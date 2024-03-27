@@ -45,7 +45,36 @@ Once the container is up and running, you can install the Upsonic Python Client 
 
 ## Usage
 
-Here's an updated quickstart guide to get you up and running with your container:
+Upsonic streamlines the development and deployment of utility libraries. Here's how to get started:
+
+### Basic Usage
+
+1. Initialize Upsonic with your server's address:
+   ```python
+   from upsonic import Upsonic_On_Prem
+   upsonic = Upsonic_On_Prem('https://your-server-address:5000', 'ACK_****************')
+   ```
+
+2. Define a function you wish to serialize and share:
+   ```python
+   def sum(a, b):
+       return a + b
+   ```
+
+3. Serialize the function for Upsonic:
+   ```python
+   upsonic.dump("math.basics.sum", sum)
+   ```
+
+4. Import and use the serialized function in another project:
+   ```python
+   math = upsonic.load_module("math")
+   math.basics.sum(5, 2)
+   ```
+
+### Advanced Usage
+
+For complex scenarios and advanced usage, refer to our [detailed documentation](https://docs.upsonic.co/home).
 
 ```python
 from upsonic import Upsonic_On_Prem
