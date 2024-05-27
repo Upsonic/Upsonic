@@ -15,10 +15,10 @@ setup(
     author="Onur Atakan ULUSOY",
     author_email="atadogan06@gmail.com",
     license="MIT",
-    packages=["gpt_assistant", "gpt_assistant.agent", "gpt_assistant.gui", "gpt_assistant.screen", "gpt_assistant.utils", "gpt_assistant.audio"],
+    packages=["gpt_computer_assistant", "gpt_computer_assistant.agent", "gpt_computer_assistant.gui", "gpt_computer_assistant.screen", "gpt_computer_assistant.utils", "gpt_computer_assistant.audio"],
     install_requires=install_requires,
     entry_points={
-        "console_scripts": ["computerassistant=gpt_assistant.gpt_assistant:start"],
+        "console_scripts": ["computerassistant=gpt_computer_assistant.gpt_computer_assistant:start"],
     },      
     python_requires=">= 3",
     zip_safe=False,

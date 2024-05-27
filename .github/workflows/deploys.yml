@@ -1,0 +1,72 @@
+name: Deploys
+
+on:
+  workflow_dispatch: 
+  workflow_run:
+    workflows: ["Release Generator"]
+    types:
+      - completed  
+
+permissions:
+  packages: write      
+
+
+concurrency: 
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event }}
+  cancel-in-progress: true
+jobs:
+
+  tagext:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    env:
+      OS: ${{ matrix.os }}
+      PYTHON: '3.8'
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Getting Tag
+        id: tag_extractor
+        run: echo "latest_tag=$(git describe --tags --abbrev=0)" >> "$GITHUB_OUTPUT"
+
+      - name: Getting Tag 2
+        id: tag_extractor_2
+        run: |
+          TAG=${{ steps.tag_extractor.outputs.latest_tag }}   
+          echo "latest_tag_2=${TAG:1} " >> "$GITHUB_OUTPUT"
+      
+
+
+  pypi:
+    needs: tagext
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    environment: Deploys
+    strategy:
+      matrix:
+        python-version: [3.8]
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+
+
+    - name: Build and Publish Python Packages
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+      run: |
+        python -m pip install --upgrade pip
+        pip install setuptools wheel twine      
+        python setup.py sdist
+        twine upload dist/*
+
+
