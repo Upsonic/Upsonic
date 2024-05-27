@@ -18,7 +18,7 @@ def text_to_speech(text):
     if os.path.exists(location):
         return location
     else:
-        response = client.audio.speech.create(
+        response = get_client().audio.speech.create(
             model="tts-1",
             voice="fable",
             input=text,

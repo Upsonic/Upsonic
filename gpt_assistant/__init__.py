@@ -1,3 +1,3 @@
-from .gpt_assistant import start_gpt_assistant
+from .gpt_assistant import start
 
 

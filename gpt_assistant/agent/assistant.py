@@ -34,7 +34,7 @@ def assistant(llm_input, llm_history, client, screenshot_path=None):
 
 
 
-    msg = agent_executor.invoke({"messages":llm_history + [the_message]}, config=config)
+    msg = get_agent_executor().invoke({"messages":llm_history + [the_message]}, config=config)
 
 
 

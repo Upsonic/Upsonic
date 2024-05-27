@@ -30,14 +30,14 @@ def process_audio(take_screenshot=True, take_system_audio=False):
     
 
     audio_file = open(mic_record_location, "rb")
-    transcription = client.audio.transcriptions.create(
+    transcription = get_client().audio.transcriptions.create(
         model="whisper-1",
         file=audio_file
     )
 
     if take_system_audio:
         audio_file2 = open(system_sound_location, "rb")
-        transcription2 = client.audio.transcriptions.create(
+        transcription2 = get_client().audio.transcriptions.create(
             model="whisper-1",
             file=audio_file2
         )
@@ -48,7 +48,7 @@ def process_audio(take_screenshot=True, take_system_audio=False):
     if take_system_audio:
         llm_input += " \n Other of USER: "+transcription2.text
 
-    llm_output = assistant(llm_input, llm_history, client, screenshot_path=screenshot_path if take_screenshot else None)
+    llm_output = assistant(llm_input, llm_history, get_client(), screenshot_path=screenshot_path if take_screenshot else None)
 
 
 
@@ -85,7 +85,7 @@ def process_screenshot():
     llm_input = "USER: "+"I just take a screenshot. for you to remember. Just say ok."
     print("LLM INPUT (just screenshot)", llm_input)
 
-    llm_output = assistant(llm_input, llm_history, client, screenshot_path=just_screenshot_path)
+    llm_output = assistant(llm_input, llm_history, get_client(), screenshot_path=just_screenshot_path)
 
 
 
