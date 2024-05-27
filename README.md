@@ -22,6 +22,19 @@ At this time we have many infrastructure element. We just aim to provide whole t
  - Knowledge Management
 
 
+#### Todo
+- [ ] Reset Option
+- [ ] Splitting long audios. (Whisper api just support <20mb)
+- [ ] More Effect
+
+- [ ] Windows .exe
+- [ ] Linux native
+- [ ] MacOS native
+
+
+## Use cases
+
+
 ## Usage
 ![options](https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/317143b3-e1c4-427f-9295-b219950d755a)
 
@@ -37,6 +50,3 @@ pip3 install gpt-computer-assistant
 computerassistant
 ```
 
-
-## Licence
-MIT
