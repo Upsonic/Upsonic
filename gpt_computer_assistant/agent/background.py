@@ -1,6 +1,8 @@
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from .chat_history import *
 
-llm_history = [
+
+llm_history_oiginal = [
     SystemMessage(
         content=[
             {"type": "text", "text": "You are an helpful and intelligent assistant. But converting your text to the speech process can be long so please make short your answers as possible."},
@@ -10,5 +12,3 @@ llm_history = [
                  ]
                  )
     ]
-
-

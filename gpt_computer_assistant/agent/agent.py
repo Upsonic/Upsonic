@@ -8,9 +8,7 @@ tools = tools.langchain()
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from ..utils.db import memory_db
 
-memory = SqliteSaver.from_conn_string(memory_db)
 
 
 
@@ -18,7 +16,7 @@ from langgraph.prebuilt import chat_agent_executor
 
 
 def get_agent_executor():
-    return chat_agent_executor.create_tool_calling_executor(get_model(), tools, checkpointer=memory)
+    return chat_agent_executor.create_tool_calling_executor(get_model(), tools)
 
 
 
@@ -34,5 +32,5 @@ repl_tool = Tool(
 )
 
 from langgraph.prebuilt import chat_agent_executor
-agent_executor = chat_agent_executor.create_tool_calling_executor(model, [repl_tool], checkpointer=memory)
+agent_executor = chat_agent_executor.create_tool_calling_executor(model, [repl_tool])
 """

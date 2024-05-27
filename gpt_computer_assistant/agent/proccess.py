@@ -25,7 +25,7 @@ from ..utils.db import system_sound_location, mic_record_location, just_screensh
 
 
 def process_audio(take_screenshot=True, take_system_audio=False):
-    global audio_data, llm_history
+    global audio_data
 
     
 
@@ -48,12 +48,10 @@ def process_audio(take_screenshot=True, take_system_audio=False):
     if take_system_audio:
         llm_input += " \n Other of USER: "+transcription2.text
 
-    llm_output = assistant(llm_input, llm_history, get_client(), screenshot_path=screenshot_path if take_screenshot else None)
+    llm_output = assistant(llm_input, chat_message_history.messages, get_client(), screenshot_path=screenshot_path if take_screenshot else None)
 
 
 
-
-    llm_history = llm_output
 
 
     chat_message_history.add_message(llm_output[-1])
@@ -79,17 +77,17 @@ def process_audio(take_screenshot=True, take_system_audio=False):
 
 
 def process_screenshot():
-    global llm_history
+
 
     
     llm_input = "USER: "+"I just take a screenshot. for you to remember. Just say ok."
     print("LLM INPUT (just screenshot)", llm_input)
 
-    llm_output = assistant(llm_input, llm_history, get_client(), screenshot_path=just_screenshot_path)
+    llm_output = assistant(llm_input, chat_message_history.messages, get_client(), screenshot_path=just_screenshot_path)
 
 
 
-    llm_history = llm_output
+
 
 
     chat_message_history.add_message(llm_output[-1])

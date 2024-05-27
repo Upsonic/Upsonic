@@ -23,7 +23,7 @@ At this time we have many infrastructure element. We just aim to provide whole t
 
 
 #### Todo
-- [ ] Reset Option
+- [x] Reset Option
 - [ ] Splitting long audios. (Whisper api just support <20mb)
 - [ ] More Effect
 

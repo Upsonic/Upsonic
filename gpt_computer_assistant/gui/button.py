@@ -7,6 +7,8 @@ from ..screen.shot import *
 
 from ..agent.proccess import *
 
+from ..agent.chat_history import clear_chat_history
+
 import pyautogui
 recording_thread = None
 
@@ -109,6 +111,13 @@ class ButtonHandler():
         save_button = QPushButton("Save")
         save_button.clicked.connect(lambda: save_api_key(api_key_input.text()))
         settings_dialog.layout().addWidget(save_button)
+
+        # Add another button to reset memory
+        reset_memory_button = QPushButton("Reset Memory")
+        reset_memory_button.clicked.connect(clear_chat_history)
+        settings_dialog.layout().addWidget(reset_memory_button)
+
+
         settings_dialog.exec_()
         settings_dialog.show()
 

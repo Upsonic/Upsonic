@@ -21,7 +21,7 @@ screenshot_path = os.path.join(artifacts_dir, "screenshot_with_text.png")
 
 
 
-memory_db = os.path.join(artifacts_dir, "memory.db")
+
 history_db = os.path.join(artifacts_dir, "history.db")
 
 openaikey = os.path.join(artifacts_dir, "openaikey.db")
