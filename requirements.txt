@@ -1,0 +1,14 @@
+langgraph==0.0.55
+pyqt5==5.15.10
+scipy==1.13.1
+pygame==2.5.2
+soundcard==0.4.3
+openai==1.30.3
+langchain_openai==0.1.7
+python-dotenv==1.0.0
+upsonic
+langchain==0.2.1
+langchain_community==0.2.1
+pyautogui==0.9.54
+sounddevice==0.4.6
+soundfile==0.12.1
