@@ -17,6 +17,9 @@ setup(
     license="MIT",
     packages=["gpt_assistant", "gpt_assistant.agent", "gpt_assistant.gui", "gpt_assistant.screen", "gpt_assistant.utils", "gpt_assistant.audio"],
     install_requires=install_requires,
+    entry_points={
+        "console_scripts": ["computerassistant=gpt_assistant.gpt_assistant:start"],
+    },      
     python_requires=">= 3",
     zip_safe=False,
 )
