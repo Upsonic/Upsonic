@@ -25,6 +25,7 @@ At this time we have many infrastructure element. We just aim to provide whole t
 ## Usage
 ![options](https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/317143b3-e1c4-427f-9295-b219950d755a)
 
+** After first click to an option that include microphone or system audio you need to stop with another click to same option.
 
 ## Installation && Run
 
