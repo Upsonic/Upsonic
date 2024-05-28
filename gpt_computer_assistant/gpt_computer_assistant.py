@@ -245,7 +245,7 @@ class MainWindow(QMainWindow):
                 self.pulse_timer = None
             self.pulse_timer = QTimer(self)
             self.pulse_timer.timeout.connect(self.pulse_circle)
-            self.pulse_timer.start(10)
+            self.pulse_timer.start(5)
         elif new_state == 'thinking':
             self.pulse_frame = 0
             if self.pulse_timer:
