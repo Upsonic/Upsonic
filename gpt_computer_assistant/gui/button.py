@@ -35,7 +35,7 @@ class ButtonHandler():
         signal_handler.assistant_response_stopped.connect(self.on_assistant_response_stopped)
 
 
-    def toggle_recording(self, no_screenshot=False, take_system_audio=False):
+    def toggle_recording(self, no_screenshot=False, take_system_audio=False, dont_save_image=False):
 
         if self.recording:
             stop_recording()
@@ -51,6 +51,7 @@ class ButtonHandler():
             self.no_screenshot = no_screenshot
 
             self.take_system_audio = take_system_audio
+            self.dont_save_image = dont_save_image
 
             global recording_thread
             if recording_thread is None or not recording_thread.is_alive():
@@ -67,7 +68,7 @@ class ButtonHandler():
         self.main_window.update_state('thinking')
         if self.process_audio_thread is None or not self.process_audio_thread.is_alive():
             signal_handler.assistant_thinking.emit()
-            self.process_audio_thread = threading.Thread(target=process_audio, args=(not self.no_screenshot,self.take_system_audio,))
+            self.process_audio_thread = threading.Thread(target=process_audio, args=(not self.no_screenshot,self.take_system_audio, self.dont_save_image))
             self.process_audio_thread.start()
 
 

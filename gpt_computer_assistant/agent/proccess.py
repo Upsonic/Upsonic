@@ -28,7 +28,7 @@ from ..utils.db import *
 from ..utils.db import system_sound_location, mic_record_location, just_screenshot_path, screenshot_path
 
 
-def process_audio(take_screenshot=True, take_system_audio=False):
+def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image=False):
     global audio_data
 
     
@@ -40,21 +40,30 @@ def process_audio(take_screenshot=True, take_system_audio=False):
         transcription2 = speech_to_text(system_sound_location)
 
     
-    llm_input = "USER: "+transcription.text
+    llm_input = "USER: "+transcription
 
     if take_system_audio:
-        llm_input += " \n Other of USER: "+transcription2.text
+        llm_input += " \n Other of USER: "+transcription2
 
     llm_output = assistant(llm_input, get_chat_message_history().messages, get_client(), screenshot_path=screenshot_path if take_screenshot else None)
 
 
 
+    if dont_save_image:
+        currently_messages = get_chat_message_history().messages
+        if take_screenshot:
+            last_message = currently_messages[-1].content[0]
+            currently_messages.remove(currently_messages[-1])
 
+            get_chat_message_history().clear()
+            for message in currently_messages:
+                get_chat_message_history().add_message(message)
+            get_chat_message_history().add_message(HumanMessage(content=[last_message]))
 
     get_chat_message_history().add_message(llm_output[-1])
     llm_output = llm_output[-1].content
 
-
+    print("Whole LLM OUTPUT", get_chat_message_history().messages)
     
     signal_handler.assistant_response_ready.emit()
 

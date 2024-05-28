@@ -270,7 +270,7 @@ class MainWindow(QMainWindow):
 
     def mousePressEvent(self, event: QMouseEvent):
         if self.circle_rect.contains(event.pos()):
-            self.button_handler.toggle_recording()
+            self.button_handler.toggle_recording(dont_save_image=True)
         elif self.small_circle_rect.contains(event.pos()):
             self.button_handler.toggle_recording(no_screenshot=True)
         elif self.small_circle_left.contains(event.pos()):
