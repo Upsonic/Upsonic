@@ -44,6 +44,25 @@ def load_api_key():
             return f.read()
         
 
+
+just_text_model = os.path.join(artifacts_dir, "just_text_model.db")
+
+def activate_just_text_model():
+    with open(just_text_model, 'w') as f:
+        f.write("1")
+
+def deactivate_just_text_model():
+    with open(just_text_model, 'w') as f:
+        f.write("0")
+
+def is_just_text_model_active():
+    if not os.path.exists(just_text_model):
+        return False
+    with open(just_text_model, 'r') as f:
+        return f.read() == "1"
+    
+
+
 icon_16_path = os.path.join(media_dir, "icon_16.png")
 icon_24_path = os.path.join(media_dir, "icon_24.png")
 icon_32_path = os.path.join(media_dir, "icon_32.png")

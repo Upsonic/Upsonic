@@ -26,6 +26,7 @@ At this time we have many infrastructure element. We just aim to provide whole t
 - [x] Reset Option
 - [x] Splitting long audios. (Whisper api just support <20mb)
 - [x] Text input area
+- [x] Just text mode (no voice answer)
 - [ ] More Effect
 
 - [ ] Windows .exe

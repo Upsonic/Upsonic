@@ -19,6 +19,9 @@ from pygame import mixer
 
 import time
 import random
+from ..utils.db import *
+
+
 
 
 
@@ -52,21 +55,29 @@ def process_audio(take_screenshot=True, take_system_audio=False):
     llm_output = llm_output[-1].content
 
 
-    response_path = text_to_speech(llm_output)
-
-
+    
     signal_handler.assistant_response_ready.emit()
 
-    def play_audio():
-        mixer.init()
-        mixer.music.load(response_path)
-        mixer.music.play()
-        while mixer.music.get_busy():
-            time.sleep(0.1)
-        signal_handler.assistant_response_stopped.emit()
-    
-    playback_thread = threading.Thread(target=play_audio)
-    playback_thread.start()
+    if not is_just_text_model_active():
+        response_path = text_to_speech(llm_output)
+        def play_audio():
+            mixer.init()
+            mixer.music.load(response_path)
+            mixer.music.play()
+            while mixer.music.get_busy():
+                time.sleep(0.1)
+            signal_handler.assistant_response_stopped.emit()
+        
+        playback_thread = threading.Thread(target=play_audio)
+        playback_thread.start()
+    else:
+        def play_text():
+            from ..gpt_computer_assistant import the_input_box
+            the_input_box.setText(llm_output)
+            signal_handler.assistant_response_stopped.emit()
+
+        playback_thread = threading.Thread(target=play_text)
+        playback_thread.start()
 
 
 
@@ -89,22 +100,31 @@ def process_screenshot():
 
 
 
-    response_path = text_to_speech(llm_output)
 
 
     signal_handler.assistant_response_ready.emit()
 
-    def play_audio():
-        mixer.init()
-        mixer.music.load(response_path)
-        mixer.music.play()
-        while mixer.music.get_busy():
-            time.sleep(0.1)
-        signal_handler.assistant_response_stopped.emit()
-    
-    playback_thread = threading.Thread(target=play_audio)
-    playback_thread.start()
+    if not is_just_text_model_active():
+        response_path = text_to_speech(llm_output)
+        def play_audio():
+            mixer.init()
+            mixer.music.load(response_path)
+            mixer.music.play()
+            while mixer.music.get_busy():
+                time.sleep(0.1)
+            signal_handler.assistant_response_stopped.emit()
+        
+        playback_thread = threading.Thread(target=play_audio)
+        playback_thread.start()
+    else:
+        def play_text():
+            from ..gpt_computer_assistant import the_input_box
+            the_input_box.setText(llm_output)
+            signal_handler.assistant_response_stopped.emit()
 
+        playback_thread = threading.Thread(target=play_text)
+        playback_thread.start()
+        
 
 
 
@@ -126,18 +146,26 @@ def process_text(text):
     llm_output = llm_output[-1].content
 
 
-    response_path = text_to_speech(llm_output)
-
-
     signal_handler.assistant_response_ready.emit()
 
-    def play_audio():
-        mixer.init()
-        mixer.music.load(response_path)
-        mixer.music.play()
-        while mixer.music.get_busy():
-            time.sleep(0.1)
-        signal_handler.assistant_response_stopped.emit()
-    
-    playback_thread = threading.Thread(target=play_audio)
-    playback_thread.start()
+    if not is_just_text_model_active():
+        response_path = text_to_speech(llm_output)
+        def play_audio():
+            mixer.init()
+            mixer.music.load(response_path)
+            mixer.music.play()
+            while mixer.music.get_busy():
+                time.sleep(0.1)
+            signal_handler.assistant_response_stopped.emit()
+        
+        playback_thread = threading.Thread(target=play_audio)
+        playback_thread.start()
+    else:
+        def play_text():
+            from ..gpt_computer_assistant import the_input_box
+            the_input_box.setText(llm_output)
+            signal_handler.assistant_response_stopped.emit()
+
+        playback_thread = threading.Thread(target=play_text)
+        playback_thread.start()
+        

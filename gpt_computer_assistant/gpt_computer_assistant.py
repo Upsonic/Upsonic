@@ -59,6 +59,7 @@ try:
 except:
     pass
 
+the_input_box = None
 
 
 class MainWindow(QMainWindow):
@@ -134,6 +135,8 @@ class MainWindow(QMainWindow):
         input_box = QLineEdit(self)
         input_box.setPlaceholderText("Type here")
         input_box.setGeometry(30, self.height() - 60, 200, 30)
+        global the_input_box
+        the_input_box = input_box
 
         send_button = QPushButton("Send", self)
         send_button.setGeometry(self.width() - 100, self.height() - 60, 70, 30)

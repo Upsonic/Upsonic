@@ -13,7 +13,7 @@ import pyautogui
 recording_thread = None
 
 
-from ..utils.db import screenshot_path, save_api_key, load_api_key
+from ..utils.db import screenshot_path, save_api_key, load_api_key, activate_just_text_model, deactivate_just_text_model, is_just_text_model_active
 from ..screen.shot import take_screenshot
 
 
@@ -116,6 +116,18 @@ class ButtonHandler():
         reset_memory_button = QPushButton("Reset Memory")
         reset_memory_button.clicked.connect(clear_chat_history)
         settings_dialog.layout().addWidget(reset_memory_button)
+
+        # Add another button to enable just text model
+        just_text_button = QPushButton("Enable Just Text Model")
+
+        settings_dialog.layout().addWidget(just_text_button)
+
+        if is_just_text_model_active():
+            just_text_button.setText("Disable Just Text Model")
+            just_text_button.clicked.connect(deactivate_just_text_model)
+        else:
+            just_text_button.clicked.connect(activate_just_text_model)
+
 
 
         settings_dialog.exec_()
