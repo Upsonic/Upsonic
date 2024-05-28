@@ -4,6 +4,7 @@ from .assistant import *
 from .chat_history import *
 
 from ..audio.tts import text_to_speech
+from ..audio.stt import speech_to_text
 
 from ..audio.record import audio_data
 
@@ -29,18 +30,11 @@ def process_audio(take_screenshot=True, take_system_audio=False):
 
     
 
-    audio_file = open(mic_record_location, "rb")
-    transcription = get_client().audio.transcriptions.create(
-        model="whisper-1",
-        file=audio_file
-    )
+    transcription = speech_to_text(mic_record_location)
 
     if take_system_audio:
-        audio_file2 = open(system_sound_location, "rb")
-        transcription2 = get_client().audio.transcriptions.create(
-            model="whisper-1",
-            file=audio_file2
-        )
+
+        transcription2 = speech_to_text(system_sound_location)
 
     
     llm_input = "USER: "+transcription.text

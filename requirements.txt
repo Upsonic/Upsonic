@@ -12,3 +12,4 @@ langchain_community==0.2.1
 pyautogui==0.9.54
 sounddevice==0.4.6
 soundfile==0.12.1
+pydub==0.25.1
