@@ -49,7 +49,7 @@ At this time we have many infrastructure element. We just aim to provide whole t
 </table>
 
 ## Usage
-![options](https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/9a1d53b8-b41b-47a9-bac7-341441b7d1fc)
+![options](https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/5a744f7e-5b2e-40e5-ba3e-ea370aee5c0d)
 
 
 ** After first click to an option that include microphone or system audio you need to stop with another click to same option.
