@@ -23,7 +23,22 @@ screenshot_path = os.path.join(artifacts_dir, "screenshot_with_text.png")
 
 
 
-history_db = os.path.join(artifacts_dir, "history.db")
+
+
+the_profile = "default"
+
+def set_profile(profile):
+    print("Setting profile to", profile)
+    global the_profile
+    the_profile = profile
+    
+def get_profile():
+    global the_profile
+    return the_profile
+
+def get_history_db():
+    global the_profile
+    return os.path.join(artifacts_dir, f"history_{the_profile}.db")
 
 openaikey = os.path.join(artifacts_dir, "openaikey.db")
 

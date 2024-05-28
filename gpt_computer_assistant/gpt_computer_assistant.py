@@ -296,10 +296,3 @@ class MainWindow(QMainWindow):
 
 
 
-
-
-
-def start():
-    app = QApplication(sys.argv)
-    ex = MainWindow()
-    sys.exit(app.exec_())

@@ -13,7 +13,7 @@ import pyautogui
 recording_thread = None
 
 
-from ..utils.db import screenshot_path, save_api_key, load_api_key, activate_just_text_model, deactivate_just_text_model, is_just_text_model_active
+from ..utils.db import screenshot_path, save_api_key, load_api_key, activate_just_text_model, deactivate_just_text_model, is_just_text_model_active, set_profile, get_profile
 from ..screen.shot import take_screenshot
 
 
@@ -127,6 +127,17 @@ class ButtonHandler():
             just_text_button.clicked.connect(deactivate_just_text_model)
         else:
             just_text_button.clicked.connect(activate_just_text_model)
+
+
+        #create a input form and save button to change profile
+        settings_dialog.layout().addWidget(QLabel("Profile"))
+        profile_input = QLineEdit()
+
+        profile_input.setText(get_profile())
+        settings_dialog.layout().addWidget(profile_input)
+        profile_save_button = QPushButton("Save")
+        profile_save_button.clicked.connect(lambda: set_profile(profile_input.text()))
+        settings_dialog.layout().addWidget(profile_save_button)
 
 
 

@@ -18,7 +18,7 @@ setup(
     packages=["gpt_computer_assistant", "gpt_computer_assistant.agent", "gpt_computer_assistant.gui", "gpt_computer_assistant.screen", "gpt_computer_assistant.utils", "gpt_computer_assistant.audio"],
     install_requires=install_requires,
     entry_points={
-        "console_scripts": ["computerassistant=gpt_computer_assistant.gpt_computer_assistant:start"],
+        "console_scripts": ["computerassistant=gpt_computer_assistant.start:start"],
     },      
     python_requires=">= 3",
     zip_safe=False,

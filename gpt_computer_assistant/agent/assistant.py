@@ -31,7 +31,7 @@ def assistant(llm_input, llm_history, client, screenshot_path=None):
         print("LEN OF İMAGE", len(base64_image)) 
 
     the_message = HumanMessage(content=the_message)
-    chat_message_history.add_message(the_message)
+    get_chat_message_history().add_message(the_message)
 
 
 

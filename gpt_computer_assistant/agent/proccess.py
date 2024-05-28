@@ -45,13 +45,13 @@ def process_audio(take_screenshot=True, take_system_audio=False):
     if take_system_audio:
         llm_input += " \n Other of USER: "+transcription2.text
 
-    llm_output = assistant(llm_input, chat_message_history.messages, get_client(), screenshot_path=screenshot_path if take_screenshot else None)
+    llm_output = assistant(llm_input, get_chat_message_history().messages, get_client(), screenshot_path=screenshot_path if take_screenshot else None)
 
 
 
 
 
-    chat_message_history.add_message(llm_output[-1])
+    get_chat_message_history().add_message(llm_output[-1])
     llm_output = llm_output[-1].content
 
 
@@ -88,14 +88,14 @@ def process_screenshot():
     llm_input = "USER: "+"I just take a screenshot. for you to remember. Just say ok."
     print("LLM INPUT (just screenshot)", llm_input)
 
-    llm_output = assistant(llm_input, chat_message_history.messages, get_client(), screenshot_path=just_screenshot_path)
+    llm_output = assistant(llm_input, get_chat_message_history().messages, get_client(), screenshot_path=just_screenshot_path)
 
 
 
 
 
 
-    chat_message_history.add_message(llm_output[-1])
+    get_chat_message_history().add_message(llm_output[-1])
     llm_output = llm_output[-1].content
 
 
@@ -136,13 +136,13 @@ def process_text(text):
 
 
 
-    llm_output = assistant(llm_input, chat_message_history.messages, get_client(), screenshot_path=None)
+    llm_output = assistant(llm_input, get_chat_message_history().messages, get_client(), screenshot_path=None)
 
 
 
 
 
-    chat_message_history.add_message(llm_output[-1])
+    get_chat_message_history().add_message(llm_output[-1])
     llm_output = llm_output[-1].content
 
 
