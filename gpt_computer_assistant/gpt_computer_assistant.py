@@ -7,6 +7,8 @@ from .agent.background import *
 from .gui.signal import *
 from .gui.button import *
 
+from .utils.db import *
+
 import hashlib
 import sys
 import threading
@@ -32,8 +34,8 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPu
 from PyQt5.QtCore import Qt, QPoint
 
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton
-
-
+from PyQt5 import QtWidgets, QtGui
+from PyQt5.QtGui import QIcon
 
 
 
@@ -44,15 +46,18 @@ print("Imported all libraries")
 
 
 
+from PyQt5 import QtCore
 
 
 
 
 
-
-
-
-
+try:
+    import ctypes
+    myappid = 'onuratakan.gpt_computer_assistant.gui.1' # arbitrary string
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+except:
+    pass
 
 
 
@@ -68,8 +73,18 @@ class MainWindow(QMainWindow):
         self.old_position = self.pos()  # For moving window
 
     def initUI(self):
-        self.setWindowTitle('GPT-4o Assistant')
+        self.setWindowTitle('GPT-4o')
         self.setGeometry(100, 100, 200, 200)  # Adjust the size as needed
+        
+
+        app_icon = QtGui.QIcon()
+        app_icon.addFile(icon_16_path, QtCore.QSize(16,16))
+        app_icon.addFile(icon_24_path, QtCore.QSize(24,24))
+        app_icon.addFile(icon_32_path, QtCore.QSize(32,32))
+        app_icon.addFile(icon_48_path, QtCore.QSize(48,48))
+        app_icon.addFile(icon_256_path, QtCore.QSize(256,256))
+        self.setWindowIcon(app_icon)
+
         central_widget = QWidget(self)
         self.setCentralWidget(central_widget)
         layout = QVBoxLayout(central_widget)
@@ -81,7 +96,7 @@ class MainWindow(QMainWindow):
         self.title_bar_layout.setContentsMargins(0, 0, 0, 0)
         self.title_bar_layout.setSpacing(0)
 
-        self.title_label = QLabel("GPT-4o Assistant", self)
+        self.title_label = QLabel("GPT-4o", self)
         self.title_bar_layout.addWidget(self.title_label)
 
         self.close_button = QPushButton("X", self)

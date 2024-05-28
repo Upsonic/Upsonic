@@ -6,6 +6,7 @@ load_dotenv(".env")
 currently_dir  = os.path.dirname(os.path.abspath(__file__))
 
 artifacts_dir = os.path.join(currently_dir, "artifacts")
+media_dir = os.path.join(currently_dir, "media")
 
 if not os.path.exists(artifacts_dir):
     os.makedirs(artifacts_dir)
@@ -41,3 +42,10 @@ def load_api_key():
                 return "CHANGE_ME"
         with open(openaikey, 'r') as f:
             return f.read()
+        
+
+icon_16_path = os.path.join(media_dir, "icon_16.png")
+icon_24_path = os.path.join(media_dir, "icon_24.png")
+icon_32_path = os.path.join(media_dir, "icon_32.png")
+icon_48_path = os.path.join(media_dir, "icon_48.png")
+icon_256_path = os.path.join(media_dir, "icon_256.png")
