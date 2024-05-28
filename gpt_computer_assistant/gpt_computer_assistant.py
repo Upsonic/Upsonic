@@ -31,7 +31,7 @@ import scipy.io.wavfile as wavfile
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QLabel, QHBoxLayout
 from PyQt5.QtCore import Qt, QPoint
 
-
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton
 
 
 
@@ -69,7 +69,7 @@ class MainWindow(QMainWindow):
 
     def initUI(self):
         self.setWindowTitle('GPT-4o Assistant')
-        self.setGeometry(100, 100, 200, 135)  # Adjust the size as needed
+        self.setGeometry(100, 100, 200, 200)  # Adjust the size as needed
         central_widget = QWidget(self)
         self.setCentralWidget(central_widget)
         layout = QVBoxLayout(central_widget)
@@ -96,6 +96,8 @@ class MainWindow(QMainWindow):
         self.other_widget = QWidget(self)
         layout.addWidget(self.other_widget)
 
+        self.layout = layout
+
         self.setLayout(layout)
 
         # Add keyboard shortcuts
@@ -109,6 +111,35 @@ class MainWindow(QMainWindow):
 
         self.shortcut_no_screenshot = QShortcut(QKeySequence("Ctrl+3"), self)
         self.shortcut_no_screenshot.activated.connect(lambda: self.button_handler.toggle_recording(no_screenshot=True))
+
+
+
+        # I want to create a input box to bottom left and a send button to bottom right
+
+        input_box = QLineEdit(self)
+        input_box.setPlaceholderText("Type here")
+        input_box.setGeometry(30, self.height() - 60, 200, 30)
+
+        send_button = QPushButton("Send", self)
+        send_button.setGeometry(self.width() - 100, self.height() - 60, 70, 30)
+
+        def input_box_send():
+            if input_box.text() != "":
+                self.button_handler.input_text(input_box.text())
+                input_box.setText("")
+                
+
+
+        # send button should trig button handler input_text function
+        send_button.clicked.connect(input_box_send)
+
+        self.layout.addWidget(input_box)
+        self.layout.addWidget(send_button)
+
+        # Also if the input box is not empty and enter is pressed, it should also trigger the send button
+        input_box.returnPressed.connect(input_box_send)
+
+
 
 
         self.show()
@@ -151,7 +182,7 @@ class MainWindow(QMainWindow):
 
         # Draw second smaller circle button at bottom right
         small_center_x = self.width() - 30
-        small_center_y = self.height() - 30
+        small_center_y = self.height() - 90
         small_radius = 25
         painter.drawEllipse(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
         
@@ -161,7 +192,7 @@ class MainWindow(QMainWindow):
 
         # Draw second smaller circle button at bottom left
         small_center_x = 30  # Adjust this line
-        small_center_y = self.height() - 30
+        small_center_y = self.height() - 90
         small_radius = 25
         painter.drawEllipse(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
 
@@ -185,6 +216,7 @@ class MainWindow(QMainWindow):
 
         self.small_rect_right_top = QRect(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
         
+
 
 
 

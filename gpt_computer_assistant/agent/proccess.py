@@ -104,3 +104,40 @@ def process_screenshot():
     
     playback_thread = threading.Thread(target=play_audio)
     playback_thread.start()
+
+
+
+
+def process_text(text):
+
+
+    
+    llm_input = "USER: "+text
+
+
+
+    llm_output = assistant(llm_input, chat_message_history.messages, get_client(), screenshot_path=None)
+
+
+
+
+
+    chat_message_history.add_message(llm_output[-1])
+    llm_output = llm_output[-1].content
+
+
+    response_path = text_to_speech(llm_output)
+
+
+    signal_handler.assistant_response_ready.emit()
+
+    def play_audio():
+        mixer.init()
+        mixer.music.load(response_path)
+        mixer.music.play()
+        while mixer.music.get_busy():
+            time.sleep(0.1)
+        signal_handler.assistant_response_stopped.emit()
+    
+    playback_thread = threading.Thread(target=play_audio)
+    playback_thread.start()

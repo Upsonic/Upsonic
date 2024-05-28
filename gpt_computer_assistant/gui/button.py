@@ -121,3 +121,12 @@ class ButtonHandler():
         settings_dialog.exec_()
         settings_dialog.show()
 
+
+
+    def input_text(self, text):
+        
+        self.main_window.update_state('thinking')
+        if self.process_audio_thread is None or not self.process_audio_thread.is_alive():
+            signal_handler.assistant_thinking.emit()
+            self.process_audio_thread = threading.Thread(target=process_text, args=(text,))
+            self.process_audio_thread.start()
