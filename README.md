@@ -25,7 +25,7 @@ At this time we have many infrastructure element. We just aim to provide whole t
 #### Todo
 - [x] Reset Option
 - [x] Splitting long audios. (Whisper api just support <20mb)
-- [ ] Text input area
+- [x] Text input area
 - [ ] More Effect
 
 - [ ] Windows .exe
