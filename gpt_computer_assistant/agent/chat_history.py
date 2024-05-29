@@ -8,13 +8,13 @@ from ..utils.db import get_history_db
 
 def get_chat_message_history():
     print("HISTORY DB", get_history_db())
-    return SQLChatMessageHistory(
+    connection = SQLChatMessageHistory(
     session_id="abc123", connection_string=f"sqlite:///{get_history_db()}")
+    if len(connection.messages) == 0:
+        connection.add_message(llm_history_oiginal[0])
 
 
 
-if not os.path.exists(get_history_db()):
-    get_chat_message_history().add_message(llm_history_oiginal[0])
     
 
 def clear_chat_history():
