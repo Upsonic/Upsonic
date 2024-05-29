@@ -13,7 +13,7 @@ def get_chat_message_history():
     if len(connection.messages) == 0:
         connection.add_message(llm_history_oiginal[0])
 
-
+    return connection
 
     
 

@@ -1,9 +1,6 @@
 from ..llm import *
 
-from upsonic import Tiger
-tools = Tiger()
-tools.enable_auto_requirements = False
-tools = tools.langchain()
+
 
 
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -14,13 +11,17 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 
 from langgraph.prebuilt import chat_agent_executor
 
-
+"""
+from upsonic import Tiger
+tools = Tiger()
+tools.enable_auto_requirements = False
+tools = tools.langchain()
 def get_agent_executor():
     return chat_agent_executor.create_tool_calling_executor(get_model(), tools)
 
-
-
 """
+
+
 from langchain.agents import Tool
 from langchain_experimental.utilities import PythonREPL
 python_repl = PythonREPL()
@@ -32,5 +33,8 @@ repl_tool = Tool(
 )
 
 from langgraph.prebuilt import chat_agent_executor
-agent_executor = chat_agent_executor.create_tool_calling_executor(model, [repl_tool])
-"""
+def get_agent_executor():
+    return chat_agent_executor.create_tool_calling_executor(get_model(), [repl_tool])
+
+
+
