@@ -72,7 +72,7 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
 
         def play_text():
             from ..gpt_computer_assistant import the_input_box
-            if the_input_box.toPlainText() == "":
+            if the_input_box.text() == "":
                 the_input_box.setText(llm_output)
          
 
@@ -127,7 +127,7 @@ def process_screenshot():
         response_path = text_to_speech(llm_output)
         def play_text():
             from ..gpt_computer_assistant import the_input_box
-            if the_input_box.toPlainText() == "":
+            if the_input_box.text() == "":
                 the_input_box.setText(llm_output)
          
 
@@ -180,7 +180,7 @@ def process_text(text):
         response_path = text_to_speech(llm_output)
         def play_text():
             from ..gpt_computer_assistant import the_input_box
-            if the_input_box.toPlainText() == "":
+            if the_input_box.text() == "":
                 the_input_box.setText(llm_output)
          
 
