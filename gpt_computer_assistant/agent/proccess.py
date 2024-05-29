@@ -28,8 +28,12 @@ from ..utils.db import *
 from ..utils.db import system_sound_location, mic_record_location, just_screenshot_path, screenshot_path
 
 
+last_ai_response = None
+
+
+
 def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image=False):
-    global audio_data
+    global audio_data, last_ai_response
 
     
 
@@ -67,13 +71,18 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
     
     signal_handler.assistant_response_ready.emit()
 
+
+    
+
     if not is_just_text_model_active():
         response_path = text_to_speech(llm_output)
 
         def play_text():
             from ..gpt_computer_assistant import the_input_box
-            if the_input_box.text() == "":
+            global last_ai_response
+            if the_input_box.text() == "" or the_input_box.text() == last_ai_response:
                 the_input_box.setText(llm_output)
+                last_ai_response = llm_output
          
 
         def play_audio():
@@ -101,7 +110,7 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
 
 
 def process_screenshot():
-
+    global last_ai_response
 
     
     llm_input = "USER: "+"I just take a screenshot. for you to remember. Just say ok."
@@ -118,7 +127,7 @@ def process_screenshot():
     llm_output = llm_output[-1].content
 
 
-
+   
 
 
     signal_handler.assistant_response_ready.emit()
@@ -127,8 +136,10 @@ def process_screenshot():
         response_path = text_to_speech(llm_output)
         def play_text():
             from ..gpt_computer_assistant import the_input_box
-            if the_input_box.text() == "":
+            global last_ai_response
+            if the_input_box.text() == "" or the_input_box.text() == last_ai_response:
                 the_input_box.setText(llm_output)
+                last_ai_response = llm_output
          
 
         def play_audio():
@@ -156,15 +167,27 @@ def process_screenshot():
 
 
 
-def process_text(text):
-
+def process_text(text, screenshot_path=None):
+    global last_ai_response
 
     
     llm_input = "USER: "+text
 
 
 
-    llm_output = assistant(llm_input, get_chat_message_history().messages, get_client(), screenshot_path=None)
+    llm_output = assistant(llm_input, get_chat_message_history().messages, get_client(), screenshot_path=screenshot_path)
+
+
+    # Remove the image
+    currently_messages = get_chat_message_history().messages
+    last_message = currently_messages[-1].content[0]
+    currently_messages.remove(currently_messages[-1])
+
+    get_chat_message_history().clear()
+    for message in currently_messages:
+        get_chat_message_history().add_message(message)
+    get_chat_message_history().add_message(HumanMessage(content=[last_message]))
+
 
 
 
@@ -173,6 +196,7 @@ def process_text(text):
     get_chat_message_history().add_message(llm_output[-1])
     llm_output = llm_output[-1].content
 
+    
 
     signal_handler.assistant_response_ready.emit()
 
@@ -180,8 +204,10 @@ def process_text(text):
         response_path = text_to_speech(llm_output)
         def play_text():
             from ..gpt_computer_assistant import the_input_box
-            if the_input_box.text() == "":
+            global last_ai_response
+            if the_input_box.text() == "" or the_input_box.text() == last_ai_response:
                 the_input_box.setText(llm_output)
+                last_ai_response = llm_output
          
 
         def play_audio():
@@ -206,3 +232,6 @@ def process_text(text):
         playback_thread = threading.Thread(target=play_text)
         playback_thread.start()
         
+
+
+

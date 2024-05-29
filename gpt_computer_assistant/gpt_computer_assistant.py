@@ -138,8 +138,6 @@ class MainWindow(QMainWindow):
         global the_input_box
         the_input_box = input_box
 
-        send_button = QPushButton("Send", self)
-        send_button.setGeometry(self.width() - 100, self.height() - 60, 70, 30)
 
         def input_box_send():
             if input_box.text() != "":
@@ -147,17 +145,43 @@ class MainWindow(QMainWindow):
                 input_box.setText("")
                 
 
+        def input_box_send_screenshot():
+            if input_box.text() != "":
+                self.button_handler.input_text_screenshot(input_box.text())
+                input_box.setText("")
+                
 
-        # send button should trig button handler input_text function
-        send_button.clicked.connect(input_box_send)
 
         self.layout.addWidget(input_box)
-        self.layout.addWidget(send_button)
 
-        # Also if the input box is not empty and enter is pressed, it should also trigger the send button
-        input_box.returnPressed.connect(input_box_send)
+        # Create a horizontal layout
+        button_layout = QHBoxLayout()
+
+        # Create the send button
+        send_button = QPushButton("Send", self)
+        send_button.clicked.connect(input_box_send)
+
+        # Create the screenshot button
+        screenshot_button = QPushButton("+Screenshot", self)
+        screenshot_button.clicked.connect(input_box_send_screenshot)
+
+        # Add the buttons to the horizontal layout
+        button_layout.addWidget(send_button)
+        button_layout.addWidget(screenshot_button)
 
 
+
+
+
+        self.shortcut_enter = QShortcut(QKeySequence("Ctrl+Return"), self)
+        self.shortcut_enter.activated.connect(input_box_send_screenshot)
+        self.shortcut_enter = QShortcut(QKeySequence("Return"), self)
+        self.shortcut_enter.activated.connect(input_box_send)
+
+
+
+
+        self.layout.addLayout(button_layout)
 
 
         self.show()
