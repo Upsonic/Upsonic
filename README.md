@@ -13,7 +13,8 @@ At this time we have many infrastructure element. We just aim to provide whole t
  - Memory
 
 --
-
+ - Open and close app
+ - Open a url
  - **Clipboard**
  - Search Engines
  - **Python and SH Interpreters**
