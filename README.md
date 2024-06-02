@@ -4,6 +4,15 @@ Hi, this is an unofficial work for providing ChatGPT MacOS app to Windows and Li
 
 <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/badge/Discord-Join?style=social&logo=discord" width=150></a>
 
+## Demo Video (1 min)
+
+
+
+https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/082a4ee7-e09f-4426-9059-e49b353976a0
+
+
+
+
 
 
 ## Capabilities
