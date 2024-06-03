@@ -6,7 +6,7 @@ Powered by [Upsonic Tiger 🐅](https://github.com/Upsonic/Tiger)
 <a href="https://github.com/Upsonic/Tiger"> <img alt="Static Badge" src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/8a269bb3-5379-44f9-a363-3d40a6a28591" width=100> </a>
 
 
-
+<a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/badge/Discord-Join?style=social&logo=discord" width=150></a>
 
 ## Demo Video (1 min)
 
