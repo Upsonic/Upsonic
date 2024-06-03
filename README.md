@@ -83,6 +83,6 @@ computerassistant
 
 
 ### About Macos
-For now we have some problems, but we will solve it. 
+For now we have some problems with **intel**, but we will solve it. 
 
 https://github.com/onuratakan/gpt-computer-assistant/issues/10
