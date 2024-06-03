@@ -65,7 +65,7 @@ the_input_box = None
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)  # Remove title bar and set window to always on top
+        self.setWindowFlags(Qt.WindowStaysOnTopHint)  # Remove title bar and set window to always on top
         
         self.state = 'idle'  # Possible states: 'idle', 'talking', 'thinking'
         self.pulse_timer = None
@@ -97,13 +97,7 @@ class MainWindow(QMainWindow):
         self.title_bar_layout.setContentsMargins(0, 0, 0, 0)
         self.title_bar_layout.setSpacing(0)
 
-        self.title_label = QLabel("GPT-4o", self)
-        self.title_bar_layout.addWidget(self.title_label)
 
-        self.close_button = QPushButton("X", self)
-        self.close_button.setFixedSize(20, 20)
-        self.close_button.clicked.connect(self.close)
-        self.title_bar_layout.addWidget(self.close_button)
 
 
         layout.addWidget(self.title_bar)
