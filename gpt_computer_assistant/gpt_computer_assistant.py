@@ -234,8 +234,8 @@ class MainWindow(QMainWindow):
 
         # Draw second smaller circle button at bottom right
         small_center_x = self.width() - 30
-        small_center_y = self.height() - 120
-        small_radius = 25
+        small_center_y = self.height() - 160
+        small_radius = 20
         painter.drawEllipse(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
         
         self.small_circle_rect = QRect(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
@@ -244,8 +244,8 @@ class MainWindow(QMainWindow):
 
         # Draw second smaller circle button at bottom left
         small_center_x = 30  # Adjust this line
-        small_center_y = self.height() - 120
-        small_radius = 25
+        small_center_y = self.height() - 130
+        small_radius = 20
         painter.drawEllipse(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
 
         self.small_circle_left = QRect(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
