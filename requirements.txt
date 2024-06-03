@@ -14,3 +14,12 @@ sounddevice==0.4.6
 soundfile==0.12.1
 pydub==0.25.1
 pyscreeze
+AppOpener==1.7
+google==3.0.0
+duckduckgo-search==5.3.0
+beautifulsoup4==4.12.3
+requests
+pyperclip==1.8.2
+ipython
+importlib_metadata
+tinydb==4.8.0
