@@ -75,7 +75,7 @@ class MainWindow(QMainWindow):
         self.old_position = self.pos()  # For moving window
 
     def initUI(self):
-        self.setWindowTitle('GPT-4o')
+        self.setWindowTitle('GPT')
         self.setGeometry(100, 100, 200, 200)  # Adjust the size as needed
         
 
@@ -220,6 +220,7 @@ class MainWindow(QMainWindow):
             radius = 70 + radius_variation
             painter.drawEllipse(int(center_x - radius / 2), int(center_y - radius / 2), int(radius), int(radius))
         elif self.state == 'thinking':
+            the_input_box.setText("Thinking...")
             # more slow pulsating circle with smooth easing animation
             radius_variation = 5 * (1 + math.sin(self.pulse_frame * math.pi / 100))
             radius = 70 + radius_variation
@@ -293,17 +294,17 @@ class MainWindow(QMainWindow):
         self.update()
 
     def mousePressEvent(self, event: QMouseEvent):
-        if self.circle_rect.contains(event.pos()):
-            self.button_handler.toggle_recording(dont_save_image=True)
-        elif self.small_circle_rect.contains(event.pos()):
-            self.button_handler.toggle_recording(no_screenshot=True)
-        elif self.small_circle_left.contains(event.pos()):
-            self.button_handler.toggle_recording(take_system_audio=True)
-        elif self.small_circle_left_top.contains(event.pos()):
-            self.button_handler.just_screenshot()
+        if self.state == 'idle' or self.state == 'talking':
+            if self.circle_rect.contains(event.pos()):
+                self.button_handler.toggle_recording(dont_save_image=True)
+            elif self.small_circle_rect.contains(event.pos()):
+                self.button_handler.toggle_recording(no_screenshot=True)
+            elif self.small_circle_left.contains(event.pos()):
+                self.button_handler.toggle_recording(take_system_audio=True)
+            elif self.small_circle_left_top.contains(event.pos()):
+                self.button_handler.just_screenshot()
 
-        elif self.small_rect_right_top.contains(event.pos()):
-            self.button_handler.settings_popup()
+
 
             
 

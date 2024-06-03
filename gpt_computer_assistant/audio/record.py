@@ -24,6 +24,8 @@ sound_data = None
 
 
 def start_recording(take_system_audio=False):
+    from ..gpt_computer_assistant import the_input_box
+    the_input_box.setText("Click again when recording is done")
     global recording, audio_data
     recording = True
     audio_data = np.array([], dtype='float32')
