@@ -18,7 +18,7 @@ import random
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
-
+from .utils.db import load_api_key
 
 from pygame import mixer
 import math
@@ -69,8 +69,9 @@ class MainWindow(QMainWindow):
         
         self.state = 'idle'  # Possible states: 'idle', 'talking', 'thinking'
         self.pulse_timer = None
-        self.initUI()
+        
         self.button_handler = ButtonHandler(self)  # Pass the whole MainWindow object
+        self.initUI()
         self.old_position = self.pos()  # For moving window
 
     def initUI(self):
@@ -127,7 +128,11 @@ class MainWindow(QMainWindow):
         # I want to create an input box to bottom left and a send button to bottom right
 
         input_box = QLineEdit(self)
-        input_box.setPlaceholderText("Type here")
+
+        if load_api_key() == "CHANGE_ME":
+            input_box.setPlaceholderText("Save your API Key, go to settings")
+        else:
+            input_box.setPlaceholderText("Type here")
         input_box.setGeometry(30, self.height() - 60, 200, 30)
         global the_input_box
         the_input_box = input_box
@@ -178,6 +183,16 @@ class MainWindow(QMainWindow):
         self.layout.addLayout(button_layout)
 
 
+
+        settingsButton = QPushButton('Settings', self)
+
+        settingsButton.clicked.connect(self.button_handler.settings_popup)
+        button_layout_ = QHBoxLayout()
+        button_layout_.addWidget(settingsButton)
+        self.layout.addLayout(button_layout_)
+
+
+
         self.show()
 
     def mousePressEvent(self, event: QMouseEvent):
@@ -197,7 +212,7 @@ class MainWindow(QMainWindow):
         painter.setBrush(QBrush(Qt.black, Qt.SolidPattern))
 
         center_x = 100  # Fixed center x-coordinate
-        center_y = 90  # Fixed center y-coordinate
+        center_y = 50  # Fixed center y-coordinate
 
         if self.state == 'talking':
             # Draw a pulsating circle with smooth easing animation
@@ -218,7 +233,7 @@ class MainWindow(QMainWindow):
 
         # Draw second smaller circle button at bottom right
         small_center_x = self.width() - 30
-        small_center_y = self.height() - 90
+        small_center_y = self.height() - 120
         small_radius = 25
         painter.drawEllipse(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
         
@@ -228,7 +243,7 @@ class MainWindow(QMainWindow):
 
         # Draw second smaller circle button at bottom left
         small_center_x = 30  # Adjust this line
-        small_center_y = self.height() - 90
+        small_center_y = self.height() - 120
         small_radius = 25
         painter.drawEllipse(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
 
@@ -237,21 +252,12 @@ class MainWindow(QMainWindow):
 
         # Draw second smaller circle button at top left
         small_center_x = 30  # Adjust this line
-        small_center_y = 60  # Adjusted this line
+        small_center_y = 30  # Adjusted this line
         small_radius = 25
         painter.drawEllipse(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
 
         self.small_circle_left_top = QRect(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
 
-
-        # Draw second smaller rectangle button at top right
-        small_center_x = self.width() - 30  # Adjust this line
-        small_center_y = 60  # Adjusted this line
-        
-        painter.drawRect(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
-
-        self.small_rect_right_top = QRect(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
-        
 
 
 
