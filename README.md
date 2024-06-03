@@ -81,6 +81,12 @@ pip3 install gpt-computer-assistant
 computerassistant
 ```
 
+Profile Selection, different profiles have fully different message histories. Just like: work, personal, upsonic.
+
+```console
+computerassistant --profile personal
+```
+
 
 ### About Macos
 For now we have some problems with **intel**, but we will solve it. 
