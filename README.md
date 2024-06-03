@@ -64,7 +64,9 @@ At this time we have many infrastructure element. We just aim to provide whole t
 - [x] Text input area
 - [x] Just text mode (no voice answer)
 - [x] Added different profiles
-- [ ] More Effect
+- [x] More Effect
+
+- [ ] Facial analyze with [DeepFace](https://github.com/serengil/deepface)
 
 - [ ] Windows .exe
 - [ ] Linux native
