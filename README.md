@@ -1,9 +1,8 @@
 # GPT Computer Assistant
 Hi, this is an alternative work for providing ChatGPT MacOS app to Windows and Linux. In this way this is a fresh and stable work. You can easily install as Python library for this time but we will prepare a pipeline to providing native install scripts (.exe).
 
-Powered by [Upsonic Tiger 🐅](https://github.com/Upsonic/Tiger)
+Powered by [Upsonic Tiger 🐅](https://github.com/Upsonic/Tiger) An function hub for llm agents.
 
-<a href="https://github.com/Upsonic/Tiger"> <img alt="Static Badge" src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/8a269bb3-5379-44f9-a363-3d40a6a28591" width=100> </a>
 
 
 <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/badge/Discord-Join?style=social&logo=discord" width=150></a>
