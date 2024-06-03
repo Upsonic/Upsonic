@@ -20,7 +20,3 @@ duckduckgo-search==5.3.0
 beautifulsoup4==4.12.3
 requests
 pyperclip==1.8.2
-ipython
-importlib_metadata
-tinydb==4.8.0
-nest_asyncio
