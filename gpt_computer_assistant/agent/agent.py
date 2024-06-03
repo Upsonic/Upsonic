@@ -14,7 +14,7 @@ from langgraph.prebuilt import chat_agent_executor
 
 from upsonic import Tiger
 tools = Tiger()
-tools.enable_auto_requirements = False
+tools.enable_auto_requirements = True
 tools = tools.langchain()
 def get_agent_executor():
     return chat_agent_executor.create_tool_calling_executor(get_model(), tools)
