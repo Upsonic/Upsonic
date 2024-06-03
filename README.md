@@ -31,6 +31,11 @@ computerassistant --profile personal
 ```
 
 
+### Upgrade
+```python
+pip3 install gpt-computer-assistant --upgrade
+```
+
 
 
 
