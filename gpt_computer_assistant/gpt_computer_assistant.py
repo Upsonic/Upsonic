@@ -130,7 +130,7 @@ class MainWindow(QMainWindow):
 
 
 
-        # I want to create a input box to bottom left and a send button to bottom right
+        # I want to create an input box to bottom left and a send button to bottom right
 
         input_box = QLineEdit(self)
         input_box.setPlaceholderText("Type here")
