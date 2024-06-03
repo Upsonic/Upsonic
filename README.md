@@ -15,6 +15,22 @@ Powered by [Upsonic Tiger 🐅](https://github.com/Upsonic/Tiger)
 https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/082a4ee7-e09f-4426-9059-e49b353976a0
 
 
+## Installation && Run
+
+```console
+pip3 install gpt-computer-assistant
+```
+
+```console
+computerassistant
+```
+
+Profile Selection, different profiles have fully different message histories. Just like: work, personal, upsonic.
+
+```console
+computerassistant --profile personal
+```
+
 
 
 
@@ -70,22 +86,6 @@ At this time we have many infrastructure element. We just aim to provide whole t
 
 
 ** After first click to an option that include microphone or system audio you need to stop with another click to same option.
-
-## Installation && Run
-
-```console
-pip3 install gpt-computer-assistant
-```
-
-```console
-computerassistant
-```
-
-Profile Selection, different profiles have fully different message histories. Just like: work, personal, upsonic.
-
-```console
-computerassistant --profile personal
-```
 
 
 ### About Macos
