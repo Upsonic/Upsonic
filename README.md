@@ -26,7 +26,7 @@ computerassistant
 
 Profile Selection, different profiles have fully different message histories. Just like: work, personal, upsonic.
 
-```console
+```python
 computerassistant --profile personal
 ```
 
