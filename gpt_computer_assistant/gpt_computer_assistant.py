@@ -54,7 +54,7 @@ from PyQt5 import QtCore
 
 try:
     import ctypes
-    myappid = 'onuratakan.gpt_computer_assistant.gui.1' # arbitrary string
+    myappid = 'onuratakan.gpt_computer_assistant.gui.1'
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 except:
     pass
@@ -65,18 +65,18 @@ the_input_box = None
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowFlags(Qt.WindowStaysOnTopHint)  # Remove title bar and set window to always on top
+        self.setWindowFlags(Qt.WindowStaysOnTopHint)
         
-        self.state = 'idle'  # Possible states: 'idle', 'talking', 'thinking'
+        self.state = 'idle'
         self.pulse_timer = None
         
-        self.button_handler = ButtonHandler(self)  # Pass the whole MainWindow object
+        self.button_handler = ButtonHandler(self)
         self.initUI()
-        self.old_position = self.pos()  # For moving window
+        self.old_position = self.pos()
 
     def initUI(self):
         self.setWindowTitle('GPT')
-        self.setGeometry(100, 100, 200, 200)  # Adjust the size as needed
+        self.setGeometry(100, 100, 200, 200)
         
 
         app_icon = QtGui.QIcon()
@@ -207,12 +207,12 @@ class MainWindow(QMainWindow):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)  # Enable antialiasing for smooth edges
+        painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(QPen(Qt.black, 8, Qt.SolidLine))
         painter.setBrush(QBrush(Qt.black, Qt.SolidPattern))
 
-        center_x = 100  # Fixed center x-coordinate
-        center_y = 50  # Fixed center y-coordinate
+        center_x = 100
+        center_y = 50
 
         if self.state == 'talking':
             # Draw a pulsating circle with smooth easing animation
@@ -232,7 +232,7 @@ class MainWindow(QMainWindow):
         
         self.circle_rect = QRect(int(center_x - radius / 2), int(center_y - radius / 2), int(radius), int(radius))
 
-        # Draw second smaller circle button at bottom right
+        
         small_center_x = self.width() - 30
         small_center_y = self.height() - 160
         small_radius = 20
@@ -242,8 +242,8 @@ class MainWindow(QMainWindow):
 
 
 
-        # Draw second smaller circle button at bottom left
-        small_center_x = 30  # Adjust this line
+        
+        small_center_x = 30 
         small_center_y = self.height() - 130
         small_radius = 20
         painter.drawEllipse(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
@@ -251,9 +251,9 @@ class MainWindow(QMainWindow):
         self.small_circle_left = QRect(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
 
 
-        # Draw second smaller circle button at top left
-        small_center_x = 30  # Adjust this line
-        small_center_y = 30  # Adjusted this line
+        
+        small_center_x = 30
+        small_center_y = 30
         small_radius = 25
         painter.drawEllipse(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
 
