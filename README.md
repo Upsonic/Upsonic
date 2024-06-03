@@ -4,6 +4,8 @@ Hi, this is an unofficial work for providing ChatGPT MacOS app to Windows and Li
 
 <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/badge/Discord-Join?style=social&logo=discord" width=150></a>
 
+
+
 ## Demo Video (1 min)
 
 
@@ -77,3 +79,8 @@ pip3 install gpt-computer-assistant
 computerassistant
 ```
 
+
+### About Macos
+For now we have some problems, but we will solve it. 
+
+https://github.com/onuratakan/gpt-computer-assistant/issues/10
