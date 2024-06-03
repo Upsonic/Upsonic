@@ -1,5 +1,5 @@
 # GPT Computer Assistant
-Hi, this is an unofficial work for providing ChatGPT MacOS app to Windows and Linux. In this way this is a fresh and stable work. You can easily install as Python library for this time but we will prepare a pipeline to providing native install scripts (.exe).
+Hi, this is an alternative work for providing ChatGPT MacOS app to Windows and Linux. In this way this is a fresh and stable work. You can easily install as Python library for this time but we will prepare a pipeline to providing native install scripts (.exe).
 
 Powered by [Upsonic Tiger 🐅](https://github.com/Upsonic/Tiger)
 
