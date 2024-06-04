@@ -20,7 +20,7 @@ setup(
     entry_points={
         "console_scripts": ["computerassistant=gpt_computer_assistant.start:start"],
     },      
-    python_requires=">= 3",
+    python_requires=">= 3.9",
     zip_safe=False,
 )
 
