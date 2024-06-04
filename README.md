@@ -1,18 +1,52 @@
+<p align="center">
+  <a href="#">
+    <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/176c8ddb-219e-444e-8782-1f8c37a92678" alt="Logo" width="250" >
+  </a>
+
+  <h3 align="center">GPT Computer Assistant</h3>
+
+  <p align="center">
+    gpt-4o for windows, macos and ubuntu
+    <br />
+   <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki"><strong>Documentation</strong></a>
+   .
+    <a href="https://github.com/onuratakan/gpt-computer-assistant/#Capabilities"><strong>Explore the capabilities »</strong></a>
+    <br />
+    </p>
+    <br>
+    <p align="center">
+     <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki">
+   <img src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="windows">
+   </a>
+   <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki">
+   <img src="https://img.shields.io/badge/mac%20os-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macos">
+   </a>
+    <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki">
+   <img src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="linux">
+   </a>
+  <br> 
+
+  </p>
+  <p align="center">
+  <a href="https://www.python.org/">
+  <img src="https://img.shields.io/badge/Made%20with-Python-1f425f.svg" alt="Made_with_python">
+  </a>
+  .
+  <img src="https://static.pepy.tech/personalized-badge/gpt-computer-assistant?period=total&units=international_system&left_color=grey&right_color=blue&left_text=PyPI%20Downloads" alt="pypi_downloads">
+  </p>
+
+
+  <p align="center">
+   <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/badge/Discord-Join?style=social&logo=discord" width=150></a>
+
+  </p>
+
+
+
 # GPT Computer Assistant
 Hi, this is an alternative work for providing ChatGPT MacOS app to Windows and Linux. In this way this is a fresh and stable work. You can easily install as Python library for this time but we will prepare a pipeline to providing native install scripts (.exe).
 
-Powered by [Upsonic Tiger 🐅](https://github.com/Upsonic/Tiger) An function hub for llm agents.
-
-
-
-<a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/badge/Discord-Join?style=social&logo=discord" width=150></a>
-
-## Demo Video (1 min)
-
-
-
-https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/082a4ee7-e09f-4426-9059-e49b353976a0
-
+Powered by <a href="https://github.com/Upsonic/Tiger"><strong>Upsonic Tiger 🐅</strong></a> An function hub for llm agents.
 
 ## Installation && Run
 Needed >= Python 3.9
@@ -24,17 +58,17 @@ pip3 install gpt-computer-assistant
 computerassistant
 ```
 
-Profile Selection, different profiles have fully different message histories. Just like: work, personal, upsonic.
-
-```python
-computerassistant --profile personal
-```
 
 
-### Upgrade
-```python
-pip3 install gpt-computer-assistant --upgrade
-```
+### Demo Video (1 min)
+
+
+
+https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/082a4ee7-e09f-4426-9059-e49b353976a0
+
+
+
+
 
 
 
@@ -118,7 +152,10 @@ At this time we have many infrastructure elements. We just aim to provide whole 
 ** After first click to an option that include microphone or system audio you need to stop with another click to same option.
 
 
-### About Macos
-For now we have some problems with **intel**, but we will solve it. 
 
-https://github.com/onuratakan/gpt-computer-assistant/issues/10
+## Contributors
+
+<a href="https://github.com/onuratakan/gpt-computer-assistant/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=onuratakan/gpt-computer-assistant" />
+</a>
+
