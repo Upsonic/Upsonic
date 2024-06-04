@@ -53,10 +53,7 @@ pip3 install gpt-computer-assistant --upgrade
 | **Our Customizable Agent Infrastructure**              | Planned      | Q2 2024        |
 | **Native Applications, exe,dmg,appimage**              | Planned      | Q2 2024        |
 | **DeepFace Integration (Facial Recognition)**                    | Planned  | Q2 2024        |
-| **Local Mode (With Ollama, Speech, and vision models)**  | Planned  | Q4 2024        |
-| **Writing and Running Scripts** | Planned      | Q2 2024        |
-| **Using your Telegram Account** | Planned      | Q3 2024        |
-| **Knowledge Management**        | Planned  | Q1 2024        |
+| **Local Mode (With Ollama, Speech, and vision models)**  | Planned  | Q2 2024        |
 
 
 #### Agent Infrastructure | Coming Soon
