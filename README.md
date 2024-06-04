@@ -83,7 +83,7 @@ assistant = crew(
 
 assistant.gui()
 ```
-
+- [ ] Ollama Support
 - [ ] Facial analyze with [DeepFace](https://github.com/serengil/deepface)
 
 - [ ] Windows .exe
