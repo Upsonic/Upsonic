@@ -146,7 +146,9 @@ At this time we have many infrastructure elements. We just aim to provide whole 
 
 
 ## Usage
-![options](https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/91fe041d-4a3f-4a6e-9294-20ce2fa1ca36)
+
+![options](https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/20972b1e-6d4f-4314-8470-f2fcf79b6e6d)
+
 
 
 ** After first click to an option that include microphone or system audio you need to stop with another click to same option.
