@@ -58,7 +58,7 @@ At this time we have many infrastructure element. We just aim to provide whole t
  - Knowledge Management
 
 
-#### Todo
+### Roadmap
 - [x] Reset Option
 - [x] Splitting long audios. (Whisper api just support <20mb)
 - [x] Text input area
