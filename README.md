@@ -15,7 +15,7 @@ https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/082a4ee7-e0
 
 
 ## Installation && Run
-
+Needed >= Python 3.9
 ```console
 pip3 install gpt-computer-assistant
 ```
