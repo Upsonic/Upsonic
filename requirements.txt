@@ -18,3 +18,4 @@ requests
 pyperclip==1.8.2
 pydantic==2.7.2
 pillow==10.3.0
+langchain_experimental
