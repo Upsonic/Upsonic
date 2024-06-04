@@ -39,36 +39,27 @@ pip3 install gpt-computer-assistant --upgrade
 
 
 
-## Capabilities
-At this time we have many infrastructure element. We just aim to provide whole thinks that already in ChatGPT app.
+## Roadmap
 
- - **Screen Read**
- - Microphone
- - **System Audio**
- - Memory
+| Feature                         | Status       | Target Release |
+|---------------------------------|--------------|----------------|
+| Clear Chat History         | Completed    | Q2 2024        |
+| Long Audios Support (Split 20mb)      | Completed    | Q2 2024        |
+| Text Inputs               | Completed      | Q2 2024        |
+| Just Text Mode (Mute Speech)           | Completed  | Q2 2024        |
+| Added profiles (Different Chats)          | Completed    | Q2 2024        |
+| More Feedback About Assistant Status                  | Completed    | Q2 2024        |
+| **New UI**              | Planned      | Q2 2024        |
+| **Our Customizable Agent Infrastructure**              | Planned      | Q2 2024        |
+| **Native Applications, exe,dmg,appimage**              | Planned      | Q2 2024        |
+| **DeepFace Integration (Facial Recognition)**                    | Planned  | Q2 2024        |
+| **Local Mode (With Ollama, Speech, and vision models)**  | Planned  | Q4 2024        |
+| **Writing and Running Scripts** | Planned      | Q2 2024        |
+| **Using your Telegram Account** | Planned      | Q3 2024        |
+| **Knowledge Management**        | Planned  | Q1 2024        |
 
---
- - Open and close app
- - Open a url
- - **Clipboard**
- - Search Engines
- - **Python and SH Interpreters**
- - Writing and Running Scripts
- - Using your Telegram Account
- - Knowledge Management
 
-
-### Roadmap
-- [x] Reset Option
-- [x] Splitting long audios. (Whisper api just support <20mb)
-- [x] Text input area
-- [x] Just text mode (no voice answer)
-- [x] Added different profiles
-- [x] More Effect
-
-- [ ] MacOS Intel Support with another basic gui
-
-- [ ] Our agentic infrastructure for generating custom agentic `gpt-computer-assistant`
+#### Agent Infrastructure | Coming Soon
 
 ```python
 from gpt-comptuer-assistant import crew, agent
@@ -83,12 +74,29 @@ assistant = crew(
 
 assistant.gui()
 ```
-- [ ] Ollama Support
-- [ ] Facial analyze with [DeepFace](https://github.com/serengil/deepface)
 
-- [ ] Windows .exe
-- [ ] Linux native
-- [ ] MacOS native
+
+
+
+## Capabilities
+At this time we have many infrastructure elements. We just aim to provide whole things that already in ChatGPT app.
+
+| Capability                         | Description                      |
+|------------------------------------|----------------------------------|
+| **Screen Read**                    |            OK                    |
+| **Microphone**                     |            OK                    |
+| **System Audio**                  |            OK                    |
+| **Memory**                         |            OK                    |
+| **Open and Close App**             |            OK                    |
+| **Open a URL**                     |            OK                    |
+| **Clipboard**                       |            OK                    |
+| **Search Engines**                 |            OK                    |
+| **Writing and running Python**     |            OK                    |
+| **Writing and running SH**    |            OK                    |
+| **Using your Telegram Account**    |            OK                    |
+| **Knowledge Management**           |            OK                    |
+
+
 
 
 ## Use cases
@@ -104,6 +112,7 @@ assistant.gui()
 
   </tr>
 </table>
+
 
 ## Usage
 ![options](https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/91fe041d-4a3f-4a6e-9294-20ce2fa1ca36)
