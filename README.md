@@ -66,6 +66,24 @@ At this time we have many infrastructure element. We just aim to provide whole t
 - [x] Added different profiles
 - [x] More Effect
 
+- [ ] MacOS Intel Support with another basic gui
+
+- [ ] Our agentic infrastructure for generating custom agentic `gpt-computer-assistant`
+
+```python
+from gpt-comptuer-assistant import crew, agent
+
+coder = agent("You are an senior python developer")
+
+manager = agent("You are senior project manager")
+
+assistant = crew(
+ [coder, manager]
+)
+
+assistant.gui()
+```
+
 - [ ] Facial analyze with [DeepFace](https://github.com/serengil/deepface)
 
 - [ ] Windows .exe
