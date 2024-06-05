@@ -113,7 +113,7 @@ https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e6
 #### Agent Infrastructure | Coming Soon
 
 ```python
-from gpt-comptuer-assistant import crew, agent
+from gpt_computer_assistant import crew, agent
 
 coder = agent("You are an senior python developer")
 
