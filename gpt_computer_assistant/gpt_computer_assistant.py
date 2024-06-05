@@ -18,12 +18,12 @@ import random
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
-from .utils.db import load_api_key, load_model_settings
+from .utils.db import load_api_key, load_model_settings, screenshot_icon_path, microphone_icon_path, audio_icon_path
 
 from pygame import mixer
 import math
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
-from PyQt5.QtGui import QMouseEvent, QPainter, QPen, QBrush
+from PyQt5.QtGui import QMouseEvent, QPainter, QPen, QBrush, QIcon, QPixmap
 from PyQt5.QtCore import Qt, QTimer, QRect, pyqtSignal, QObject
 from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import QShortcut
@@ -252,31 +252,51 @@ class MainWindow(QMainWindow):
         self.circle_rect = QRect(int(center_x - radius / 2), int(center_y - radius / 2), int(radius), int(radius))
 
         
+
+
         small_center_x = self.width() - 30
-        small_center_y = self.height() - 160
-        small_radius = 20
+        small_center_y = self.height() - 150
+        small_radius = 30
         painter.drawEllipse(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
         
         self.small_circle_rect = QRect(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
 
+        # Draw the icon inside the circle
+        icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
+        icon_rect = QRect(small_center_x - icon_size // 2, small_center_y - icon_size // 2, icon_size, icon_size)
+        self.small_circle_recticon = QIcon(microphone_icon_path)
+        self.small_circle_recticon.paint(painter, icon_rect)
 
 
         
         small_center_x = 30 
-        small_center_y = self.height() - 130
-        small_radius = 20
+        small_center_y = self.height() - 125
+        small_radius = 30
         painter.drawEllipse(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
 
         self.small_circle_left = QRect(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
 
+        # Draw the icon inside the circle
+        icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
+        icon_rect = QRect(small_center_x - icon_size // 2, small_center_y - icon_size // 2, icon_size, icon_size)
+        self.small_circle_lefticon = QIcon(audio_icon_path)
+        self.small_circle_lefticon.paint(painter, icon_rect)
+
 
         
         small_center_x = 30
-        small_center_y = 30
-        small_radius = 25
+        small_center_y = 25
+        small_radius = 30
         painter.drawEllipse(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
 
         self.small_circle_left_top = QRect(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
+
+        # Draw the icon inside the circle
+        icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
+        icon_rect = QRect(small_center_x - icon_size // 2, small_center_y - icon_size // 2, icon_size, icon_size)
+        self.small_circle_left_topticon = QIcon(screenshot_icon_path)
+        self.small_circle_left_topticon.paint(painter, icon_rect)
+
 
 
     def remove_painting(self):

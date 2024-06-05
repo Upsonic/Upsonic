@@ -98,3 +98,8 @@ icon_24_path = os.path.join(media_dir, "icon_24.png")
 icon_32_path = os.path.join(media_dir, "icon_32.png")
 icon_48_path = os.path.join(media_dir, "icon_48.png")
 icon_256_path = os.path.join(media_dir, "icon_256.png")
+
+
+screenshot_icon_path = os.path.join(media_dir, "Screenshot.png")
+audio_icon_path = os.path.join(media_dir, "Audio.png")
+microphone_icon_path = os.path.join(media_dir, "Microphone.png")
