@@ -4,6 +4,9 @@
   </a>
 
   <h3 align="center">GPT Computer Assistant</h3>
+  <p align="center">
+  <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/discord/1148697961639968859.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2" width=200></a>
+  </p>
 
   <p align="center">
     gpt-4o for windows, macos and ubuntu
@@ -15,13 +18,13 @@
     </p>
     <br>
     <p align="center">
-     <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki">
+     <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki/Installation">
    <img src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="windows">
    </a>
-   <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki">
+   <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki/Installation">
    <img src="https://img.shields.io/badge/mac%20os-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macos">
    </a>
-    <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki">
+    <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki/Installation">
    <img src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="linux">
    </a>
   <br> 
@@ -37,10 +40,11 @@
 
 
   <p align="center">
-   <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/badge/Discord-Join?style=social&logo=discord" width=150></a>
-   <a href="https://x.com/GPTCompAsst"><img alt="Static Badge" src="https://img.shields.io/badge/X-Join?style=social&logo=x" width=100></a>
+   <a href="https://x.com/GPTCompAsst"><img alt="Static Badge" src="https://img.shields.io/twitter/follow/GPTCompAsst?style=social" width=160></a>
+</p>
 
-  </p>
+
+
 
 |ENGLISH|[简体中文](README.zh_CN.md)|
 
@@ -49,7 +53,9 @@ Hi, this is an alternative work for providing ChatGPT MacOS app to Windows and L
 
 Powered by <a href="https://github.com/Upsonic/Tiger"><strong>Upsonic Tiger 🐅</strong></a> An function hub for llm agents.
 
-**Local models, coming soon**
+ <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki/Usage"><img alt="Static Badge" src="https://img.shields.io/badge/Local_Models?style=flat-square&label=Available" width=200></a>
+
+
 
 ## Installation && Run
 Needed >= Python 3.9
