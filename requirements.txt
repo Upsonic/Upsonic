@@ -6,7 +6,7 @@ soundcard==0.4.3
 openai==1.30.3
 langchain_openai==0.1.7
 python-dotenv==1.0.0
-upsonic
+upsonic==0.28.1
 langchain==0.2.1
 langchain_community==0.2.1
 pyautogui==0.9.54
