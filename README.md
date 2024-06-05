@@ -42,7 +42,7 @@
 
   </p>
 
-
+|ENGLISH|[简体中文](README.zh_CN.md)|
 
 # GPT Computer Assistant
 Hi, this is an alternative work for providing ChatGPT MacOS app to Windows and Linux. In this way this is a fresh and stable work. You can easily install as Python library for this time but we will prepare a pipeline to providing native install scripts (.exe).
@@ -158,4 +158,3 @@ At this time we have many infrastructure elements. We just aim to provide whole 
 <a href="https://github.com/onuratakan/gpt-computer-assistant/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=onuratakan/gpt-computer-assistant" />
 </a>
-
