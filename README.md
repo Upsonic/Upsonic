@@ -131,7 +131,7 @@ https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e6
 | More Feedback About Assistant Status                  | Completed    | Q2 2024        |
 | Local Model Vision and Text (With Ollama, and vision models)  | Completed  | Q2 2024        |
 | **Our Customizable Agent Infrastructure**              | Completed      | Q2 2024        |
-| **Supporting Groq Models**  | Ongoing  | Q2 2024        |
+| Supporting Groq Models  | Complated  | Q2 2024        |
 | **Native Applications, exe, dmg, appimage**              | Planned      | Q2 2024        |
 | **New UI**              | Planned      | Q2 2024        |
 | **DeepFace Integration (Facial Recognition)**                    | Planned  | Q2 2024        |

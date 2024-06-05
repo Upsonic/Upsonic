@@ -54,7 +54,7 @@ def agentic(llm_input, llm_history, client, screenshot_path=None, dont_save_imag
 
         elif the_model == "llava" or the_model == "bakllava":
 
-            get_agent_executor().invoke(
+            msg =  get_agent_executor().invoke(
                 {
                     "input": the_message,
                     "chat_history": llm_history,
@@ -104,10 +104,12 @@ def assistant(llm_input, llm_history, client, screenshot_path=None, dont_save_im
     print("LLM INPUT", llm_input)
 
 
+
     the_message = [
                 {"type": "text", "text": f"{llm_input}"},
                 
             ]
+
 
 
 
@@ -128,12 +130,39 @@ def assistant(llm_input, llm_history, client, screenshot_path=None, dont_save_im
     the_model = load_model_settings()
 
 
-    if the_model == "gpt-4o":
-        msg = get_agent_executor().invoke({"messages":llm_history + [the_message]}, config=config)
+    if the_model == "gpt-4o" or the_model == "mixtral-8x7b-groq":
+
+
+        if the_model == "mixtral-8x7b-groq":
+            the_history = []
+            for message in llm_history:
+                try:
+                # Seperate the system message and human message by class
+                    print("EXAMPLE", message.content[0])
+                    if isinstance(message, SystemMessage):
+                        the_mes = SystemMessage(content=message.content[0]["text"])
+                        the_history.append(the_mes)
+                    elif isinstance(message, HumanMessage):
+                        the_mes = HumanMessage(content=message.content[0]["text"])
+                        the_history.append(the_mes)
+                    else:
+                        the_mes = AIMessage(content=message.content[0]["text"])
+                        the_history.append(the_mes)
+                except:
+                    pass
+
+            the_last_message = HumanMessage(content=llm_input)
+            msg = get_agent_executor().invoke({"messages":the_history + [the_last_message]}, config=config)
+
+
+
+
+        else:
+            msg = get_agent_executor().invoke({"messages":llm_history + [the_message]}, config=config)
 
     elif the_model == "llava" or the_model == "bakllava":
 
-        get_agent_executor().invoke(
+        msg = get_agent_executor().invoke(
             {
                 "input": the_message,
                 "chat_history": llm_history,
@@ -159,6 +188,7 @@ def assistant(llm_input, llm_history, client, screenshot_path=None, dont_save_im
     get_chat_message_history().add_message(the_last_messages[-1])
 
 
+    print("THE LAST MESSAGES", the_last_messages[-1].content)
 
     return the_last_messages[-1].content
 

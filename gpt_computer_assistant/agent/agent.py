@@ -63,6 +63,9 @@ def get_agent_executor():
             agent=the_agent, tools=tools, verbose=True, handle_parsing_errors=True
         )
 
+    elif model == "mixtral-8x7b-groq":
+        return chat_agent_executor.create_tool_calling_executor(get_model(), tools)
+
 
 
 """

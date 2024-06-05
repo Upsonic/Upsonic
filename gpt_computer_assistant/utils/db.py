@@ -108,3 +108,24 @@ microphone_icon_path = os.path.join(media_dir, "Microphone.png")
 
 
 agents = []
+
+
+
+groqkey = os.path.join(artifacts_dir, "groqkey.db")
+
+
+def save_groq_api_key(api_key):
+        with open(groqkey, 'w') as f:
+            f.write(api_key)
+
+def load_groq_api_key():
+        if not os.path.exists(groqkey):
+            env = os.getenv("GROQ_API_KEY")
+            if env:
+                save_api_key(env)
+                return env
+            else:
+                return "CHANGE_ME"
+        with open(groqkey, 'r') as f:
+            return f.read()
+        

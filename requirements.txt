@@ -20,4 +20,5 @@ langchainhub
 langchain_experimental
 opentelemetry-sdk==1.24.0
 crewai==0.30.11
+langchain-groq==0.1.5
 langchain_community
