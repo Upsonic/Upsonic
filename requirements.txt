@@ -17,8 +17,8 @@ pyperclip==1.8.2
 pydantic==2.7.2
 pillow==10.3.0
 langchainhub
-langchain_experimental
+langchain_experimental==0.0.58
 opentelemetry-sdk==1.24.0
 crewai==0.30.11
 langchain-groq==0.1.5
-langchain_community
+langchain_community==0.0.38
