@@ -73,6 +73,10 @@ computerassistant
 
 https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e619-44d6-9b04-f39cf1ac1f8f
 
+## Usage
+![Options](https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/54b39347-98e0-4ee4-a715-9128c40dbcd4)
+
+
 ### Use cases
 
 <table>
@@ -151,13 +155,7 @@ At this time we have many infrastructure elements. We just aim to provide whole 
 
 
 
-## Usage
 
-![Options](https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/20972b1e-6d4f-4314-8470-f2fcf79b6e6d)
-
-
-
-** After first click to an option that include microphone or system audio you need to stop with another click to same option.
 
 
 
