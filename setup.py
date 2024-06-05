@@ -7,7 +7,7 @@ with open('requirements.txt') as fp:
     install_requires = fp.read()
 setup(
     name="gpt_computer_assistant",
-    version="0.6.14",
+    version="0.7.0",
     description="""GPT""",
     long_description="".join(open("README.md", encoding="utf-8").readlines()),
     long_description_content_type="text/markdown",
@@ -23,5 +23,6 @@ setup(
     python_requires=">= 3.9",
     zip_safe=False,
 )
+
 
 
