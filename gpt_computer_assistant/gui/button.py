@@ -105,7 +105,7 @@ class ButtonHandler():
         settings_dialog.setWindowModality(Qt.ApplicationModal)
 
         settings_dialog.setLayout(QVBoxLayout())
-        settings_dialog.layout().addWidget(QLabel("OpenAI API Key"))
+        settings_dialog.layout().addWidget(QLabel("OpenAI API Key Get It Here https://platform.openai.com/api-keys"))
         api_key_input = QLineEdit()
         api_key = load_api_key()
         api_key_input.setText(api_key)
