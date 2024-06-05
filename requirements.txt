@@ -1,14 +1,12 @@
-langgraph==0.0.55
+langgraph
 pyqt5==5.15.10
 scipy==1.13.1
 pygame==2.5.2
 soundcard==0.4.3
 openai==1.30.3
-langchain_openai==0.1.7
+langchain_openai
 python-dotenv==1.0.0
 upsonic==0.28.1
-langchain==0.2.1
-langchain_community==0.2.1
 pyautogui==0.9.54
 sounddevice==0.4.6
 soundfile==0.12.1
@@ -18,6 +16,8 @@ requests
 pyperclip==1.8.2
 pydantic==2.7.2
 pillow==10.3.0
-langchainhub==0.1.17
-langchain_experimental==0.0.59
+langchainhub
+langchain_experimental
 opentelemetry-sdk==1.24.0
+crewai==0.30.11
+langchain_community
