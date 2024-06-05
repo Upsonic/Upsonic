@@ -62,10 +62,7 @@ computerassistant
 
 ### Demo Video (1 min)
 
-
-
-https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/082a4ee7-e09f-4426-9059-e49b353976a0
-
+https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e619-44d6-9b04-f39cf1ac1f8f
 
 
 
