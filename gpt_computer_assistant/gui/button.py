@@ -1,25 +1,14 @@
-
-from .signal import *
-
-from ..audio.record import *
-
-from ..screen.shot import *
-
-from ..agent.proccess import *
-
-from ..agent.chat_history import clear_chat_history
-
 import pyautogui
-recording_thread = None
-
-
+from .signal import *
+from ..audio.record import *
+from ..screen.shot import *
+from ..agent.proccess import *
+from ..agent.chat_history import clear_chat_history
 from ..utils.db import screenshot_path, save_api_key, load_api_key, activate_just_text_model, deactivate_just_text_model, is_just_text_model_active, set_profile, get_profile
 from ..screen.shot import take_screenshot
-
-
-
-
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton
+
+recording_thread = None
 
 
 class ButtonHandler():
@@ -36,7 +25,7 @@ class ButtonHandler():
 
 
     def toggle_recording(self, no_screenshot=False, take_system_audio=False, dont_save_image=False):
-
+        
         if self.recording:
             stop_recording()
             self.recording = False
