@@ -20,3 +20,4 @@ pydantic==2.7.2
 pillow==10.3.0
 langchainhub==0.1.17
 langchain_experimental==0.0.59
+opentelemetry-sdk==1.24.0
