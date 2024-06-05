@@ -25,7 +25,7 @@ from ..utils.db import *
 
 
 
-from ..utils.db import system_sound_location, mic_record_location, just_screenshot_path, screenshot_path
+from ..utils.db import system_sound_location, mic_record_location, just_screenshot_path, screenshot_path, load_api_key
 
 
 last_ai_response = None
@@ -201,7 +201,7 @@ def process_text(text, screenshot_path=None):
     signal_handler.assistant_response_ready.emit()
 
     if not is_just_text_model_active():
-        response_path = text_to_speech(llm_output)
+        
         def play_text():
             from ..gpt_computer_assistant import the_input_box
             global last_ai_response
@@ -210,19 +210,24 @@ def process_text(text, screenshot_path=None):
                 last_ai_response = llm_output
          
 
-        def play_audio():
-            play_text()
-            mixer.init()
-            mixer.music.load(response_path)
-            mixer.music.play()
-            while mixer.music.get_busy():
-                time.sleep(0.1)
-            signal_handler.assistant_response_stopped.emit()
-        
+        if load_api_key() != "CHANGE_ME":
+            response_path = text_to_speech(llm_output)
 
-        
-        playback_thread = threading.Thread(target=play_audio)
-        playback_thread.start()
+            def play_audio():
+                play_text()
+                mixer.init()
+                mixer.music.load(response_path)
+                mixer.music.play()
+                while mixer.music.get_busy():
+                    time.sleep(0.1)
+                signal_handler.assistant_response_stopped.emit()
+            
+            playback_thread = threading.Thread(target=play_audio)
+            playback_thread.start()
+        else:
+            play_text()
+            signal_handler.assistant_response_stopped.emit()
+
     else:
         def play_text():
             from ..gpt_computer_assistant import the_input_box

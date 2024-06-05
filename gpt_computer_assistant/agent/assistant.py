@@ -4,7 +4,7 @@ from .chat_history import *
 from .agent import *
 from ..screen.shot import *
 
-
+from ..utils.db import load_model_settings
 
 config = {"configurable": {"thread_id": "abc123"}}
 
@@ -34,9 +34,20 @@ def assistant(llm_input, llm_history, client, screenshot_path=None):
     get_chat_message_history().add_message(the_message)
 
 
+    the_model = load_model_settings()
 
-    msg = get_agent_executor().invoke({"messages":llm_history + [the_message]}, config=config)
 
+    if the_model == "gpt-4o":
+        msg = get_agent_executor().invoke({"messages":llm_history + [the_message]}, config=config)
+
+    elif the_model == "llava" or the_model == "bakllava":
+
+        get_agent_executor().invoke(
+            {
+                "input": the_message,
+                "chat_history": llm_history,
+            }
+        )
 
 
 
