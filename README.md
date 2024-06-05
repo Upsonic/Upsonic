@@ -1,11 +1,11 @@
 <p align="center">
   <a href="#">
-    <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/176c8ddb-219e-444e-8782-1f8c37a92678" alt="Logo" width="200" >
+    <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/176c8ddb-219e-444e-8782-1f8c37a92678" alt="Logo" width="250" >
   </a>
 
   <h3 align="center">GPT Computer Assistant</h3>
   <p align="center">
-  <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/discord/1148697961639968859.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2" width=200></a>
+  <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/discord/1148697961639968859.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2" width=100></a>
   </p>
 
   <p align="center">
