@@ -49,9 +49,9 @@
 |ENGLISH|[简体中文](README.zh_CN.md)|
 
 # GPT Computer Assistant
-Hi, this is an alternative work for providing ChatGPT MacOS app to Windows and Linux. In this way this is a fresh and stable work. You can easily install as Python library for this time but we will prepare a pipeline to providing native install scripts (.exe).
+Hi, this is an alternative work for providing ChatGPT MacOS app to Windows and Linux. In this way this is a fresh and stable work. You can easily install as Python library for this time but we will prepare a pipeline for providing native install scripts (.exe).
 
-Powered by <a href="https://github.com/Upsonic/Tiger"><strong>Upsonic Tiger 🐅</strong></a> An function hub for llm agents.
+Powered by <a href="https://github.com/Upsonic/Tiger"><strong>Upsonic Tiger 🐅</strong></a> A function hub for llm agents.
 
  <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki/Usage"><img alt="Static Badge" src="https://img.shields.io/badge/Local_Models-Available-blue" width=200></a>
 
@@ -104,7 +104,7 @@ https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e6
 | Local Model Vision and Text (With Ollama, and vision models)  | Completed  | Q2 2024        |
 | **Supporting Groq Models**  | Ongoing  | Q2 2024        |
 | **Our Customizable Agent Infrastructure**              | Planned      | Q2 2024        |
-| **Native Applications, exe,dmg,appimage**              | Planned      | Q2 2024        |
+| **Native Applications, exe, dmg, appimage**              | Planned      | Q2 2024        |
 | **New UI**              | Planned      | Q2 2024        |
 | **DeepFace Integration (Facial Recognition)**                    | Planned  | Q2 2024        |
 
@@ -153,7 +153,7 @@ At this time we have many infrastructure elements. We just aim to provide whole 
 
 ## Usage
 
-![options](https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/20972b1e-6d4f-4314-8470-f2fcf79b6e6d)
+![Options](https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/20972b1e-6d4f-4314-8470-f2fcf79b6e6d)
 
 
 
