@@ -49,6 +49,8 @@ Hi, this is an alternative work for providing ChatGPT MacOS app to Windows and L
 
 Powered by <a href="https://github.com/Upsonic/Tiger"><strong>Upsonic Tiger 🐅</strong></a> An function hub for llm agents.
 
+**Local models, coming soon**
+
 ## Installation && Run
 Needed >= Python 3.9
 ```console
@@ -94,11 +96,12 @@ https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e6
 | Just Text Mode (Mute Speech)           | Completed  | Q2 2024        |
 | Added profiles (Different Chats)          | Completed    | Q2 2024        |
 | More Feedback About Assistant Status                  | Completed    | Q2 2024        |
+| **Local Mode (With Ollama, Speech, and vision models)**  | Ongoing  | Q2 2024        |
 | **New UI**              | Planned      | Q2 2024        |
 | **Our Customizable Agent Infrastructure**              | Planned      | Q2 2024        |
 | **Native Applications, exe,dmg,appimage**              | Planned      | Q2 2024        |
 | **DeepFace Integration (Facial Recognition)**                    | Planned  | Q2 2024        |
-| **Local Mode (With Ollama, Speech, and vision models)**  | Planned  | Q2 2024        |
+
 
 
 #### Agent Infrastructure | Coming Soon
