@@ -1,13 +1,25 @@
-from .agent.chat_history import *
-from .agent.assistant import *
-from .llm import *
-from .agent.agent import *
-from .agent.background import *
+try:
+    from .agent.chat_history import *
+    from .agent.assistant import *
+    from .llm import *
+    from .agent.agent import *
+    from .agent.background import *
+    from .utils.db import *
+    from .gui.signal import *
+    from .gui.button import *
+    from .utils.db import load_api_key
+except ImportError:
+    # This is for running the script directly
+    # in order to test the GUI without rebuilding the package
+    from agent.chat_history import *
+    from agent.assistant import *
+    from llm import *
+    from agent.agent import *
+    from agent.background import *
+    from utils.db import *
+    from gui.signal import *
+    from gui.button import *
 
-from .gui.signal import *
-from .gui.button import *
-
-from .utils.db import *
 
 import hashlib
 import sys

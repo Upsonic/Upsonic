@@ -1,8 +1,11 @@
 from openai import OpenAI
 from langchain_openai import ChatOpenAI
 from langchain_community.chat_models import ChatOllama
-from .utils.db import load_api_key, load_model_settings, load_groq_api_key
 from langchain_groq import ChatGroq
+try:
+    from .utils.db import load_api_key, load_model_settings, load_groq_api_key
+except ImportError:
+    from utils.db import load_api_key, load_model_settings, load_groq_api_key
 
 
 

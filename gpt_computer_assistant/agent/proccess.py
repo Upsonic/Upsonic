@@ -1,15 +1,21 @@
-from ..llm import *
-from .assistant import *
-
-from .chat_history import *
-
-from ..audio.tts import text_to_speech
-from ..audio.stt import speech_to_text
-
-from ..audio.record import audio_data
-
-
-from ..gui.signal import signal_handler
+try:
+    from ..llm import *
+    from .assistant import *
+    from .chat_history import *
+    from ..audio.tts import text_to_speech
+    from ..audio.stt import speech_to_text
+    from ..audio.record import audio_data
+    from ..gui.signal import signal_handler
+    from ..utils.db import *
+except ImportError:
+    from llm import *
+    from agent.assistant import *
+    from agent.chat_history import *
+    from audio.tts import text_to_speech
+    from audio.stt import speech_to_text
+    from audio.record import audio_data
+    from gui.signal import signal_handler
+    from utils.db import *
 
 import threading
 
@@ -19,13 +25,11 @@ from pygame import mixer
 
 import time
 import random
-from ..utils.db import *
 
 
 
 
 
-from ..utils.db import system_sound_location, mic_record_location, just_screenshot_path, screenshot_path, load_api_key
 
 
 last_ai_response = None

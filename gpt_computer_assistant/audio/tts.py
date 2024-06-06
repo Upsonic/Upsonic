@@ -1,11 +1,13 @@
-
-from ..llm import *
-
+try:
+    from ..llm import *
+    from ..utils.db import artifacts_dir
+except ImportError:
+    from llm import *
+    from utils.db import artifacts_dir
 import os
 
 import hashlib
 
-from ..utils.db import artifacts_dir
 
 def text_to_speech(text):
     #create sha256 hash of text and save it if already exists just return it

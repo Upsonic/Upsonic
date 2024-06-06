@@ -1,7 +1,12 @@
 import base64
 import pyautogui
-from ..gui.signal import signal_handler
-from ..utils.db import just_screenshot_path
+
+try:  
+    from ..gui.signal import signal_handler
+    from ..utils.db import just_screenshot_path
+except ImportError:
+    from gui.signal import signal_handler
+    from utils.db import just_screenshot_path
 
 
 def encode_image(image_path):

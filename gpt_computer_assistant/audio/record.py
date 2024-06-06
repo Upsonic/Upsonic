@@ -1,5 +1,9 @@
-from ..gui.signal import *
-
+try: 
+    from ..gui.signal import *
+    from ..utils.db import mic_record_location, system_sound_location
+except ImportError:
+    from gui.signal import *
+    from utils.db import mic_record_location, system_sound_location
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
@@ -12,7 +16,6 @@ import soundcard as sc
 import threading
 
 
-from ..utils.db import mic_record_location, system_sound_location
 
 
 samplerate = 48000  # Updated samplerate for better quality

@@ -1,6 +1,10 @@
+try:
+    from ..llm import get_client
+except ImportError:
+    from llm import get_client
+    
 import os
 from pydub import AudioSegment
-from ..llm import get_client
 
 def split_audio(file_path, max_size=20*1024*1024):
     audio = AudioSegment.from_wav(file_path)

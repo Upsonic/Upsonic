@@ -1,11 +1,20 @@
 import pyautogui
 from .signal import *
-from ..audio.record import *
-from ..screen.shot import *
-from ..agent.proccess import *
-from ..agent.chat_history import clear_chat_history
-from ..utils.db import screenshot_path, save_api_key, load_api_key, activate_just_text_model, deactivate_just_text_model, is_just_text_model_active, set_profile, get_profile
-from ..screen.shot import take_screenshot
+
+try:
+    from ..audio.record import *
+    from ..screen.shot import *
+    from ..agent.proccess import *
+    from ..agent.chat_history import clear_chat_history
+    from ..utils.db import screenshot_path, save_api_key, load_api_key, activate_just_text_model, deactivate_just_text_model, is_just_text_model_active, set_profile, get_profile
+    from ..screen.shot import take_screenshot
+except ImportError:
+    from audio.record import *
+    from screen.shot import *
+    from agent.proccess import *
+    from agent.chat_history import clear_chat_history
+    from utils.db import screenshot_path, save_api_key, load_api_key, activate_just_text_model, deactivate_just_text_model, is_just_text_model_active, set_profile, get_profile
+    from screen.shot import take_screenshot
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton
 
 recording_thread = None
