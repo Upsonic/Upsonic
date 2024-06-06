@@ -86,6 +86,10 @@ https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e6
 With this way you can create `crewai` agents and using it into gpt-computer-assistant gui and tools.
 
 
+```console
+pip3 install gpt-computer-assistant[agentic]
+```
+
 ```python
 from gpt_computer_assistant import Agent, start
 
