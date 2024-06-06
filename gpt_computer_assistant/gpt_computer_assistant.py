@@ -89,6 +89,7 @@ class MainWindow(QMainWindow):
     def initUI(self):
         self.setWindowTitle('GPT')
         self.setGeometry(100, 100, 200, 200)
+        self.setFixedSize(self.width(), self.height())
         
 
         app_icon = QtGui.QIcon()
@@ -253,8 +254,8 @@ class MainWindow(QMainWindow):
         
 
 
-        small_center_x = self.width() - 30
-        small_center_y = self.height() - 150
+        small_center_x = 170
+        small_center_y = 25
         small_radius = 30
         painter.drawEllipse(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
         
@@ -269,7 +270,7 @@ class MainWindow(QMainWindow):
 
         
         small_center_x = 30 
-        small_center_y = self.height() - 125
+        small_center_y = 65
         small_radius = 30
         painter.drawEllipse(int(small_center_x - small_radius / 2), int(small_center_y - small_radius / 2), int(small_radius), int(small_radius))
 
