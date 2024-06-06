@@ -63,8 +63,6 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
 
 
 
-
-        print("Whole LLM OUTPUT", get_chat_message_history().messages)
         
         
 
