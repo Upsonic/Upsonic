@@ -13,7 +13,6 @@ from langgraph.prebuilt import chat_agent_executor
 
 try:
     from upsonic import Tiger
-    raise Exception("Use the other one")
     tools = Tiger()
     tools.enable_auto_requirements = True
     tools = tools.langchain()
