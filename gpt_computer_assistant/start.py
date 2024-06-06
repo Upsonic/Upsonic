@@ -16,7 +16,8 @@ def start():
         set_profile(profile)
     
 
-    from .gpt_computer_assistant import QApplication, MainWindow, sys
+    from .gpt_computer_assistant import QApplication, MainWindow, sys, os
+    os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
     app = QApplication(sys.argv)
     ex = MainWindow()
     sys.exit(app.exec_())
