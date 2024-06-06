@@ -1,4 +1,5 @@
 import os
+import uuid
 
 from dotenv import load_dotenv
 load_dotenv(".env")
@@ -129,3 +130,17 @@ def load_groq_api_key():
         with open(groqkey, 'r') as f:
             return f.read()
         
+user_id_db = os.path.join(artifacts_dir, "user_id.db")
+
+def save_user_id():
+    with open(user_id_db, "w") as f:
+        uuid4 = str(uuid.uuid4())
+        f.write(uuid4)
+        return uuid4
+
+
+def load_user_id():
+    if not os.path.exists(user_id_db):
+        return save_user_id()
+    with open(user_id_db, "r") as f:
+        return f.read()

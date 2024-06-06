@@ -1,9 +1,11 @@
 try: 
     from ..gui.signal import *
-    from ..utils.db import mic_record_location, system_sound_location
+    from ..utils.db import mic_record_location, system_sound_location, load_user_id
+    from ..utils.telemetry import my_tracer
 except ImportError:
     from gui.signal import *
-    from utils.db import mic_record_location, system_sound_location
+    from utils.db import mic_record_location, system_sound_location, load_user_id
+    from utils.telemetry import my_tracer
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
@@ -17,7 +19,6 @@ import threading
 
 
 
-
 samplerate = 48000  # Updated samplerate for better quality
 channels = 1
 recording = False
@@ -25,20 +26,24 @@ recording = False
 audio_data = None
 sound_data = None
 
+user_id = load_user_id()
 
 def start_recording(take_system_audio=False):
-    from ..gpt_computer_assistant import the_input_box
-    the_input_box.setText("Click again when recording is done")
-    global recording, audio_data
-    recording = True
-    audio_data = np.array([], dtype='float32')
-    sound_data = np.array([], dtype='float32')
-    print("Recording started...")
+    with my_tracer.start_span("start_recording") as span:
+        span.set_attribute("user_id", user_id)
+        
+        from ..gpt_computer_assistant import the_input_box
+        the_input_box.setText("Click again when recording is done")
+        global recording, audio_data
+        recording = True
+        audio_data = np.array([], dtype='float32')
+        sound_data = np.array([], dtype='float32')
+        print("Recording started...")
 
-    def callback(indata, frames, time, status):
-        global audio_data
-        if recording:
-            audio_data = np.append(audio_data, indata)
+        def callback(indata, frames, time, status):
+            global audio_data
+            if recording:
+                audio_data = np.append(audio_data, indata)
     
 
 
@@ -47,29 +52,31 @@ def start_recording(take_system_audio=False):
 
 
     def record_audio():
-        global recording, sound_data
-        mics = sc.all_microphones(include_loopback=True)
+        with my_tracer.start_span("record_audio") as span:
+            span.set_attribute("user_id", user_id)
+            global recording, sound_data
+            mics = sc.all_microphones(include_loopback=True)
 
-        default_mic = mics[0]
+            default_mic = mics[0]
 
-        data = []
+            data = []
 
-        with default_mic.recorder(samplerate=148000) as mic:
-            print("Recording...")
+            with default_mic.recorder(samplerate=148000) as mic:
+                print("Recording...")
+                
+                while recording:
+                    frame = mic.record(numframes=4096)
+                    data.append(frame)
+
+            # Convert list to numpy array
+            data = np.concatenate(data, axis=0)
+
+            # Convert the recorded data to 16-bit PCM format
+            data_int16 = (data * 32767).astype('int16')
+
+            # Save the recorded data as a WAV file
             
-            while recording:
-                frame = mic.record(numframes=4096)
-                data.append(frame)
-
-        # Convert list to numpy array
-        data = np.concatenate(data, axis=0)
-
-        # Convert the recorded data to 16-bit PCM format
-        data_int16 = (data * 32767).astype('int16')
-
-        # Save the recorded data as a WAV file
-        
-        wavfile.write(system_sound_location, 148000, data_int16)
+            wavfile.write(system_sound_location, 148000, data_int16)
 
     if take_system_audio:
         recording_thread = threading.Thread(target=record_audio)
