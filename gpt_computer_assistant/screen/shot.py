@@ -23,7 +23,6 @@ def encode_image(image_path):
 
 def take_screenshot():
     try:
-        screenshot_path = get_screenshot_path()
         screenshot = pyautogui.screenshot()
         screenshot.save(just_screenshot_path)
         signal_handler.assistant_thinking.emit()
