@@ -110,6 +110,14 @@ def llmsettings_popup(self):
             show_groq()
 
 
+        if model_select.currentText() == "Llava (Ollama)" or model_select.currentText() == "BakLLaVA (Ollama)":
+            from ..gpt_computer_assistant import the_main_window
+            the_main_window.remove_painting()
+
+        if model_select.currentText() == "Mixtral 8x7b (Groq)":
+            from ..gpt_computer_assistant import the_main_window
+            the_main_window.remove_screenshot_button()
+
 
 
         def on_model_change():
@@ -119,21 +127,25 @@ def llmsettings_popup(self):
                 save_model_settings("llava")
                 from ..gpt_computer_assistant import the_main_window
                 the_main_window.remove_painting()
+                the_main_window.add_screenshot_button()      
 
             elif model_select.currentText() == "BakLLaVA (Ollama)":
                 save_model_settings("bakllava")
                 from ..gpt_computer_assistant import the_main_window
                 the_main_window.remove_painting()
+                the_main_window.add_screenshot_button()      
             elif model_select.currentText() == "gpt-4o (OpenAI)":
                 show_openai()
                 save_model_settings("gpt-4o")
                 from ..gpt_computer_assistant import the_main_window
-                the_main_window.activate_painting()          
+                the_main_window.activate_painting()   
+                the_main_window.add_screenshot_button()       
             elif model_select.currentText() == "Mixtral 8x7b (Groq)":
                 show_groq()
                 save_model_settings("mixtral-8x7b-groq")
                 from ..gpt_computer_assistant import the_main_window
-                the_main_window.remove_painting()      
+                the_main_window.remove_painting()   
+                the_main_window.remove_screenshot_button()   
 
         model_select.currentIndexChanged.connect(on_model_change)
 
