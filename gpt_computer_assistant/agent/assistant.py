@@ -153,11 +153,11 @@ def assistant(llm_input, llm_history, client, screenshot_path=None, dont_save_im
                         the_mes = AIMessage(content=message.content[0]["text"])
                         the_history.append(the_mes)
                 except:
-                    pass
+                    the_mes = AIMessage(content=message.content)
+                    the_history.append(the_mes)
 
             the_last_message = HumanMessage(content=llm_input)
             msg = get_agent_executor().invoke({"messages":the_history + [the_last_message]}, config=config)
-
 
 
 
