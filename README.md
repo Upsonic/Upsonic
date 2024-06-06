@@ -1,6 +1,8 @@
+
+
 <p align="center">
   <a href="#">
-    <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/176c8ddb-219e-444e-8782-1f8c37a92678" alt="Logo" width="250" >
+    <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/df0fe23b-da03-42ad-965e-8858eef73263" alt="Logo"  >
   </a>
 
   <h3 align="center">GPT Computer Assistant</h3>
