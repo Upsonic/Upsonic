@@ -69,19 +69,7 @@ pip3 install gpt-computer-assistant
 computerassistant
 ```
 
-
-
-https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e619-44d6-9b04-f39cf1ac1f8f
-
-<p align="center">
-  <a href="#">
-    <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/94ac619c-1f29-4fe6-b3cb-85a03932646b" alt="Logo"  >
-  </a>
-</p>
-
-
-
-#### Agent Infrastructure
+## Agent Infrastructure | NEW
 
 With this way you can create `crewai` agents and using it into gpt-computer-assistant gui and tools.
 
@@ -108,6 +96,18 @@ coder = Agent(
 
 start()
 ```
+
+
+https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e619-44d6-9b04-f39cf1ac1f8f
+
+<p align="center">
+  <a href="#">
+    <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/94ac619c-1f29-4fe6-b3cb-85a03932646b" alt="Logo"  >
+  </a>
+</p>
+
+
+
 
 
 
