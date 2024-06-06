@@ -1,1 +1,2 @@
 include gpt_computer_assistant/utils/media/*
+include requirements.txt
