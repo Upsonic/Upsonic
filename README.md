@@ -49,6 +49,8 @@
 
 
 
+https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e619-44d6-9b04-f39cf1ac1f8f
+
 <p align="center">
   <a href="#">
     <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/94ac619c-1f29-4fe6-b3cb-85a03932646b" alt="Logo"  >
@@ -105,9 +107,6 @@ start()
 
 
 
-### Demo Video (1 min)
-
-https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e619-44d6-9b04-f39cf1ac1f8f
 
 ## Usage
 ![Options](https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/54b39347-98e0-4ee4-a715-9128c40dbcd4)
