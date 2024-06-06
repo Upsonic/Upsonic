@@ -14,6 +14,9 @@ from langchain.agents import AgentExecutor, create_json_chat_agent
 
 from langgraph.prebuilt import chat_agent_executor
 
+
+custom_tools = []
+
 try:
     from upsonic import Tiger
     tools = Tiger()
@@ -33,6 +36,8 @@ except:
 
 
 
+
+
 prompt_cache = {}
 def get_prompt(name):
     global prompt_cache
@@ -46,7 +51,8 @@ def get_prompt(name):
 
 
 def get_agent_executor():
-    
+    global custom_tools, tools
+    tools += custom_tools
     model = load_model_settings()
     if model == "gpt-4o":
         return chat_agent_executor.create_tool_calling_executor(get_model(), tools)

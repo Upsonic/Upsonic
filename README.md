@@ -98,6 +98,23 @@ start()
 ```
 
 
+### Adding Custom Tools | NEW
+
+Now you are able to add custom tools that run in the agentic infra and assistant procceses. 
+
+
+```python
+from gpt_computer_assistant import Agent, Tool
+
+@Tool
+def sum_tool(first_number: int, second_number: int) -> str:
+    """Useful for when you need to sum two numbers together."""
+    return first_number + second_number
+
+start()
+```
+
+
 https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e619-44d6-9b04-f39cf1ac1f8f
 
 <p align="center">
@@ -147,6 +164,7 @@ https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e6
 | Local Model Vision and Text (With Ollama, and vision models)  | Completed  | Q2 2024        |
 | **Our Customizable Agent Infrastructure**              | Completed      | Q2 2024        |
 | Supporting Groq Models  | Completed  | Q2 2024        |
+| **Adding Custom Tools**  | Completed  | Q2 2024        |
 | **Native Applications, exe, dmg, appimage**              | Planned      | Q2 2024        |
 | **New UI**              | Planned      | Q2 2024        |
 | **DeepFace Integration (Facial Recognition)**                    | Planned  | Q2 2024        |
