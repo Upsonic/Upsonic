@@ -48,6 +48,14 @@
 
 
 
+
+<p align="center">
+  <a href="#">
+    <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/94ac619c-1f29-4fe6-b3cb-85a03932646b" alt="Logo"  >
+  </a>
+</p>
+
+
 |ENGLISH|[简体中文](README.zh_CN.md)|
 
 # GPT Computer Assistant
