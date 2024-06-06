@@ -26,6 +26,20 @@ config = {"configurable": {"thread_id": "abc123"}}
 
 def agentic(llm_input, llm_history, client, screenshot_path=None, dont_save_image=False):
     from crewai import Task, Crew
+
+
+    from crewai import Agent as crewai_Agent
+
+    the_agents = []
+
+    for each in agents:
+        the_agents.append(crewai_Agent(role=each["role"], goal=each["goal"], backstory=each["backstory"], llm=get_model()))
+
+    
+    agents = the_agents
+
+
+
     print("LLM INPUT", llm_input)
 
     def image_explaination():
