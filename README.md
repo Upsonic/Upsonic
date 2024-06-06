@@ -104,7 +104,7 @@ Now you are able to add custom tools that run in the agentic infra and assistant
 
 
 ```python
-from gpt_computer_assistant import Agent, Tool
+from gpt_computer_assistant import Tool, start
 
 @Tool
 def sum_tool(first_number: int, second_number: int) -> str:
