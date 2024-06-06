@@ -23,6 +23,9 @@ setup(
     },      
     python_requires=">= 3.9",
     zip_safe=False,
+    extras_require={
+        'agentic': ['crewai==0.30.11'],
+    }
 )
 
 
