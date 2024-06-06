@@ -25,5 +25,24 @@ def CreateTracer(service_name, trace_name, infrastackai_api_key=None):
 
     return tracer
 
+
+def os_name():
+    import platform
+
+    system_name = platform.system()
+    if system_name == 'Windows':
+        return 'Windows'
+    elif system_name == 'Darwin':
+        return 'macOS'
+    elif system_name == 'Linux':
+        return 'Linux'
+    else:
+        return 'Unknown OS'
+
+
+
+
 my_tracer = CreateTracer("gpt_computer_assistant", "app", infrastackai_api_key="sk-2b29c6da910d2883de0599d4c5dd6b9d2e4ec61bbfa834d5")
+
+
 

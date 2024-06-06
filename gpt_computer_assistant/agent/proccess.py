@@ -7,7 +7,7 @@ try:
     from ..audio.record import audio_data
     from ..gui.signal import signal_handler
     from ..utils.db import *
-    from ..utils.telemetry import my_tracer
+    from ..utils.telemetry import my_tracer, os_name
 except ImportError:
     from llm import *
     from agent.assistant import *
@@ -17,7 +17,7 @@ except ImportError:
     from audio.record import audio_data
     from gui.signal import signal_handler
     from utils.db import *
-    from utils.telemetry import my_tracer
+    from utils.telemetry import my_tracer, os_name
 
 import threading
 
@@ -36,11 +36,13 @@ import random
 
 last_ai_response = None
 user_id = load_user_id()
+os_name_ = os_name()
 
 
 def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image=False):
     with my_tracer.start_span("process_audio") as span:
         span.set_attribute("user_id", user_id)
+        span.set_attribute("os_name", os_name_)
 
         global audio_data, last_ai_response
 
@@ -82,7 +84,8 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
 
             def play_audio():
                 with my_tracer.start_span("play_audio") as span:
-                    span.set_attribute("user_id", user_id)                            
+                    span.set_attribute("user_id", user_id)    
+                    span.set_attribute("os_name", os_name_)                        
                     play_text()
                     mixer.init()
                     mixer.music.load(response_path)
@@ -110,6 +113,7 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
 def process_screenshot():
     with my_tracer.start_span("process_screenshot") as span:
         span.set_attribute("user_id", user_id)
+        span.set_attribute("os_name", os_name_)
 
         global last_ai_response
 
@@ -143,7 +147,8 @@ def process_screenshot():
 
             def play_audio():
                 with my_tracer.start_span("play_audio") as span:
-                    span.set_attribute("user_id", user_id)            
+                    span.set_attribute("user_id", user_id) 
+                    span.set_attribute("os_name", os_name_)           
                     play_text()
                     mixer.init()
                     mixer.music.load(response_path)
@@ -172,6 +177,7 @@ def process_screenshot():
 def process_text(text, screenshot_path=None):
     with my_tracer.start_span("process_text") as span:
         span.set_attribute("user_id", user_id)
+        span.set_attribute("os_name", os_name_)
 
         global last_ai_response
 
@@ -204,7 +210,8 @@ def process_text(text, screenshot_path=None):
                 signal_handler.assistant_response_ready.emit()
                 def play_audio():
                     with my_tracer.start_span("play_audio") as span:
-                        span.set_attribute("user_id", user_id)                          
+                        span.set_attribute("user_id", user_id)    
+                        span.set_attribute("os_name", os_name_)                      
                         play_text()
                         mixer.init()
                         mixer.music.load(response_path)

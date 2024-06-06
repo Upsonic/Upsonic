@@ -1,11 +1,11 @@
 try: 
     from ..gui.signal import *
     from ..utils.db import mic_record_location, system_sound_location, load_user_id
-    from ..utils.telemetry import my_tracer
+    from ..utils.telemetry import my_tracer, os_name
 except ImportError:
     from gui.signal import *
     from utils.db import mic_record_location, system_sound_location, load_user_id
-    from utils.telemetry import my_tracer
+    from utils.telemetry import my_tracer, os_name
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
@@ -27,10 +27,12 @@ audio_data = None
 sound_data = None
 
 user_id = load_user_id()
+os_name_ = os_name()
 
 def start_recording(take_system_audio=False):
     with my_tracer.start_span("start_recording") as span:
         span.set_attribute("user_id", user_id)
+        span.set_attribute("os_name", os_name_)
         
         from ..gpt_computer_assistant import the_input_box
         the_input_box.setText("Click again when recording is done")
@@ -54,6 +56,7 @@ def start_recording(take_system_audio=False):
     def record_audio():
         with my_tracer.start_span("record_audio") as span:
             span.set_attribute("user_id", user_id)
+            span.set_attribute("os_name", os_name_)
             global recording, sound_data
             mics = sc.all_microphones(include_loopback=True)
 

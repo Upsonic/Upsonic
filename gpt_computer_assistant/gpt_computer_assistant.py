@@ -8,7 +8,7 @@ try:
     from .gui.signal import *
     from .gui.button import *
     from .utils.db import *
-    from .utils.telemetry import my_tracer
+    from .utils.telemetry import my_tracer, os_name
 except ImportError:
     # This is for running the script directly
     # in order to test the GUI without rebuilding the package
@@ -18,7 +18,7 @@ except ImportError:
     from agent.agent import *
     from agent.background import *
     from utils.db import *
-    from utils.telemetry import my_tracer
+    from utils.telemetry import my_tracer, os_name
     from gui.signal import *
     from gui.button import *
 
@@ -80,6 +80,7 @@ the_main_window = None
 
 
 user_id = load_user_id()
+os_name_ = os_name()
 
 
 class MainWindow(QMainWindow):
@@ -361,6 +362,7 @@ class MainWindow(QMainWindow):
     def mousePressEvent(self, event: QMouseEvent):
         with my_tracer.start_span("mouse_press_event") as span:
             span.set_attribute("user_id", user_id)
+            span.set_attribute("os_name", os_name_)
             if self.state == 'idle' or self.state == 'talking':
                 if self.circle_rect.contains(event.pos()):
                     self.button_handler.toggle_recording(dont_save_image=True)
