@@ -1,6 +1,6 @@
 import base64
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-from crewai import Task, Crew
+
 
 
 from .chat_history import *
@@ -25,7 +25,7 @@ config = {"configurable": {"thread_id": "abc123"}}
 
 
 def agentic(llm_input, llm_history, client, screenshot_path=None, dont_save_image=False):
-
+    from crewai import Task, Crew
     print("LLM INPUT", llm_input)
 
     def image_explaination():
