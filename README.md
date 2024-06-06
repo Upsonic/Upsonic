@@ -63,7 +63,9 @@ Hi, this is an alternative work for providing ChatGPT MacOS app to Windows and L
 
 Powered by <a href="https://github.com/Upsonic/Tiger"><strong>Upsonic Tiger 🐅</strong></a> A function hub for llm agents.
 
- <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki/Usage"><img alt="Static Badge" src="https://img.shields.io/badge/Local_Models-Available-blue" width=200></a>
+ <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki/Usage"><img alt="Static Badge" src="https://img.shields.io/badge/Local_Models-Available-blue" width=150></a>
+ <br>
+ <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki/Usage"><img alt="Static Badge" src="https://img.shields.io/badge/Groq-Available-blue" width=100></a>
 
 
 
