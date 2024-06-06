@@ -46,18 +46,6 @@
 </p>
 
 
-
-
-
-https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e619-44d6-9b04-f39cf1ac1f8f
-
-<p align="center">
-  <a href="#">
-    <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/94ac619c-1f29-4fe6-b3cb-85a03932646b" alt="Logo"  >
-  </a>
-</p>
-
-
 |ENGLISH|[简体中文](README.zh_CN.md)|
 
 # GPT Computer Assistant
@@ -80,6 +68,18 @@ pip3 install gpt-computer-assistant
 ```console
 computerassistant
 ```
+
+
+
+https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e619-44d6-9b04-f39cf1ac1f8f
+
+<p align="center">
+  <a href="#">
+    <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/94ac619c-1f29-4fe6-b3cb-85a03932646b" alt="Logo"  >
+  </a>
+</p>
+
+
 
 #### Agent Infrastructure
 
