@@ -25,6 +25,7 @@ config = {"configurable": {"thread_id": "abc123"}}
 
 
 def agentic(llm_input, llm_history, client, screenshot_path=None, dont_save_image=False):
+    global agents
     from crewai import Task, Crew
 
 
