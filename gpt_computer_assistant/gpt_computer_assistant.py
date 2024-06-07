@@ -2,6 +2,7 @@ try:
     from .agent.chat_history import *
     from .agent.assistant import *
     from .llm import *
+    from .llm_settings import llm_settings
     from .agent.agent import *
     from .agent.background import *
 
@@ -18,6 +19,7 @@ except ImportError:
     from agent.chat_history import *
     from agent.assistant import *
     from llm import *
+    from llm_settings import llm_settings
     from agent.agent import *
     from agent.background import *
     from utils.db import load_api_key, load_model_settings, screenshot_icon_path, microphone_icon_path, audio_icon_path
@@ -99,7 +101,7 @@ class MainWindow(QMainWindow):
         self.initUI()
         self.old_position = self.pos()
 
-        if load_model_settings().startswith("gpt"):
+        if llm_settings[load_model_settings()]["transcription"]:
             self.should_paint = True  # Flag to control painting
         else:
             self.should_paint = False
@@ -200,7 +202,7 @@ class MainWindow(QMainWindow):
         self.screenshot_button.clicked.connect(input_box_send_screenshot)
 
 
-        if load_model_settings() == "mixtral-8x7b-groq":
+        if llm_settings[load_model_settings()]["vision"] == False:
             self.screenshot_button.hide()
 
 
@@ -241,7 +243,7 @@ class MainWindow(QMainWindow):
             return  # Skip the drawing if should_paint is False
 
 
-        if load_model_settings() == "gpt-4o":
+        if llm_settings[load_model_settings()]["vision"] == True:
             self.screen_available = True
         else:
             self.screen_available = False
@@ -434,7 +436,7 @@ class MainWindow(QMainWindow):
             span.set_attribute("os_name", os_name_)
             if self.state == "idle" or self.state == "talking":
                 if self.circle_rect.contains(event.pos()):
-                    if load_model_settings() == "gpt-4o":
+                    if llm_settings[load_model_settings()]["vision"] == True:
                         
                         self.button_handler.toggle_recording(dont_save_image=True)
                     else:

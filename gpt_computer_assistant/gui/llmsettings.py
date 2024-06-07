@@ -1,9 +1,11 @@
 try:
     from ..utils.db import screenshot_path, save_api_key, load_api_key, activate_just_text_model, deactivate_just_text_model, is_just_text_model_active, set_profile, get_profile, load_model_settings, save_model_settings, load_openai_url, load_groq_api_key
     from ..agent.chat_history import clear_chat_history
+    from ..llm_settings import llm_show_name, llm_settings
 except ImportError:
     from utils.db import screenshot_path, save_api_key, load_api_key, activate_just_text_model, deactivate_just_text_model, is_just_text_model_active, set_profile, get_profile, load_model_settings, save_model_settings, load_openai_url, load_groq_api_key
     from agent.chat_history import clear_chat_history
+    from llm_settings import llm_show_name, llm_settings
     
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton
 from PyQt5.QtCore import Qt, QTimer, QRect, pyqtSignal, QObject
@@ -131,73 +133,75 @@ def llmsettings_popup(self):
     elif current_model == "mixtral-8x7b-groq":
         model_select.setCurrentIndex(4)
 
-    if model_select.currentText() == "gpt-4o (OpenAI)":
+
+
+    if llm_settings[llm_show_name[model_select.currentText()]]["provider"] == "openai":
         show_openai()
 
-    if model_select.currentText() == "gpt-3.5-turbo (OpenAI)":
-        show_openai()
-
-
-    if model_select.currentText() == "Mixtral 8x7b (Groq)":
+    if llm_settings[llm_show_name[model_select.currentText()]]["provider"] == "groq":
         show_groq()
-        
 
-    if (
-        model_select.currentText() == "Llava (Ollama)"
-        or model_select.currentText() == "BakLLaVA (Ollama)"
-    ):
+    if not llm_settings[llm_show_name[model_select.currentText()]]["transcription"]:
         from ..gpt_computer_assistant import the_main_window
 
         the_main_window.remove_painting()
 
-    if model_select.currentText() == "Mixtral 8x7b (Groq)":
+    if not llm_settings[llm_show_name[model_select.currentText()]]["vision"]:
         from ..gpt_computer_assistant import the_main_window
 
         the_main_window.remove_screenshot_button()
 
+
+
+
     def on_model_change():
         hide_openai()
         hide_groq()
+
+
         if model_select.currentText() == "Llava (Ollama)":
             save_model_settings("llava")
-            from ..gpt_computer_assistant import the_main_window
-
-            the_main_window.remove_painting()
-            the_main_window.add_screenshot_button()
 
         elif model_select.currentText() == "BakLLaVA (Ollama)":
             save_model_settings("bakllava")
-            from ..gpt_computer_assistant import the_main_window
 
-            the_main_window.remove_painting()
-            the_main_window.add_screenshot_button()
         elif model_select.currentText() == "gpt-4o (OpenAI)":
-            show_openai()
-            openai_url_label.show()
-            openai_url_input.show()
-            openai_url_save_button.show()
             save_model_settings("gpt-4o")
-            from ..gpt_computer_assistant import the_main_window
 
-            the_main_window.activate_painting()
-            the_main_window.add_screenshot_button()
+
         elif model_select.currentText() == "gpt-3.5-turbo (OpenAI)":
-            show_openai()
-            openai_url_label.show()
-            openai_url_input.show()
-            openai_url_save_button.show()
             save_model_settings("gpt-3.5-turbo")
-            from ..gpt_computer_assistant import the_main_window
 
-            the_main_window.activate_painting()
-            the_main_window.remove_screenshot_button()
+
         elif model_select.currentText() == "Mixtral 8x7b (Groq)":
             show_groq()
             save_model_settings("mixtral-8x7b-groq")
+
+
+
+
+        if llm_settings[llm_show_name[model_select.currentText()]]["transcription"] == False: 
             from ..gpt_computer_assistant import the_main_window
 
             the_main_window.remove_painting()
+
+
+
+        if llm_settings[llm_show_name[model_select.currentText()]]["provider"] == "openai":
+            show_openai()
+            openai_url_label.show()
+            openai_url_input.show()
+            openai_url_save_button.show()
+            from ..gpt_computer_assistant import the_main_window
+
+            the_main_window.activate_painting()
+
+        if llm_settings[llm_show_name[model_select.currentText()]]["vision"]:
+            the_main_window.add_screenshot_button()
+        else:
             the_main_window.remove_screenshot_button()
+
+
 
     model_select.currentIndexChanged.connect(on_model_change)
 
