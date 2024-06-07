@@ -5,7 +5,6 @@ except ImportError:
 from ..utils.db import load_model_settings
 
 
-
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 
@@ -19,12 +18,14 @@ custom_tools = []
 
 try:
     from upsonic import Tiger
+
     tools = Tiger()
     tools.enable_auto_requirements = True
     tools = tools.langchain()
 except:
     from langchain.agents import Tool
     from langchain_experimental.utilities import PythonREPL
+
     python_repl = PythonREPL()
     # You can create the tool to pass to an agent
     repl_tool = Tool(
@@ -35,16 +36,16 @@ except:
     tools = [repl_tool]
 
 
-
-
-
 prompt_cache = {}
+
+
 def get_prompt(name):
     global prompt_cache
     if name in prompt_cache:
         return prompt_cache[name]
     else:
         from langchain import hub
+
         prompt = hub.pull(name)
         prompt_cache[name] = prompt
         return prompt
@@ -58,6 +59,7 @@ def get_agent_executor():
         return chat_agent_executor.create_tool_calling_executor(get_model(), tools)
     elif model == "llava":
         from langchain import hub
+
         prompt = get_prompt("hwchase17/react-chat-json")
         the_agent = create_json_chat_agent(get_model(), tools, prompt)
         return AgentExecutor(
@@ -75,7 +77,6 @@ def get_agent_executor():
         return chat_agent_executor.create_tool_calling_executor(get_model(), tools)
 
 
-
 """
 from langchain.agents import Tool
 from langchain_experimental.utilities import PythonREPL
@@ -91,5 +92,3 @@ from langgraph.prebuilt import chat_agent_executor
 def get_agent_executor():
     return chat_agent_executor.create_tool_calling_executor(get_model(), [repl_tool])
 """
-
-

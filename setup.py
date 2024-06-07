@@ -3,7 +3,7 @@
 
 from setuptools import setup
 
-with open('requirements.txt') as fp:
+with open("requirements.txt") as fp:
     install_requires = fp.read()
 setup(
     name="gpt_computer_assistant",
@@ -15,18 +15,22 @@ setup(
     author="Onur Atakan ULUSOY",
     author_email="atadogan06@gmail.com",
     license="MIT",
-    packages=["gpt_computer_assistant", "gpt_computer_assistant.agent", "gpt_computer_assistant.gui", "gpt_computer_assistant.screen", "gpt_computer_assistant.utils", "gpt_computer_assistant.audio"],
-    include_package_data = True,
+    packages=[
+        "gpt_computer_assistant",
+        "gpt_computer_assistant.agent",
+        "gpt_computer_assistant.gui",
+        "gpt_computer_assistant.screen",
+        "gpt_computer_assistant.utils",
+        "gpt_computer_assistant.audio",
+    ],
+    include_package_data=True,
     install_requires=install_requires,
     entry_points={
         "console_scripts": ["computerassistant=gpt_computer_assistant.start:start"],
-    },      
+    },
     python_requires=">= 3.9",
     zip_safe=False,
     extras_require={
-        'agentic': ['crewai==0.30.11'],
-    }
+        "agentic": ["crewai==0.30.11"],
+    },
 )
-
-
-

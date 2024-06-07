@@ -1,10 +1,11 @@
-
 import os
+
 
 def start():
 
     # get --profile argument with library
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", help="profile to use")
     args = parser.parse_args()
@@ -13,8 +14,9 @@ def start():
 
     if profile != None:
         from .utils.db import set_profile
+
         set_profile(profile)
-    
+
     try:
         from .gpt_computer_assistant import QApplication, MainWindow, sys
     except ImportError:
@@ -24,4 +26,3 @@ def start():
     app = QApplication(sys.argv)
     ex = MainWindow()
     sys.exit(app.exec_())
-

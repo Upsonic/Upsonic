@@ -2,7 +2,6 @@ import base64
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 
-
 from .chat_history import *
 from .agent import *
 
@@ -20,81 +19,75 @@ except ImportError:
 config = {"configurable": {"thread_id": "abc123"}}
 
 
-
-
-
-
-def agentic(llm_input, llm_history, client, screenshot_path=None, dont_save_image=False):
+def agentic(
+    llm_input, llm_history, client, screenshot_path=None, dont_save_image=False
+):
     global agents
     from crewai import Task, Crew
-
 
     from crewai import Agent as crewai_Agent
 
     the_agents = []
 
     for each in agents:
-        the_agents.append(crewai_Agent(role=each["role"], goal=each["goal"], backstory=each["backstory"], llm=get_model()))
+        the_agents.append(
+            crewai_Agent(
+                role=each["role"],
+                goal=each["goal"],
+                backstory=each["backstory"],
+                llm=get_model(),
+            )
+        )
 
-    
     agents = the_agents
-
-
 
     print("LLM INPUT", llm_input)
 
     def image_explaination():
         the_message = [
-                    {"type": "text", "text": f"Explain the image"},
-                    
-                ]
-
-
+            {"type": "text", "text": f"Explain the image"},
+        ]
 
         if screenshot_path:
             base64_image = encode_image(screenshot_path)
             the_message.append(
                 {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
-                    },
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+                },
             )
-            print("LEN OF İMAGE", len(base64_image)) 
+            print("LEN OF İMAGE", len(base64_image))
 
         the_message = HumanMessage(content=the_message)
         get_chat_message_history().add_message(the_message)
 
-
         the_model = load_model_settings()
 
-
         if the_model == "gpt-4o":
-            msg = get_agent_executor().invoke({"messages":llm_history + [the_message]}, config=config)
+            msg = get_agent_executor().invoke(
+                {"messages": llm_history + [the_message]}, config=config
+            )
 
         elif the_model == "llava" or the_model == "bakllava":
 
-            msg =  get_agent_executor().invoke(
+            msg = get_agent_executor().invoke(
                 {
                     "input": the_message,
                     "chat_history": llm_history,
                 }
             )
 
-
-
         the_last_messages = msg["messages"]
 
         return the_last_messages[-1].content
-
-
 
     if screenshot_path:
         image_explain = image_explaination()
         llm_input += "User Sent Image and image content is: " + image_explain
 
-    
-
-    task = Task(description=llm_input, expected_output="Answer", agent=agents[0], tools=tools)
+    task = Task(
+        description=llm_input, expected_output="Answer", agent=agents[0], tools=tools
+    )
 
     the_crew = Crew(
         llm=get_model(),
@@ -112,9 +105,9 @@ def agentic(llm_input, llm_history, client, screenshot_path=None, dont_save_imag
     return result
 
 
-
-
-def assistant(llm_input, llm_history, client, screenshot_path=None, dont_save_image=False):
+def assistant(
+    llm_input, llm_history, client, screenshot_path=None, dont_save_image=False
+):
 
     if len(agents) != 0:
         print("Moving to Agentic")
@@ -122,41 +115,32 @@ def assistant(llm_input, llm_history, client, screenshot_path=None, dont_save_im
 
     print("LLM INPUT", llm_input)
 
-
-
     the_message = [
-                {"type": "text", "text": f"{llm_input}"},
-                
-            ]
-
-
-
+        {"type": "text", "text": f"{llm_input}"},
+    ]
 
     if screenshot_path:
         base64_image = encode_image(screenshot_path)
         the_message.append(
             {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
-                },
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+            },
         )
-        print("LEN OF İMAGE", len(base64_image)) 
+        print("LEN OF İMAGE", len(base64_image))
 
     the_message = HumanMessage(content=the_message)
     get_chat_message_history().add_message(the_message)
 
-
     the_model = load_model_settings()
 
-
     if the_model == "gpt-4o" or the_model == "mixtral-8x7b-groq":
-
 
         if the_model == "mixtral-8x7b-groq":
             the_history = []
             for message in llm_history:
                 try:
-                # Seperate the system message and human message by class
+                    # Seperate the system message and human message by class
                     print("EXAMPLE", message.content[0])
                     if isinstance(message, SystemMessage):
                         the_mes = SystemMessage(content=message.content[0]["text"])
@@ -172,12 +156,14 @@ def assistant(llm_input, llm_history, client, screenshot_path=None, dont_save_im
                     the_history.append(the_mes)
 
             the_last_message = HumanMessage(content=llm_input)
-            msg = get_agent_executor().invoke({"messages":the_history + [the_last_message]}, config=config)
-
-
+            msg = get_agent_executor().invoke(
+                {"messages": the_history + [the_last_message]}, config=config
+            )
 
         else:
-            msg = get_agent_executor().invoke({"messages":llm_history + [the_message]}, config=config)
+            msg = get_agent_executor().invoke(
+                {"messages": llm_history + [the_message]}, config=config
+            )
 
     elif the_model == "llava" or the_model == "bakllava":
 
@@ -188,10 +174,7 @@ def assistant(llm_input, llm_history, client, screenshot_path=None, dont_save_im
             }
         )
 
-
-
     the_last_messages = msg["messages"]
-
 
     if dont_save_image and screenshot_path != None:
         currently_messages = get_chat_message_history().messages
@@ -206,12 +189,6 @@ def assistant(llm_input, llm_history, client, screenshot_path=None, dont_save_im
 
     get_chat_message_history().add_message(the_last_messages[-1])
 
-
     print("THE LAST MESSAGES", the_last_messages[-1].content)
 
     return the_last_messages[-1].content
-
-
-
-
-

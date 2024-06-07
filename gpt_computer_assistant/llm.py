@@ -2,11 +2,11 @@ from openai import OpenAI
 from langchain_openai import ChatOpenAI
 from langchain_community.chat_models import ChatOllama
 from langchain_groq import ChatGroq
+
 try:
     from .utils.db import load_api_key, load_model_settings, load_groq_api_key
 except ImportError:
     from utils.db import load_api_key, load_model_settings, load_groq_api_key
-
 
 
 def get_model():
@@ -20,9 +20,9 @@ def get_model():
         return ChatOllama(model="bakllava")
     elif the_model == "mixtral-8x7b-groq":
         the_api_key = load_groq_api_key()
-        return ChatGroq(temperature=0, model_name="mixtral-8x7b-32768", groq_api_key=the_api_key)
-
-
+        return ChatGroq(
+            temperature=0, model_name="mixtral-8x7b-32768", groq_api_key=the_api_key
+        )
 
 
 def get_client():
