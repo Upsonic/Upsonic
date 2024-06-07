@@ -14,7 +14,10 @@ def get_model():
     if the_model == "gpt-4o":
         the_api_key = load_api_key()
         the_openai_url = load_openai_url()
-        return ChatOpenAI(model="gpt-4o", api_key=the_api_key, base_url=the_openai_url)
+        if the_openai_url == "default":
+            return ChatOpenAI(model="gpt-4o", api_key=the_api_key, base_url=the_openai_url)
+        else:
+            return ChatOpenAI(model="gpt-4o", api_key=the_api_key, base_url=the_openai_url)
     elif the_model == "llava":
         return ChatOllama(model="llava")
     elif the_model == "bakllava":
@@ -29,4 +32,7 @@ def get_model():
 def get_client():
     the_api_key = load_api_key()
     the_openai_url = load_openai_url()
-    return OpenAI(api_key=the_api_key, base_url=the_openai_url)
+    if the_openai_url == "default":
+        return OpenAI(api_key=the_api_key)
+    else:
+        return OpenAI(api_key=the_api_key, base_url=the_openai_url)
