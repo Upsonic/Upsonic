@@ -8,25 +8,27 @@ try:
 except ImportError:
     from utils.db import load_api_key, load_openai_url, load_model_settings, load_groq_api_key
 
-
 def get_model():
     the_model = load_model_settings()
-    if the_model == "gpt-4o":
-        the_api_key = load_api_key()
-        the_openai_url = load_openai_url()
-        if the_openai_url == "default":
-            return ChatOpenAI(model="gpt-4o", api_key=the_api_key, base_url=the_openai_url)
-        else:
-            return ChatOpenAI(model="gpt-4o", api_key=the_api_key, base_url=the_openai_url)
-    elif the_model == "llava":
-        return ChatOllama(model="llava")
-    elif the_model == "bakllava":
-        return ChatOllama(model="bakllava")
-    elif the_model == "mixtral-8x7b-groq":
-        the_api_key = load_groq_api_key()
-        return ChatGroq(
-            temperature=0, model_name="mixtral-8x7b-32768", groq_api_key=the_api_key
-        )
+    the_api_key = load_api_key()
+    the_openai_url = load_openai_url()
+    
+    args_mapping = {
+        ChatOpenAI: f"model='{the_model}', api_key='{the_api_key}', base_url='{the_openai_url}'",
+        ChatOllama: f"model='{the_model}'",
+        ChatGroq: f"temperature=0, model_name='{the_model}', groq_api_key='{load_groq_api_key()}'"
+    }
+    
+    model_mapping = {
+        "gpt-4o": (ChatOpenAI, args_mapping[ChatOpenAI]),
+        "gpt-3.5": (ChatOpenAI, args_mapping[ChatOpenAI]),
+        "llava": (ChatOllama, args_mapping[ChatOllama]),
+        "bakllava": (ChatOllama, args_mapping[ChatOllama]),
+        "mixtral-8x7b-groq": (ChatGroq, args_mapping[ChatGroq])
+    }
+    
+    model_class, args = model_mapping[the_model] 
+    return model_class(**args) if model_class else None 
 
 
 def get_client():
