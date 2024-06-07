@@ -60,6 +60,20 @@ def load_api_key():
     with open(openaikey, "r") as f:
         return f.read()
 
+#custom openai base_url
+openai_url_db = os.path.join(artifacts_dir, "openai_url.db")
+
+def save_openai_url(url):
+    with open(openai_url_db, "w") as f:
+        f.write(url)
+
+def load_openai_url():
+    if not os.path.exists(openai_url_db):
+        return "https://api.openai.com"
+    with open(openai_url_db, "r") as f:
+        return f.read()
+
+
 
 model_settings_db = os.path.join(artifacts_dir, "model_settings.db")
 
