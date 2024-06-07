@@ -1,7 +1,6 @@
 from langchain_community.chat_message_histories import SQLChatMessageHistory
 import os
 from .background import llm_history_oiginal
-
 try:
     from ..utils.db import get_history_db
 except ImportError:

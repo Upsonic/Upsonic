@@ -19,6 +19,7 @@ except ImportError:
     from utils.db import *
     from utils.telemetry import my_tracer, os_name
 
+
 import threading
 
 
@@ -27,7 +28,6 @@ from pygame import mixer
 
 import time
 import random
-
 
 last_ai_response = None
 user_id = load_user_id()
@@ -95,7 +95,6 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
 
             def play_text():
                 from ..gpt_computer_assistant import the_input_box
-
                 the_input_box.setText(llm_output)
                 signal_handler.assistant_response_stopped.emit()
 

@@ -1,6 +1,11 @@
+try:
+    from ..utils.db import screenshot_path, save_api_key, load_api_key, activate_just_text_model, deactivate_just_text_model, is_just_text_model_active, set_profile, get_profile, load_model_settings, save_model_settings
+    from ..agent.chat_history import clear_chat_history
+except ImportError:
+    from utils.db import screenshot_path, save_api_key, load_api_key, activate_just_text_model, deactivate_just_text_model, is_just_text_model_active, set_profile, get_profile, load_model_settings, save_model_settings
+    from agent.chat_history import clear_chat_history
+    
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton
-from ..utils.db import *
-from ..agent.chat_history import clear_chat_history
 from PyQt5.QtCore import Qt, QTimer, QRect, pyqtSignal, QObject
 from PyQt5.QtWidgets import QComboBox, QLabel
 

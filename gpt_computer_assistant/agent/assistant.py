@@ -1,7 +1,6 @@
 import base64
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
-
 from .chat_history import *
 from .agent import *
 
@@ -14,7 +13,6 @@ except ImportError:
     from screen.shot import *
     from utils.db import load_model_settings, agents
     from llm import get_model
-
 
 config = {"configurable": {"thread_id": "abc123"}}
 
