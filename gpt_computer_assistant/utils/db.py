@@ -120,6 +120,8 @@ icon_256_path = os.path.join(media_dir, "icon_256.png")
 screenshot_icon_path = os.path.join(media_dir, "Screenshot.png")
 audio_icon_path = os.path.join(media_dir, "Audio.png")
 microphone_icon_path = os.path.join(media_dir, "Microphone.png")
+up_icon_path = os.path.join(media_dir, "Up.png")
+down_icon_path = os.path.join(media_dir, "Down.png")
 
 
 agents = []
@@ -160,3 +162,24 @@ def load_user_id():
         return save_user_id()
     with open(user_id_db, "r") as f:
         return f.read()
+
+
+
+collapse_setting = os.path.join(artifacts_dir, "collapse_setting.db")
+
+
+def activate_collapse_setting():
+    with open(collapse_setting, "w") as f:
+        f.write("1")
+
+
+def deactivate_collapse_setting():
+    with open(collapse_setting, "w") as f:
+        f.write("0")
+
+
+def is_collapse_setting_active():
+    if not os.path.exists(collapse_setting):
+        return False
+    with open(collapse_setting, "r") as f:
+        return f.read() == "1"

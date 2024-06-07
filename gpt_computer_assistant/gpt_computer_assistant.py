@@ -10,7 +10,7 @@ try:
     from .gui.button import *
     from .gui.settings import settings_popup
     from .gui.llmsettings import llmsettings_popup
-    from .utils.db import load_api_key, load_model_settings, screenshot_icon_path, microphone_icon_path, audio_icon_path
+    from .utils.db import *
     from .utils.telemetry import my_tracer, os_name
 
 except ImportError:
@@ -22,7 +22,7 @@ except ImportError:
     from llm_settings import llm_settings
     from agent.agent import *
     from agent.background import *
-    from utils.db import load_api_key, load_model_settings, screenshot_icon_path, microphone_icon_path, audio_icon_path
+    from utils.db import *
     from gui.signal import *
     from gui.button import *
     from gui.settings import settings_popup
@@ -154,16 +154,31 @@ class MainWindow(QMainWindow):
 
 
 
-
-        
+        self.collapse = is_collapse_setting_active()
+        if self.collapse:
+            self.collapse_window()
 
         global the_main_window
         the_main_window = self
 
+
+    def collapse_window(self):
+        the_input_box.hide()
+        self.screenshot_button.hide()
+        self.settingsButton.hide()
+        self.llmsettingsButton.hide()
+        self.send_button.hide()
+        self.window().setFixedSize(self.width(), 100)        
+
+        
+
     def initUI(self):
         self.setWindowTitle("GPT")
         self.setGeometry(100, 100, 200, 200)
-        self.setFixedSize(self.width(), self.height() + 40)
+        self.setFixedSize(self.width()+10, self.height() + 40)
+
+        self.first_height = self.height()
+        self.first_width = self.width()
 
         app_icon = QtGui.QIcon()
         app_icon.addFile(icon_16_path, QtCore.QSize(16, 16))
@@ -243,8 +258,8 @@ class MainWindow(QMainWindow):
         button_layout = QHBoxLayout()
 
         # Create the send button
-        send_button = QPushButton("Send", self)
-        send_button.clicked.connect(input_box_send)
+        self.send_button = QPushButton("Send", self)
+        self.send_button.clicked.connect(input_box_send)
 
         # Create the screenshot button
         self.screenshot_button = QPushButton("+Screenshot", self)
@@ -257,7 +272,7 @@ class MainWindow(QMainWindow):
 
 
         # Add the buttons to the horizontal layout
-        button_layout.addWidget(send_button)
+        button_layout.addWidget(self.send_button)
         button_layout.addWidget(self.screenshot_button)
 
         self.shortcut_enter = QShortcut(QKeySequence("Ctrl+Return"), self)
@@ -270,14 +285,14 @@ class MainWindow(QMainWindow):
 
         button_layout_ = QHBoxLayout()
 
-        settingsButton = QPushButton("Chat Settings", self)
-        settingsButton.clicked.connect(settings_popup)
+        self.settingsButton = QPushButton("Chat Settings", self)
+        self.settingsButton.clicked.connect(settings_popup)
 
-        llmsettingsButton = QPushButton("LLM Settings", self)
-        llmsettingsButton.clicked.connect(llmsettings_popup)
+        self.llmsettingsButton = QPushButton("LLM Settings", self)
+        self.llmsettingsButton.clicked.connect(llmsettings_popup)
 
-        button_layout_.addWidget(settingsButton)
-        button_layout_.addWidget(llmsettingsButton)
+        button_layout_.addWidget(self.settingsButton)
+        button_layout_.addWidget(self.llmsettingsButton)
         self.layout.addLayout(button_layout_)
 
 
@@ -312,6 +327,7 @@ class MainWindow(QMainWindow):
             return  # Skip the drawing if should_paint is False
 
 
+
         if llm_settings[load_model_settings()]["vision"] == True:
             self.screen_available = True
         else:
@@ -322,7 +338,7 @@ class MainWindow(QMainWindow):
         painter.setPen(QPen(Qt.black, 8, Qt.SolidLine))
         painter.setBrush(QBrush(Qt.black, Qt.SolidPattern))
 
-        center_x = 100
+        center_x = 105
         center_y = 50
 
         if self.state == "talking":
@@ -364,7 +380,7 @@ class MainWindow(QMainWindow):
 
         if self.screen_available:
 
-            small_center_x = 170
+            small_center_x = 180
             small_center_y = 25
             small_radius = 30
             painter.drawEllipse(
@@ -394,7 +410,7 @@ class MainWindow(QMainWindow):
 
             
             small_center_x = 30
-            small_center_y = 65
+            small_center_y = 70
             small_radius = 30
             painter.drawEllipse(
                 int(small_center_x - small_radius / 2),
@@ -456,6 +472,44 @@ class MainWindow(QMainWindow):
 
 
 
+        small_center_x = 180
+        small_center_y = 70
+        small_radius = 30
+        painter.drawEllipse(
+            int(small_center_x - small_radius / 2),
+            int(small_center_y - small_radius / 2),
+            int(small_radius),
+            int(small_radius),
+        )
+
+        self.small_circle_collapse = QRect(
+            int(small_center_x - small_radius / 2),
+            int(small_center_y - small_radius / 2),
+            int(small_radius),
+            int(small_radius),
+        )
+
+        # Draw the icon inside the circle
+        icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
+        icon_rect = QRect(
+            small_center_x - icon_size // 2,
+            small_center_y - icon_size // 2,
+            icon_size,
+            icon_size,
+        )
+
+        if self.collapse:
+            self.small_circle_collapse_icon = QIcon(down_icon_path)
+        else:
+            self.small_circle_collapse_icon = QIcon(up_icon_path)
+        self.small_circle_collapse_icon.paint(painter, icon_rect)
+
+            
+            
+
+
+
+
     def remove_painting(self):
         self.should_paint = False  # Set the flag to False
         self.update()  # Request a repaint, which will now skip drawing
@@ -505,15 +559,54 @@ class MainWindow(QMainWindow):
             span.set_attribute("user_id", user_id)
             span.set_attribute("os_name", os_name_)
             if self.state == "idle" or self.state == "talking":
-                if self.circle_rect.contains(event.pos()):
-                    if llm_settings[load_model_settings()]["vision"] == True:
-                        
-                        self.button_handler.toggle_recording(dont_save_image=True)
-                    else:
+                try:
+                    if self.circle_rect.contains(event.pos()):
+                        if llm_settings[load_model_settings()]["vision"] == True:
+                            
+                            self.button_handler.toggle_recording(dont_save_image=True)
+                        else:
+                            self.button_handler.toggle_recording(no_screenshot=True)
+                except:
+                    pass
+
+                try:
+                    if self.small_circle_rect.contains(event.pos()):
                         self.button_handler.toggle_recording(no_screenshot=True)
-                elif self.small_circle_rect.contains(event.pos()):
-                    self.button_handler.toggle_recording(no_screenshot=True)
-                elif self.small_circle_left.contains(event.pos()):
-                    self.button_handler.toggle_recording(take_system_audio=True)
-                elif self.small_circle_left_top.contains(event.pos()):
-                    self.button_handler.just_screenshot()
+                except:
+                    pass
+
+                try:
+                    if self.small_circle_left.contains(event.pos()):
+                        self.button_handler.toggle_recording(take_system_audio=True)
+                except:
+                    pass
+
+                try:
+                    if self.small_circle_left_top.contains(event.pos()):
+                        self.button_handler.just_screenshot()
+                except:
+                    pass
+
+                try:
+                    if self.small_circle_collapse.contains(event.pos()):
+                        if self.collapse:
+                            self.collapse = False
+                            # hide all buttons and input box
+                            the_input_box.show()
+                            if llm_settings[load_model_settings()]["vision"] == False:
+                                self.screenshot_button.hide()
+                            self.settingsButton.show()
+                            self.llmsettingsButton.show()
+                            self.send_button.show()
+                            self.window().setFixedSize(self.first_width, self.first_height)
+                            deactivate_collapse_setting()
+                        else:
+                            self.collapse = True
+                            self.collapse_window()
+                            activate_collapse_setting()
+
+
+                        self.update()
+                except:
+                    pass
+                        
