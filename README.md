@@ -46,7 +46,7 @@
 </p>
 
 
-|ENGLISH|[简体中文](README.zh_CN.md)|
+|ENGLISH|[简体中文](README.zh_CN.md)|[正體中文](README.zh_TW.md)
 
 # GPT Computer Assistant
 Hi, this is an alternative work for providing ChatGPT MacOS app to Windows and Linux. In this way this is a fresh and stable work. You can easily install as Python library for this time but we will prepare a pipeline for providing native install scripts (.exe).
