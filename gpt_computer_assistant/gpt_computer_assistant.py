@@ -44,7 +44,7 @@ from pygame import mixer
 import math
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
 from PyQt5.QtGui import QMouseEvent, QPainter, QPen, QBrush, QIcon, QPixmap
-from PyQt5.QtCore import Qt, QTimer, QRect, pyqtSignal, QObject
+from PyQt5.QtCore import Qt, QTimer, QRect, pyqtSignal, QObject, pyqtSlot
 from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import QShortcut
 import os
@@ -61,9 +61,11 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QPoint
 
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QTextEdit
 from PyQt5 import QtWidgets, QtGui
 from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import QThread, pyqtSignal, Qt
+
 
 print("Imported all libraries")
 
@@ -80,6 +82,8 @@ except:
     pass
 
 the_input_box = None
+the_input_text = None
+
 
 
 the_main_window = None
@@ -87,6 +91,48 @@ the_main_window = None
 
 user_id = load_user_id()
 os_name_ = os_name()
+
+
+
+
+
+
+
+class Worker(QThread):
+    text_to_set = pyqtSignal(str)
+
+
+    def __init__(self):
+        super().__init__()
+        self.the_input_text = None
+        self.commited_text = []
+
+    def run(self):
+        while True:
+            self.msleep(500)  # Simulate a time-consuming task
+
+            if self.the_input_text:
+                last_text = self.commited_text[-1] if len(self.commited_text) > 0 else ""
+                if self.the_input_text != last_text:
+                    self.commited_text.append(self.the_input_text)
+
+                    for i in range(len(self.the_input_text)):
+                        self.text_to_set.emit(self.the_input_text[:i + 1])
+                        self.msleep(10)
+
+
+
+
+return_key_event = None
+class CustomTextEdit(QTextEdit):
+    def __init__(self, parent=None):
+        super(CustomTextEdit, self).__init__(parent)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
+            global return_key_event
+            return_key_event()
+        super(CustomTextEdit, self).keyPressEvent(event)  # Process other key events normally
 
 
 class MainWindow(QMainWindow):
@@ -170,7 +216,10 @@ class MainWindow(QMainWindow):
 
         # I want to create an input box to bottom left and a send button to bottom right
 
-        input_box = QLineEdit(self)
+        input_box = CustomTextEdit(self)
+
+        input_box.setFixedHeight(40)
+
 
         if load_api_key() == "CHANGE_ME":
             input_box.setPlaceholderText("Save your API Key, go to settings")
@@ -181,12 +230,12 @@ class MainWindow(QMainWindow):
         the_input_box = input_box
 
         def input_box_send():
-            if input_box.text() != "":
-                self.button_handler.input_text(input_box.text())
+            if input_box.toPlainText() != "":
+                self.button_handler.input_text(input_box.toPlainText())
 
         def input_box_send_screenshot():
-            if input_box.text() != "":
-                self.button_handler.input_text_screenshot(input_box.text())
+            if input_box.toPlainText() != "":
+                self.button_handler.input_text_screenshot(input_box.toPlainText())
 
         self.layout.addWidget(input_box)
 
@@ -213,8 +262,9 @@ class MainWindow(QMainWindow):
 
         self.shortcut_enter = QShortcut(QKeySequence("Ctrl+Return"), self)
         self.shortcut_enter.activated.connect(input_box_send_screenshot)
-        self.shortcut_enter = QShortcut(QKeySequence("Return"), self)
-        self.shortcut_enter.activated.connect(input_box_send)
+
+        global return_key_event
+        return_key_event = input_box_send
 
         self.layout.addLayout(button_layout)
 
@@ -230,7 +280,26 @@ class MainWindow(QMainWindow):
         button_layout_.addWidget(llmsettingsButton)
         self.layout.addLayout(button_layout_)
 
+
+
+        self.worker = Worker()
+        self.worker.text_to_set.connect(self.set_text)
+        self.worker.start()
+
         self.show()
+
+
+
+
+
+    def set_text(self, text):
+        global the_input_box
+        the_input_box.setPlainText(text)
+
+    def update_from_thread(self, text):
+        print("Updating from thread", text)
+        self.worker.the_input_text = text
+
 
     def mouseMoveEvent(self, event: QMouseEvent):
         delta = QPoint(event.globalPos() - self.old_position)
@@ -413,7 +482,8 @@ class MainWindow(QMainWindow):
             self.pulse_timer.timeout.connect(self.pulse_circle)
             self.pulse_timer.start(5)
         elif new_state == "thinking":
-            the_input_box.setText("Thinking...")
+
+            the_main_window.update_from_thread("Thinking...")
             self.pulse_frame = 0
             if self.pulse_timer:
                 self.pulse_timer.stop()

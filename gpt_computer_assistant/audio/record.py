@@ -34,9 +34,10 @@ def start_recording(take_system_audio=False):
         span.set_attribute("user_id", user_id)
         span.set_attribute("os_name", os_name_)
 
-        from ..gpt_computer_assistant import the_input_box
+        from ..gpt_computer_assistant import the_input_box, the_main_window
 
-        the_input_box.setText("Click again when recording is done")
+
+        the_main_window.update_from_thread("Click again when recording is done")
         global recording, audio_data
         recording = True
         audio_data = np.array([], dtype="float32")
