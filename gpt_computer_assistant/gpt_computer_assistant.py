@@ -593,8 +593,8 @@ class MainWindow(QMainWindow):
                             self.collapse = False
                             # hide all buttons and input box
                             the_input_box.show()
-                            if llm_settings[load_model_settings()]["vision"] == False:
-                                self.screenshot_button.hide()
+                            if llm_settings[load_model_settings()]["vision"]:
+                                self.screenshot_button.show()
                             self.settingsButton.show()
                             self.llmsettingsButton.show()
                             self.send_button.show()
