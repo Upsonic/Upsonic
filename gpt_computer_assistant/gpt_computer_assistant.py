@@ -405,9 +405,7 @@ class MainWindow(QMainWindow):
         self.update()  # Trigger a repaint
 
     def pulse_circle(self):
-        self.pulse_frame += 1
-        if self.pulse_frame >= 100:
-            self.pulse_frame = 0
+        self.pulse_frame = (self.pulse_frame + 1) % 100
         self.update()
 
     def mousePressEvent(self, event: QMouseEvent):
