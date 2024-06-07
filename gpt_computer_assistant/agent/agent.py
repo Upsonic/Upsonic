@@ -20,7 +20,6 @@ custom_tools = []
 
 try:
     from upsonic import Tiger
-    raise Exception("This is not supported")
     tools = Tiger()
     tools.enable_auto_requirements = True
     tools = tools.langchain()

@@ -163,7 +163,7 @@ class MainWindow(QMainWindow):
     def initUI(self):
         self.setWindowTitle("GPT")
         self.setGeometry(100, 100, 200, 200)
-        self.setFixedSize(self.width(), self.height() + 20)
+        self.setFixedSize(self.width(), self.height() + 40)
 
         app_icon = QtGui.QIcon()
         app_icon.addFile(icon_16_path, QtCore.QSize(16, 16))
