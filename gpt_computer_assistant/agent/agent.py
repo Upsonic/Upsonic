@@ -59,6 +59,8 @@ def get_agent_executor():
     model = load_model_settings()
     if model == "gpt-4o":
         return chat_agent_executor.create_tool_calling_executor(get_model(), tools)
+    elif model == "gpt-3.5-turbo":
+        return chat_agent_executor.create_tool_calling_executor(get_model(), tools)
     elif model == "llava":
         from langchain import hub
 

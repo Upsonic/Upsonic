@@ -1,8 +1,8 @@
 try:
-    from ..utils.db import screenshot_path, save_api_key, load_api_key, activate_just_text_model, deactivate_just_text_model, is_just_text_model_active, set_profile, get_profile, load_model_settings, save_model_settings
+    from ..utils.db import screenshot_path, save_api_key, load_api_key, activate_just_text_model, deactivate_just_text_model, is_just_text_model_active, set_profile, get_profile, load_model_settings, save_model_settings, load_openai_url, load_groq_api_key
     from ..agent.chat_history import clear_chat_history
 except ImportError:
-    from utils.db import screenshot_path, save_api_key, load_api_key, activate_just_text_model, deactivate_just_text_model, is_just_text_model_active, set_profile, get_profile, load_model_settings, save_model_settings
+    from utils.db import screenshot_path, save_api_key, load_api_key, activate_just_text_model, deactivate_just_text_model, is_just_text_model_active, set_profile, get_profile, load_model_settings, save_model_settings, load_openai_url, load_groq_api_key
     from agent.chat_history import clear_chat_history
     
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton
@@ -108,6 +108,7 @@ def llmsettings_popup(self):
     model_select.addItems(
         [
             "gpt-4o (OpenAI)",
+            "gpt-3.5-turbo (OpenAI)",
             "Llava (Ollama)",
             "BakLLaVA (Ollama)",
             "Mixtral 8x7b (Groq)",
@@ -121,19 +122,25 @@ def llmsettings_popup(self):
     current_model = load_model_settings()
     if current_model == "gpt-4o":
         model_select.setCurrentIndex(0)
-    elif current_model == "llava":
+    elif current_model == "gpt-3.5-turbo":
         model_select.setCurrentIndex(1)
-    elif current_model == "bakllava":
+    elif current_model == "llava":
         model_select.setCurrentIndex(2)
-    elif current_model == "mixtral-8x7b-groq":
+    elif current_model == "bakllava":
         model_select.setCurrentIndex(3)
+    elif current_model == "mixtral-8x7b-groq":
+        model_select.setCurrentIndex(4)
 
     if model_select.currentText() == "gpt-4o (OpenAI)":
+        show_openai()
+
+    if model_select.currentText() == "gpt-3.5-turbo (OpenAI)":
         show_openai()
 
 
     if model_select.currentText() == "Mixtral 8x7b (Groq)":
         show_groq()
+        
 
     if (
         model_select.currentText() == "Llava (Ollama)"
@@ -174,6 +181,16 @@ def llmsettings_popup(self):
 
             the_main_window.activate_painting()
             the_main_window.add_screenshot_button()
+        elif model_select.currentText() == "gpt-3.5-turbo (OpenAI)":
+            show_openai()
+            openai_url_label.show()
+            openai_url_input.show()
+            openai_url_save_button.show()
+            save_model_settings("gpt-3.5-turbo")
+            from ..gpt_computer_assistant import the_main_window
+
+            the_main_window.activate_painting()
+            the_main_window.remove_screenshot_button()
         elif model_select.currentText() == "Mixtral 8x7b (Groq)":
             show_groq()
             save_model_settings("mixtral-8x7b-groq")

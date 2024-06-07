@@ -99,10 +99,15 @@ class MainWindow(QMainWindow):
         self.initUI()
         self.old_position = self.pos()
 
-        if load_model_settings() == "gpt-4o":
+        if load_model_settings().startswith("gpt"):
             self.should_paint = True  # Flag to control painting
         else:
             self.should_paint = False
+
+
+
+
+        
 
         global the_main_window
         the_main_window = self
@@ -194,6 +199,12 @@ class MainWindow(QMainWindow):
         self.screenshot_button = QPushButton("+Screenshot", self)
         self.screenshot_button.clicked.connect(input_box_send_screenshot)
 
+
+        if load_model_settings() == "mixtral-8x7b-groq":
+            self.screenshot_button.hide()
+
+
+
         # Add the buttons to the horizontal layout
         button_layout.addWidget(send_button)
         button_layout.addWidget(self.screenshot_button)
@@ -228,6 +239,12 @@ class MainWindow(QMainWindow):
     def paintEvent(self, event):
         if not self.should_paint:
             return  # Skip the drawing if should_paint is False
+
+
+        if load_model_settings() == "gpt-4o":
+            self.screen_available = True
+        else:
+            self.screen_available = False
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
@@ -274,89 +291,99 @@ class MainWindow(QMainWindow):
             int(radius),
         )
 
-        small_center_x = 170
-        small_center_y = 25
-        small_radius = 30
-        painter.drawEllipse(
-            int(small_center_x - small_radius / 2),
-            int(small_center_y - small_radius / 2),
-            int(small_radius),
-            int(small_radius),
-        )
+        if self.screen_available:
 
-        self.small_circle_rect = QRect(
-            int(small_center_x - small_radius / 2),
-            int(small_center_y - small_radius / 2),
-            int(small_radius),
-            int(small_radius),
-        )
+            small_center_x = 170
+            small_center_y = 25
+            small_radius = 30
+            painter.drawEllipse(
+                int(small_center_x - small_radius / 2),
+                int(small_center_y - small_radius / 2),
+                int(small_radius),
+                int(small_radius),
+            )
 
-        # Draw the icon inside the circle
-        icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
-        icon_rect = QRect(
-            small_center_x - icon_size // 2,
-            small_center_y - icon_size // 2,
-            icon_size,
-            icon_size,
-        )
-        self.small_circle_recticon = QIcon(microphone_icon_path)
-        self.small_circle_recticon.paint(painter, icon_rect)
+            self.small_circle_rect = QRect(
+                int(small_center_x - small_radius / 2),
+                int(small_center_y - small_radius / 2),
+                int(small_radius),
+                int(small_radius),
+            )
 
-        small_center_x = 30
-        small_center_y = 65
-        small_radius = 30
-        painter.drawEllipse(
-            int(small_center_x - small_radius / 2),
-            int(small_center_y - small_radius / 2),
-            int(small_radius),
-            int(small_radius),
-        )
+            # Draw the icon inside the circle
+            icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
+            icon_rect = QRect(
+                small_center_x - icon_size // 2,
+                small_center_y - icon_size // 2,
+                icon_size,
+                icon_size,
+            )
+            self.small_circle_recticon = QIcon(microphone_icon_path)
+            self.small_circle_recticon.paint(painter, icon_rect)
 
-        self.small_circle_left = QRect(
-            int(small_center_x - small_radius / 2),
-            int(small_center_y - small_radius / 2),
-            int(small_radius),
-            int(small_radius),
-        )
+            
+            small_center_x = 30
+            small_center_y = 65
+            small_radius = 30
+            painter.drawEllipse(
+                int(small_center_x - small_radius / 2),
+                int(small_center_y - small_radius / 2),
+                int(small_radius),
+                int(small_radius),
+            )
 
-        # Draw the icon inside the circle
-        icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
-        icon_rect = QRect(
-            small_center_x - icon_size // 2,
-            small_center_y - icon_size // 2,
-            icon_size,
-            icon_size,
-        )
-        self.small_circle_lefticon = QIcon(audio_icon_path)
-        self.small_circle_lefticon.paint(painter, icon_rect)
+            self.small_circle_left = QRect(
+                int(small_center_x - small_radius / 2),
+                int(small_center_y - small_radius / 2),
+                int(small_radius),
+                int(small_radius),
+            )
 
-        small_center_x = 30
-        small_center_y = 25
-        small_radius = 30
-        painter.drawEllipse(
-            int(small_center_x - small_radius / 2),
-            int(small_center_y - small_radius / 2),
-            int(small_radius),
-            int(small_radius),
-        )
+            # Draw the icon inside the circle
+            icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
+            icon_rect = QRect(
+                small_center_x - icon_size // 2,
+                small_center_y - icon_size // 2,
+                icon_size,
+                icon_size,
+            )
+            self.small_circle_lefticon = QIcon(audio_icon_path)
+            self.small_circle_lefticon.paint(painter, icon_rect)
 
-        self.small_circle_left_top = QRect(
-            int(small_center_x - small_radius / 2),
-            int(small_center_y - small_radius / 2),
-            int(small_radius),
-            int(small_radius),
-        )
 
-        # Draw the icon inside the circle
-        icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
-        icon_rect = QRect(
-            small_center_x - icon_size // 2,
-            small_center_y - icon_size // 2,
-            icon_size,
-            icon_size,
-        )
-        self.small_circle_left_topticon = QIcon(screenshot_icon_path)
-        self.small_circle_left_topticon.paint(painter, icon_rect)
+
+            small_center_x = 30
+            small_center_y = 25
+            small_radius = 30
+            painter.drawEllipse(
+                int(small_center_x - small_radius / 2),
+                int(small_center_y - small_radius / 2),
+                int(small_radius),
+                int(small_radius),
+            )
+
+            self.small_circle_left_top = QRect(
+                int(small_center_x - small_radius / 2),
+                int(small_center_y - small_radius / 2),
+                int(small_radius),
+                int(small_radius),
+            )
+
+            # Draw the icon inside the circle
+            icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
+            icon_rect = QRect(
+                small_center_x - icon_size // 2,
+                small_center_y - icon_size // 2,
+                icon_size,
+                icon_size,
+            )
+            self.small_circle_left_topticon = QIcon(screenshot_icon_path)
+            self.small_circle_left_topticon.paint(painter, icon_rect)
+
+
+
+
+
 
     def remove_painting(self):
         self.should_paint = False  # Set the flag to False
@@ -407,7 +434,11 @@ class MainWindow(QMainWindow):
             span.set_attribute("os_name", os_name_)
             if self.state == "idle" or self.state == "talking":
                 if self.circle_rect.contains(event.pos()):
-                    self.button_handler.toggle_recording(dont_save_image=True)
+                    if load_model_settings() == "gpt-4o":
+                        
+                        self.button_handler.toggle_recording(dont_save_image=True)
+                    else:
+                        self.button_handler.toggle_recording(no_screenshot=True)
                 elif self.small_circle_rect.contains(event.pos()):
                     self.button_handler.toggle_recording(no_screenshot=True)
                 elif self.small_circle_left.contains(event.pos()):

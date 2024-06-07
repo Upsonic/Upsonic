@@ -18,22 +18,28 @@ def get_model():
     the_api_key = load_api_key()
     the_openai_url = load_openai_url()
     
+    def open_ai_base():
+        if the_openai_url == "default":
+            return {"model": the_model, "api_key": the_api_key}
+        else:
+            return {"model": the_model, "api_key": the_api_key, "base_url": the_openai_url}
+    
     args_mapping = {
-        ChatOpenAI: f"model='{the_model}', api_key='{the_api_key}', base_url='{the_openai_url}'",
-        ChatOllama: f"model='{the_model}'",
-        ChatGroq: f"temperature=0, model_name='{the_model}', groq_api_key='{load_groq_api_key()}'"
+        ChatOpenAI: open_ai_base(),
+        ChatOllama: {"model": the_model},
+        ChatGroq: {"temperature": 0, "model_name": the_model.replace("-groq", ""), "groq_api_key": load_groq_api_key()}
     }
     
     model_mapping = {
         "gpt-4o": (ChatOpenAI, args_mapping[ChatOpenAI]),
-        "gpt-3.5": (ChatOpenAI, args_mapping[ChatOpenAI]),
+        "gpt-3.5-turbo": (ChatOpenAI, args_mapping[ChatOpenAI]),
         "llava": (ChatOllama, args_mapping[ChatOllama]),
         "bakllava": (ChatOllama, args_mapping[ChatOllama]),
         "mixtral-8x7b-groq": (ChatGroq, args_mapping[ChatGroq])
     }
     
-    model_class, args = model_mapping[the_model] 
-    return model_class(**args) if model_class else None 
+    model_class, args = model_mapping[the_model]
+    return model_class(**args) if model_class else None
 
 
 def get_client():

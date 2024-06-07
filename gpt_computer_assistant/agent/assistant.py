@@ -61,7 +61,7 @@ def agentic(
 
         the_model = load_model_settings()
 
-        if the_model == "gpt-4o":
+        if the_model == "gpt-4o" or the_model == "gpt-3.5-turbo":
             msg = get_agent_executor().invoke(
                 {"messages": llm_history + [the_message]}, config=config
             )
@@ -132,7 +132,7 @@ def assistant(
 
     the_model = load_model_settings()
 
-    if the_model == "gpt-4o" or the_model == "mixtral-8x7b-groq":
+    if the_model == "gpt-4o" or the_model == "gpt-3.5-turbo" or the_model == "mixtral-8x7b-groq":
 
         if the_model == "mixtral-8x7b-groq":
             the_history = []
