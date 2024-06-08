@@ -20,9 +20,9 @@ def get_model():
     
     def open_ai_base():
         if the_openai_url == "default":
-            return {"model": the_model, "api_key": the_api_key}
+            return {"model": the_model, "api_key": the_api_key, "max_retries":15}
         else:
-            return {"model": the_model, "api_key": the_api_key, "base_url": the_openai_url}
+            return {"model": the_model, "api_key": the_api_key, "max_retries":15, "base_url": the_openai_url}
     
     args_mapping = {
         ChatOpenAI: open_ai_base(),
