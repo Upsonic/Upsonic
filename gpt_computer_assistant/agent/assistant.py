@@ -9,12 +9,12 @@ try:
     from ..screen.shot import *
     from ..utils.db import load_model_settings, agents
     from ..llm import get_model
-    from ..llm_settings import first_message
+    from ..llm_settings import each_message_extension
 except ImportError:
     from screen.shot import *
     from utils.db import load_model_settings, agents
     from llm import get_model
-    from llm_settings import first_message
+    from llm_settings import each_message_extension
 
 config = {"configurable": {"thread_id": "abc123"}}
 
@@ -87,7 +87,7 @@ def agentic(
 
 
 
-    llm_input = llm_input + first_message
+    llm_input = llm_input + each_message_extension
 
 
     task = Task(
@@ -104,7 +104,7 @@ def agentic(
 
     result = the_crew.kickoff()["final_output"]
 
-    get_chat_message_history().add_message(HumanMessage(content=[llm_input.replace(first_message, "")]))
+    get_chat_message_history().add_message(HumanMessage(content=[llm_input.replace(each_message_extension, "")]))
     get_chat_message_history().add_message(AIMessage(content=[result]))
 
     return result
@@ -120,7 +120,7 @@ def assistant(
 
     print("LLM INPUT", llm_input)
 
-    llm_input = llm_input + first_message
+    llm_input = llm_input + each_message_extension
 
     the_message = [
         {"type": "text", "text": f"{llm_input}"},
@@ -164,7 +164,7 @@ def assistant(
                     the_mes = AIMessage(content=message.content)
                     the_history.append(the_mes)
 
-            llm_input += first_message
+            llm_input += each_message_extension
 
             the_last_message = HumanMessage(content=llm_input)
             msg = get_agent_executor().invoke(
@@ -205,14 +205,14 @@ def assistant(
 
 
 
-    # Replace first_message with empty string
+    # Replace each_message_extension with empty string
     list_of_messages = get_chat_message_history().messages
 
     get_chat_message_history().clear()
 
     for message in list_of_messages:
         try:
-            message.content[0]["text"] = message.content[0]["text"].replace(first_message, "")
+            message.content[0]["text"] = message.content[0]["text"].replace(each_message_extension, "")
             get_chat_message_history().add_message(message)
         except:
             get_chat_message_history().add_message(message)
