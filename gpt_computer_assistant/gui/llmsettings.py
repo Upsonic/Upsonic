@@ -106,17 +106,13 @@ def llmsettings_popup(self):
     hide_openai()
     hide_groq()
 
+    print("LLLM SETTINGS", list(llm_show_name.keys()))
+
     # Add a select box with the options OpenAI and Olamo
     model_label = QLabel("Model")
     model_select = QComboBox()
     model_select.addItems(
-        [
-            "gpt-4o (OpenAI)",
-            "gpt-3.5-turbo (OpenAI)",
-            "Llava (Ollama)",
-            "BakLLaVA (Ollama)",
-            "Mixtral 8x7b (Groq)",
-        ]
+        list(llm_show_name.keys())
     )
 
     settings_dialog.layout().addWidget(model_label)
@@ -124,16 +120,10 @@ def llmsettings_popup(self):
 
     # currently model
     current_model = load_model_settings()
-    if current_model == "gpt-4o":
-        model_select.setCurrentIndex(0)
-    elif current_model == "gpt-3.5-turbo":
-        model_select.setCurrentIndex(1)
-    elif current_model == "llava":
-        model_select.setCurrentIndex(2)
-    elif current_model == "bakllava":
-        model_select.setCurrentIndex(3)
-    elif current_model == "mixtral-8x7b-groq":
-        model_select.setCurrentIndex(4)
+    # lets set index of current model
+    for i, model in enumerate(llm_show_name.keys()):
+        if model == current_model:
+            model_select.setCurrentIndex(i)
 
 
 
@@ -161,23 +151,9 @@ def llmsettings_popup(self):
         hide_groq()
 
 
-        if model_select.currentText() == "Llava (Ollama)":
-            save_model_settings("llava")
+        the_save_string = llm_show_name[model_select.currentText()]
+        save_model_settings(the_save_string)
 
-        elif model_select.currentText() == "BakLLaVA (Ollama)":
-            save_model_settings("bakllava")
-
-        elif model_select.currentText() == "gpt-4o (OpenAI)":
-            save_model_settings("gpt-4o")
-
-
-        elif model_select.currentText() == "gpt-3.5-turbo (OpenAI)":
-            save_model_settings("gpt-3.5-turbo")
-
-
-        elif model_select.currentText() == "Mixtral 8x7b (Groq)":
-            show_groq()
-            save_model_settings("mixtral-8x7b-groq")
 
 
 
@@ -203,6 +179,11 @@ def llmsettings_popup(self):
         else:
             the_main_window.remove_screenshot_button()
 
+
+
+
+        if llm_settings[llm_show_name[model_select.currentText()]]["provider"] == "groq":
+            show_groq
 
 
     model_select.currentIndexChanged.connect(on_model_change)

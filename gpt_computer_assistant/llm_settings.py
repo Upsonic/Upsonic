@@ -1,5 +1,6 @@
 llm_settings = {
     "gpt-4o": {"vision":True, "transcription":True, "provider":"openai"},
+    "gpt-4-turbo": {"vision":False, "transcription":True, "provider":"openai"},
     "gpt-3.5-turbo": {"vision":False, "transcription":True, "provider":"openai"},
     "llava": {"vision":True, "transcription":False, "provider":"ollama"},
     "bakllava": {"vision":True, "transcription":False, "provider":"ollama"},
@@ -8,6 +9,7 @@ llm_settings = {
 
 llm_show_name = {
     "gpt-4o (OpenAI)": "gpt-4o",
+    "gpt-4-turbo (OpenAI)": "gpt-4-turbo",
     "gpt-3.5-turbo (OpenAI)": "gpt-3.5-turbo",
     "Llava (Ollama)": "llava",
     "BakLLaVA (Ollama)": "bakllava",
