@@ -38,170 +38,43 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
     with my_tracer.start_span("process_audio") as span:
         span.set_attribute("user_id", user_id)
         span.set_attribute("os_name", os_name_)
+        try:
+            global audio_data, last_ai_response
 
-        global audio_data, last_ai_response
+            transcription = speech_to_text(mic_record_location)
 
-        transcription = speech_to_text(mic_record_location)
+            if take_system_audio:
 
-        if take_system_audio:
+                transcription2 = speech_to_text(system_sound_location)
 
-            transcription2 = speech_to_text(system_sound_location)
+            llm_input = transcription
 
-        llm_input = "USER: " + transcription
+            if take_system_audio:
+                llm_input += " \n Other of USER: " + transcription2
 
-        if take_system_audio:
-            llm_input += " \n Other of USER: " + transcription2
+            llm_output = assistant(
+                llm_input,
+                get_chat_message_history().messages,
+                get_client(),
+                screenshot_path=screenshot_path if take_screenshot else None,
+                dont_save_image=dont_save_image,
+            )
 
-        llm_output = assistant(
-            llm_input,
-            get_chat_message_history().messages,
-            get_client(),
-            screenshot_path=screenshot_path if take_screenshot else None,
-            dont_save_image=dont_save_image,
-        )
-
-        if not is_just_text_model_active():
-            response_path = text_to_speech(llm_output)
-            signal_handler.assistant_response_ready.emit()
-
-            def play_text():
-                from ..gpt_computer_assistant import the_input_box, the_main_window
-
-                global last_ai_response
-                if (
-                    the_input_box.toPlainText() == ""
-                    or the_input_box.toPlainText() == "Thinking..."
-                    or the_input_box.toPlainText() == last_ai_response
-                ):
-                    the_main_window.update_from_thread(llm_output)
-                    last_ai_response = llm_output
-
-            def play_audio():
-                with my_tracer.start_span("play_audio") as span:
-                    span.set_attribute("user_id", user_id)
-                    span.set_attribute("os_name", os_name_)
-                    play_text()
-                    mixer.init()
-                    mixer.music.load(response_path)
-                    mixer.music.play()
-                    while mixer.music.get_busy():
-                        time.sleep(0.1)
-                    signal_handler.assistant_response_stopped.emit()
-
-            playback_thread = threading.Thread(target=play_audio)
-            playback_thread.start()
-        else:
-            signal_handler.assistant_response_ready.emit()
-
-            def play_text():
-                from ..gpt_computer_assistant import the_input_box, the_main_window
-         
-                the_main_window.update_from_thread(llm_output)
-                signal_handler.assistant_response_stopped.emit()
-
-            playback_thread = threading.Thread(target=play_text)
-            playback_thread.start()
-
-
-def process_screenshot():
-    with my_tracer.start_span("process_screenshot") as span:
-        span.set_attribute("user_id", user_id)
-        span.set_attribute("os_name", os_name_)
-
-        global last_ai_response
-
-        llm_input = (
-            "USER: " + "I just take a screenshot. for you to remember. Just say ok."
-        )
-        print("LLM INPUT (just screenshot)", llm_input)
-
-        llm_output = assistant(
-            llm_input,
-            get_chat_message_history().messages,
-            get_client(),
-            screenshot_path=just_screenshot_path,
-            dont_save_image=True,
-        )
-
-        if not is_just_text_model_active():
-            response_path = text_to_speech(llm_output)
-            signal_handler.assistant_response_ready.emit()
-
-            def play_text():
-                from ..gpt_computer_assistant import the_input_box, the_main_window
-
-                global last_ai_response
-                if (
-                    the_input_box.toPlainText() == ""
-                    or the_input_box.toPlainText() == "Thinking..."
-                    or the_input_box.toPlainText() == last_ai_response
-                ):
-                    the_main_window.update_from_thread(llm_output)
-                    last_ai_response = llm_output
-
-            def play_audio():
-                with my_tracer.start_span("play_audio") as span:
-                    span.set_attribute("user_id", user_id)
-                    span.set_attribute("os_name", os_name_)
-                    play_text()
-                    mixer.init()
-                    mixer.music.load(response_path)
-                    mixer.music.play()
-                    while mixer.music.get_busy():
-                        time.sleep(0.1)
-                    signal_handler.assistant_response_stopped.emit()
-
-            playback_thread = threading.Thread(target=play_audio)
-            playback_thread.start()
-        else:
-            signal_handler.assistant_response_ready.emit()
-
-            def play_text():
-                from ..gpt_computer_assistant import the_input_box, the_main_window
-
-
-                the_main_window.update_from_thread(llm_output)
-                signal_handler.assistant_response_stopped.emit()
-
-            playback_thread = threading.Thread(target=play_text)
-            playback_thread.start()
-
-
-def process_text(text, screenshot_path=None):
-    with my_tracer.start_span("process_text") as span:
-        span.set_attribute("user_id", user_id)
-        span.set_attribute("os_name", os_name_)
-
-        global last_ai_response
-
-        llm_input = "USER: " + text
-
-        llm_output = assistant(
-            llm_input,
-            get_chat_message_history().messages,
-            get_client(),
-            screenshot_path=screenshot_path,
-            dont_save_image=True,
-        )
-
-        if not is_just_text_model_active():
-
-            def play_text():
-                from ..gpt_computer_assistant import the_input_box, the_main_window
-
-                global last_ai_response
-                if (
-                    the_input_box.toPlainText() == ""
-                    or the_input_box.toPlainText() == "Thinking..."
-                    or the_input_box.toPlainText() == last_ai_response
-                ):
-
-                    the_main_window.update_from_thread(llm_output)
-                    last_ai_response = llm_output
-
-            if load_api_key() != "CHANGE_ME":
+            if not is_just_text_model_active():
                 response_path = text_to_speech(llm_output)
                 signal_handler.assistant_response_ready.emit()
+
+                def play_text():
+                    from ..gpt_computer_assistant import the_input_box, the_main_window
+
+                    global last_ai_response
+                    if (
+                        the_input_box.toPlainText() == ""
+                        or the_input_box.toPlainText() == "Thinking..."
+                        or the_input_box.toPlainText() == last_ai_response
+                    ):
+                        the_main_window.update_from_thread(llm_output)
+                        last_ai_response = llm_output
 
                 def play_audio():
                     with my_tracer.start_span("play_audio") as span:
@@ -219,18 +92,170 @@ def process_text(text, screenshot_path=None):
                 playback_thread.start()
             else:
                 signal_handler.assistant_response_ready.emit()
-                play_text()
-                signal_handler.assistant_response_stopped.emit()
 
-        else:
-            signal_handler.assistant_response_ready.emit()
+                def play_text():
+                    from ..gpt_computer_assistant import the_input_box, the_main_window
+            
+                    the_main_window.update_from_thread(llm_output)
+                    signal_handler.assistant_response_stopped.emit()
 
-            def play_text():
-                from ..gpt_computer_assistant import the_input_box, the_main_window
+                playback_thread = threading.Thread(target=play_text)
+                playback_thread.start()
+        except Exception as e:
+            print("Error in process_audio", e)
+            from ..gpt_computer_assistant import the_input_box, the_main_window
+            the_main_window.update_from_thread("EXCEPTION: " + str(e))
+            signal_handler.assistant_response_stopped.emit()
 
 
-                the_main_window.update_from_thread(llm_output)
-                signal_handler.assistant_response_stopped.emit()
+def process_screenshot():
+    with my_tracer.start_span("process_screenshot") as span:
+        span.set_attribute("user_id", user_id)
+        span.set_attribute("os_name", os_name_)
+        try:
 
-            playback_thread = threading.Thread(target=play_text)
-            playback_thread.start()
+
+            global last_ai_response
+
+            llm_input = (
+                 "I just take a screenshot. for you to remember. Just say ok."
+            )
+            print("LLM INPUT (just screenshot)", llm_input)
+
+            llm_output = assistant(
+                llm_input,
+                get_chat_message_history().messages,
+                get_client(),
+                screenshot_path=just_screenshot_path,
+                dont_save_image=True,
+            )
+
+            if not is_just_text_model_active():
+                response_path = text_to_speech(llm_output)
+                signal_handler.assistant_response_ready.emit()
+
+                def play_text():
+                    from ..gpt_computer_assistant import the_input_box, the_main_window
+
+                    global last_ai_response
+                    if (
+                        the_input_box.toPlainText() == ""
+                        or the_input_box.toPlainText() == "Thinking..."
+                        or the_input_box.toPlainText() == last_ai_response
+                    ):
+                        the_main_window.update_from_thread(llm_output)
+                        last_ai_response = llm_output
+
+                def play_audio():
+                    with my_tracer.start_span("play_audio") as span:
+                        span.set_attribute("user_id", user_id)
+                        span.set_attribute("os_name", os_name_)
+                        play_text()
+                        mixer.init()
+                        mixer.music.load(response_path)
+                        mixer.music.play()
+                        while mixer.music.get_busy():
+                            time.sleep(0.1)
+                        signal_handler.assistant_response_stopped.emit()
+
+                playback_thread = threading.Thread(target=play_audio)
+                playback_thread.start()
+            else:
+                signal_handler.assistant_response_ready.emit()
+
+                def play_text():
+                    from ..gpt_computer_assistant import the_input_box, the_main_window
+
+
+                    the_main_window.update_from_thread(llm_output)
+                    signal_handler.assistant_response_stopped.emit()
+
+                playback_thread = threading.Thread(target=play_text)
+                playback_thread.start()
+
+
+        except Exception as e:
+            print("Error in process_screenshot", e)
+            from ..gpt_computer_assistant import the_input_box, the_main_window
+            the_main_window.update_from_thread("EXCEPTION: " + str(e))
+            signal_handler.assistant_response_stopped.emit()
+
+
+
+def process_text(text, screenshot_path=None):
+    with my_tracer.start_span("process_text") as span:
+        span.set_attribute("user_id", user_id)
+        span.set_attribute("os_name", os_name_)
+        try:
+
+            global last_ai_response
+
+            llm_input = text
+
+            llm_output = assistant(
+                llm_input,
+                get_chat_message_history().messages,
+                get_client(),
+                screenshot_path=screenshot_path,
+                dont_save_image=True,
+            )
+
+            if not is_just_text_model_active():
+
+                def play_text():
+                    from ..gpt_computer_assistant import the_input_box, the_main_window
+
+                    global last_ai_response
+                    if (
+                        the_input_box.toPlainText() == ""
+                        or the_input_box.toPlainText() == "Thinking..."
+                        or the_input_box.toPlainText() == last_ai_response
+                    ):
+
+                        the_main_window.update_from_thread(llm_output)
+                        last_ai_response = llm_output
+
+                if load_api_key() != "CHANGE_ME":
+                    response_path = text_to_speech(llm_output)
+                    signal_handler.assistant_response_ready.emit()
+
+                    def play_audio():
+                        with my_tracer.start_span("play_audio") as span:
+                            span.set_attribute("user_id", user_id)
+                            span.set_attribute("os_name", os_name_)
+                            play_text()
+                            mixer.init()
+                            mixer.music.load(response_path)
+                            mixer.music.play()
+                            while mixer.music.get_busy():
+                                time.sleep(0.1)
+                            signal_handler.assistant_response_stopped.emit()
+
+                    playback_thread = threading.Thread(target=play_audio)
+                    playback_thread.start()
+                else:
+                    signal_handler.assistant_response_ready.emit()
+                    play_text()
+                    signal_handler.assistant_response_stopped.emit()
+
+            else:
+                signal_handler.assistant_response_ready.emit()
+
+                def play_text():
+                    from ..gpt_computer_assistant import the_input_box, the_main_window
+
+
+                    the_main_window.update_from_thread(llm_output)
+                    signal_handler.assistant_response_stopped.emit()
+
+                playback_thread = threading.Thread(target=play_text)
+                playback_thread.start()
+
+
+        except Exception as e:
+            print("Error in process_text", e)
+            from ..gpt_computer_assistant import the_input_box, the_main_window
+            the_main_window.update_from_thread("EXCEPTION: " + str(e))
+            signal_handler.assistant_response_stopped.emit()
+
+
