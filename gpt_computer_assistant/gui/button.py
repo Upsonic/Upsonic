@@ -1,5 +1,6 @@
 import pyautogui
 from .signal import *
+import threading
 
 try:
     from ..audio.record import *
@@ -39,7 +40,10 @@ recording_thread = None
 
 
 class ButtonHandler:
+    """Handles button click events and corresponding actions."""
+
     def __init__(self, main_window):
+        """Initialize the ButtonHandler."""
         self.recording = False
         self.main_window = main_window
         self.process_audio_thread = None
@@ -57,19 +61,17 @@ class ButtonHandler:
     def toggle_recording(
         self, no_screenshot=False, take_system_audio=False, dont_save_image=False
     ):
+        """Toggle audio recording."""
 
         if self.recording:
             stop_recording()
             self.recording = False
         else:
-            # Take screenshot before starting recording
             if not no_screenshot:
                 screenshot = pyautogui.screenshot()
-
                 screenshot.save(screenshot_path)
 
             self.no_screenshot = no_screenshot
-
             self.take_system_audio = take_system_audio
             self.dont_save_image = dont_save_image
 
@@ -82,10 +84,14 @@ class ButtonHandler:
             signal_handler.recording_started.emit()
 
     def on_recording_started(self):
+        """Handle event when recording starts."""
+
         self.recording = True
         self.main_window.update_state("talking")
 
     def on_recording_stopped(self):
+        """Handle event when recording stops."""
+
         print("ON RECORDING STOPPED")
         self.recording = False
         self.main_window.update_state("thinking")
@@ -105,21 +111,29 @@ class ButtonHandler:
             self.process_audio_thread.start()
 
     def just_screenshot(self):
+        """Take a screenshot."""
 
         take_screenshot()
         self.process_audio_thread = threading.Thread(target=process_screenshot)
         self.process_audio_thread.start()
 
     def on_assistant_response_stopped(self):
+        """Handle event when assistant's response stops."""
+
         self.main_window.update_state("idle")
 
     def on_assistant_thinking(self):
+        """Handle event when assistant is thinking."""
+
         self.main_window.update_state("thinking")
 
     def on_assistant_response_ready(self):
+        """Handle event when assistant's response is ready."""
+
         self.main_window.update_state("talking")
 
     def input_text(self, text):
+        """Handle input text."""
 
         self.main_window.update_state("thinking")
         if (
@@ -133,8 +147,9 @@ class ButtonHandler:
             self.process_audio_thread.start()
 
     def input_text_screenshot(self, text):
-        screenshot = pyautogui.screenshot()
+        """Handle input text with screenshot."""
 
+        screenshot = pyautogui.screenshot()
         screenshot.save(screenshot_path)
 
         self.main_window.update_state("thinking")

@@ -8,6 +8,15 @@ from pydub import AudioSegment
 
 
 def split_audio(file_path, max_size=20 * 1024 * 1024):
+    """Split an audio file into smaller parts if it exceeds a maximum size.
+
+    Args:
+        file_path (str): The path to the audio file to be split.
+        max_size (int): The maximum size in bytes for each split part. Defaults to 20 MB.
+
+    Returns:
+        list: A list of tuples containing the split audio segments and their respective file paths.
+    """
     audio = AudioSegment.from_wav(file_path)
     file_size = os.path.getsize(file_path)
     if file_size <= max_size:
@@ -30,6 +39,14 @@ def split_audio(file_path, max_size=20 * 1024 * 1024):
 
 
 def speech_to_text(location):
+    """Convert speech audio file to text using an external service.
+
+    Args:
+        location (str): The path to the speech audio file.
+
+    Returns:
+        str: The transcribed text from the speech audio file.
+    """
     audio_parts = split_audio(location)
     transcriptions = []
 
