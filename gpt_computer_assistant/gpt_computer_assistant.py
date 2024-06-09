@@ -123,6 +123,7 @@ class Worker(QThread):
 
 
 
+
 return_key_event = None
 class CustomTextEdit(QTextEdit):
     def __init__(self, parent=None):
@@ -139,6 +140,22 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
+
+
+        # Load the San Francisco font
+        print("Loading font")
+        print(font_dir)
+        try:
+            font_id = QtGui.QFontDatabase.addApplicationFont(font_dir)
+
+        
+            font_family = QtGui.QFontDatabase.applicationFontFamilies(font_id)[0]
+            self.setFont(QtGui.QFont(font_family))
+        except:
+            print("Error loading font")
+
+
+
 
         self.state = "idle"
         self.pulse_timer = None

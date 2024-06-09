@@ -183,3 +183,8 @@ def is_collapse_setting_active():
         return False
     with open(collapse_setting, "r") as f:
         return f.read() == "1"
+
+
+
+
+font_dir = os.path.join(media_dir, "SF-Pro-Text-Bold.otf")
