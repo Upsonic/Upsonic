@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton
 from PyQt5.QtCore import Qt, pyqtSignal, QObject
-from ..utils.db import screenshot_path, save_api_key, load_api_key, activate_just_text_model, deactivate_just_text_model, is_just_text_model_active, set_profile, get_profile
+from ..utils.db import screenshot_path, save_api_key, load_api_key, activate_just_text_model, deactivate_just_text_model, is_just_text_model_active, set_profile, get_profile, activate_dark_mode, deactivate_dark_mode, is_dark_mode_active
 from ..agent.chat_history import clear_chat_history
 
 def settings_popup(self):
@@ -105,5 +105,49 @@ def settings_popup(self):
 
     profile_save_button.clicked.connect(lambda: set_profile_(profile_input.text()))
     settings_dialog.layout().addWidget(profile_save_button)
+
+
+    dark_mode_button = QPushButton("Enable Dark Mode")
+
+    settings_dialog.layout().addWidget(dark_mode_button)
+
+    if is_dark_mode_active():
+        dark_mode_button.setText("Disabled Dark Mode")
+
+        def deactivate_dark_mode_():
+            """
+            Deactivate dark mode and update the main window.
+
+            This function deactivates dark mode and updates the main window with a notification.
+
+            Returns:
+            - None
+            """
+            deactivate_dark_mode()
+            the_main_window.update_from_thread("Disabled Dark Mode")
+            the_main_window.light_mode()
+            settings_dialog.close()
+
+        dark_mode_button.clicked.connect(deactivate_dark_mode_)
+    else:
+            
+            def activate_dark_mode_():
+                """
+                Activate dark mode and update the main window.
+    
+                This function activates dark mode and updates the main window with a notification.
+    
+                Returns:
+                - None
+                """
+                activate_dark_mode()
+                the_main_window.update_from_thread("Enabled Dark Mode")
+                the_main_window.dark_mode()
+                settings_dialog.close()
+    
+            dark_mode_button.clicked.connect(activate_dark_mode_)
+
+
+
 
     settings_dialog.exec_()

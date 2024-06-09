@@ -196,3 +196,27 @@ def is_collapse_setting_active():
 
 # Define font directory path
 font_dir = os.path.join(media_dir, "SF-Pro-Text-Bold.otf")
+
+
+
+style_setting = os.path.join(artifacts_dir, "style_setting.db")
+
+
+def activate_dark_mode():
+    """Activate the dark mode setting."""
+    with open(style_setting, "w") as f:
+        f.write("1")
+
+
+def deactivate_dark_mode():
+    """Deactivate the dark mode setting."""
+    with open(style_setting, "w") as f:
+        f.write("0")
+
+
+def is_dark_mode_active():
+    """Check if the dark mode setting is active."""
+    if not os.path.exists(style_setting):
+        return True
+    with open(style_setting, "r") as f:
+        return f.read() == "1"

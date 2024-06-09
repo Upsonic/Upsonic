@@ -43,7 +43,7 @@ import soundfile as sf
 from pygame import mixer
 import math
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
-from PyQt5.QtGui import QMouseEvent, QPainter, QPen, QBrush, QIcon, QPixmap
+from PyQt5.QtGui import QMouseEvent, QPainter, QPen, QBrush, QIcon, QPixmap, QColor
 from PyQt5.QtCore import Qt, QTimer, QRect, pyqtSignal, QObject, pyqtSlot
 from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import QShortcut
@@ -179,6 +179,55 @@ class MainWindow(QMainWindow):
         the_main_window = self
 
 
+        self.general_styling()
+
+        if is_dark_mode_active():
+            self.dark_mode()
+        else:
+            self.light_mode()
+
+    def general_styling(self):
+
+        self.input_box_style = "border-radius: 10px; border-bottom: 1px solid #01EE8A;"
+
+        self.send_button_style = "border-radius: 5px; height: 25px; border-style: solid;"
+        self.screenshot_button_style = "border-radius: 5px; height: 25px; border-style: solid;"
+
+        self.settingsButton_style = "border-radius: 5px; height: 25px; border-style: solid;"
+        self.llmsettingsButton_style = "border-radius: 5px; height: 25px; border-style: solid;"
+
+
+
+
+    def dark_mode(self):
+        self.setAutoFillBackground(True)
+        p = self.palette()
+        p.setColor(self.backgroundRole(), QColor("#171717"))  # Set background color to white
+        self.setPalette(p)
+        self.input_box.setStyleSheet(self.input_box_style+"background-color: #2E2E2E; color: white;")
+
+        self.send_button.setStyleSheet(self.send_button_style+"background-color: #2E2E2E; color: white; border-color: #01EE8A;;")
+        self.screenshot_button.setStyleSheet(self.screenshot_button_style+"background-color: #2E2E2E; color: white; border-color: #01EE8A;")
+
+        self.settingsButton.setStyleSheet(self.settingsButton_style+"background-color: #2E2E2E; color: white; border-color: #01EE8A;")
+        self.llmsettingsButton.setStyleSheet(self.llmsettingsButton_style+"background-color: #2E2E2E; color: white; border-color: #01EE8A;")
+
+
+    def light_mode(self):
+        self.setAutoFillBackground(True)
+        p = self.palette()
+        p.setColor(self.backgroundRole(), QColor("#F0F0F0"))
+        self.setPalette(p)
+        self.input_box.setStyleSheet(self.input_box_style+"background-color: #FFFFFF; color: black;")
+        self.send_button.setStyleSheet(self.send_button_style+"background-color: #FFFFFF; color: black; ")
+        self.screenshot_button.setStyleSheet(self.screenshot_button_style+"background-color: #FFFFFF; color: black; ")
+        self.settingsButton.setStyleSheet(self.settingsButton_style+"background-color: #FFFFFF; color: black; ")
+        self.llmsettingsButton.setStyleSheet(self.llmsettingsButton_style+"background-color: #FFFFFF; color: black; ")
+
+
+    
+
+
     def collapse_window(self):
         the_input_box.hide()
         self.screenshot_button.hide()
@@ -249,6 +298,8 @@ class MainWindow(QMainWindow):
         # I want to create an input box to bottom left and a send button to bottom right
 
         input_box = CustomTextEdit(self)
+        self.input_box = input_box
+        
 
         input_box.setFixedHeight(40)
 
@@ -350,6 +401,9 @@ class MainWindow(QMainWindow):
         else:
             self.screen_available = False
 
+
+
+        self.setAutoFillBackground(True)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(QPen(Qt.black, 8, Qt.SolidLine))
@@ -388,12 +442,28 @@ class MainWindow(QMainWindow):
                 int(radius),
             )
 
+
+
+
         self.circle_rect = QRect(
             int(center_x - radius / 2),
             int(center_y - radius / 2),
             int(radius),
             int(radius),
         )
+
+
+        painter.setPen(QPen(QColor("#01EE8A"), 1))  # Green color with 2px thickness
+
+        # Draw the ellipse with the specified green border
+        painter.drawEllipse(
+            int(center_x - radius / 2),
+            int(center_y - radius / 2),
+            int(radius),
+            int(radius),
+        )
+
+        painter.setPen(QPen(Qt.black, 8, Qt.SolidLine))
 
         if self.screen_available:
 
