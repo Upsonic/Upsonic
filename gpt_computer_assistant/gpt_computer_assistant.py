@@ -154,7 +154,7 @@ class MainWindow(QMainWindow):
         except:
             print("Error loading font")
 
-
+        self.should_paint = False # In order to initialize the painting, it will be overwitten by the settings
 
 
         self.state = "idle"

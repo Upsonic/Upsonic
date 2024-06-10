@@ -1,5 +1,7 @@
 from PyQt5.QtCore import Qt, QTimer, QRect, pyqtSignal, QObject
 
+
+
 class SignalHandler(QObject):
     """
     A QObject subclass to handle signals used in the GUI application.
@@ -15,12 +17,23 @@ class SignalHandler(QObject):
     - assistant_response_stopped: Signal emitted when the assistant response display is stopped.
 
     """
-    recording_started = pyqtSignal()
-    recording_stopped = pyqtSignal()
-    assistant_thinking = pyqtSignal()
-    assistant_response_ready = pyqtSignal()
-    assistant_response_stopped = pyqtSignal()
-
+    
+    def emit_connection(self, signal):
+        recording_started = signal()
+        recording_stopped = signal()
+        assistant_thinking = signal()
+        assistant_response_ready = signal()
+        assistant_response_stopped = signal()
+    
+    try: 
+        emit_connection(pyqtSignal)
+    except Exception as e:
+        print("Error in SignalHandler", e)
+        print("Retrying in 5 seconds to avoid overloading requests query...")
+        from time import sleep
+        sleep(5)
+        emit_connection(pyqtSignal)
+        
 
 signal_handler = SignalHandler()
 
