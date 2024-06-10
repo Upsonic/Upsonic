@@ -85,6 +85,8 @@ the_input_box = None
 the_input_text = None
 
 
+the_input_box_pre = None
+
 
 the_main_window = None
 

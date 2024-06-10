@@ -42,6 +42,8 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
         try:
             global audio_data, last_ai_response
             from ..gpt_computer_assistant import the_input_box, the_main_window
+            from ..audio.record import audio_data, the_input_box_pre
+
 
             transcription = speech_to_text(mic_record_location)
 
@@ -51,13 +53,13 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
 
             llm_input = transcription
 
-
+            print("LLM INPUT (screenshot)", the_input_box_pre)
             if (
-                        the_input_box.toPlainText() != ""
-                        and the_input_box.toPlainText() != "Thinking..."
-                        and the_input_box.toPlainText() != last_ai_response
+                        the_input_box_pre != ""
+                        and the_input_box_pre != "Thinking..."
+                        and the_input_box_pre != last_ai_response
                     ):
-                llm_input = the_input_box.toPlainText()
+                llm_input += the_input_box_pre
 
             if take_system_audio:
                 llm_input += " \n Other of USER: " + transcription2
@@ -128,15 +130,17 @@ def process_screenshot():
 
             global last_ai_response
             from ..gpt_computer_assistant import the_input_box, the_main_window
+            from ..audio.record import audio_data, the_input_box_pre
 
             llm_input =  "I just take a screenshot. for you to remember. Just say ok."
             
+
             if (
-                        the_input_box.toPlainText() != ""
-                        and the_input_box.toPlainText() != "Thinking..."
-                        and the_input_box.toPlainText() != last_ai_response
+                        the_input_box_pre != ""
+                        and the_input_box_pre != "Thinking..."
+                        and the_input_box_pre != last_ai_response
                     ):
-                llm_input = the_input_box.toPlainText()
+                llm_input += the_input_box_pre
 
             print("LLM INPUT (just screenshot)", llm_input)
 

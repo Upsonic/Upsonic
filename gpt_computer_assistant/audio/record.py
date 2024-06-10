@@ -22,6 +22,8 @@ audio_data = None
 user_id = load_user_id()
 os_name_ = os_name()
 
+the_input_box_pre = None
+
 def start_recording(take_system_audio=False):
     """Start recording audio from microphone and/or system sound.
 
@@ -32,7 +34,9 @@ def start_recording(take_system_audio=False):
         span.set_attribute("user_id", user_id)
         span.set_attribute("os_name", os_name_)
 
+        global the_input_box_pre
         from ..gpt_computer_assistant import the_input_box, the_main_window
+        the_input_box_pre = the_input_box.toPlainText()
 
         the_main_window.update_from_thread("Click again when recording is done")
         global recording, audio_data
