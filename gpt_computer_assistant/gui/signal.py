@@ -18,22 +18,11 @@ class SignalHandler(QObject):
 
     """
     
-    def emit_connection(self, signal):
-        recording_started = signal()
-        recording_stopped = signal()
-        assistant_thinking = signal()
-        assistant_response_ready = signal()
-        assistant_response_stopped = signal()
-    
-    try: 
-        emit_connection(pyqtSignal)
-    except Exception as e:
-        print("Error in SignalHandler", e)
-        print("Retrying in 5 seconds to avoid overloading requests query...")
-        from time import sleep
-        sleep(5)
-        emit_connection(pyqtSignal)
-        
+    recording_started = pyqtSignal()
+    recording_stopped = pyqtSignal()
+    assistant_thinking = pyqtSignal()
+    assistant_response_ready = pyqtSignal()
+    assistant_response_stopped = pyqtSignal()
 
 signal_handler = SignalHandler()
 
