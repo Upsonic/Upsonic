@@ -6,6 +6,7 @@ llm_settings = {
     "llama3": {"vision":False, "transcription":False, "provider":"ollama"},
     "llava": {"vision":True, "transcription":False, "provider":"ollama"},
     "bakllava": {"vision":True, "transcription":False, "provider":"ollama"},
+    "llava-phi3": {"vision":True, "transcription":False, "provider":"ollama"},
     "gemini-pro": {"vision":True, "transcription":False, "provider":"google"},
     "mixtral-8x7b-groq": {"vision":False, "transcription":False, "provider":"groq"},
 }
@@ -18,6 +19,7 @@ llm_show_name = {
     "Llava (Ollama)": "llava",
     "Llama3 (Ollama)": "llama3",
     "BakLLaVA (Ollama)": "bakllava",
+    "LLaVA-Phi-3 (Ollama)": "llava-phi3",
     "gemini-pro (Google)": "gemini-pro",
     "Mixtral 8x7b (Groq)": "mixtral-8x7b-groq",
 }
