@@ -20,7 +20,6 @@ from langgraph.prebuilt import chat_agent_executor
 custom_tools = []
 
 try:
-    raise ImportError
     from upsonic import Tiger
     tools = Tiger()
     tools.enable_auto_requirements = True
