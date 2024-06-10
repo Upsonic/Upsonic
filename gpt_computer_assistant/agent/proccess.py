@@ -41,6 +41,7 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
         span.set_attribute("os_name", os_name_)
         try:
             global audio_data, last_ai_response
+            from ..gpt_computer_assistant import the_input_box, the_main_window
 
             transcription = speech_to_text(mic_record_location)
 
@@ -49,6 +50,14 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
                 transcription2 = speech_to_text(system_sound_location)
 
             llm_input = transcription
+
+
+            if (
+                        the_input_box.toPlainText() != ""
+                        and the_input_box.toPlainText() != "Thinking..."
+                        and the_input_box.toPlainText() != last_ai_response
+                    ):
+                llm_input = the_input_box.toPlainText()
 
             if take_system_audio:
                 llm_input += " \n Other of USER: " + transcription2
@@ -118,11 +127,20 @@ def process_screenshot():
 
 
             global last_ai_response
+            from ..gpt_computer_assistant import the_input_box, the_main_window
 
-            llm_input = (
-                 "I just take a screenshot. for you to remember. Just say ok."
-            )
+            llm_input =  "I just take a screenshot. for you to remember. Just say ok."
+            
+            if (
+                        the_input_box.toPlainText() != ""
+                        and the_input_box.toPlainText() != "Thinking..."
+                        and the_input_box.toPlainText() != last_ai_response
+                    ):
+                llm_input = the_input_box.toPlainText()
+
             print("LLM INPUT (just screenshot)", llm_input)
+
+
 
             llm_output = assistant(
                 llm_input,
