@@ -165,6 +165,7 @@ https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e6
 | **Our Customizable Agent Infrastructure**              | Completed      | Q2 2024        |
 | Supporting Groq Models  | Completed  | Q2 2024        |
 | **Adding Custom Tools**  | Completed  | Q2 2024        |
+| **Click on something on the screen**              | Planned      | Q2 2024        |
 | **Native Applications, exe, dmg, appimage**              | Planned      | Q2 2024        |
 | **New UI**              | Planned      | Q2 2024        |
 | **DeepFace Integration (Facial Recognition)**                    | Planned  | Q2 2024        |
