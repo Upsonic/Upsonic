@@ -1,9 +1,9 @@
 try:
-    from ..utils.db import screenshot_path, save_api_key, load_api_key, activate_just_text_model, deactivate_just_text_model, is_just_text_model_active, set_profile, get_profile, load_model_settings, save_model_settings, load_openai_url, load_groq_api_key
+    from ..utils.db import *
     from ..agent.chat_history import clear_chat_history
     from ..llm_settings import llm_show_name, llm_settings
 except ImportError:
-    from utils.db import screenshot_path, save_api_key, load_api_key, activate_just_text_model, deactivate_just_text_model, is_just_text_model_active, set_profile, get_profile, load_model_settings, save_model_settings, load_openai_url, load_groq_api_key
+    from utils.db import *
     from agent.chat_history import clear_chat_history
     from llm_settings import llm_show_name, llm_settings
     
@@ -79,6 +79,26 @@ def llmsettings_popup(self):
     )
     settings_dialog.layout().addWidget(groq_save_button)
 
+
+
+    google_api_key_label = QLabel("Google Generative AI API Key")
+    settings_dialog.layout().addWidget(google_api_key_label)
+    google_api_key_input = QLineEdit()
+    google_api_key = load_google_api_key()
+    google_api_key_input.setText(google_api_key)
+    settings_dialog.layout().addWidget(google_api_key_input)
+    google_save_button = QPushButton("Save")
+
+    def google_save_api_key_(api_key):
+        save_google_api_key(api_key)
+        the_main_window.update_from_thread("Saved Google API Key")
+        settings_dialog.close()
+
+    google_save_button.clicked.connect(
+        lambda: google_save_api_key_(google_api_key_input.text())
+    )
+    settings_dialog.layout().addWidget(google_save_button)
+
     def hide_openai():
         api_key_label.hide()
         api_key_input.hide()
@@ -91,6 +111,12 @@ def llmsettings_popup(self):
         groq_api_key_label.hide()
         groq_api_key_input.hide()
         groq_save_button.hide()
+
+
+    def hide_google():
+        google_api_key_label.hide()
+        google_api_key_input.hide()
+        google_save_button.hide()
 
     def show_openai():
         api_key_label.show()
@@ -105,8 +131,14 @@ def llmsettings_popup(self):
         groq_api_key_input.show()
         groq_save_button.show()
 
+    def show_google():
+        google_api_key_label.show()
+        google_api_key_input.show()
+        google_save_button.show()
+
     hide_openai()
     hide_groq()
+    hide_google()
 
     print("LLLM SETTINGS", list(llm_show_name.keys()))
 
@@ -124,7 +156,9 @@ def llmsettings_popup(self):
     current_model = load_model_settings()
     # lets set index of current model
     for i, model in enumerate(llm_show_name.keys()):
-        if model == current_model:
+        print("MODEL", model, current_model)
+        the_save_string = llm_show_name[model]
+        if the_save_string == current_model:
             model_select.setCurrentIndex(i)
 
 
@@ -134,6 +168,9 @@ def llmsettings_popup(self):
 
     if llm_settings[llm_show_name[model_select.currentText()]]["provider"] == "groq":
         show_groq()
+
+    if llm_settings[llm_show_name[model_select.currentText()]]["provider"] == "google":
+        show_google()
 
     if not llm_settings[llm_show_name[model_select.currentText()]]["transcription"]:
         from ..gpt_computer_assistant import the_main_window
@@ -151,6 +188,7 @@ def llmsettings_popup(self):
     def on_model_change():
         hide_openai()
         hide_groq()
+        hide_google()
 
 
         the_save_string = llm_show_name[model_select.currentText()]
@@ -185,7 +223,10 @@ def llmsettings_popup(self):
 
 
         if llm_settings[llm_show_name[model_select.currentText()]]["provider"] == "groq":
-            show_groq
+            show_groq()
+
+        if llm_settings[llm_show_name[model_select.currentText()]]["provider"] == "google":
+            show_google()
 
 
     model_select.currentIndexChanged.connect(on_model_change)

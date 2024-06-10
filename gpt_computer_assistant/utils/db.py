@@ -1,5 +1,6 @@
 import os
 import uuid
+import getpass
 from dotenv import load_dotenv
 
 load_dotenv(".env")
@@ -220,3 +221,27 @@ def is_dark_mode_active():
         return True
     with open(style_setting, "r") as f:
         return f.read() == "1"
+
+
+
+
+googlekey = os.path.join(artifacts_dir, "googlekey.db")
+
+
+def save_google_api_key(api_key):
+    """Save the Google Generative AI API key to a file."""
+    with open(googlekey, "w") as f:
+        f.write(api_key)
+
+
+def load_google_api_key():
+    """Load the Google Generative AI API key from a file or environment variables."""
+    if not os.path.exists(googlekey):
+        env = os.getenv("GOOGLE_API_KEY")
+        if env:
+            save_api_key(env)
+            return env
+        else:
+            return "CHANGE_ME"
+    with open(googlekey, "r") as f:
+        return f.read()

@@ -5,6 +5,7 @@ pygame==2.5.2
 soundcard==0.4.3
 openai==1.30.3
 langchain_experimental==0.0.60
+langchain_google_genai==1.0.6
 langchain_openai==0.1.8
 python-dotenv==1.0.0
 upsonic==0.28.2

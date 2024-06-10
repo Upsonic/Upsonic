@@ -59,7 +59,7 @@ def get_agent_executor():
     model = load_model_settings()
 
 
-    if llm_settings[model]["provider"] == "openai" or llm_settings[model]["provider"] == "groq":
+    if llm_settings[model]["provider"] == "openai" or llm_settings[model]["provider"] == "groq" or llm_settings[model]["provider"] == "google":
         return chat_agent_executor.create_tool_calling_executor(get_model(), tools)
 
 

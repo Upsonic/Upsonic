@@ -21,6 +21,7 @@ except ImportError:
 
 
 import threading
+import traceback
 
 
 from pygame import mixer
@@ -103,6 +104,7 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
                 playback_thread.start()
         except Exception as e:
             print("Error in process_audio", e)
+            traceback.print_exc()
             from ..gpt_computer_assistant import the_input_box, the_main_window
             the_main_window.update_from_thread("EXCEPTION: " + str(e))
             signal_handler.assistant_response_stopped.emit()
@@ -176,6 +178,7 @@ def process_screenshot():
 
         except Exception as e:
             print("Error in process_screenshot", e)
+            traceback.print_exc()
             from ..gpt_computer_assistant import the_input_box, the_main_window
             the_main_window.update_from_thread("EXCEPTION: " + str(e))
             signal_handler.assistant_response_stopped.emit()
@@ -254,6 +257,7 @@ def process_text(text, screenshot_path=None):
 
         except Exception as e:
             print("Error in process_text", e)
+            traceback.print_exc()
             from ..gpt_computer_assistant import the_input_box, the_main_window
             the_main_window.update_from_thread("EXCEPTION: " + str(e))
             signal_handler.assistant_response_stopped.emit()

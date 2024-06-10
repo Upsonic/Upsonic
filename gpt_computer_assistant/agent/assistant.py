@@ -68,6 +68,11 @@ def agentic(
                 {"messages": llm_history + [the_message]}, config=config
             )
 
+        if  llm_settings[the_model]["provider"] == "google":
+            msg = get_agent_executor().invoke(
+                {"messages": llm_history + [the_message]}, config=config
+            )
+
         if llm_settings[the_model]["provider"] == "ollama":
 
             msg = get_agent_executor().invoke(
@@ -148,6 +153,30 @@ def assistant(
             {"messages": llm_history + [the_message]}, config=config
         )
 
+    if llm_settings[the_model]["provider"] == "google":
+        the_history = []
+        for message in llm_history:
+            try:
+
+                if isinstance(message, SystemMessage):
+                    the_mes = HumanMessage(content=message.content[0]["text"])
+                    the_history.append(the_mes)
+                elif isinstance(message, HumanMessage):
+                    the_mes = HumanMessage(content=message.content[0]["text"])
+                    the_history.append(the_mes)
+                else:
+                    the_mes = AIMessage(content=message.content[0]["text"])
+                    the_history.append(the_mes)
+            except:
+                the_mes = AIMessage(content=message.content)
+                the_history.append(the_mes)
+
+        llm_input += each_message_extension
+
+        the_last_message = HumanMessage(content=llm_input)
+        msg = get_agent_executor().invoke(
+            {"messages": the_history + [the_last_message]}, config=config
+        )
 
     elif llm_settings[the_model]["provider"] == "groq":
         the_history = []

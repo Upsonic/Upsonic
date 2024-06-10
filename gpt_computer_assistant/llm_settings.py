@@ -1,9 +1,12 @@
 llm_settings = {
     "gpt-4o": {"vision":True, "transcription":True, "provider":"openai"},
     "gpt-4-turbo": {"vision":False, "transcription":True, "provider":"openai"},
+    "gpt-3.5": {"vision":False, "transcription":True, "provider":"openai"},
     "gpt-3.5-turbo": {"vision":False, "transcription":True, "provider":"openai"},
+    "llama3": {"vision":False, "transcription":False, "provider":"ollama"},
     "llava": {"vision":True, "transcription":False, "provider":"ollama"},
     "bakllava": {"vision":True, "transcription":False, "provider":"ollama"},
+    "gemini-pro": {"vision":True, "transcription":False, "provider":"google"},
     "mixtral-8x7b-groq": {"vision":False, "transcription":False, "provider":"groq"},
 }
 
@@ -11,8 +14,11 @@ llm_show_name = {
     "gpt-4o (OpenAI)": "gpt-4o",
     "gpt-4-turbo (OpenAI)": "gpt-4-turbo",
     "gpt-3.5-turbo (OpenAI)": "gpt-3.5-turbo",
+    "gpt-3.5 (OpenAI)": "gpt-3.5",
     "Llava (Ollama)": "llava",
+    "Llama3 (Ollama)": "llama3",
     "BakLLaVA (Ollama)": "bakllava",
+    "gemini-pro (Google)": "gemini-pro",
     "Mixtral 8x7b (Groq)": "mixtral-8x7b-groq",
 }
 

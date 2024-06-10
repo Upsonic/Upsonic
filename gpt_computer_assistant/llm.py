@@ -1,21 +1,19 @@
 from openai import OpenAI
 from langchain_openai import ChatOpenAI
 from langchain_community.chat_models import ChatOllama
-try:
-    from .utils.db import load_api_key, load_model_settings
-except ImportError:
-    from utils.db import load_api_key
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 
-
 try:
-    from .utils.db import load_api_key, load_openai_url, load_model_settings, load_groq_api_key
+    from .utils.db import load_api_key, load_openai_url, load_model_settings, load_groq_api_key, load_google_api_key
 except ImportError:
-    from utils.db import load_api_key, load_openai_url, load_model_settings, load_groq_api_key
+    from utils.db import load_api_key, load_openai_url, load_model_settings, load_groq_api_key, load_google_api_key
 
 def get_model():
     the_model = load_model_settings()
     the_api_key = load_api_key()
+    the_groq_api_key = load_groq_api_key()
+    the_google_api_key = load_google_api_key()
     the_openai_url = load_openai_url()
     
     def open_ai_base():
@@ -27,15 +25,26 @@ def get_model():
     args_mapping = {
         ChatOpenAI: open_ai_base(),
         ChatOllama: {"model": the_model},
-        ChatGroq: {"temperature": 0, "model_name": the_model.replace("-groq", ""), "groq_api_key": load_groq_api_key()}
+        ChatGroq: {"temperature": 0, "model_name": the_model.replace("-groq", ""), "groq_api_key": the_openai_url},
+        ChatGoogleGenerativeAI:{"model": the_model, "google_api_key": the_google_api_key}
     }
     
     model_mapping = {
+        # OpenAI
         "gpt-4o": (ChatOpenAI, args_mapping[ChatOpenAI]),
         "gpt-4-turbo": (ChatOpenAI, args_mapping[ChatOpenAI]),
+        "gpt-3.5": (ChatOpenAI, args_mapping[ChatOpenAI]),
         "gpt-3.5-turbo": (ChatOpenAI, args_mapping[ChatOpenAI]),
+        
+        # Google Generative AI - Llama
         "llava": (ChatOllama, args_mapping[ChatOllama]),
+        "llama3": (ChatOllama, args_mapping[ChatOllama]),
         "bakllava": (ChatOllama, args_mapping[ChatOllama]),
+
+        # Google Generative AI - Gemini
+        "gemini-pro": (ChatGoogleGenerativeAI, args_mapping[ChatGoogleGenerativeAI]),
+        
+        # Groq
         "mixtral-8x7b-groq": (ChatGroq, args_mapping[ChatGroq])
     }
     
