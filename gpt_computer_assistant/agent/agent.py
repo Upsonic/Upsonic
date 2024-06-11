@@ -2,10 +2,12 @@ try:
     from ..llm import get_model
     from ..utils.db import load_model_settings
     from ..llm_settings import llm_settings
+    from ..tooler import click_on_a_text_on_the_screen, click_on_a_icon_on_the_screen
 except ImportError:
     from llm import get_model
     from utils.db import load_model_settings
     from llm_settings import llm_settings
+    from tooler import click_on_a_text_on_the_screen, click_on_a_icon_on_the_screen
 
 
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -59,7 +61,11 @@ def get_agent_executor():
     model = load_model_settings()
 
 
-    if llm_settings[model]["provider"] == "openai" or llm_settings[model]["provider"] == "groq" or llm_settings[model]["provider"] == "google":
+    if llm_settings[model]["provider"] == "openai":
+        tools += [click_on_a_text_on_the_screen, click_on_a_icon_on_the_screen]
+
+
+    if llm_settings[model]["provider"] == "openai" or llm_settings[model]["provider"] == "groq":
         return chat_agent_executor.create_tool_calling_executor(get_model(), tools)
 
 
