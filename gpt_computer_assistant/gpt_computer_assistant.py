@@ -141,8 +141,7 @@ class CustomTextEdit(QTextEdit):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowFlags(Qt.WindowStaysOnTopHint)
-
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)  # Remove the default title bar
 
         # Load the San Francisco font
         print("Loading font")
@@ -199,6 +198,11 @@ class MainWindow(QMainWindow):
         self.llmsettingsButton_style = "border-radius: 5px; height: 25px; border-style: solid;"
 
 
+        self.btn_minimize.setStyleSheet("background-color: #2E2E2E; color: white; border-style: none;")
+        self.btn_close.setStyleSheet("background-color: #2E2E2E; color: white; border-style: none;")
+        self.title_bar.setStyleSheet("background-color: #2E2E2E; color: white; border-style: none;")
+
+        
 
 
     def dark_mode(self):
@@ -213,6 +217,8 @@ class MainWindow(QMainWindow):
 
         self.settingsButton.setStyleSheet(self.settingsButton_style+"background-color: #2E2E2E; color: white; border-color: #01EE8A;")
         self.llmsettingsButton.setStyleSheet(self.llmsettingsButton_style+"background-color: #2E2E2E; color: white; border-color: #01EE8A;")
+
+
 
 
     def light_mode(self):
@@ -236,14 +242,14 @@ class MainWindow(QMainWindow):
         self.settingsButton.hide()
         self.llmsettingsButton.hide()
         self.send_button.hide()
-        self.window().setFixedSize(self.width(), 100)        
+        self.window().setFixedSize(self.width(), 160)        
 
         
 
     def initUI(self):
         self.setWindowTitle("GPT")
         self.setGeometry(100, 100, 200, 200)
-        self.setFixedSize(self.width()+10, self.height() + 40)
+        self.setFixedSize(self.width()+10, self.height() + 80)
 
         self.first_height = self.height()
         self.first_width = self.width()
@@ -262,10 +268,26 @@ class MainWindow(QMainWindow):
 
         # Custom title bar
         self.title_bar = QWidget(self)
-        self.title_bar.setFixedHeight(20)  # Set a fixed height for the title bar
+        self.title_bar.setFixedHeight(30)  # Set a fixed height for the title bar
+        self.title_bar.setStyleSheet("background-color: #2E2E2E;")
+
         self.title_bar_layout = QHBoxLayout(self.title_bar)
         self.title_bar_layout.setContentsMargins(0, 0, 0, 0)
         self.title_bar_layout.setSpacing(0)
+
+        self.btn_minimize = QPushButton("_", self.title_bar)
+        self.btn_minimize.setFixedSize(30, 20)
+        self.btn_minimize.clicked.connect(self.showMinimized)
+
+
+        self.btn_close = QPushButton("X", self.title_bar)
+        self.btn_close.setFixedSize(30, 20)
+        self.btn_close.clicked.connect(self.close)
+
+        self.title_bar_layout.addWidget(QLabel(" GPT", self.title_bar))
+        self.title_bar_layout.addWidget(self.btn_minimize)
+
+        self.title_bar_layout.addWidget(self.btn_close)
 
         layout.addWidget(self.title_bar)
 
@@ -276,6 +298,8 @@ class MainWindow(QMainWindow):
         self.layout = layout
 
         self.setLayout(layout)
+
+
 
         # Add keyboard shortcuts
         self.shortcut_screenshot = QShortcut(QKeySequence("Ctrl+1"), self)
@@ -385,7 +409,6 @@ class MainWindow(QMainWindow):
         print("Updating from thread", text)
         self.worker.the_input_text = text
 
-
     def mouseMoveEvent(self, event: QMouseEvent):
         delta = QPoint(event.globalPos() - self.old_position)
         if event.buttons() == Qt.LeftButton and self.title_bar.underMouse():
@@ -412,7 +435,7 @@ class MainWindow(QMainWindow):
         painter.setBrush(QBrush(Qt.black, Qt.SolidPattern))
 
         center_x = 105
-        center_y = 50
+        center_y = 100
 
         if self.state == "talking":
             # Draw a pulsating circle with smooth easing animation
@@ -470,7 +493,7 @@ class MainWindow(QMainWindow):
         if self.screen_available:
 
             small_center_x = 180
-            small_center_y = 25
+            small_center_y = 70
             small_radius = 30
             painter.drawEllipse(
                 int(small_center_x - small_radius / 2),
@@ -499,7 +522,7 @@ class MainWindow(QMainWindow):
 
             
             small_center_x = 30
-            small_center_y = 70
+            small_center_y = 120
             small_radius = 30
             painter.drawEllipse(
                 int(small_center_x - small_radius / 2),
@@ -529,7 +552,7 @@ class MainWindow(QMainWindow):
 
 
             small_center_x = 30
-            small_center_y = 25
+            small_center_y = 70
             small_radius = 30
             painter.drawEllipse(
                 int(small_center_x - small_radius / 2),
@@ -562,7 +585,7 @@ class MainWindow(QMainWindow):
 
 
         small_center_x = 180
-        small_center_y = 70
+        small_center_y = 120
         small_radius = 30
         painter.drawEllipse(
             int(small_center_x - small_radius / 2),
@@ -644,6 +667,10 @@ class MainWindow(QMainWindow):
         self.update()
 
     def mousePressEvent(self, event: QMouseEvent):
+
+
+        self.old_position = event.globalPos()
+
         with my_tracer.start_span("mouse_press_event") as span:
             span.set_attribute("user_id", user_id)
             span.set_attribute("os_name", os_name_)
