@@ -100,7 +100,7 @@ start()
 
 ### Adding Custom Tools | NEW
 
-Now you are able to add custom tools that run in the agentic infra and assistant procceses. 
+Now you are able to add custom tools that run in the agentic infra and assistant processes. 
 
 
 ```python

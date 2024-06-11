@@ -5,7 +5,7 @@ import threading
 try:
     from ..audio.record import *
     from ..screen.shot import *
-    from ..agent.proccess import *
+    from ..agent.process import *
     from ..agent.chat_history import clear_chat_history
     from ..utils.db import (
         screenshot_path,
@@ -21,7 +21,7 @@ try:
 except ImportError:
     from audio.record import *
     from screen.shot import *
-    from agent.proccess import *
+    from agent.process import *
     from agent.chat_history import clear_chat_history
     from utils.db import (
         screenshot_path,
