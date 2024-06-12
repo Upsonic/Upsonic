@@ -189,6 +189,9 @@ class MainWindow(QMainWindow):
 
     def general_styling(self):
 
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setStyleSheet("border-radius: 20px; background-color: rgba(45, 45, 45, 200);")
+
         self.input_box_style = "border-radius: 10px; border-bottom: 1px solid #01EE8A;"
 
         self.send_button_style = "border-radius: 5px; height: 25px; border-style: solid;"
@@ -294,6 +297,13 @@ class MainWindow(QMainWindow):
         # Add other UI elements below the title bar
         self.other_widget = QWidget(self)
         layout.addWidget(self.other_widget)
+        # add background color
+        self.other_widget.setStyleSheet("background-color: rgba(45, 45, 45, 0);;")
+        self.other_widget.raise_()
+
+
+
+        
 
         self.layout = layout
 
@@ -430,8 +440,9 @@ class MainWindow(QMainWindow):
 
         self.setAutoFillBackground(True)
         painter = QPainter(self)
+
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.setPen(QPen(Qt.black, 8, Qt.SolidLine))
+        painter.setPen(QPen(QColor("#000"), 1))
         painter.setBrush(QBrush(Qt.black, Qt.SolidPattern))
 
         center_x = 105
@@ -488,7 +499,7 @@ class MainWindow(QMainWindow):
             int(radius),
         )
 
-        painter.setPen(QPen(Qt.black, 8, Qt.SolidLine))
+        painter.setPen(QPen(QColor("#000"), 1))
 
         if self.screen_available:
 
@@ -617,7 +628,8 @@ class MainWindow(QMainWindow):
         self.small_circle_collapse_icon.paint(painter, icon_rect)
 
             
-            
+
+
 
 
 
