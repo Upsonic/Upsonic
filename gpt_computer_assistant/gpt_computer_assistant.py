@@ -49,6 +49,7 @@ from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import QShortcut
 import os
 import scipy.io.wavfile as wavfile
+from PyQt5.QtWidgets import QSpacerItem, QSizePolicy
 
 from PyQt5.QtWidgets import (
     QApplication,
@@ -593,7 +594,7 @@ class MainWindow(QMainWindow):
         self.title_bar_layout.setSpacing(0)
 
         self.btn_minimize = QPushButton("_", self.title_bar)
-        self.btn_minimize.setFixedSize(30, 20)
+        self.btn_minimize.setFixedSize(25, 20)
         self.btn_minimize.clicked.connect(self.showMinimized)
 
 
@@ -604,7 +605,16 @@ class MainWindow(QMainWindow):
         self.title_bar_layout.addWidget(QLabel("  GPT Computer Assistant", self.title_bar))
         self.title_bar_layout.addWidget(self.btn_minimize)
 
+
+
         self.title_bar_layout.addWidget(self.btn_close)
+
+
+        # Create a spacer item with expanding policy
+        spacer = QSpacerItem(5, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.title_bar_layout.addSpacerItem(spacer)  # Add spacer to the layout
+
+
 
         layout.addWidget(self.title_bar)
 
