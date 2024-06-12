@@ -481,6 +481,7 @@ class MainWindow(QMainWindow):
 
         self.setAttribute(Qt.WA_TranslucentBackground)
         
+        self.central_widget.setStyleSheet("border-style: solid; border-width: 1px; border-color: #2E2E2E;")
 
         self.input_box_style = "border-radius: 10px; border-bottom: 1px solid #01EE8A;"
 
@@ -500,11 +501,13 @@ class MainWindow(QMainWindow):
     def enterEvent(self, event):
         # Reset window to fully opaque when mouse enters
         self.setStyleSheet("border-radius: 20px; background-color: rgba(45, 45, 45, 250);")
+        self.central_widget.setStyleSheet("border-style: solid; border-width: 1px; border-color: rgb(0,0,0,0);")
         event.accept()
 
     def leaveEvent(self, event):
         # Set window to 50% transparent when mouse leaves
-        self.setStyleSheet("border-radius: 20px; background-color: rgba(45, 45, 45, 0);")
+        self.setStyleSheet("border-radius: 20px; background-color: rgba(45, 45, 45, 0); ")
+        self.central_widget.setStyleSheet("border-style: solid; border-width: 1px; border-color: #2E2E2E;")
         event.accept()
 
 
@@ -515,11 +518,11 @@ class MainWindow(QMainWindow):
         self.setPalette(p)
         self.input_box.setStyleSheet(self.input_box_style+"background-color: #2E2E2E; color: white;")
 
-        self.send_button.setStyleSheet(self.send_button_style+"background-color: #2E2E2E; color: white; border-color: #01EE8A;;")
-        self.screenshot_button.setStyleSheet(self.screenshot_button_style+"background-color: #2E2E2E; color: white; border-color: #01EE8A;")
+        self.send_button.setStyleSheet(self.send_button_style+"background-color: #2E2E2E; color: white;")
+        self.screenshot_button.setStyleSheet(self.screenshot_button_style+"background-color: #2E2E2E; color: white;")
 
-        self.settingsButton.setStyleSheet(self.settingsButton_style+"background-color: #2E2E2E; color: white; border-color: #01EE8A;")
-        self.llmsettingsButton.setStyleSheet(self.llmsettingsButton_style+"background-color: #2E2E2E; color: white; border-color: #01EE8A;")
+        self.settingsButton.setStyleSheet(self.settingsButton_style+"background-color: #2E2E2E; color: white;")
+        self.llmsettingsButton.setStyleSheet(self.llmsettingsButton_style+"background-color: #2E2E2E; color: white;")
 
 
 
@@ -565,9 +568,9 @@ class MainWindow(QMainWindow):
         app_icon.addFile(icon_256_path, QtCore.QSize(256, 256))
         self.setWindowIcon(app_icon)
 
-        central_widget = QWidget(self)
-        self.setCentralWidget(central_widget)
-        layout = QVBoxLayout(central_widget)
+        self.central_widget = QWidget(self)
+        self.setCentralWidget(self.central_widget)
+        layout = QVBoxLayout(self.central_widget)
 
         # Custom title bar
         self.title_bar = QWidget(self)
