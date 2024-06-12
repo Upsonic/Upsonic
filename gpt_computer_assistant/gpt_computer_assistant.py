@@ -389,28 +389,28 @@ class DrawingWidget(QWidget):
                 except:
                     pass
 
-                try:
-                    if self.main_.small_circle_collapse.contains(event.pos()):
-                        if self.main_.collapse:
-                            self.main_.collapse = False
-                            # hide all buttons and input box
-                            the_input_box.show()
-                            if llm_settings[load_model_settings()]["vision"]:
-                                self.main_.screenshot_button.show()
-                            self.main_.settingsButton.show()
-                            self.main_.llmsettingsButton.show()
-                            self.main_.send_button.show()
-                            self.main_.window().setFixedSize(self.main_.first_width, self.main_.first_height)
-                            deactivate_collapse_setting()
-                        else:
-                            self.main_.collapse = True
-                            self.main_.collapse_window()
-                            activate_collapse_setting()
+            try:
+                if self.main_.small_circle_collapse.contains(event.pos()):
+                    if self.main_.collapse:
+                        self.main_.collapse = False
+                        # hide all buttons and input box
+                        the_input_box.show()
+                        if llm_settings[load_model_settings()]["vision"]:
+                            self.main_.screenshot_button.show()
+                        self.main_.settingsButton.show()
+                        self.main_.llmsettingsButton.show()
+                        self.main_.send_button.show()
+                        self.main_.window().setFixedSize(self.main_.first_width, self.main_.first_height)
+                        deactivate_collapse_setting()
+                    else:
+                        self.main_.collapse = True
+                        self.main_.collapse_window()
+                        activate_collapse_setting()
 
 
-                        self.main_.update()
-                except:
-                    pass
+                    self.main_.update()
+            except:
+                pass
 
 
 
