@@ -363,11 +363,18 @@ class DrawingWidget(QWidget):
             if self.main_.state == "idle" or self.main_.state == "talking":
                 try:
                     if self.main_.circle_rect.contains(event.pos()):
-                        if llm_settings[load_model_settings()]["vision"] == True:
-                            
-                            self.main_.button_handler.toggle_recording(dont_save_image=True)
+
+                        if self.main_.state == "talking":
+          
+                            self.main_.stop_talking = True
+                            print("Stop talking")
+                                
                         else:
-                            self.main_.button_handler.toggle_recording(no_screenshot=True)
+                            if llm_settings[load_model_settings()]["vision"] == True:
+                                
+                                self.main_.button_handler.toggle_recording(dont_save_image=True)
+                            else:
+                                self.main_.button_handler.toggle_recording(no_screenshot=True)
                 except:
                     pass
 
@@ -420,6 +427,7 @@ class DrawingWidget(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.stop_talking = False
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)  # Remove the default title bar
 
         # Load the San Francisco font
