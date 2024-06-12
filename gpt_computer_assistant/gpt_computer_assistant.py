@@ -173,7 +173,7 @@ class DrawingWidget(QWidget):
         center_x = 95
         center_y = 40
 
-        if self.main_.state == "talking":
+        if "talking" in self.main_.state:
             # Draw a pulsating circle with smooth easing animation
             radius_variation = 5 * (1 + math.sin(self.main_.pulse_frame * math.pi / 100))
             radius = 70 + radius_variation
@@ -205,7 +205,6 @@ class DrawingWidget(QWidget):
 
 
 
-
         self.main_.circle_rect = QRect(
             int(center_x - radius / 2),
             int(center_y - radius / 2),
@@ -214,15 +213,27 @@ class DrawingWidget(QWidget):
         )
 
 
-        painter.setPen(QPen(QColor("#01EE8A"), 1))  # Green color with 2px thickness
+        
+        if not self.main_.state == "thinking":
+            painter.setPen(QPen(QColor("#01EE8A"), 1))  # Green color with 2px thickness
+            # Draw the ellipse with the specified green border
+            painter.drawEllipse(
+                int(center_x - radius / 2),
+                int(center_y - radius / 2),
+                int(radius),
+                int(radius),
+            )
+        else:
+            painter.setPen(QPen(QColor("#23538F"), 1))
 
-        # Draw the ellipse with the specified green border
-        painter.drawEllipse(
-            int(center_x - radius / 2),
-            int(center_y - radius / 2),
-            int(radius),
-            int(radius),
-        )
+            painter.drawEllipse(
+                int(center_x - radius / 2),
+                int(center_y - radius / 2),
+                int(radius),
+                int(radius),
+            )
+
+            
 
         painter.setPen(QPen(QColor("#000"), 1))
 
@@ -363,11 +374,11 @@ class DrawingWidget(QWidget):
         with my_tracer.start_span("mouse_press_event") as span:
             span.set_attribute("user_id", user_id)
             span.set_attribute("os_name", os_name_)
-            if self.main_.state == "idle" or self.main_.state == "talking":
+            if self.main_.state == "idle" or "talking" in self.main_.state:
                 try:
                     if self.main_.circle_rect.contains(event.pos()):
 
-                        if self.main_.state == "talking":
+                        if self.main_.state == "aitalking":
           
                             self.main_.stop_talking = True
                             print("Stop talking")
@@ -755,7 +766,7 @@ class MainWindow(QMainWindow):
     def update_state(self, new_state):
         self.state = new_state
         print(f"State updated: {new_state}")
-        if new_state == "talking":
+        if "talking" in new_state:
             self.pulse_frame = 0
             if self.pulse_timer:
                 self.pulse_timer.stop()

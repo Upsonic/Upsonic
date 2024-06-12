@@ -130,7 +130,7 @@ class ButtonHandler:
     def on_assistant_response_ready(self):
         """Handle event when assistant's response is ready."""
 
-        self.main_window.update_state("talking")
+        self.main_window.update_state("aitalking")
 
     def input_text(self, text):
         """Handle input text."""
