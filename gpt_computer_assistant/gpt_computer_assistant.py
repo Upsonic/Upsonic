@@ -138,6 +138,285 @@ class CustomTextEdit(QTextEdit):
         super(CustomTextEdit, self).keyPressEvent(event)  # Process other key events normally
 
 
+
+
+class DrawingWidget(QWidget):
+    def __init__(self, parent=None):
+        super(DrawingWidget, self).__init__(parent)
+        # Set widget properties if needed, e.g., size
+
+        self.main_ = parent
+
+    def paintEvent(self, event):
+        if not self.main_.should_paint:
+            return  # Skip the drawing if should_paint is False
+
+
+
+        if llm_settings[load_model_settings()]["vision"] == True:
+            self.main_.screen_available = True
+        else:
+            self.main_.screen_available = False
+
+
+
+        self.main_.setAutoFillBackground(True)
+        painter = QPainter(self)
+
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(QPen(QColor("#000"), 1))
+        painter.setBrush(QBrush(Qt.black, Qt.SolidPattern))
+
+        center_x = 95
+        center_y = 40
+
+        if self.main_.state == "talking":
+            # Draw a pulsating circle with smooth easing animation
+            radius_variation = 5 * (1 + math.sin(self.main_.pulse_frame * math.pi / 100))
+            radius = 70 + radius_variation
+            painter.drawEllipse(
+                int(center_x - radius / 2),
+                int(center_y - radius / 2),
+                int(radius),
+                int(radius),
+            )
+        elif self.main_.state == "thinking":
+            # more slow pulsating circle with smooth easing animation
+            radius_variation = 5 * (1 + math.sin(self.main_.pulse_frame * math.pi / 100))
+            radius = 70 + radius_variation
+            painter.drawEllipse(
+                int(center_x - radius / 2),
+                int(center_y - radius / 2),
+                int(radius),
+                int(radius),
+            )
+
+        else:
+            radius = 70
+            painter.drawEllipse(
+                int(center_x - radius / 2),
+                int(center_y - radius / 2),
+                int(radius),
+                int(radius),
+            )
+
+
+
+
+        self.main_.circle_rect = QRect(
+            int(center_x - radius / 2),
+            int(center_y - radius / 2),
+            int(radius),
+            int(radius),
+        )
+
+
+        painter.setPen(QPen(QColor("#01EE8A"), 1))  # Green color with 2px thickness
+
+        # Draw the ellipse with the specified green border
+        painter.drawEllipse(
+            int(center_x - radius / 2),
+            int(center_y - radius / 2),
+            int(radius),
+            int(radius),
+        )
+
+        painter.setPen(QPen(QColor("#000"), 1))
+
+        if self.main_.screen_available:
+
+            small_center_x = 165
+            small_center_y = 25
+            small_radius = 30
+            painter.drawEllipse(
+                int(small_center_x - small_radius / 2),
+                int(small_center_y - small_radius / 2),
+                int(small_radius),
+                int(small_radius),
+            )
+
+            self.main_.small_circle_rect = QRect(
+                int(small_center_x - small_radius / 2),
+                int(small_center_y - small_radius / 2),
+                int(small_radius),
+                int(small_radius),
+            )
+
+            # Draw the icon inside the circle
+            icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
+            icon_rect = QRect(
+                small_center_x - icon_size // 2,
+                small_center_y - icon_size // 2,
+                icon_size,
+                icon_size,
+            )
+            self.main_.small_circle_recticon = QIcon(microphone_icon_path)
+            self.main_.small_circle_recticon.paint(painter, icon_rect)
+
+            
+            small_center_x = 30
+            small_center_y = 60
+            small_radius = 30
+            painter.drawEllipse(
+                int(small_center_x - small_radius / 2),
+                int(small_center_y - small_radius / 2),
+                int(small_radius),
+                int(small_radius),
+            )
+
+            self.main_.small_circle_left = QRect(
+                int(small_center_x - small_radius / 2),
+                int(small_center_y - small_radius / 2),
+                int(small_radius),
+                int(small_radius),
+            )
+
+            # Draw the icon inside the circle
+            icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
+            icon_rect = QRect(
+                small_center_x - icon_size // 2,
+                small_center_y - icon_size // 2,
+                icon_size,
+                icon_size,
+            )
+            self.main_.small_circle_lefticon = QIcon(audio_icon_path)
+            self.main_.small_circle_lefticon.paint(painter, icon_rect)
+
+
+
+            small_center_x = 30
+            small_center_y = 25
+            small_radius = 30
+            painter.drawEllipse(
+                int(small_center_x - small_radius / 2),
+                int(small_center_y - small_radius / 2),
+                int(small_radius),
+                int(small_radius),
+            )
+
+            self.main_.small_circle_left_top = QRect(
+                int(small_center_x - small_radius / 2),
+                int(small_center_y - small_radius / 2),
+                int(small_radius),
+                int(small_radius),
+            )
+
+            # Draw the icon inside the circle
+            icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
+            icon_rect = QRect(
+                small_center_x - icon_size // 2,
+                small_center_y - icon_size // 2,
+                icon_size,
+                icon_size,
+            )
+            self.main_.small_circle_left_topticon = QIcon(screenshot_icon_path)
+            self.main_.small_circle_left_topticon.paint(painter, icon_rect)
+
+
+
+
+
+
+        small_center_x = 165
+        small_center_y = 60
+        small_radius = 30
+        painter.drawEllipse(
+            int(small_center_x - small_radius / 2),
+            int(small_center_y - small_radius / 2),
+            int(small_radius),
+            int(small_radius),
+        )
+
+        self.main_.small_circle_collapse = QRect(
+            int(small_center_x - small_radius / 2),
+            int(small_center_y - small_radius / 2),
+            int(small_radius),
+            int(small_radius),
+        )
+
+        # Draw the icon inside the circle
+        icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
+        icon_rect = QRect(
+            small_center_x - icon_size // 2,
+            small_center_y - icon_size // 2,
+            icon_size,
+            icon_size,
+        )
+
+        if self.main_.collapse:
+            self.main_.small_circle_collapse_icon = QIcon(down_icon_path)
+        else:
+            self.main_.small_circle_collapse_icon = QIcon(up_icon_path)
+        self.main_.small_circle_collapse_icon.paint(painter, icon_rect)
+
+
+
+
+    def mousePressEvent(self, event: QMouseEvent):
+
+
+        self.main_.old_position = event.globalPos()
+
+        with my_tracer.start_span("mouse_press_event") as span:
+            span.set_attribute("user_id", user_id)
+            span.set_attribute("os_name", os_name_)
+            if self.main_.state == "idle" or self.main_.state == "talking":
+                try:
+                    if self.main_.circle_rect.contains(event.pos()):
+                        if llm_settings[load_model_settings()]["vision"] == True:
+                            
+                            self.main_.button_handler.toggle_recording(dont_save_image=True)
+                        else:
+                            self.main_.button_handler.toggle_recording(no_screenshot=True)
+                except:
+                    pass
+
+                try:
+                    if self.main_.small_circle_rect.contains(event.pos()):
+                        self.main_.button_handler.toggle_recording(no_screenshot=True)
+                except:
+                    pass
+
+                try:
+                    if self.main_.small_circle_left.contains(event.pos()):
+                        self.main_.button_handler.toggle_recording(take_system_audio=True)
+                except:
+                    pass
+
+                try:
+                    if self.main_.small_circle_left_top.contains(event.pos()):
+                        self.main_.button_handler.just_screenshot()
+                except:
+                    pass
+
+                try:
+                    if self.main_.small_circle_collapse.contains(event.pos()):
+                        if self.main_.collapse:
+                            self.main_.collapse = False
+                            # hide all buttons and input box
+                            the_input_box.show()
+                            if llm_settings[load_model_settings()]["vision"]:
+                                self.main_.screenshot_button.show()
+                            self.main_.settingsButton.show()
+                            self.main_.llmsettingsButton.show()
+                            self.main_.send_button.show()
+                            self.main_.window().setFixedSize(self.main_.first_width, self.main_.first_height)
+                            deactivate_collapse_setting()
+                        else:
+                            self.main_.collapse = True
+                            self.main_.collapse_window()
+                            activate_collapse_setting()
+
+
+                        self.main_.update()
+                except:
+                    pass
+
+
+
+
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -190,7 +469,7 @@ class MainWindow(QMainWindow):
     def general_styling(self):
 
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setStyleSheet("border-radius: 20px; background-color: rgba(45, 45, 45, 200);")
+        self.setStyleSheet("border-radius: 20px; background-color: rgba(45, 45, 45, 250);")
 
         self.input_box_style = "border-radius: 10px; border-bottom: 1px solid #01EE8A;"
 
@@ -245,7 +524,7 @@ class MainWindow(QMainWindow):
         self.settingsButton.hide()
         self.llmsettingsButton.hide()
         self.send_button.hide()
-        self.window().setFixedSize(self.width(), 160)        
+        self.window().setFixedSize(self.width(), 140)        
 
         
 
@@ -287,19 +566,19 @@ class MainWindow(QMainWindow):
         self.btn_close.setFixedSize(30, 20)
         self.btn_close.clicked.connect(self.close)
 
-        self.title_bar_layout.addWidget(QLabel(" GPT", self.title_bar))
+        self.title_bar_layout.addWidget(QLabel(" GPT Computer Assistant", self.title_bar))
         self.title_bar_layout.addWidget(self.btn_minimize)
 
         self.title_bar_layout.addWidget(self.btn_close)
 
         layout.addWidget(self.title_bar)
 
-        # Add other UI elements below the title bar
-        self.other_widget = QWidget(self)
-        layout.addWidget(self.other_widget)
-        # add background color
-        self.other_widget.setStyleSheet("background-color: rgba(45, 45, 45, 0);;")
-        self.other_widget.raise_()
+
+
+
+        self.drawing_widget = DrawingWidget(self)
+        layout.addWidget(self.drawing_widget)
+
 
 
 
@@ -405,6 +684,9 @@ class MainWindow(QMainWindow):
         self.worker.text_to_set.connect(self.set_text)
         self.worker.start()
 
+        # print height and width
+        print(self.height(), self.width())
+
         self.show()
 
 
@@ -425,211 +707,9 @@ class MainWindow(QMainWindow):
             self.move(self.x() + delta.x(), self.y() + delta.y())
             self.old_position = event.globalPos()
 
-    def paintEvent(self, event):
-        if not self.should_paint:
-            return  # Skip the drawing if should_paint is False
 
-
-
-        if llm_settings[load_model_settings()]["vision"] == True:
-            self.screen_available = True
-        else:
-            self.screen_available = False
-
-
-
-        self.setAutoFillBackground(True)
-        painter = QPainter(self)
-
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.setPen(QPen(QColor("#000"), 1))
-        painter.setBrush(QBrush(Qt.black, Qt.SolidPattern))
-
-        center_x = 105
-        center_y = 100
-
-        if self.state == "talking":
-            # Draw a pulsating circle with smooth easing animation
-            radius_variation = 5 * (1 + math.sin(self.pulse_frame * math.pi / 100))
-            radius = 70 + radius_variation
-            painter.drawEllipse(
-                int(center_x - radius / 2),
-                int(center_y - radius / 2),
-                int(radius),
-                int(radius),
-            )
-        elif self.state == "thinking":
-            # more slow pulsating circle with smooth easing animation
-            radius_variation = 5 * (1 + math.sin(self.pulse_frame * math.pi / 100))
-            radius = 70 + radius_variation
-            painter.drawEllipse(
-                int(center_x - radius / 2),
-                int(center_y - radius / 2),
-                int(radius),
-                int(radius),
-            )
-
-        else:
-            radius = 70
-            painter.drawEllipse(
-                int(center_x - radius / 2),
-                int(center_y - radius / 2),
-                int(radius),
-                int(radius),
-            )
-
-
-
-
-        self.circle_rect = QRect(
-            int(center_x - radius / 2),
-            int(center_y - radius / 2),
-            int(radius),
-            int(radius),
-        )
-
-
-        painter.setPen(QPen(QColor("#01EE8A"), 1))  # Green color with 2px thickness
-
-        # Draw the ellipse with the specified green border
-        painter.drawEllipse(
-            int(center_x - radius / 2),
-            int(center_y - radius / 2),
-            int(radius),
-            int(radius),
-        )
-
-        painter.setPen(QPen(QColor("#000"), 1))
-
-        if self.screen_available:
-
-            small_center_x = 180
-            small_center_y = 70
-            small_radius = 30
-            painter.drawEllipse(
-                int(small_center_x - small_radius / 2),
-                int(small_center_y - small_radius / 2),
-                int(small_radius),
-                int(small_radius),
-            )
-
-            self.small_circle_rect = QRect(
-                int(small_center_x - small_radius / 2),
-                int(small_center_y - small_radius / 2),
-                int(small_radius),
-                int(small_radius),
-            )
-
-            # Draw the icon inside the circle
-            icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
-            icon_rect = QRect(
-                small_center_x - icon_size // 2,
-                small_center_y - icon_size // 2,
-                icon_size,
-                icon_size,
-            )
-            self.small_circle_recticon = QIcon(microphone_icon_path)
-            self.small_circle_recticon.paint(painter, icon_rect)
-
-            
-            small_center_x = 30
-            small_center_y = 120
-            small_radius = 30
-            painter.drawEllipse(
-                int(small_center_x - small_radius / 2),
-                int(small_center_y - small_radius / 2),
-                int(small_radius),
-                int(small_radius),
-            )
-
-            self.small_circle_left = QRect(
-                int(small_center_x - small_radius / 2),
-                int(small_center_y - small_radius / 2),
-                int(small_radius),
-                int(small_radius),
-            )
-
-            # Draw the icon inside the circle
-            icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
-            icon_rect = QRect(
-                small_center_x - icon_size // 2,
-                small_center_y - icon_size // 2,
-                icon_size,
-                icon_size,
-            )
-            self.small_circle_lefticon = QIcon(audio_icon_path)
-            self.small_circle_lefticon.paint(painter, icon_rect)
-
-
-
-            small_center_x = 30
-            small_center_y = 70
-            small_radius = 30
-            painter.drawEllipse(
-                int(small_center_x - small_radius / 2),
-                int(small_center_y - small_radius / 2),
-                int(small_radius),
-                int(small_radius),
-            )
-
-            self.small_circle_left_top = QRect(
-                int(small_center_x - small_radius / 2),
-                int(small_center_y - small_radius / 2),
-                int(small_radius),
-                int(small_radius),
-            )
-
-            # Draw the icon inside the circle
-            icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
-            icon_rect = QRect(
-                small_center_x - icon_size // 2,
-                small_center_y - icon_size // 2,
-                icon_size,
-                icon_size,
-            )
-            self.small_circle_left_topticon = QIcon(screenshot_icon_path)
-            self.small_circle_left_topticon.paint(painter, icon_rect)
-
-
-
-
-
-
-        small_center_x = 180
-        small_center_y = 120
-        small_radius = 30
-        painter.drawEllipse(
-            int(small_center_x - small_radius / 2),
-            int(small_center_y - small_radius / 2),
-            int(small_radius),
-            int(small_radius),
-        )
-
-        self.small_circle_collapse = QRect(
-            int(small_center_x - small_radius / 2),
-            int(small_center_y - small_radius / 2),
-            int(small_radius),
-            int(small_radius),
-        )
-
-        # Draw the icon inside the circle
-        icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
-        icon_rect = QRect(
-            small_center_x - icon_size // 2,
-            small_center_y - icon_size // 2,
-            icon_size,
-            icon_size,
-        )
-
-        if self.collapse:
-            self.small_circle_collapse_icon = QIcon(down_icon_path)
-        else:
-            self.small_circle_collapse_icon = QIcon(up_icon_path)
-        self.small_circle_collapse_icon.paint(painter, icon_rect)
-
-            
-
-
+    def mousePressEvent(self, event: QMouseEvent):
+        self.old_position = event.globalPos()
 
 
 
@@ -678,63 +758,4 @@ class MainWindow(QMainWindow):
         self.pulse_frame = (self.pulse_frame + 1) % 100
         self.update()
 
-    def mousePressEvent(self, event: QMouseEvent):
-
-
-        self.old_position = event.globalPos()
-
-        with my_tracer.start_span("mouse_press_event") as span:
-            span.set_attribute("user_id", user_id)
-            span.set_attribute("os_name", os_name_)
-            if self.state == "idle" or self.state == "talking":
-                try:
-                    if self.circle_rect.contains(event.pos()):
-                        if llm_settings[load_model_settings()]["vision"] == True:
-                            
-                            self.button_handler.toggle_recording(dont_save_image=True)
-                        else:
-                            self.button_handler.toggle_recording(no_screenshot=True)
-                except:
-                    pass
-
-                try:
-                    if self.small_circle_rect.contains(event.pos()):
-                        self.button_handler.toggle_recording(no_screenshot=True)
-                except:
-                    pass
-
-                try:
-                    if self.small_circle_left.contains(event.pos()):
-                        self.button_handler.toggle_recording(take_system_audio=True)
-                except:
-                    pass
-
-                try:
-                    if self.small_circle_left_top.contains(event.pos()):
-                        self.button_handler.just_screenshot()
-                except:
-                    pass
-
-                try:
-                    if self.small_circle_collapse.contains(event.pos()):
-                        if self.collapse:
-                            self.collapse = False
-                            # hide all buttons and input box
-                            the_input_box.show()
-                            if llm_settings[load_model_settings()]["vision"]:
-                                self.screenshot_button.show()
-                            self.settingsButton.show()
-                            self.llmsettingsButton.show()
-                            self.send_button.show()
-                            self.window().setFixedSize(self.first_width, self.first_height)
-                            deactivate_collapse_setting()
-                        else:
-                            self.collapse = True
-                            self.collapse_window()
-                            activate_collapse_setting()
-
-
-                        self.update()
-                except:
-                    pass
                         
