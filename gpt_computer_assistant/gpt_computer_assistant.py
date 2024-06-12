@@ -469,7 +469,7 @@ class MainWindow(QMainWindow):
     def general_styling(self):
 
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setStyleSheet("border-radius: 20px; background-color: rgba(45, 45, 45, 250);")
+        
 
         self.input_box_style = "border-radius: 10px; border-bottom: 1px solid #01EE8A;"
 
@@ -485,6 +485,16 @@ class MainWindow(QMainWindow):
         self.title_bar.setStyleSheet("background-color: #2E2E2E; color: white; border-style: none;")
 
         
+
+    def enterEvent(self, event):
+        # Reset window to fully opaque when mouse enters
+        self.setStyleSheet("border-radius: 20px; background-color: rgba(45, 45, 45, 250);")
+        event.accept()
+
+    def leaveEvent(self, event):
+        # Set window to 50% transparent when mouse leaves
+        self.setStyleSheet("border-radius: 20px; background-color: rgba(45, 45, 45, 60);")
+        event.accept()
 
 
     def dark_mode(self):
