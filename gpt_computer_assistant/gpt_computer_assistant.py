@@ -118,9 +118,12 @@ class Worker(QThread):
                 if self.the_input_text != last_text:
                     self.commited_text.append(self.the_input_text)
 
-                    for i in range(len(self.the_input_text)):
-                        self.text_to_set.emit(self.the_input_text[:i + 1])
-                        self.msleep(10)
+                    if len(self.the_input_text) > 90:
+                        self.text_to_set.emit(self.the_input_text)
+                    else:
+                        for i in range(len(self.the_input_text)):
+                            self.text_to_set.emit(self.the_input_text[:i + 1])
+                            self.msleep(10)
 
 
 
