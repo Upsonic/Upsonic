@@ -482,7 +482,7 @@ class MainWindow(QMainWindow):
 
         self.btn_minimize.setStyleSheet("background-color: #2E2E2E; color: white; border-style: none;")
         self.btn_close.setStyleSheet("background-color: #2E2E2E; color: white; border-style: none;")
-        self.title_bar.setStyleSheet("background-color: #2E2E2E; color: white; border-style: none;")
+        self.title_bar.setStyleSheet("background-color: #2E2E2E; color: white; border-style: solid; border-radius: 15px;")
 
         
 
@@ -493,7 +493,7 @@ class MainWindow(QMainWindow):
 
     def leaveEvent(self, event):
         # Set window to 50% transparent when mouse leaves
-        self.setStyleSheet("border-radius: 20px; background-color: rgba(45, 45, 45, 60);")
+        self.setStyleSheet("border-radius: 20px; background-color: rgba(45, 45, 45, 0);")
         event.accept()
 
 
@@ -576,7 +576,7 @@ class MainWindow(QMainWindow):
         self.btn_close.setFixedSize(30, 20)
         self.btn_close.clicked.connect(self.close)
 
-        self.title_bar_layout.addWidget(QLabel(" GPT Computer Assistant", self.title_bar))
+        self.title_bar_layout.addWidget(QLabel("  GPT Computer Assistant", self.title_bar))
         self.title_bar_layout.addWidget(self.btn_minimize)
 
         self.title_bar_layout.addWidget(self.btn_close)
