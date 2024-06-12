@@ -23,12 +23,13 @@ def Tool(func):
     return func
 
 
-def click_on_a_text_on_the_screen(text:str) -> bool:
+def click_on_a_text_on_the_screen(text:str, click_type: str = "singular") -> bool:
     """
     A function to click on a text on the screen.
 
     Parameters:
     - text (str): The text to be clicked on.
+    - click_type (str): The type of click to be performed. The default value is "singular". Possible values are "singular" and "double".
 
     Returns:
     - bool: True if the text was clicked on successfully, False otherwise.
@@ -61,19 +62,23 @@ def click_on_a_text_on_the_screen(text:str) -> bool:
         x = int(x)
         y = int(y)
 
-        interpreter.computer.mouse.click(x=x, y=y, screenshot=screenshot)
+        if click_type == "singular":
+            interpreter.computer.mouse.click(x=x, y=y, screenshot=screenshot)
+        elif click_type == "double":
+            interpreter.computer.mouse.double_click(x=x, y=y, screenshot=screenshot)
         return True
     except:
         traceback.print_exc()
         return False
 
 
-def click_on_a_icon_on_the_screen(icon_name:str) -> bool:
+def click_on_a_icon_on_the_screen(icon_name:str, click_type: str = "singular") -> bool:
     """
     A function to click on a icon name on the screen.
 
     Parameters:
     - icon_name (str): The icon name to be clicked on.
+    - click_type (str): The type of click to be performed. The default value is "singular". Possible values are "singular" and "double".
 
     Returns:
     - bool: True if the icon name was clicked on successfully, False otherwise.
@@ -95,8 +100,12 @@ def click_on_a_icon_on_the_screen(icon_name:str) -> bool:
 
 
 
-        interpreter.computer.mouse.click(icon=icon_name, screenshot=screenshot)
+        if click_type == "singular":
+            interpreter.computer.mouse.click(icon=icon_name, screenshot=screenshot)
+        elif click_type == "double":
+            interpreter.computer.mouse.double_click(icon=icon_name, screenshot=screenshot)
         return True
+
     except:
         traceback.print_exc()
         return False
