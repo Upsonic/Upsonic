@@ -71,6 +71,7 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
                 screenshot_path=screenshot_path if take_screenshot else None,
                 dont_save_image=dont_save_image,
             )
+            last_ai_response = llm_output
 
             if not is_just_text_model_active():
                 response_path = text_to_speech(llm_output)
@@ -86,7 +87,7 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
                         or the_input_box.toPlainText() == last_ai_response
                     ):
                         the_main_window.update_from_thread(llm_output)
-                        last_ai_response = llm_output
+   
 
                 def play_audio():
                     with my_tracer.start_span("play_audio") as span:
@@ -153,6 +154,7 @@ def process_screenshot():
                 screenshot_path=just_screenshot_path,
                 dont_save_image=True,
             )
+            last_ai_response = llm_output
 
             if not is_just_text_model_active():
                 response_path = text_to_speech(llm_output)
@@ -168,7 +170,7 @@ def process_screenshot():
                         or the_input_box.toPlainText() == last_ai_response
                     ):
                         the_main_window.update_from_thread(llm_output)
-                        last_ai_response = llm_output
+                        
 
                 def play_audio():
                     with my_tracer.start_span("play_audio") as span:
@@ -224,13 +226,14 @@ def process_text(text, screenshot_path=None):
                 screenshot_path=screenshot_path,
                 dont_save_image=True,
             )
+            last_ai_response = llm_output
 
             if not is_just_text_model_active():
 
                 def play_text():
                     from ..gpt_computer_assistant import the_input_box, the_main_window
-
                     global last_ai_response
+                    
                     if (
                         the_input_box.toPlainText() == ""
                         or the_input_box.toPlainText() == "Thinking..."
@@ -238,7 +241,7 @@ def process_text(text, screenshot_path=None):
                     ):
 
                         the_main_window.update_from_thread(llm_output)
-                        last_ai_response = llm_output
+                        
 
                 if load_api_key() != "CHANGE_ME":
                     response_path = text_to_speech(llm_output)
