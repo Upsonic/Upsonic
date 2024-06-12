@@ -8,7 +8,7 @@ except ImportError:
 
 
 def get_chat_message_history():
-    print("HISTORY DB", get_history_db())
+
     connection = SQLChatMessageHistory(
         session_id="abc123", connection_string=f"sqlite:///{get_history_db()}"
     )
