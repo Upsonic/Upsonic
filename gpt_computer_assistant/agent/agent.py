@@ -1,13 +1,13 @@
 try:
     from ..llm import get_model
-    from ..utils.db import load_model_settings
+    from ..utils.db import load_model_settings, is_predefined_agents_setting_active
     from ..llm_settings import llm_settings
-    from ..tooler import click_on_a_text_on_the_screen, click_on_a_icon_on_the_screen
+    from ..tooler import click_on_a_text_on_the_screen, click_on_a_icon_on_the_screen, search_on_internet_and_report_team
 except ImportError:
     from llm import get_model
-    from utils.db import load_model_settings
+    from utils.db import load_model_settings, is_predefined_agents_setting_active
     from llm_settings import llm_settings
-    from tooler import click_on_a_text_on_the_screen, click_on_a_icon_on_the_screen
+    from tooler import click_on_a_text_on_the_screen, click_on_a_icon_on_the_screen, search_on_internet_and_report_team
 
 
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -58,6 +58,15 @@ def get_prompt(name):
 def get_agent_executor():
     global custom_tools, tools
     tools += custom_tools
+
+    if is_predefined_agents_setting_active():
+        try:
+            import crewai
+            tools += [search_on_internet_and_report_team]
+        except ImportError:
+            pass
+
+
     model = load_model_settings()
 
 

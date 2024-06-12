@@ -100,7 +100,7 @@ def agentic(
     )
 
     the_crew = Crew(
-        llm=get_model(),
+        llm=get_model(high_context=True),
         agents=agents,
         tasks=[task],
         full_output=True,

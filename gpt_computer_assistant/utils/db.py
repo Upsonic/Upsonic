@@ -245,3 +245,29 @@ def load_google_api_key():
             return "CHANGE_ME"
     with open(googlekey, "r") as f:
         return f.read()
+    
+
+
+
+
+predefined_agents_setting = os.path.join(artifacts_dir, "predefined_agents_setting.db")
+
+
+def activate_predefined_agents_setting():
+    """Activate the predefined agents setting setting."""
+    with open(predefined_agents_setting, "w") as f:
+        f.write("1")
+
+
+def deactivate_predefined_agents_setting():
+    """Deactivate the predefined agents setting setting."""
+    with open(predefined_agents_setting, "w") as f:
+        f.write("0")
+
+
+def is_predefined_agents_setting_active():
+    """Check if the predefined agents setting setting is active."""
+    if not os.path.exists(predefined_agents_setting):
+        return False
+    with open(predefined_agents_setting, "r") as f:
+        return f.read() == "1"

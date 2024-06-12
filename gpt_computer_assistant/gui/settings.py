@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton
 from PyQt5.QtCore import Qt, pyqtSignal, QObject
-from ..utils.db import screenshot_path, save_api_key, load_api_key, activate_just_text_model, deactivate_just_text_model, is_just_text_model_active, set_profile, get_profile, activate_dark_mode, deactivate_dark_mode, is_dark_mode_active
+from ..utils.db import *
 from ..agent.chat_history import clear_chat_history
 
 def settings_popup(self):
@@ -112,7 +112,7 @@ def settings_popup(self):
     settings_dialog.layout().addWidget(dark_mode_button)
 
     if is_dark_mode_active():
-        dark_mode_button.setText("Disabled Dark Mode")
+        dark_mode_button.setText("Disable Dark Mode")
 
         def deactivate_dark_mode_():
             """
@@ -130,7 +130,7 @@ def settings_popup(self):
 
         dark_mode_button.clicked.connect(deactivate_dark_mode_)
     else:
-            
+
             def activate_dark_mode_():
                 """
                 Activate dark mode and update the main window.
@@ -146,6 +146,50 @@ def settings_popup(self):
                 settings_dialog.close()
     
             dark_mode_button.clicked.connect(activate_dark_mode_)
+
+
+
+
+    predefined_agents_button = QPushButton("Enable Predefined Agents (Good Results, Long Response Time)")
+
+    settings_dialog.layout().addWidget(predefined_agents_button)
+
+    if is_predefined_agents_setting_active():
+        predefined_agents_button.setText("Disable Predefined Agents (Bad Results, Short Response Time)")
+
+        def deactivate_predefined_agents_():
+            """
+            Deactivate dark mode and update the main window.
+
+            This function deactivates dark mode and updates the main window with a notification.
+
+            Returns:
+            - None
+            """
+            deactivate_predefined_agents_setting()
+            the_main_window.update_from_thread("Disabled Predefined Agents (Bad Results, Short Response Time)")
+            the_main_window.light_mode()
+            settings_dialog.close()
+
+        predefined_agents_button.clicked.connect(deactivate_predefined_agents_)
+    else:
+            
+            def activate_predefined_agents_():
+                """
+                Activate dark mode and update the main window.
+    
+                This function activates dark mode and updates the main window with a notification.
+    
+                Returns:
+                - None
+                """
+                activate_predefined_agents_setting()
+                the_main_window.update_from_thread("Enable Predefined Agents (Good Results, Long Response Time)")
+                settings_dialog.close()
+    
+            predefined_agents_button.clicked.connect(activate_predefined_agents_)
+
+
 
 
 

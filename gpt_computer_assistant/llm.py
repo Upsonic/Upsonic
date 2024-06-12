@@ -9,7 +9,7 @@ try:
 except ImportError:
     from utils.db import load_api_key, load_openai_url, load_model_settings, load_groq_api_key, load_google_api_key
 
-def get_model():
+def get_model(high_context=False):
     the_model = load_model_settings()
     the_api_key = load_api_key()
     the_groq_api_key = load_groq_api_key()
@@ -18,7 +18,10 @@ def get_model():
     
     def open_ai_base():
         if the_openai_url == "default":
-            return {"model": the_model, "api_key": the_api_key, "max_retries":15}
+            true_model = the_model
+            if high_context:
+                true_model = "gpt-4-turbo"
+            return {"model": true_model, "api_key": the_api_key, "max_retries":15}
         else:
             return {"model": the_model, "api_key": the_api_key, "max_retries":15, "base_url": the_openai_url}
     
