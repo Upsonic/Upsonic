@@ -168,7 +168,6 @@ def settings_popup(self):
             """
             deactivate_predefined_agents_setting()
             the_main_window.update_from_thread("Disabled Predefined Agents (Bad Results, Short Response Time)")
-            the_main_window.light_mode()
             settings_dialog.close()
 
         predefined_agents_button.clicked.connect(deactivate_predefined_agents_)
