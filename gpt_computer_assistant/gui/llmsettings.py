@@ -36,6 +36,7 @@ def llmsettings_popup(self):
         save_api_key(api_key)
 
         the_main_window.update_from_thread("Saved API Key")
+        the_main_window.input_box.setPlaceholderText("Type here")
         settings_dialog.close()
 
     save_button.clicked.connect(lambda: save_api_key_(api_key_input.text()))
@@ -54,6 +55,7 @@ def llmsettings_popup(self):
         save_openai_url(openai_url)
 
         the_main_window.update_from_thread("Saved OpenAI Base URL")
+        the_main_window.input_box.setPlaceholderText("Type here")
         settings_dialog.close()
 
     openai_url_save_button = QPushButton("Save URL")
@@ -72,6 +74,7 @@ def llmsettings_popup(self):
     def groq_save_api_key_(api_key):
         save_groq_api_key(api_key)
         the_main_window.update_from_thread("Saved Groq API Key")
+        the_main_window.input_box.setPlaceholderText("Type here")
         settings_dialog.close()
 
     groq_save_button.clicked.connect(
@@ -92,6 +95,7 @@ def llmsettings_popup(self):
     def google_save_api_key_(api_key):
         save_google_api_key(api_key)
         the_main_window.update_from_thread("Saved Google API Key")
+        the_main_window.input_box.setPlaceholderText("Type here")
         settings_dialog.close()
 
     google_save_button.clicked.connect(
