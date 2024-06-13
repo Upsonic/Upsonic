@@ -47,7 +47,7 @@ def settings_popup(self):
     settings_dialog.layout().addWidget(just_text_button)
 
     if is_just_text_model_active():
-        just_text_button.setText("Disabled Just Text Model")
+        just_text_button.setText("Disable Just Text Model")
 
         def deactivate_just_text_model_():
             """
