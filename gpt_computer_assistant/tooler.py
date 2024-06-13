@@ -181,18 +181,9 @@ def search_on_internet_and_report_team_(the_subject:str, copy_to_clipboard: bool
     )
 
 
-    the_tasks = []
 
-    if copy_to_clipboard:
-        task_4 = Task(
-            description="Copy the report to the clipboard", expected_output="Success", agent=report_generator, tools=the_tool_list, context=[task_2]
-        )
-        the_tasks = [task, task_2, task_3, task_4]
+    the_tasks = [task, task_2, task_3]
 
-    else:
-        the_tasks = [task, task_2, task_3]
-
-    print("Model gathering")
     the_crew = Crew(
         agents=agents,
         tasks=the_tasks,
@@ -202,7 +193,10 @@ def search_on_internet_and_report_team_(the_subject:str, copy_to_clipboard: bool
 
     result = the_crew.kickoff()["final_output"]
 
-    print("Result:", result)
+    if copy_to_clipboard:
+        from .standard_tools import copy
+        copy(result)
+
 
     return result
 
