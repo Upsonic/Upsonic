@@ -16,7 +16,7 @@ def get_model(high_context=False):
     the_google_api_key = load_google_api_key()
     the_openai_url = load_openai_url()
     
-    def open_ai_base():
+    def open_ai_base(high_context):
         if the_openai_url == "default":
             true_model = the_model
             if high_context:
@@ -26,12 +26,11 @@ def get_model(high_context=False):
             return {"model": the_model, "api_key": the_api_key, "max_retries":15, "base_url": the_openai_url}
     
     args_mapping = {
-        ChatOpenAI: open_ai_base(),
+        ChatOpenAI: open_ai_base(high_context=high_context),
         ChatOllama: {"model": the_model},
         ChatGroq: {"temperature": 0, "model_name": the_model.replace("-groq", ""), "groq_api_key": the_openai_url},
         ChatGoogleGenerativeAI:{"model": the_model, "google_api_key": the_google_api_key}
     }
-    
     model_mapping = {
         # OpenAI
         "gpt-4o": (ChatOpenAI, args_mapping[ChatOpenAI]),

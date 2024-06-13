@@ -149,7 +149,8 @@ def search_on_internet_and_report_team_(the_subject:str, copy_to_clipboard: bool
         role="search_engine_master",
         goal="Search the internet",
         backstory="I am the search engine master",
-        max_iter=15
+        max_iter=15,
+        llm=get_model(high_context=True),
     )
 
 
@@ -157,7 +158,8 @@ def search_on_internet_and_report_team_(the_subject:str, copy_to_clipboard: bool
         role="report_generator",
         goal="Generate a report",
         backstory="I am the report generator",
-        max_iter=15
+        max_iter=15,
+        llm=get_model(high_context=True),
     )
 
     agents = [search_engine_master, report_generator]
@@ -190,9 +192,8 @@ def search_on_internet_and_report_team_(the_subject:str, copy_to_clipboard: bool
     else:
         the_tasks = [task, task_2, task_3]
 
-
+    print("Model gathering")
     the_crew = Crew(
-        llm=get_model(high_context=True),
         agents=agents,
         tasks=the_tasks,
         full_output=True,
@@ -200,6 +201,10 @@ def search_on_internet_and_report_team_(the_subject:str, copy_to_clipboard: bool
     )
 
     result = the_crew.kickoff()["final_output"]
+
+    print("Result:", result)
+
+    return result
 
 
 search_on_internet_and_report_team = tool(search_on_internet_and_report_team_)
