@@ -7,7 +7,7 @@ on:
 
 
 jobs:
-  pyinstaller-build:
+  windows:
     runs-on: windows-latest
     steps:
       - name: Create Executable
@@ -15,7 +15,7 @@ jobs:
         with:
           python_ver: '3.10'
           pyinstaller_ver: '==5.13.2'
-          spec: 'run.py'
+          spec: 'app.spec'
           requirements: 'requirements.txt'
           upload_exe_with_name: 'windows'
           options: --onefile, --name "GPT Computer Assistant", --windowed, 
