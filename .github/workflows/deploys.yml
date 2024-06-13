@@ -100,13 +100,11 @@ jobs:
     needs: tagext
     runs-on: macos-latest
     steps:
-      - run: brew install gettext
-      - run: brew link gettext --force
       
       - name: Create Executable
         uses: sayyid5416/pyinstaller@v1
         with:
-          python_ver: '3.10'
+          python_ver: '3.11'
           pyinstaller_ver: '==5.13.2'
           spec: 'app.spec'
           requirements: 'requirements.txt'
