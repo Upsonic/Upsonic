@@ -72,6 +72,7 @@ jobs:
 
 
   windows:
+    permissions: write-all
     needs: tagext
     runs-on: windows-latest
     steps:
