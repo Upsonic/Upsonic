@@ -28,7 +28,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='GPT Computer Assistant',
+    name='GPT_Computer_Assistant',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
