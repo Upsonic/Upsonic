@@ -21,7 +21,7 @@ jobs:
           python_ver: '3.10'
           pyinstaller_ver: '==5.13.2'
           spec: 'app.spec'
-          requirements: 'requirements.txt'
+          requirements: 'requirements_comb.txt'
           upload_exe_with_name: 'windows'
           options: --onefile, --name "GPT_Computer_Assistant_windows", --windowed, 
 
@@ -38,6 +38,6 @@ jobs:
           python_ver: '3.11'
           pyinstaller_ver: '==5.13.2'
           spec: 'app.spec'
-          requirements: 'requirements.txt'
+          requirements: 'requirements_comb.txt'
           upload_exe_with_name: 'macos'
           options: --onefile, --name "GPT_Computer_Assistant_macos", --windowed, 
