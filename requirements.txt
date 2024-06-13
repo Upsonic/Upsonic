@@ -440,7 +440,7 @@ pyzmq==26.0.3
     #   jupyter-client
 readchar==4.1.0
     # via inquirer
-regex==2024.5.15
+#regex==2024.5.15
     # via
     #   nltk
     #   tiktoken
