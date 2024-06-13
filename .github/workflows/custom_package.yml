@@ -34,8 +34,8 @@ jobs:
         
       - name: Run PyInstaller
         run: |
-          pyinstaller --onefile --name "GPT_Computer_Assistant_windows" --windowed app.py
-          mv dist/GPT_Computer_Assistant_windows.exe GPT_Computer_Assistant_windows.exe
+          pyinstaller --onefile --name "GPT_Computer_Assistant_windows" --windowed app.spec
+          mv dist/GPT_Computer_Assistant.exe GPT_Computer_Assistant_windows.exe
         
       # Upload as an artifact
       - name: Upload Artifact
