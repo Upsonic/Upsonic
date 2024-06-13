@@ -19,19 +19,7 @@
     <br />
     </p>
     <br>
-    <p align="center">
-     <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki/Installation">
-   <img src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="windows">
-   </a>
-   <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki/Installation">
-   <img src="https://img.shields.io/badge/mac%20os-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macos">
-   </a>
-    <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki/Installation">
-   <img src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="linux">
-   </a>
-  <br> 
 
-  </p>
   <p align="center">
   <a href="https://www.python.org/">
   <img src="https://img.shields.io/badge/Made%20with-Python-1f425f.svg" alt="Made_with_python">
@@ -53,13 +41,27 @@ Hi, this is an alternative work for providing ChatGPT MacOS app to Windows and L
 
 Powered by <a href="https://github.com/Upsonic/Tiger"><strong>Upsonic Tiger 🐅</strong></a> A function hub for llm agents.
 
- <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki/Usage"><img alt="Static Badge" src="https://img.shields.io/badge/Local_Models-Available-blue" width=150></a>
- <br>
- <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki/Usage"><img alt="Static Badge" src="https://img.shields.io/badge/Groq-Available-blue" width=100></a>
+
+  <p align="start">
+  <br>
+     <a href="https://github.com/onuratakan/gpt-computer-assistant/releases/latest/download/GPT.Computer.Assistant.exe">
+   <img src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="windows">
+   </a>
+   <a href="https://github.com/onuratakan/gpt-computer-assistant/releases/latest/download/GPT.Computer.Assistant">
+   <img src="https://img.shields.io/badge/mac%20os-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macos">
+   </a>
+    <a href="https://github.com/onuratakan/gpt-computer-assistant?tab=readme-ov-file#assistant-installation-and-run">
+   <img src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="linux">
+   </a>
+  <br>
+  <br> 
+
+  </p>
 
 
 
-## Assistant Installation and Run
+
+## Developer Installation and Run
 Needed >= Python 3.9
 ```console
 pip3 install gpt-computer-assistant
@@ -167,7 +169,7 @@ https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e6
 | **Adding Custom Tools**  | Completed  | Q2 2024        |
 | **Click on something on the screen (text and icon)**              | Completed      | Q2 2024        |
 | **New UI**              | Completed      | Q2 2024        |
-| **Native Applications, exe, dmg, appimage**              | Preparing      | Q2 2024        |
+| **Native Applications, exe, dmg**              | Completed      | Q2 2024        |
 | **DeepFace Integration (Facial Recognition)**                    | Planned  | Q2 2024        |
 
 
