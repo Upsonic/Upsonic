@@ -271,3 +271,30 @@ def is_predefined_agents_setting_active():
         return False
     with open(predefined_agents_setting, "r") as f:
         return f.read() == "1"
+
+
+
+
+
+
+online_tools_setting = os.path.join(artifacts_dir, "online_tools.db")
+
+
+def activate_online_tools_setting():
+    """Activate the online_tools setting."""
+    with open(online_tools_setting, "w") as f:
+        f.write("1")
+
+
+def deactivate_online_tools_setting():
+    """Deactivate the online_tools setting."""
+    with open(online_tools_setting, "w") as f:
+        f.write("0")
+
+
+def is_online_tools_setting_active():
+    """Check if the online_tools setting is active."""
+    if not os.path.exists(online_tools_setting):
+        return True
+    with open(online_tools_setting, "r") as f:
+        return f.read() == "1"

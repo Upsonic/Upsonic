@@ -158,14 +158,6 @@ def settings_popup(self):
         predefined_agents_button.setText("Disable Predefined Agents (Bad Results, Short Response Time)")
 
         def deactivate_predefined_agents_():
-            """
-            Deactivate dark mode and update the main window.
-
-            This function deactivates dark mode and updates the main window with a notification.
-
-            Returns:
-            - None
-            """
             deactivate_predefined_agents_setting()
             the_main_window.update_from_thread("Disabled Predefined Agents (Bad Results, Short Response Time)")
             settings_dialog.close()
@@ -174,19 +166,41 @@ def settings_popup(self):
     else:
             
             def activate_predefined_agents_():
-                """
-                Activate dark mode and update the main window.
-    
-                This function activates dark mode and updates the main window with a notification.
-    
-                Returns:
-                - None
-                """
                 activate_predefined_agents_setting()
-                the_main_window.update_from_thread("Enable Predefined Agents (Good Results, Long Response Time)")
+                the_main_window.update_from_thread("Enabled Predefined Agents (Good Results, Long Response Time)")
                 settings_dialog.close()
     
             predefined_agents_button.clicked.connect(activate_predefined_agents_)
+
+
+
+
+
+
+
+
+    online_tools_button = QPushButton("Enable Upsonic Tiger Tools - More Capability (Recommended)")
+
+    settings_dialog.layout().addWidget(online_tools_button)
+
+    if is_online_tools_setting_active():
+        online_tools_button.setText("Disable Upsonic Tiger Tools - Low Capability (Not Recommended)")
+
+        def deactivate_online_tools_():
+            deactivate_online_tools_setting()
+            the_main_window.update_from_thread("Disabled Upsonic Tiger Tools - Low Capability (Not Recommended)")
+            settings_dialog.close()
+
+        online_tools_button.clicked.connect(deactivate_online_tools_)
+    else:
+            
+            def activate_online_tools_():
+                activate_online_tools_setting()
+                the_main_window.update_from_thread("Enabled Upsonic Tiger Tools - More Capability (Recommended)")
+                settings_dialog.close()
+    
+            online_tools_button.clicked.connect(activate_online_tools_)
+
 
 
 

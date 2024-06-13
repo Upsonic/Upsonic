@@ -134,7 +134,8 @@ def search_on_internet_and_report_team_(the_subject:str, copy_to_clipboard: bool
 
     from crewai import Task, Crew, Agent
 
-    from .agent.agent import tools
+    from .agent.agent import get_tools
+    tools = get_tools()
 
     the_tool_list = []
     for each in tools:

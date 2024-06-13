@@ -96,7 +96,7 @@ def agentic(
 
 
     task = Task(
-        description=llm_input, expected_output="Answer", agent=agents[0], tools=tools
+        description=llm_input, expected_output="Answer", agent=agents[0], tools=get_tools()
     )
 
     the_crew = Crew(

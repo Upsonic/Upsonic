@@ -1,11 +1,11 @@
 try:
     from ..llm import get_model
-    from ..utils.db import load_model_settings, is_predefined_agents_setting_active
+    from ..utils.db import *
     from ..llm_settings import llm_settings
     from ..tooler import click_on_a_text_on_the_screen, click_on_a_icon_on_the_screen, search_on_internet_and_report_team
 except ImportError:
     from llm import get_model
-    from utils.db import load_model_settings, is_predefined_agents_setting_active
+    from utils.db import *
     from llm_settings import llm_settings
     from tooler import click_on_a_text_on_the_screen, click_on_a_icon_on_the_screen, search_on_internet_and_report_team
 
@@ -21,23 +21,22 @@ from langgraph.prebuilt import chat_agent_executor
 
 custom_tools = []
 
-try:
-    from upsonic import Tiger
-    tools = Tiger()
-    tools.enable_auto_requirements = True
-    tools = tools.langchain()
-except:
-    from langchain.agents import Tool
-    from langchain_experimental.utilities import PythonREPL
 
-    python_repl = PythonREPL()
-    # You can create the tool to pass to an agent
-    repl_tool = Tool(
-        name="python_repl",
-        description="A Python shell. Use this to execute python commands. Input should be a valid python command. If you want to see the output of a value, you should print it out with `print(...)`.",
-        func=python_repl.run,
-    )
-    tools = [repl_tool]
+
+def load_tiger_tools():
+    try:
+        from upsonic import Tiger
+        tools = Tiger()
+        tools.enable_auto_requirements = True
+        tools = tools.langchain()
+        return tools
+    except:
+        return False
+
+
+def load_default_tools():
+    from ..standard_tools import the_standard_tools
+    return the_standard_tools
 
 
 prompt_cache = {}
@@ -55,8 +54,19 @@ def get_prompt(name):
         return prompt
 
 
+def get_tools():
+    if is_online_tools_setting_active():
+        tools = load_tiger_tools()
+        if not tools:
+            tools = load_default_tools()
+    else:
+        tools = load_default_tools()
+    return tools
+
+
 def get_agent_executor():
-    global custom_tools, tools
+    global custom_tools
+    tools = get_tools()
     tools += custom_tools
 
     if is_predefined_agents_setting_active():

@@ -580,3 +580,9 @@ zipp==3.19.2
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
+
+# default tools
+pyperclip==1.8.2
+google==3.0.0
+duckduckgo-search==5.3.0
+beautifulsoup4==4.12.3
