@@ -84,7 +84,7 @@ jobs:
           spec: 'app.spec'
           requirements: 'requirements.txt'
           upload_exe_with_name: 'windows'
-          options: --onefile, --name "GPT Computer Assistant", --windowed, 
+          options: --onefile, --name "GPT_Computer_Assistant_windows", --windowed, 
 
       - uses: AButler/upload-release-assets@v3.0
         with:
@@ -92,4 +92,48 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           release-tag: ${{ needs.tagext.outputs.tag }}
 
+
+
+  linux:
+    permissions: write-all
+    needs: tagext
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create Executable
+        uses: sayyid5416/pyinstaller@v1
+        with:
+          python_ver: '3.10'
+          pyinstaller_ver: '==5.13.2'
+          spec: 'app.spec'
+          requirements: 'requirements.txt'
+          upload_exe_with_name: 'linux'
+          options: --onefile, --name "GPT_Computer_Assistant_linux", --windowed, 
+
+      - uses: AButler/upload-release-assets@v3.0
+        with:
+          files: "./dist/*"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          release-tag: ${{ needs.tagext.outputs.tag }}
+
+
+  macos:
+    permissions: write-all
+    needs: tagext
+    runs-on: macos-latest
+    steps:
+      - name: Create Executable
+        uses: sayyid5416/pyinstaller@v1
+        with:
+          python_ver: '3.10'
+          pyinstaller_ver: '==5.13.2'
+          spec: 'app.spec'
+          requirements: 'requirements.txt'
+          upload_exe_with_name: 'macos'
+          options: --onefile, --name "GPT_Computer_Assistant_macos", --windowed, 
+
+      - uses: AButler/upload-release-assets@v3.0
+        with:
+          files: "./dist/*"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          release-tag: ${{ needs.tagext.outputs.tag }}
 
