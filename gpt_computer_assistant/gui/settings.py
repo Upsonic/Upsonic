@@ -154,25 +154,28 @@ def settings_popup(self):
 
     settings_dialog.layout().addWidget(predefined_agents_button)
 
-    if is_predefined_agents_setting_active():
-        predefined_agents_button.setText("Disable Predefined Agents (Bad Results, Short Response Time)")
+    try:
+        import crewai
+        if is_predefined_agents_setting_active():
+            predefined_agents_button.setText("Disable Predefined Agents (Bad Results, Short Response Time)")
 
-        def deactivate_predefined_agents_():
-            deactivate_predefined_agents_setting()
-            the_main_window.update_from_thread("Disabled Predefined Agents (Bad Results, Short Response Time)")
-            settings_dialog.close()
-
-        predefined_agents_button.clicked.connect(deactivate_predefined_agents_)
-    else:
-            
-            def activate_predefined_agents_():
-                activate_predefined_agents_setting()
-                the_main_window.update_from_thread("Enabled Predefined Agents (Good Results, Long Response Time)")
+            def deactivate_predefined_agents_():
+                deactivate_predefined_agents_setting()
+                the_main_window.update_from_thread("Disabled Predefined Agents (Bad Results, Short Response Time)")
                 settings_dialog.close()
-    
-            predefined_agents_button.clicked.connect(activate_predefined_agents_)
 
+            predefined_agents_button.clicked.connect(deactivate_predefined_agents_)
+        else:
+                
+                def activate_predefined_agents_():
+                    activate_predefined_agents_setting()
+                    the_main_window.update_from_thread("Enabled Predefined Agents (Good Results, Long Response Time)")
+                    settings_dialog.close()
+        
+                predefined_agents_button.clicked.connect(activate_predefined_agents_)
 
+    except:
+         predefined_agents_button.setText("Install gpt-computer-assistant[agentic]")
 
 
 
