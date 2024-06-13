@@ -227,7 +227,7 @@ langchain-google-genai==1.0.4
     # via -r requirements.in
 langchain-groq==0.1.5
     # via -r requirements.in
-langchain-openai==0.1.6
+langchain-openai==0.1.7
     # via
     #   -r requirements.in
     #   upsonic
