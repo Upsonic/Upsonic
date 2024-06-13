@@ -70,3 +70,22 @@ jobs:
         twine upload dist/*
 
 
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Create Executable
+        uses: sayyid5416/pyinstaller@v1
+        with:
+          python_ver: '3.10'
+          pyinstaller_ver: '==5.13.2'
+          spec: 'app.spec'
+          requirements: 'requirements.txt'
+          upload_exe_with_name: 'windows'
+          options: --onefile, --name "GPT Computer Assistant", --windowed, 
+
+      - uses: AButler/upload-release-assets@v3.0
+        with:
+          files: "./dist/*"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+
