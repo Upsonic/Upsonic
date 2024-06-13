@@ -38,7 +38,8 @@ jobs:
           TAG=${{ steps.tag_extractor.outputs.latest_tag }}   
           echo "latest_tag_2=${TAG:1} " >> "$GITHUB_OUTPUT"
       
-
+    outputs:
+      tag: ${{ steps.tag_extractor.outputs.latest_tag }}
 
   pypi:
     needs: tagext
@@ -71,6 +72,7 @@ jobs:
 
 
   windows:
+    needs: tagext
     runs-on: windows-latest
     steps:
       - name: Create Executable
@@ -87,5 +89,6 @@ jobs:
         with:
           files: "./dist/*"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+          release-tag: ${{ needs.tagext.outputs.tag }}
 
 
