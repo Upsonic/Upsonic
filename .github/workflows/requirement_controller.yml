@@ -1,0 +1,76 @@
+name: Requirement Controller
+
+on: 
+  push:
+    paths:
+      - 'requirements.txt'
+  pull_request:
+    paths:
+        - 'requirements.txt'
+
+  workflow_dispatch:
+
+
+
+
+jobs:
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+    
+      - name: Set Up Python
+        uses: actions/setup-python@v2
+        with:
+            python-version: 3.11
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+        
+
+        
+  macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+    
+      - name: Set Up Python
+        uses: actions/setup-python@v2
+        with:
+            python-version: 3.11
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+
+        
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+    
+      - name: Set Up Python
+        uses: actions/setup-python@v2
+        with:
+            python-version: 3.11
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+        
+
+        
+
+    
+    
