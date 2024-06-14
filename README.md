@@ -44,10 +44,10 @@ Powered by <a href="https://github.com/Upsonic/Tiger"><strong>Upsonic Tiger 🐅
 
   <p align="start">
   <br>
-     <a href="https://github.com/onuratakan/gpt-computer-assistant/releases/latest/download/GPT.Computer.Assistant.exe">
+     <a href="https://github.com/onuratakan/gpt-computer-assistant/releases/latest/download/GPT_Computer_Assistant_windows.exe">
    <img src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="windows">
    </a>
-   <a href="https://github.com/onuratakan/gpt-computer-assistant/releases/latest/download/GPT.Computer.Assistant">
+   <a href="https://github.com/onuratakan/gpt-computer-assistant/releases/latest/download/GPT_Computer_Assistant_macos">
    <img src="https://img.shields.io/badge/mac%20os-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macos">
    </a>
     <a href="https://github.com/onuratakan/gpt-computer-assistant?tab=readme-ov-file#assistant-installation-and-run">
