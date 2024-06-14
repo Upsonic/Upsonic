@@ -43,12 +43,9 @@ jobs:
         run: |
           python setup_package.py build
         
-      - name: Zip the build
-        run: |
-          7z a GPT_Computer_Assistant_windows.zip build/exe.win-amd64-3.11/*
 
       - name: Artifact the build
         uses: actions/upload-artifact@v2
         with:
           name: GPT_Computer_Assistant_windows
-          path: GPT_Computer_Assistant_windows.zip
+          path: build/exe.win-amd64-3.11/*
