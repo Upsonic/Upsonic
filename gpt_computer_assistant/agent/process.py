@@ -116,15 +116,19 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
                         span.set_attribute("user_id", user_id)
                         span.set_attribute("os_name", os_name_)
                         play_text()
-                        mixer.init()
-                        mixer.music.load(response_path)
-                        mixer.music.play()
-                        while mixer.music.get_busy():
-                            if the_main_window.stop_talking:
-                                mixer.music.stop()
-                                the_main_window.stop_talking = False
-                                break
-                            time.sleep(0.1)
+                        stop_talking = False
+                        for each_r in response_path:
+                            if not stop_talking:
+                                mixer.init()
+                                mixer.music.load(each_r)
+                                mixer.music.play()
+                                while mixer.music.get_busy():
+                                    if the_main_window.stop_talking:
+                                        mixer.music.stop()
+                                        the_main_window.stop_talking = False
+                                        stop_talking = True
+                                        break
+                                    time.sleep(0.1)
                         signal_handler.assistant_response_stopped.emit()
 
                 playback_thread = threading.Thread(target=play_audio)
@@ -205,15 +209,21 @@ def process_screenshot():
                         span.set_attribute("user_id", user_id)
                         span.set_attribute("os_name", os_name_)
                         play_text()
-                        mixer.init()
-                        mixer.music.load(response_path)
-                        mixer.music.play()
-                        while mixer.music.get_busy():
-                            if the_main_window.stop_talking:
-                                mixer.music.stop()
-                                the_main_window.stop_talking = False
-                                break
-                            time.sleep(0.1)
+
+                        stop_talking = False
+                        for each_r in response_path:
+                            if not stop_talking:
+                                mixer.init()
+                                mixer.music.load(each_r)
+                                mixer.music.play()
+                                while mixer.music.get_busy():
+                                    if the_main_window.stop_talking:
+                                        mixer.music.stop()
+                                        the_main_window.stop_talking = False
+                                        stop_talking = True
+                                        break
+                                    time.sleep(0.1)
+
                         signal_handler.assistant_response_stopped.emit()
 
                 playback_thread = threading.Thread(target=play_audio)
@@ -286,15 +296,21 @@ def process_text(text, screenshot_path=None):
                             span.set_attribute("user_id", user_id)
                             span.set_attribute("os_name", os_name_)
                             play_text()
-                            mixer.init()
-                            mixer.music.load(response_path)
-                            mixer.music.play()
-                            while mixer.music.get_busy():
-                                if the_main_window.stop_talking:
-                                    mixer.music.stop()
-                                    the_main_window.stop_talking = False
-                                    break
-                                time.sleep(0.1)
+
+                            stop_talking = False
+                            for each_r in response_path:
+                                if not stop_talking:
+                                    mixer.init()
+                                    mixer.music.load(each_r)
+                                    mixer.music.play()
+                                    while mixer.music.get_busy():
+                                        if the_main_window.stop_talking:
+                                            mixer.music.stop()
+                                            the_main_window.stop_talking = False
+                                            stop_talking = True
+                                            break
+                                        time.sleep(0.1)
+
                             signal_handler.assistant_response_stopped.emit()
 
                     playback_thread = threading.Thread(target=play_audio)
