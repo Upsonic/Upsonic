@@ -35,6 +35,27 @@ user_id = load_user_id()
 os_name_ = os_name()
 
 
+
+def tts_if_you_can(text:str):
+    try:
+        if not is_just_text_model_active():
+            response_path = text_to_speech(text)
+
+            def play_audio():
+                    mixer.init()
+                    mixer.music.load(response_path)
+                    mixer.music.play()
+                    while mixer.music.get_busy():
+                        time.sleep(0.1)
+
+            playback_thread = threading.Thread(target=play_audio)
+            playback_thread.start()
+    except Exception as e:
+        pass
+        
+
+
+
 def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image=False):
     with my_tracer.start_span("process_audio") as span:
         span.set_attribute("user_id", user_id)
@@ -124,6 +145,7 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
             traceback.print_exc()
             from ..gpt_computer_assistant import the_input_box, the_main_window
             the_main_window.update_from_thread("EXCEPTION: " + str(e))
+            tts_if_you_can("Exception occurred. Please check the logs.")
             signal_handler.assistant_response_stopped.emit()
 
 
@@ -215,6 +237,7 @@ def process_screenshot():
             traceback.print_exc()
             from ..gpt_computer_assistant import the_input_box, the_main_window
             the_main_window.update_from_thread("EXCEPTION: " + str(e))
+            tts_if_you_can("Exception occurred. Please check the logs.")
             signal_handler.assistant_response_stopped.emit()
 
 
@@ -300,6 +323,7 @@ def process_text(text, screenshot_path=None):
             traceback.print_exc()
             from ..gpt_computer_assistant import the_input_box, the_main_window
             the_main_window.update_from_thread("EXCEPTION: " + str(e))
+            tts_if_you_can("Exception occurred. Please check the logs.")
             signal_handler.assistant_response_stopped.emit()
 
 
