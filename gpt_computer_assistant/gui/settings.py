@@ -208,6 +208,34 @@ def settings_popup(self):
 
 
 
+    auto_stop_recording_button = QPushButton("Enable Auto Stop Recording")
+
+    settings_dialog.layout().addWidget(auto_stop_recording_button)
+
+    if is_auto_stop_recording_setting_active():
+        auto_stop_recording_button.setText("Disable Auto Stop Recording")
+
+        def deactivate_auto_stop_recording_():
+            deactivate_auto_stop_recording_setting()
+            the_main_window.update_from_thread("Disabled Auto Stop Recording")
+            settings_dialog.close()
+
+        auto_stop_recording_button.clicked.connect(deactivate_auto_stop_recording_)
+    else:
+            
+            def activate_auto_stop_recording_():
+                activate_auto_stop_recording_setting()
+                the_main_window.update_from_thread("Enabled Auto Stop Recording")
+                settings_dialog.close()
+    
+            auto_stop_recording_button.clicked.connect(activate_auto_stop_recording_)
+
+
+
+
+
+
+
 
 
     settings_dialog.exec_()

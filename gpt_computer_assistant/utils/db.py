@@ -298,3 +298,30 @@ def is_online_tools_setting_active():
         return True
     with open(online_tools_setting, "r") as f:
         return f.read() == "1"
+
+
+
+
+
+
+auto_stop_recording_setting = os.path.join(artifacts_dir, "auto_stop_recording.db")
+
+
+def activate_auto_stop_recording_setting():
+    """Activate the auto_stop_recording setting."""
+    with open(auto_stop_recording_setting, "w") as f:
+        f.write("1")
+
+
+def deactivate_auto_stop_recording_setting():
+    """Deactivate the auto_stop_recording setting."""
+    with open(auto_stop_recording_setting, "w") as f:
+        f.write("0")
+
+
+def is_auto_stop_recording_setting_active():
+    """Check if the auto_stop_recording setting is active."""
+    if not os.path.exists(auto_stop_recording_setting):
+        return True
+    with open(auto_stop_recording_setting, "r") as f:
+        return f.read() == "1"

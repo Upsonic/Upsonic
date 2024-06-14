@@ -78,7 +78,7 @@ class ButtonHandler:
             global recording_thread
             if recording_thread is None or not recording_thread.is_alive():
                 recording_thread = threading.Thread(
-                    target=start_recording, args=(take_system_audio,)
+                    target=start_recording, args=(take_system_audio,self,)
                 )
                 recording_thread.start()
             signal_handler.recording_started.emit()

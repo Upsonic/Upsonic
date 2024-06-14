@@ -1,10 +1,10 @@
 try:
     from ..gui.signal import *
-    from ..utils.db import mic_record_location, system_sound_location, load_user_id
+    from ..utils.db import *
     from ..utils.telemetry import my_tracer, os_name
 except ImportError:
     from gui.signal import *
-    from utils.db import mic_record_location, system_sound_location, load_user_id
+    from utils.db import *
     from utils.telemetry import my_tracer, os_name
 import numpy as np
 import sounddevice as sd
@@ -12,6 +12,7 @@ import soundfile as sf
 import scipy.io.wavfile as wavfile
 import soundcard as sc
 import threading
+import time
 
 samplerate = 48000  # Updated samplerate for better quality
 channels = 1
@@ -24,11 +25,31 @@ os_name_ = os_name()
 
 the_input_box_pre = None
 
-def start_recording(take_system_audio=False):
+
+
+import queue
+
+# Initialize a queue to keep the last N audio levels (rolling window)
+audio_levels = queue.Queue(maxsize=10)  # Adjust size as needed
+
+def calculate_dynamic_threshold():
+    """Calculate a dynamic threshold based on recent audio levels."""
+    if audio_levels.qsize() == 0:
+        return 0.01  # Default threshold if no data is available
+    else:
+        # Calculate the average of the last N audio levels
+        return np.mean(list(audio_levels.queue)) * 2  # Adjust multiplier as needed
+
+
+silence_start_time = None
+
+auto_stop_recording = True
+
+
+def start_recording(take_system_audio, buttonhandler):
     """Start recording audio from microphone and/or system sound.
 
-    Args:
-        take_system_audio (bool, optional): Whether to record system sound. Defaults to False.
+
     """
     with my_tracer.start_span("start_recording") as span:
         span.set_attribute("user_id", user_id)
@@ -39,15 +60,47 @@ def start_recording(take_system_audio=False):
         the_input_box_pre = the_input_box.toPlainText()
 
         the_main_window.update_from_thread("Click again when recording is done")
-        global recording, audio_data
+        global recording, audio_data, silence_start_time, auto_stop_recording
         recording = True
         audio_data = np.array([], dtype="float32")
         print("Recording started...")
 
-        def callback(indata, frames, time, status):
-            global audio_data
+        threshold = 0.01  # Define the threshold for stopping the recording
+        silence_duration = 2  # Duration in seconds to consider as silence before stopping
+        silence_start_time = None
+
+
+        auto_stop_recording = is_auto_stop_recording_setting_active()
+
+
+        def callback(indata, frames, time_info, status):
+            global audio_data, recording, silence_start_time, auto_stop_recording
+            current_level = np.max(np.abs(indata))
+
+            
+            # Add the current level to the queue
+            if audio_levels.full():
+                audio_levels.get()  # Remove the oldest level if the queue is full
+            audio_levels.put(current_level)
+            
+            # Calculate dynamic threshold based on recent audio levels
+            dynamic_threshold = calculate_dynamic_threshold()
+
+
             if recording:
                 audio_data = np.append(audio_data, indata)
+                # Check if the audio is below the dynamic threshold
+                if current_level < dynamic_threshold and auto_stop_recording:
+                    if silence_start_time is None:
+                        silence_start_time = time.time()  # Step 2: Use time.time() to mark the start of silence
+
+                    elif (time.time() - silence_start_time) > silence_duration:  # Step 3: Check the duration of silence
+                        recording = False
+                        buttonhandler.recording = False
+
+                else:
+                    silence_start_time = None
+
 
     def record_audio():
         with my_tracer.start_span("record_audio") as span:
