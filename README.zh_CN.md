@@ -52,7 +52,7 @@
 ## 安装 && 运行
 需要 >= Python 3.9
 ```console
-pip3 install gpt-computer-assistant
+pip3 install gpt-computer-assistant[default]
 ```
 
 ```console

@@ -27,8 +27,8 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install gpt-computer-assistant[agentic]
-          pip install .
+          pip install .[default]
+          pip install .[agentic]
           pip install pyinstaller
 
         
@@ -60,8 +60,8 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install gpt-computer-assistant[agentic]
-          pip install .
+          pip install .[default]
+          pip install .[agentic]
           pip install pyinstaller
 
         
