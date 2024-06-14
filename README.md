@@ -42,26 +42,9 @@ Hi, this is an alternative work for providing ChatGPT MacOS app to Windows and L
 Powered by <a href="https://github.com/Upsonic/Tiger"><strong>Upsonic Tiger 🐅</strong></a> A function hub for llm agents.
 
 
-  <p align="start">
-  <br>
-     <a href="https://github.com/onuratakan/gpt-computer-assistant/releases/latest/download/GPT_Computer_Assistant_windows.exe">
-   <img src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="windows">
-   </a>
-   <a href="https://github.com/onuratakan/gpt-computer-assistant/releases/latest/download/GPT_Computer_Assistant_macos">
-   <img src="https://img.shields.io/badge/mac%20os-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macos">
-   </a>
-    <a href="https://github.com/onuratakan/gpt-computer-assistant?tab=readme-ov-file#assistant-installation-and-run">
-   <img src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="linux">
-   </a>
-  <br>
-  <br> 
-
-  </p>
 
 
-
-
-## Developer Installation and Run
+## Installation and Run
 Needed >= Python 3.9
 ```console
 pip3 install gpt-computer-assistant[default]
@@ -170,7 +153,7 @@ https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e6
 | **Adding Custom Tools**  | Completed  | Q2 2024        |
 | **Click on something on the screen (text and icon)**              | Completed      | Q2 2024        |
 | **New UI**              | Completed      | Q2 2024        |
-| **Native Applications, exe, dmg**              | Completed      | Q2 2024        |
+| **Native Applications, exe, dmg**              | Failed (Agentic Infra libraries not supported for now)     | Q2 2024        |
 | **DeepFace Integration (Facial Recognition)**                    | Planned  | Q2 2024        |
 
 
