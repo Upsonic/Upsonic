@@ -116,7 +116,8 @@ https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e6
 
 
 ## Usage
-![Options](https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/54b39347-98e0-4ee4-a715-9128c40dbcd4)
+![options](https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/37d34745-ae4b-4b37-9bfa-aec070c97897)
+
 
 
 ### Use cases
