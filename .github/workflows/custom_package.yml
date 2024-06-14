@@ -43,9 +43,12 @@ jobs:
         run: |
           python setup_package.py build
         
+      - uses: montudor/action-zip@v1
+        with:
+          args: zip -qq -r windows.zip build/exe.win-amd64-3.11/          
 
       - name: Artifact the build
         uses: actions/upload-artifact@v2
         with:
           name: GPT_Computer_Assistant_windows
-          path: build/exe.win-amd64-3.11/*
+          path: windows.zip
