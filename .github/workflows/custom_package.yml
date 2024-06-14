@@ -3,14 +3,13 @@ name: Custom Package
 on:
   workflow_dispatch: 
 
-
 permissions:
   packages: write      
-
 
 concurrency: 
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event }}
   cancel-in-progress: true
+
 jobs:
   windows:
     runs-on: windows-latest
@@ -24,57 +23,32 @@ jobs:
         with:
             python-version: 3.11
 
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install .[default]
-          pip install .[agentic]
-          pip install embedchain[poe]
-          pip install pyinstaller
-
-        
-      - name: Run PyInstaller
-        run: |
-          pyinstaller app.spec
-          mv dist/GPT_Computer_Assistant.exe GPT_Computer_Assistant_windows.exe
-        
-      # Upload as an artifact
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v2
+      # Add caching step here
+      - name: Cache Python packages
+        uses: actions/cache@v2
         with:
-          name: windows
-          path: GPT_Computer_Assistant_windows.exe
-
-
-  macos:
-    runs-on: macos-latest
-    steps:
-      
-      - name: Checkout Repository
-        uses: actions/checkout@v2
-    
-      - name: Set Up Python
-        uses: actions/setup-python@v2
-        with:
-            python-version: 3.11
+          path: ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/setup_package.py', '**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install .[default]
           pip install .[agentic]
-          pip install embedchain[poe]
-          pip install pyinstaller
+          pip install cx_Freeze
 
-        
-      - name: Run PyInstaller
+      - name: Run cx_Freeze
         run: |
-          pyinstaller app.spec
-          mv dist/GPT_Computer_Assistant GPT_Computer_Assistant_macos
+          python setup_package.py build
         
-      # Upload as an artifact
-      - name: Upload Artifact
+      - name: Zip the build
+        run: |
+          7z a GPT_Computer_Assistant_windows.zip build/exe.win-amd64-3.11/*
+
+      - name: Artifact the build
         uses: actions/upload-artifact@v2
         with:
-          name: macos
-          path: GPT_Computer_Assistant_macos
+          name: GPT_Computer_Assistant_windows
+          path: GPT_Computer_Assistant_windows.zip
