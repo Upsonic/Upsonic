@@ -1,14 +1,20 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import crewai
+import os
+
+# Find the crewai installation directory
+crewai_path = crewai.__path__[0]
+# Prepare the crewai path for inclusion
+crewai_data = (crewai_path, 'crewai')
 
 block_cipher = None
-
 
 a = Analysis(
     ['run.py'],
     pathex=[],
     binaries=[],
-    datas=[('gpt_computer_assistant/utils/media/*', 'gpt_computer_assistant/utils/media')],
+    datas=[('gpt_computer_assistant/utils/media/*', 'gpt_computer_assistant/utils/media'), crewai_data],
     hiddenimports=['crewai',],
     hookspath=[],
     hooksconfig={},
