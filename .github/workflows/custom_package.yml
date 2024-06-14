@@ -32,9 +32,12 @@ jobs:
           pip install pyinstaller
 
         
-      - name: Run PyInstaller
+      - name: Run PyInstaller with crewai included
         run: |
-          pyinstaller app.spec
+          # Use Python to find the 'crewai' installation directory and store it in a variable
+          CREWAI_PATH=$(python -c "import crewai; print(crewai.__path__[0])")
+          # Use the path in the PyInstaller command
+          pyinstaller --add-data "$CREWAI_PATH;crewai" app.spec
           mv dist/GPT_Computer_Assistant.exe GPT_Computer_Assistant_windows.exe
         
       # Upload as an artifact
