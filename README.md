@@ -154,7 +154,7 @@ https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e6
 | Click on something on the screen (text and icon)              | Completed      | Q2 2024        |
 | New UI              | Completed      | Q2 2024        |
 | Native Applications, exe, dmg              | Failed (Agentic Infra libraries not supported for now)     | Q2 2024        |
-| **Collaborated Speaking Different Voice Models on long responses.**              | Planned     | Q2 2024        |
+| **Collaborated Speaking Different Voice Models on long responses.**              | Completed     | Q2 2024        |
 | **Adding more capability on device**              | Planned     | Q2 2024        |
 | DeepFace Integration (Facial Recognition)                    | Planned  | Q2 2024        |
 
