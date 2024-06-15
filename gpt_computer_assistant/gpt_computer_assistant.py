@@ -383,9 +383,7 @@ class DrawingWidget(QWidget):
                     if self.main_.circle_rect.contains(event.pos()):
 
                         if self.main_.state == "aitalking":
-          
                             self.main_.stop_talking = True
-                            print("Stop talking")
                                 
                         else:
                             if llm_settings[load_model_settings()]["vision"] == True:
@@ -397,20 +395,32 @@ class DrawingWidget(QWidget):
                     pass
 
                 try:
-                    if self.main_.small_circle_rect.contains(event.pos()):
-                        self.main_.button_handler.toggle_recording(no_screenshot=True)
+                        if self.main_.state == "aitalking":
+                            self.main_.stop_talking = True
+                                
+                        else:
+                            if self.main_.small_circle_rect.contains(event.pos()):
+                                self.main_.button_handler.toggle_recording(no_screenshot=True)
                 except:
                     pass
 
                 try:
-                    if self.main_.small_circle_left.contains(event.pos()):
-                        self.main_.button_handler.toggle_recording(take_system_audio=True)
+                        if self.main_.state == "aitalking":
+                            self.main_.stop_talking = True
+                                
+                        else:                    
+                            if self.main_.small_circle_left.contains(event.pos()):
+                                self.main_.button_handler.toggle_recording(take_system_audio=True)
                 except:
                     pass
 
                 try:
-                    if self.main_.small_circle_left_top.contains(event.pos()):
-                        self.main_.button_handler.just_screenshot()
+                        if self.main_.state == "aitalking":
+                            self.main_.stop_talking = True
+                                
+                        else:                    
+                            if self.main_.small_circle_left_top.contains(event.pos()):
+                                self.main_.button_handler.just_screenshot()
                 except:
                     pass
 
@@ -495,6 +505,8 @@ class MainWindow(QMainWindow):
 
         self.wake_word_thread = None
 
+        self.wake_word_active = True
+
         if load_pvporcupine_api_key() != "CHANGE_ME" and is_wake_word_active():
             self.wake_word_trigger()        
 
@@ -505,7 +517,7 @@ class MainWindow(QMainWindow):
     def wake_word(self):
         from .agent.process import tts_if_you_can
         while True and is_wake_word_active():
-            if wake_word():
+            if wake_word(self):
 
                 def random_accept_words():
                     return random.choice(["Yes", "Sir", "Boss", "Master"])
@@ -624,10 +636,15 @@ class MainWindow(QMainWindow):
         self.btn_minimize.setFixedSize(25, 20)
         self.btn_minimize.clicked.connect(self.showMinimized)
 
+        def stop_app():
+            self.stop_talking = True
+            self.wake_word_active = False
+            self.close()
+
 
         self.btn_close = QPushButton("X", self.title_bar)
         self.btn_close.setFixedSize(30, 20)
-        self.btn_close.clicked.connect(self.close)
+        self.btn_close.clicked.connect(stop_app)
 
         self.title_bar_layout.addWidget(QLabel("  GPT Computer Assistant", self.title_bar))
         self.title_bar_layout.addWidget(self.btn_minimize)

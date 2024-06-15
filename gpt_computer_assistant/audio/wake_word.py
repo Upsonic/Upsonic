@@ -4,7 +4,7 @@ import struct
 from ..utils.db import load_pvporcupine_api_key
 
 
-def wake_word():
+def wake_word(the_main_window):
     import pvporcupine
     import pyaudio
 
@@ -25,7 +25,7 @@ def wake_word():
     print("Listening for wake word...")
 
     # Continuously listen for the wake word
-    while True:
+    while the_main_window.wake_word_active:
         pcm = audio_stream.read(porcupine.frame_length)
         pcm = struct.unpack_from("h" * porcupine.frame_length, pcm)
 

@@ -282,7 +282,8 @@ def settings_popup(self):
 
             def deactivate_wake_word_():
                 deactivate_wake_word()
-                the_main_window.update_from_thread("Disabled Wake Word, Please Restart the APP")
+                the_main_window.update_from_thread("Disabled Wake Word")
+                the_main_window.wake_word_active = False
                 settings_dialog.close()
 
             wake_word_button.clicked.connect(deactivate_wake_word_)
@@ -290,7 +291,9 @@ def settings_popup(self):
                 
                 def activate_wake_word_():
                     activate_wake_word()
-                    the_main_window.update_from_thread("Enabled Wake Word, Please Restart the APP")
+                    the_main_window.update_from_thread("Enabled Wake Word")
+                    the_main_window.wake_word_active = True
+                    the_main_window.wake_word_trigger()
                     settings_dialog.close()
         
                 wake_word_button.clicked.connect(activate_wake_word_)
