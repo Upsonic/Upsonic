@@ -54,9 +54,18 @@ def get_prompt(name):
         return prompt
 
 
+cached_tiger_tools = None
+
+def get_tiger_tools():
+    global cached_tiger_tools
+    if cached_tiger_tools is None:
+        cached_tiger_tools = load_tiger_tools()
+    return cached_tiger_tools
+
+
 def get_tools():
     if is_online_tools_setting_active():
-        tools = load_tiger_tools()
+        tools = get_tiger_tools()
         if not tools:
             tools = load_default_tools()
     else:
