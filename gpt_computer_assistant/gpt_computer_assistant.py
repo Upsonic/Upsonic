@@ -798,7 +798,9 @@ class MainWindow(QMainWindow):
         global the_input_box
         the_input_box.setPlainText(text)
 
-    def update_from_thread(self, text):
+    def update_from_thread(self, text, system=True):
+        if system:
+            text = "System: " + text
         print("Updating from thread", text)
         self.worker.the_input_text = text
 

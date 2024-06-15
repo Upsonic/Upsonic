@@ -80,7 +80,7 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
             print("LLM INPUT (screenshot)", the_input_box_pre)
             if (
                         the_input_box_pre != ""
-                        and the_input_box_pre != "Thinking..."
+                        and not the_input_box_pre.startswith("System:")
                         and the_input_box_pre != last_ai_response
                     ):
                 llm_input += the_input_box_pre
@@ -110,7 +110,7 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
                         or the_input_box.toPlainText() == "Thinking..."
                         or the_input_box.toPlainText() == last_ai_response
                     ):
-                        the_main_window.update_from_thread(llm_output)
+                        the_main_window.update_from_thread(llm_output, system=False)
    
 
                 def play_audio():
@@ -142,7 +142,7 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
                 def play_text():
                     from ..gpt_computer_assistant import the_input_box, the_main_window
             
-                    the_main_window.update_from_thread(llm_output)
+                    the_main_window.update_from_thread(llm_output, system=False)
                     signal_handler.assistant_response_stopped.emit()
 
                 playback_thread = threading.Thread(target=play_text)
@@ -172,7 +172,7 @@ def process_screenshot():
 
             if (
                         the_input_box_pre != ""
-                        and the_input_box_pre != "Thinking..."
+                        and not the_input_box_pre.startswith("System:")
                         and the_input_box_pre != last_ai_response
                     ):
                 llm_input += the_input_box_pre
@@ -203,7 +203,7 @@ def process_screenshot():
                         or the_input_box.toPlainText() == "Thinking..."
                         or the_input_box.toPlainText() == last_ai_response
                     ):
-                        the_main_window.update_from_thread(llm_output)
+                        the_main_window.update_from_thread(llm_output, system=False)
                         
 
                 def play_audio():
@@ -238,7 +238,7 @@ def process_screenshot():
                     from ..gpt_computer_assistant import the_input_box, the_main_window
 
 
-                    the_main_window.update_from_thread(llm_output)
+                    the_main_window.update_from_thread(llm_output, system=False)
                     signal_handler.assistant_response_stopped.emit()
 
                 playback_thread = threading.Thread(target=play_text)
@@ -286,7 +286,7 @@ def process_text(text, screenshot_path=None):
                         or the_input_box.toPlainText() == last_ai_response
                     ):
 
-                        the_main_window.update_from_thread(llm_output)
+                        the_main_window.update_from_thread(llm_output, system=False)
                         
 
                 if load_api_key() != "CHANGE_ME":
@@ -330,7 +330,7 @@ def process_text(text, screenshot_path=None):
                     from ..gpt_computer_assistant import the_input_box, the_main_window
 
 
-                    the_main_window.update_from_thread(llm_output)
+                    the_main_window.update_from_thread(llm_output, system=False)
                     signal_handler.assistant_response_stopped.emit()
 
                 playback_thread = threading.Thread(target=play_text)
