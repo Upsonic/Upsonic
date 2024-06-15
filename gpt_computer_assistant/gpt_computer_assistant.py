@@ -503,8 +503,16 @@ class MainWindow(QMainWindow):
         self.wake_word_thread.start()       
 
     def wake_word(self):
+        from .agent.process import tts_if_you_can
         while True and is_wake_word_active():
             if wake_word():
+
+                def random_accept_words():
+                    return random.choice(["Yes", "Sir", "Boss", "Master"])
+
+
+                tts_if_you_can(random_accept_words())
+                
                 if self.state == "aitalking":
                     self.stop_talking = True
                     time.sleep(1)

@@ -36,20 +36,23 @@ os_name_ = os_name()
 
 
 
-def tts_if_you_can(text:str):
+def tts_if_you_can(text:str, not_threaded=False):
     try:
         if not is_just_text_model_active():
             response_path = text_to_speech(text)
 
             def play_audio():
-                    mixer.init()
-                    mixer.music.load(response_path)
-                    mixer.music.play()
-                    while mixer.music.get_busy():
-                        time.sleep(0.1)
-
-            playback_thread = threading.Thread(target=play_audio)
-            playback_thread.start()
+                    for each_r in response_path:
+                        mixer.init()
+                        mixer.music.load(each_r)
+                        mixer.music.play()
+                        while mixer.music.get_busy():
+                            time.sleep(0.1)
+            if not not_threaded:
+                playback_thread = threading.Thread(target=play_audio)
+                playback_thread.start()
+            else:
+                play_audio()
     except Exception as e:
         pass
         
