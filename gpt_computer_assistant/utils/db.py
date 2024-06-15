@@ -295,7 +295,7 @@ def deactivate_online_tools_setting():
 def is_online_tools_setting_active():
     """Check if the online_tools setting is active."""
     if not os.path.exists(online_tools_setting):
-        return True
+        return False
     with open(online_tools_setting, "r") as f:
         return f.read() == "1"
 
