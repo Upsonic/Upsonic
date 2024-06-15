@@ -48,12 +48,22 @@ Powered by <a href="https://github.com/Upsonic/Tiger"><strong>Upsonic Tiger 🐅
 ## Installation and Run
 Needed >= Python 3.9
 ```console
-pip3 install gpt-computer-assistant[base]
+pip3 install 'gpt-computer-assistant[base]'
 ```
 
 ```console
 computerassistant
 ```
+
+
+### Wake Word | NEW
+We have added Pvporcupine integration. To use it, you need to install an additional library:
+
+```console
+pip3 install 'gpt-computer-assistant[wakeword]'
+```
+
+After that, please enter your [Pvporcupine](https://picovoice.ai/) API key and enable the wake word feature.
 
 ### Agent Infrastructure
 
@@ -61,8 +71,8 @@ With this way you can create `crewai` agents and using it into gpt-computer-assi
 
 
 ```console
-pip3 install gpt-computer-assistant[base]
-pip3 install gpt-computer-assistant[agentic]
+pip3 install 'gpt-computer-assistant[base]'
+pip3 install 'gpt-computer-assistant[agentic]'
 ```
 
 ```python
@@ -102,14 +112,6 @@ start()
 ```
 
 
-### Wake Word | NEW
-We have added Pvporcupine integration. To use it, you need to install an additional library:
-
-```console
-pip3 install gpt-computer-assistant[wakeword]
-```
-
-After that, please enter your [Pvporcupine](https://picovoice.ai/) API key and enable the wake word feature. Lastly, restart the app.
 
 
 ### Auto Stop Recording | NEW
