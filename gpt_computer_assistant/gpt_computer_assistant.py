@@ -396,35 +396,37 @@ class DrawingWidget(QWidget):
                     pass
 
                 try:
-                        if self.main_.state == "aitalking":
-                            self.main_.manuel_stop = True
-                            self.main_.stop_talking = True
-                                
-                        else:
                             if self.main_.small_circle_rect.contains(event.pos()):
-                                self.main_.button_handler.toggle_recording(no_screenshot=True)
+                                if self.main_.state == "aitalking":
+                                    self.main_.manuel_stop = True
+                                    self.main_.stop_talking = True
+                                        
+                                else: 
+                                    self.main_.button_handler.toggle_recording(no_screenshot=True)
                 except:
                     pass
 
                 try:
-                        if self.main_.state == "aitalking":
-                            self.main_.manuel_stop = True
-                            self.main_.stop_talking = True
-                                
-                        else:                    
+         
                             if self.main_.small_circle_left.contains(event.pos()):
-                                self.main_.button_handler.toggle_recording(take_system_audio=True)
+                                if self.main_.state == "aitalking":
+                                    self.main_.manuel_stop = True
+                                    self.main_.stop_talking = True
+                                        
+                                else:                                 
+                                    self.main_.button_handler.toggle_recording(take_system_audio=True)
                 except:
                     pass
 
                 try:
-                        if self.main_.state == "aitalking":
-                            self.main_.manuel_stop = True
-                            self.main_.stop_talking = True
-                                
-                        else:                    
+                                         
                             if self.main_.small_circle_left_top.contains(event.pos()):
-                                self.main_.button_handler.just_screenshot()
+                                if self.main_.state == "aitalking":
+                                    self.main_.manuel_stop = True
+                                    self.main_.stop_talking = True
+                                        
+                                else:   
+                                    self.main_.button_handler.just_screenshot()
                 except:
                     pass
 
