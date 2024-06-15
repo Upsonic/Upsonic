@@ -8,7 +8,7 @@
 
   <h3 align="center">GPT Computer Assistant</h3>
   <p align="center">
-  <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/discord/1148697961639968859.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2" width=100></a>
+    <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/badge/Discord-Join?style=social&logo=discord" width=150></a>
   </p>
 
   <p align="center">
