@@ -432,6 +432,7 @@ class DrawingWidget(QWidget):
                 if self.main_.small_circle_collapse.contains(event.pos()):
                     if self.main_.collapse:
                         self.main_.collapse = False
+                        print()
                         # hide all buttons and input box
                         the_input_box.show()
                         if llm_settings[load_model_settings()]["vision"]:
@@ -509,9 +510,10 @@ class MainWindow(QMainWindow):
 
         self.wake_word_thread = None
 
-        self.wake_word_active = True
+        self.wake_word_active = False
 
         if load_pvporcupine_api_key() != "CHANGE_ME" and is_wake_word_active():
+            self.wake_word_active = True
             self.wake_word_trigger()    
 
 
@@ -523,7 +525,7 @@ class MainWindow(QMainWindow):
 
     def wake_word(self):
         from .agent.process import tts_if_you_can
-        while True and is_wake_word_active():
+        while True and is_wake_word_active() and self.wake_word_active:
             if wake_word(self):
 
                 def random_accept_words():
