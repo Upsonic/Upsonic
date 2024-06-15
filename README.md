@@ -55,8 +55,10 @@ pip3 install 'gpt-computer-assistant[base]'
 computerassistant
 ```
 
-
 ### Wake Word | NEW
+<details>
+
+
 We have added Pvporcupine integration. To use it, you need to install an additional library:
 
 ```console
@@ -64,6 +66,23 @@ pip3 install 'gpt-computer-assistant[wakeword]'
 ```
 
 After that, please enter your [Pvporcupine](https://picovoice.ai/) API key and enable the wake word feature.
+</details>
+
+<p align="center">
+<br>
+  <br>
+  <br>
+  <br>
+  <br>
+</p>
+
+
+<p align="center">
+<a href="#">
+    <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/5c6b7063-3d9b-4ea6-befa-ce15d69fcd43" alt="Logo"  >
+  </a>
+</p>
+
 
 ### Agent Infrastructure
 
@@ -95,6 +114,13 @@ start()
 ```
 
 
+
+<p align="center">
+<a href="#">
+    <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/c78f3460-6660-4da6-8941-a8ac5cfc1191" alt="Logo"  >
+  </a>
+</p>
+
 ### Adding Custom Tools
 
 Now you are able to add custom tools that run in the agentic infra and assistant processes. 
@@ -112,10 +138,21 @@ start()
 ```
 
 
+<p align="center">
+<br>
+  <br>
+  <br>
+  <br>
+  <br>
+</p>
 
-
-### Auto Stop Recording | NEW
-We also offer an auto-stop recording feature that automatically detects the end of your sentences. However, in certain cases and environments, you can disable this feature in the settings.
+<p align="center">
+<br>
+  <br>
+  <br>
+  <br>
+  <br>
+</p>
 
 
 https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e619-44d6-9b04-f39cf1ac1f8f
