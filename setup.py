@@ -9,7 +9,7 @@ with open("requirements.txt") as fp:
 
 setup(
     name="gpt_computer_assistant",
-    version="0.14.5",
+    version="0.15.0",
     description="""GPT""",
     long_description="".join(open("README.md", encoding="utf-8").readlines()),
     long_description_content_type="text/markdown",
