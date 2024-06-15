@@ -505,7 +505,13 @@ class MainWindow(QMainWindow):
     def wake_word(self):
         while True and is_wake_word_active():
             if wake_word():
-                self.button_handler.toggle_recording(no_screenshot=True)
+                if self.state == "aitalking":
+                    self.stop_talking = True
+                    time.sleep(1)
+                    self.button_handler.toggle_recording(no_screenshot=True)
+                    print("Stop talking")
+                else:
+                    self.button_handler.toggle_recording(no_screenshot=True)
             
 
 
