@@ -183,7 +183,7 @@ def process_screenshot():
                 get_chat_message_history().messages,
                 get_client(),
                 screenshot_path=just_screenshot_path,
-                dont_save_image=True,
+                dont_save_image=False,
             )
             last_ai_response = llm_output
 
