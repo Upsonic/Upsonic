@@ -364,6 +364,10 @@ def deactivate_wake_word():
 
 def is_wake_word_active():
     """Check if the wake_word_setting setting is active."""
+    try:
+        import pyaudio
+    except ImportError:
+        return False
     if not os.path.exists(wake_word_setting):
         return True
     with open(wake_word_setting, "r") as f:

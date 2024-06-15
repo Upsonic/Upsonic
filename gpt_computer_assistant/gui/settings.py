@@ -264,8 +264,17 @@ def settings_popup(self):
 
     settings_dialog.layout().addWidget(wake_word_button)
 
+    missing_parts = False
+    try:
+         import pyaudio
+    except:
+        missing_parts = True
+
+
     if api_key == "CHANGE_ME":
         wake_word_button.setText("Please Set Pvporcupine API Key First")
+    elif missing_parts:
+        wake_word_button.setText("Please Install gpt-computer-assistant[wakeword]")
     else:
 
         if is_wake_word_active():

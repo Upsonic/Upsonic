@@ -48,7 +48,7 @@ Powered by <a href="https://github.com/Upsonic/Tiger"><strong>Upsonic Tiger 🐅
 ## Installation and Run
 Needed >= Python 3.9
 ```console
-pip3 install gpt-computer-assistant[default]
+pip3 install gpt-computer-assistant[base]
 ```
 
 ```console
@@ -61,7 +61,7 @@ With this way you can create `crewai` agents and using it into gpt-computer-assi
 
 
 ```console
-pip3 install gpt-computer-assistant[default]
+pip3 install gpt-computer-assistant[base]
 pip3 install gpt-computer-assistant[agentic]
 ```
 
