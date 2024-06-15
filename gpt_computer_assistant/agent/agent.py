@@ -62,6 +62,8 @@ def get_tiger_tools():
         cached_tiger_tools = load_tiger_tools()
     return cached_tiger_tools
 
+if is_online_tools_setting_active():
+    get_tiger_tools()
 
 def get_tools():
     if is_online_tools_setting_active():
