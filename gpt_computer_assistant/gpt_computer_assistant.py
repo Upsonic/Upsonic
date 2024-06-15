@@ -13,6 +13,8 @@ try:
     from .utils.db import *
     from .utils.telemetry import my_tracer, os_name
 
+    from .audio.wake_word import wake_word
+
 except ImportError:
     # This is for running the script directly
     # in order to test the GUI without rebuilding the package
@@ -28,6 +30,7 @@ except ImportError:
     from gui.settings import settings_popup
     from gui.llmsettings import llmsettings_popup
     from utils.telemetry import my_tracer, os_name
+    from audio.wake_word import wake_word
 
 
 import hashlib
@@ -488,6 +491,23 @@ class MainWindow(QMainWindow):
             self.dark_mode()
         else:
             self.light_mode()
+
+
+        self.wake_word_thread = None
+
+        if load_pvporcupine_api_key() != "CHANGE_ME":
+            self.wake_word_trigger()        
+
+    def wake_word_trigger(self):
+        self.wake_word_thread = threading.Thread(target=self.wake_word)
+        self.wake_word_thread.start()       
+
+    def wake_word(self):
+        while True:
+            if wake_word():
+                self.button_handler.toggle_recording(no_screenshot=True)
+            
+
 
     def general_styling(self):
 

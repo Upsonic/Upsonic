@@ -234,6 +234,30 @@ def settings_popup(self):
 
 
 
+    api_key_label = QLabel("Wakeword - Pvporcupine API Key")
+    settings_dialog.layout().addWidget(api_key_label)
+    api_key_input = QLineEdit()
+    api_key = load_pvporcupine_api_key()
+    api_key_input.setText(api_key)
+    settings_dialog.layout().addWidget(api_key_input)
+    save_button = QPushButton("Save")
+
+    def save_api_key_(api_key):
+        first_time = True
+        if api_key != "CHANGE_ME":
+            first_time = False
+        save_pvporcupine_api_key(api_key)
+
+        the_main_window.update_from_thread("Wake word activated, just say 'Her Computer' or jarvis to activate the assistant")
+        if first_time:
+            the_main_window.wake_word_trigger()
+        settings_dialog.close()
+
+    save_button.clicked.connect(lambda: save_api_key_(api_key_input.text()))
+    settings_dialog.layout().addWidget(save_button)
+
+
+
 
 
 

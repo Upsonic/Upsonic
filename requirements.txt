@@ -582,6 +582,9 @@ zipp==3.19.2
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
 
+pvporcupine
+pyaudio
+
 # default tools
 pyperclip==1.8.2
 google==3.0.0

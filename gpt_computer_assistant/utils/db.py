@@ -325,3 +325,22 @@ def is_auto_stop_recording_setting_active():
         return True
     with open(auto_stop_recording_setting, "r") as f:
         return f.read() == "1"
+
+
+
+pvporcupine_api_key = os.path.join(artifacts_dir, "pvporcupine_api_key.db")
+
+
+def save_pvporcupine_api_key(api_key):
+    """Save the Pvporcupine AI API key to a file."""
+    with open(pvporcupine_api_key, "w") as f:
+        f.write(api_key)
+
+
+def load_pvporcupine_api_key():
+    """Load the Pvporcupine AI API key from a file or environment variables."""
+    if not os.path.exists(pvporcupine_api_key):
+        return "CHANGE_ME"
+    with open(pvporcupine_api_key, "r") as f:
+        return f.read()
+
