@@ -1,11 +1,13 @@
-import pvporcupine
-import pyaudio
+
 import struct
 
 from ..utils.db import load_pvporcupine_api_key
 
 
 def wake_word():
+    import pvporcupine
+    import pyaudio
+
     porcupine = pvporcupine.create(access_key=load_pvporcupine_api_key(),
                                            keywords=pvporcupine.KEYWORDS)
     # Initialize PyAudio
