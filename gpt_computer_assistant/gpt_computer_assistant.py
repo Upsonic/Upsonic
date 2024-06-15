@@ -511,7 +511,7 @@ class MainWindow(QMainWindow):
                     return random.choice(["Yes", "Sir", "Boss", "Master"])
 
 
-                tts_if_you_can(random_accept_words())
+                tts_if_you_can(random_accept_words(), not_threaded=True)
                 
                 if self.state == "aitalking":
                     self.stop_talking = True
