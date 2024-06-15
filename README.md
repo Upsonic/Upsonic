@@ -55,7 +55,7 @@ pip3 install gpt-computer-assistant[base]
 computerassistant
 ```
 
-### Agent Infrastructure | NEW
+### Agent Infrastructure
 
 With this way you can create `crewai` agents and using it into gpt-computer-assistant gui and tools.
 
@@ -85,7 +85,7 @@ start()
 ```
 
 
-### Adding Custom Tools | NEW
+### Adding Custom Tools
 
 Now you are able to add custom tools that run in the agentic infra and assistant processes. 
 
@@ -100,6 +100,20 @@ def sum_tool(first_number: int, second_number: int) -> str:
 
 start()
 ```
+
+
+### Wake Word | NEW
+We have added Pvporcupine integration. To use it, you need to install an additional library:
+
+```console
+pip3 install gpt-computer-assistant[wakeword]
+```
+
+After that, please enter your [Pvporcupine](https://picovoice.ai/) API key and enable the wake word feature. Lastly, restart the app.
+
+
+### Auto Stop Recording | NEW
+We also offer an auto-stop recording feature that automatically detects the end of your sentences. However, in certain cases and environments, you can disable this feature in the settings.
 
 
 https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e619-44d6-9b04-f39cf1ac1f8f
