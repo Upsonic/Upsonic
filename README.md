@@ -173,6 +173,7 @@ https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e6
 | **Collaborated Speaking Different Voice Models on long responses.**              | Completed     | Q2 2024        |
 | **Auto Stop Recording, when you complate talking**              | Completed     | Q2 2024        |
 | **Wakeup Word**              | Completed     | Q2 2024        |
+| **Continuously Conversations**              | Completed     | Q2 2024        |
 | **Adding more capability on device**              | Planned     | Q2 2024        |
 | DeepFace Integration (Facial Recognition)                    | Planned  | Q2 2024        |
 

@@ -787,6 +787,12 @@ class MainWindow(QMainWindow):
         self.screenshot_button.show()
 
     def update_state(self, new_state):
+
+        assistant_stopped = False
+        if self.state == "aitalking" and new_state == "idle":
+            assistant_stopped = True
+
+
         self.state = new_state
         print(f"State updated: {new_state}")
         if "talking" in new_state:
@@ -811,6 +817,12 @@ class MainWindow(QMainWindow):
             self.pulse_timer.stop()
             self.pulse_timer = None
         self.update()  # Trigger a repaint
+
+        if assistant_stopped:
+            if llm_settings[load_model_settings()]["transcription"]:
+                global the_input_box
+                if the_input_box.toPlainText().endswith("?"):
+                    self.button_handler.toggle_recording(no_screenshot=True, new_record=True)
 
     def pulse_circle(self):
         self.pulse_frame = (self.pulse_frame + 1) % 100

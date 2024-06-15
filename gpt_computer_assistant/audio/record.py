@@ -68,7 +68,7 @@ def start_recording(take_system_audio, buttonhandler):
         threshold = 0.01  # Define the threshold for stopping the recording
         silence_duration = 2  # Duration in seconds to consider as silence before stopping
         silence_start_time = None
-
+        recording_start_time = time.time()  # Record the start time of the recording
 
         auto_stop_recording = is_auto_stop_recording_setting_active()
 
@@ -92,9 +92,10 @@ def start_recording(take_system_audio, buttonhandler):
                 # Check if the audio is below the dynamic threshold
                 if current_level < dynamic_threshold and auto_stop_recording:
                     if silence_start_time is None:
-                        silence_start_time = time.time()  # Step 2: Use time.time() to mark the start of silence
+                        silence_start_time = time.time()  # Mark the start of silence
 
-                    elif (time.time() - silence_start_time) > silence_duration:  # Step 3: Check the duration of silence
+                    # Ensure recording has been ongoing for at least 3 seconds before considering auto-stop
+                    elif (time.time() - silence_start_time) > silence_duration and (time.time() - recording_start_time) > 3:
                         recording = False
                         buttonhandler.recording = False
 

@@ -59,11 +59,11 @@ class ButtonHandler:
         )
 
     def toggle_recording(
-        self, no_screenshot=False, take_system_audio=False, dont_save_image=False
+        self, no_screenshot=False, take_system_audio=False, dont_save_image=False, new_record=False
     ):
         """Toggle audio recording."""
 
-        if self.recording:
+        if self.recording and not new_record:
             stop_recording()
             self.recording = False
         else:
@@ -76,7 +76,7 @@ class ButtonHandler:
             self.dont_save_image = dont_save_image
 
             global recording_thread
-            if recording_thread is None or not recording_thread.is_alive():
+            if recording_thread is None or not recording_thread.is_alive() or new_record:
                 recording_thread = threading.Thread(
                     target=start_recording, args=(take_system_audio,self,)
                 )

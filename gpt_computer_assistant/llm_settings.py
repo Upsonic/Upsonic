@@ -47,6 +47,10 @@ If your answer include something in the list below, please generate the answer a
 
 After copying the thing that requested please say: "I copied to clipboard" and stop.
 
+
+# Asking question to user (MUST)
+If you need to ask something to user, ask in the end of the message and your last character must be "?".
+
 """
 
 
