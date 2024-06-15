@@ -260,6 +260,33 @@ def settings_popup(self):
 
 
 
+    wake_word_button = QPushButton("Enable Wake Word")
+
+    settings_dialog.layout().addWidget(wake_word_button)
+
+    if api_key == "CHANGE_ME":
+        wake_word_button.setText("Please Set Pvporcupine API Key First")
+    else:
+
+        if is_wake_word_active():
+            wake_word_button.setText("Disable Wake Word")
+
+            def deactivate_wake_word_():
+                deactivate_wake_word()
+                the_main_window.update_from_thread("Disabled Wake Word, Please Restart the APP")
+                settings_dialog.close()
+
+            wake_word_button.clicked.connect(deactivate_wake_word_)
+        else:
+                
+                def activate_wake_word_():
+                    activate_wake_word()
+                    the_main_window.update_from_thread("Enabled Wake Word, Please Restart the APP")
+                    settings_dialog.close()
+        
+                wake_word_button.clicked.connect(activate_wake_word_)
+
+
 
 
     settings_dialog.exec_()

@@ -495,7 +495,7 @@ class MainWindow(QMainWindow):
 
         self.wake_word_thread = None
 
-        if load_pvporcupine_api_key() != "CHANGE_ME":
+        if load_pvporcupine_api_key() != "CHANGE_ME" and is_wake_word_active():
             self.wake_word_trigger()        
 
     def wake_word_trigger(self):
@@ -503,7 +503,7 @@ class MainWindow(QMainWindow):
         self.wake_word_thread.start()       
 
     def wake_word(self):
-        while True:
+        while True and is_wake_word_active():
             if wake_word():
                 self.button_handler.toggle_recording(no_screenshot=True)
             

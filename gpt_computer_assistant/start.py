@@ -16,6 +16,12 @@ def start():
     Returns:
     None
     """
+
+    try:
+        import crewai
+    except:
+        pass
+
     # get --profile argument with library
     import argparse
 
