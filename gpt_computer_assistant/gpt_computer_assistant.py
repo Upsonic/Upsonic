@@ -383,6 +383,7 @@ class DrawingWidget(QWidget):
                     if self.main_.circle_rect.contains(event.pos()):
 
                         if self.main_.state == "aitalking":
+                            self.main_.manuel_stop = True
                             self.main_.stop_talking = True
                                 
                         else:
@@ -396,6 +397,7 @@ class DrawingWidget(QWidget):
 
                 try:
                         if self.main_.state == "aitalking":
+                            self.main_.manuel_stop = True
                             self.main_.stop_talking = True
                                 
                         else:
@@ -406,6 +408,7 @@ class DrawingWidget(QWidget):
 
                 try:
                         if self.main_.state == "aitalking":
+                            self.main_.manuel_stop = True
                             self.main_.stop_talking = True
                                 
                         else:                    
@@ -416,6 +419,7 @@ class DrawingWidget(QWidget):
 
                 try:
                         if self.main_.state == "aitalking":
+                            self.main_.manuel_stop = True
                             self.main_.stop_talking = True
                                 
                         else:                    
@@ -508,7 +512,10 @@ class MainWindow(QMainWindow):
         self.wake_word_active = True
 
         if load_pvporcupine_api_key() != "CHANGE_ME" and is_wake_word_active():
-            self.wake_word_trigger()        
+            self.wake_word_trigger()    
+
+
+        self.manuel_stop = False    
 
     def wake_word_trigger(self):
         self.wake_word_thread = threading.Thread(target=self.wake_word)
@@ -526,6 +533,7 @@ class MainWindow(QMainWindow):
                 tts_if_you_can(random_accept_words(), not_threaded=True)
                 
                 if self.state == "aitalking":
+                    self.manuel_stop = True
                     self.stop_talking = True
                     time.sleep(1)
                     self.button_handler.toggle_recording(no_screenshot=True)
@@ -822,6 +830,11 @@ class MainWindow(QMainWindow):
         assistant_stopped = False
         if self.state == "aitalking" and new_state == "idle":
             assistant_stopped = True
+
+        if self.manuel_stop:
+            assistant_stopped = False
+            self.manuel_stop = False
+        
 
 
         self.state = new_state
