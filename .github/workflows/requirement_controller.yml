@@ -3,9 +3,11 @@ name: Requirement Controller
 on: 
   push:
     paths:
+      - '.github/workflows/requirement_controller.yml'
       - 'requirements.txt'
   pull_request:
     paths:
+        - '.github/workflows/requirement_controller.yml'
         - 'requirements.txt'
 
   workflow_dispatch:
@@ -29,7 +31,8 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install .
+          pip install .[default]
+          pip install .[agentic]
 
         
 
@@ -48,7 +51,8 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install .
+          pip install .[default]
+          pip install .[agentic]
 
 
         
@@ -66,7 +70,8 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install .
+          pip install .[default]
+          pip install .[agentic]
 
         
 
