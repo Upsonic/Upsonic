@@ -96,6 +96,13 @@ def open_url(url) -> bool:
         return False
 
 
+def sleep(seconds: int):
+    """
+    Sleep for the given number of seconds.
+    """
+    import time
+    time.sleep(seconds)
+
 
 the_standard_tools_ = []
 
@@ -105,6 +112,7 @@ the_standard_tools_.append(tool(google))
 the_standard_tools_.append(tool(duckduckgo))
 the_standard_tools_.append(tool(copy))
 the_standard_tools_.append(tool(open_url))
+the_standard_tools_.append(tool(sleep))
 
 
 the_standard_tools = the_standard_tools_
