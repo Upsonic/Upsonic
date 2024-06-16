@@ -1,6 +1,6 @@
 import os
 
-def start():
+def start(api=False):
     """
     Starts the computer assistant application.
 
@@ -27,13 +27,18 @@ def start():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", help="profile to use")
+    parser.add_argument("--api", help="Enable API mode", action="store_true")
     args = parser.parse_args()
     profile = args.profile
+    api_arg = args.api
     print("Profile:", profile)
 
     if profile is not None:
         from .utils.db import set_profile
         set_profile(profile)
+
+
+        
 
     try:
         from .gpt_computer_assistant import QApplication, MainWindow, sys
@@ -41,6 +46,10 @@ def start():
         from gpt_computer_assistant import QApplication, MainWindow, sys
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
 
+    if api or api_arg:
+        print("API Enabled")
+        MainWindow.api_enabled = True
+    
     app = QApplication(sys.argv)
     ex = MainWindow()
     sys.exit(app.exec_())

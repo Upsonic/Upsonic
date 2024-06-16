@@ -457,11 +457,18 @@ class DrawingWidget(QWidget):
 
 
 
-
-
 class MainWindow(QMainWindow):
+    api_enabled = False
     def __init__(self):
         super().__init__()
+
+        print("API Enabled:", MainWindow.api_enabled)
+        if MainWindow.api_enabled:
+            try:
+                from .api import start_api
+                start_api()
+            except:
+                raise Exception("API could not be started, please install gpt-computer-assistant[api]")
         self.stop_talking = False
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)  # Remove the default title bar
 
