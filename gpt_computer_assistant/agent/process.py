@@ -88,6 +88,10 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
             if take_system_audio:
                 llm_input += " \n Other of USER: " + transcription2
 
+            if the_input_box.toPlainText().startswith("System:"):
+                the_main_window.update_from_thread("Transciption Completed. Running AI...")
+
+
             llm_output = assistant(
                 llm_input,
                 get_chat_message_history().messages,
@@ -95,6 +99,8 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
                 screenshot_path=screenshot_path if take_screenshot else None,
                 dont_save_image=dont_save_image,
             )
+            if the_input_box.toPlainText().startswith("System:"):
+                the_main_window.update_from_thread("AI Response Completed. Generating Audio...")
             last_ai_response = llm_output
 
             if not is_just_text_model_active():
@@ -179,6 +185,9 @@ def process_screenshot():
 
             print("LLM INPUT (just screenshot)", llm_input)
 
+            if the_input_box.toPlainText().startswith("System:"):
+                the_main_window.update_from_thread("Transciption Completed. Running AI...")
+
 
 
             llm_output = assistant(
@@ -188,6 +197,10 @@ def process_screenshot():
                 screenshot_path=just_screenshot_path,
                 dont_save_image=False,
             )
+
+            if the_input_box.toPlainText().startswith("System:"):
+                the_main_window.update_from_thread("AI Response Completed. Generating Audio...")
+
             last_ai_response = llm_output
 
             if not is_just_text_model_active():
@@ -264,6 +277,7 @@ def process_text(text, screenshot_path=None):
             global last_ai_response
 
             llm_input = text
+
 
             llm_output = assistant(
                 llm_input,
