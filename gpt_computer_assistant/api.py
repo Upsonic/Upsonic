@@ -5,6 +5,7 @@ import os
 import sys
 import threading
 import time
+from multiprocessing import Process
 
 app = Flask(__name__)
 
@@ -31,10 +32,24 @@ def input():
 
     return jsonify({"response": response})
 
+server_process = None
+
 def start_api():
     """
     This function starts the API.
     """
     print("Starting API")
-    threading.Thread(target=app.run, kwargs={"host": "0.0.0.0", "port": 7541}).start()
+    global server_process
+    server_process = Process(target=app.run, kwargs={"host": "0.0.0.0", "port": 7541})
+    server_process.start()
 
+
+
+def stop_api():
+    """
+    This function stops the API.
+    """
+    print("Stopping API")
+    global server_process
+    server_process.terminate()
+    server_process.join()

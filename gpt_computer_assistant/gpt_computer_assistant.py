@@ -658,6 +658,9 @@ class MainWindow(QMainWindow):
         def stop_app():
             self.stop_talking = True
             self.wake_word_active = False
+            if MainWindow.api_enabled:
+                from .api import stop_api
+                stop_api()
             self.close()
 
 
