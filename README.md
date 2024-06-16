@@ -72,8 +72,7 @@ After that, please enter your [Pvporcupine](https://picovoice.ai/) API key and e
 <br>
   <br>
   <br>
-  <br>
-  <br>
+
 </p>
 
 
@@ -193,17 +192,6 @@ print(output)
 
 https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e619-44d6-9b04-f39cf1ac1f8f
 
-<p align="center">
-  <a href="#">
-    <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/94ac619c-1f29-4fe6-b3cb-85a03932646b" alt="Logo"  >
-  </a>
-</p>
-
-
-
-
-
-
 
 ## Usage
 ![options](https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/37d34745-ae4b-4b37-9bfa-aec070c97897)
@@ -278,7 +266,7 @@ At this time we have many infrastructure elements. We just aim to provide whole 
 | **Writing and running SH**    |            OK                    |
 | **Using your Telegram Account**    |            OK                    |
 | **Knowledge Management**           |            OK                    |
-
+| **[Add more tool]()https://github.com/onuratakan/gpt-computer-assistant/blob/master/gpt_computer_assistant/standard_tools.py**           |            ?                    |
 
 ### Predefined Agents
 If you enable it your assistant will work with these teams:
@@ -287,7 +275,7 @@ If you enable it your assistant will work with these teams:
 |------------------------------------|----------------------------------|
 | **search_on_internet_and_report_team**                    |            OK                    |
 | **generate_code_with_aim_team_**                    |            OK                    |
-
+| **[Add your own one](https://github.com/onuratakan/gpt-computer-assistant/blob/master/gpt_computer_assistant/teams.py)**                    |            ?                    |
 
 
 
