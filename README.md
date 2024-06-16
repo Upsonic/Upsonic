@@ -266,7 +266,7 @@ At this time we have many infrastructure elements. We just aim to provide whole 
 | **Writing and running SH**    |            OK                    |
 | **Using your Telegram Account**    |            OK                    |
 | **Knowledge Management**           |            OK                    |
-| **[Add more tool]()https://github.com/onuratakan/gpt-computer-assistant/blob/master/gpt_computer_assistant/standard_tools.py**           |            ?                    |
+| **[Add more tool](https://github.com/onuratakan/gpt-computer-assistant/blob/master/gpt_computer_assistant/standard_tools.py)**           |            ?                    |
 
 ### Predefined Agents
 If you enable it your assistant will work with these teams:
