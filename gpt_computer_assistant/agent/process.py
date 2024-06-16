@@ -38,7 +38,8 @@ os_name_ = os_name()
 
 def tts_if_you_can(text:str, not_threaded=False):
     try:
-        if not is_just_text_model_active():
+        from ..gpt_computer_assistant import the_main_window
+        if not is_just_text_model_active() and not the_main_window.api_enabled:
             response_path = text_to_speech(text)
 
             def play_audio():
@@ -103,7 +104,8 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
                 the_main_window.update_from_thread("AI Response Completed. Generating Audio...")
             last_ai_response = llm_output
 
-            if not is_just_text_model_active():
+            from ..gpt_computer_assistant import the_main_window
+            if not is_just_text_model_active() and not the_main_window.api_enabled:
                 response_path = text_to_speech(llm_output)
                 signal_handler.assistant_response_ready.emit()
 
@@ -203,7 +205,8 @@ def process_screenshot():
 
             last_ai_response = llm_output
 
-            if not is_just_text_model_active():
+            from ..gpt_computer_assistant import the_main_window
+            if not is_just_text_model_active() and not the_main_window.api_enabled:
                 response_path = text_to_speech(llm_output)
                 signal_handler.assistant_response_ready.emit()
 
@@ -288,7 +291,8 @@ def process_text(text, screenshot_path=None):
             )
             last_ai_response = llm_output
 
-            if not is_just_text_model_active():
+            from ..gpt_computer_assistant import the_main_window
+            if not is_just_text_model_active() and not the_main_window.api_enabled:
 
                 def play_text():
                     from ..gpt_computer_assistant import the_input_box, the_main_window
