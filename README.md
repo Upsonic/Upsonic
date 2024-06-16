@@ -188,8 +188,6 @@ print(output)
 <br>
   <br>
   <br>
-  <br>
-  <br>
 </p>
 
 
@@ -263,10 +261,12 @@ https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e6
 ## Capabilities
 At this time we have many infrastructure elements. We just aim to provide whole things that already in ChatGPT app.
 
-| Capability                         | Description                      |
+| Capability                         | Status                      |
 |------------------------------------|----------------------------------|
 | **Screen Read**                    |            OK                    |
 | **Click to and Text or Icon in the screen**                    |            OK                    |
+| **Move to and Text or Icon in the screen**                    |            OK                    |
+| **Scrolling**                    |            OK                    |
 | **Microphone**                     |            OK                    |
 | **System Audio**                  |            OK                    |
 | **Memory**                         |            OK                    |
@@ -280,8 +280,13 @@ At this time we have many infrastructure elements. We just aim to provide whole 
 | **Knowledge Management**           |            OK                    |
 
 
+### Predefined Agents
+If you enable it your assistant will work with these teams:
 
-
+| Team Name                         | Status                      |
+|------------------------------------|----------------------------------|
+| **search_on_internet_and_report_team**                    |            OK                    |
+| **generate_code_with_aim_team_**                    |            OK                    |
 
 
 

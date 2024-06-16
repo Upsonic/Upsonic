@@ -2,12 +2,16 @@ try:
     from ..llm import get_model
     from ..utils.db import *
     from ..llm_settings import llm_settings
-    from ..tooler import click_on_a_text_on_the_screen, click_on_a_icon_on_the_screen, search_on_internet_and_report_team, generate_code_with_aim_team
+    from ..tooler import *
+    from ..display_tools import *
+    from ..teams import *
 except ImportError:
     from llm import get_model
     from utils.db import *
     from llm_settings import llm_settings
-    from tooler import click_on_a_text_on_the_screen, click_on_a_icon_on_the_screen, search_on_internet_and_report_team, generate_code_with_aim_team
+    from tooler import *
+    from display_tools import *
+    from teams import *
 
 
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -92,7 +96,7 @@ def get_agent_executor():
 
 
     if llm_settings[model]["provider"] == "openai":
-        tools += [click_on_a_text_on_the_screen, click_on_a_icon_on_the_screen]
+        tools += [click_on_a_text_on_the_screen, click_on_a_icon_on_the_screen, move_on_a_text_on_the_screen, move_on_a_icon_on_the_screen, mouse_scroll]
 
 
     if llm_settings[model]["provider"] == "openai" or llm_settings[model]["provider"] == "groq":
