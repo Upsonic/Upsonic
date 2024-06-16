@@ -107,7 +107,7 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
                     global last_ai_response
                     if (
                         the_input_box.toPlainText() == ""
-                        or the_input_box.toPlainText() == "Thinking..."
+                        or the_input_box.toPlainText().startswith("System:")
                         or the_input_box.toPlainText() == last_ai_response
                     ):
                         the_main_window.update_from_thread(llm_output, system=False)
@@ -200,7 +200,7 @@ def process_screenshot():
                     global last_ai_response
                     if (
                         the_input_box.toPlainText() == ""
-                        or the_input_box.toPlainText() == "Thinking..."
+                        or the_input_box.toPlainText().startswith("System:")
                         or the_input_box.toPlainText() == last_ai_response
                     ):
                         the_main_window.update_from_thread(llm_output, system=False)
@@ -282,7 +282,7 @@ def process_text(text, screenshot_path=None):
                     
                     if (
                         the_input_box.toPlainText() == ""
-                        or the_input_box.toPlainText() == "Thinking..."
+                        or the_input_box.toPlainText().startswith("System:")
                         or the_input_box.toPlainText() == last_ai_response
                     ):
 
