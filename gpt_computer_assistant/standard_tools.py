@@ -80,6 +80,23 @@ def copy(text:str):
 
 
 
+def open_url(url) -> bool:
+    """
+    Open the URL in the default web browser.
+
+    :param url: str:
+
+    """
+    import webbrowser
+
+    try:
+        webbrowser.open(url)
+        return True
+    except:
+        return False
+
+
+
 the_standard_tools_ = []
 
 
@@ -87,6 +104,7 @@ the_standard_tools_.append(tool(read_website))
 the_standard_tools_.append(tool(google))
 the_standard_tools_.append(tool(duckduckgo))
 the_standard_tools_.append(tool(copy))
+the_standard_tools_.append(tool(open_url))
 
 
 the_standard_tools = the_standard_tools_
