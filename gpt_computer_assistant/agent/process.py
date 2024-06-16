@@ -287,6 +287,7 @@ def process_text(text, screenshot_path=None):
                     ):
 
                         the_main_window.update_from_thread(llm_output, system=False)
+                        the_main_window.manuel_stop = True
                         
 
                 if load_api_key() != "CHANGE_ME":
@@ -331,6 +332,7 @@ def process_text(text, screenshot_path=None):
 
 
                     the_main_window.update_from_thread(llm_output, system=False)
+                    the_main_window.manuel_stop = True
                     signal_handler.assistant_response_stopped.emit()
 
                 playback_thread = threading.Thread(target=play_text)
