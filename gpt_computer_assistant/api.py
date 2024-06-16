@@ -20,13 +20,18 @@ def input():
     screen = data["screen"]
     print("Input:", text)
     from .gpt_computer_assistant import the_main_window, the_input_box
+
+    firsst_text = the_input_box.toPlainText()
+
     if screen != "true":
         the_main_window.button_handler.input_text(text)
     else:
         the_main_window.button_handler.input_text_screenshot(text)
     
-    time.sleep(1)
-    while the_main_window.state != "idle":
+    while the_input_box.toPlainText() == firsst_text:
+        time.sleep(0.3)
+
+    while the_input_box.toPlainText().startswith("System:"):
         time.sleep(0.3)
 
     response = the_input_box.toPlainText()

@@ -122,7 +122,7 @@ class Worker(QThread):
                 if self.the_input_text != last_text:
                     self.commited_text.append(self.the_input_text)
 
-                    if len(self.the_input_text) > 90:
+                    if len(self.the_input_text) > 90 or MainWindow.api_enabled:
                         self.text_to_set.emit(self.the_input_text)
                     else:
                         for i in range(len(self.the_input_text)):
