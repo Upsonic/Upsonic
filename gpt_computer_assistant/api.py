@@ -5,7 +5,8 @@ import os
 import sys
 import threading
 import time
-from multiprocessing import Process
+
+from werkzeug.serving import make_server
 
 app = Flask(__name__)
 
@@ -32,24 +33,40 @@ def input():
 
     return jsonify({"response": response})
 
-server_process = None
+
+
+class ServerThread(threading.Thread):
+    def __init__(self, app, host, port):
+        threading.Thread.__init__(self)
+        self.srv = make_server(host, port, app)
+        self.ctx = app.app_context()
+        self.ctx.push()
+
+    def run(self):
+        print("Starting server")
+        self.srv.serve_forever()
+
+    def shutdown(self):
+        print("Stopping server")
+        self.srv.shutdown()
+
+server_thread = None
 
 def start_api():
-    """
-    This function starts the API.
-    """
-    print("Starting API")
-    global server_process
-    server_process = Process(target=app.run, kwargs={"host": "0.0.0.0", "port": 7541})
-    server_process.start()
-
-
+    global server_thread
+    if server_thread is None:
+        server_thread = ServerThread(app, "0.0.0.0", 7541)
+        server_thread.start()
+        print("API started")
+    else:
+        print("API is already running")
 
 def stop_api():
-    """
-    This function stops the API.
-    """
-    print("Stopping API")
-    global server_process
-    server_process.terminate()
-    server_process.join()
+    global server_thread
+    if server_thread is not None:
+        server_thread.shutdown()
+        server_thread.join()
+        server_thread = None
+        print("API stopped")
+    else:
+        print("API is not running")
