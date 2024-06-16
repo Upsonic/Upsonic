@@ -40,6 +40,82 @@ def input():
 
 
 
+@app.route("/profile", methods=["POST"])
+def profile():
+    """
+    This function sets the profile for the application.
+    """
+    data = request.json
+    profile = data["profile"]
+    print("Profile:", profile)
+    from .utils.db import set_profile
+    set_profile(profile)
+    from .gpt_computer_assistant import the_main_window
+    the_main_window.update_from_thread("Profile set to "+profile)
+    return jsonify({"response": "Profile set to "+profile})
+
+
+@app.route("/reset_memory", methods=["POST"])
+def reset_memory():
+    """
+    This function resets the memory of the application.
+    """
+    from .agent.chat_history import clear_chat_history
+    clear_chat_history()
+    from .gpt_computer_assistant import the_main_window
+    the_main_window.update_from_thread("Memory reset")
+    return jsonify({"response": "Memory reset"})
+
+
+
+@app.route("/activate_predefined_agents", methods=["POST"])
+def enable_predefined_agents():
+    """
+    This function enables predefined agents for the application.
+    """
+    from .utils.db import activate_predefined_agents_setting
+    activate_predefined_agents_setting()
+    from .gpt_computer_assistant import the_main_window
+    the_main_window.update_from_thread("Predefined agents enabled")
+    return jsonify({"response": "Predefined agents enabled"})
+
+@app.route("/deactivate_predefined_agents", methods=["POST"])
+def disable_predefined_agents():
+    """
+    This function disables predefined agents for the application.
+    """
+    from .utils.db import deactivate_predefined_agents_setting
+    deactivate_predefined_agents_setting()
+    from .gpt_computer_assistant import the_main_window
+    the_main_window.update_from_thread("Predefined agents disabled")
+    return jsonify({"response": "Predefined agents disabled"})
+
+
+@app.route("/activate_online_tools", methods=["POST"])
+def enable_online_tools():
+    """
+    This function enables online tools for the application.
+    """
+    from .utils.db import activate_online_tools_setting
+    activate_online_tools_setting()
+    from .gpt_computer_assistant import the_main_window
+    the_main_window.update_from_thread("Online tools enabled")
+    return jsonify({"response": "Online tools enabled"})
+
+
+
+@app.route("/deactivate_online_tools", methods=["POST"])
+def disable_online_tools():
+    """
+    This function disables online tools for the application.
+    """
+    from .utils.db import deactivate_online_tools_setting
+    deactivate_online_tools_setting()
+    from .gpt_computer_assistant import the_main_window
+    the_main_window.update_from_thread("Online tools disabled")
+    return jsonify({"response": "Online tools disabled"})
+
+
 class ServerThread(threading.Thread):
     def __init__(self, app, host, port):
         threading.Thread.__init__(self)
