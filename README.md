@@ -165,9 +165,19 @@ computerassistant --api
 ```python
 from gpt_computer_assistant.remote import remote
 
-output = remote.input("Hi, how are you today?")
-
+output = remote.input("Hi, how are you today?", screen=False)
 print(output)
+
+
+# Other Functionalities
+remote.reset_memory()
+remote.profile("default")
+
+remote.enable_predefined_agents()
+remote.disable_predefined_agents()
+
+remote.enable_online_tools()
+remote.disable_online_tools()
 ```
 
 
