@@ -118,6 +118,21 @@ def sleep(seconds: int):
     time.sleep(seconds)
 
 
+
+
+
+def keyboard_write(text:str):
+    """
+    Write the text using the keyboard.
+    """
+    import pyautogui
+    pyautogui.write(text)
+
+
+
+
+
+
 the_standard_tools_ = []
 
 
@@ -127,6 +142,7 @@ the_standard_tools_.append(tool(duckduckgo))
 the_standard_tools_.append(tool(copy))
 the_standard_tools_.append(tool(open_url))
 the_standard_tools_.append(tool(sleep))
+the_standard_tools_.append(tool(keyboard_write))
 
 
 the_standard_tools = the_standard_tools_
