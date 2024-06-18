@@ -23,7 +23,7 @@ audio_data = None
 user_id = load_user_id()
 os_name_ = os_name()
 
-the_input_box_pre = None
+the_input_box_pre = ""
 
 
 
