@@ -131,6 +131,14 @@ def keyboard_write(text:str):
 
 
 
+def keyboard_press(key:str):
+    """
+    Press the key using the keyboard.
+    """
+    import pyautogui
+    pyautogui.press(key)
+
+
 
 
 the_standard_tools_ = []
@@ -143,6 +151,7 @@ the_standard_tools_.append(tool(copy))
 the_standard_tools_.append(tool(open_url))
 the_standard_tools_.append(tool(sleep))
 the_standard_tools_.append(tool(keyboard_write))
+the_standard_tools_.append(tool(keyboard_press))
 
 
 the_standard_tools = the_standard_tools_
