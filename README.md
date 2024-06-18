@@ -265,6 +265,8 @@ At this time we have many infrastructure elements. We just aim to provide whole 
 | **Screen Read**                    |            OK                    |
 | **Click to and Text or Icon in the screen**                    |            OK                    |
 | **Move to and Text or Icon in the screen**                    |            OK                    |
+| **Typing Something**                    |            OK                    |
+| **Pressing to Any Key**                    |            OK                    |
 | **Scrolling**                    |            OK                    |
 | **Microphone**                     |            OK                    |
 | **System Audio**                  |            OK                    |
