@@ -3,6 +3,9 @@ import requests
 import re
 from urllib.parse import urljoin
 
+from .tooler import tool
+
+
 def read_website(url: str, max_content_length: int = 5000) -> dict:
     """
     Read the content of a website and return the title, meta data, content, and sub-links.
