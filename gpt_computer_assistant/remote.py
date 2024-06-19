@@ -10,8 +10,8 @@ class Remote_Client:
         response = requests.post(self.url+path, json=data)
         return response.json()
 
-    def input(self, text:str, screen:bool=False) -> str:
-        data = {"text": text, "screen": str(screen).lower()}
+    def input(self, text:str, screen:bool=False, talk:bool=False) -> str:
+        data = {"text": text, "screen": str(screen).lower(), "talk": str(talk).lower()}
         response = self.send_request("/input", data)
         return response["response"]
     

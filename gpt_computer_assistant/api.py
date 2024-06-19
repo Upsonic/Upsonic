@@ -18,15 +18,20 @@ def input():
     data = request.json
     text = data["text"]
     screen = data["screen"]
+    talk = data["talk"]
     print("Input:", text)
     from .gpt_computer_assistant import the_main_window, the_input_box
 
     firsst_text = the_input_box.toPlainText()
 
+    if talk == "true":
+        the_main_window.api_enabled = False
+
     if screen != "true":
         the_main_window.button_handler.input_text(text)
     else:
         the_main_window.button_handler.input_text_screenshot(text)
+
     
     while the_input_box.toPlainText() == firsst_text:
         time.sleep(0.3)
@@ -35,6 +40,10 @@ def input():
         time.sleep(0.3)
 
     response = the_input_box.toPlainText()
+
+
+    if talk == "true":
+        the_main_window.api_enabled = True
 
     return jsonify({"response": response})
 
