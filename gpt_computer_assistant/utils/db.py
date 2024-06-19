@@ -372,3 +372,31 @@ def is_wake_word_active():
         return True
     with open(wake_word_setting, "r") as f:
         return f.read() == "1"
+
+
+
+
+
+
+
+wake_word_screen_setting = os.path.join(artifacts_dir, "wake_word_screen_setting.db")
+
+
+def activate_wake_word_screen_setting():
+    """Activate the wake_word_screen setting."""
+    with open(wake_word_screen_setting, "w") as f:
+        f.write("1")
+
+
+def deactivate_wake_word_screen_setting():
+    """Deactivate the wake_word_screen setting."""
+    with open(wake_word_screen_setting, "w") as f:
+        f.write("0")
+
+
+def is_wake_word_screen_setting_active():
+    """Check if the wake_word_screen setting is active."""
+    if not os.path.exists(wake_word_screen_setting):
+        return True
+    with open(wake_word_screen_setting, "r") as f:
+        return f.read() == "1"

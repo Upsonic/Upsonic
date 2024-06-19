@@ -301,4 +301,28 @@ def settings_popup(self):
 
 
 
+
+    wake_word_screen_button = QPushButton("Enable Screen Input for Wake Word Mode")
+
+    settings_dialog.layout().addWidget(wake_word_screen_button)
+
+    if is_wake_word_screen_setting_active():
+        wake_word_screen_button.setText("Disable Screen Input for Wake Word Mode")
+
+        def deactivate_auto_stop_recording_():
+            deactivate_wake_word_screen_setting()
+            the_main_window.update_from_thread("Disabled Screen Input for Wake Word Mode")
+            settings_dialog.close()
+
+        wake_word_screen_button.clicked.connect(deactivate_auto_stop_recording_)
+    else:
+            
+            def activate_auto_stop_recording_():
+                activate_wake_word_screen_setting()
+                the_main_window.update_from_thread("Enabled Screen Input for Wake Word Mode")
+                settings_dialog.close()
+    
+            wake_word_screen_button.clicked.connect(activate_auto_stop_recording_)
+
+
     settings_dialog.exec_()

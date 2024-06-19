@@ -543,14 +543,21 @@ class MainWindow(QMainWindow):
 
                 tts_if_you_can(random_accept_words(), not_threaded=True)
                 
+
+                def trigger_wake_word():
+                    if is_wake_word_screen_setting_active() and llm_settings[load_model_settings()]["vision"]:
+                        self.button_handler.toggle_recording(dont_save_image=True)
+                    else:
+                        self.button_handler.toggle_recording(no_screenshot=True)
+
                 if self.state == "aitalking":
                     self.manuel_stop = True
                     self.stop_talking = True
                     time.sleep(1)
-                    self.button_handler.toggle_recording(no_screenshot=True)
+                    trigger_wake_word()
                     print("Stop talking")
                 else:
-                    self.button_handler.toggle_recording(no_screenshot=True)
+                    trigger_wake_word()
             
 
 
