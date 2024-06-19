@@ -166,9 +166,10 @@ computerassistant --api
 ```python
 from gpt_computer_assistant.remote import remote
 
-output = remote.input("Hi, how are you today?", screen=False)
+output = remote.input("Hi, how are you today?", screen=False, talk=False)
 print(output)
 
+remote.just_screenshot()
 
 # Other Functionalities
 remote.reset_memory()
