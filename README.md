@@ -171,6 +171,8 @@ print(output)
 
 remote.just_screenshot()
 
+remote.talk("TTS test")
+
 # Other Functionalities
 remote.reset_memory()
 remote.profile("default")

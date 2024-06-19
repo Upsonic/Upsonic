@@ -36,11 +36,13 @@ os_name_ = os_name()
 
 
 
-def tts_if_you_can(text:str, not_threaded=False):
+def tts_if_you_can(text:str, not_threaded=False, status_edit=False):
     try:
         from ..gpt_computer_assistant import the_main_window
         if not is_just_text_model_active() and not the_main_window.api_enabled:
             response_path = text_to_speech(text)
+            if status_edit:
+                signal_handler.assistant_response_ready.emit()
 
             def play_audio():
                     for each_r in response_path:
@@ -49,6 +51,8 @@ def tts_if_you_can(text:str, not_threaded=False):
                         mixer.music.play()
                         while mixer.music.get_busy():
                             time.sleep(0.1)
+                    if status_edit:
+                        signal_handler.assistant_response_stopped.emit()
             if not not_threaded:
                 playback_thread = threading.Thread(target=play_audio)
                 playback_thread.start()

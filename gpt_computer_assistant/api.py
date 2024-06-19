@@ -26,6 +26,7 @@ def input():
 
     if talk == "true":
         the_main_window.api_enabled = False
+        the_main_window.manuel_stop = True
 
     if screen != "true":
         the_main_window.button_handler.input_text(text)
@@ -40,6 +41,7 @@ def input():
         time.sleep(0.3)
 
     response = the_input_box.toPlainText()
+
 
 
     if talk == "true":
@@ -68,6 +70,22 @@ def screenshot():
     return jsonify({"response": response})
 
 
+
+@app.route("/tts", methods=["POST"])
+def tts():
+    """
+    This function receives a text to speech request from the user and returns the response.
+    """
+    from .gpt_computer_assistant import the_main_window, the_input_box
+    the_main_window.api_enabled = False
+    the_main_window.manuel_stop = True
+    data = request.json
+    text = data["text"]
+    print("TTS:", text)
+    from .agent.process import tts_if_you_can
+    tts_if_you_can(text, not_threaded=True, status_edit=True)
+    the_main_window.api_enabled = True
+    return jsonify({"response": "TTS request received"})
 
 @app.route("/profile", methods=["POST"])
 def profile():

@@ -20,6 +20,11 @@ class Remote_Client:
         response = self.send_request("/screenshot", data)
         return response["response"]
 
+    def talk(self, text:str) -> str:
+        data = {"text": text}
+        response = self.send_request("/tts", data)
+        return response["response"]
+
     def profile(self, profile:str) -> str:
         data = {"profile": profile}
         response = self.send_request("/profile", data)
