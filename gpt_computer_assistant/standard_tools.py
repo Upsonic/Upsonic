@@ -141,17 +141,24 @@ def keyboard_press(key:str):
 
 
 
-the_standard_tools_ = []
 
 
-the_standard_tools_.append(tool(read_website))
-the_standard_tools_.append(tool(google))
-the_standard_tools_.append(tool(duckduckgo))
-the_standard_tools_.append(tool(copy))
-the_standard_tools_.append(tool(open_url))
-the_standard_tools_.append(tool(sleep))
-the_standard_tools_.append(tool(keyboard_write))
-the_standard_tools_.append(tool(keyboard_press))
+
+def get_standard_tools():
+
+    the_standard_tools_ = []
 
 
-the_standard_tools = the_standard_tools_
+    the_standard_tools_.append(tool(read_website))
+    the_standard_tools_.append(tool(google))
+    the_standard_tools_.append(tool(duckduckgo))
+    the_standard_tools_.append(tool(copy))
+    the_standard_tools_.append(tool(open_url))
+    the_standard_tools_.append(tool(sleep))
+    the_standard_tools_.append(tool(keyboard_write))
+    the_standard_tools_.append(tool(keyboard_press))
+
+
+    the_standard_tools = the_standard_tools_
+
+    return the_standard_tools

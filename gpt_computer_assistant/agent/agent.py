@@ -39,8 +39,8 @@ def load_tiger_tools():
 
 
 def load_default_tools():
-    from ..standard_tools import the_standard_tools
-    return the_standard_tools
+    from ..standard_tools import get_standard_tools
+    return get_standard_tools()
 
 
 prompt_cache = {}
