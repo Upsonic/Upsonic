@@ -39,6 +39,26 @@ def input():
     return jsonify({"response": response})
 
 
+@app.route("/screenshot", methods=["POST"])
+def screenshot():
+    """
+    This function receives a screenshot from the user and returns the response.
+    """
+    from .gpt_computer_assistant import the_main_window, the_input_box
+    firsst_text = the_input_box.toPlainText()
+    the_main_window.button_handler.just_screenshot()
+
+    while the_input_box.toPlainText() == firsst_text:
+        time.sleep(0.3)
+
+    while the_input_box.toPlainText().startswith("System:"):
+        time.sleep(0.3)
+
+    response = the_input_box.toPlainText()
+
+    return jsonify({"response": response})
+
+
 
 @app.route("/profile", methods=["POST"])
 def profile():

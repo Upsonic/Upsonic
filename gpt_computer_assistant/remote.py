@@ -15,6 +15,10 @@ class Remote_Client:
         response = self.send_request("/input", data)
         return response["response"]
     
+    def just_screenshot(self) -> str:
+        data = {}
+        response = self.send_request("/screenshot", data)
+        return response["response"]
 
     def profile(self, profile:str) -> str:
         data = {"profile": profile}
