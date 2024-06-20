@@ -1,6 +1,6 @@
 import requests
 
-
+import time
 
 class Remote_Client:
     def __init__(self, url):
@@ -50,6 +50,8 @@ class Remote_Client:
         response = self.send_request("/deactivate_online_tools", {})
         return response["response"]
     
+    def wait(self, second):
+        time.sleep(second)
     
         
 
