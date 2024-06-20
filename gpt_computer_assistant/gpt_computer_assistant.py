@@ -888,7 +888,7 @@ class MainWindow(QMainWindow):
         if assistant_stopped:
             if llm_settings[load_model_settings()]["transcription"]:
                 global the_input_box
-                if the_input_box.toPlainText().endswith("?"):
+                if the_input_box.toPlainText().endswith("?") and is_continuously_conversations_setting_active():
                     self.button_handler.toggle_recording(no_screenshot=True, new_record=True)
 
     def pulse_circle(self):

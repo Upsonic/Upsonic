@@ -400,3 +400,30 @@ def is_wake_word_screen_setting_active():
         return True
     with open(wake_word_screen_setting, "r") as f:
         return f.read() == "1"
+    
+
+
+
+
+
+continuously_conversations_setting = os.path.join(artifacts_dir, "continuously_conversations_setting.db")
+
+
+def activate_continuously_conversations_setting():
+    """Activate the continuously_conversations setting."""
+    with open(continuously_conversations_setting, "w") as f:
+        f.write("1")
+
+
+def deactivate_continuously_conversations_setting():
+    """Deactivate the continuously_conversations setting."""
+    with open(continuously_conversations_setting, "w") as f:
+        f.write("0")
+
+
+def is_continuously_conversations_setting_active():
+    """Check if the continuously_conversations setting is active."""
+    if not os.path.exists(continuously_conversations_setting):
+        return False
+    with open(continuously_conversations_setting, "r") as f:
+        return f.read() == "1"

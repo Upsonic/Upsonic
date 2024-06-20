@@ -325,4 +325,28 @@ def settings_popup(self):
             wake_word_screen_button.clicked.connect(activate_auto_stop_recording_)
 
 
+
+
+    continuously_conversations_button = QPushButton("Enable Continuously Conversations")
+
+    settings_dialog.layout().addWidget(continuously_conversations_button)
+
+    if is_continuously_conversations_setting_active():
+        continuously_conversations_button.setText("Disable Continuously Conversations")
+
+        def deactivate_auto_stop_recording_():
+            deactivate_continuously_conversations_setting()
+            the_main_window.update_from_thread("Disabled Continuously Conversations")
+            settings_dialog.close()
+
+        continuously_conversations_button.clicked.connect(deactivate_auto_stop_recording_)
+    else:
+            
+            def activate_auto_stop_recording_():
+                activate_continuously_conversations_setting()
+                the_main_window.update_from_thread("Enabled Continuously Conversations")
+                settings_dialog.close()
+    
+            continuously_conversations_button.clicked.connect(activate_auto_stop_recording_)
+
     settings_dialog.exec_()
