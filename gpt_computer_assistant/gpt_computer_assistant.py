@@ -901,6 +901,8 @@ class MainWindow(QMainWindow):
             title_bar_text = "  GPT Computer Assistant"
         else:
             title_bar_text = f"  {title_bar_text}"
+            if len(title_bar_text) > 33:
+                title_bar_text = title_bar_text[:30] + "..."
         self.worker_2.title_bar_text = title_bar_text
 
         self.btn_minimize.hide()
@@ -908,7 +910,7 @@ class MainWindow(QMainWindow):
     def deactive_border_animation(self):
         self.worker_2.the_input_text = False
         self.worker_2.title_bar_text = "  GPT Computer Assistant"
-        time.sleep()
+        time.sleep(1)
         self.btn_minimize.show()
         self.btn_close.show()
 
