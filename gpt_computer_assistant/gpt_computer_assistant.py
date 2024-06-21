@@ -147,6 +147,40 @@ class CustomTextEdit(QTextEdit):
 
 
 
+class Worker_2(QThread):
+    text_to_set = pyqtSignal(str)
+    text_to_set_title_bar = pyqtSignal(str)
+
+
+    def __init__(self):
+        super().__init__()
+        self.the_input_text = None
+        self.title_bar_text = None
+        self.prev = None
+        self.commited_text = []
+
+    def run(self):
+        while True:
+            self.msleep(500)  # Simulate a time-consuming task
+
+            if self.the_input_text and (self.prev == None or self.prev != self.the_input_text):
+                self.prev = self.the_input_text
+                self.text_to_set.emit("True")
+                for i in range(len(self.title_bar_text)):
+                    self.text_to_set_title_bar.emit(self.title_bar_text[:i + 1])
+                    self.msleep(10)    
+            
+            if not self.the_input_text and self.prev != self.the_input_text:
+                self.prev = self.the_input_text
+                self.text_to_set.emit("False")
+
+                for i in range(len(self.title_bar_text)):
+                    self.text_to_set_title_bar.emit(self.title_bar_text[:i + 1])
+                    self.msleep(10)                
+ 
+
+
+
 class DrawingWidget(QWidget):
     def __init__(self, parent=None):
         super(DrawingWidget, self).__init__(parent)
@@ -455,7 +489,7 @@ class DrawingWidget(QWidget):
                 pass
 
 
-
+from PyQt5.QtCore import QPropertyAnimation, QVariantAnimation
 
 class MainWindow(QMainWindow):
     api_enabled = False
@@ -528,6 +562,58 @@ class MainWindow(QMainWindow):
 
         self.manuel_stop = False    
 
+        
+        self.border_animation = None
+
+    def init_border_animation(self):
+        # Create a QVariantAnimation to handle color change
+        border_animation = QVariantAnimation(
+            self,
+            valueChanged=self.update_border_color,
+            startValue=QColor("#303030"),
+            endValue=QColor("#23538F"),
+            duration=2000  # Duration for one loop in milliseconds
+        )
+        border_animation.setLoopCount(-1)  # Loop indefinitely
+        return border_animation
+
+    def start_border_animation(self, status):
+        print("FUNCTION TRİGGERED")
+        if self.border_animation == None:
+            self.border_animation = self.init_border_animation()
+
+        status = status.lower() == "true"
+        if status:
+            self.border_animation.start()
+        else:
+            self.border_animation.stop()
+            self.title_bar.setStyleSheet(f"background-color: #2E2E2E; color: white; border-style: solid; border-radius: 15px; border-width: 0px; color: #fff;")
+
+
+
+    def update_border_color(self, color):
+        self.title_bar.setStyleSheet(f"background-color: #2E2E2E; color: white; border-style: solid; border-radius: 15px; border-width: 2px; border-color: {color.name()}; color: #fff;")
+        self.title_bar.setStyleSheet(f"background-color: #2E2E2E; color: white; border-style: solid; border-radius: 15px; border-width: 1px; border-color: {color.name()}; color: #fff;")
+
+    # Existing methods...
+
+    def general_styling(self):
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setStyleSheet("border-radius: 20px; background-color: rgba(45, 45, 45, 250);")
+        self.central_widget.setStyleSheet("border-style: solid; border-width: 1px; border-color: rgb(0,0,0,0);")
+
+        self.input_box_style = "border-radius: 10px; border-bottom: 1px solid #01EE8A;"
+
+        self.send_button_style = "border-radius: 5px; height: 25px; border-style: solid;"
+        self.screenshot_button_style = "border-radius: 5px; height: 25px; border-style: solid;"
+
+        self.settingsButton_style = "border-radius: 5px; height: 25px; border-style: solid;"
+        self.llmsettingsButton_style = "border-radius: 5px; height: 25px; border-style: solid;"
+
+        self.btn_minimize.setStyleSheet("background-color: #2E2E2E; color: white; border-style: none;")
+        self.btn_close.setStyleSheet("background-color: #2E2E2E; color: white; border-style: none;")
+
+
     def wake_word_trigger(self):
         self.wake_word_thread = threading.Thread(target=self.wake_word)
         self.wake_word_thread.start()       
@@ -561,29 +647,6 @@ class MainWindow(QMainWindow):
             
 
 
-    def general_styling(self):
-
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        
-
-
-        self.setStyleSheet("border-radius: 20px; background-color: rgba(45, 45, 45, 250);")
-        self.central_widget.setStyleSheet("border-style: solid; border-width: 1px; border-color: rgb(0,0,0,0);")
-
-        self.input_box_style = "border-radius: 10px; border-bottom: 1px solid #01EE8A;"
-
-        self.send_button_style = "border-radius: 5px; height: 25px; border-style: solid;"
-        self.screenshot_button_style = "border-radius: 5px; height: 25px; border-style: solid;"
-
-        self.settingsButton_style = "border-radius: 5px; height: 25px; border-style: solid;"
-        self.llmsettingsButton_style = "border-radius: 5px; height: 25px; border-style: solid;"
-
-
-        self.btn_minimize.setStyleSheet("background-color: #2E2E2E; color: white; border-style: none;")
-        self.btn_close.setStyleSheet("background-color: #2E2E2E; color: white; border-style: none;")
-        self.title_bar.setStyleSheet("background-color: #2E2E2E; color: white; border-style: solid; border-radius: 15px;")
-
-        
 
 
 
@@ -652,10 +715,10 @@ class MainWindow(QMainWindow):
         # Custom title bar
         self.title_bar = QWidget(self)
         self.title_bar.setFixedHeight(30)  # Set a fixed height for the title bar
-        self.title_bar.setStyleSheet("background-color: #2E2E2E;")
+        self.title_bar.setStyleSheet("background-color: #2E2E2E; color: #fff;")
 
         self.title_bar_layout = QHBoxLayout(self.title_bar)
-        self.title_bar_layout.setContentsMargins(0, 0, 0, 0)
+        self.title_bar_layout.setContentsMargins(5, 5, 0, 5)
         self.title_bar_layout.setSpacing(0)
 
         self.btn_minimize = QPushButton("_", self.title_bar)
@@ -675,7 +738,9 @@ class MainWindow(QMainWindow):
         self.btn_close.setFixedSize(30, 20)
         self.btn_close.clicked.connect(stop_app)
 
-        self.title_bar_layout.addWidget(QLabel("  GPT Computer Assistant", self.title_bar))
+        self.title_label = QLabel("  GPT Computer Assistant", self.title_bar)
+        self.title_label.setStyleSheet("border: 0px solid blue;") 
+        self.title_bar_layout.addWidget(self.title_label)
         self.title_bar_layout.addWidget(self.btn_minimize)
 
 
@@ -802,6 +867,11 @@ class MainWindow(QMainWindow):
         self.worker.text_to_set.connect(self.set_text)
         self.worker.start()
 
+        self.worker_2 = Worker_2()
+        self.worker_2.text_to_set.connect(self.start_border_animation)
+        self.worker_2.text_to_set_title_bar.connect(self.set_title_bar_text)
+        self.worker_2.start()
+
         # print height and width
         print(self.height(), self.width())
 
@@ -815,11 +885,33 @@ class MainWindow(QMainWindow):
         global the_input_box
         the_input_box.setPlainText(text)
 
+    def set_title_bar_text(self, text):
+        self.title_label.setText(text)
+
     def update_from_thread(self, text, system=True):
         if system:
             text = "System: " + text
         print("Updating from thread", text)
         self.worker.the_input_text = text
+
+
+    def active_border_animation(self, title_bar_text = None):
+        self.worker_2.the_input_text = True
+        if title_bar_text == None:
+            title_bar_text = "  GPT Computer Assistant"
+        else:
+            title_bar_text = f"  {title_bar_text}"
+        self.worker_2.title_bar_text = title_bar_text
+
+        self.btn_minimize.hide()
+        self.btn_close.hide()
+    def deactive_border_animation(self):
+        self.worker_2.the_input_text = False
+        self.worker_2.title_bar_text = "  GPT Computer Assistant"
+        time.sleep()
+        self.btn_minimize.show()
+        self.btn_close.show()
+
 
     def mouseMoveEvent(self, event: QMouseEvent):
         delta = QPoint(event.globalPos() - self.old_position)

@@ -5,7 +5,27 @@ from urllib.parse import urljoin
 
 from .tooler import tool
 
+import functools
 
+from .gpt_computer_assistant import the_main_window
+
+
+def wrapper(func):
+    """A decorator that logs the start and end of the function call."""
+    @functools.wraps(func)
+    def wrapped_func(*args, **kwargs):
+        global the_main_window
+        print("GOOGLE-searching")
+        function_name = "Tool: " + func.__name__
+        the_main_window.active_border_animation(function_name)
+        result = func(*args, **kwargs)
+        the_main_window.deactive_border_animation()
+        print("GOOGLE SEARCHİNG COMPLEATES")
+        
+        return result
+    return wrapped_func
+
+@wrapper
 def read_website(url: str, max_content_length: int = 5000) -> dict:
     """
     Read the content of a website and return the title, meta data, content, and sub-links.
@@ -58,7 +78,7 @@ def read_website(url: str, max_content_length: int = 5000) -> dict:
       
     
 
-
+@wrapper
 def google(query:str, max_number:int=20) -> list:
     """
     Search the query on Google and return the results.
@@ -70,7 +90,7 @@ def google(query:str, max_number:int=20) -> list:
         return "An exception occurred"    
 
 
-
+@wrapper
 def duckduckgo(query:str, max_number:int=20) -> list:
     """
     Search the query on DuckDuckGo and return the results.
@@ -83,7 +103,7 @@ def duckduckgo(query:str, max_number:int=20) -> list:
     
 
 
-
+@wrapper
 def copy(text:str):
     """
     Copy the text to the clipboard.
@@ -93,7 +113,7 @@ def copy(text:str):
 
 
 
-
+@wrapper
 def open_url(url) -> bool:
     """
     Open the URL in the default web browser.
@@ -109,7 +129,7 @@ def open_url(url) -> bool:
     except:
         return False
 
-
+@wrapper
 def sleep(seconds: int):
     """
     Sleep for the given number of seconds.
@@ -120,7 +140,7 @@ def sleep(seconds: int):
 
 
 
-
+@wrapper
 def keyboard_write(text:str):
     """
     Write the text using the keyboard.
@@ -130,7 +150,7 @@ def keyboard_write(text:str):
 
 
 
-
+@wrapper
 def keyboard_press(key:str):
     """
     Press the key using the keyboard.
