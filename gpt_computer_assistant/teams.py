@@ -152,7 +152,7 @@ def generate_code_with_aim_team_(aim: str, copy_to_clipboard: bool = False) -> s
 
     generate_code_task = Task(
         description="Generate code based on the outlined requirements.",
-        expected_output="Generated code",
+        expected_output="Generated code, just code without any ```pyhton things or any other thing. Just python code",
         agent=code_generator,
         tools=the_tool_list,
         context=[analyze_task],
