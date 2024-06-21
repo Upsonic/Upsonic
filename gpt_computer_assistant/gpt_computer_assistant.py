@@ -174,8 +174,10 @@ class Worker_2(QThread):
                 self.prev = self.the_input_text
                 self.text_to_set.emit("False")
 
-                for i in range(len(self.title_bar_text)):
-                    self.text_to_set_title_bar.emit(self.title_bar_text[:i + 1])
+                the_text = "  GPT Computer Assistant"
+
+                for i in range(len(the_text)):
+                    self.text_to_set_title_bar.emit(the_text[:i + 1])
                     self.msleep(10)                
  
 
@@ -896,6 +898,10 @@ class MainWindow(QMainWindow):
 
 
     def active_border_animation(self, title_bar_text = None):
+        if self.worker_2.title_bar_text != None:
+            if self.worker_2.title_bar_text != title_bar_text:
+                return
+
         self.worker_2.the_input_text = True
         if title_bar_text == None:
             title_bar_text = "  GPT Computer Assistant"
@@ -907,9 +913,21 @@ class MainWindow(QMainWindow):
 
         self.btn_minimize.hide()
         self.btn_close.hide()
-    def deactive_border_animation(self):
+    def deactive_border_animation(self, title_bar_text=None):
+
+        if title_bar_text == None:
+            title_bar_text = "  GPT Computer Assistant"
+        else:
+            title_bar_text = f"  {title_bar_text}"
+            if len(title_bar_text) > 33:
+                title_bar_text = title_bar_text[:30] + "..."
+        
+        if self.worker_2.title_bar_text != None:
+            if self.worker_2.title_bar_text != title_bar_text:
+                return
+
         self.worker_2.the_input_text = False
-        self.worker_2.title_bar_text = "  GPT Computer Assistant"
+        self.worker_2.title_bar_text = None
         time.sleep(1)
         self.btn_minimize.show()
         self.btn_close.show()

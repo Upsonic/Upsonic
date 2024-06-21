@@ -12,7 +12,7 @@ def wrapper(func):
         function_name = "Tool: " + func.__name__
         the_main_window.active_border_animation(function_name)
         result = func(*args, **kwargs)
-        the_main_window.deactive_border_animation()
+        the_main_window.deactive_border_animation(function_name)
         print("GOOGLE SEARCHİNG COMPLEATES")
         
         return result
