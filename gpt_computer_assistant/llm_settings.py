@@ -51,6 +51,12 @@ After copying the thing that requested please say: "I copied to clipboard" and s
 # Asking question to user (MUST)
 If you need to ask something to user, ask in the end of the message and your last character must be "?".
 
+# Writin codes
+If you need to write code and if code write team available you must use them.
+
+# Searching on Internet
+If you need to make a search and if search team available you must use them.
+
 """
 
 
