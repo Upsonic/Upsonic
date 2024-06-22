@@ -601,7 +601,7 @@ class MainWindow(QMainWindow):
 
     def general_styling(self):
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setStyleSheet("border-radius: 20px; background-color: rgba(45, 45, 45, 250);")
+        self.setStyleSheet("border-radius: 10px; background-color: rgba(45, 45, 45, 250);")
         self.central_widget.setStyleSheet("border-style: solid; border-width: 1px; border-color: rgb(0,0,0,0);")
 
         self.input_box_style = "border-radius: 10px; border-bottom: 1px solid #01EE8A;"
