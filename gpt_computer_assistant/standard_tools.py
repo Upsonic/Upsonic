@@ -145,10 +145,25 @@ def keyboard_press(key:str):
 
 
 
+from langchain_experimental.utilities import PythonREPL
+
+the_py_client = PythonREPL()
+
+@wrapper
+def python_repl(code:str) -> str:
+    """
+    Run and return the given python code in python repl
+    """
+    return the_py_client.run(code)
+    
 
 
+import time
 
+# Sleep for 15 seconds
+time.sleep(15)
 
+print("15 seconds have passed")
 def get_standard_tools():
 
     the_standard_tools_ = []
@@ -162,6 +177,7 @@ def get_standard_tools():
     the_standard_tools_.append(tool(sleep))
     the_standard_tools_.append(tool(keyboard_write))
     the_standard_tools_.append(tool(keyboard_press))
+    the_standard_tools_.append(tool(python_repl))
 
 
     the_standard_tools = the_standard_tools_
