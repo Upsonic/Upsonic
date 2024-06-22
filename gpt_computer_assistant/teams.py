@@ -101,6 +101,69 @@ def search_on_internet_and_report_team_(the_subject:str, copy_to_clipboard: bool
 search_on_internet_and_report_team = tool(search_on_internet_and_report_team_)
 
 
+lastly_generated_codes = {}
+
+
+def currently_codes():
+    global lastly_generated_codes
+    return lastly_generated_codes
+
+
+def get_code(name:str):
+    """
+    returns the code
+    """
+    global lastly_generated_codes
+    return lastly_generated_codes[name]
+
+
+def save_code(name, code):
+    global lastly_generated_codes
+    lastly_generated_codes[name] = code
+
+
+def required_old_code(aim):
+    try:
+        from crewai import Task, Crew, Agent
+
+
+        requirement_analyzer = Agent(
+            role="requirement_analyzer",
+            goal="To understand and analyze the given aim to ensure the generated code meets the specified requirements.",
+            backstory="As a requirement analyzer, my purpose is to bridge the gap between human intentions and machine execution. With a deep understanding of software development principles and a keen analytical mind, I dissect aims into actionable requirements.",
+            max_iter=10,
+            llm=get_model(high_context=True),
+        )
+
+        required_old_codes = Task(
+            description=f"Analyze the aim: '{aim}' and find the required old codes for better compatibility. Old code names: {list(currently_codes())}",
+            expected_output="Require old code names in a list",
+            agent=requirement_analyzer,
+        )
+
+
+        the_crew = Crew(
+            agents=[requirement_analyzer],
+            tasks=[required_old_codes],
+            full_output=True,
+            verbose=True,
+        )
+
+        # Execute the tasks
+        old_codes = the_crew.kickoff()["final_output"]
+
+        the_string = ""
+
+        for each in currently_codes():
+            if each in old_codes:
+                the_string += "\n" + get_code(each)
+
+        return the_string
+
+    except:
+        return "An exception occurred" 
+
+
 
 @wrapper
 def generate_code_with_aim_team_(aim: str, copy_to_clipboard: bool = False) -> str:
@@ -114,68 +177,95 @@ def generate_code_with_aim_team_(aim: str, copy_to_clipboard: bool = False) -> s
     Returns:
     - str: The generated code.
     """
+    try:
 
-    from crewai import Task, Crew, Agent
+        print("\nCOde generating\n")
+        print("Previously codes", currently_codes())
+        try:
+            print("Inside of the first one", get_code(currently_codes()[0]))
+        except:
+            pass
 
-    from .agent.agent import get_tools
-    tools = get_tools()
 
-    the_tool_list = []
-    for each in tools:
-        if "team" not in each.name:
-            the_tool_list.append(each)
+        from crewai import Task, Crew, Agent
 
-    # Create the agents
-    requirement_analyzer = Agent(
-        role="requirement_analyzer",
-        goal="To understand and analyze the given aim to ensure the generated code meets the specified requirements.",
-        backstory="As a requirement analyzer, my purpose is to bridge the gap between human intentions and machine execution. With a deep understanding of software development principles and a keen analytical mind, I dissect aims into actionable requirements.",
-        max_iter=10,
-        llm=get_model(high_context=True),
-    )
+        from .agent.agent import get_tools
+        tools = get_tools()
 
-    code_generator = Agent(
-        role="code_generator",
-        goal="To translate the analyzed requirements into efficient, clean, and functional code.",
-        backstory="I am the code generator, an architect of the digital world. With a vast library of programming knowledge and a creative spark, I craft code that breathes life into ideas. My code is not just functional; it's a masterpiece.",
-        max_iter=20,
-        llm=get_model(high_context=True),
-    )
+        the_tool_list = []
+        for each in tools:
+            if "team" not in each.name:
+                the_tool_list.append(each)
 
-    # Define the tasks
-    analyze_task = Task(
-        description=f"Analyze the aim: '{aim}' and outline the requirements for the code.",
-        expected_output="Requirements outline",
-        agent=requirement_analyzer,
-        tools=the_tool_list,
-    )
+        # Create the agents
+        requirement_analyzer = Agent(
+            role="requirement_analyzer",
+            goal="To understand and analyze the given aim to ensure the generated code meets the specified requirements.",
+            backstory="As a requirement analyzer, my purpose is to bridge the gap between human intentions and machine execution. With a deep understanding of software development principles and a keen analytical mind, I dissect aims into actionable requirements.",
+            max_iter=10,
+            llm=get_model(high_context=True),
+        )
 
-    generate_code_task = Task(
-        description="Generate code based on the outlined requirements.",
-        expected_output="Generated code, just code without any ```pyhton things or any other thing. Just python code",
-        agent=code_generator,
-        tools=the_tool_list,
-        context=[analyze_task],
-    )
+        code_generator = Agent(
+            role="code_generator",
+            goal="To translate the analyzed requirements into efficient, clean, and functional code.",
+            backstory="I am the code generator, an architect of the digital world. With a vast library of programming knowledge and a creative spark, I craft code that breathes life into ideas. My code is not just functional; it's a masterpiece.",
+            max_iter=20,
+            llm=get_model(high_context=True),
+        )
 
-    # Create the crew and assign tasks
-    the_crew = Crew(
-        agents=[requirement_analyzer, code_generator],
-        tasks=[analyze_task, generate_code_task],
-        full_output=True,
-        verbose=True,
-    )
+        # Define the tasks
+        analyze_task = Task(
+            description=f"Analyze the aim: '{aim}' and outline the requirements for the code.",
+            expected_output="Requirements outline",
+            agent=requirement_analyzer,
+            tools=the_tool_list,
+        )
 
-    # Execute the tasks
-    result = the_crew.kickoff()["final_output"]
 
-    # Optionally copy the result to the clipboard
-    if copy_to_clipboard:
-        from .standard_tools import copy
-        copy(result)
+        old_code_requirements = required_old_code(aim)
+        print("Old_code_requirements", old_code_requirements)
 
-    return result
 
+        generate_code_task = Task(
+            description=f"Generate code based on the outlined requirements. The other codes in the repo are: {old_code_requirements}",
+            expected_output="Generated code, just code without any ```pyhton things or any other thing. Just python code",
+            agent=code_generator,
+            context=[analyze_task],
+        )
+
+        name_of_work = Task(
+            description="Generate a name for the work",
+            expected_output="a module name like text, examples: math.basics.sum for sum function. ",
+            agent=code_generator,
+            context=[generate_code_task],
+        )
+
+
+        # Create the crew and assign tasks
+        the_crew = Crew(
+            agents=[requirement_analyzer, code_generator],
+            tasks=[analyze_task, generate_code_task, name_of_work],
+            full_output=True,
+            verbose=True,
+        )
+
+        # Execute the tasks
+        the_crew.kickoff()["final_output"]
+
+        result = generate_code_task.output.raw_output
+
+        # Optionally copy the result to the clipboard
+        if copy_to_clipboard:
+            from .standard_tools import copy
+            copy(result)
+
+        print("name", name_of_work.output.raw_output)
+        save_code(name_of_work.output.raw_output, result)
+
+        return result
+    except:
+        return "An exception occurred" 
 
 
 generate_code_with_aim_team = tool(generate_code_with_aim_team_)

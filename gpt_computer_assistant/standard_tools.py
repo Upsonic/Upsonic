@@ -158,12 +158,7 @@ def python_repl(code:str) -> str:
     
 
 
-import time
 
-# Sleep for 15 seconds
-time.sleep(15)
-
-print("15 seconds have passed")
 def get_standard_tools():
 
     the_standard_tools_ = []
