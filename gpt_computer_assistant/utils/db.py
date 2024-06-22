@@ -268,7 +268,7 @@ def deactivate_predefined_agents_setting():
 def is_predefined_agents_setting_active():
     """Check if the predefined agents setting setting is active."""
     if not os.path.exists(predefined_agents_setting):
-        return False
+        return True
     with open(predefined_agents_setting, "r") as f:
         return f.read() == "1"
 
