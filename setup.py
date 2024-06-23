@@ -2,10 +2,20 @@
 # -*- coding: utf-8 -*-
 
 from setuptools import setup
+import platform
+
 
 # Read the requirements from the requirements.txt file
 with open("requirements.txt") as fp:
     install_requires = fp.read().splitlines()
+
+if platform.system() in ["Linux", "Windows"]:
+    install_requires.append("AppOpener==1.7")
+
+elif platform.system() == "Darwin": # Darwin is the system name for macOS
+    install_requires.append("MacAppOpener==0.0.5") # Replace with actual macOS specific package
+
+
 
 setup(
     name="gpt_computer_assistant",

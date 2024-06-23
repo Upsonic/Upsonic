@@ -158,6 +158,22 @@ def python_repl(code:str) -> str:
     
 
 
+@wrapper
+def app_open(app_name:str) -> bool:
+    """
+    Opens the native apps. 
+    """
+    try:
+        from AppOpener import open
+        open(app_name, throw_error=True)
+        return True
+    except:
+        try:
+            from MacAppOpener import open
+            open(app_name)
+        except:
+            return False
+
 
 def get_standard_tools():
 
