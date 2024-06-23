@@ -174,6 +174,22 @@ def app_open(app_name:str) -> bool:
         except:
             return False
 
+@wrapper
+def app_close(app_name:str) -> bool:
+    """
+    Closes the native apps.
+    """
+    try:
+        from AppOpener import close
+        close(app_name, throw_error=True)
+        return True
+    except:
+        try:
+            from MacAppOpener import open
+            close(app_name)
+        except:
+            return False
+
 
 def get_standard_tools():
 
@@ -189,6 +205,8 @@ def get_standard_tools():
     the_standard_tools_.append(tool(keyboard_write))
     the_standard_tools_.append(tool(keyboard_press))
     the_standard_tools_.append(tool(python_repl))
+    the_standard_tools_.append(tool(app_open))
+    the_standard_tools_.append(tool(app_close))
 
 
     the_standard_tools = the_standard_tools_
