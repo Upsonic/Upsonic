@@ -15,7 +15,7 @@ def get_model(high_context=False):
     the_groq_api_key = load_groq_api_key()
     the_google_api_key = load_google_api_key()
     the_openai_url = load_openai_url()
-    
+
     def open_ai_base(high_context):
         if the_openai_url == "default":
             true_model = the_model
@@ -24,7 +24,7 @@ def get_model(high_context=False):
             return {"model": true_model, "api_key": the_api_key, "max_retries":15}
         else:
             return {"model": the_model, "api_key": the_api_key, "max_retries":15, "base_url": the_openai_url}
-    
+
     args_mapping = {
         ChatOpenAI: open_ai_base(high_context=high_context),
         ChatOllama: {"model": the_model},
@@ -37,7 +37,7 @@ def get_model(high_context=False):
         "gpt-4-turbo": (ChatOpenAI, args_mapping[ChatOpenAI]),
         "gpt-3.5": (ChatOpenAI, args_mapping[ChatOpenAI]),
         "gpt-3.5-turbo": (ChatOpenAI, args_mapping[ChatOpenAI]),
-        
+
         # Google Generative AI - Llama
         "llava": (ChatOllama, args_mapping[ChatOllama]),
         "llama3": (ChatOllama, args_mapping[ChatOllama]),
@@ -45,11 +45,11 @@ def get_model(high_context=False):
 
         # Google Generative AI - Gemini
         "gemini-pro": (ChatGoogleGenerativeAI, args_mapping[ChatGoogleGenerativeAI]),
-        
+
         # Groq
         "mixtral-8x7b-groq": (ChatGroq, args_mapping[ChatGroq])
     }
-    
+
     model_class, args = model_mapping[the_model]
     return model_class(**args) if model_class else None
 

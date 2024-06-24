@@ -60,8 +60,8 @@ def read_website(url: str, max_content_length: int = 5000) -> dict:
         content = content[:max_content_length].rsplit(' ', 1)[0] + '...'
 
     return {"meta": meta, "title": title, "content": content, "sub_links": links}
-      
-    
+
+
 
 @wrapper
 def google(query:str, max_number:int=20) -> list:
@@ -85,7 +85,7 @@ def duckduckgo(query:str, max_number:int=20) -> list:
         return [result["href"] for result in DDGS().text(query, max_results=max_number)]
     except:
         return "An exception occurred"
-    
+
 
 
 @wrapper
@@ -155,7 +155,7 @@ def python_repl(code:str) -> str:
     Run and return the given python code in python repl
     """
     return the_py_client.run(code)
-    
+
 
 
 @wrapper

@@ -119,7 +119,7 @@ def main():
     if len(sys.argv) != 2 or sys.argv[1] not in valid_parts:
         logger.error(f"Usage: python version.py <{'|'.join(valid_parts)}>")
         sys.exit(1)
-        
+
     part = sys.argv[1]
     version = read_version()
     new_version = increment_version(part, version)

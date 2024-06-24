@@ -38,7 +38,7 @@ def start(api=False):
         set_profile(profile)
 
 
-        
+
 
     try:
         from .gpt_computer_assistant import QApplication, MainWindow, sys
@@ -49,7 +49,7 @@ def start(api=False):
     if api or api_arg:
         print("API Enabled")
         MainWindow.api_enabled = True
-    
+
     app = QApplication(sys.argv)
     ex = MainWindow()
     sys.exit(app.exec_())

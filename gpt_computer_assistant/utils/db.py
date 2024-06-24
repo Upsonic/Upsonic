@@ -245,7 +245,7 @@ def load_google_api_key():
             return "CHANGE_ME"
     with open(googlekey, "r") as f:
         return f.read()
-    
+
 
 
 
@@ -400,7 +400,7 @@ def is_wake_word_screen_setting_active():
         return True
     with open(wake_word_screen_setting, "r") as f:
         return f.read() == "1"
-    
+
 
 
 

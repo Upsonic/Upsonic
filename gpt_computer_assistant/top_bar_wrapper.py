@@ -14,6 +14,6 @@ def wrapper(func):
         result = func(*args, **kwargs)
         the_main_window.deactive_border_animation(function_name)
         print("GOOGLE SEARCHİNG COMPLEATES")
-        
+
         return result
     return wrapped_func

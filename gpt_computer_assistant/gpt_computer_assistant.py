@@ -169,7 +169,7 @@ class Worker_2(QThread):
                 for i in range(len(self.title_bar_text)):
                     self.text_to_set_title_bar.emit(self.title_bar_text[:i + 1])
                     self.msleep(10)    
-            
+
             if not self.the_input_text and self.prev != self.the_input_text:
                 self.prev = self.the_input_text
                 self.text_to_set.emit("False")
@@ -179,7 +179,7 @@ class Worker_2(QThread):
                 for i in range(len(the_text)):
                     self.text_to_set_title_bar.emit(the_text[:i + 1])
                     self.msleep(10)                
- 
+
 
 
 
@@ -253,7 +253,7 @@ class DrawingWidget(QWidget):
         )
 
 
-        
+
         if not self.main_.state == "thinking":
             painter.setPen(QPen(QColor("#01EE8A"), 1))  # Green color with 2px thickness
             # Draw the ellipse with the specified green border
@@ -273,7 +273,7 @@ class DrawingWidget(QWidget):
                 int(radius),
             )
 
-            
+
 
         painter.setPen(QPen(QColor("#000"), 1))
 
@@ -307,7 +307,7 @@ class DrawingWidget(QWidget):
             self.main_.small_circle_recticon = QIcon(microphone_icon_path)
             self.main_.small_circle_recticon.paint(painter, icon_rect)
 
-            
+
             small_center_x = 30
             small_center_y = 60
             small_radius = 30
@@ -421,10 +421,10 @@ class DrawingWidget(QWidget):
                         if self.main_.state == "aitalking":
                             self.main_.manuel_stop = True
                             self.main_.stop_talking = True
-                                
+
                         else:
                             if llm_settings[load_model_settings()]["vision"] == True:
-                                
+
                                 self.main_.button_handler.toggle_recording(dont_save_image=True)
                             else:
                                 self.main_.button_handler.toggle_recording(no_screenshot=True)
@@ -436,31 +436,31 @@ class DrawingWidget(QWidget):
                                 if self.main_.state == "aitalking":
                                     self.main_.manuel_stop = True
                                     self.main_.stop_talking = True
-                                        
+
                                 else: 
                                     self.main_.button_handler.toggle_recording(no_screenshot=True)
                 except:
                     pass
 
                 try:
-         
+
                             if self.main_.small_circle_left.contains(event.pos()):
                                 if self.main_.state == "aitalking":
                                     self.main_.manuel_stop = True
                                     self.main_.stop_talking = True
-                                        
+
                                 else:                                 
                                     self.main_.button_handler.toggle_recording(take_system_audio=True)
                 except:
                     pass
 
                 try:
-                                         
+
                             if self.main_.small_circle_left_top.contains(event.pos()):
                                 if self.main_.state == "aitalking":
                                     self.main_.manuel_stop = True
                                     self.main_.stop_talking = True
-                                        
+
                                 else:   
                                     self.main_.button_handler.just_screenshot()
                 except:
@@ -514,7 +514,7 @@ class MainWindow(QMainWindow):
         try:
             font_id = QtGui.QFontDatabase.addApplicationFont(font_dir)
 
-        
+
             font_family = QtGui.QFontDatabase.applicationFontFamilies(font_id)[0]
             self.setFont(QtGui.QFont(font_family))
         except:
@@ -564,7 +564,7 @@ class MainWindow(QMainWindow):
 
         self.manuel_stop = False    
 
-        
+
         self.border_animation = None
 
     def init_border_animation(self):
@@ -630,7 +630,7 @@ class MainWindow(QMainWindow):
 
 
                 tts_if_you_can(random_accept_words(), not_threaded=True)
-                
+
 
                 def trigger_wake_word():
                     if is_wake_word_screen_setting_active() and llm_settings[load_model_settings()]["vision"]:
@@ -646,7 +646,7 @@ class MainWindow(QMainWindow):
                     print("Stop talking")
                 else:
                     trigger_wake_word()
-            
+
 
 
 
@@ -681,7 +681,7 @@ class MainWindow(QMainWindow):
         self.llmsettingsButton.setStyleSheet(self.llmsettingsButton_style+"background-color: #FFFFFF; color: black; ")
 
 
-    
+
 
 
     def collapse_window(self):
@@ -692,7 +692,7 @@ class MainWindow(QMainWindow):
         self.send_button.hide()
         self.window().setFixedSize(self.width(), 140)        
 
-        
+
 
     def initUI(self):
         self.setWindowTitle("GPT")
@@ -767,7 +767,7 @@ class MainWindow(QMainWindow):
 
 
 
-        
+
 
         self.layout = layout
 
@@ -799,7 +799,7 @@ class MainWindow(QMainWindow):
 
         input_box = CustomTextEdit(self)
         self.input_box = input_box
-        
+
 
         input_box.setFixedHeight(40)
 
@@ -921,7 +921,7 @@ class MainWindow(QMainWindow):
             title_bar_text = f"  {title_bar_text}"
             if len(title_bar_text) > 33:
                 title_bar_text = title_bar_text[:30] + "..."
-        
+
         if self.worker_2.title_bar_text != None:
             if self.worker_2.title_bar_text != title_bar_text:
                 return
@@ -969,7 +969,7 @@ class MainWindow(QMainWindow):
         if self.manuel_stop:
             assistant_stopped = False
             self.manuel_stop = False
-        
+
 
 
         self.state = new_state
@@ -1007,4 +1007,4 @@ class MainWindow(QMainWindow):
         self.pulse_frame = (self.pulse_frame + 1) % 100
         self.update()
 
-                        
+

@@ -33,7 +33,7 @@ def input():
     else:
         the_main_window.button_handler.input_text_screenshot(text)
 
-    
+
     while the_input_box.toPlainText() == firsst_text:
         time.sleep(0.3)
 

@@ -60,7 +60,7 @@ def tts_if_you_can(text:str, not_threaded=False, status_edit=False):
                 play_audio()
     except Exception as e:
         pass
-        
+
 
 
 
@@ -123,7 +123,7 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
                         or the_input_box.toPlainText() == last_ai_response
                     ):
                         the_main_window.update_from_thread(llm_output, system=False)
-   
+
 
                 def play_audio():
                     from ..gpt_computer_assistant import the_input_box, the_main_window
@@ -153,7 +153,7 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
 
                 def play_text():
                     from ..gpt_computer_assistant import the_input_box, the_main_window
-            
+
                     the_main_window.update_from_thread(llm_output, system=False)
                     signal_handler.assistant_response_stopped.emit()
 
@@ -180,7 +180,7 @@ def process_screenshot():
             from ..audio.record import audio_data, the_input_box_pre
 
             llm_input =  "I just take a screenshot. for you to remember. Just say ok."
-            
+
 
             if (
                         the_input_box_pre != ""
@@ -224,7 +224,7 @@ def process_screenshot():
                         or the_input_box.toPlainText() == last_ai_response
                     ):
                         the_main_window.update_from_thread(llm_output, system=False)
-                        
+
 
                 def play_audio():
                     from ..gpt_computer_assistant import the_input_box, the_main_window
@@ -301,7 +301,7 @@ def process_text(text, screenshot_path=None):
                 def play_text():
                     from ..gpt_computer_assistant import the_input_box, the_main_window
                     global last_ai_response
-                    
+
                     if (
                         the_input_box.toPlainText() == ""
                         or the_input_box.toPlainText().startswith("System:")
@@ -310,7 +310,7 @@ def process_text(text, screenshot_path=None):
 
                         the_main_window.update_from_thread(llm_output, system=False)
                         the_main_window.manuel_stop = True
-                        
+
 
                 if load_api_key() != "CHANGE_ME":
                     response_path = text_to_speech(llm_output)

@@ -6,7 +6,7 @@ except ImportError:
     from utils.db import *
     from agent.chat_history import clear_chat_history
     from llm_settings import llm_show_name, llm_settings
-    
+
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton
 from PyQt5.QtCore import Qt, QTimer, QRect, pyqtSignal, QObject
 from PyQt5.QtWidgets import QComboBox, QLabel

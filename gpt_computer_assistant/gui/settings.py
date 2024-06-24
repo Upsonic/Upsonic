@@ -134,9 +134,9 @@ def settings_popup(self):
             def activate_dark_mode_():
                 """
                 Activate dark mode and update the main window.
-    
+
                 This function activates dark mode and updates the main window with a notification.
-    
+
                 Returns:
                 - None
                 """
@@ -144,7 +144,7 @@ def settings_popup(self):
                 the_main_window.update_from_thread("Enabled Dark Mode")
                 the_main_window.dark_mode()
                 settings_dialog.close()
-    
+
             dark_mode_button.clicked.connect(activate_dark_mode_)
 
 
@@ -166,12 +166,12 @@ def settings_popup(self):
 
             predefined_agents_button.clicked.connect(deactivate_predefined_agents_)
         else:
-                
+
                 def activate_predefined_agents_():
                     activate_predefined_agents_setting()
                     the_main_window.update_from_thread("Enabled Predefined Agents (Good Results, Long Response Time)")
                     settings_dialog.close()
-        
+
                 predefined_agents_button.clicked.connect(activate_predefined_agents_)
 
     except:
@@ -196,12 +196,12 @@ def settings_popup(self):
 
         online_tools_button.clicked.connect(deactivate_online_tools_)
     else:
-            
+
             def activate_online_tools_():
                 activate_online_tools_setting()
                 the_main_window.update_from_thread("Enabled Upsonic Tiger Tools - More Capability (Recommended)")
                 settings_dialog.close()
-    
+
             online_tools_button.clicked.connect(activate_online_tools_)
 
 
@@ -222,12 +222,12 @@ def settings_popup(self):
 
         auto_stop_recording_button.clicked.connect(deactivate_auto_stop_recording_)
     else:
-            
+
             def activate_auto_stop_recording_():
                 activate_auto_stop_recording_setting()
                 the_main_window.update_from_thread("Enabled Auto Stop Recording")
                 settings_dialog.close()
-    
+
             auto_stop_recording_button.clicked.connect(activate_auto_stop_recording_)
 
 
@@ -288,14 +288,14 @@ def settings_popup(self):
 
             wake_word_button.clicked.connect(deactivate_wake_word_)
         else:
-                
+
                 def activate_wake_word_():
                     activate_wake_word()
                     the_main_window.update_from_thread("Enabled Wake Word")
                     the_main_window.wake_word_active = True
                     the_main_window.wake_word_trigger()
                     settings_dialog.close()
-        
+
                 wake_word_button.clicked.connect(activate_wake_word_)
 
 
@@ -316,12 +316,12 @@ def settings_popup(self):
 
         wake_word_screen_button.clicked.connect(deactivate_auto_stop_recording_)
     else:
-            
+
             def activate_auto_stop_recording_():
                 activate_wake_word_screen_setting()
                 the_main_window.update_from_thread("Enabled Screen Input for Wake Word Mode")
                 settings_dialog.close()
-    
+
             wake_word_screen_button.clicked.connect(activate_auto_stop_recording_)
 
 
@@ -341,12 +341,12 @@ def settings_popup(self):
 
         continuously_conversations_button.clicked.connect(deactivate_auto_stop_recording_)
     else:
-            
+
             def activate_auto_stop_recording_():
                 activate_continuously_conversations_setting()
                 the_main_window.update_from_thread("Enabled Continuously Conversations")
                 settings_dialog.close()
-    
+
             continuously_conversations_button.clicked.connect(activate_auto_stop_recording_)
 
     settings_dialog.exec_()

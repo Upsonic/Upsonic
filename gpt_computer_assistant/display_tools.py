@@ -26,7 +26,7 @@ def click_on_a_text_on_the_screen_(text:str, click_type: str = "singular") -> bo
 
 
         from interpreter import OpenInterpreter
-        
+
 
 
 
@@ -79,7 +79,7 @@ def move_on_a_text_on_the_screen_(text:str) -> bool:
 
 
         from interpreter import OpenInterpreter
-        
+
 
 
 
@@ -130,7 +130,7 @@ def click_on_a_icon_on_the_screen_(icon_name:str, click_type: str = "singular") 
 
 
         from interpreter import OpenInterpreter
-        
+
 
         screenshot = pyautogui.screenshot()
 
@@ -172,7 +172,7 @@ def move_on_a_icon_on_the_screen_(icon_name:str,) -> bool:
 
 
         from interpreter import OpenInterpreter
-        
+
 
         screenshot = pyautogui.screenshot()
 

@@ -37,7 +37,7 @@ def split_text_to_sentences(text, max_chunk_size=300):
     sentences = text.split('.')
     chunks = []
     current_chunk = ""
-    
+
     for sentence in sentences:
         sentence = sentence.strip()
         if len(current_chunk) + len(sentence) + 1 <= max_chunk_size:
@@ -45,20 +45,20 @@ def split_text_to_sentences(text, max_chunk_size=300):
         else:
             chunks.append(current_chunk.strip())
             current_chunk = sentence + '. '
-    
+
     if current_chunk:
         chunks.append(current_chunk.strip())
-    
+
     return chunks
 
 def text_to_speech(text):
     text_chunks = split_text_to_sentences(text)
-    
+
     threads = []
     results = [None] * len(text_chunks)
-    
+
     initial_voice = random.choice(supported_openai_speakers)
-    
+
     for i, chunk in enumerate(text_chunks):
         voice = initial_voice if i % 2 == 0 else random_model(initial_voice)  # Alternate voices
         thread = threading.Thread(
@@ -67,10 +67,10 @@ def text_to_speech(text):
         )
         threads.append(thread)
         thread.start()
-    
+
     for thread in threads:
         thread.join()
-    
+
     mp3_files = [result for result in results if result is not None]
 
     return mp3_files

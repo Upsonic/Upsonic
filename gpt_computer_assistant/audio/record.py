@@ -77,12 +77,12 @@ def start_recording(take_system_audio, buttonhandler):
             global audio_data, recording, silence_start_time, auto_stop_recording
             current_level = np.max(np.abs(indata))
 
-            
+
             # Add the current level to the queue
             if audio_levels.full():
                 audio_levels.get()  # Remove the oldest level if the queue is full
             audio_levels.put(current_level)
-            
+
             # Calculate dynamic threshold based on recent audio levels
             dynamic_threshold = calculate_dynamic_threshold()
 
