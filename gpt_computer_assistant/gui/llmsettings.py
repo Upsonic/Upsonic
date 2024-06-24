@@ -9,7 +9,7 @@ except ImportError:
 
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QComboBox, QLabel
+from PyQt5.QtWidgets import QComboBox, 
 
 from gpt_computer_assistant.utils.db import save_openai_url, save_groq_api_key
 
@@ -177,12 +177,10 @@ def llmsettings_popup(self):
         show_google()
 
     if not llm_settings[llm_show_name[model_select.currentText()]]["transcription"]:
-        from ..gpt_computer_assistant import the_main_window
 
         the_main_window.remove_painting()
 
     if not llm_settings[llm_show_name[model_select.currentText()]]["vision"]:
-        from ..gpt_computer_assistant import the_main_window
 
         the_main_window.remove_screenshot_button()
 

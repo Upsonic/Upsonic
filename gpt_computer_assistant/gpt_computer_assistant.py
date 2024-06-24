@@ -43,19 +43,15 @@ from PyQt5.QtWidgets import QShortcut
 from PyQt5.QtWidgets import QSpacerItem, QSizePolicy
 
 from PyQt5.QtWidgets import (
-    QMainWindow,
-    QVBoxLayout,
-    QWidget,
     QPushButton,
     QLabel,
     QHBoxLayout,
 )
-from PyQt5.QtCore import Qt, QPoint
+from PyQt5.QtCore import QPoint
 
-from PyQt5.QtWidgets import QVBoxLayout, QLabel, QPushButton, QTextEdit
+from PyQt5.QtWidgets import QTextEdit
 from PyQt5 import QtGui
-from PyQt5.QtGui import QIcon
-from PyQt5.QtCore import QThread, pyqtSignal, Qt
+from PyQt5.QtCore import QThread, 
 
 
 print("Imported all libraries")
