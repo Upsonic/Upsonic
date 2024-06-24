@@ -4,6 +4,7 @@ import os
 import sys
 import re
 import logging
+import shlex
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -92,7 +93,7 @@ def create_tag(version):
     Args:
         version (str): The version number for the git tag.
     """
-    os.system(f"git tag v{version}")
+    os.system(f"git tag v{shlex.quote(version)}")
 
 
 def create_commit(version):
@@ -104,7 +105,7 @@ def create_commit(version):
         version (str): Version number included in the commit message.
     """
     os.system("git add .")
-    os.system(f"git commit -m 'Changed version number with v{version}'")
+    os.system(f"git commit -m 'Changed version number with v{shlex.quote(version)}'")
 
 
 def push():
