@@ -1,6 +1,5 @@
 import os
 import uuid
-import getpass
 from dotenv import load_dotenv
 
 load_dotenv(".env")

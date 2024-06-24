@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton
-from PyQt5.QtCore import Qt, pyqtSignal, QObject
+from PyQt5.QtCore import Qt
 from ..utils.db import *
 from ..agent.chat_history import clear_chat_history
 
@@ -16,7 +16,7 @@ def settings_popup(self):
     Returns:
     - None
     """
-    from ..gpt_computer_assistant import the_input_box, the_main_window
+    from ..gpt_computer_assistant import the_main_window
 
     settings_dialog = QDialog()
     settings_dialog.setWindowTitle("Settings")

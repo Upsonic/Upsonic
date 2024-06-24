@@ -14,9 +14,6 @@ except ImportError:
     from teams import *
 
 
-from langgraph.checkpoint.sqlite import SqliteSaver
-
-
 from langchain.agents import AgentExecutor, create_json_chat_agent
 
 

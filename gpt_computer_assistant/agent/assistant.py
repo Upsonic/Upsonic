@@ -1,4 +1,3 @@
-import base64
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 from .chat_history import *

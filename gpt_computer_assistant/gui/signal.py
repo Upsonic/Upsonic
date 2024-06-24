@@ -1,4 +1,4 @@
-from PyQt5.QtCore import Qt, QTimer, QRect, pyqtSignal, QObject
+from PyQt5.QtCore import pyqtSignal, QObject
 
 
 

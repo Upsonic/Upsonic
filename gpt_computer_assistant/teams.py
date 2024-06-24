@@ -1,5 +1,4 @@
 from langchain.tools import tool
-import traceback
 
 try:
     from .utils.db import load_api_key

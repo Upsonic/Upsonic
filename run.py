@@ -1,4 +1,4 @@
-from gpt_computer_assistant import start, Tool
+from gpt_computer_assistant import start
 
 
 

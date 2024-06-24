@@ -1,8 +1,6 @@
 # Create a python api and start_api function via flask
 
 from flask import Flask, request, jsonify
-import os
-import sys
 import threading
 import time
 

@@ -28,7 +28,6 @@ from pygame import mixer
 
 
 import time
-import random
 
 last_ai_response = None
 user_id = load_user_id()

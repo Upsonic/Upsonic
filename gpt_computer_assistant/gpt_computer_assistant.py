@@ -31,31 +31,18 @@ except ImportError:
     from gui.llmsettings import llmsettings_popup
     from utils.telemetry import my_tracer, os_name
     from audio.wake_word import wake_word
-
-
-import hashlib
-import sys
 import threading
-import base64
 import time
 import random
-import numpy as np
-import sounddevice as sd
-import soundfile as sf
-
-from pygame import mixer
 import math
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
-from PyQt5.QtGui import QMouseEvent, QPainter, QPen, QBrush, QIcon, QPixmap, QColor
-from PyQt5.QtCore import Qt, QTimer, QRect, pyqtSignal, QObject, pyqtSlot
+from PyQt5.QtGui import QMouseEvent, QPainter, QPen, QBrush, QIcon, QColor
+from PyQt5.QtCore import Qt, QTimer, QRect, pyqtSignal
 from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import QShortcut
-import os
-import scipy.io.wavfile as wavfile
 from PyQt5.QtWidgets import QSpacerItem, QSizePolicy
 
 from PyQt5.QtWidgets import (
-    QApplication,
     QMainWindow,
     QVBoxLayout,
     QWidget,
@@ -65,8 +52,8 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QPoint
 
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QTextEdit
-from PyQt5 import QtWidgets, QtGui
+from PyQt5.QtWidgets import QVBoxLayout, QLabel, QPushButton, QTextEdit
+from PyQt5 import QtGui
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import QThread, pyqtSignal, Qt
 
@@ -491,7 +478,7 @@ class DrawingWidget(QWidget):
                 pass
 
 
-from PyQt5.QtCore import QPropertyAnimation, QVariantAnimation
+from PyQt5.QtCore import QVariantAnimation
 
 class MainWindow(QMainWindow):
     api_enabled = False

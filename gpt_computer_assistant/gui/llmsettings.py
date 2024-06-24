@@ -8,14 +8,14 @@ except ImportError:
     from llm_settings import llm_show_name, llm_settings
 
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton
-from PyQt5.QtCore import Qt, QTimer, QRect, pyqtSignal, QObject
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QComboBox, QLabel
 
 from gpt_computer_assistant.utils.db import save_openai_url, save_groq_api_key
 
 
 def llmsettings_popup(self):
-    from ..gpt_computer_assistant import the_input_box, the_main_window
+    from ..gpt_computer_assistant import the_main_window
 
     # Create a settings dialog and inside of it create a text input about openai_api_key and a button to save it
     settings_dialog = QDialog()

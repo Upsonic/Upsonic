@@ -34,7 +34,6 @@ except ImportError:
         get_profile,
     )
     from screen.shot import take_screenshot
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton
 
 recording_thread = None
 
