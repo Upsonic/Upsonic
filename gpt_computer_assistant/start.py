@@ -1,4 +1,5 @@
 import os
+import sys
 
 def start(api=False):
     """
@@ -41,9 +42,9 @@ def start(api=False):
 
 
     try:
-        from .gpt_computer_assistant import QApplication, MainWindow, sys
+        from .gpt_computer_assistant import QApplication, MainWindow
     except ImportError:
-        from gpt_computer_assistant import QApplication, MainWindow, sys
+        from gpt_computer_assistant import QApplication, MainWindow
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
 
     if api or api_arg:
