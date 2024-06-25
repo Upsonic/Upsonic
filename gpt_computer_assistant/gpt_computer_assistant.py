@@ -146,7 +146,7 @@ class Worker_2(QThread):
         while True:
             self.msleep(500)  # Simulate a time-consuming task
 
-            if self.the_input_text and (self.prev == None or self.prev != self.the_input_text):
+            if self.the_input_text and (self.prev is None or self.prev != self.the_input_text):
                 self.prev = self.the_input_text
                 self.text_to_set.emit("True")
                 for i in range(len(self.title_bar_text)):
@@ -179,7 +179,7 @@ class DrawingWidget(QWidget):
 
 
 
-        if llm_settings[load_model_settings()]["vision"] == True:
+        if llm_settings[load_model_settings()]["vision"] is True:
             self.main_.screen_available = True
         else:
             self.main_.screen_available = False
@@ -406,7 +406,7 @@ class DrawingWidget(QWidget):
                             self.main_.stop_talking = True
 
                         else:
-                            if llm_settings[load_model_settings()]["vision"] == True:
+                            if llm_settings[load_model_settings()]["vision"] is True:
 
                                 self.main_.button_handler.toggle_recording(dont_save_image=True)
                             else:
@@ -564,7 +564,7 @@ class MainWindow(QMainWindow):
 
     def start_border_animation(self, status):
         print("FUNCTION TRİGGERED")
-        if self.border_animation == None:
+        if self.border_animation is None:
             self.border_animation = self.init_border_animation()
 
         status = status.lower() == "true"
@@ -817,7 +817,7 @@ class MainWindow(QMainWindow):
         self.screenshot_button.clicked.connect(input_box_send_screenshot)
 
 
-        if llm_settings[load_model_settings()]["vision"] == False:
+        if llm_settings[load_model_settings()]["vision"] is False:
             self.screenshot_button.hide()
 
 
@@ -881,12 +881,12 @@ class MainWindow(QMainWindow):
 
 
     def active_border_animation(self, title_bar_text = None):
-        if self.worker_2.title_bar_text != None:
+        if self.worker_2.title_bar_text is not None:
             if self.worker_2.title_bar_text != title_bar_text:
                 return
 
         self.worker_2.the_input_text = True
-        if title_bar_text == None:
+        if title_bar_text is None:
             title_bar_text = "  GPT Computer Assistant"
         else:
             title_bar_text = f"  {title_bar_text}"
@@ -898,14 +898,14 @@ class MainWindow(QMainWindow):
         self.btn_close.hide()
     def deactive_border_animation(self, title_bar_text=None):
 
-        if title_bar_text == None:
+        if title_bar_text is None:
             title_bar_text = "  GPT Computer Assistant"
         else:
             title_bar_text = f"  {title_bar_text}"
             if len(title_bar_text) > 33:
                 title_bar_text = title_bar_text[:30] + "..."
 
-        if self.worker_2.title_bar_text != None:
+        if self.worker_2.title_bar_text is not None:
             if self.worker_2.title_bar_text != title_bar_text:
                 return
 

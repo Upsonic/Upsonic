@@ -214,7 +214,7 @@ def assistant(
 
 
 
-    if dont_save_image and screenshot_path != None:
+    if dont_save_image and screenshot_path is not None:
         currently_messages = get_chat_message_history().messages
         if take_screenshot:
             last_message = currently_messages[-1].content[0]

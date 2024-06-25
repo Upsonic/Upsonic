@@ -200,7 +200,7 @@ def llmsettings_popup(self):
 
 
 
-        if llm_settings[llm_show_name[model_select.currentText()]]["transcription"] == False: 
+        if llm_settings[llm_show_name[model_select.currentText()]]["transcription"] is False: 
             from ..gpt_computer_assistant import the_main_window
 
             the_main_window.remove_painting()
