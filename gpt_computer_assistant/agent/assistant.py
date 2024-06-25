@@ -44,7 +44,7 @@ def agentic(
 
     def image_explaination():
         the_message = [
-            {"type": "text", "text": f"Explain the image"},
+            {"type": "text", "text": "Explain the image"},
         ]
 
         if screenshot_path:

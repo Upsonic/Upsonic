@@ -572,7 +572,7 @@ class MainWindow(QMainWindow):
             self.border_animation.start()
         else:
             self.border_animation.stop()
-            self.title_bar.setStyleSheet(f"background-color: #2E2E2E; color: white; border-style: solid; border-radius: 15px; border-width: 0px; color: #fff;")
+            self.title_bar.setStyleSheet("background-color: #2E2E2E; color: white; border-style: solid; border-radius: 15px; border-width: 0px; color: #fff;")
 
 
 
