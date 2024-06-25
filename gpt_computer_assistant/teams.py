@@ -4,10 +4,14 @@ try:
     from .utils.db import load_api_key
     from .llm import get_model
     from .top_bar_wrapper import wrapper
+    from .agent.agent_tools import get_tools
 except ImportError:
     from utils.db import load_api_key
     from llm import get_model
     from top_bar_wrapper import wrapper
+    from agent.agent_tools import get_tools
+
+
 
 @wrapper
 def search_on_internet_and_report_team_(the_subject:str, copy_to_clipboard: bool=False) -> str:
@@ -26,7 +30,7 @@ def search_on_internet_and_report_team_(the_subject:str, copy_to_clipboard: bool
 
     from crewai import Task, Crew, Agent
 
-    from .agent.agent import get_tools
+    
     tools = get_tools()
 
     the_tool_list = []
@@ -188,7 +192,7 @@ def generate_code_with_aim_team_(aim: str, copy_to_clipboard: bool = False) -> s
 
         from crewai import Task, Crew, Agent
 
-        from .agent.agent import get_tools
+
         tools = get_tools()
 
         the_tool_list = []

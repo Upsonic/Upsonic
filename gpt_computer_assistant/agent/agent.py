@@ -5,6 +5,7 @@ try:
     from ..tooler import *
     from ..display_tools import *
     from ..teams import *
+    from .agent_tools import get_tools
 except ImportError:
     from llm import get_model
     from utils.db import *
@@ -12,6 +13,7 @@ except ImportError:
     from tooler import *
     from display_tools import *
     from teams import *
+    from agent_tools import get_tools
 
 
 from langchain.agents import AgentExecutor, create_json_chat_agent
@@ -23,21 +25,6 @@ from langgraph.prebuilt import chat_agent_executor
 custom_tools = []
 
 
-
-def load_tiger_tools():
-    try:
-        from upsonic import Tiger
-        tools = Tiger()
-        tools.enable_auto_requirements = True
-        tools = tools.langchain()
-        return tools
-    except:
-        return False
-
-
-def load_default_tools():
-    from ..standard_tools import get_standard_tools
-    return get_standard_tools()
 
 
 prompt_cache = {}
@@ -54,26 +41,6 @@ def get_prompt(name):
         prompt_cache[name] = prompt
         return prompt
 
-
-cached_tiger_tools = None
-
-def get_tiger_tools():
-    global cached_tiger_tools
-    if cached_tiger_tools is None:
-        cached_tiger_tools = load_tiger_tools()
-    return cached_tiger_tools
-
-if is_online_tools_setting_active():
-    get_tiger_tools()
-
-def get_tools():
-    if is_online_tools_setting_active():
-        tools = get_tiger_tools()
-        if not tools:
-            tools = load_default_tools()
-    else:
-        tools = load_default_tools()
-    return tools
 
 
 def get_agent_executor():
@@ -111,21 +78,3 @@ def get_agent_executor():
         )
 
 
-
-
-
-"""
-from langchain.agents import Tool
-from langchain_experimental.utilities import PythonREPL
-python_repl = PythonREPL()
-# You can create the tool to pass to an agent
-repl_tool = Tool(
-    name="python_repl",
-    description="A Python shell. Use this to execute python commands. Input should be a valid python command. If you want to see the output of a value, you should print it out with `print(...)`.",
-    func=python_repl.run,
-)
-
-from langgraph.prebuilt import chat_agent_executor
-def get_agent_executor():
-    return chat_agent_executor.create_tool_calling_executor(get_model(), [repl_tool])
-"""
