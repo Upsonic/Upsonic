@@ -7,10 +7,11 @@ from urllib.parse import urljoin
 from .tooler import tool
 from .top_bar_wrapper import wrapper
 
-_standard_tools_ = []
+_standard_tools_ = {}
 
 def register_tool(func):
-    _standard_tools_.append(tool(func))
+    if func.__name__ not in _standard_tools_:
+        _standard_tools_[func.__name__] = tool(func)
     return func
 @wrapper
 def read_website(url: str, max_content_length: int = 5000) -> dict:
@@ -93,10 +94,7 @@ def duckduckgo(query: str, max_number: int = 20) -> list:
         return [result["href"] for result in DDGS().text(query, max_results=max_number)]
     except:
         return "An exception occurred"
-        from duckduckgo_search import DDGS
-        return [result["href"] for result in DDGS().text(query, max_results=max_number)]
-    except:
-        return "An exception occurred"
+
 
 
 
@@ -209,16 +207,10 @@ def app_close(app_name: str) -> bool:
             close(app_name)
         except:
             return False
-        from AppOpener import close
-        close(app_name, throw_error=True)
-        return True
-    except:
-        try:
-            from MacAppOpener import open
-            close(app_name)
-        except:
-            return False
+
 
 
 def get_standard_tools():
-    return _standard_tools_
+    print("Tool len", len(_standard_tools_))
+    last_list = [_standard_tools_[each] for each in _standard_tools_]
+    return last_list
