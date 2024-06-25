@@ -13,6 +13,7 @@ def register_tool(func):
     if func.__name__ not in _standard_tools_:
         _standard_tools_[func.__name__] = tool(func)
     return func
+@register_tool
 @wrapper
 def read_website(url: str, max_content_length: int = 5000) -> dict:
     """
@@ -65,9 +66,8 @@ def read_website(url: str, max_content_length: int = 5000) -> dict:
     return {"meta": meta, "title": title, "content": content, "sub_links": links}
 
 
-
-@wrapper
 @register_tool
+@wrapper
 def google(query: str, max_number: int = 20) -> list:
     """
     Search the query on Google and return the results.
@@ -75,16 +75,12 @@ def google(query: str, max_number: int = 20) -> list:
     try:
         from googlesearch import search as gsearch
         return list(gsearch(query, stop=max_number))
-    except ImportError:
-        return {"error": "Google search library not found."}
-        from googlesearch import search as gsearch
-        return list(gsearch(query, stop=max_number))
     except:
         return "An exception occurred"    
 
 
-@wrapper
 @register_tool
+@wrapper
 def duckduckgo(query: str, max_number: int = 20) -> list:
     """
     Search the query on DuckDuckGo and return the results.
@@ -97,9 +93,8 @@ def duckduckgo(query: str, max_number: int = 20) -> list:
 
 
 
-
-@wrapper
 @register_tool
+@wrapper
 def copy(text: str):
     """
     Copy the text to the clipboard.
@@ -109,9 +104,8 @@ def copy(text: str):
     pyperclip.copy(text)
 
 
-
-@wrapper
 @register_tool
+@wrapper
 def open_url(url) -> bool:
     """
     Open the URL in the default web browser.
@@ -127,8 +121,8 @@ def open_url(url) -> bool:
         return False
         return False
 
-@wrapper
 @register_tool
+@wrapper
 def sleep(seconds: int):
     """
     Sleep for the given number of seconds.
@@ -138,9 +132,8 @@ def sleep(seconds: int):
 
 
 
-
-@wrapper
 @register_tool
+@wrapper
 def keyboard_write(text: str):
     """
     Write the text using the keyboard.
@@ -148,9 +141,8 @@ def keyboard_write(text: str):
     import pyautogui
     pyautogui.write(text)
 
-
-@wrapper
 @register_tool
+@wrapper
 def keyboard_press(key: str):
     """
     Press the key using the keyboard.
@@ -165,17 +157,16 @@ from langchain_experimental.utilities import PythonREPL
 
 the_py_client = PythonREPL()
 
-@wrapper
 @register_tool
+@wrapper
 def python_repl(code: str) -> str:
     """
     Run and return the given python code in python repl
     """
     return the_py_client.run(code)
 
-
-@wrapper
 @register_tool
+@wrapper
 def app_open(app_name: str) -> bool:
     """
     Opens the native apps.
@@ -191,8 +182,8 @@ def app_open(app_name: str) -> bool:
         except:
             return False
 
-@wrapper
 @register_tool
+@wrapper
 def app_close(app_name: str) -> bool:
     """
     Closes the native apps.
