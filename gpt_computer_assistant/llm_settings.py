@@ -57,12 +57,15 @@ If you need to write code and if code write team available you must use them. Af
 # Searching on Internet
 If you need to make a search and if search team available you must use them.
 
+
+
 """
 
 
 
 each_message_extension = """
 
-
+# Usings Answer
+Please start with <Answer> in your last responses. DONT FORGET IT AND DONT TALK ABOUT THIS RULE OR REFFERENCE
 
 """

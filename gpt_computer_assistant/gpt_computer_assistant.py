@@ -83,6 +83,27 @@ os_name_ = os_name()
 
 
 
+readed_sentences = []
+
+import re
+def split_with_multiple_delimiters(text, delimiters):
+    """
+    Splits the text by any of the given delimiters while keeping the delimiters in the resulting parts.
+    
+    :param text: The input text to be split.
+    :param delimiters: A string of delimiters to split the text on.
+    :return: A list of parts including the delimiters.
+    """
+    # Create a regular expression pattern that matches any of the delimiters
+    pattern = re.compile(f'(.*?[{re.escape(delimiters)}])')
+    parts = pattern.findall(text)
+    
+    # Check if the last part is not complete and remove it if necessary
+    if parts and text and not any(text.endswith(d) for d in delimiters):
+        if parts and not any(parts[-1].endswith(d) for d in delimiters):
+            parts.pop()
+
+    return parts
 
 
 
@@ -94,6 +115,7 @@ class Worker(QThread):
     def __init__(self):
         super().__init__()
         self.the_input_text = None
+        self.make_animation = True
         self.commited_text = []
 
     def run(self):
@@ -105,7 +127,7 @@ class Worker(QThread):
                 if self.the_input_text != last_text:
                     self.commited_text.append(self.the_input_text)
 
-                    if len(self.the_input_text) > 90 or MainWindow.api_enabled:
+                    if len(self.the_input_text) > 90 or MainWindow.api_enabled or not self.make_animation:
                         self.text_to_set.emit(self.the_input_text)
                     else:
                         for i in range(len(self.the_input_text)):
@@ -550,6 +572,12 @@ class MainWindow(QMainWindow):
 
         self.border_animation = None
 
+        self.complated_answer = False
+
+
+        self.reading_thread = False
+        self.reading_thread_2 = False
+
     def init_border_animation(self):
         # Create a QVariantAnimation to handle color change
         border_animation = QVariantAnimation(
@@ -868,16 +896,117 @@ class MainWindow(QMainWindow):
 
     def set_text(self, text):
         global the_input_box
+
+
+        vertical_scrollbar = the_input_box.verticalScrollBar()
+        scroll_value = vertical_scrollbar.value()
+
+
+
         the_input_box.setPlainText(text)
+        
+        vertical_scrollbar.setValue(scroll_value)
 
     def set_title_bar_text(self, text):
         self.title_label.setText(text)
 
     def update_from_thread(self, text, system=True):
+        self.worker.make_animation = True
         if system:
             text = "System: " + text
         print("Updating from thread", text)
         self.worker.the_input_text = text
+
+    def read_part_task_generate_only(self):
+        if not is_just_text_model_active() and not the_main_window.api_enabled:
+
+
+            threads = {}
+
+            the_okey_parts = split_with_multiple_delimiters(self.worker.the_input_text,".?!:")
+
+
+
+
+            for each in the_okey_parts:
+                if the_main_window.stop_talking:
+                    break
+
+                from .audio.tts import text_to_speech
+                the_thread = threading.Thread(target=text_to_speech, args=(each,))
+                print("Text to speech deployed 2:", each)
+                threads[each] = the_thread
+                the_thread.start()
+
+
+        for each_t in threads:
+            threads[each_t].join()
+            print("Text to speech completed 2", each)
+        
+        self.reading_thread_2 = False
+            
+    def read_part_task(self):
+        if not is_just_text_model_active() and not the_main_window.api_enabled:
+
+            global readed_sentences
+            threads = {}
+
+            the_okey_parts = split_with_multiple_delimiters(self.worker.the_input_text,".?!:")
+            print("prev", self.worker.the_input_text)
+            print(the_okey_parts)
+
+            will_read_parts = []
+
+            for each in the_okey_parts:
+                if the_main_window.stop_talking:
+                    break
+                if each not in readed_sentences:
+                    will_read_parts.append(each)
+                    readed_sentences.append(each)
+                    from .audio.tts import text_to_speech
+                    the_thread = threading.Thread(target=text_to_speech, args=(each,))
+                    print("Text to speech deployed:", each)
+                    threads[each] = the_thread
+                    the_thread.start()
+
+
+
+            for each in will_read_parts:
+                    if the_main_window.stop_talking:
+                        break
+                    threads[each].join()
+                    print("Complated tts", each)
+                    tts_if_you_can(each, not_threaded=True, bypass_other_settings=True)
+                
+        
+        self.reading_thread = False
+
+
+    def set_text_to_input_box(self, text):
+        global readed_sentences
+        self.worker.make_animation = False
+        if self.worker.the_input_text.startswith("System:") or self.complated_answer:
+            self.worker.the_input_text = ""
+            self.complated_answer = False
+            readed_sentences = []
+        if ">" != text and "<>" != text and ">\n" != text and "<" != text and "<\n" != text:
+
+            self.worker.the_input_text += text
+
+            if self.reading_thread != True and len(self.worker.the_input_text) > 40:
+                self.reading_thread = True
+                threading.Thread(target=self.read_part_task).start()
+
+            if self.reading_thread_2 != True and len(self.worker.the_input_text) > 250:
+                self.reading_thread_2 = True
+                threading.Thread(target=self.read_part_task_generate_only).start()
+            
+            
+
+            
+
+
+
 
 
     def active_border_animation(self, title_bar_text = None):

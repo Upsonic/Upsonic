@@ -10,7 +10,7 @@ import hashlib
 import random
 import threading
 
-supported_openai_speakers = ["fable", "nova"]
+supported_openai_speakers = ["fable"]
 
 def random_model(exclude):
     models = supported_openai_speakers.copy()
