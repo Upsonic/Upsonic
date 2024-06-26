@@ -1,6 +1,5 @@
 """Callback Handler streams to stdout on new llm token."""
 from langchain.callbacks.streaming_stdout_final_only import FinalStreamingStdOutCallbackHandler
-import sys
 from typing import Any, Dict, List, Optional
 
 class customcallback(FinalStreamingStdOutCallbackHandler):

@@ -89,7 +89,7 @@ import re
 def split_with_multiple_delimiters(text, delimiters):
     """
     Splits the text by any of the given delimiters while keeping the delimiters in the resulting parts.
-    
+
     :param text: The input text to be split.
     :param delimiters: A string of delimiters to split the text on.
     :return: A list of parts including the delimiters.
@@ -97,11 +97,15 @@ def split_with_multiple_delimiters(text, delimiters):
     # Create a regular expression pattern that matches any of the delimiters
     pattern = re.compile(f'(.*?[{re.escape(delimiters)}])')
     parts = pattern.findall(text)
-    
+
     # Check if the last part is not complete and remove it if necessary
-    if parts and text and not any(text.endswith(d) for d in delimiters):
-        if parts and not any(parts[-1].endswith(d) for d in delimiters):
-            parts.pop()
+    if (
+        parts and text
+        and not any(text.endswith(d) for d in delimiters)
+        and parts
+        and not any(parts[-1].endswith(d) for d in delimiters)
+    ):
+        parts.pop()
 
     return parts
 
@@ -904,7 +908,7 @@ class MainWindow(QMainWindow):
 
 
         the_input_box.setPlainText(text)
-        
+
         vertical_scrollbar.setValue(scroll_value)
 
     def set_title_bar_text(self, text):
@@ -942,13 +946,11 @@ class MainWindow(QMainWindow):
         for each_t in threads:
             threads[each_t].join()
 
-        
+
         self.reading_thread_2 = False
-            
+
     def read_part_task(self):
         if not is_just_text_model_active() and not the_main_window.api_enabled:
-
-            global readed_sentences
             threads = {}
 
             the_okey_parts = split_with_multiple_delimiters(self.worker.the_input_text,".?!:")
@@ -976,8 +978,8 @@ class MainWindow(QMainWindow):
                     threads[each].join()
 
                     tts_if_you_can(each, not_threaded=True, bypass_other_settings=True)
-                
-        
+
+
         self.reading_thread = False
 
 
@@ -988,21 +990,21 @@ class MainWindow(QMainWindow):
             self.worker.the_input_text = ""
             self.complated_answer = False
             readed_sentences = []
-        if ">" != text and "<>" != text and ">\n" != text and "<" != text and "<\n" != text:
+        if text not in (">", "<>", ">\n", "<", "<\n"):
 
             self.worker.the_input_text += text
 
-            if self.reading_thread != True and len(self.worker.the_input_text) > 40:
+            if self.reading_thread is not True and len(self.worker.the_input_text) > 40:
                 self.reading_thread = True
                 threading.Thread(target=self.read_part_task).start()
 
-            if self.reading_thread_2 != True and len(self.worker.the_input_text) > 250:
+            if self.reading_thread_2 is not True and len(self.worker.the_input_text) > 250:
                 self.reading_thread_2 = True
                 threading.Thread(target=self.read_part_task_generate_only).start()
-            
-            
 
-            
+
+
+
 
 
 
