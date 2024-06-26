@@ -934,14 +934,14 @@ class MainWindow(QMainWindow):
 
                 from .audio.tts import text_to_speech
                 the_thread = threading.Thread(target=text_to_speech, args=(each,))
-                print("Text to speech deployed 2:", each)
+
                 threads[each] = the_thread
                 the_thread.start()
 
 
         for each_t in threads:
             threads[each_t].join()
-            print("Text to speech completed 2", each)
+
         
         self.reading_thread_2 = False
             
@@ -952,8 +952,7 @@ class MainWindow(QMainWindow):
             threads = {}
 
             the_okey_parts = split_with_multiple_delimiters(self.worker.the_input_text,".?!:")
-            print("prev", self.worker.the_input_text)
-            print(the_okey_parts)
+
 
             will_read_parts = []
 
@@ -965,7 +964,7 @@ class MainWindow(QMainWindow):
                     readed_sentences.append(each)
                     from .audio.tts import text_to_speech
                     the_thread = threading.Thread(target=text_to_speech, args=(each,))
-                    print("Text to speech deployed:", each)
+
                     threads[each] = the_thread
                     the_thread.start()
 
@@ -975,7 +974,7 @@ class MainWindow(QMainWindow):
                     if the_main_window.stop_talking:
                         break
                     threads[each].join()
-                    print("Complated tts", each)
+
                     tts_if_you_can(each, not_threaded=True, bypass_other_settings=True)
                 
         
