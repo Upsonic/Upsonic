@@ -84,11 +84,15 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
 
             llm_input = transcription
 
-            print("LLM INPUT (screenshot)", the_input_box_pre)
+            print("Previously AI response", last_ai_response, "end prev")
+
+            print("Input Box AI", the_input_box_pre)
+
+            
             if (
                         the_input_box_pre != ""
                         and not the_input_box_pre.startswith("System:")
-                        and the_input_box_pre != last_ai_response
+                        and the_input_box_pre not in last_ai_response 
                     ):
                 llm_input += the_input_box_pre
 
@@ -98,6 +102,8 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
             if the_input_box.toPlainText().startswith("System:"):
                 the_main_window.update_from_thread("Transciption Completed. Running AI...")
 
+
+            print("LLM INPUT (screenshot)", llm_input)
 
             llm_output = assistant(
                 llm_input,
@@ -154,7 +160,7 @@ def process_screenshot():
             if (
                         the_input_box_pre != ""
                         and not the_input_box_pre.startswith("System:")
-                        and the_input_box_pre != last_ai_response
+                        and the_input_box_pre not in last_ai_response 
                     ):
                 llm_input += the_input_box_pre
 
