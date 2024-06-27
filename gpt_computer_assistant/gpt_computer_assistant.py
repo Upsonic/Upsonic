@@ -943,8 +943,8 @@ class MainWindow(QMainWindow):
                 the_thread.start()
 
 
-        for each in threads.values():
-            each.join()
+            for each in threads.values():
+                each.join()
 
 
         self.reading_thread_2 = False
