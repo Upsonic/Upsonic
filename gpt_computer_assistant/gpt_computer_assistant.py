@@ -14,6 +14,7 @@ try:
     from .utils.telemetry import my_tracer, os_name
 
     from .audio.wake_word import wake_word
+    from .audio.tts import text_to_speech
 
 except ImportError:
     # This is for running the script directly
@@ -31,6 +32,7 @@ except ImportError:
     from gui.llmsettings import llmsettings_popup
     from utils.telemetry import my_tracer, os_name
     from audio.wake_word import wake_word
+    from audio.tts import text_to_speech
 import threading
 import time
 import random
@@ -936,7 +938,7 @@ class MainWindow(QMainWindow):
                 if the_main_window.stop_talking:
                     break
 
-                from .audio.tts import text_to_speech
+                
                 the_thread = threading.Thread(target=text_to_speech, args=(each,))
 
                 threads[each] = the_thread
@@ -964,7 +966,7 @@ class MainWindow(QMainWindow):
                 if each not in readed_sentences:
                     will_read_parts.append(each)
                     readed_sentences.append(each)
-                    from .audio.tts import text_to_speech
+
                     the_thread = threading.Thread(target=text_to_speech, args=(each,))
 
                     threads[each] = the_thread
