@@ -2,7 +2,7 @@ from bs4 import BeautifulSoup
 import requests
 import re
 from urllib.parse import urljoin
-from urllib.parse import urljoin
+import datetime
 
 from .tooler import tool
 from .top_bar_wrapper import wrapper
@@ -198,6 +198,17 @@ def app_close(app_name: str) -> bool:
             close(app_name)
         except:
             return False
+
+
+
+@register_tool
+@wrapper
+def get_current_time() -> str:
+    """
+    Get the current time in ISO format.
+    """
+    return datetime.datetime.now().isoformat()
+
 
 
 
