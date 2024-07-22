@@ -45,8 +45,7 @@
    <a href="https://x.com/GPTCompAsst"><img alt="Static Badge" src="https://img.shields.io/twitter/follow/GPTCompAsst?style=social" width=160></a>
 </p>
 
-
-|[ENGLISH](README.md)|[簡體中文](README.zh_CN.md)|正體中文
+|[ENGLISH](README.md)|[簡體中文](README.zh_CN.md)|正體中文|[TÜRKÇE](README.TR.md)
 
 # GPT 電腦助手
 嗨，這是為了將 ChatGPT MacOS 應用程式提供給 Windows 和 Linux 的替代方案。這樣做可以提供一個新鮮且穩定的解決方案。這次您可以輕鬆地安裝為 Python 庫，但我們將準備一個流程，提供本機安裝腳本（.exe）。

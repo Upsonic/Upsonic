@@ -42,7 +42,7 @@
 
   </p>
 
-|[ENGLISH](README.md)|简体中文|[正體中文](README.zh_TW.md)
+|[ENGLISH](README.md)|简体中文|[正體中文](README.zh_TW.md)|[TÜRKÇE](README.TR.md)
 
 # GPT 计算机助手
 你好，这是一个将 ChatGPT MacOS 应用程序提供给 Windows 和 Linux 的替代工作。因此，这是一个全新且稳定的项目。此时，您可以轻松地将其作为 Python 库安装，但我们将准备一个流水线来提供本机安装脚本 (.exe)。
