@@ -200,6 +200,7 @@ class DrawingWidget(QWidget):
         # Set widget properties if needed, e.g., size
 
         self.main_ = parent
+        self.active_button = ""
 
     def paintEvent(self, event):
         if not self.main_.should_paint:
@@ -216,6 +217,7 @@ class DrawingWidget(QWidget):
 
         self.main_.setAutoFillBackground(True)
         painter = QPainter(self)
+        painter = painter
 
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(QPen(QColor("#000"), 1))
@@ -366,6 +368,21 @@ class DrawingWidget(QWidget):
                 int(small_radius),
             )
 
+
+
+            self.main_.screenshot_button_coordinates_size = [
+                int(small_center_x - small_radius / 2),
+                int(small_center_y - small_radius / 2),
+                int(small_radius),
+                int(small_radius),
+            ]
+
+            if self.active_button == "screenshot":
+                self.screenshot_button_border_activate(painter)
+                self.active_button = ""
+
+
+
             # Draw the icon inside the circle
             icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
             icon_rect = QRect(
@@ -413,6 +430,19 @@ class DrawingWidget(QWidget):
         else:
             self.main_.small_circle_collapse_icon = QIcon(up_icon_path)
         self.main_.small_circle_collapse_icon.paint(painter, icon_rect)
+
+
+    def screenshot_button_border_activate(self, painter):
+        # Add an white border to the circle
+        painter.setPen(QPen(QColor("#FFF"), 1))
+        # Draw the ellipse with the specified green border
+        self.main_.screenshot_button_border = painter.drawEllipse(
+            self.main_.screenshot_button_coordinates_size[0],
+            self.main_.screenshot_button_coordinates_size[1],
+            self.main_.screenshot_button_coordinates_size[2],
+            self.main_.screenshot_button_coordinates_size[3],
+        )
+        painter.setPen(QPen(QColor("#000"), 1)) 
 
 
 
@@ -472,7 +502,9 @@ class DrawingWidget(QWidget):
                                     self.main_.manuel_stop = True
                                     self.main_.stop_talking = True
 
-                                else:   
+                                else:
+                                    self.active_button = "screenshot"
+                                    self.update()
                                     self.main_.button_handler.just_screenshot()
                 except:
                     pass
