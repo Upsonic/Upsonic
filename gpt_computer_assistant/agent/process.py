@@ -154,7 +154,7 @@ def process_screenshot():
             from ..gpt_computer_assistant import the_input_box, the_main_window
             from ..audio.record import audio_data, the_input_box_pre
 
-            llm_input =  "I just take a screenshot. for you to remember. Just say ok."
+            llm_input =  "I just take a screenshot. for you to remember. Just say 'Ok.' if the user doesnt want anything before."
 
 
             if (
@@ -178,9 +178,6 @@ def process_screenshot():
                 screenshot_path=just_screenshot_path,
                 dont_save_image=False,
             )
-
-            if the_input_box.toPlainText().startswith("System:"):
-                the_main_window.update_from_thread("AI Response Completed. Generating Audio...")
 
             last_ai_response = llm_output
 
