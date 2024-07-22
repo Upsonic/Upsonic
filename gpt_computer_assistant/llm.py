@@ -50,6 +50,7 @@ def get_model(high_context=False):
         "llava": (ChatOllama, args_mapping[ChatOllama]),
         "llama3": (ChatOllama, args_mapping[ChatOllama]),
         "bakllava": (ChatOllama, args_mapping[ChatOllama]),
+        "llava-llama3": (ChatOllama, args_mapping[ChatOllama]),
 
         # Google Generative AI - Gemini
         "gemini-pro": (ChatGoogleGenerativeAI, args_mapping[ChatGoogleGenerativeAI]),
