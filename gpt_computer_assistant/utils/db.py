@@ -128,6 +128,8 @@ microphone_icon_path = os.path.join(media_dir, "Microphone.png")
 up_icon_path = os.path.join(media_dir, "Up.png")
 down_icon_path = os.path.join(media_dir, "Down.png")
 
+click_sound_path = os.path.join(media_dir, "boop.mp3")
+
 agents = []  # Placeholder for agents data
 
 groqkey = os.path.join(artifacts_dir, "groqkey.db")

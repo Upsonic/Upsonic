@@ -54,7 +54,7 @@ from PyQt5.QtCore import QPoint
 from PyQt5.QtWidgets import QTextEdit
 from PyQt5 import QtGui
 from PyQt5.QtCore import QThread
-
+import pygame
 
 print("Imported all libraries")
 
@@ -111,6 +111,15 @@ def split_with_multiple_delimiters(text, delimiters):
 
     return parts
 
+
+
+def click_sound():
+    pygame.mixer.init()
+
+
+    retro = pygame.mixer.Sound(click_sound_path)
+    retro.set_volume(0.1)
+    retro.play()
 
 
 
@@ -464,13 +473,14 @@ class DrawingWidget(QWidget):
                             self.main_.stop_talking = True
 
                         else:
+                            click_sound()
                             if llm_settings[load_model_settings()]["vision"] is True:
 
                                 self.main_.button_handler.toggle_recording(dont_save_image=True)
                             else:
                                 self.main_.button_handler.toggle_recording(no_screenshot=True)
                 except:
-                    pass
+                    traceback.print_exc()
 
                 try:
                             if self.main_.small_circle_rect.contains(event.pos()):
@@ -479,9 +489,10 @@ class DrawingWidget(QWidget):
                                     self.main_.stop_talking = True
 
                                 else: 
+                                    click_sound()
                                     self.main_.button_handler.toggle_recording(no_screenshot=True)
                 except:
-                    pass
+                    traceback.print_exc()
 
                 try:
 
@@ -490,10 +501,11 @@ class DrawingWidget(QWidget):
                                     self.main_.manuel_stop = True
                                     self.main_.stop_talking = True
 
-                                else:                                 
+                                else:       
+                                    click_sound()                          
                                     self.main_.button_handler.toggle_recording(take_system_audio=True)
                 except:
-                    pass
+                    traceback.print_exc()
 
                 try:
 
@@ -503,11 +515,12 @@ class DrawingWidget(QWidget):
                                     self.main_.stop_talking = True
 
                                 else:
+                                    click_sound()
                                     self.active_button = "screenshot"
                                     self.update()
                                     self.main_.button_handler.just_screenshot()
                 except:
-                    pass
+                    traceback.print_exc()
 
             try:
                 if self.main_.small_circle_collapse.contains(event.pos()):
@@ -863,10 +876,12 @@ class MainWindow(QMainWindow):
 
         def input_box_send():
             if input_box.toPlainText() != "":
+                click_sound()
                 self.button_handler.input_text(input_box.toPlainText())
 
         def input_box_send_screenshot():
             if input_box.toPlainText() != "":
+                click_sound()
                 self.button_handler.input_text_screenshot(input_box.toPlainText())
 
         self.layout.addWidget(input_box)
@@ -1061,7 +1076,7 @@ class MainWindow(QMainWindow):
         self.btn_minimize.hide()
         self.btn_close.hide()
     def deactive_border_animation(self, title_bar_text=None):
-
+        
         if title_bar_text is None:
             title_bar_text = "  GPT Computer Assistant"
         else:
@@ -1145,10 +1160,15 @@ class MainWindow(QMainWindow):
         self.update()  # Trigger a repaint
 
         if assistant_stopped:
+            
             if llm_settings[load_model_settings()]["transcription"]:
                 global the_input_box
                 if the_input_box.toPlainText().endswith("?") and is_continuously_conversations_setting_active():
+                    
                     self.button_handler.toggle_recording(no_screenshot=True, new_record=True)
+
+        if new_state == "idle":
+            click_sound()
 
     def pulse_circle(self):
         self.pulse_frame = (self.pulse_frame + 1) % 100
