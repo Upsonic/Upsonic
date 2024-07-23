@@ -90,7 +90,7 @@ def agentic(
         llm_input += "User Sent Image and image content is: " + image_explain
 
 
-
+    
     llm_input = llm_input + each_message_extension
 
 
@@ -117,13 +117,18 @@ def assistant(
     llm_input, llm_history, client, screenshot_path=None, dont_save_image=False
 ):
 
+    the_model = load_model_settings()
+
+
     if len(agents) != 0:
         print("Moving to Agentic")
         return agentic(llm_input, llm_history, client, screenshot_path, dont_save_image)
 
     print("LLM INPUT", llm_input)
 
-    llm_input = llm_input + each_message_extension
+
+    if llm_settings[the_model]["tools"]:
+        llm_input = llm_input + each_message_extension
 
     the_message = [
         {"type": "text", "text": f"{llm_input}"},
@@ -144,8 +149,7 @@ def assistant(
     the_message = HumanMessage(content=the_message)
     get_chat_message_history().add_message(the_message)
 
-    the_model = load_model_settings()
-
+    
     if llm_settings[the_model]["provider"] == "openai":
         msg = get_agent_executor().invoke(
             {"messages": llm_history + [the_message]}, config=config
@@ -169,7 +173,7 @@ def assistant(
                 the_mes = AIMessage(content=message.content)
                 the_history.append(the_mes)
 
-        llm_input += each_message_extension
+
 
         the_last_message = HumanMessage(content=llm_input)
         msg = get_agent_executor().invoke(
@@ -194,7 +198,7 @@ def assistant(
                 the_mes = AIMessage(content=message.content)
                 the_history.append(the_mes)
 
-        llm_input += each_message_extension
+
 
         the_last_message = HumanMessage(content=llm_input)
         msg = get_agent_executor().invoke(
@@ -203,13 +207,43 @@ def assistant(
 
     elif llm_settings[the_model]["provider"] == "ollama":
 
+        the_list = []
+        for message in llm_history:
+            if isinstance(message, SystemMessage):
+                the_list.append(("system", message.content[0]["text"]))
+            elif isinstance(message, HumanMessage):
+                the_list.append(("human", message.content[0]["text"]))
+            else:
+                try:
+                    the_list.append(("ai", message.content[0]["text"]))
+                except:
+                    the_list.append(("ai", message.content))
+        the_list.append(("human", llm_input))
+
+
         msg = get_agent_executor().invoke(
-            {
-                "input": the_message,
-                "chat_history": llm_history,
-            }
+            the_list
         )
 
+        print(msg)
+
+    
+
+    if llm_settings[the_model]["provider"] == "ollama":
+        print("AI result")
+
+        messages = llm_history
+
+        messages.append(AIMessage(content=msg.content))
+        
+
+        msg = {"messages": messages}
+
+        print(msg)
+    else:
+        print("Normal GPT")
+
+    
     the_last_messages = msg["messages"]
 
 
@@ -230,6 +264,7 @@ def assistant(
 
 
 
+
     # Replace each_message_extension with empty string
     list_of_messages = get_chat_message_history().messages
 
@@ -243,5 +278,7 @@ def assistant(
             get_chat_message_history().add_message(message)
 
 
+
+    print("The return", the_last_messages[-1].content)
 
     return the_last_messages[-1].content

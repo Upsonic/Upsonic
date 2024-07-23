@@ -1051,7 +1051,8 @@ class MainWindow(QMainWindow):
                 self.reading_thread_2 = True
                 threading.Thread(target=self.read_part_task_generate_only).start()
 
-
+        else:
+            print("Problem on text chars")
 
 
 

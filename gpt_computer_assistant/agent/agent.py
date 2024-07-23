@@ -48,7 +48,10 @@ def get_agent_executor():
     tools = get_tools()
     tools += custom_tools
 
-    if is_predefined_agents_setting_active():
+    model = load_model_settings()
+
+
+    if is_predefined_agents_setting_active() and llm_settings[model]["tools"]:
         try:
             import crewai
             tools += [search_on_internet_and_report_team, generate_code_with_aim_team]
@@ -56,7 +59,7 @@ def get_agent_executor():
             pass
 
 
-    model = load_model_settings()
+    
 
 
     if llm_settings[model]["provider"] == "openai":
@@ -69,12 +72,8 @@ def get_agent_executor():
 
 
     if llm_settings[model]["provider"] == "ollama":
-        from langchain import hub
+        print("Ollama tool len", len(tools))
 
-        prompt = get_prompt("hwchase17/react-chat-json")
-        the_agent = create_json_chat_agent(get_model(), tools, prompt)
-        return AgentExecutor(
-            agent=the_agent, tools=tools, verbose=True, handle_parsing_errors=True
-        )
 
+        return get_model()
 

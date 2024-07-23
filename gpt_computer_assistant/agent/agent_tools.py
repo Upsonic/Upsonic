@@ -3,6 +3,7 @@ try:
     from ..tooler import *
     from ..display_tools import *
     from ..teams import *
+    from ..llm_settings import each_message_extension, llm_settings
 except ImportError:
 
     from utils.db import *
@@ -10,6 +11,7 @@ except ImportError:
     from tooler import *
     from display_tools import *
     from teams import *
+    from llm_settings import each_message_extension, llm_settings
 
 
 
@@ -47,10 +49,23 @@ if is_online_tools_setting_active():
     get_tiger_tools()
 
 def get_tools():
+
+    model = load_model_settings()
+
+
+
+
+    if not llm_settings[model]["tools"]:
+        from ..standard_tools import get_current_time
+        from ..tooler import tool
+        return []
+
+
     if is_online_tools_setting_active():
         tools = get_tiger_tools()
         if not tools:
             tools = load_default_tools()
     else:
         tools = load_default_tools()
+
     return tools
