@@ -4,11 +4,13 @@ import traceback
 try:
     from .utils.db import load_api_key
     from .llm import get_model
+    from .top_bar_wrapper import wrapper
 except ImportError:
     from utils.db import load_api_key
     from llm import get_model
+    from top_bar_wrapper import wrapper
 
-
+@wrapper
 def click_on_a_text_on_the_screen_(text:str, click_type: str = "singular") -> bool:
     """
     A function to click on a text on the screen.
@@ -62,7 +64,7 @@ click_on_a_text_on_the_screen = tool(click_on_a_text_on_the_screen_)
 
 
 
-
+@wrapper
 def move_on_a_text_on_the_screen_(text:str) -> bool:
     """
     A function to move on a text on the screen.
@@ -112,7 +114,7 @@ def move_on_a_text_on_the_screen_(text:str) -> bool:
 move_on_a_text_on_the_screen = tool(move_on_a_text_on_the_screen_)
 
 
-
+@wrapper
 def click_on_a_icon_on_the_screen_(icon_name:str, click_type: str = "singular") -> bool:
     """
     A function to click on a icon name on the screen.
@@ -155,7 +157,7 @@ click_on_a_icon_on_the_screen = tool(click_on_a_icon_on_the_screen_)
 
 
 
-
+@wrapper
 def move_on_a_icon_on_the_screen_(icon_name:str,) -> bool:
     """
     A function to move on a icon name on the screen.
