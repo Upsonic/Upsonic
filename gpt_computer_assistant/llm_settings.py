@@ -1,5 +1,6 @@
 llm_settings = {
     "gpt-4o": {"vision":True, "transcription":True, "provider":"openai", "tools":True, "stream":True},
+    "gpt-4o-mini": {"vision":True, "transcription":True, "provider":"openai", "tools":True, "stream":True},
     "gpt-4-turbo": {"vision":False, "transcription":True, "provider":"openai", "tools":True, "stream":True},
     "gpt-3.5": {"vision":False, "transcription":True, "provider":"openai", "tools":True, "stream":True},
     "gpt-3.5-turbo": {"vision":False, "transcription":True, "provider":"openai", "tools":True, "stream":True},
@@ -14,6 +15,7 @@ llm_settings = {
 
 llm_show_name = {
     "gpt-4o (OpenAI)": "gpt-4o",
+    "gpt-4o-mini (OpenAI)": "gpt-4o-mini",
     "gpt-4-turbo (OpenAI)": "gpt-4-turbo",
     "gpt-3.5-turbo (OpenAI)": "gpt-3.5-turbo",
     "gpt-3.5 (OpenAI)": "gpt-3.5",
