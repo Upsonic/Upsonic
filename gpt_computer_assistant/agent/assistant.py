@@ -135,13 +135,22 @@ def assistant(
     ]
 
     if screenshot_path:
+
         base64_image = encode_image(screenshot_path)
-        the_message.append(
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
-            },
-        )
+        if llm_settings[the_model]["provider"] == "ollama":
+            the_message.append(
+                {
+                    "type": "image_url",
+                    "image_url": base64_image,
+                },
+            )
+        else:
+            the_message.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+                },
+            )
         print("LEN OF IMAGE", len(base64_image))
 
 
@@ -207,18 +216,8 @@ def assistant(
 
     elif llm_settings[the_model]["provider"] == "ollama":
 
-        the_list = []
-        for message in llm_history:
-            if isinstance(message, SystemMessage):
-                the_list.append(("system", message.content[0]["text"]))
-            elif isinstance(message, HumanMessage):
-                the_list.append(("human", message.content[0]["text"]))
-            else:
-                try:
-                    the_list.append(("ai", message.content[0]["text"]))
-                except:
-                    the_list.append(("ai", message.content))
-        the_list.append(("human", llm_input))
+        the_list = llm_history + [the_message]
+
 
 
         msg = get_agent_executor().invoke(
