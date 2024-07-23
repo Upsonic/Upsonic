@@ -1,5 +1,5 @@
 import functools
-
+import time
 
 
 def wrapper(func):
@@ -11,8 +11,10 @@ def wrapper(func):
         print("GOOGLE-searching")
         function_name = "Tool: " + func.__name__
         the_main_window.active_border_animation(function_name)
+        time.sleep(2)
         result = func(*args, **kwargs)
         the_main_window.deactive_border_animation(function_name)
+        time.sleep(1)
         print("GOOGLE SEARCHİNG COMPLEATES")
 
         return result
