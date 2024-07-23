@@ -19,7 +19,7 @@ elif platform.system() == "Darwin": # Darwin is the system name for macOS
 
 setup(
     name="gpt_computer_assistant",
-    version="0.20.0",
+    version="0.21.0",
     description="""GPT""",
     long_description="".join(open("README.md", encoding="utf-8").readlines()),
     long_description_content_type="text/markdown",
