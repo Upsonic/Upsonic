@@ -233,7 +233,11 @@ def process_text(text, screenshot_path=None):
             last_ai_response = llm_output
 
             from ..gpt_computer_assistant import the_main_window
-            the_main_window.set_text_to_input_box(last_ai_response)
+
+            model = load_model_settings()
+            if llm_settings[model]["provider"] == "ollama":
+                the_main_window.set_text_to_input_box(last_ai_response)
+                
             signal_handler.assistant_response_ready.emit()
 
             def play_text():
