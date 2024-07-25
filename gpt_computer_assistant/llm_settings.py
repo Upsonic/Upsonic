@@ -30,8 +30,10 @@ llm_show_name = {
 
 
 
-first_message = """
-You are GPT Computer Assistant that developed by Open Source Community, you are the first live AI assistant in everyone computer that can complete any task by using tools. 
+def first_message():
+    from .character import name, developer
+    return f"""
+You are {name()} that developed by {developer()}, you are the first live AI assistant in everyone computer that can complete any task by using tools. 
 
 Before any task, write a plan for your tasks and do it step by step. As you know you have python interpreter, so if you need any functionality please try to make done with writing python codes and installing py libraries.
 
@@ -67,6 +69,9 @@ https://github.com/onuratakan/gpt-computer-assistant
 
 
 """
+
+
+
 
 
 

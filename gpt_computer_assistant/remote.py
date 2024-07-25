@@ -50,6 +50,18 @@ class Remote_Client:
         response = self.send_request("/deactivate_online_tools", {})
         return response["response"]
 
+
+    def change_name(self, new_name:str) -> str:
+        data = {"new_name": new_name}
+        response = self.send_request("/change_name", data)
+        return response["response"]
+    
+    def change_developer(self, new_developer:str) -> str:
+        data = {"new_developer": new_developer}
+        response = self.send_request("/change_developer", data)
+        return response["response"]
+
+
     def wait(self, second):
         time.sleep(second)
 

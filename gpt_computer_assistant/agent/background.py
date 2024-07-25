@@ -3,12 +3,14 @@ from .chat_history import *
 from ..llm_settings import first_message
 
 
-llm_history_oiginal = [
+def llm_history_oiginal():
+
+    return [
     SystemMessage(
         content=[
             {
                 "type": "text",
-                "text": first_message,
+                "text": first_message(),
             }
         ]
     ),    

@@ -15,6 +15,7 @@ try:
 
     from .audio.wake_word import wake_word
     from .audio.tts import text_to_speech
+    from .character import name, developer
 
 except ImportError:
     # This is for running the script directly
@@ -194,7 +195,7 @@ class Worker_2(QThread):
                 self.prev = self.the_input_text
                 self.text_to_set.emit("False")
 
-                the_text = "  GPT Computer Assistant"
+                the_text = "  "+ name()
 
                 for i in range(len(the_text)):
                     self.text_to_set_title_bar.emit(the_text[:i + 1])
@@ -802,7 +803,7 @@ class MainWindow(QMainWindow):
         self.btn_close.setFixedSize(30, 20)
         self.btn_close.clicked.connect(stop_app)
 
-        self.title_label = QLabel("  GPT Computer Assistant", self.title_bar)
+        self.title_label = QLabel("  "+name(), self.title_bar)
         self.title_label.setStyleSheet("border: 0px solid blue;") 
         self.title_bar_layout.addWidget(self.title_label)
         self.title_bar_layout.addWidget(self.btn_minimize)
@@ -1067,7 +1068,7 @@ class MainWindow(QMainWindow):
 
         self.worker_2.the_input_text = True
         if title_bar_text is None:
-            title_bar_text = "  GPT Computer Assistant"
+            title_bar_text = "  "+name()
         else:
             title_bar_text = f"  {title_bar_text}"
             if len(title_bar_text) > 33:
@@ -1079,7 +1080,7 @@ class MainWindow(QMainWindow):
     def deactive_border_animation(self, title_bar_text=None):
         
         if title_bar_text is None:
-            title_bar_text = "  GPT Computer Assistant"
+            title_bar_text = "  "+name()
         else:
             title_bar_text = f"  {title_bar_text}"
             if len(title_bar_text) > 33:

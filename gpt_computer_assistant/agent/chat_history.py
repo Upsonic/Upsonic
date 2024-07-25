@@ -19,7 +19,7 @@ def get_chat_message_history():
     if len(connection.messages) == 0:
         the_model = load_model_settings()
         if llm_settings[the_model]["tools"]:
-            connection.add_message(llm_history_oiginal[0])
+            connection.add_message(llm_history_oiginal()[0])
 
     return connection
 
@@ -29,4 +29,4 @@ def clear_chat_history():
     
     the_model = load_model_settings()
     if llm_settings[the_model]["tools"]:
-        get_chat_message_history().add_message(llm_history_oiginal[0])
+        get_chat_message_history().add_message(llm_history_oiginal()[0])
