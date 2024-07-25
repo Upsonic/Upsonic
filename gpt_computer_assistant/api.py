@@ -73,6 +73,9 @@ def screenshot():
     while the_input_box.toPlainText().startswith("System:"):
         time.sleep(0.3)
 
+    while not the_main_window.state == "idle":
+        time.sleep(0.3)
+
     response = the_input_box.toPlainText()
 
     return jsonify({"response": response})
