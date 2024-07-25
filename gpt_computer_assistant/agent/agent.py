@@ -22,9 +22,14 @@ from langchain.agents import AgentExecutor, create_json_chat_agent
 from langgraph.prebuilt import chat_agent_executor
 
 
-custom_tools = []
+custom_tools_ = []
 
 
+def custom_tools():
+    globla custom_tools_
+    the_list = []
+    the_list += custom_tools_
+    return the_list
 
 
 prompt_cache = {}
@@ -44,9 +49,8 @@ def get_prompt(name):
 
 
 def get_agent_executor():
-    global custom_tools
     tools = get_tools()
-    tools += custom_tools
+    tools += custom_tools()
 
     model = load_model_settings()
 

@@ -18,8 +18,8 @@ def Tool(func):
     Returns:
     - callable: The input function `func` unchanged.
     """
-    from .agent.agent import custom_tools
-    global custom_tools
-    custom_tools.append(tool(func))
+    from .agent.agent import custom_tools_
+    global custom_tools_
+    custom_tools_.append(tool(func))
     return func
 
