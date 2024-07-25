@@ -191,6 +191,35 @@ def change_developer():
 
 
 
+@app.route("/library_install", methods=["POST"])
+def library_install():
+    """
+    This function install a library.
+    """
+    data = request.json
+    library = data["library"]
+    print("Library İnstall:", library)
+    from .utils.pypi import install_library
+    if install_library(library):
+        return jsonify({"response": f"Library {library} installed"})
+    else:
+        return jsonify({"response": f"Library {library} installation failed"})
+
+@app.route("/library_uninstall", methods=["POST"])
+def library_uninstall():
+    """
+    This function uninstall a library.
+    """
+    data = request.json
+    library = data["library"]
+    print("Library Uninstall:", library)
+    from .utils.pypi import uninstall_library
+    if uninstall_library(library):
+        return jsonify({"response": f"Library {library} uninstalled"})
+    else:
+        return jsonify({"response": f"Library {library} uninstallation failed"})
+
+
 
 class ServerThread(threading.Thread):
     def __init__(self, app, host, port):

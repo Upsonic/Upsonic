@@ -62,6 +62,17 @@ class Remote_Client:
         return response["response"]
 
 
+    def install_library(self, library:str) -> str:
+        data = {"library": library}
+        response = self.send_request("/library_install", data)
+        return response["response"]
+    
+    def uninstall_library(self, library:str) -> str:
+        data = {"library": library}
+        response = self.send_request("/library_uninstall", data)
+        return response["response"]
+
+
     def wait(self, second):
         time.sleep(second)
 
