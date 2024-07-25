@@ -38,6 +38,9 @@ def input():
     while the_input_box.toPlainText().startswith("System:"):
         time.sleep(0.3)
 
+    while not the_main_window.state == "idle":
+        time.sleep(0.3)
+
     response = the_input_box.toPlainText()
 
 
@@ -219,6 +222,23 @@ def library_uninstall():
     else:
         return jsonify({"response": f"Library {library} uninstallation failed"})
 
+
+@app.route("/custom_tool", methods=["POST"])
+def custom_tool():
+    """
+    This function adds a custom tool to the application.
+    """
+    data = request.json
+    code = data["code"]
+    print("Custom Tool:", code)
+    from .utils.function import string_to_function
+    try:
+        func = string_to_function(code)
+        from .tooler import Tool
+        Tool(func)
+        return jsonify({"response": f"Custom tool {func.__name__} added"})
+    except Exception as e:
+        return jsonify({"response": f"Custom tool addition failed: {e}"}), 500
 
 
 class ServerThread(threading.Thread):

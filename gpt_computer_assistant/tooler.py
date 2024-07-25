@@ -3,9 +3,11 @@ from langchain.tools import tool
 try:
     from .utils.db import load_api_key
     from .llm import get_model
+    from .top_bar_wrapper import wrapper
 except ImportError:
     from utils.db import load_api_key
     from llm import get_model
+    from top_bar_wrapper import wrapper
 
 
 def Tool(func):
@@ -20,6 +22,7 @@ def Tool(func):
     """
     from .agent.agent import custom_tools_
     global custom_tools_
+    func = wrapper(func)
     custom_tools_.append(tool(func))
     return func
 

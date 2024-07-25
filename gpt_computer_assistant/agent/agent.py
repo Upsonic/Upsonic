@@ -26,7 +26,7 @@ custom_tools_ = []
 
 
 def custom_tools():
-    globla custom_tools_
+    global custom_tools_
     the_list = []
     the_list += custom_tools_
     return the_list

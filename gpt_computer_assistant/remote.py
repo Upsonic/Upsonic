@@ -1,6 +1,11 @@
+import textwrap
 import requests
 
 import time
+
+from upsonic import Tiger
+
+the_upsonic = Tiger()
 
 class Remote_Client:
     def __init__(self, url):
@@ -8,6 +13,13 @@ class Remote_Client:
 
     def send_request(self, path, data):
         response = requests.post(self.url+path, json=data)
+        if response.status_code != 200:
+            try:
+                print(response.json())
+            except:
+                print(response.text)
+
+            raise Exception("Request failed", response.status_code, path)
         return response.json()
 
     def input(self, text:str, screen:bool=False, talk:bool=False) -> str:
@@ -70,6 +82,18 @@ class Remote_Client:
     def uninstall_library(self, library:str) -> str:
         data = {"library": library}
         response = self.send_request("/library_uninstall", data)
+        return response["response"]
+
+
+    def custom_tool(self, func):
+        the_code = textwrap.dedent(the_upsonic.extract_source(func))
+        # Remove the first line
+
+        if the_code.startswith("@remote.custom_tool"):
+            the_code = the_code[the_code.find("\n")+1:]
+        
+        data = {"code": the_code}
+        response = self.send_request("/custom_tool", data)
         return response["response"]
 
 
