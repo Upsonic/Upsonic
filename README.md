@@ -45,11 +45,25 @@ Powered by <a href="https://github.com/Upsonic/Tiger"><strong>Upsonic Tiger 🐅
 
 
 
-## Installation and Run
-Needed >= Python 3.9
+## Install and run
+
+Make sure to update setuptools first
+
+```console
+pip3 install setuptools --upgrade
+# or
+pip install setuptools --upgrade
+```
+
+Python 3.9 or higher is required
+
 ```console
 pip3 install 'gpt-computer-assistant[base]'
+# or
+pip install 'gpt-computer-assistant[base]'
 ```
+
+To run gpt-computer-assistant, simply type
 
 ```console
 computerassistant
