@@ -181,6 +181,19 @@ remote.disable_predefined_agents()
 
 remote.enable_online_tools()
 remote.disable_online_tools()
+
+
+
+# Custom tools
+remote.install_library("numpy")
+
+@remote.custom_tool
+def hobbies():
+    "returns hobbies"
+    import numpy
+    return "Tennis, volleyball, and swimming."
+
+
 ```
 
 
