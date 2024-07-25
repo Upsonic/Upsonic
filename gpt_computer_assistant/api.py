@@ -8,6 +8,13 @@ from werkzeug.serving import make_server
 
 app = Flask(__name__)
 
+
+@app.route("/status", methods=["POST"])
+def status():
+    return jsonify({"response": True})
+
+
+
 @app.route("/input", methods=["POST"])
 def input():
     """

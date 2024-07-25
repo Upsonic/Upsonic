@@ -2,7 +2,7 @@ import textwrap
 import requests
 
 import time
-
+import sys
 from upsonic import Tiger
 
 the_upsonic = Tiger()
@@ -11,16 +11,33 @@ class Remote_Client:
     def __init__(self, url):
         self.url = url
 
-    def send_request(self, path, data):
-        response = requests.post(self.url+path, json=data)
-        if response.status_code != 200:
-            try:
-                print(response.json())
-            except:
-                print(response.text)
+        if self.status != True:
+            raise Exception("The server is not running")
 
-            raise Exception("Request failed", response.status_code, path)
-        return response.json()
+
+    def send_request(self, path, data, dont_error=False):
+        try:
+            response = requests.post(self.url+path, json=data)
+            if response.status_code != 200:
+                try:
+                    print(response.json())
+                except:
+                    print(response.text)
+                
+                raise Exception("Request failed", response.status_code, path)
+            return response.json()
+        except Exception as e:
+            if dont_error:
+                return {"response": str(e)}
+            else:
+                raise e
+
+
+    @property
+    def status(self):
+        data = {}
+        response = self.send_request("/status", data, dont_error=True)
+        return response["response"]
 
     def input(self, text:str, screen:bool=False, talk:bool=False) -> str:
         data = {"text": text, "screen": str(screen).lower(), "talk": str(talk).lower()}
