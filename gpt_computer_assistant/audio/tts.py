@@ -1,14 +1,38 @@
 try:
     from ..llm import *
     from ..utils.db import artifacts_dir
+    from .tts_providers.openai import tts_openai
 except ImportError:
     from llm import *
-    from utils.db import artifacts_dir
+    from utils.db import artifacts_dir, load_model_settings, load_api_key
 
 import os
 import hashlib
 import random
 import threading
+
+
+def is_local_tts_available():
+    try:
+        from transformers import pipeline
+        from datasets import load_dataset
+        import soundfile as sf
+
+        import torch
+        return True
+    except:
+        return False
+
+
+def is_openai_tts_available():
+
+    the_model = load_model_settings()
+    if llm_settings[the_model]["provider"] == "openai":
+        if load_api_key() != "CHANGE_ME":
+            return True
+    return False
+
+
 
 supported_openai_speakers = ["fable"]
 
@@ -24,12 +48,13 @@ def generate_speech_chunk(text_chunk, index, voice, results):
     if os.path.exists(location):
         results[index] = location
     else:
-        response = get_client().audio.speech.create(
-            model="tts-1",
-            voice=voice,
-            input=text_chunk,
-        )
-        response.stream_to_file(location)
+        the_model = load_model_settings()
+        if llm_settings[the_model]["provider"] == "openai": 
+            tts_openai(voice, text_chunk, location)
+        else:
+            print("Please install gpt-computer-assistant[local_tts] to use local TTS")
+            
+                
         results[index] = location
 
 def split_text_to_sentences(text, max_chunk_size=300):
