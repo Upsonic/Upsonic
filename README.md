@@ -263,8 +263,9 @@ https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e6
 | **Auto Stop Recording, when you complate talking**              | Completed     | Q2 2024        |
 | **Wakeup Word**              | Completed     | Q2 2024        |
 | **Continuously Conversations**              | Completed     | Q2 2024        |
-| **Adding more capability on device**              | Planned     | Q2 2024        |
-| DeepFace Integration (Facial Recognition)                    | Planned  | Q2 2024        |
+| **Adding more capability on device**              | Completed     | Q2 2024        |
+| **Local TTS and STT**              | On the way     | Q3 2024        |
+| DeepFace Integration (Facial Recognition)                    | Planned  | Q3 2024        |
 
 
 
@@ -277,6 +278,8 @@ At this time we have many infrastructure elements. We just aim to provide whole 
 
 | Capability                         | Status                      |
 |------------------------------------|----------------------------------|
+| **Local LLM with Vision (Ollama)**                    |            OK                    |
+| Local text-to-speech and speech-to-text                    |            ON THE WAY                    |
 | **Screen Read**                    |            OK                    |
 | **Click to and Text or Icon in the screen**                    |            OK                    |
 | **Move to and Text or Icon in the screen**                    |            OK                    |
