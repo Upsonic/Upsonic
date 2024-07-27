@@ -3,13 +3,16 @@ from langchain_openai import ChatOpenAI
 from langchain_community.chat_models import ChatOllama
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
+import copy
 
 try:
     from .utils.db import load_api_key, load_openai_url, load_model_settings, load_groq_api_key, load_google_api_key
     from .custom_callback import customcallback
+    from .llm_settings import llm_settings
 except ImportError:
     from utils.db import load_api_key, load_openai_url, load_model_settings, load_groq_api_key, load_google_api_key
     from custom_callback import customcallback
+    from llm_settings import llm_settings
 
 
 
@@ -39,28 +42,26 @@ def get_model(high_context=False):
         ChatGroq: {"temperature": 0, "model_name": the_model.replace("-groq", ""), "groq_api_key": the_openai_url},
         ChatGoogleGenerativeAI:{"model": the_model, "google_api_key": the_google_api_key}
     }
-    model_mapping = {
-        # OpenAI
-        "gpt-4o": (ChatOpenAI, args_mapping[ChatOpenAI]),
-        "gpt-4o-mini": (ChatOpenAI, args_mapping[ChatOpenAI]),
-        "gpt-4-turbo": (ChatOpenAI, args_mapping[ChatOpenAI]),
-        "gpt-3.5": (ChatOpenAI, args_mapping[ChatOpenAI]),
-        "gpt-3.5-turbo": (ChatOpenAI, args_mapping[ChatOpenAI]),
 
-        # Google Generative AI - Llama
-        "llava": (ChatOllama, args_mapping[ChatOllama]),
-        "llama3": (ChatOllama, args_mapping[ChatOllama]),
-        "phi3-1.5b": (ChatOllama, args_mapping[ChatOllama]),
-        "bakllava": (ChatOllama, args_mapping[ChatOllama]),
-        "llava-phi3": (ChatOllama, args_mapping[ChatOllama]),
-        "llava-llama3": (ChatOllama, args_mapping[ChatOllama]),
 
-        # Google Generative AI - Gemini
-        "gemini-pro": (ChatGoogleGenerativeAI, args_mapping[ChatGoogleGenerativeAI]),
+    model_mapping = {}
 
-        # Groq
-        "mixtral-8x7b-groq": (ChatGroq, args_mapping[ChatGroq])
-    }
+    for model_name, model_args in llm_settings.items():
+        the_tuple = None
+        if model_args["provider"] == "openai":
+            the_tuple = (ChatOpenAI, args_mapping[ChatOpenAI])
+        elif model_args["provider"] == "ollama":
+            the_tuple = (ChatOllama, args_mapping[ChatOllama])
+        elif model_args["provider"] == "google":
+            the_tuple = (ChatGoogleGenerativeAI, args_mapping[ChatGoogleGenerativeAI])
+        elif model_args["provider"] == "groq":
+            the_tuple = (ChatGroq, args_mapping[ChatGroq])
+        
+        if the_tuple:
+            model_mapping[model_name] = the_tuple
+
+        
+
 
     model_class, args = model_mapping[the_model]
     return model_class(**args) if model_class else None
