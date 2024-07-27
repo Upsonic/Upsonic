@@ -1,34 +1,28 @@
 llm_settings = {
-    "gpt-4o": {"vision":True, "transcription":True, "provider":"openai", "tools":True, "stream":True},
-    "gpt-4o-mini": {"vision":True, "transcription":True, "provider":"openai", "tools":True, "stream":True},
-    "gpt-4-turbo": {"vision":False, "transcription":True, "provider":"openai", "tools":True, "stream":True},
-    "gpt-3.5": {"vision":False, "transcription":True, "provider":"openai", "tools":True, "stream":True},
-    "gpt-3.5-turbo": {"vision":False, "transcription":True, "provider":"openai", "tools":True, "stream":True},
-    "llama3": {"vision":False, "transcription":False, "provider":"ollama", "tools":False, "stream":False},
-    "qwen2:1.5b": {"vision":False, "transcription":False, "provider":"ollama", "tools":False, "stream":False},
-    "llava": {"vision":True, "transcription":False, "provider":"ollama", "tools":False, "stream":False},
-    "bakllava": {"vision":True, "transcription":False, "provider":"ollama", "tools":False, "stream":False},
-    "llava-llama3": {"vision":True, "transcription":False, "provider":"ollama", "tools":False, "stream":False},
-    "llava-phi3": {"vision":True, "transcription":False, "provider":"ollama", "tools":False, "stream":False},
-    "gemini-pro": {"vision":True, "transcription":False, "provider":"google", "tools":True, "stream":True},
-    "mixtral-8x7b-groq": {"vision":False, "transcription":False, "provider":"groq", "tools":True, "stream":True},
+    "gpt-4o":            {"show_name":"gpt-4o (OpenAI)", "vision":True, "transcription":True, "provider":"openai", "tools":True, "stream":True},
+    "gpt-4o-mini":       {"show_name":"gpt-4o-mini (OpenAI)","vision":True, "transcription":True, "provider":"openai", "tools":True, "stream":True},
+    "gpt-4-turbo":       {"show_name":"gpt-4-turbo (OpenAI)","vision":False, "transcription":True, "provider":"openai", "tools":True, "stream":True},
+    "gpt-3.5":           {"show_name":"gpt-3.5 (OpenAI)","vision":False, "transcription":True, "provider":"openai", "tools":True, "stream":True},
+    "gpt-3.5-turbo":     {"show_name":"gpt-3.5-turbo (OpenAI)","vision":False, "transcription":True, "provider":"openai", "tools":True, "stream":True},
+    "llama3":            {"show_name":"Llama3 (Ollama)","vision":False, "transcription":False, "provider":"ollama", "tools":False, "stream":False},
+    "qwen2:1.5b":        {"show_name":"Qwen2 1.5b (Ollama)","vision":False, "transcription":False, "provider":"ollama", "tools":False, "stream":False},
+    "llava":             {"show_name":"Llava (Ollama)","vision":True, "transcription":False, "provider":"ollama", "tools":False, "stream":False},
+    "bakllava":          {"show_name":"BakLLaVA (Ollama)","vision":True, "transcription":False, "provider":"ollama", "tools":False, "stream":False},
+    "llava-llama3":      {"show_name":"Llava-Llama3 (Ollama)","vision":True, "transcription":False, "provider":"ollama", "tools":False, "stream":False},
+    "llava-phi3":        {"show_name":"LLaVA-Phi-3 (Ollama)","vision":True, "transcription":False, "provider":"ollama", "tools":False, "stream":False},
+    "gemini-pro":        {"show_name":"gemini-pro (Google)","vision":True, "transcription":False, "provider":"google", "tools":True, "stream":True},
+    "mixtral-8x7b-groq": {"show_name":"Mixtral 8x7b (Groq)","vision":False, "transcription":False, "provider":"groq", "tools":True, "stream":True},
 }
 
-llm_show_name = {
-    "gpt-4o (OpenAI)": "gpt-4o",
-    "gpt-4o-mini (OpenAI)": "gpt-4o-mini",
-    "gpt-4-turbo (OpenAI)": "gpt-4-turbo",
-    "gpt-3.5-turbo (OpenAI)": "gpt-3.5-turbo",
-    "gpt-3.5 (OpenAI)": "gpt-3.5",
-    "Llava (Ollama)": "llava",
-    "Llama3 (Ollama)": "llama3",
-    "Qwen2 1.5b (Ollama)": "qwen2:1.5b",
-    "BakLLaVA (Ollama)": "bakllava",
-    "Llava-Llama3 (Ollama)": "llava-llama3",
-    "LLaVA-Phi-3 (Ollama)": "llava-phi3",
-    "gemini-pro (Google)": "gemini-pro",
-    "Mixtral 8x7b (Groq)": "mixtral-8x7b-groq",
-}
+
+
+
+
+llm_show_name_ = {}
+for k, v in llm_settings.items():
+    llm_show_name_[v["show_name"]] = k
+
+llm_show_name = llm_show_name_
 
 
 
