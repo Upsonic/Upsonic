@@ -1,10 +1,13 @@
 try:
     from ..llm import *
-    from ..utils.db import artifacts_dir
+    from ..utils.db import *
     from .tts_providers.openai import tts_openai
+    from .tts_providers.microsoft_local import tts_microsoft_local
 except ImportError:
     from llm import *
-    from utils.db import artifacts_dir, load_model_settings, load_api_key
+    from utils.db import *
+    from tts_providers.openai import tts_openai
+    from tts_providers.microsoft_local import tts_microsoft_local
 
 import os
 import hashlib
@@ -49,10 +52,16 @@ def generate_speech_chunk(text_chunk, index, voice, results):
         results[index] = location
     else:
         the_model = load_model_settings()
-        if llm_settings[the_model]["provider"] == "openai": 
+        tts_setting = load_tts_model_settings()
+        if tts_setting == "openai" : 
             tts_openai(voice, text_chunk, location)
-        else:
-            print("Please install gpt-computer-assistant[local_tts] to use local TTS")
+        
+        if tts_setting == "microsoft_local":
+            if not is_local_tts_available():
+                print("Please install gpt-computer-assistant[local_tts] to use local TTS")
+            else:
+                tts_microsoft_local(text_chunk, location)
+                
             
                 
         results[index] = location

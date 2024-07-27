@@ -428,3 +428,22 @@ def is_continuously_conversations_setting_active():
         return False
     with open(continuously_conversations_setting, "r") as f:
         return f.read() == "1"
+
+
+
+
+tts_model_settings_db = os.path.join(artifacts_dir, "tts_model_settings.db")
+
+
+def save_tts_model_settings(model):
+    """Save the tts model settings to a file."""
+    with open(tts_model_settings_db, "w") as f:
+        f.write(model)
+
+
+def load_tts_model_settings():
+    """Load the tts model settings from a file."""
+    if not os.path.exists(tts_model_settings_db):
+        return "openai"
+    with open(tts_model_settings_db, "r") as f:
+        return f.read()
