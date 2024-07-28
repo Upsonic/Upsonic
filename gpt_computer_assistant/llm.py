@@ -51,7 +51,7 @@ def get_model(high_context=False):
         if model_args["provider"] == "openai":
             the_tuple = (ChatOpenAI, args_mapping[ChatOpenAI])
         elif model_args["provider"] == "ollama":
-            the_tuple = (ChatOllama, args_mapping[ChatOllama])
+            the_tuple = (ChatOpenAI, {"api_key": "ollama", "base_url":"http://localhost:11434/v1", "model": model_name})
         elif model_args["provider"] == "google":
             the_tuple = (ChatGoogleGenerativeAI, args_mapping[ChatGoogleGenerativeAI])
         elif model_args["provider"] == "groq":

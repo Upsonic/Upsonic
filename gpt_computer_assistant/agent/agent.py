@@ -77,8 +77,6 @@ def get_agent_executor():
 
     if llm_settings[model]["provider"] == "ollama":
         print("Ollama tool len", len(tools))
-
-
-        return get_model()
+        return chat_agent_executor.create_tool_calling_executor(get_model(), tools)
 
             

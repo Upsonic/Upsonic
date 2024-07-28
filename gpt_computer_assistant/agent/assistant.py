@@ -62,7 +62,7 @@ def agentic(
 
         the_model = load_model_settings()
 
-        if  llm_settings[the_model]["provider"] == "openai":
+        if  llm_settings[the_model]["provider"] == "openai" and llm_settings[the_model]["provider"] == "ollama":
             msg = get_agent_executor().invoke(
                 {"messages": llm_history + [the_message]}, config=config
             )
@@ -72,14 +72,6 @@ def agentic(
                 {"messages": llm_history + [the_message]}, config=config
             )
 
-        if llm_settings[the_model]["provider"] == "ollama":
-
-            msg = get_agent_executor().invoke(
-                {
-                    "input": the_message,
-                    "chat_history": llm_history,
-                }
-            )
 
         the_last_messages = msg["messages"]
 
@@ -159,7 +151,7 @@ def assistant(
     get_chat_message_history().add_message(the_message)
 
     
-    if llm_settings[the_model]["provider"] == "openai":
+    if llm_settings[the_model]["provider"] == "openai" or llm_settings[the_model]["provider"] == "ollama":
         msg = get_agent_executor().invoke(
             {"messages": llm_history + [the_message]}, config=config
         )
@@ -214,35 +206,9 @@ def assistant(
             {"messages": the_history + [the_last_message]}, config=config
         )
 
-    elif llm_settings[the_model]["provider"] == "ollama":
-
-        the_list = llm_history + [the_message]
 
 
 
-        msg = get_agent_executor().invoke(
-            the_list
-        )
-
-        print(msg)
-
-    
-
-    if llm_settings[the_model]["provider"] == "ollama":
-        print("AI result")
-
-        messages = llm_history
-
-        messages.append(AIMessage(content=msg.content))
-        
-
-        msg = {"messages": messages}
-
-        print(msg)
-    else:
-        print("Normal GPT")
-
-    
     the_last_messages = msg["messages"]
 
 
