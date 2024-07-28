@@ -39,7 +39,19 @@ def start(api=False):
         from .utils.db import set_profile
         set_profile(profile)
 
+    try:
+        from .utils.db import load_tts_model_settings, load_stt_model_settings
+    except ImportError:
+        from utils.db import load_tts_model_settings, load_stt_model_settings
 
+    if load_tts_model_settings() != "openai":
+        from .audio.tts_providers.microsoft_local import preload_tts_microsoft_local
+        preload_tts_microsoft_local()
+    
+    if load_stt_model_settings() != "openai":
+        from .audio.stt_providers.openai_whisper_local import preload_stt_openai_whisper_local
+        preload_stt_openai_whisper_local()
+        
 
 
     try:
