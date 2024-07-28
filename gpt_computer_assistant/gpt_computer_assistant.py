@@ -255,6 +255,7 @@ class DrawingWidget(QWidget):
 
         else:
             radius = 70
+            
             painter.drawEllipse(
                 int(center_x - radius / 2),
                 int(center_y - radius / 2),
@@ -263,7 +264,7 @@ class DrawingWidget(QWidget):
             )
 
 
-
+        
         self.main_.circle_rect = QRect(
             int(center_x - radius / 2),
             int(center_y - radius / 2),
@@ -284,7 +285,7 @@ class DrawingWidget(QWidget):
             )
         else:
             painter.setPen(QPen(QColor("#23538F"), 1))
-
+            
             painter.drawEllipse(
                 int(center_x - radius / 2),
                 int(center_y - radius / 2),
@@ -301,7 +302,8 @@ class DrawingWidget(QWidget):
         small_center_x = 165
         small_center_y = 25
         small_radius = 30
-        painter.drawEllipse(
+        
+        painter.drawEllipse( # Microphone bacground black
             int(small_center_x - small_radius / 2),
             int(small_center_y - small_radius / 2),
             int(small_radius),
@@ -360,13 +362,15 @@ class DrawingWidget(QWidget):
         small_center_x = 30
         small_center_y = 25
         small_radius = 30
-        painter.drawEllipse(
-            int(small_center_x - small_radius / 2),
-            int(small_center_y - small_radius / 2),
-            int(small_radius),
-            int(small_radius),
-        )
+        if self.main_.screen_available:
+            painter.drawEllipse( # ScreenShot BUtton
+                int(small_center_x - small_radius / 2),
+                int(small_center_y - small_radius / 2),
+                int(small_radius),
+                int(small_radius),
+            )
 
+        
         self.main_.small_circle_left_top = QRect(
             int(small_center_x - small_radius / 2),
             int(small_center_y - small_radius / 2),
@@ -388,17 +392,17 @@ class DrawingWidget(QWidget):
             self.active_button = ""
 
 
-
-        # Draw the icon inside the circle
-        icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
-        icon_rect = QRect(
-            small_center_x - icon_size // 2,
-            small_center_y - icon_size // 2,
-            icon_size,
-            icon_size,
-        )
-        self.main_.small_circle_left_topticon = QIcon(screenshot_icon_path)
-        self.main_.small_circle_left_topticon.paint(painter, icon_rect)
+        if self.main_.screen_available:
+            # Draw the icon inside the circle
+            icon_size = small_radius * 2 // 3  # Adjust the icon size relative to the circle
+            icon_rect = QRect(
+                small_center_x - icon_size // 2,
+                small_center_y - icon_size // 2,
+                icon_size,
+                icon_size,
+            )
+            self.main_.small_circle_left_topticon = QIcon(screenshot_icon_path)
+            self.main_.small_circle_left_topticon.paint(painter, icon_rect)
 
 
 
@@ -1100,10 +1104,11 @@ class MainWindow(QMainWindow):
 
 
     def remove_screenshot_button(self):
-
+        self.update()
         self.screenshot_button.hide()
 
     def add_screenshot_button(self):
+        self.update()
         self.screenshot_button.show()
 
     def update_state(self, new_state):
