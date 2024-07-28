@@ -151,8 +151,7 @@ def llmsettings_popup(self):
         show_groq()
     if llm_settings[llm_show_name[model_select.currentText()]]["provider"] == "google":
         show_google()
-    if not llm_settings[llm_show_name[model_select.currentText()]]["transcription"]:
-        the_main_window.remove_painting()
+
     if not llm_settings[llm_show_name[model_select.currentText()]]["vision"]:
         the_main_window.remove_screenshot_button()
 
@@ -162,14 +161,12 @@ def llmsettings_popup(self):
         hide_google()
         the_save_string = llm_show_name[model_select.currentText()]
         save_model_settings(the_save_string)
-        if llm_settings[llm_show_name[model_select.currentText()]]["transcription"] is False:
-            the_main_window.remove_painting()
+
         if llm_settings[llm_show_name[model_select.currentText()]]["provider"] == "openai":
             show_openai()
             openai_url_label.show()
             openai_url_input.show()
             openai_url_save_button.show()
-            the_main_window.activate_painting()
         if llm_settings[llm_show_name[model_select.currentText()]]["vision"]:
             the_main_window.add_screenshot_button()
         else:
