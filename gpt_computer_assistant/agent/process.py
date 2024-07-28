@@ -116,7 +116,14 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
                 the_main_window.update_from_thread("AI Response Completed. Generating Audio...")
             last_ai_response = llm_output
 
+
+
             from ..gpt_computer_assistant import the_main_window
+
+
+            model = load_model_settings()
+            if not llm_settings[model]["stream"]:
+                the_main_window.set_text_to_input_box(last_ai_response)
 
             signal_handler.assistant_response_ready.emit()
 
@@ -183,6 +190,11 @@ def process_screenshot():
 
             from ..gpt_computer_assistant import the_main_window
 
+
+            model = load_model_settings()
+            if not llm_settings[model]["stream"]:
+                the_main_window.set_text_to_input_box(last_ai_response)
+
             signal_handler.assistant_response_ready.emit()
 
             def play_text():
@@ -235,7 +247,7 @@ def process_text(text, screenshot_path=None):
             from ..gpt_computer_assistant import the_main_window
 
             model = load_model_settings()
-            if llm_settings[model]["provider"] == "ollama":
+            if not llm_settings[model]["stream"]:
                 the_main_window.set_text_to_input_box(last_ai_response)
                 
             signal_handler.assistant_response_ready.emit()
