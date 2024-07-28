@@ -3,11 +3,13 @@ try:
     from ..agent.chat_history import clear_chat_history
     from ..llm_settings import llm_show_name, llm_settings
     from ..audio.tts import is_local_tts_available
+    from ..audio.stt import is_local_stt_available
 except ImportError:
     from utils.db import *
     from agent.chat_history import clear_chat_history
     from llm_settings import llm_show_name, llm_settings
     from audio.tts import is_local_tts_available
+    from audio.stt import is_local_stt_available
 
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox
 from PyQt5.QtCore import Qt
@@ -199,7 +201,6 @@ def llmsettings_popup(self):
             show_openai()
             save_tts_model_settings("openai")
         else:
-            hide_openai()
             save_tts_model_settings("microsoft_local")
 
     if not is_local_tts_available():
@@ -207,9 +208,49 @@ def llmsettings_popup(self):
         information_text = QLabel("Please install gpt-computer-assistant[local_tts] to use local TTS")
         settings_dialog.layout().addWidget(information_text)
         tts_model_select.setEnabled(False)
-        
+
 
 
     tts_model_select.currentIndexChanged.connect(on_tts_model_change)
+
+
+
+
+    # Add STT model selection
+    stt_model_label = QLabel("STT Model")
+    stt_model_select = QComboBox()
+    stt_model_select.addItems(["openai", "openai_whisper_local"])
+    settings_dialog.layout().addWidget(stt_model_label)
+    settings_dialog.layout().addWidget(stt_model_select)
+
+    currently_stt_model = load_stt_model_settings()
+
+    if currently_stt_model == "openai":
+        stt_model_select.setCurrentIndex(0)
+        show_openai()
+    else:
+        stt_model_select.setCurrentIndex(1)
+
+    def on_stt_model_change():
+        if stt_model_select.currentText() == "openai":
+            show_openai()
+            save_stt_model_settings("openai")
+        else:
+            save_stt_model_settings("openai_whisper_local")
+
+    if not is_local_stt_available():
+        #add an text to inform the user that local stt is not available
+        information_text = QLabel("Please install gpt-computer-assistant[local_stt] to use local STT")
+        settings_dialog.layout().addWidget(information_text)
+        stt_model_select.setEnabled(False)
+
+
+
+    stt_model_select.currentIndexChanged.connect(on_stt_model_change)
+
+
+
+
+
 
     settings_dialog.exec_()

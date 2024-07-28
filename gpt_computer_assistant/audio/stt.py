@@ -1,10 +1,27 @@
 try:
     from ..llm import get_client
+    from ..utils.db import *
+    from .stt_providers.openai import stt_openai
+    from .stt_providers.openai_whisper_local import stt_openai_whisper_local
 except ImportError:
     from llm import get_client
+    from utils.db import *
+    from stt_providers.openai import stt_openai
+    from stt_providers.openai_whisper_local import stt_openai_whisper_local
 
 import os
 from pydub import AudioSegment
+
+
+
+
+def is_local_stt_available():
+    try:
+        import whisper
+        return True
+    except:
+        return False
+
 
 
 def split_audio(file_path, max_size=20 * 1024 * 1024):
@@ -52,14 +69,16 @@ def speech_to_text(location):
 
     for part, part_path in audio_parts:
         with open(part_path, "rb") as audio_file:
-            transcription = get_client().audio.transcriptions.create(
-                model="whisper-1", file=audio_file
-            )
+            if load_stt_model_settings() == "openai":
+                transcription = stt_openai(audio_file)
+            else:
+                transcription = stt_openai_whisper_local(part_path)
+
             transcriptions.append(transcription)
         os.remove(part_path)  # Clean up the temporary file immediately after processing
 
     # Merge transcriptions (assuming it's a list of text segments)
     full_transcription = " ".join(
-        transcription.text for transcription in transcriptions
+        transcription for transcription in transcriptions
     )
     return full_transcription

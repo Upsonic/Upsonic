@@ -55,5 +55,8 @@ setup(
             "torch==2.4.0",
             "transformers==4.43.3",
         ],
+        "local_stt": [
+            "openai-whisper==20231117",
+        ],
     },
 )

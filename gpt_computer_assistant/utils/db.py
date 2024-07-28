@@ -447,3 +447,22 @@ def load_tts_model_settings():
         return "openai"
     with open(tts_model_settings_db, "r") as f:
         return f.read()
+
+
+stt_model_settings_db = os.path.join(artifacts_dir, "stt_model_settings.db")
+
+
+def save_stt_model_settings(model):
+    """Save the stt model settings to a file."""
+    with open(stt_model_settings_db, "w") as f:
+        f.write(model)
+
+
+def load_stt_model_settings():
+    """Load the stt model settings from a file."""
+    if not os.path.exists(stt_model_settings_db):
+        return "openai"
+    with open(stt_model_settings_db, "r") as f:
+        return f.read()
+    
+
