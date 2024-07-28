@@ -114,7 +114,7 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
             )
             if the_input_box.toPlainText().startswith("System:"):
                 the_main_window.update_from_thread("AI Response Completed. Generating Audio...")
-            last_ai_response = llm_output
+            last_ai_response = llm_output.replace("<Answer>", "")
 
 
 
@@ -122,8 +122,9 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
 
 
             model = load_model_settings()
-            if not llm_settings[model]["stream"]:
+            if not llm_settings[model]["stream"] or the_main_window.worker.the_input_text.startswith("System:"):
                 the_main_window.set_text_to_input_box(last_ai_response)
+                the_main_window.complated_answer = True
 
             signal_handler.assistant_response_ready.emit()
 
@@ -186,14 +187,15 @@ def process_screenshot():
                 dont_save_image=False,
             )
 
-            last_ai_response = llm_output
+            last_ai_response = llm_output.replace("<Answer>", "")
 
             from ..gpt_computer_assistant import the_main_window
 
 
             model = load_model_settings()
-            if not llm_settings[model]["stream"]:
+            if not llm_settings[model]["stream"] or the_main_window.worker.the_input_text.startswith("System:"):
                 the_main_window.set_text_to_input_box(last_ai_response)
+                the_main_window.complated_answer = True
 
             signal_handler.assistant_response_ready.emit()
 
@@ -242,13 +244,14 @@ def process_text(text, screenshot_path=None):
                 screenshot_path=screenshot_path,
                 dont_save_image=True,
             )
-            last_ai_response = llm_output
+            last_ai_response = llm_output.replace("<Answer>", "")
 
             from ..gpt_computer_assistant import the_main_window
 
             model = load_model_settings()
-            if not llm_settings[model]["stream"]:
+            if not llm_settings[model]["stream"] or the_main_window.worker.the_input_text.startswith("System:"):
                 the_main_window.set_text_to_input_box(last_ai_response)
+                the_main_window.complated_answer = True
                 
             signal_handler.assistant_response_ready.emit()
 
