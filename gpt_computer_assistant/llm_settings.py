@@ -5,6 +5,7 @@ llm_settings = {
     "gpt-3.5":           {"show_name":"gpt-3.5 (OpenAI)","vision":False, "provider":"openai", "tools":True, "stream":True},
     "gpt-3.5-turbo":     {"show_name":"gpt-3.5-turbo (OpenAI)","vision":False, "provider":"openai", "tools":True, "stream":True},
     "llama3":            {"show_name":"Llama3 (Ollama)","vision":False, "provider":"ollama", "tools":False, "stream":False},
+    "llama3.1":          {"show_name":"Llama3.1 (Ollama)","vision":False, "provider":"ollama", "tools":True, "stream":False},
     "qwen2:1.5b":        {"show_name":"Qwen2 1.5b (Ollama)","vision":False, "provider":"ollama", "tools":False, "stream":False},
     "llava":             {"show_name":"Llava (Ollama)","vision":True, "provider":"ollama", "tools":False, "stream":False},
     "bakllava":          {"show_name":"BakLLaVA (Ollama)","vision":True, "provider":"ollama", "tools":False, "stream":False},
