@@ -255,13 +255,13 @@ class DrawingWidget(QWidget):
 
         else:
             radius = 70
-            
-            painter.drawEllipse(
-                int(center_x - radius / 2),
-                int(center_y - radius / 2),
-                int(radius),
-                int(radius),
-            )
+            if self.main_.screen_available:
+                painter.drawEllipse( # Main Button
+                    int(center_x - radius / 2),
+                    int(center_y - radius / 2),
+                    int(radius),
+                    int(radius),
+                )
 
 
         
@@ -275,14 +275,14 @@ class DrawingWidget(QWidget):
 
 
         if not self.main_.state == "thinking":
-            painter.setPen(QPen(QColor("#01EE8A"), 1))  # Green color with 2px thickness
-            # Draw the ellipse with the specified green border
-            painter.drawEllipse(
-                int(center_x - radius / 2),
-                int(center_y - radius / 2),
-                int(radius),
-                int(radius),
-            )
+            painter.setPen(QPen(QColor("#01EE8A"), 1)) 
+            if self.main_.screen_available:
+                painter.drawEllipse( # Main BUtton Green Border
+                    int(center_x - radius / 2),
+                    int(center_y - radius / 2),
+                    int(radius),
+                    int(radius),
+                )
         else:
             painter.setPen(QPen(QColor("#23538F"), 1))
             
