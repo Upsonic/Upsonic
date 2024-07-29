@@ -55,7 +55,59 @@ pip3 install 'gpt-computer-assistant[base]'
 computerassistant
 ```
 
-### Wake Word | NEW
+
+https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e619-44d6-9b04-f39cf1ac1f8f
+
+
+### Local text-to-speech | NEW
+<details>
+
+Now GCA just support totaly local text-to-speech with Microsoft Open Source model. For enabling and using it you should run this command:
+
+```console
+pip3 install 'gpt-computer-assistant[local_tts]'
+```
+
+After that, just go to LLM setting section and select `microsoft_local` in tts combobox.
+</details>
+
+
+### Local speech-to-text | NEW
+<details>
+
+Now GCA just support totaly local speech-to-text with OpenAI Whisper tiny model. For enabling and using it you should run this commands:
+
+```console
+pip3 install 'gpt-computer-assistant[local_stt]'
+```
+
+Installing ffmpeg:
+
+```console
+# on Ubuntu or Debian
+sudo apt update && sudo apt install ffmpeg
+
+# on Arch Linux
+sudo pacman -S ffmpeg
+
+# on MacOS using Homebrew (https://brew.sh/)
+brew install ffmpeg
+
+# on Windows using Chocolatey (https://chocolatey.org/)
+choco install ffmpeg
+
+# on Windows using Scoop (https://scoop.sh/)
+scoop install ffmpeg
+```
+
+
+
+After that, just go to LLM setting section and select `openai_whisper_local` in stt combobox.
+</details>
+
+
+
+### Wake Word
 <details>
 
 
@@ -214,9 +266,6 @@ def hobbies():
   <br>
   <br>
 </p>
-
-
-https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e619-44d6-9b04-f39cf1ac1f8f
 
 
 ## Usage
