@@ -30,8 +30,39 @@ def start(api=False):
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", help="profile to use")
     parser.add_argument("--api", help="Enable API mode", action="store_true")
+
+    parser.add_argument("--set_tts_provider", help="Set tts provider only")
+    parser.add_argument("--set_stt_provider", help="Set stt provider only")
+
+    parser.add_argument("--set_llm", help="Set llm model only")
+
+
     args = parser.parse_args()
+
+    set_tts_provider = args.set_tts_provider
+
+    if set_tts_provider is not None:
+        from .utils.db import save_tts_model_settings
+        save_tts_model_settings(set_tts_provider)
+        return
+    
+    set_stt_provider = args.set_stt_provider
+
+    if set_stt_provider is not None:
+        from .utils.db import save_stt_model_settings
+        save_stt_model_settings(set_stt_provider)
+        return
+    
+    set_llm = args.set_llm
+
+    if set_llm is not None:
+        from .utils.db import save_model_settings
+        save_model_settings(set_llm)
+        return
+
+
     profile = args.profile
+    
     api_arg = args.api
     print("Profile:", profile)
 
