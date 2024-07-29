@@ -592,3 +592,5 @@ duckduckgo-search==5.3.0
 beautifulsoup4==4.12.3
 
 pytesseract==0.3.10
+
+pywifi-controls==0.7

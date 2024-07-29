@@ -3,9 +3,14 @@ import requests
 import re
 from urllib.parse import urljoin
 import datetime
+import traceback
 
-from .tooler import tool
-from .top_bar_wrapper import wrapper
+try:
+    from .tooler import tool
+    from .top_bar_wrapper import wrapper
+except:
+    from tooler import tool
+    from top_bar_wrapper import wrapper
 
 _standard_tools_ = {}
 
@@ -211,8 +216,61 @@ def get_current_time() -> str:
 
 
 
+@register_tool
+@wrapper
+def turn_off_wifi() -> bool:
+    """
+    Turn off the wifi.
+    """
+    try:
+        from pywifi import ControlPeripheral
+        wifi = ControlPeripheral()
+        wifi.disable()
+        return True
+    except:
+
+        return False
+    
+@register_tool
+@wrapper
+def turn_on_wifi() -> bool:
+    """
+    Turn on the wifi.
+    """
+    try:
+        from pywifi import ControlPeripheral
+        wifi = ControlPeripheral()
+        wifi.enable()
+        return True
+    except:
+        
+        return False
+    
+
+@register_tool
+@wrapper
+def connect_wifi(ssid: str, password: str) -> bool:
+    """
+    Connect to the wifi with the given ssid and password.
+    """
+    try:
+        from pywifi import ControlConnection
+
+        # Arguments passed during object instantiation
+        controller = ControlConnection(wifi_ssid=ssid, wifi_password=password)
+        controller.wifi_connector()
+        return True
+    except:
+        return False
+
+
 
 def get_standard_tools():
     print("Tool len", len(_standard_tools_))
     last_list = [_standard_tools_[each] for each in _standard_tools_]
     return last_list
+
+
+
+if __name__ == "__main__":
+    print(turn_on_wifi())
