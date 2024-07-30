@@ -28,8 +28,8 @@ jobs:
 
     - name: Build DMG
       run: |
-        chmod +x build/macos_build.sh
-        ./build/macos_build.sh
+        chmod +x os/macos_build.sh
+        ./os/macos_build.sh
 
     - name: Upload artifact
       uses: actions/upload-artifact@v2
