@@ -1,7 +1,10 @@
 import os
 import sys
+import webbrowser
 from PyQt5.QtWidgets import QApplication
-
+from PyQt5.QtGui import *
+from PyQt5.QtWidgets import *
+from PyQt5.QtCore import Qt
 def start(api=False):
     """
     Starts the computer assistant application.
@@ -107,5 +110,53 @@ def start(api=False):
     app_icon.addFile(icon_48_path, QtCore.QSize(48, 48))
     app_icon.addFile(icon_256_path, QtCore.QSize(256, 256))
     app.setWindowIcon(app_icon)
+
+    # Create the tray
+    tray = QSystemTrayIcon()
+    tray.setIcon(app_icon)
+    tray.setVisible(True)
+
+    # Create the menu
+    menu = QMenu()
+
+
+    show_menu = QAction("Show")
+    def show_menu_connect():
+        ex.setWindowState(Qt.WindowNoState)
+    show_menu.triggered.connect(show_menu_connect)
+    menu.addAction(show_menu)
+
+
+
+    hide_menu = QAction("Hide")
+    hide_menu.triggered.connect(ex.showMinimized)
+    menu.addAction(hide_menu)
+
+    menu.addSeparator()
+
+    screenshot_and_microphone = QAction("Action: Screenshot and Microphone")
+    def screenshot_and_microphone_connect():
+        ex.setWindowState(Qt.WindowNoState)
+        ex.screenshot_and_microphone_button_action()
+    screenshot_and_microphone.triggered.connect(screenshot_and_microphone_connect)
+    menu.addAction(screenshot_and_microphone)
+
+
+    menu.addSeparator()
+
+    action = QAction("Open GitHub Issues")
+    action.triggered.connect(lambda: webbrowser.open("https://github.com/onuratakan/gpt-computer-assistant/issues"))
+    menu.addAction(action)
+
+
+
+    # Add a Quit option to the menu.
+    quit = QAction("Quit")
+    quit.triggered.connect(app.quit)
+    menu.addAction(quit)
+
+    # Add the menu to the tray
+    tray.setContextMenu(menu)
+
 
     sys.exit(app.exec_())

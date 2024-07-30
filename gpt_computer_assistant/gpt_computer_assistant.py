@@ -474,12 +474,7 @@ class DrawingWidget(QWidget):
                             self.main_.stop_talking = True
 
                         else:
-                            click_sound()
-                            if llm_settings[load_model_settings()]["vision"] is True:
-
-                                self.main_.button_handler.toggle_recording(dont_save_image=True)
-                            else:
-                                self.main_.button_handler.toggle_recording(no_screenshot=True)
+                            self.main_.screenshot_and_microphone_button_action()
                 except:
                     traceback.print_exc()
 
@@ -552,6 +547,18 @@ from PyQt5.QtCore import QVariantAnimation
 
 class MainWindow(QMainWindow):
     api_enabled = False
+
+
+    def screenshot_and_microphone_button_action(self):
+        click_sound()
+        if llm_settings[load_model_settings()]["vision"] is True:
+
+            self.button_handler.toggle_recording(dont_save_image=True)
+        else:
+            self.button_handler.toggle_recording(no_screenshot=True)
+
+
+
     def __init__(self):
         super().__init__()
 
