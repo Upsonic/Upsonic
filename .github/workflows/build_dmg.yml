@@ -26,6 +26,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install ".[base]"
         brew install create-dmg
+        pip install pyinstaller==6.9.0
 
     - name: Build DMG
       run: |
