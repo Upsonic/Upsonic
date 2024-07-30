@@ -97,4 +97,15 @@ def start(api=False):
 
     app = QApplication(sys.argv)
     ex = MainWindow()
+    from PyQt5 import QtGui
+    from PyQt5 import QtCore
+    app_icon = QtGui.QIcon()
+    from .utils.db import icon_16_path, icon_24_path, icon_32_path, icon_48_path, icon_256_path
+    app_icon.addFile(icon_16_path, QtCore.QSize(16, 16))
+    app_icon.addFile(icon_24_path, QtCore.QSize(24, 24))
+    app_icon.addFile(icon_32_path, QtCore.QSize(32, 32))
+    app_icon.addFile(icon_48_path, QtCore.QSize(48, 48))
+    app_icon.addFile(icon_256_path, QtCore.QSize(256, 256))
+    app.setWindowIcon(app_icon)
+
     sys.exit(app.exec_())

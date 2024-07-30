@@ -760,13 +760,7 @@ class MainWindow(QMainWindow):
         self.first_height = self.height()
         self.first_width = self.width()
 
-        app_icon = QtGui.QIcon()
-        app_icon.addFile(icon_16_path, QtCore.QSize(16, 16))
-        app_icon.addFile(icon_24_path, QtCore.QSize(24, 24))
-        app_icon.addFile(icon_32_path, QtCore.QSize(32, 32))
-        app_icon.addFile(icon_48_path, QtCore.QSize(48, 48))
-        app_icon.addFile(icon_256_path, QtCore.QSize(256, 256))
-        self.setWindowIcon(app_icon)
+
 
         self.central_widget = QWidget(self)
         self.setCentralWidget(self.central_widget)
