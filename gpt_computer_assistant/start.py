@@ -148,9 +148,9 @@ def start(api=False):
     menu.addSeparator()
 
     if platform.system() == "Darwin":
-        the_text_of_screenshot_and_microphone = "Action: ⌃+⌥+G Screenshot and Microphone"
+        the_text_of_screenshot_and_microphone = "Action: ⌃+⌥+⌘+up Screenshot and Microphone"
     else:
-        the_text_of_screenshot_and_microphone = "Action: ctrl+alt+G Screenshot and Microphone"
+        the_text_of_screenshot_and_microphone = "Action: ctrl+alt+windows+up Screenshot and Microphone"
     screenshot_and_microphone = QAction(the_text_of_screenshot_and_microphone)
     def screenshot_and_microphone_connect():
         ex.setWindowState(Qt.WindowNoState)
@@ -158,7 +158,7 @@ def start(api=False):
 
 
     screenshot_listener = keyboard.GlobalHotKeys({
-        '<ctrl>+<alt>+<up>': screenshot_and_microphone_connect
+        '<ctrl>+<alt>+<cmd>+<up>': screenshot_and_microphone_connect
     })
     screenshot_listener.start()
 
