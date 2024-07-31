@@ -247,6 +247,19 @@ def llmsettings_popup(self):
 
 
 
+    # Add an separator
+    separator = QLabel("------------------------------------------------")
+    settings_dialog.layout().addWidget(separator)
+
+
+    # Add an powered by label
+    powered_by_label = QLabel("Powered by Upsonic <3")
+    # Make label bold
+    font = powered_by_label.font()
+    font.setBold(True)
+    powered_by_label.setFont(font)
+    
+    settings_dialog.layout().addWidget(powered_by_label)
 
 
 
