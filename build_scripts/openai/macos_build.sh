@@ -1,6 +1,7 @@
 #!/bin/sh
 # Requireed installations
 pip install ".[base]"
+pip install '.[agentic]'
 brew install create-dmg
 pip install pyinstaller==6.9.0
 
