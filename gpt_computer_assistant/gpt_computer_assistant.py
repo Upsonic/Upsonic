@@ -34,6 +34,7 @@ except ImportError:
     from utils.telemetry import my_tracer, os_name
     from audio.wake_word import wake_word
     from audio.tts import text_to_speech
+import platform
 import threading
 import time
 import random
@@ -525,11 +526,10 @@ class DrawingWidget(QWidget):
                         print()
                         # hide all buttons and input box
                         the_input_box.show()
-                        if llm_settings[load_model_settings()]["vision"]:
-                            self.main_.screenshot_button.show()
+
                         self.main_.settingsButton.show()
                         self.main_.llmsettingsButton.show()
-                        self.main_.send_button.show()
+
                         self.main_.window().setFixedSize(self.main_.first_width, self.main_.first_height)
                         deactivate_collapse_setting()
                     else:
@@ -671,8 +671,7 @@ class MainWindow(QMainWindow):
 
         self.input_box_style = "border-radius: 10px; border-bottom: 1px solid #01EE8A;"
 
-        self.send_button_style = "border-radius: 5px; height: 25px; border-style: solid;"
-        self.screenshot_button_style = "border-radius: 5px; height: 25px; border-style: solid;"
+
 
         self.settingsButton_style = "border-radius: 5px; height: 25px; border-style: solid;"
         self.llmsettingsButton_style = "border-radius: 5px; height: 25px; border-style: solid;"
@@ -725,8 +724,7 @@ class MainWindow(QMainWindow):
         self.setPalette(p)
         self.input_box.setStyleSheet(self.input_box_style+"background-color: #2E2E2E; color: white;")
 
-        self.send_button.setStyleSheet(self.send_button_style+"background-color: #2E2E2E; color: white;")
-        self.screenshot_button.setStyleSheet(self.screenshot_button_style+"background-color: #2E2E2E; color: white;")
+
 
         self.settingsButton.setStyleSheet(self.settingsButton_style+"background-color: #2E2E2E; color: white;")
         self.llmsettingsButton.setStyleSheet(self.llmsettingsButton_style+"background-color: #2E2E2E; color: white;")
@@ -740,8 +738,7 @@ class MainWindow(QMainWindow):
         p.setColor(self.backgroundRole(), QColor("#F0F0F0"))
         self.setPalette(p)
         self.input_box.setStyleSheet(self.input_box_style+"background-color: #FFFFFF; color: black;")
-        self.send_button.setStyleSheet(self.send_button_style+"background-color: #FFFFFF; color: black; ")
-        self.screenshot_button.setStyleSheet(self.screenshot_button_style+"background-color: #FFFFFF; color: black; ")
+
         self.settingsButton.setStyleSheet(self.settingsButton_style+"background-color: #FFFFFF; color: black; ")
         self.llmsettingsButton.setStyleSheet(self.llmsettingsButton_style+"background-color: #FFFFFF; color: black; ")
 
@@ -751,10 +748,10 @@ class MainWindow(QMainWindow):
 
     def collapse_window(self):
         the_input_box.hide()
-        self.screenshot_button.hide()
+
         self.settingsButton.hide()
         self.llmsettingsButton.hide()
-        self.send_button.hide()
+
         self.window().setFixedSize(self.width(), 140)        
 
 
@@ -860,14 +857,25 @@ class MainWindow(QMainWindow):
         self.input_box = input_box
 
 
-        input_box.setFixedHeight(40)
+        input_box.setFixedHeight(80)
 
 
         if load_api_key() == "CHANGE_ME":
             input_box.setPlaceholderText("Save your API Key, go to settings")
         else:
-            input_box.setPlaceholderText("Type here")
-        input_box.setGeometry(30, self.height() - 60, 200, 30)
+
+            if platform.system() == "Darwin":
+                if llm_settings[load_model_settings()]["vision"] is False:
+                    input_box.setPlaceholderText("Type here \nsand ↵ ")
+                else:
+                    input_box.setPlaceholderText("Type here \nand ↵ \nor ⌘ + ↵ (+screenshot)")
+            else:
+                if llm_settings[load_model_settings()]["vision"] is False:
+                    input_box.setPlaceholderText("Type here \nand ↵ ")
+                else:
+                    input_box.setPlaceholderText("Type here \nand ↵ \nor Ctrl + ↵ (+screenshot)")
+            # Add an information and use enter icon to the input box for mac            
+        input_box.setGeometry(30, self.height() - 60, 200, 80)
         global the_input_box
         the_input_box = input_box
 
@@ -883,26 +891,8 @@ class MainWindow(QMainWindow):
 
         self.layout.addWidget(input_box)
 
-        # Create a horizontal layout
-        button_layout = QHBoxLayout()
-
-        # Create the send button
-        self.send_button = QPushButton("Send", self)
-        self.send_button.clicked.connect(input_box_send)
-
-        # Create the screenshot button
-        self.screenshot_button = QPushButton("+Screenshot", self)
-        self.screenshot_button.clicked.connect(input_box_send_screenshot)
 
 
-        if llm_settings[load_model_settings()]["vision"] is False:
-            self.screenshot_button.hide()
-
-
-
-        # Add the buttons to the horizontal layout
-        button_layout.addWidget(self.send_button)
-        button_layout.addWidget(self.screenshot_button)
 
         self.shortcut_enter = QShortcut(QKeySequence("Ctrl+Return"), self)
         self.shortcut_enter.activated.connect(input_box_send_screenshot)
@@ -910,7 +900,7 @@ class MainWindow(QMainWindow):
         global return_key_event
         return_key_event = input_box_send
 
-        self.layout.addLayout(button_layout)
+
 
         button_layout_ = QHBoxLayout()
 
@@ -1106,11 +1096,11 @@ class MainWindow(QMainWindow):
 
     def remove_screenshot_button(self):
         self.update()
-        self.screenshot_button.hide()
+
 
     def add_screenshot_button(self):
         self.update()
-        self.screenshot_button.show()
+
 
     def update_state(self, new_state):
 
