@@ -9,7 +9,7 @@ import platform
 with open("requirements.txt") as fp:
     install_requires = fp.read().splitlines()
 
-if platform.system() in ["Linux", "Windows"]:
+if platform.system() in ["Windows"]:
     install_requires.append("AppOpener==1.7")
 
 elif platform.system() == "Darwin": # Darwin is the system name for macOS
