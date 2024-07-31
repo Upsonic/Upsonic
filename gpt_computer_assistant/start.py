@@ -1,10 +1,14 @@
 import os
+import platform
 import sys
 import webbrowser
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import Qt
+from pynput import keyboard
+
+
 def start(api=False):
     """
     Starts the computer assistant application.
@@ -103,7 +107,7 @@ def start(api=False):
     from PyQt5 import QtGui
     from PyQt5 import QtCore
     app_icon = QtGui.QIcon()
-    from .utils.db import icon_16_path, icon_24_path, icon_32_path, icon_48_path, icon_256_path
+    from .utils.db import icon_16_path, icon_24_path, icon_32_path, icon_48_path, icon_256_path, icon_48_active_path
     app_icon.addFile(icon_16_path, QtCore.QSize(16, 16))
     app_icon.addFile(icon_24_path, QtCore.QSize(24, 24))
     app_icon.addFile(icon_32_path, QtCore.QSize(32, 32))
@@ -112,9 +116,18 @@ def start(api=False):
     app.setWindowIcon(app_icon)
 
     # Create the tray
+    menu_icon = QtGui.QIcon()
+    menu_icon.addFile(icon_48_path, QtCore.QSize(48, 48))
+
+    menu_active_icon = QtGui.QIcon()
+    menu_active_icon.addFile(icon_48_active_path, QtCore.QSize(48, 48))
+
     tray = QSystemTrayIcon()
-    tray.setIcon(app_icon)
+    tray.setIcon(menu_icon)
     tray.setVisible(True)
+    ex.tray = tray
+    ex.tray_active_icon = menu_active_icon
+    ex.tray_icon = menu_icon
 
     # Create the menu
     menu = QMenu()
@@ -134,10 +147,21 @@ def start(api=False):
 
     menu.addSeparator()
 
-    screenshot_and_microphone = QAction("Action: Screenshot and Microphone")
+    if platform.system() == "Darwin":
+        the_text_of_screenshot_and_microphone = "Action: ⌃+⌥+G Screenshot and Microphone"
+    else:
+        the_text_of_screenshot_and_microphone = "Action: ctrl+alt+G Screenshot and Microphone"
+    screenshot_and_microphone = QAction(the_text_of_screenshot_and_microphone)
     def screenshot_and_microphone_connect():
         ex.setWindowState(Qt.WindowNoState)
         ex.screenshot_and_microphone_button_action()
+
+
+    screenshot_listener = keyboard.GlobalHotKeys({
+        '<ctrl>+<alt>+<up>': screenshot_and_microphone_connect
+    })
+    screenshot_listener.start()
+
     screenshot_and_microphone.triggered.connect(screenshot_and_microphone_connect)
     menu.addAction(screenshot_and_microphone)
 

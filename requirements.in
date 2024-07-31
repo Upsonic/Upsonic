@@ -34,3 +34,5 @@ beautifulsoup4==4.12.3
 
 pytesseract==0.3.10
 pywifi-controls==0.7
+
+pynput==1.7.7

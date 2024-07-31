@@ -58,6 +58,7 @@ from PyQt5 import QtGui
 from PyQt5.QtCore import QThread
 import pygame
 
+
 print("Imported all libraries")
 
 
@@ -1117,6 +1118,7 @@ class MainWindow(QMainWindow):
         self.state = new_state
         print(f"State updated: {new_state}")
         if "talking" in new_state:
+            self.tray.setIcon(self.tray_active_icon)
             self.pulse_frame = 0
             if self.pulse_timer:
                 self.pulse_timer.stop()
@@ -1135,6 +1137,7 @@ class MainWindow(QMainWindow):
             self.pulse_timer.timeout.connect(self.pulse_circle)
             self.pulse_timer.start(20)
         elif self.pulse_timer:
+            self.tray.setIcon(self.tray_icon)
             self.pulse_timer.stop()
             self.pulse_timer = None
         self.update()  # Trigger a repaint
