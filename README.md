@@ -246,6 +246,11 @@ def hobbies():
     return "Tennis, volleyball, and swimming."
 
 
+# Create an operation, it will inform the user with top bar animation
+with remote.operation("Scanning")
+  remote.wait(5)
+
+
 ```
 
 
