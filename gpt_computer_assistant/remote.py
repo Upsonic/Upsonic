@@ -124,6 +124,11 @@ class Remote_Client:
         response = self.send_request("/top_bar_deactivate", data)
 
 
+    def boop(self):
+        data = {}
+        response = self.send_request("/boop_sound", data)
+
+
 
     class OperationContext:
         def __init__(self, client, text):

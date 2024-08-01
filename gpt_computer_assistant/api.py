@@ -279,6 +279,16 @@ def top_bar_deactivate():
 
 
 
+@app.route("/boop_sound", methods=["POST"])
+def boop_sound():
+    """
+    This function sound an boop to user
+    """
+
+    from .gpt_computer_assistant import click_sound
+    click_sound()
+    return jsonify({"response": "Sound played"})
+
 
 
 class ServerThread(threading.Thread):
