@@ -266,7 +266,8 @@ def connect_wifi(ssid: str, password: str) -> bool:
 
 
 
-
+@register_tool
+@wrapper
 def ask_to_user(question:str, wait_for_answer:str=None) -> str:
     """
     Its ask to the user for your question and return the answer
