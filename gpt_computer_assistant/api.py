@@ -251,6 +251,36 @@ def custom_tool():
         return jsonify({"response": f"Custom tool addition failed: {e}"}), 500
 
 
+
+
+
+@app.route("/top_bar_activate", methods=["POST"])
+def top_bar_activate():
+    """
+    This function serve an animation of top bar to show an operations especialy
+    """
+    from .gpt_computer_assistant import the_main_window
+    data = request.json
+    text = data["text"]
+    
+    the_main_window.active_border_animation(text)
+    return jsonify({"response": "Activated top bar animation"})
+
+@app.route("/top_bar_deactivate", methods=["POST"])
+def top_bar_deactivate():
+    """
+    This function stop the top bar animation
+    """
+    from .gpt_computer_assistant import the_main_window
+    data = request.json
+    text = data["text"]
+    the_main_window.deactive_border_animation(text)
+    return jsonify({"response": "Deactivated top bar animation"})
+
+
+
+
+
 class ServerThread(threading.Thread):
     def __init__(self, app, host, port):
         threading.Thread.__init__(self)

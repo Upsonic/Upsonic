@@ -114,6 +114,33 @@ class Remote_Client:
         return response["response"]
 
 
+    def top_bar_animation(self, text):
+        data = {"text": text}
+        response = self.send_request("/top_bar_activate", data)
+
+
+    def stop_top_bar_animation(self, text):
+        data = {"text": text}
+        response = self.send_request("/top_bar_deactivate", data)
+
+
+
+    class OperationContext:
+        def __init__(self, client, text):
+            self.client = client
+            self.text = text
+
+        def __enter__(self):
+            self.client.top_bar_animation(self.text)
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            self.client.stop_top_bar_animation(self.text)
+
+    def operation(self, text):
+        return self.OperationContext(self, text)
+
+
     def wait(self, second):
         time.sleep(second)
 
