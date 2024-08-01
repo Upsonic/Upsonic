@@ -6,8 +6,8 @@ try:
 except ImportError:
     from llm import *
     from utils.db import *
-    from tts_providers.openai import tts_openai
-    from tts_providers.microsoft_local import tts_microsoft_local
+    from audio.tts_providers.openai import tts_openai
+    from audio.tts_providers.microsoft_local import tts_microsoft_local
 
 import os
 import hashlib

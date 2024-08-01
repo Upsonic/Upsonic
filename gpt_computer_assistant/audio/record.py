@@ -13,6 +13,7 @@ import scipy.io.wavfile as wavfile
 import soundcard as sc
 import threading
 import time
+from scipy.io.wavfile import write
 
 samplerate = 48000  # Updated samplerate for better quality
 channels = 1
@@ -138,3 +139,24 @@ def stop_recording():
     global recording
     recording = False
     print("Recording stopped")
+
+
+
+def quick_speech_to_text(time_total:int=5) -> str:
+    global samplerate, channels, samplerate
+
+
+    quic_location = "temp.wav"
+
+
+    myrecording = sd.rec(int(time_total * samplerate), samplerate=samplerate, channels=channels)
+    sd.wait()  # Wait until recording is finished
+    write(quic_location, samplerate, myrecording)  # Save as WAV file 
+
+
+    try:
+        from .stt import speech_to_text
+    except ImportError:
+        from stt import speech_to_text
+
+    return speech_to_text(quic_location)

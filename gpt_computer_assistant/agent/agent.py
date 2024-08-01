@@ -13,7 +13,7 @@ except ImportError:
     from tooler import *
     from display_tools import *
     from teams import *
-    from agent_tools import get_tools
+    from agent.agent_tools import get_tools
 
 
 from langchain.agents import AgentExecutor, create_json_chat_agent

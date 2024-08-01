@@ -1,8 +1,11 @@
 
 import struct
 
-from ..utils.db import load_pvporcupine_api_key
+try:
 
+    from ..utils.db import load_pvporcupine_api_key
+except ImportError:
+    from utils.db import load_pvporcupine_api_key
 
 def wake_word(the_main_window):
     import pvporcupine

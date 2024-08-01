@@ -1,7 +1,11 @@
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton
 from PyQt5.QtCore import Qt
-from ..utils.db import *
-from ..agent.chat_history import clear_chat_history
+try:
+    from ..utils.db import *
+    from ..agent.chat_history import clear_chat_history
+except:
+     from utils.db import *
+     from agent.chat_history import clear_chat_history
 
 def settings_popup(self):
     """

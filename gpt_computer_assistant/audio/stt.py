@@ -6,8 +6,8 @@ try:
 except ImportError:
     from llm import get_client
     from utils.db import *
-    from stt_providers.openai import stt_openai
-    from stt_providers.openai_whisper_local import stt_openai_whisper_local
+    from audio.stt_providers.openai import stt_openai
+    from audio.stt_providers.openai_whisper_local import stt_openai_whisper_local
 
 import os
 from pydub import AudioSegment

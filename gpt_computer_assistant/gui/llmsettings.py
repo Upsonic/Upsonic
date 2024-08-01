@@ -4,6 +4,7 @@ try:
     from ..llm_settings import llm_show_name, llm_settings
     from ..audio.tts import is_local_tts_available
     from ..audio.stt import is_local_stt_available
+
 except ImportError:
     from utils.db import *
     from agent.chat_history import clear_chat_history
@@ -14,7 +15,7 @@ except ImportError:
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox
 from PyQt5.QtCore import Qt
 
-from gpt_computer_assistant.utils.db import save_openai_url, save_groq_api_key
+
 
 
 def llmsettings_popup(self):
