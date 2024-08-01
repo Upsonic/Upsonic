@@ -37,8 +37,18 @@ os_name_ = os_name()
 
 def tts_if_you_can(text:str, not_threaded=False, status_edit=False, bypass_other_settings = False):
     try:
-        from ..gpt_computer_assistant import the_main_window
-        if (not is_just_text_model_active() and not the_main_window.api_enabled) or bypass_other_settings:
+        try:
+            from ..gpt_computer_assistant import the_main_window
+        except ImportError:
+            from gpt_computer_assistant import the_main_window
+
+        first_control = None
+        try:
+            first_control = (not is_just_text_model_active() and not the_main_window.api_enabled)
+        except:
+            first_control = False
+
+        if first_control or bypass_other_settings:
             response_path = text_to_speech(text)
             if status_edit:
                 signal_handler.assistant_response_ready.emit()
@@ -49,7 +59,12 @@ def tts_if_you_can(text:str, not_threaded=False, status_edit=False, bypass_other
                         mixer.music.load(each_r)
                         mixer.music.play()
                         while mixer.music.get_busy():
-                            if the_main_window.stop_talking:
+                            the_stop_talking = False
+                            try:
+                                the_stop_talking = the_main_window.stop_talking
+                            except:
+                                pass
+                            if the_stop_talking:
                                 mixer.music.stop()
                                 break                            
                             time.sleep(0.1)
@@ -61,6 +76,7 @@ def tts_if_you_can(text:str, not_threaded=False, status_edit=False, bypass_other
             else:
                 play_audio()
     except Exception as e:
+        traceback.print_exc()
         pass
 
 

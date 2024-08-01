@@ -265,6 +265,34 @@ def connect_wifi(ssid: str, password: str) -> bool:
 
 
 
+
+
+def ask_to_user(question:str, wait_for_answer:str=None) -> str:
+    """
+    Its ask to the user for your question and return the answer
+    """
+    try:
+
+        try:
+            from .agent.process import tts_if_you_can
+            from .audio.record import quick_speech_to_text
+        except:
+            from agent.process import tts_if_you_can
+            from audio.record import quick_speech_to_text
+
+        print("TTS")
+        tts_if_you_can(question, bypass_other_settings=True, not_threaded=True)
+        print("TTS END")
+
+        if wait_for_answer:
+            return quick_speech_to_text(wait_for_answer)
+        else:
+            return quick_speech_to_text()
+    except:
+        traceback.print_exc()
+        return False
+
+
 def get_standard_tools():
     print("Tool len", len(_standard_tools_))
     last_list = [_standard_tools_[each] for each in _standard_tools_]
@@ -273,4 +301,4 @@ def get_standard_tools():
 
 
 if __name__ == "__main__":
-    print(turn_on_wifi())
+    print(ask_to_user("What is your age"))
