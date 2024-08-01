@@ -472,8 +472,7 @@ class DrawingWidget(QWidget):
                     if self.main_.circle_rect.contains(event.pos()):
 
                         if self.main_.state == "aitalking":
-                            self.main_.manuel_stop = True
-                            self.main_.stop_talking = True
+                            self.main_.stop_ai_talking()
 
                         else:
                             self.main_.screenshot_and_microphone_button_action()
@@ -483,8 +482,7 @@ class DrawingWidget(QWidget):
                 try:
                             if self.main_.small_circle_rect.contains(event.pos()):
                                 if self.main_.state == "aitalking":
-                                    self.main_.manuel_stop = True
-                                    self.main_.stop_talking = True
+                                    self.main_.stop_ai_talking()
 
                                 else: 
                                     click_sound()
@@ -496,8 +494,7 @@ class DrawingWidget(QWidget):
 
                             if self.main_.small_circle_left.contains(event.pos()):
                                 if self.main_.state == "aitalking":
-                                    self.main_.manuel_stop = True
-                                    self.main_.stop_talking = True
+                                    self.main_.stop_ai_talking()
 
                                 else:       
                                     click_sound()                          
@@ -509,8 +506,7 @@ class DrawingWidget(QWidget):
 
                             if self.main_.small_circle_left_top.contains(event.pos()):
                                 if self.main_.state == "aitalking":
-                                    self.main_.manuel_stop = True
-                                    self.main_.stop_talking = True
+                                    self.main_.stop_ai_talking()
 
                                 else:
                                     click_sound()
@@ -558,7 +554,9 @@ class MainWindow(QMainWindow):
         else:
             self.button_handler.toggle_recording(no_screenshot=True)
 
-
+    def stop_ai_talking(self):
+        self.manuel_stop = True
+        self.stop_talking = True
 
     def __init__(self):
         super().__init__()
