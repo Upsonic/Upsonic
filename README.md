@@ -251,6 +251,10 @@ with remote.operation("Scanning")
   remote.wait(5)
 
 
+
+color_name = remote.ask("What is your favorite color")
+
+
 ```
 
 
