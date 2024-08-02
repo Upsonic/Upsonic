@@ -290,6 +290,20 @@ def boop_sound():
     return jsonify({"response": "Sound played"})
 
 
+@app.route("/ask_to_user", methods=["POST"])
+def ask_to_user():
+    """
+    This api asks question to the user and return the result
+    """
+    data = request.json
+    question = data["question"]
+    wait_for_answer = data["wait_for_answer"]
+    from .standard_tools import ask_to_user
+    result = ask_to_user(question, wait_for_answer)
+    return jsonify({"response": result})
+
+
+
 
 class ServerThread(threading.Thread):
     def __init__(self, app, host, port):

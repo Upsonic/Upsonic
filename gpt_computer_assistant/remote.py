@@ -129,6 +129,11 @@ class Remote_Client:
         response = self.send_request("/boop_sound", data)
 
 
+    def ask(self, question, wait_for_answer=None):
+        data = {"question":question, "wait_for_answer":wait_for_answer}
+        response = self.send_request("/ask_to_user", data)
+        return response["response"]
+
 
     class OperationContext:
         def __init__(self, client, text):
