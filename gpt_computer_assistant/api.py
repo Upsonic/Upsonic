@@ -303,6 +303,17 @@ def ask_to_user():
     return jsonify({"response": result})
 
 
+@app.route("/set_text", methods=["POST"])
+def set_text():
+    """
+    This api set text to main window text input 
+    """
+    data = request.json
+    text = data["text"]
+    from .gpt_computer_assistant import the_main_window
+    the_main_window.set_text_from_api(text)
+    return jsonify({"response": "Text set."})
+
 
 
 class ServerThread(threading.Thread):

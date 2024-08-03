@@ -5,7 +5,17 @@ import time
 import sys
 from upsonic import Tiger
 
-the_upsonic = Tiger()
+
+the_upsonic_ = None
+
+
+def the_upsonic():
+    global the_upsonic_
+
+    if not the_upsonic_:
+        the_upsonic_ = Tiger()
+    
+    return the_upsonic_
 
 class Remote_Client:
     def __init__(self, url):
@@ -103,7 +113,7 @@ class Remote_Client:
 
 
     def custom_tool(self, func):
-        the_code = textwrap.dedent(the_upsonic.extract_source(func))
+        the_code = textwrap.dedent(the_upsonic().extract_source(func))
         # Remove the first line
 
         if the_code.startswith("@remote.custom_tool"):
@@ -134,6 +144,11 @@ class Remote_Client:
         response = self.send_request("/ask_to_user", data)
         return response["response"]
 
+
+    def set_text(self, text):
+        data = {"text": text}
+        response = self.send_request("/set_text", data)
+        return response["response"]
 
     class OperationContext:
         def __init__(self, client, text):

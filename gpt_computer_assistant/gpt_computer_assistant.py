@@ -1043,6 +1043,16 @@ class MainWindow(QMainWindow):
 
 
 
+    def set_text_from_api(self, text):
+        self.worker.make_animation = True
+        self.worker.the_input_text = text
+
+
+
+
+
+
+
 
 
 
