@@ -311,7 +311,7 @@ def set_text():
     data = request.json
     text = data["text"]
     from .gpt_computer_assistant import the_main_window
-    the_main_window.set_text_to_input_box(text)
+    the_main_window.set_text_from_api(text)
     return jsonify({"response": "Text set."})
 
 
