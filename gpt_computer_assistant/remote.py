@@ -135,6 +135,11 @@ class Remote_Client:
         return response["response"]
 
 
+    def set_text(self, text):
+        data = {"text": text}
+        response = self.send_request("/set_text", data)
+        return response["response"]
+
     class OperationContext:
         def __init__(self, client, text):
             self.client = client
