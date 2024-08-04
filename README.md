@@ -45,11 +45,14 @@ Powered by <a href="https://github.com/Upsonic/Tiger"><strong>Upsonic Tiger 🐅
 
 
 
-## Installation and Run
-Needed >= Python 3.9
+## Install and run
+*Python 3.9 or higher is required
+
 ```console
-pip3 install 'gpt-computer-assistant[base]'
+pip install 'gpt-computer-assistant[base]'
 ```
+
+To run gpt-computer-assistant, simply type
 
 ```console
 computerassistant
@@ -116,6 +119,19 @@ We have added Pvporcupine integration. To use it, you need to install an additio
 ```console
 pip3 install 'gpt-computer-assistant[wakeword]'
 ```
+</details>
+
+### Error Solutions
+<details>
+
+#### Setuptools
+
+```console
+pip install setuptools --upgrade
+```
+
+</details>
+
 
 After that, please enter your [Pvporcupine](https://picovoice.ai/) API key and enable the wake word feature.
 </details>
