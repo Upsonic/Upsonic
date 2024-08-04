@@ -1,0 +1,37 @@
+name: Build OpenAI DMG
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - onuratakan
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+
+    - name: Build DMG
+      run: |
+        chmod +x build_scripts/openai/macos_build.sh
+        ./build_scripts/openai/macos_build.sh
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: gpt-computer-assistant-openai
+        path: dist/*.dmg
