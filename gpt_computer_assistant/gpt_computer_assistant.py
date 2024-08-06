@@ -819,7 +819,7 @@ class MainWindow(QMainWindow):
         self.title_bar_layout.setSpacing(0)
 
         self.btn_minimize = QPushButton("_", self.title_bar)
-        self.btn_minimize.setFixedSize(25, 20)
+        self.btn_minimize.setFixedSize(20, 20)
         self.btn_minimize.clicked.connect(self.showMinimized)
 
         def stop_app():
@@ -832,12 +832,14 @@ class MainWindow(QMainWindow):
 
 
         self.btn_close = QPushButton("X", self.title_bar)
-        self.btn_close.setFixedSize(30, 20)
+        self.btn_close.setFixedSize(20, 20)
         self.btn_close.clicked.connect(stop_app)
 
         self.title_label = QLabel("  "+name(), self.title_bar)
         self.title_label.setStyleSheet("border: 0px solid blue;") 
+
         self.title_bar_layout.addWidget(self.title_label)
+        self.title_bar_layout.addStretch()
         self.title_bar_layout.addWidget(self.btn_minimize)
 
 

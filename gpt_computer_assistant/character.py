@@ -8,7 +8,17 @@ def change_name(new_name):
     name_ = new_name
 
     from .gpt_computer_assistant import the_main_window
-    the_main_window.title_label.setText(name_)
+
+    def adjust_string_length(input_string):
+
+        if len(input_string) < 18:
+
+            return input_string.ljust(18)
+        else:
+   
+            return input_string[:18]
+
+    the_main_window.title_label.setText(adjust_string_length(name_))
 
 
 
