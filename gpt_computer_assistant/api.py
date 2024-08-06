@@ -378,6 +378,19 @@ def save_openai_api_key():
     save_api_key(openai_api_key)
     return jsonify({"response": "OpenAI API key saved."})
 
+
+@app.route("/save_openai_url", methods=["POST"]),
+def save_openai_url():
+    """
+    This api saves the OpenAI base URL
+    """
+    data = request.json
+    openai_url = data["openai_url"]
+    from .utils.db import save_openai_url
+    save_openai_url(openai_url)
+    return jsonify({"response": "OpenAI base URL saved."})
+
+
 class ServerThread(threading.Thread):
     def __init__(self, app, host, port):
         threading.Thread.__init__(self)
