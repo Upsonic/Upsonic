@@ -271,6 +271,13 @@ with remote.operation("Scanning")
 color_name = remote.ask("What is your favorite color")
 
 
+remote.set_background_color(255, 255, 255)
+remote.set_opacity(200)
+
+remote.set_border_radius(3)
+
+remote.collapse()
+remote.expand()
 ```
 
 
