@@ -166,8 +166,8 @@ class Remote_Client:
         return self.OperationContext(self, text)
 
 
-    def set_background_color(self, color):
-        data = {"color": color}
+    def set_background_color(self, r,g,b):
+        data = {"color": f"{r}, {g}, {b}"}
         response = self.send_request("/set_background_color", data)
         return response["response"]
     
