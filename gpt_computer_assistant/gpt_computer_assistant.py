@@ -205,6 +205,26 @@ class Worker_2(QThread):
 
 
 
+class Worker_3(QThread):
+    text_to_set = pyqtSignal(str)
+
+
+    def __init__(self):
+        super().__init__()
+        self.the_input_text = None
+
+
+
+    def run(self):
+        while True:
+            self.msleep(500)  # Simulate a time-consuming task
+
+            if self.the_input_text:
+                self.text_to_set.emit("True")
+                self.the_input_text = None
+               
+
+
 
 class DrawingWidget(QWidget):
     def __init__(self, parent=None):
@@ -561,6 +581,10 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        self.background_color = "45, 45, 45"
+        self.opacity = 250
+
+
         print("API Enabled:", MainWindow.api_enabled)
         if MainWindow.api_enabled:
             try:
@@ -631,6 +655,8 @@ class MainWindow(QMainWindow):
         self.reading_thread = False
         self.reading_thread_2 = False
 
+
+
     def init_border_animation(self):
         # Create a QVariantAnimation to handle color change
         border_animation = QVariantAnimation(
@@ -663,9 +689,9 @@ class MainWindow(QMainWindow):
 
     # Existing methods...
 
-    def general_styling(self):
+    def general_styling(self, a=None):
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setStyleSheet("border-radius: 10px; background-color: rgba(45, 45, 45, 250);")
+        self.setStyleSheet(f"border-radius: 10px; background-color: rgba({self.background_color}, {self.opacity});")
         self.central_widget.setStyleSheet("border-style: solid; border-width: 1px; border-color: rgb(0,0,0,0);")
 
         self.input_box_style = "border-radius: 10px; border-bottom: 1px solid #01EE8A;"
@@ -677,6 +703,15 @@ class MainWindow(QMainWindow):
 
         self.btn_minimize.setStyleSheet("background-color: #2E2E2E; color: white; border-style: none;")
         self.btn_close.setStyleSheet("background-color: #2E2E2E; color: white; border-style: none;")
+
+
+    def set_background_color(self, color):
+        self.background_color = color
+        self.worker_3.the_input_text = "True"
+
+    def set_opacity(self, opacity):
+        self.opacity = opacity
+        self.worker_3.the_input_text = "True"
 
 
     def wake_word_trigger(self):
@@ -923,6 +958,10 @@ class MainWindow(QMainWindow):
         self.worker_2.text_to_set.connect(self.start_border_animation)
         self.worker_2.text_to_set_title_bar.connect(self.set_title_bar_text)
         self.worker_2.start()
+
+        self.worker_3 = Worker_3()
+        self.worker_3.text_to_set.connect(self.general_styling)
+        self.worker_3.start()
 
         # print height and width
         print(self.height(), self.width())

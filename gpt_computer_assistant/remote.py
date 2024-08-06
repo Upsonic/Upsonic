@@ -166,6 +166,18 @@ class Remote_Client:
         return self.OperationContext(self, text)
 
 
+    def set_background_color(self, color):
+        data = {"color": color}
+        response = self.send_request("/set_background_color", data)
+        return response["response"]
+    
+    def set_opacity(self, opacity):
+        data = {"opacity": opacity}
+        response = self.send_request("/set_opacity", data)
+        return response["response"]
+
+
+
     def wait(self, second):
         time.sleep(second)
 

@@ -315,6 +315,29 @@ def set_text():
     return jsonify({"response": "Text set."})
 
 
+@app.route("/set_background_color", methods=["POST"])
+def set_background_color():
+    """
+    This api set text to main window text input 
+    """
+    data = request.json
+    color = data["color"]
+    from .gpt_computer_assistant import the_main_window
+    the_main_window.set_background_color(color)
+    return jsonify({"response": "Background color set."})
+
+@app.route("/set_opacity", methods=["POST"])
+def set_opacity():
+    """
+    This api set text to main window text input 
+    """
+    data = request.json
+    opacity = data["opacity"]
+    from .gpt_computer_assistant import the_main_window
+    the_main_window.set_opacity(opacity)
+    return jsonify({"response": "Opacity set."})
+
+
 
 class ServerThread(threading.Thread):
     def __init__(self, app, host, port):
