@@ -2,13 +2,8 @@
 name: Build OpenAI DMG
 
 on:
-  push:
-    branches:
-      - master
-  pull_request:
-    branches:
-      - onuratakan
-
+  workflow_dispatch:
+    
 jobs:
   build:
     runs-on: macos-latest
