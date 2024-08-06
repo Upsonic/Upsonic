@@ -203,6 +203,11 @@ class Remote_Client:
         data = {"openai_url": openai_url}
         response = self.send_request("/save_openai_url", data)
         return response["response"]
+    
+    def save_model_settings(self, model_name):
+        data = {"model_name": model_name}
+        response = self.send_request("/save_model_settings", data)
+        return response["response"]
 
 
     def wait(self, second):

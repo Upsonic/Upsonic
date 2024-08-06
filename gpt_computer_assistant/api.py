@@ -390,6 +390,16 @@ def save_openai_url():
     save_openai_url(openai_url)
     return jsonify({"response": "OpenAI base URL saved."})
 
+@app.route("/save_model_settings", methods=["POST"])
+def save_model_settings():
+    """
+    This api saves the model settings
+    """
+    data = request.json
+    model_settings = data["model_settings"]
+    from .utils.db import save_model_settings
+    save_model_settings(model_settings)
+    return jsonify({"response": "Model settings saved."})
 
 class ServerThread(threading.Thread):
     def __init__(self, app, host, port):
