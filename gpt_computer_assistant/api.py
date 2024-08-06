@@ -424,6 +424,18 @@ def save_google_api_key():
     return jsonify({"response": "Google Generative AI API key saved."})
 
 
+@app.route("/save_tts_model_settings", methods=["POST"])
+def save_tts_model_settings():
+    """
+    This api saves the TTS model settings
+    """
+    data = request.json
+    tts_model_settings = data["tts_model_settings"]
+    from .utils.db import save_tts_model_settings
+    save_tts_model_settings(tts_model_settings)
+    return jsonify({"response": "TTS model settings saved."})
+
+
 class ServerThread(threading.Thread):
     def __init__(self, app, host, port):
         threading.Thread.__init__(self)
