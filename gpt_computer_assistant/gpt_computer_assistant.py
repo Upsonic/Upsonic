@@ -222,8 +222,48 @@ class Worker_3(QThread):
             if self.the_input_text:
                 self.text_to_set.emit("True")
                 self.the_input_text = None
-               
 
+
+
+
+class Worker_collapse(QThread):
+    text_to_set = pyqtSignal(str)
+
+
+    def __init__(self):
+        super().__init__()
+        self.the_input_text = None
+
+
+
+    def run(self):
+        while True:
+            self.msleep(500)  # Simulate a time-consuming task
+
+            if self.the_input_text:
+                self.text_to_set.emit("True")
+                self.the_input_text = None
+               
+        
+
+class Worker_uncollapse(QThread):
+    text_to_set = pyqtSignal(str)
+
+
+    def __init__(self):
+        super().__init__()
+        self.the_input_text = None
+
+
+
+    def run(self):
+        while True:
+            self.msleep(500)  # Simulate a time-consuming task
+
+            if self.the_input_text:
+                self.text_to_set.emit("True")
+                self.the_input_text = None
+               
 
 
 class DrawingWidget(QWidget):
@@ -539,20 +579,9 @@ class DrawingWidget(QWidget):
             try:
                 if self.main_.small_circle_collapse.contains(event.pos()):
                     if self.main_.collapse:
-                        self.main_.collapse = False
-                        print()
-                        # hide all buttons and input box
-                        the_input_box.show()
-
-                        self.main_.settingsButton.show()
-                        self.main_.llmsettingsButton.show()
-
-                        self.main_.window().setFixedSize(self.main_.first_width, self.main_.first_height)
-                        deactivate_collapse_setting()
+                        self.main_.uncollapse_gca()
                     else:
-                        self.main_.collapse = True
-                        self.main_.collapse_window()
-                        activate_collapse_setting()
+                        self.main_.collapse_gca()
 
 
                     self.main_.update()
@@ -970,6 +999,17 @@ class MainWindow(QMainWindow):
         self.worker_3.text_to_set.connect(self.general_styling)
         self.worker_3.start()
 
+
+        self.worker_collapse = Worker_collapse()
+        self.worker_collapse.text_to_set.connect(self.collapse_gca)
+        self.worker_collapse.start()
+
+
+        self.worker_uncollapse = Worker_uncollapse()
+        self.worker_uncollapse.text_to_set.connect(self.uncollapse_gca)
+        self.worker_uncollapse.start()
+
+
         # print height and width
         print(self.height(), self.width())
 
@@ -1211,3 +1251,30 @@ class MainWindow(QMainWindow):
         self.update()
 
 
+
+
+    def collapse_gca(self):
+        self.collapse = True
+        self.collapse_window()
+        activate_collapse_setting()
+
+    def collapse_gca_api(self):
+        self.worker_collapse.the_input_text = "True"
+
+
+    def uncollapse_gca(self):
+        self.collapse = False
+        print()
+        # hide all buttons and input box
+        the_input_box.show()
+
+        self.settingsButton.show()
+        self.llmsettingsButton.show()
+
+        self.window().setFixedSize(self.first_width, self.first_height)
+        deactivate_collapse_setting()
+
+
+    def uncollapse_gca_api(self):
+        self.worker_uncollapse.the_input_text = "True"
+        

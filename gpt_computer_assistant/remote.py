@@ -182,6 +182,19 @@ class Remote_Client:
         return response["response"]
 
 
+    def collapse(self):
+        data = {}
+        response = self.send_request("/collapse", data)
+        return response["response"]
+    
+
+    def expand(self):
+        data = {}
+        response = self.send_request("/expand", data)
+        return response["response"]
+    
+
+
     def wait(self, second):
         time.sleep(second)
 

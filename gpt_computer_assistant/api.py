@@ -348,6 +348,26 @@ def set_border_radius():
     the_main_window.set_border_radius(radius)
     return jsonify({"response": "Border radius set."})
 
+@app.route("/collapse", methods=["POST"])
+def collapse():
+    """
+    This api set text to main window text input 
+    """
+    from .gpt_computer_assistant import the_main_window
+    the_main_window.collapse_gca_api()
+    return jsonify({"response": "Collapsed."})
+
+@app.route("/expand", methods=["POST"])
+def expand():
+    """
+    This api set text to main window text input 
+    """
+    from .gpt_computer_assistant import the_main_window
+    the_main_window.uncollapse_gca_api()
+    return jsonify({"response": "Expanded."})
+
+
+
 class ServerThread(threading.Thread):
     def __init__(self, app, host, port):
         threading.Thread.__init__(self)
