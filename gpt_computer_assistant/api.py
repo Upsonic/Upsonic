@@ -367,6 +367,16 @@ def expand():
     return jsonify({"response": "Expanded."})
 
 
+@app.route("/save_openai_api_key", methods=["POST"])
+def save_openai_api_key():
+    """
+    This api saves the OpenAI API key
+    """
+    data = request.json
+    openai_api_key = data["openai_api_key"]
+    from .utils.db import save_api_key
+    save_api_key(openai_api_key)
+    return jsonify({"response": "OpenAI API key saved."})
 
 class ServerThread(threading.Thread):
     def __init__(self, app, host, port):

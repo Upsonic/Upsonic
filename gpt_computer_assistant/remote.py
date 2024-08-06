@@ -194,6 +194,11 @@ class Remote_Client:
         return response["response"]
     
 
+    def save_openai_api_key(self, openai_api_key):
+        data = {"openai_api_key": openai_api_key}
+        response = self.send_request("/save_openai_api_key", data)
+        return response["response"]
+
 
     def wait(self, second):
         time.sleep(second)
