@@ -435,6 +435,17 @@ def save_tts_model_settings():
     save_tts_model_settings(tts_model_settings)
     return jsonify({"response": "TTS model settings saved."})
 
+@app.route("/save_stt_model_settings", methods=["POST"])
+def save_stt_model_settings():
+    """
+    This api saves the STT model settings
+    """
+    data = request.json
+    stt_model_settings = data["stt_model_settings"]
+    from .utils.db import save_stt_model_settings
+    save_stt_model_settings(stt_model_settings)
+    return jsonify({"response": "STT model settings saved."})
+
 
 class ServerThread(threading.Thread):
     def __init__(self, app, host, port):
