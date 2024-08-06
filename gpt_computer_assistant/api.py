@@ -412,6 +412,18 @@ def save_groq_api_key():
     save_groq_api_key(groq_api_key)
     return jsonify({"response": "Groq API key saved."})
 
+@app.route("/save_google_api_key", methods=["POST"])
+def save_google_api_key():
+    """
+    This api saves the Google Generative AI API key
+    """
+    data = request.json
+    google_api_key = data["google_api_key"]
+    from .utils.db import save_google_api_key
+    save_google_api_key(google_api_key)
+    return jsonify({"response": "Google Generative AI API key saved."})
+
+
 class ServerThread(threading.Thread):
     def __init__(self, app, host, port):
         threading.Thread.__init__(self)

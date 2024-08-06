@@ -214,6 +214,11 @@ class Remote_Client:
         response = self.send_request("/save_groq_api_key", data)
         return response["response"]
 
+    def save_google_api_key(self, google_api_key):
+        data = {"google_api_key": google_api_key}
+        response = self.send_request("/save_google_api_key", data)
+        return response["response"]
+    
 
     def wait(self, second):
         time.sleep(second)
