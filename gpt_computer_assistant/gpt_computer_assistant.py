@@ -583,6 +583,7 @@ class MainWindow(QMainWindow):
 
         self.background_color = "45, 45, 45"
         self.opacity = 250
+        self.border_radius = 10
 
 
         print("API Enabled:", MainWindow.api_enabled)
@@ -691,7 +692,7 @@ class MainWindow(QMainWindow):
 
     def general_styling(self, a=None):
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setStyleSheet(f"border-radius: 10px; background-color: rgba({self.background_color}, {self.opacity});")
+        self.setStyleSheet(f"border-radius: {self.border_radius}px; background-color: rgba({self.background_color}, {self.opacity});")
         self.central_widget.setStyleSheet("border-style: solid; border-width: 1px; border-color: rgb(0,0,0,0);")
 
         self.input_box_style = "border-radius: 10px; border-bottom: 1px solid #01EE8A;"
@@ -711,6 +712,10 @@ class MainWindow(QMainWindow):
 
     def set_opacity(self, opacity):
         self.opacity = opacity
+        self.worker_3.the_input_text = "True"
+
+    def set_border_radius(self, radius):
+        self.border_radius = radius
         self.worker_3.the_input_text = "True"
 
 

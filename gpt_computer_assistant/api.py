@@ -337,7 +337,16 @@ def set_opacity():
     the_main_window.set_opacity(opacity)
     return jsonify({"response": "Opacity set."})
 
-
+@app.route("/set_border_radius", methods=["POST"])
+def set_border_radius():
+    """
+    This api set text to main window text input 
+    """
+    data = request.json
+    radius = data["radius"]
+    from .gpt_computer_assistant import the_main_window
+    the_main_window.set_border_radius(radius)
+    return jsonify({"response": "Border radius set."})
 
 class ServerThread(threading.Thread):
     def __init__(self, app, host, port):

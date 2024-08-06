@@ -176,6 +176,10 @@ class Remote_Client:
         response = self.send_request("/set_opacity", data)
         return response["response"]
 
+    def set_border_radius(self, radius):
+        data = {"radius": radius}
+        response = self.send_request("/set_border_radius", data)
+        return response["response"]
 
 
     def wait(self, second):
