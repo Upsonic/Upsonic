@@ -812,7 +812,7 @@ class MainWindow(QMainWindow):
         # Custom title bar
         self.title_bar = QWidget(self)
         self.title_bar.setFixedHeight(30)  # Set a fixed height for the title bar
-        self.title_bar.setStyleSheet("background-color: #2E2E2E; color: #fff;")
+        self.title_bar.setStyleSheet("background-color: #2E2E2E; color: #fff; border-radius: 15px; border-style: solid; border-width: 1px; border-color: #303030;")
 
         self.title_bar_layout = QHBoxLayout(self.title_bar)
         self.title_bar_layout.setContentsMargins(5, 5, 0, 5)
