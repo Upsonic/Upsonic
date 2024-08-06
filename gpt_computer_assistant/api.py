@@ -401,6 +401,17 @@ def save_model_settings():
     save_model_settings(model_settings)
     return jsonify({"response": "Model settings saved."})
 
+@app.route("/save_groq_api_key", methods=["POST"])
+def save_groq_api_key():
+    """
+    This api saves the Groq API key
+    """
+    data = request.json
+    groq_api_key = data["groq_api_key"]
+    from .utils.db import save_groq_api_key
+    save_groq_api_key(groq_api_key)
+    return jsonify({"response": "Groq API key saved."})
+
 class ServerThread(threading.Thread):
     def __init__(self, app, host, port):
         threading.Thread.__init__(self)

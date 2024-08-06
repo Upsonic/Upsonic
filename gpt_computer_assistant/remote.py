@@ -209,6 +209,11 @@ class Remote_Client:
         response = self.send_request("/save_model_settings", data)
         return response["response"]
 
+    def save_groq_api_key(self, groq_api_key):
+        data = {"groq_api_key": groq_api_key}
+        response = self.send_request("/save_groq_api_key", data)
+        return response["response"]
+
 
     def wait(self, second):
         time.sleep(second)
