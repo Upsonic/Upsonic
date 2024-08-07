@@ -39,6 +39,7 @@ import threading
 import time
 import random
 import math
+from PyQt5 import sip # for windows pyinstaller
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
 from PyQt5.QtGui import QMouseEvent, QPainter, QPen, QBrush, QIcon, QColor
 from PyQt5.QtCore import Qt, QTimer, QRect, pyqtSignal
