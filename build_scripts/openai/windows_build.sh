@@ -1,8 +1,8 @@
 #!/bin/sh
 # Requireed installations
-pip install ".[base]"
-pip install '.[agentic]'
-pip install pyinstaller==6.9.0
+python -m pip install ".[base]"
+python -m pip install '.[agentic]'
+python -m pip install pyinstaller==6.9.0
 
 
 # Pyinstaller
