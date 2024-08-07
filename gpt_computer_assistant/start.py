@@ -2,7 +2,7 @@ import os
 import platform
 import sys
 import webbrowser
-from PyQt5 import sip # for windows pyinstaller
+
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
