@@ -131,6 +131,8 @@ down_icon_path = os.path.join(media_dir, "Down.png")
 
 click_sound_path = os.path.join(media_dir, "boop.mp3")
 
+gca_logo_path = os.path.join(media_dir, "gca_logo.png")
+
 agents = []  # Placeholder for agents data
 
 groqkey = os.path.join(artifacts_dir, "groqkey.db")
@@ -467,3 +469,27 @@ def load_stt_model_settings():
         return f.read()
     
 
+
+
+
+
+logo_active_setting = os.path.join(artifacts_dir, "logo_active_setting.db")
+
+
+def activate_logo_active_setting():
+    """Activate the logo_active_setting."""
+    with open(logo_active_setting, "w") as f:
+        f.write("1")
+
+
+def deactivate_logo_active_setting():
+    """Deactivate the logo_active_setting."""
+    with open(logo_active_setting, "w") as f:
+        f.write("0")
+
+def is_logo_active_setting_active():
+    """Check if the logo_active_setting is active."""
+    if not os.path.exists(logo_active_setting):
+        return False
+    with open(logo_active_setting, "r") as f:
+        return f.read() == "1"

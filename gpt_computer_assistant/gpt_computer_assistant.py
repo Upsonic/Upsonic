@@ -688,6 +688,24 @@ class MainWindow(QMainWindow):
 
 
 
+
+
+        # Logo Adding
+        if is_logo_active_setting_active():
+            image_layout = QHBoxLayout()
+            self.the_image = QLabel(self)
+            self.the_image.setPixmap(QtGui.QPixmap(gca_logo_path).scaled(15, 15))
+
+            image_layout.addWidget(self.the_image)
+            self.layout.addLayout(image_layout)
+            self.the_image.setAlignment(Qt.AlignCenter)
+            self.the_image.setFixedHeight(35)
+
+            self.setFixedSize(self.width(), self.height() + 40)
+        
+
+
+
     def init_border_animation(self):
         # Create a QVariantAnimation to handle color change
         border_animation = QVariantAnimation(
@@ -821,7 +839,13 @@ class MainWindow(QMainWindow):
         self.settingsButton.hide()
         self.llmsettingsButton.hide()
 
+
+
         self.window().setFixedSize(self.width(), 140)        
+
+        # Logo Adding
+        if is_logo_active_setting_active():
+            self.window().setFixedSize(self.width(), 175) 
 
 
 
@@ -1273,6 +1297,12 @@ class MainWindow(QMainWindow):
         self.llmsettingsButton.show()
 
         self.window().setFixedSize(self.first_width, self.first_height)
+
+        # Logo Adding
+        if is_logo_active_setting_active():
+            self.window().setFixedSize(self.first_width, self.first_height + 35)
+
+
         deactivate_collapse_setting()
 
 
