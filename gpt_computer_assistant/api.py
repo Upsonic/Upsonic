@@ -379,7 +379,7 @@ def save_openai_api_key():
     return jsonify({"response": "OpenAI API key saved."})
 
 
-@app.route("/save_openai_url", methods=["POST"]),
+@app.route("/save_openai_url", methods=["POST"])
 def save_openai_url():
     """
     This api saves the OpenAI base URL
