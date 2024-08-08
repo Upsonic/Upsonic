@@ -307,6 +307,46 @@ class Worker_hide_logo(QThread):
                 self.the_input_text = None
 
 
+class Worker_activate_long_gca(QThread):
+    text_to_set = pyqtSignal(str)
+
+
+    def __init__(self):
+        super().__init__()
+        self.the_input_text = None
+
+
+
+    def run(self):
+        while True:
+            self.msleep(500)  # Simulate a time-consuming task
+
+            if self.the_input_text:
+                self.text_to_set.emit("True")
+                self.the_input_text = None
+
+
+class Worker_deactivate_long_gca(QThread):
+    text_to_set = pyqtSignal(str)
+
+
+    def __init__(self):
+        super().__init__()
+        self.the_input_text = None
+
+
+
+    def run(self):
+        while True:
+            self.msleep(500)  # Simulate a time-consuming task
+
+            if self.the_input_text:
+                self.text_to_set.emit("True")
+                self.the_input_text = None
+
+
+
+
 class DrawingWidget(QWidget):
     def __init__(self, parent=None):
         super(DrawingWidget, self).__init__(parent)
@@ -1087,6 +1127,16 @@ class MainWindow(QMainWindow):
         self.worker_hide_logo.start()
 
 
+
+        self.worker_activate_long_gca = Worker_activate_long_gca()
+        self.worker_activate_long_gca.text_to_set.connect(self.activate_long_gca)
+        self.worker_activate_long_gca.start()
+
+        self.worker_deactivate_long_gca = Worker_deactivate_long_gca()
+        self.worker_deactivate_long_gca.text_to_set.connect(self.deactivate_long_gca)
+        self.worker_deactivate_long_gca.start()
+
+
         # print height and width
         print(self.height(), self.width())
 
@@ -1379,6 +1429,24 @@ class MainWindow(QMainWindow):
         self.worker_hide_logo.the_input_text = "True"
 
 
+
+
+
+    def activate_long_gca(self):
+        activate_long_gca_setting()
+        self.update_screen()
+
+    def activate_long_gca_api(self):
+        self.worker_activate_long_gca.the_input_text = "True"
+
+    def deactivate_long_gca(self):
+        deactivate_long_gca_setting()
+        self.update_screen()
+
+    def deactivate_long_gca_api(self):
+        self.worker_deactivate_long_gca.the_input_text = "True"
+
+
     def update_screen(self):
         width = 210
         height = 300
@@ -1393,5 +1461,14 @@ class MainWindow(QMainWindow):
             if is_logo_active_setting_active():
                 height += 35
         
-        
+        if is_long_gca_setting_active():
+            if not is_collapse_setting_active():
+                height += 500
+                self.input_box.setFixedHeight(580)
+
+        else:
+            self.input_box.setFixedHeight(80)
+
+            
+
         self.setFixedSize(width, height) 

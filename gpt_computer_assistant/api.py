@@ -482,6 +482,25 @@ def custom_logo_upload():
     return jsonify({"response": "Custom logo uploaded."})
 
 
+@app.route("/activate_long_gca", methods=["POST"])
+def activate_long_gca():
+    """
+    This api activates long GCA
+    """
+    from .gpt_computer_assistant import the_main_window
+    the_main_window.activate_long_gca_api()
+    return jsonify({"response": "Long GCA activated."})
+
+@app.route("/deactivate_long_gca", methods=["POST"])
+def deactivate_long_gca():
+    """
+    This api deactivates long GCA
+    """
+    from .gpt_computer_assistant import the_main_window
+    the_main_window.deactivate_long_gca_api()
+    return jsonify({"response": "Long GCA deactivated."})
+
+
 class ServerThread(threading.Thread):
     def __init__(self, app, host, port):
         threading.Thread.__init__(self)

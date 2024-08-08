@@ -252,6 +252,19 @@ class Remote_Client:
         response = self.send_request("/custom_logo_upload", data, files)
         return response["response"]
 
+
+    def activate_long_gca(self):
+        data = {}
+        response = self.send_request("/activate_long_gca", data)
+        return response["response"]
+    
+    def deactivate_long_gca(self):
+        data = {}
+        response = self.send_request("/deactivate_long_gca", data)
+        return response["response"]
+
+
+
     def wait(self, second):
         time.sleep(second)
 

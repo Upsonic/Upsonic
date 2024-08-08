@@ -516,3 +516,29 @@ def load_logo_file_path():
     
 
 custom_logo_path = os.path.join(artifacts_dir, "custom_logo_path.png")
+
+
+
+
+
+
+long_gca_setting = os.path.join(artifacts_dir, "long_gca_setting.db")
+
+
+def activate_long_gca_setting():
+    """Activate the long_gca_setting."""
+    with open(long_gca_setting, "w") as f:
+        f.write("1")
+
+
+def deactivate_long_gca_setting():
+    """Deactivate the long_gca_setting."""
+    with open(long_gca_setting, "w") as f:
+        f.write("0")
+
+def is_long_gca_setting_active():
+    """Check if the long_gca_setting is active."""
+    if not os.path.exists(long_gca_setting):
+        return True
+    with open(long_gca_setting, "r") as f:
+        return f.read() == "1"
