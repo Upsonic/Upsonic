@@ -694,7 +694,7 @@ class MainWindow(QMainWindow):
         if is_logo_active_setting_active():
             image_layout = QHBoxLayout()
             self.the_image = QLabel(self)
-            self.the_image.setPixmap(QtGui.QPixmap(gca_logo_path).scaled(15, 15))
+            self.the_image.setPixmap(QtGui.QPixmap(load_logo_file_path()).scaled(15, 15))
 
             image_layout.addWidget(self.the_image)
             self.layout.addLayout(image_layout)

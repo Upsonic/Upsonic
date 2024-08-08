@@ -493,3 +493,25 @@ def is_logo_active_setting_active():
         return False
     with open(logo_active_setting, "r") as f:
         return f.read() == "1"
+    
+
+
+
+
+logo_file_path = os.path.join(artifacts_dir, "loog_file.db")
+
+
+def save_logo_file_path(model):
+    """Save the logo_file_path to a file."""
+    with open(logo_file_path, "w") as f:
+        f.write(model)
+
+
+def load_logo_file_path():
+    """Load the logo_file_path from a file."""
+    if not os.path.exists(logo_file_path):
+        return gca_logo_path
+    with open(logo_file_path, "r") as f:
+        return f.read()
+    
+
