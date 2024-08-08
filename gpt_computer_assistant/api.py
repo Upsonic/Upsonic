@@ -466,6 +466,17 @@ def hide_logo():
     return jsonify({"response": "Custom logo deactivated."})
 
 
+@app.route("/custom_logo_upload", methods=["POST"])
+def custom_logo_upload():
+    """
+    This api uploads a custom logo
+    """
+    file = request.files["logo"]
+    from .utils.db import save_logo_file_path, custom_logo_path
+    file.save(custom_logo_path)
+    save_logo_file_path(custom_logo_path)
+    return jsonify({"response": "Custom logo uploaded."})
+
 
 class ServerThread(threading.Thread):
     def __init__(self, app, host, port):
