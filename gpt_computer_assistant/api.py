@@ -454,6 +454,8 @@ def show_logo():
     """
     from .utils.db import activate_logo_active_setting
     activate_logo_active_setting()
+    from .gpt_computer_assistant import the_main_window
+    the_main_window.show_logo_api()
     return jsonify({"response": "Custom logo activated."})
 
 @app.route("/hide_logo", methods=["POST"])
@@ -463,6 +465,8 @@ def hide_logo():
     """
     from .utils.db import deactivate_logo_active_setting
     deactivate_logo_active_setting()
+    from .gpt_computer_assistant import the_main_window
+    the_main_window.hide_logo_api()
     return jsonify({"response": "Custom logo deactivated."})
 
 

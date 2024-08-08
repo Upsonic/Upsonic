@@ -267,6 +267,46 @@ class Worker_uncollapse(QThread):
                
 
 
+
+
+class Worker_show_logo(QThread):
+    text_to_set = pyqtSignal(str)
+
+
+    def __init__(self):
+        super().__init__()
+        self.the_input_text = None
+
+
+
+    def run(self):
+        while True:
+            self.msleep(500)  # Simulate a time-consuming task
+
+            if self.the_input_text:
+                self.text_to_set.emit("True")
+                self.the_input_text = None
+               
+
+class Worker_hide_logo(QThread):
+    text_to_set = pyqtSignal(str)
+
+
+    def __init__(self):
+        super().__init__()
+        self.the_input_text = None
+
+
+
+    def run(self):
+        while True:
+            self.msleep(500)  # Simulate a time-consuming task
+
+            if self.the_input_text:
+                self.text_to_set.emit("True")
+                self.the_input_text = None
+
+
 class DrawingWidget(QWidget):
     def __init__(self, parent=None):
         super(DrawingWidget, self).__init__(parent)
@@ -687,23 +727,23 @@ class MainWindow(QMainWindow):
         self.reading_thread_2 = False
 
 
+        image_layout = QHBoxLayout()
+        self.the_image = QLabel(self)
+        self.the_image.setPixmap(QtGui.QPixmap(load_logo_file_path()).scaled(15, 15))
 
+        image_layout.addWidget(self.the_image)
+        self.layout.addLayout(image_layout)
+        self.the_image.setAlignment(Qt.AlignCenter)
+        self.the_image.setFixedHeight(35)
 
 
         # Logo Adding
-        if is_logo_active_setting_active():
-            image_layout = QHBoxLayout()
-            self.the_image = QLabel(self)
-            self.the_image.setPixmap(QtGui.QPixmap(load_logo_file_path()).scaled(15, 15))
+        if not is_logo_active_setting_active():
+            self.the_image.hide()
 
-            image_layout.addWidget(self.the_image)
-            self.layout.addLayout(image_layout)
-            self.the_image.setAlignment(Qt.AlignCenter)
-            self.the_image.setFixedHeight(35)
 
-            self.setFixedSize(self.width(), self.height() + 40)
         
-
+        self.update_screen()
 
 
     def init_border_animation(self):
@@ -839,20 +879,23 @@ class MainWindow(QMainWindow):
         self.settingsButton.hide()
         self.llmsettingsButton.hide()
 
+        self.update_screen()
 
 
-        self.window().setFixedSize(self.width(), 140)        
 
-        # Logo Adding
-        if is_logo_active_setting_active():
-            self.window().setFixedSize(self.width(), 175) 
+  
+
 
 
 
     def initUI(self):
         self.setWindowTitle("GPT")
         self.setGeometry(100, 100, 200, 200)
-        self.setFixedSize(self.width()+10, self.height() + 80)
+        width = 210
+        height = 300
+  
+        # setting the minimum size 
+        self.setMinimumSize(width, height) 
 
         self.first_height = self.height()
         self.first_width = self.width()
@@ -1033,6 +1076,15 @@ class MainWindow(QMainWindow):
         self.worker_uncollapse = Worker_uncollapse()
         self.worker_uncollapse.text_to_set.connect(self.uncollapse_gca)
         self.worker_uncollapse.start()
+
+
+        self.worker_show_logo = Worker_show_logo()
+        self.worker_show_logo.text_to_set.connect(self.show_logo)
+        self.worker_show_logo.start()
+
+        self.worker_hide_logo = Worker_hide_logo()
+        self.worker_hide_logo.text_to_set.connect(self.hide_logo)
+        self.worker_hide_logo.start()
 
 
         # print height and width
@@ -1282,6 +1334,7 @@ class MainWindow(QMainWindow):
         self.collapse = True
         self.collapse_window()
         activate_collapse_setting()
+        self.update_screen()
 
     def collapse_gca_api(self):
         self.worker_collapse.the_input_text = "True"
@@ -1296,16 +1349,49 @@ class MainWindow(QMainWindow):
         self.settingsButton.show()
         self.llmsettingsButton.show()
 
-        self.window().setFixedSize(self.first_width, self.first_height)
 
-        # Logo Adding
-        if is_logo_active_setting_active():
-            self.window().setFixedSize(self.first_width, self.first_height + 35)
 
 
         deactivate_collapse_setting()
 
+        self.update_screen()
+
 
     def uncollapse_gca_api(self):
         self.worker_uncollapse.the_input_text = "True"
+
         
+
+
+
+    def show_logo(self):
+        self.the_image.show()
+        self.update_screen()
+
+    def show_logo_api(self):
+        self.worker_show_logo.the_input_text = "True"
+
+    def hide_logo(self):
+        self.the_image.hide()
+        self.update_screen()
+    
+    def hide_logo_api(self):
+        self.worker_hide_logo.the_input_text = "True"
+
+
+    def update_screen(self):
+        width = 210
+        height = 300
+  
+        
+
+        if is_logo_active_setting_active():
+            height += 35
+
+        if is_collapse_setting_active():
+            height = 150
+            if is_logo_active_setting_active():
+                height += 35
+        
+        
+        self.setFixedSize(width, height) 
