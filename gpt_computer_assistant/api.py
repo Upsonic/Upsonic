@@ -447,6 +447,26 @@ def save_stt_model_settings():
     return jsonify({"response": "STT model settings saved."})
 
 
+@app.route("/show_logo", methods=["POST"])
+def show_logo():
+    """
+    This api shows the custom logo
+    """
+    from .utils.db import activate_logo_active_setting
+    activate_logo_active_setting()
+    return jsonify({"response": "Custom logo activated."})
+
+@app.route("/hide_logo", methods=["POST"])
+def hide_logo():
+    """
+    This api hides the custom logo
+    """
+    from .utils.db import deactivate_logo_active_setting
+    deactivate_logo_active_setting()
+    return jsonify({"response": "Custom logo deactivated."})
+
+
+
 class ServerThread(threading.Thread):
     def __init__(self, app, host, port):
         threading.Thread.__init__(self)

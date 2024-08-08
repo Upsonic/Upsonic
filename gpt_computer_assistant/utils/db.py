@@ -515,3 +515,4 @@ def load_logo_file_path():
         return f.read()
     
 
+custom_logo_path = os.path.join(artifacts_dir, "custom_logo_path.png")

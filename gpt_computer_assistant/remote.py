@@ -230,6 +230,19 @@ class Remote_Client:
         return response["response"]
 
 
+    
+
+    def show_logo(self):
+        data = {}
+        response = self.send_request("/show_logo", data)
+        return response["response"]
+    
+    def hide_logo(self):
+        data = {}
+        response = self.send_request("/hide_logo", data)
+        return response["response"]
+
+
     def wait(self, second):
         time.sleep(second)
 
