@@ -146,7 +146,7 @@ class Worker(QThread):
                 if self.the_input_text != last_text:
                     self.commited_text.append(self.the_input_text)
 
-                    if len(self.the_input_text) > 90 or MainWindow.api_enabled or not self.make_animation:
+                    if len(self.the_input_text) > 90 or not self.make_animation:
                         self.text_to_set.emit(self.the_input_text)
                     else:
                         for i in range(len(self.the_input_text)):
@@ -674,6 +674,7 @@ from PyQt5.QtCore import QVariantAnimation
 
 class MainWindow(QMainWindow):
     api_enabled = False
+    tts_available = True
 
 
     def screenshot_and_microphone_button_action(self):
@@ -1170,7 +1171,7 @@ class MainWindow(QMainWindow):
         self.worker.the_input_text = text
 
     def read_part_task_generate_only(self):
-        if not is_just_text_model_active() and not the_main_window.api_enabled:
+        if not is_just_text_model_active() and the_main_window.tts_available:
 
 
             threads = {}
@@ -1198,7 +1199,7 @@ class MainWindow(QMainWindow):
         self.reading_thread_2 = False
 
     def read_part_task(self):
-        if not is_just_text_model_active() and not the_main_window.api_enabled:
+        if not is_just_text_model_active() and the_main_window.tts_available:
             threads = {}
 
             the_okey_parts = split_with_multiple_delimiters(self.worker.the_input_text,".?!:")
