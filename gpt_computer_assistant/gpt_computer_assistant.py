@@ -1043,6 +1043,14 @@ class MainWindow(QMainWindow):
 
         input_box.setFixedHeight(80)
 
+        # Set text wrapping. I dont wat to cut the text
+        input_box.setWordWrapMode(QtGui.QTextOption.NoWrap)
+
+        # Change the font size 
+        font = QtGui.QFont()
+        font.setPointSize(12)
+        input_box.setFont(font)
+
 
         if load_api_key() == "CHANGE_ME":
             input_box.setPlaceholderText("Save your API Key, go to settings")
