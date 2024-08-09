@@ -91,6 +91,111 @@ os_name_ = os_name()
 
 
 
+from PyQt5.QtCore import Qt, QRegExp
+from PyQt5.QtGui import QColor, QSyntaxHighlighter, QTextCharFormat, QFont
+from PyQt5.QtWidgets import QApplication, QTextEdit
+
+class PythonSyntaxHighlighter(QSyntaxHighlighter):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.highlighting_rules = []
+
+        # Define different text formats with appropriate colors
+        keyword_format = QTextCharFormat()
+        keyword_format.setForeground(QColor(127, 0, 85))  # Dark purple for keywords
+
+        built_in_formats = QTextCharFormat()
+        built_in_formats.setForeground(QColor(42, 0, 255))  # Dark blue for built-ins and constants
+
+        string_format = QTextCharFormat()
+        string_format.setForeground(QColor(0, 128, 0))  # Green for strings
+
+        function_format = QTextCharFormat()
+        function_format.setForeground(QColor(0, 0, 255))  # Blue for function names
+
+        comment_format = QTextCharFormat()
+        comment_format.setForeground(QColor(128, 128, 128))  # Gray for comments
+        comment_format.setFontItalic(True)
+
+        number_format = QTextCharFormat()
+        number_format.setForeground(QColor(255, 0, 0))  # Red for numbers
+
+        decorator_format = QTextCharFormat()
+        decorator_format.setForeground(QColor(0, 0, 128))  # Navy blue for decorators
+
+        # Markdown formatting
+        header_format = QTextCharFormat()
+        header_format.setForeground(QColor(0, 128, 128))  # Teal for headers
+        header_format.setFontWeight(QFont.Bold)
+
+        bold_format = QTextCharFormat()
+        bold_format.setFontWeight(QFont.Bold)
+
+        italic_format = QTextCharFormat()
+        italic_format.setFontItalic(True)
+
+        code_format = QTextCharFormat()
+        code_format.setForeground(QColor(255, 140, 0))  # Dark orange for inline code
+        code_format.setFontFamily("Courier New")
+        code_format.setBackground(QColor(245, 245, 245))  # Light gray background for inline code
+
+        block_code_format = QTextCharFormat()
+        block_code_format.setForeground(QColor(255, 140, 0))  # Dark orange for code blocks
+        block_code_format.setFontFamily("Courier New")
+        block_code_format.setBackground(QColor(245, 245, 245))  # Light gray background for code blocks
+
+        # Define the regular expressions
+        keywords = [
+            'def', 'class', 'if', 'else', 'elif', 'return', 'import', 'from', 'as', 'for', 
+            'while', 'try', 'except', 'finally', 'with', 'async', 'await', 'yield', 'lambda', 
+            'global', 'nonlocal', 'assert', 'del', 'pass', 'break', 'continue', 'and', 'or', 
+            'not', 'is', 'in'
+        ]
+        self.highlighting_rules += [(QRegExp(r'\b' + word + r'\b'), keyword_format) for word in keywords]
+
+        built_ins = [
+            'True', 'False', 'None', '__init__', 'self', 'print', 'len', 'range', 'str', 'int', 
+            'float', 'list', 'dict', 'set', 'tuple'
+        ]
+        self.highlighting_rules += [(QRegExp(r'\b' + word + r'\b'), built_in_formats) for word in built_ins]
+
+        self.highlighting_rules.append((QRegExp(r'"[^"\\]*(\\.[^"\\]*)*"'), string_format))
+        self.highlighting_rules.append((QRegExp(r"'[^'\\]*(\\.[^'\\]*)*'"), string_format))
+
+        self.highlighting_rules.append((QRegExp(r'\bdef\b\s*(\w+)'), function_format))
+        self.highlighting_rules.append((QRegExp(r'\bclass\b\s*(\w+)'), function_format))
+        
+        self.highlighting_rules.append((QRegExp(r'#.*'), comment_format))
+        
+        self.highlighting_rules.append((QRegExp(r'\b[0-9]+[lL]?\b'), number_format))
+        self.highlighting_rules.append((QRegExp(r'\b0[xX][0-9A-Fa-f]+[lL]?\b'), number_format))
+        self.highlighting_rules.append((QRegExp(r'\b0[oO]?[0-7]+[lL]?\b'), number_format))
+        self.highlighting_rules.append((QRegExp(r'\b0[bB][01]+[lL]?\b'), number_format))
+
+        self.highlighting_rules.append((QRegExp(r'@[^\s]+'), decorator_format))
+
+        # Markdown rules
+        self.highlighting_rules.append((QRegExp(r'^#{1,6} .+'), header_format))  # Headers
+        self.highlighting_rules.append((QRegExp(r'\*\*[^*]+\*\*'), bold_format))  # **bold**
+        self.highlighting_rules.append((QRegExp(r'__[^_]+__'), bold_format))  # __bold__
+        self.highlighting_rules.append((QRegExp(r'\*[^*]+\*'), italic_format))  # *italic*
+        self.highlighting_rules.append((QRegExp(r'_[^_]+_'), italic_format))  # _italic_
+        self.highlighting_rules.append((QRegExp(r'`[^`]+`'), code_format))  # Inline code
+
+    def highlightBlock(self, text):
+        # Handle code blocks separately
+        if text.strip().startswith("```"):
+            self.setFormat(0, len(text), self.highlighting_rules[-1][1])
+            return
+        
+        for pattern, format in self.highlighting_rules:
+            expression = QRegExp(pattern)
+            index = expression.indexIn(text)
+            while index >= 0:
+                length = expression.matchedLength()
+                self.setFormat(index, length, format)
+                index = expression.indexIn(text, index + length)
+
 readed_sentences = []
 
 import re
@@ -1050,6 +1155,8 @@ class MainWindow(QMainWindow):
         font = QtGui.QFont()
         font.setPointSize(12)
         input_box.setFont(font)
+
+        self.highlighter = PythonSyntaxHighlighter(self.input_box.document())
 
 
         if load_api_key() == "CHANGE_ME":
