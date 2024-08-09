@@ -473,15 +473,34 @@ def hide_logo():
     return jsonify({"response": "Custom logo deactivated."})
 
 
+@app.route("/default_logo", methods=["POST"])
+def default_logo():
+    """
+    This api enable default logo
+    """
+    from .utils.db import save_logo_file_path, icon_256_path, is_logo_active_setting_active
+
+    save_logo_file_path(icon_256_path)
+
+    from .gpt_computer_assistant import the_main_window
+    the_main_window.tray_and_task_bar_logo_api()
+    if is_logo_active_setting_active():
+        the_main_window.show_logo_api()
+    return jsonify({"response": "Custom logo deactivated."})
+
 @app.route("/custom_logo_upload", methods=["POST"])
 def custom_logo_upload():
     """
     This api uploads a custom logo
     """
     file = request.files["logo"]
-    from .utils.db import save_logo_file_path, custom_logo_path
+    from .utils.db import save_logo_file_path, custom_logo_path, is_logo_active_setting_active
     file.save(custom_logo_path)
     save_logo_file_path(custom_logo_path)
+    from .gpt_computer_assistant import the_main_window
+    the_main_window.tray_and_task_bar_logo_api()
+    if is_logo_active_setting_active():
+        the_main_window.show_logo_api()
     return jsonify({"response": "Custom logo uploaded."})
 
 

@@ -510,10 +510,11 @@ def save_logo_file_path(model):
 def load_logo_file_path():
     """Load the logo_file_path from a file."""
     if not os.path.exists(logo_file_path):
-        return gca_logo_path
+        return icon_256_path
     with open(logo_file_path, "r") as f:
         return f.read()
     
+
 
 custom_logo_path = os.path.join(artifacts_dir, "custom_logo_path.png")
 

@@ -251,6 +251,12 @@ class Remote_Client:
         files = {"logo": open(logo_path, "rb")}
         response = self.send_request("/custom_logo_upload", data, files)
         return response["response"]
+    
+    def default_logo(self):
+        data = {}
+        response = self.send_request("/default_logo", data)
+        return response["response"]
+
 
 
     def activate_long_gca(self):
@@ -262,6 +268,7 @@ class Remote_Client:
         data = {}
         response = self.send_request("/deactivate_long_gca", data)
         return response["response"]
+
 
 
 

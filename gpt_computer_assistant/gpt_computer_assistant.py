@@ -453,6 +453,25 @@ class Worker_deactivate_long_gca(QThread):
 
 
 
+class Worker_tray_and_task_bar_logo(QThread):
+    text_to_set = pyqtSignal(str)
+
+
+    def __init__(self):
+        super().__init__()
+        self.the_input_text = None
+
+
+
+    def run(self):
+        while True:
+            self.msleep(500)  # Simulate a time-consuming task
+
+            if self.the_input_text:
+                self.text_to_set.emit("True")
+                self.the_input_text = None
+
+
 
 class DrawingWidget(QWidget):
     def __init__(self, parent=None):
@@ -877,7 +896,7 @@ class MainWindow(QMainWindow):
 
         image_layout = QHBoxLayout()
         self.the_image = QLabel(self)
-        self.the_image.setPixmap(QtGui.QPixmap(load_logo_file_path()).scaled(15, 15))
+        self.the_image.setPixmap(QtGui.QPixmap(load_logo_file_path()).scaled(25, 25))
 
         image_layout.addWidget(self.the_image)
         self.layout.addLayout(image_layout)
@@ -1084,6 +1103,12 @@ class MainWindow(QMainWindow):
         self.btn_close.clicked.connect(stop_app)
 
         self.title_label = QLabel("  "+name(), self.title_bar)
+
+        # Change font size
+        font = QtGui.QFont()
+        font.setPointSize(11)
+        self.title_label.setFont(font)
+
         self.title_label.setStyleSheet("border: 0px solid blue;") 
 
         self.title_bar_layout.addWidget(self.title_label)
@@ -1256,6 +1281,11 @@ class MainWindow(QMainWindow):
         self.worker_deactivate_long_gca = Worker_deactivate_long_gca()
         self.worker_deactivate_long_gca.text_to_set.connect(self.deactivate_long_gca)
         self.worker_deactivate_long_gca.start()
+
+
+        self.worker_tray_and_task_bar_logo = Worker_tray_and_task_bar_logo()
+        self.worker_tray_and_task_bar_logo.text_to_set.connect(self.tray_and_task_bar_logo)
+        self.worker_tray_and_task_bar_logo.start()
 
 
         # print height and width
@@ -1536,8 +1566,34 @@ class MainWindow(QMainWindow):
 
 
     def show_logo(self):
+        self.the_image.setPixmap(QtGui.QPixmap(load_logo_file_path()).scaled(25, 25))
         self.the_image.show()
+
         self.update_screen()
+
+
+
+    def tray_and_task_bar_logo(self):
+        app_icon = QtGui.QIcon()
+
+        app_icon.addFile(load_logo_file_path(), QtCore.QSize(48, 48))
+
+
+
+
+        self.the_app.setWindowIcon(app_icon)
+
+        self.tray.setIcon(app_icon)
+
+        self.tray_icon = app_icon
+        self.tray_active_icon = app_icon
+
+        print("ICON Set", load_logo_file_path())
+
+
+    def tray_and_task_bar_logo_api(self):
+        self.worker_tray_and_task_bar_logo.the_input_text = "True"
+
 
     def show_logo_api(self):
         self.worker_show_logo.the_input_text = "True"

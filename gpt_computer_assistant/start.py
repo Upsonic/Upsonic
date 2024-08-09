@@ -79,9 +79,9 @@ def start(api=False):
         set_profile(profile)
 
     try:
-        from .utils.db import load_tts_model_settings, load_stt_model_settings
+        from .utils.db import load_tts_model_settings, load_stt_model_settings, is_logo_active_setting_active, load_logo_file_path
     except ImportError:
-        from utils.db import load_tts_model_settings, load_stt_model_settings
+        from utils.db import load_tts_model_settings, load_stt_model_settings, is_logo_active_setting_active, load_logo_file_path
 
     if load_tts_model_settings() != "openai":
         from .audio.tts_providers.microsoft_local import preload_tts_microsoft_local
@@ -108,20 +108,18 @@ def start(api=False):
     from PyQt5 import QtGui
     from PyQt5 import QtCore
     app_icon = QtGui.QIcon()
-    from .utils.db import icon_16_path, icon_24_path, icon_32_path, icon_48_path, icon_256_path, icon_48_active_path
-    app_icon.addFile(icon_16_path, QtCore.QSize(16, 16))
-    app_icon.addFile(icon_24_path, QtCore.QSize(24, 24))
-    app_icon.addFile(icon_32_path, QtCore.QSize(32, 32))
-    app_icon.addFile(icon_48_path, QtCore.QSize(48, 48))
-    app_icon.addFile(icon_256_path, QtCore.QSize(256, 256))
+
+    app_icon.addFile(load_logo_file_path(), QtCore.QSize(48, 48))
     app.setWindowIcon(app_icon)
+
+    ex.the_app = app
 
     # Create the tray
     menu_icon = QtGui.QIcon()
-    menu_icon.addFile(icon_48_path, QtCore.QSize(48, 48))
+    menu_icon.addFile(load_logo_file_path(), QtCore.QSize(48, 48))
 
     menu_active_icon = QtGui.QIcon()
-    menu_active_icon.addFile(icon_48_active_path, QtCore.QSize(48, 48))
+    menu_active_icon.addFile(load_logo_file_path(), QtCore.QSize(48, 48))
 
     tray = QSystemTrayIcon()
     tray.setIcon(menu_icon)
@@ -132,6 +130,12 @@ def start(api=False):
 
     # Create the menu
     menu = QMenu()
+
+
+    ex.the_tray = tray
+
+
+
 
 
     show_menu = QAction("Show")

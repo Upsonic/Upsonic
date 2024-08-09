@@ -11,12 +11,12 @@ def change_name(new_name):
 
     def adjust_string_length(input_string):
 
-        if len(input_string) < 18:
+        if len(input_string) < 20:
 
-            return input_string.ljust(18)
+            return input_string.ljust(20)
         else:
    
-            return input_string[:18]
+            return input_string[:20]
 
     the_main_window.title_label.setText(adjust_string_length(name_))
 
