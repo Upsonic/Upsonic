@@ -542,3 +542,31 @@ def is_long_gca_setting_active():
         return True
     with open(long_gca_setting, "r") as f:
         return f.read() == "1"
+    
+
+
+
+
+
+
+
+
+
+
+
+location_setting = os.path.join(artifacts_dir, "location_setting.db")
+
+
+def save_location_setting(model):
+    """Save the location_setting to a file."""
+    with open(location_setting, "w") as f:
+        f.write(model)
+
+
+def load_location_setting():
+    """Load the location_setting from a file."""
+    if not os.path.exists(location_setting):
+        return "right"
+    with open(location_setting, "r") as f:
+        return f.read()
+    

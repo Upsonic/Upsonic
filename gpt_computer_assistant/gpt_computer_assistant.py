@@ -46,6 +46,8 @@ from PyQt5.QtCore import Qt, QTimer, QRect, pyqtSignal
 from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import QShortcut
 from PyQt5.QtWidgets import QSpacerItem, QSizePolicy
+from PyQt5.QtWidgets import QDesktopWidget
+
 
 from PyQt5.QtWidgets import (
     QPushButton,
@@ -786,6 +788,9 @@ class MainWindow(QMainWindow):
         
         self.update_screen()
 
+        if load_location_setting() == "right":
+            self.put_window_to_right_side_of_screen()
+
 
     def init_border_animation(self):
         # Create a QVariantAnimation to handle color change
@@ -1473,3 +1478,21 @@ class MainWindow(QMainWindow):
             
 
         self.setFixedSize(width, height) 
+
+        
+
+
+
+    def put_window_to_right_side_of_screen(self):
+        screen = QDesktopWidget().screenGeometry()
+        window = self.frameGeometry()
+        
+        # Calculate x position for the right side of the screen and center vertically
+        x = screen.width() - window.width()  # To right side
+        y = (screen.height() - window.height()) // 2  # Center vertically
+
+
+        # Add a small offset to the right side
+        x -= 10
+
+        self.move(x, y)
