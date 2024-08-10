@@ -34,7 +34,7 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: gpt-computer-assistant-openai-dmg
-        path: dist/*
+        path: dist/*.dmg
 
   build_exe:
     runs-on: windows-latest
@@ -59,7 +59,7 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: gpt-computer-assistant-openai-exe
-        path: dist/*
+        path: dist/*.exe
 
   release:
     needs: [build_dmg, build_exe]
