@@ -56,4 +56,4 @@ pip3 install pynput==1.7.7
 pip3 uninstall numpy -y
 pip3 install numpy
 
-pyinstaller --recursive-copy-metadata gpt_computer_assistant run.py --onefile --add-data="gpt_computer_assistant/utils/media/*":"gpt_computer_assistant/utils/media" --icon="gpt_computer_assistant/utils/media/icon.ico" --name="GPT_Computer_Assistant"
+pyinstaller --recursive-copy-metadata gpt_computer_assistant run.py --onefile --add-data="gpt_computer_assistant/utils/media/*":"gpt_computer_assistant/utils/media" --icon="gpt_computer_assistant/utils/media/icon.ico" --name="GPT Computer Assistant"
