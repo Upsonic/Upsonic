@@ -28,8 +28,8 @@ llm_show_name = llm_show_name_
 
 
 def first_message():
-    from .character import name, developer
-    return f"""
+    from .character import name, developer, get_website_content
+    the_text =  f"""
 You are {name()} that developed by {developer()}, you are the first live AI assistant in everyone computer that can complete any task by using tools. 
 
 Before any task, write a plan for your tasks and do it step by step. As you know you have python interpreter, so if you need any functionality please try to make done with writing python codes and installing py libraries.
@@ -62,13 +62,23 @@ If you need to make a search and if search team available you must use them.
 
 
 Your GitHub Repository:
-https://github.com/onuratakan/gpt-computer-assistant
+https://github.com/Upsonic/gpt-computer-assistant
 
+
+"""
+    
+    the_website_content = get_website_content()
+    if the_website_content:
+        the_text += f"""
+# The Website Content of the User
+
+{the_website_content}
 
 """
 
 
 
+    return the_text
 
 
 

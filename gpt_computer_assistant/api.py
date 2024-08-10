@@ -523,6 +523,19 @@ def deactivate_long_gca():
     return jsonify({"response": "Long GCA deactivated."})
 
 
+
+@app.route("/train", methods=["POST"])
+def train():
+    """
+    This api trains the gca with given url
+    """
+    data = request.json
+    url = data["url"]
+    from .utils.train import train
+    the_result = train(url)
+    return jsonify({"response": the_result})
+
+
 class ServerThread(threading.Thread):
     def __init__(self, app, host, port):
         threading.Thread.__init__(self)

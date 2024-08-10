@@ -271,6 +271,12 @@ class Remote_Client:
 
 
 
+    def train(self, url):
+        data = {"url": url}
+        response = self.send_request("/train", data)
+        return response["response"]
+
+
 
     def wait(self, second):
         time.sleep(second)

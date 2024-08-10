@@ -31,3 +31,15 @@ def developer():
 def change_developer(new_developer):
     global developer_
     developer_ = new_developer
+
+
+
+
+the_website_content = None
+def get_website_content():
+    global the_website_content
+    return the_website_content
+
+def set_website_content(content):
+    global the_website_content
+    the_website_content = content
