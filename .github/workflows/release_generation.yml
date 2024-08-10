@@ -65,19 +65,22 @@ jobs:
     needs: [build_dmg, build_exe]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+      - uses: actions/checkout@v3
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
+          fetch-depth: 0
+      - name: Getting Tag
+        id: tag_extractor
+        run: echo "latest_tag=$(git describe --tags --abbrev=0)" >> "$GITHUB_OUTPUT"
+    
+      - uses: ncipollo/release-action@v1
+        id: create_release
+        with:
+          name: GPT Computer Assistant ${{ steps.tag_extractor.outputs.latest_tag }}
+          generateReleaseNotes: true
+          tag: ${{ steps.tag_extractor.outputs.latest_tag }}
 
       - name: Upload DMG Asset
         uses: actions/upload-release-asset@v1
