@@ -103,7 +103,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: dist/*.dmg
+          asset_path: dist/*
           asset_name: gpt-computer-assistant-openai.dmg
           asset_content_type: application/octet-stream
 
