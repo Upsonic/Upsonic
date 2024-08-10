@@ -704,10 +704,14 @@ class DrawingWidget(QWidget):
             icon_size,
         )
 
-        if self.main_.collapse:
+        if is_collapse_setting_active():
             self.main_.small_circle_collapse_icon = QIcon(down_icon_path)
-        else:
+
+
+
+        if not is_collapse_setting_active() and is_long_gca_setting_active():
             self.main_.small_circle_collapse_icon = QIcon(up_icon_path)
+
         self.main_.small_circle_collapse_icon.paint(painter, icon_rect)
 
 
@@ -785,10 +789,20 @@ class DrawingWidget(QWidget):
 
             try:
                 if self.main_.small_circle_collapse.contains(event.pos()):
-                    if self.main_.collapse:
-                        self.main_.uncollapse_gca()
+
+
+
+                    if not is_collapse_setting_active():
+                        if is_long_gca_setting_active():
+                            self.main_.deactivate_long_gca()
+                            self.main_.collapse_gca()
+                        else:
+                            self.main_.activate_long_gca()
+
                     else:
-                        self.main_.collapse_gca()
+                        self.main_.uncollapse_gca()
+
+
 
 
                     self.main_.update()
@@ -1220,27 +1234,7 @@ class MainWindow(QMainWindow):
 
 
 
-        # Create an button for expanding and put an icon
-        self.expand_button = QPushButton(self)
-        self.expand_button.setFixedSize(15, 15)
-        if is_logo_active_setting_active():
-            self.expand_button.setIcon(QIcon(up_icon_path))
-        else:
-            self.expand_button.setIcon(QIcon(down_icon_path))
-        self.expand_button.setIconSize(QtCore.QSize(15, 15))
 
-        self.expand_button.setStyleSheet("background-color: #2E2E2E; color: white; border-style: solid; border-radius: 15px; border-width: 1px; border-color: #303030;")
-
-        self.expand_button.clicked.connect(self.activate_long_gca)
-
-        expand_button_layout = QHBoxLayout()
-        expand_button_layout.addStretch()
-        expand_button_layout.addWidget(self.expand_button)
-        expand_button_layout.addStretch()
-        self.layout.addLayout(expand_button_layout)
-
-        
-        
 
 
 
@@ -1641,8 +1635,7 @@ class MainWindow(QMainWindow):
     def activate_long_gca(self):
         activate_long_gca_setting()
 
-        self.expand_button.setIcon(QIcon(up_icon_path))
-        self.expand_button.clicked.connect(self.deactivate_long_gca)
+
         self.update_screen()
 
     def activate_long_gca_api(self):
@@ -1650,8 +1643,7 @@ class MainWindow(QMainWindow):
 
     def deactivate_long_gca(self):
         deactivate_long_gca_setting()
-        self.expand_button.setIcon(QIcon(down_icon_path))
-        self.expand_button.clicked.connect(self.activate_long_gca)
+
         self.update_screen()
 
     def deactivate_long_gca_api(self):
@@ -1668,12 +1660,11 @@ class MainWindow(QMainWindow):
             height += 35
 
         if is_collapse_setting_active():
-            self.expand_button.hide()
+
             height = 150
             if is_logo_active_setting_active():
                 height += 35
-        else:
-            self.expand_button.show()
+
         
         if is_long_gca_setting_active():
             if not is_collapse_setting_active():

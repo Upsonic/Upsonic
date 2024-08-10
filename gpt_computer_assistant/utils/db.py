@@ -128,6 +128,7 @@ audio_icon_path = os.path.join(media_dir, "Audio.png")
 microphone_icon_path = os.path.join(media_dir, "Microphone.png")
 up_icon_path = os.path.join(media_dir, "Up.png")
 down_icon_path = os.path.join(media_dir, "Down.png")
+double_down_icon_path = os.path.join(media_dir, "Double_down.png")
 
 click_sound_path = os.path.join(media_dir, "boop.mp3")
 
