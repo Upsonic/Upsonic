@@ -13,53 +13,53 @@ permissions:
 jobs:
   build_dmg:
     runs-on: macos-latest
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+    - name: Checkout repository
+      uses: actions/checkout@v2
 
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: '3.x'
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.10'
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Build DMG
-        run: ./build_scripts/openai/macos_build.sh
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v2
-        with:
-          name: gpt-computer-assistant-openai-dmg
-          path: dist/*.dmg
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+    - name: Build DMG
+      run: |
+        chmod +x build_scripts/openai/macos_build.sh
+        ./build_scripts/openai/macos_build.sh
+    - name: Upload artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: gpt-computer-assistant-openai-dmg
+        path: dist/*.dmg
 
   build_exe:
     runs-on: windows-latest
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+    - name: Checkout repository
+      uses: actions/checkout@v2
 
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: '3.11'
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip' # caching pip dependencies
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Build EXE
-        run: ./build_scripts/openai/windows_build.sh
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v2
-        with:
-          name: gpt-computer-assistant-openai-exe
-          path: dist/*.exe
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+    - name: Build EXE
+      run: |
+        sh build_scripts/openai/windows_build.sh
+    - name: Upload artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: gpt-computer-assistant-openai-exe
+        path: dist/*
 
   release:
     needs: [build_dmg, build_exe]
