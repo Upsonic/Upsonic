@@ -65,9 +65,6 @@ jobs:
     needs: [build_dmg, build_exe]
     runs-on: ubuntu-latest
     steps:
-
-
-
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
@@ -82,7 +79,6 @@ jobs:
           generateReleaseNotes: true
           tag: ${{ steps.tag_extractor.outputs.latest_tag }}
 
-
       - name: Download DMG Artifact
         uses: actions/download-artifact@v2
         with:
@@ -95,7 +91,11 @@ jobs:
           name: gpt-computer-assistant-openai-exe
           path: dist_exe
 
+      - name: List DMG Directory
+        run: ls -la dist_dmg
 
+      - name: List EXE Directory
+        run: ls -la dist_exe
 
       - name: Upload DMG Asset
         uses: actions/upload-release-asset@v1
