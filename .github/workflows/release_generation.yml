@@ -82,6 +82,21 @@ jobs:
           generateReleaseNotes: true
           tag: ${{ steps.tag_extractor.outputs.latest_tag }}
 
+
+      - name: Download DMG Artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: gpt-computer-assistant-openai-dmg
+          path: dist
+
+      - name: Download EXE Artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: gpt-computer-assistant-openai-exe
+          path: dist
+
+
+
       - name: Upload DMG Asset
         uses: actions/upload-release-asset@v1
         env:
