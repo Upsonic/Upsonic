@@ -103,7 +103,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: dist_dmg/*.dmg
+          asset_path: dist_dmg/GPT_Computer_Assistant.dmg
           asset_name: gpt-computer-assistant-openai.dmg
           asset_content_type: application/octet-stream
 
@@ -113,6 +113,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: dist_exe/*.exe
+          asset_path: dist_exe/GPT_Computer_Assistant.exe
           asset_name: gpt-computer-assistant-openai.exe
           asset_content_type: application/octet-stream
