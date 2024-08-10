@@ -27,7 +27,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Build DMG
-        run: ./build_scripts/macos/build.sh
+        run: ./build_scripts/openai/macos_build.sh
 
       - name: Upload artifact
         uses: actions/upload-artifact@v2
@@ -52,7 +52,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Build EXE
-        run: ./build_scripts/windows/build.sh
+        run: ./build_scripts/openai/windows_build.sh
 
       - name: Upload artifact
         uses: actions/upload-artifact@v2
