@@ -912,9 +912,12 @@ class MainWindow(QMainWindow):
         
         self.update_screen()
 
+
+
+
+    def put_location(self):
         if load_location_setting() == "right":
             self.put_window_to_right_side_of_screen()
-
 
     def init_border_animation(self):
         # Create a QVariantAnimation to handle color change
@@ -1214,6 +1217,31 @@ class MainWindow(QMainWindow):
                 self.button_handler.input_text_screenshot(input_box.toPlainText())
 
         self.layout.addWidget(input_box)
+
+
+
+        # Create an button for expanding and put an icon
+        self.expand_button = QPushButton(self)
+        self.expand_button.setFixedSize(15, 15)
+        if is_logo_active_setting_active():
+            self.expand_button.setIcon(QIcon(up_icon_path))
+        else:
+            self.expand_button.setIcon(QIcon(down_icon_path))
+        self.expand_button.setIconSize(QtCore.QSize(15, 15))
+
+        self.expand_button.setStyleSheet("background-color: #2E2E2E; color: white; border-style: solid; border-radius: 15px; border-width: 1px; border-color: #303030;")
+
+        self.expand_button.clicked.connect(self.activate_long_gca)
+
+        expand_button_layout = QHBoxLayout()
+        expand_button_layout.addStretch()
+        expand_button_layout.addWidget(self.expand_button)
+        expand_button_layout.addStretch()
+        self.layout.addLayout(expand_button_layout)
+
+        
+        
+
 
 
 
@@ -1535,6 +1563,7 @@ class MainWindow(QMainWindow):
         self.collapse = True
         self.collapse_window()
         activate_collapse_setting()
+        
         self.update_screen()
 
     def collapse_gca_api(self):
@@ -1611,6 +1640,9 @@ class MainWindow(QMainWindow):
 
     def activate_long_gca(self):
         activate_long_gca_setting()
+
+        self.expand_button.setIcon(QIcon(up_icon_path))
+        self.expand_button.clicked.connect(self.deactivate_long_gca)
         self.update_screen()
 
     def activate_long_gca_api(self):
@@ -1618,6 +1650,8 @@ class MainWindow(QMainWindow):
 
     def deactivate_long_gca(self):
         deactivate_long_gca_setting()
+        self.expand_button.setIcon(QIcon(down_icon_path))
+        self.expand_button.clicked.connect(self.activate_long_gca)
         self.update_screen()
 
     def deactivate_long_gca_api(self):
@@ -1626,7 +1660,7 @@ class MainWindow(QMainWindow):
 
     def update_screen(self):
         width = 210
-        height = 300
+        height = 320
   
         
 
@@ -1634,9 +1668,12 @@ class MainWindow(QMainWindow):
             height += 35
 
         if is_collapse_setting_active():
+            self.expand_button.hide()
             height = 150
             if is_logo_active_setting_active():
                 height += 35
+        else:
+            self.expand_button.show()
         
         if is_long_gca_setting_active():
             if not is_collapse_setting_active():
@@ -1649,6 +1686,7 @@ class MainWindow(QMainWindow):
             
 
         self.setFixedSize(width, height) 
+        self.put_location()
 
         
 
