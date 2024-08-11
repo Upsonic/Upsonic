@@ -1102,7 +1102,7 @@ class MainWindow(QMainWindow):
         self.title_bar_layout.setContentsMargins(5, 5, 0, 5)
         self.title_bar_layout.setSpacing(0)
 
-        self.btn_minimize = QPushButton("_", self.title_bar)
+        self.btn_minimize = QPushButton("-", self.title_bar)
         self.btn_minimize.setFixedSize(20, 20)
         self.btn_minimize.clicked.connect(self.showMinimized)
 
@@ -1115,7 +1115,7 @@ class MainWindow(QMainWindow):
             self.close()
 
 
-        self.btn_close = QPushButton("X", self.title_bar)
+        self.btn_close = QPushButton("×", self.title_bar)
         self.btn_close.setFixedSize(20, 20)
         self.btn_close.clicked.connect(stop_app)
 
