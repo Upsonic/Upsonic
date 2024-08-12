@@ -1,11 +1,14 @@
 <p align="center">
   <a href="#">
-    <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/deeeb463-c161-4fc6-8407-71c3d8b7defe" alt="Logo"  >
+    <img src="https://github.com/user-attachments/assets/5393b8b2-6ee0-4535-9ae7-69b75b91bf43" >
   </a>
   <br>
   <a href="#">
-    <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/36714716-6990-40b0-84d5-cd7432811bcb" alt="Logo"  >
+    <img src="https://github.com/user-attachments/assets/895d3187-7c74-4a1c-a91f-ac67d2e83def"  >
   </a>
+
+
+
 
   <h3 align="center">GPT Computer Assistant</h3>
   <p align="center">
@@ -13,7 +16,7 @@
   </p>
 
   <p align="center">
-    gpt-4o for windows, macos and ubuntu
+    Intelligence development framework
     <br />
    <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki"><strong>Documentation</strong></a>
    .
