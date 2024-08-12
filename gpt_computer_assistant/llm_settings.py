@@ -17,7 +17,7 @@ llm_settings = {
 
 
 
-def get_openai_modelsş():
+def get_openai_models():
     return [k for k, v in llm_settings.items() if v["provider"] == "openai"]
 
 def get_ollama_models():
