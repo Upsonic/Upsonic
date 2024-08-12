@@ -3,9 +3,6 @@
     <img src="https://github.com/user-attachments/assets/df1a3ec1-8c03-43c8-9432-c71358c35b9e" >
   </a>
   <br>
-  <a href="#">
-    <img src="https://github.com/user-attachments/assets/890b4e0a-4484-4870-a158-2d365b0d969e" >
-  </a>
 
 
 
@@ -52,17 +49,23 @@ Powered by <a href="https://github.com/Upsonic/Tiger"><strong>Upsonic Tiger 🐅
 
 ```console
 pip install 'gpt-computer-assistant[base]'
+pip install 'gpt-computer-assistant[api]'
 ```
 
 To run gpt-computer-assistant, simply type
 
 ```console
-computerassistant
+computerassistant --api
 ```
 
 
-https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/26ae3624-e619-44d6-9b04-f39cf1ac1f8f
+<p align="center">
 
+  <a href="#">
+    <img src="https://github.com/user-attachments/assets/890b4e0a-4484-4870-a158-2d365b0d969e" >
+  </a>
+
+</p>
 
 ### Local text-to-speech | NEW
 <details>
