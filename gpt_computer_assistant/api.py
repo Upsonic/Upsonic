@@ -536,6 +536,41 @@ def train():
     return jsonify({"response": the_result})
 
 
+@app.route("/get_openai_models", methods=["POST"])
+def get_openai_models():
+    """
+    This api returns the list of OpenAI models
+    """
+    from .llm_settings import get_openai_models
+    return jsonify({"response": get_openai_models()})
+
+@app.route("/get_ollama_models", methods=["POST"])
+def get_ollama_models():
+    """
+    This api returns the list of Ollama models
+    """
+    from .llm_settings import get_ollama_models
+    return jsonify({"response": get_ollama_models()})
+
+@app.route("/get_google_models", methods=["POST"])
+def get_google_models():
+    """
+    This api returns the list of Google models
+    """
+    from .llm_settings import get_google_models
+    return jsonify({"response": get_google_models()})
+
+@app.route("/get_groq_models", methods=["POST"])
+def get_groq_models():
+    """
+    This api returns the list of Groq models
+    """
+    from .llm_settings import get_groq_models
+    return jsonify({"response": get_groq_models()})
+
+
+
+
 class ServerThread(threading.Thread):
     def __init__(self, app, host, port):
         threading.Thread.__init__(self)

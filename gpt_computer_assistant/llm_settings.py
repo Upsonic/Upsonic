@@ -17,6 +17,19 @@ llm_settings = {
 
 
 
+def get_openai_modelsş():
+    return [k for k, v in llm_settings.items() if v["provider"] == "openai"]
+
+def get_ollama_models():
+    return [k for k, v in llm_settings.items() if v["provider"] == "ollama"]
+
+def get_google_models():
+    return [k for k, v in llm_settings.items() if v["provider"] == "google"]
+
+def get_groq_models():
+    return [k for k, v in llm_settings.items() if v["provider"] == "groq"]
+
+
 
 
 llm_show_name_ = {}

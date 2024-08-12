@@ -233,6 +233,25 @@ class Remote_Client:
         return response["response"]
 
 
+    def get_openai_models(self):
+        data = {}
+        response = self.send_request("/get_openai_models", data)
+        return response["response"]
+    
+    def get_ollama_models(self):
+        data = {}
+        response = self.send_request("/get_ollama_models", data)
+        return response["response"]
+    
+    def get_google_models(self):
+        data = {}
+        response = self.send_request("/get_google_models", data)
+        return response["response"]
+    
+    def get_groq_models(self):
+        data = {}
+        response = self.send_request("/get_groq_models", data)
+        return response["response"]
     
 
     def show_logo(self):
