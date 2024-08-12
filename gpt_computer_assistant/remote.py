@@ -211,6 +211,9 @@ class Remote_Client:
         data = {"model_name": model_name}
         response = self.send_request("/save_model_settings", data)
         return response["response"]
+    
+    def save_model(self, model_name):
+        self.save_model_settings(model_name)
 
     def save_groq_api_key(self, groq_api_key):
         data = {"groq_api_key": groq_api_key}
