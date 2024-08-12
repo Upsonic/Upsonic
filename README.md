@@ -4,19 +4,30 @@
   </a>
   <br>
 
+<p align="center">
+
+  <a href="https://docs.gca.dev">
+    <img src="https://github.com/user-attachments/assets/c60562bf-540e-47d9-b578-994285071128" width="250">
+  </a>
+  .
+  <a href="https://github.com/Upsonic/gpt-computer-assistant/releases/latest/download/gpt-computer-assistant-openai.dmg">
+    <img src="https://github.com/user-attachments/assets/a0475f31-9dfd-4a0c-91b0-7ae128c3c773" width="250">
+  </a>
+  .
+  <a href="https://github.com/Upsonic/gpt-computer-assistant/releases/latest/download/gpt-computer-assistant-openai.exe">
+    <img src="https://github.com/user-attachments/assets/c94139fd-609c-4780-9541-6e9e01dd0e47" width="250">
+  </a>
+
+</p>
 
 
-  <h3 align="center">GPT Computer Assistant</h3>
   <p align="center">
     <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/badge/Discord-Join?style=social&logo=discord" width=150></a>
   </p>
 
   <p align="center">
-    Intelligence development framework
     <br />
-   <a href="https://github.com/onuratakan/gpt-computer-assistant/wiki"><strong>Documentation</strong></a>
-   .
-    <a href="https://github.com/onuratakan/gpt-computer-assistant/#Capabilities"><strong>Explore the capabilities »</strong></a>
+    Intelligence development framework
     <br />
     </p>
     <br>
@@ -33,6 +44,8 @@
   <p align="center">
    <a href="https://x.com/GPTCompAsst"><img alt="Static Badge" src="https://img.shields.io/twitter/follow/GPTCompAsst?style=social" width=160></a>
 </p>
+
+
 
 |ENGLISH|[简体中文](README.zh_CN.md)|[正體中文](README.zh_TW.md)|[TÜRKÇE](README.TR.md)
 
@@ -66,6 +79,10 @@ computerassistant --api
   </a>
 
 </p>
+
+
+
+
 
 ### Local text-to-speech | NEW
 <details>
