@@ -1,12 +1,11 @@
 <p align="center">
   <a href="#">
-    <img src="https://github.com/user-attachments/assets/5393b8b2-6ee0-4535-9ae7-69b75b91bf43" >
+    <img src="https://github.com/user-attachments/assets/df1a3ec1-8c03-43c8-9432-c71358c35b9e" >
   </a>
   <br>
   <a href="#">
-    <img src="https://github.com/user-attachments/assets/895d3187-7c74-4a1c-a91f-ac67d2e83def"  >
+    <img src="https://github.com/user-attachments/assets/890b4e0a-4484-4870-a158-2d365b0d969e" >
   </a>
-
 
 
 
