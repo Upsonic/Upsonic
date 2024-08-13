@@ -226,6 +226,8 @@ remote.change_developer("X Company")
 # Installing an library:
 remote.install_library("numpy")
 
+
+
 # Adding functianility as python functions:
 @remote.custom_tool
 def my_server_status() -> bool:
@@ -248,7 +250,8 @@ def my_server_status() -> bool:
 ## Interact with User API
 
 
-**remote.input**
+### remote.input
+
 Talk with assistant, about user and computer. With this api you can create an consulting process.
 
 `Hi, look to user window and return which app using now`
@@ -266,50 +269,6 @@ output = remote.input("Extract the user redis config file.", screen=False)
 print(output)
 ```
 
-
-**remote.operation**
-
-With this you can define an operation and inform user via GUI
-
-
-```python
-with remote.operation("Scanning"):
-  remote.wait(5)
-```
-
-
-
-
-**remote.say**
-
-This function say given string to user via `text-to-speech`
-
-```python
-remote.say("Hello, sir how are you today?")
-```
-
-
-
-
-**remote.ask**
-
-This for getting an user answer for any question.
-
-
-```python
-the_user_answer = remote.ask("What is your favorite color?")
-print(the_user_answer)
-```
-
-
-**remote.screenshot_to_memory**
-
-This function is so important, if you want to take a cold screenshot to assistant history to remember and taking some details in future, this function for you.
-
-
-```python
-remote.screenshot_to_memory()
-```
 
 
 
