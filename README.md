@@ -157,168 +157,140 @@ pip install setuptools --upgrade
 After that, please enter your [Pvporcupine](https://picovoice.ai/) API key and enable the wake word feature.
 </details>
 
+
+
+
+
+
+
+
+
+
+
+
 <p align="center">
 <br>
   <br>
   <br>
-
+  <br>
+  <br>
 </p>
-
 
 <p align="center">
-<a href="#">
-    <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/5c6b7063-3d9b-4ea6-befa-ce15d69fcd43" alt="Logo"  >
-  </a>
+<br>
+  <br>
+  <br>
 </p>
 
 
-### Agent Infrastructure
-
-With this way you can create `crewai` agents and using it into gpt-computer-assistant gui and tools.
-
-
-```console
-pip3 install 'gpt-computer-assistant[base]'
-pip3 install 'gpt-computer-assistant[agentic]'
-```
-
-```python
-from gpt_computer_assistant import Agent, start
-
-manager = Agent(
-  role='Project Manager',
-  goal='understands project needs and assist coder',
-  backstory="""You're a manager at a large company.""",
-)
-
-coder = Agent(
-  role='Senior Python Coder',
-  goal='writing python scripts and copying to clipboard',
-  backstory="""You're a python developer at a large company.""",
-)
-
-
-start()
-```
 
 
 
-<p align="center">
-<a href="#">
-    <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/c78f3460-6660-4da6-8941-a8ac5cfc1191" alt="Logo"  >
-  </a>
-</p>
-
-### Adding Custom Tools
-
-Now you are able to add custom tools that run in the agentic infra and assistant processes. 
-
-
-```python
-from gpt_computer_assistant import Tool, start
-
-@Tool
-def sum_tool(first_number: int, second_number: int) -> str:
-    """Useful for when you need to sum two numbers together."""
-    return first_number + second_number
-
-start()
-```
-
-
-
-
-
-
-<p align="center">
-<a href="#">
-    <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/65b5fe7c-c0e1-40e9-9447-f41cd4f369a3" alt="Logo"  >
-  </a>
-</p>
-
-
-### API | NEW
-
-Now you can use your GPT Computer Assistant remotely! GUI still active, for this there is few steps:
-
-```console
-pip3 install 'gpt-computer-assistant[base]'
-pip3 install 'gpt-computer-assistant[api]'
-```
-
-```console
-computerassistant --api
-```
-
+## LLM Settings
 
 ```python
 from gpt_computer_assistant.remote import remote
 
-output = remote.input("Hi, how are you today?", screen=False, talk=False)
-print(output)
+remote.save_models("gpt-4o")
+remote.save_openai_api_key("sk-**")
+```
 
-remote.just_screenshot()
+## Characteristic API
 
-remote.talk("TTS test")
+Name of the assitant:
+```python
+remote.change_name("X Intelligence")
+```
 
-# Other Functionalities
-remote.reset_memory()
-remote.profile("default")
+Developer personna of the assistant:
+```python
+remote.change_developer("X Company")
+```
 
-remote.enable_predefined_agents()
-remote.disable_predefined_agents()
+## Connect Your Functions API
 
-remote.enable_online_tools()
-remote.disable_online_tools()
-
-
-
-# Custom tools
+Installing an library:
+```python
 remote.install_library("numpy")
+```
 
+Adding functianility as python functions:
+```python
 @remote.custom_tool
-def hobbies():
-    "returns hobbies"
-    import numpy
-    return "Tennis, volleyball, and swimming."
+def my_server_status() -> bool:
+  """
+  Check the server status.
+  """
+  return True
+```
 
 
-# Create an operation, it will inform the user with top bar animation
-with remote.operation("Scanning")
+## Interact with User API
+
+
+### remote.input
+Talk with assistant, about user and computer. With this api you can create an consulting process.
+
+`Hi, look to user window and return which app using now`
+
+`Ask user to is user need any kind of supoprt`
+
+`Extract the user redis config file.`
+
+
+With this questions you will make a shortcut for your needs. 
+**You can collect informations from user computer or directly from user or user computer.**
+
+```python
+output = remote.input("Extract the user redis config file.", screen=False)
+print(output)
+```
+
+
+### remote.operation
+
+With this you can define an operation and inform user via GUI
+
+
+```python
+with remote.operation("Scanning"):
   remote.wait(5)
-
-
-
-color_name = remote.ask("What is your favorite color")
-
-
-remote.set_background_color(255, 255, 255)
-remote.set_opacity(200)
-
-remote.set_border_radius(3)
-
-remote.collapse()
-remote.expand()
 ```
 
 
 
 
+## remote.say
+
+This function say given string to user via `text-to-speech`
+
+```python
+remote.say("Hello, sir how are you today?")
+```
 
 
-<p align="center">
-<br>
-  <br>
-  <br>
-  <br>
-  <br>
-</p>
 
-<p align="center">
-<br>
-  <br>
-  <br>
-</p>
+
+## remote.ask
+
+This for getting an user answer for any question.
+
+
+```python
+the_user_answer = remote.ask("What is your favorite color?")
+print(the_user_answer)
+```
+
+
+## remote.screenshot_to_memory
+
+This function is so important, if you want to take a cold screenshot to assistant history to remember and taking some details in future, this function for you.
+
+
+```python
+remote.screenshot_to_memory()
+```
+
 
 
 ## Usage
