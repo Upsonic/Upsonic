@@ -23,10 +23,10 @@
 
   <p align="center">
     <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/badge/Discord-Join?style=social&logo=discord" width=150></a>
-  </p>
-  <p align="center">
+    .
     <a href="https://x.com/GPTCompAsst"><img alt="Static Badge" src="https://img.shields.io/badge/X_App-Join?style=social&logo=x" width=150></a>
   </p>
+
 
   <p align="center">
     <br />
