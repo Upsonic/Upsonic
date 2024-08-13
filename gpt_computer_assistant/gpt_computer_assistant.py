@@ -711,6 +711,9 @@ class DrawingWidget(QWidget):
 
         if not is_collapse_setting_active() and is_long_gca_setting_active():
             self.main_.small_circle_collapse_icon = QIcon(up_icon_path)
+        
+        if not is_collapse_setting_active() and not is_long_gca_setting_active():
+            self.main_.small_circle_collapse_icon = QIcon(down_icon_path)
 
         self.main_.small_circle_collapse_icon.paint(painter, icon_rect)
 

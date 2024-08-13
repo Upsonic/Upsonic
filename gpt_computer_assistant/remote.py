@@ -62,10 +62,19 @@ class Remote_Client:
         response = self.send_request("/screenshot", data)
         return response["response"]
 
+
+    def screenshot_to_memory(self) -> str:
+       return self.just_screenshot()
+
+
     def talk(self, text:str) -> str:
         data = {"text": text}
         response = self.send_request("/tts", data)
         return response["response"]
+    
+    def say(self, text:str) -> str:
+        return self.talk(text)
+    
 
     def profile(self, profile:str) -> str:
         data = {"profile": profile}
@@ -282,6 +291,7 @@ class Remote_Client:
 
 
     def activate_long_gca(self):
+        self.expand()
         data = {}
         response = self.send_request("/activate_long_gca", data)
         return response["response"]

@@ -96,7 +96,7 @@ def tts():
     text = data["text"]
     print("TTS:", text)
     from .agent.process import tts_if_you_can
-    tts_if_you_can(text, not_threaded=True, status_edit=True)
+    tts_if_you_can(text, not_threaded=False, status_edit=True, bypass_other_settings=True)
     the_main_window.tts_available = original_tts
 
     return jsonify({"response": "TTS request received"})
