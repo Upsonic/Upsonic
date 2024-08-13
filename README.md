@@ -360,7 +360,7 @@ remote.expand()
 | **Adding Custom Tools**  | Completed  | Q2 2024        |
 | Click on something on the screen (text and icon)              | Completed      | Q2 2024        |
 | New UI              | Completed      | Q2 2024        |
-| Native Applications, exe, dmg              | Failed (Agentic Infra libraries not supported for now)     | Q2 2024        |
+| Native Applications, exe, dmg              | Completed     | Q3 2024        |
 | **Collaborated Speaking Different Voice Models on long responses.**              | Completed     | Q2 2024        |
 | **Auto Stop Recording, when you complate talking**              | Completed     | Q2 2024        |
 | **Wakeup Word**              | Completed     | Q2 2024        |
