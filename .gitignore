@@ -8,7 +8,7 @@ gpt_computer_assistant/utils/artifacts/*.png
 *.db-shm
 *.db-wal
 test.py
-
+test_backup.py
 
 output/
 dist/
