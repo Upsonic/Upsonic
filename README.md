@@ -176,11 +176,6 @@ After that, please enter your [Pvporcupine](https://picovoice.ai/) API key and e
   <br>
 </p>
 
-<p align="center">
-<br>
-  <br>
-  <br>
-</p>
 
 
 
@@ -195,27 +190,43 @@ remote.save_models("gpt-4o")
 remote.save_openai_api_key("sk-**")
 ```
 
+
+<p align="center">
+<br>
+  <br>
+  <br>
+</p>
+
+
+
 ## Characteristic API
 
-Name of the assitant:
-```python
-remote.change_name("X Intelligence")
-```
 
-Developer personna of the assistant:
 ```python
+# Name of the assitant:
+remote.change_name("X Intelligence")
+
+#Developer personna of the assistant:
 remote.change_developer("X Company")
 ```
 
+
+<p align="center">
+<br>
+  <br>
+  <br>
+</p>
+
+
+
 ## Connect Your Functions API
 
-Installing an library:
-```python
-remote.install_library("numpy")
-```
 
-Adding functianility as python functions:
 ```python
+# Installing an library:
+remote.install_library("numpy")
+
+# Adding functianility as python functions:
 @remote.custom_tool
 def my_server_status() -> bool:
   """
@@ -225,10 +236,19 @@ def my_server_status() -> bool:
 ```
 
 
+
+<p align="center">
+<br>
+  <br>
+  <br>
+</p>
+
+
+
 ## Interact with User API
 
 
-### remote.input
+**remote.input**
 Talk with assistant, about user and computer. With this api you can create an consulting process.
 
 `Hi, look to user window and return which app using now`
@@ -247,7 +267,7 @@ print(output)
 ```
 
 
-### remote.operation
+**remote.operation**
 
 With this you can define an operation and inform user via GUI
 
@@ -260,7 +280,7 @@ with remote.operation("Scanning"):
 
 
 
-## remote.say
+**remote.say**
 
 This function say given string to user via `text-to-speech`
 
@@ -271,7 +291,7 @@ remote.say("Hello, sir how are you today?")
 
 
 
-## remote.ask
+**remote.ask**
 
 This for getting an user answer for any question.
 
@@ -282,7 +302,7 @@ print(the_user_answer)
 ```
 
 
-## remote.screenshot_to_memory
+**remote.screenshot_to_memory**
 
 This function is so important, if you want to take a cold screenshot to assistant history to remember and taking some details in future, this function for you.
 
