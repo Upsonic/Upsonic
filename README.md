@@ -56,7 +56,7 @@ Powered by <a href="https://github.com/Upsonic/Tiger"><strong>Upsonic Tiger 🐅
 
 
 
-## Install and run
+## 1. Install and run
 *Python 3.9 or higher is required
 
 ```console
@@ -181,7 +181,7 @@ After that, please enter your [Pvporcupine](https://picovoice.ai/) API key and e
 
 
 
-## LLM Settings
+## 2. LLM Settings
 
 ```python
 from gpt_computer_assistant.remote import remote
@@ -189,6 +189,15 @@ from gpt_computer_assistant.remote import remote
 remote.save_models("gpt-4o")
 remote.save_openai_api_key("sk-**")
 ```
+
+<p align="start">
+
+  <a href="https://docs.upsonic.co/gca/dev_guides/llm_settings">
+    <img src="https://github.com/user-attachments/assets/a75c8ddf-f9df-436b-9dc8-c5220211e15e" width="150">
+  </a>
+
+</p>
+
 
 
 <p align="center">
@@ -199,7 +208,7 @@ remote.save_openai_api_key("sk-**")
 
 
 
-## Characteristic API
+## 3. Characteristic API
 
 
 ```python
@@ -210,6 +219,15 @@ remote.change_name("X Intelligence")
 remote.change_developer("X Company")
 ```
 
+<p align="start">
+
+  <a href="https://docs.upsonic.co/gca/dev_guides/characteristic">
+    <img src="https://github.com/user-attachments/assets/d7e02ac6-e40c-4b35-8e65-4621bf3fb9a1" width="150">
+  </a>
+
+</p>
+
+
 
 <p align="center">
 <br>
@@ -219,7 +237,7 @@ remote.change_developer("X Company")
 
 
 
-## Connect Your Functions API
+## 4. Connect Your Functions API
 
 
 ```python
@@ -247,19 +265,20 @@ def my_server_status() -> bool:
 
 
 
-## Interact with User API
+## 5. Interact with User API
 
 
 ### remote.input
 
 Talk with assistant, about user and computer. With this api you can create an consulting process.
 
+```markdown
 `Hi, look to user window and return which app using now`
 
 `Ask user to is user need any kind of supoprt`
 
 `Extract the user redis config file.`
-
+```
 
 With this questions you will make a shortcut for your needs. 
 **You can collect informations from user computer or directly from user or user computer.**
@@ -270,6 +289,38 @@ print(output)
 ```
 
 
+<p align="start">
+
+  <a href="https://docs.upsonic.co/gca/dev_guides/interact">
+    <img src="https://github.com/user-attachments/assets/81614347-ab85-4965-9b77-225d0f2961e9" width="150">
+  </a>
+  .
+  <a href="https://docs.upsonic.co/gca/dev_guides/interact">
+    <img src="https://github.com/user-attachments/assets/ecaa7590-f4c5-4eda-9482-462cef54aeff" width="150">
+  </a>
+  .
+  <a href="https://docs.upsonic.co/gca/dev_guides/interact">
+    <img src="https://github.com/user-attachments/assets/0f35df10-b32e-4fa1-936e-b336be46b1bd" width="150">
+  </a>
+
+</p>
+
+
+
+<p align="start">
+
+  <a href="https://docs.upsonic.co/gca/dev_guides/interact">
+    <img src="https://github.com/user-attachments/assets/a893c50c-3ede-4b42-90ee-92e2fea82120" width="150">
+  </a>
+
+</p>
+
+
+<p align="center">
+<br>
+  <br>
+  <br>
+</p>
 
 
 ## Usage
