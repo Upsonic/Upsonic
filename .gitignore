@@ -9,6 +9,7 @@ gpt_computer_assistant/utils/artifacts/*.png
 *.db-wal
 test.py
 test_backup.py
+test_logo.png
 
 output/
 dist/
