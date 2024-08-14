@@ -34,6 +34,8 @@ setup(
         "gpt_computer_assistant.screen",
         "gpt_computer_assistant.utils",
         "gpt_computer_assistant.audio",
+        "gpt_computer_assistant.audio.tts_providers",
+        "gpt_computer_assistant.audio.stt_providers",
     ],
     include_package_data=True,
     install_requires=[],
