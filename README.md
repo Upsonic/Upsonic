@@ -1,3 +1,4 @@
+<a href="https://www.producthunt.com/posts/gpt-computer-assistant?embed=true&utm_source=badge-featured&utm_medium=badge&utm_souce=badge-gpt&#0045;computer&#0045;assistant" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=465468&theme=light" alt="GPT&#0032;Computer&#0032;Assistant - Create&#0032;intelligence&#0032;for&#0032;your&#0032;products | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" /></a>
 <p align="center">
   <a href="#">
     <img src="https://github.com/user-attachments/assets/df1a3ec1-8c03-43c8-9432-c71358c35b9e" >
