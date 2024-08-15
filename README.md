@@ -58,7 +58,7 @@ Powered by <a href="https://github.com/Upsonic/Tiger"><strong>Upsonic Tiger 🐅
 
 
 ## 1. Install and run
-*Python 3.9 or higher is required
+*Python 3.10 or 3.11 is required
 
 ```console
 pip install 'gpt-computer-assistant[base]'
