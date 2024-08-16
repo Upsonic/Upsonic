@@ -1,0 +1,27 @@
+name: Manual Refactor
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-refactor:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.8
+
+    - name: setup git config
+      run: |
+        # setup the username and email. I tend to use 'GitHub Actions Bot' with no email by default
+        git config user.name "Upsonic Refactor Bot"
+        git config user.email "<>"      
+
+    - name: Run Refactor Script
+      run: |
+        python refactor.py
