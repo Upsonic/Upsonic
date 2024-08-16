@@ -62,16 +62,18 @@ def agentic(
 
         the_model = load_model_settings()
 
-        if  llm_settings[the_model]["provider"] == "openai" and llm_settings[the_model]["provider"] == "ollama":
+        if (
+            llm_settings[the_model]["provider"] == "openai"
+            and llm_settings[the_model]["provider"] == "ollama"
+        ):
             msg = get_agent_executor().invoke(
                 {"messages": llm_history + [the_message]}, config=config
             )
 
-        if  llm_settings[the_model]["provider"] == "google":
+        if llm_settings[the_model]["provider"] == "google":
             msg = get_agent_executor().invoke(
                 {"messages": llm_history + [the_message]}, config=config
             )
-
 
         the_last_messages = msg["messages"]
 
@@ -81,13 +83,13 @@ def agentic(
         image_explain = image_explaination()
         llm_input += "User Sent Image and image content is: " + image_explain
 
-
-    
     llm_input = llm_input + each_message_extension
 
-
     task = Task(
-        description=llm_input, expected_output="Answer", agent=agents[0], tools=get_tools()
+        description=llm_input,
+        expected_output="Answer",
+        agent=agents[0],
+        tools=get_tools(),
     )
 
     the_crew = Crew(
@@ -99,7 +101,9 @@ def agentic(
 
     result = the_crew.kickoff()["final_output"]
 
-    get_chat_message_history().add_message(HumanMessage(content=[llm_input.replace(each_message_extension, "")]))
+    get_chat_message_history().add_message(
+        HumanMessage(content=[llm_input.replace(each_message_extension, "")])
+    )
     get_chat_message_history().add_message(AIMessage(content=[result]))
 
     return result
@@ -108,16 +112,13 @@ def agentic(
 def assistant(
     llm_input, llm_history, client, screenshot_path=None, dont_save_image=False
 ):
-
     the_model = load_model_settings()
-
 
     if len(agents) != 0:
         print("Moving to Agentic")
         return agentic(llm_input, llm_history, client, screenshot_path, dont_save_image)
 
     print("LLM INPUT", llm_input)
-
 
     if llm_settings[the_model]["tools"]:
         llm_input = llm_input + each_message_extension
@@ -127,7 +128,6 @@ def assistant(
     ]
 
     if screenshot_path:
-
         base64_image = encode_image(screenshot_path)
         if llm_settings[the_model]["provider"] == "ollama":
             the_message.append(
@@ -145,13 +145,13 @@ def assistant(
             )
         print("LEN OF IMAGE", len(base64_image))
 
-
-
     the_message = HumanMessage(content=the_message)
     get_chat_message_history().add_message(the_message)
 
-    
-    if llm_settings[the_model]["provider"] == "openai" or llm_settings[the_model]["provider"] == "ollama":
+    if (
+        llm_settings[the_model]["provider"] == "openai"
+        or llm_settings[the_model]["provider"] == "ollama"
+    ):
         msg = get_agent_executor().invoke(
             {"messages": llm_history + [the_message]}, config=config
         )
@@ -160,7 +160,6 @@ def assistant(
         the_history = []
         for message in llm_history:
             try:
-
                 if isinstance(message, SystemMessage):
                     the_mes = HumanMessage(content=message.content[0]["text"])
                     the_history.append(the_mes)
@@ -174,8 +173,6 @@ def assistant(
                 the_mes = AIMessage(content=message.content)
                 the_history.append(the_mes)
 
-
-
         the_last_message = HumanMessage(content=llm_input)
         msg = get_agent_executor().invoke(
             {"messages": the_history + [the_last_message]}, config=config
@@ -185,7 +182,6 @@ def assistant(
         the_history = []
         for message in llm_history:
             try:
-
                 if isinstance(message, SystemMessage):
                     the_mes = SystemMessage(content=message.content[0]["text"])
                     the_history.append(the_mes)
@@ -199,19 +195,12 @@ def assistant(
                 the_mes = AIMessage(content=message.content)
                 the_history.append(the_mes)
 
-
-
         the_last_message = HumanMessage(content=llm_input)
         msg = get_agent_executor().invoke(
             {"messages": the_history + [the_last_message]}, config=config
         )
 
-
-
-
     the_last_messages = msg["messages"]
-
-
 
     if dont_save_image and screenshot_path is not None:
         currently_messages = get_chat_message_history().messages
@@ -226,10 +215,6 @@ def assistant(
 
     get_chat_message_history().add_message(the_last_messages[-1])
 
-
-
-
-
     # Replace each_message_extension with empty string
     list_of_messages = get_chat_message_history().messages
 
@@ -237,12 +222,12 @@ def assistant(
 
     for message in list_of_messages:
         try:
-            message.content[0]["text"] = message.content[0]["text"].replace(each_message_extension, "")
+            message.content[0]["text"] = message.content[0]["text"].replace(
+                each_message_extension, ""
+            )
             get_chat_message_history().add_message(message)
         except:
             get_chat_message_history().add_message(message)
-
-
 
     print("The return", the_last_messages[-1].content)
 

@@ -1,10 +1,11 @@
-
 model_ = None
+
 
 def model():
     global model_
     if model_ is None:
         import whisper
+
         model_ = whisper.load_model("tiny")
     return model_
 

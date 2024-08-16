@@ -7,15 +7,19 @@ try:
 
 except ImportError:
     from utils.db import *
-    from agent.chat_history import clear_chat_history
     from llm_settings import llm_show_name, llm_settings
     from audio.tts import is_local_tts_available
     from audio.stt import is_local_stt_available
 
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox
+from PyQt5.QtWidgets import (
+    QDialog,
+    QVBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QComboBox,
+)
 from PyQt5.QtCore import Qt
-
-
 
 
 def llmsettings_popup(self):
@@ -75,7 +79,9 @@ def llmsettings_popup(self):
         the_main_window.input_box.setPlaceholderText("Type here")
         settings_dialog.close()
 
-    groq_save_button.clicked.connect(lambda: groq_save_api_key_(groq_api_key_input.text()))
+    groq_save_button.clicked.connect(
+        lambda: groq_save_api_key_(groq_api_key_input.text())
+    )
     settings_dialog.layout().addWidget(groq_save_button)
 
     google_api_key_label = QLabel("Google Generative AI API Key")
@@ -92,7 +98,9 @@ def llmsettings_popup(self):
         the_main_window.input_box.setPlaceholderText("Type here")
         settings_dialog.close()
 
-    google_save_button.clicked.connect(lambda: google_save_api_key_(google_api_key_input.text()))
+    google_save_button.clicked.connect(
+        lambda: google_save_api_key_(google_api_key_input.text())
+    )
     settings_dialog.layout().addWidget(google_save_button)
 
     def hide_openai():
@@ -163,7 +171,10 @@ def llmsettings_popup(self):
         the_save_string = llm_show_name[model_select.currentText()]
         save_model_settings(the_save_string)
 
-        if llm_settings[llm_show_name[model_select.currentText()]]["provider"] == "openai":
+        if (
+            llm_settings[llm_show_name[model_select.currentText()]]["provider"]
+            == "openai"
+        ):
             show_openai()
             openai_url_label.show()
             openai_url_input.show()
@@ -172,9 +183,15 @@ def llmsettings_popup(self):
             the_main_window.add_screenshot_button()
         else:
             the_main_window.remove_screenshot_button()
-        if llm_settings[llm_show_name[model_select.currentText()]]["provider"] == "groq":
+        if (
+            llm_settings[llm_show_name[model_select.currentText()]]["provider"]
+            == "groq"
+        ):
             show_groq()
-        if llm_settings[llm_show_name[model_select.currentText()]]["provider"] == "google":
+        if (
+            llm_settings[llm_show_name[model_select.currentText()]]["provider"]
+            == "google"
+        ):
             show_google()
 
     model_select.currentIndexChanged.connect(on_model_change)
@@ -202,17 +219,14 @@ def llmsettings_popup(self):
             save_tts_model_settings("microsoft_local")
 
     if not is_local_tts_available():
-        #add an text to inform the user that local tts is not available
-        information_text = QLabel("Please install gpt-computer-assistant[local_tts] to use local TTS")
+        # add an text to inform the user that local tts is not available
+        information_text = QLabel(
+            "Please install gpt-computer-assistant[local_tts] to use local TTS"
+        )
         settings_dialog.layout().addWidget(information_text)
         tts_model_select.setEnabled(False)
 
-
-
     tts_model_select.currentIndexChanged.connect(on_tts_model_change)
-
-
-
 
     # Add STT model selection
     stt_model_label = QLabel("STT Model")
@@ -237,21 +251,18 @@ def llmsettings_popup(self):
             save_stt_model_settings("openai_whisper_local")
 
     if not is_local_stt_available():
-        #add an text to inform the user that local stt is not available
-        information_text = QLabel("Please install gpt-computer-assistant[local_stt] to use local STT")
+        # add an text to inform the user that local stt is not available
+        information_text = QLabel(
+            "Please install gpt-computer-assistant[local_stt] to use local STT"
+        )
         settings_dialog.layout().addWidget(information_text)
         stt_model_select.setEnabled(False)
 
-
-
     stt_model_select.currentIndexChanged.connect(on_stt_model_change)
-
-
 
     # Add an separator
     separator = QLabel("------------------------------------------------")
     settings_dialog.layout().addWidget(separator)
-
 
     # Add an powered by label
     powered_by_label = QLabel("Powered by Upsonic <3")
@@ -259,9 +270,7 @@ def llmsettings_popup(self):
     font = powered_by_label.font()
     font.setBold(True)
     powered_by_label.setFont(font)
-    
+
     settings_dialog.layout().addWidget(powered_by_label)
-
-
 
     settings_dialog.exec_()

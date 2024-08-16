@@ -27,11 +27,11 @@ os_name_ = os_name()
 the_input_box_pre = ""
 
 
-
 import queue
 
 # Initialize a queue to keep the last N audio levels (rolling window)
 audio_levels = queue.Queue(maxsize=10)  # Adjust size as needed
+
 
 def calculate_dynamic_threshold():
     """Calculate a dynamic threshold based on recent audio levels."""
@@ -48,16 +48,14 @@ auto_stop_recording = True
 
 
 def start_recording(take_system_audio, buttonhandler):
-    """Start recording audio from microphone and/or system sound.
-
-
-    """
+    """Start recording audio from microphone and/or system sound."""
     with my_tracer.start_span("start_recording") as span:
         span.set_attribute("user_id", user_id)
         span.set_attribute("os_name", os_name_)
 
         global the_input_box_pre
         from ..gpt_computer_assistant import the_input_box, the_main_window
+
         the_input_box_pre = the_input_box.toPlainText()
 
         the_main_window.update_from_thread("Click again when recording is done")
@@ -67,17 +65,17 @@ def start_recording(take_system_audio, buttonhandler):
         print("Recording started...")
 
         threshold = 0.01  # Define the threshold for stopping the recording
-        silence_duration = 2  # Duration in seconds to consider as silence before stopping
+        silence_duration = (
+            2  # Duration in seconds to consider as silence before stopping
+        )
         silence_start_time = None
         recording_start_time = time.time()  # Record the start time of the recording
 
         auto_stop_recording = is_auto_stop_recording_setting_active()
 
-
         def callback(indata, frames, time_info, status):
             global audio_data, recording, silence_start_time, auto_stop_recording
             current_level = np.max(np.abs(indata))
-
 
             # Add the current level to the queue
             if audio_levels.full():
@@ -87,7 +85,6 @@ def start_recording(take_system_audio, buttonhandler):
             # Calculate dynamic threshold based on recent audio levels
             dynamic_threshold = calculate_dynamic_threshold()
 
-
             if recording:
                 audio_data = np.append(audio_data, indata)
                 # Check if the audio is below the dynamic threshold
@@ -96,13 +93,14 @@ def start_recording(take_system_audio, buttonhandler):
                         silence_start_time = time.time()  # Mark the start of silence
 
                     # Ensure recording has been ongoing for at least 3 seconds before considering auto-stop
-                    elif (time.time() - silence_start_time) > silence_duration and (time.time() - recording_start_time) > 3:
+                    elif (time.time() - silence_start_time) > silence_duration and (
+                        time.time() - recording_start_time
+                    ) > 3:
                         recording = False
                         buttonhandler.recording = False
 
                 else:
                     silence_start_time = None
-
 
     def record_audio():
         with my_tracer.start_span("record_audio") as span:
@@ -134,6 +132,7 @@ def start_recording(take_system_audio, buttonhandler):
         print("Audio saved as voice_input.wav")
         signal_handler.recording_stopped.emit()
 
+
 def stop_recording():
     """Stop recording audio."""
     global recording
@@ -141,18 +140,16 @@ def stop_recording():
     print("Recording stopped")
 
 
-
-def quick_speech_to_text(time_total:int=5) -> str:
+def quick_speech_to_text(time_total: int = 5) -> str:
     global samplerate, channels, samplerate
-
 
     quic_location = "temp.wav"
 
-
-    myrecording = sd.rec(int(time_total * samplerate), samplerate=samplerate, channels=channels)
+    myrecording = sd.rec(
+        int(time_total * samplerate), samplerate=samplerate, channels=channels
+    )
     sd.wait()  # Wait until recording is finished
-    write(quic_location, samplerate, myrecording)  # Save as WAV file 
-
+    write(quic_location, samplerate, myrecording)  # Save as WAV file
 
     try:
         from .stt import speech_to_text

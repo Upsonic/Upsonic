@@ -1,5 +1,6 @@
 from .utils.db import agents
 
+
 class Agent:
     """
     Represents an agent within the system.
@@ -18,6 +19,7 @@ class Agent:
     Global Variables:
     - agents (list): A global list containing information about all agents in the system.
     """
+
     def __init__(self, role, goal, backstory):
         """
         Initializes a new Agent object and adds it to the global list of agents.

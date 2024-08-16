@@ -14,10 +14,13 @@ except:
 
 _standard_tools_ = {}
 
+
 def register_tool(func):
     if func.__name__ not in _standard_tools_:
         _standard_tools_[func.__name__] = tool(func)
     return func
+
+
 @register_tool
 @wrapper
 def read_website(url: str, max_content_length: int = 5000) -> dict:
@@ -41,11 +44,13 @@ def read_website(url: str, max_content_length: int = 5000) -> dict:
         "og:url",
         "description",
         "keywords",
-        "author"
+        "author",
     ]
     meta = {}
     for property_name in meta_properties:
-        tag = soup.find("meta", property=property_name) or soup.find("meta", attrs={"name": property_name})
+        tag = soup.find("meta", property=property_name) or soup.find(
+            "meta", attrs={"name": property_name}
+        )
         if tag:
             meta[property_name] = tag.get("content", "")
 
@@ -66,7 +71,7 @@ def read_website(url: str, max_content_length: int = 5000) -> dict:
     content = content.strip()
 
     if len(content) > max_content_length:
-        content = content[:max_content_length].rsplit(' ', 1)[0] + '...'
+        content = content[:max_content_length].rsplit(" ", 1)[0] + "..."
 
     return {"meta": meta, "title": title, "content": content, "sub_links": links}
 
@@ -79,9 +84,10 @@ def google(query: str, max_number: int = 20) -> list:
     """
     try:
         from googlesearch import search as gsearch
+
         return list(gsearch(query, stop=max_number))
     except:
-        return "An exception occurred"    
+        return "An exception occurred"
 
 
 @register_tool
@@ -92,10 +98,10 @@ def duckduckgo(query: str, max_number: int = 20) -> list:
     """
     try:
         from duckduckgo_search import DDGS
+
         return [result["href"] for result in DDGS().text(query, max_results=max_number)]
     except:
         return "An exception occurred"
-
 
 
 @register_tool
@@ -105,6 +111,7 @@ def copy(text: str):
     Copy the text to the clipboard.
     """
     import pyperclip
+
     pyperclip.copy(text)
     pyperclip.copy(text)
 
@@ -126,6 +133,7 @@ def open_url(url) -> bool:
         return False
         return False
 
+
 @register_tool
 @wrapper
 def sleep(seconds: int):
@@ -133,8 +141,8 @@ def sleep(seconds: int):
     Sleep for the given number of seconds.
     """
     import time
-    time.sleep(seconds)
 
+    time.sleep(seconds)
 
 
 @register_tool
@@ -144,7 +152,9 @@ def keyboard_write(text: str):
     Write the text using the keyboard.
     """
     import pyautogui
+
     pyautogui.write(text)
+
 
 @register_tool
 @wrapper
@@ -153,14 +163,15 @@ def keyboard_press(key: str):
     Press the key using the keyboard.
     """
     import pyautogui
-    pyautogui.press(key)
-    pyautogui.press(key)
 
+    pyautogui.press(key)
+    pyautogui.press(key)
 
 
 from langchain_experimental.utilities import PythonREPL
 
 the_py_client = PythonREPL()
+
 
 @register_tool
 @wrapper
@@ -170,6 +181,7 @@ def python_repl(code: str) -> str:
     """
     return the_py_client.run(code)
 
+
 @register_tool
 @wrapper
 def app_open(app_name: str) -> bool:
@@ -178,14 +190,17 @@ def app_open(app_name: str) -> bool:
     """
     try:
         from AppOpener import open
+
         open(app_name, throw_error=True)
         return True
     except:
         try:
             from MacAppOpener import open
+
             open(app_name)
         except:
             return False
+
 
 @register_tool
 @wrapper
@@ -195,15 +210,14 @@ def app_close(app_name: str) -> bool:
     """
     try:
         from AppOpener import close
+
         close(app_name, throw_error=True)
         return True
     except:
         try:
-            from MacAppOpener import open
             close(app_name)
         except:
             return False
-
 
 
 @register_tool
@@ -215,7 +229,6 @@ def get_current_time() -> str:
     return datetime.datetime.now().isoformat()
 
 
-
 @register_tool
 @wrapper
 def turn_off_wifi() -> bool:
@@ -224,13 +237,14 @@ def turn_off_wifi() -> bool:
     """
     try:
         from pywifi import ControlPeripheral
+
         wifi = ControlPeripheral()
         wifi.disable()
         return True
     except:
-
         return False
-    
+
+
 @register_tool
 @wrapper
 def turn_on_wifi() -> bool:
@@ -239,13 +253,13 @@ def turn_on_wifi() -> bool:
     """
     try:
         from pywifi import ControlPeripheral
+
         wifi = ControlPeripheral()
         wifi.enable()
         return True
     except:
-        
         return False
-    
+
 
 @register_tool
 @wrapper
@@ -264,16 +278,13 @@ def connect_wifi(ssid: str, password: str) -> bool:
         return False
 
 
-
-
 @register_tool
 @wrapper
-def ask_to_user(question:str, wait_for_answer:str=None) -> str:
+def ask_to_user(question: str, wait_for_answer: str = None) -> str:
     """
     Its ask to the user for your question and return the answer
     """
     try:
-
         try:
             from .agent.process import tts_if_you_can
             from .audio.record import quick_speech_to_text
@@ -298,7 +309,6 @@ def get_standard_tools():
     print("Tool len", len(_standard_tools_))
     last_list = [_standard_tools_[each] for each in _standard_tools_]
     return last_list
-
 
 
 if __name__ == "__main__":

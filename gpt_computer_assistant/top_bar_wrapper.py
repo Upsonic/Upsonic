@@ -4,6 +4,7 @@ import time
 
 def wrapper(func):
     """A decorator that logs the start and end of the function call."""
+
     @functools.wraps(func)
     def wrapped_func(*args, **kwargs):
         try:
@@ -21,4 +22,5 @@ def wrapper(func):
             return result
         except:
             return func(*args, **kwargs)
+
     return wrapped_func

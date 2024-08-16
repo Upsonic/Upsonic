@@ -204,7 +204,6 @@ def is_collapse_setting_active():
 font_dir = os.path.join(media_dir, "SF-Pro-Text-Bold.otf")
 
 
-
 style_setting = os.path.join(artifacts_dir, "style_setting.db")
 
 
@@ -228,8 +227,6 @@ def is_dark_mode_active():
         return f.read() == "1"
 
 
-
-
 googlekey = os.path.join(artifacts_dir, "googlekey.db")
 
 
@@ -250,9 +247,6 @@ def load_google_api_key():
             return "CHANGE_ME"
     with open(googlekey, "r") as f:
         return f.read()
-
-
-
 
 
 predefined_agents_setting = os.path.join(artifacts_dir, "predefined_agents_setting.db")
@@ -278,10 +272,6 @@ def is_predefined_agents_setting_active():
         return f.read() == "1"
 
 
-
-
-
-
 online_tools_setting = os.path.join(artifacts_dir, "online_tools.db")
 
 
@@ -303,10 +293,6 @@ def is_online_tools_setting_active():
         return False
     with open(online_tools_setting, "r") as f:
         return f.read() == "1"
-
-
-
-
 
 
 auto_stop_recording_setting = os.path.join(artifacts_dir, "auto_stop_recording.db")
@@ -332,7 +318,6 @@ def is_auto_stop_recording_setting_active():
         return f.read() == "1"
 
 
-
 pvporcupine_api_key = os.path.join(artifacts_dir, "pvporcupine_api_key.db")
 
 
@@ -348,8 +333,6 @@ def load_pvporcupine_api_key():
         return "CHANGE_ME"
     with open(pvporcupine_api_key, "r") as f:
         return f.read()
-
-
 
 
 wake_word_setting = os.path.join(artifacts_dir, "wake_word_setting.db")
@@ -379,11 +362,6 @@ def is_wake_word_active():
         return f.read() == "1"
 
 
-
-
-
-
-
 wake_word_screen_setting = os.path.join(artifacts_dir, "wake_word_screen_setting.db")
 
 
@@ -407,11 +385,9 @@ def is_wake_word_screen_setting_active():
         return f.read() == "1"
 
 
-
-
-
-
-continuously_conversations_setting = os.path.join(artifacts_dir, "continuously_conversations_setting.db")
+continuously_conversations_setting = os.path.join(
+    artifacts_dir, "continuously_conversations_setting.db"
+)
 
 
 def activate_continuously_conversations_setting():
@@ -432,8 +408,6 @@ def is_continuously_conversations_setting_active():
         return False
     with open(continuously_conversations_setting, "r") as f:
         return f.read() == "1"
-
-
 
 
 tts_model_settings_db = os.path.join(artifacts_dir, "tts_model_settings.db")
@@ -468,10 +442,6 @@ def load_stt_model_settings():
         return "openai"
     with open(stt_model_settings_db, "r") as f:
         return f.read()
-    
-
-
-
 
 
 logo_active_setting = os.path.join(artifacts_dir, "logo_active_setting.db")
@@ -488,15 +458,13 @@ def deactivate_logo_active_setting():
     with open(logo_active_setting, "w") as f:
         f.write("0")
 
+
 def is_logo_active_setting_active():
     """Check if the logo_active_setting is active."""
     if not os.path.exists(logo_active_setting):
         return False
     with open(logo_active_setting, "r") as f:
         return f.read() == "1"
-    
-
-
 
 
 logo_file_path = os.path.join(artifacts_dir, "loog_file.db")
@@ -514,14 +482,9 @@ def load_logo_file_path():
         return icon_256_path
     with open(logo_file_path, "r") as f:
         return f.read()
-    
 
 
 custom_logo_path = os.path.join(artifacts_dir, "custom_logo_path.png")
-
-
-
-
 
 
 long_gca_setting = os.path.join(artifacts_dir, "long_gca_setting.db")
@@ -538,22 +501,13 @@ def deactivate_long_gca_setting():
     with open(long_gca_setting, "w") as f:
         f.write("0")
 
+
 def is_long_gca_setting_active():
     """Check if the long_gca_setting is active."""
     if not os.path.exists(long_gca_setting):
         return True
     with open(long_gca_setting, "r") as f:
         return f.read() == "1"
-    
-
-
-
-
-
-
-
-
-
 
 
 location_setting = os.path.join(artifacts_dir, "location_setting.db")
@@ -571,4 +525,3 @@ def load_location_setting():
         return "right"
     with open(location_setting, "r") as f:
         return f.read()
-    

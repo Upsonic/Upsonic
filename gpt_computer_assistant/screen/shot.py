@@ -1,7 +1,7 @@
 import base64
 import pyautogui
 
-try:  
+try:
     from ..gui.signal import signal_handler
     from ..utils.db import just_screenshot_path
 except ImportError:

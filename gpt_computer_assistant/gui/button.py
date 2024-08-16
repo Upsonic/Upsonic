@@ -22,16 +22,8 @@ except ImportError:
     from audio.record import *
     from screen.shot import *
     from agent.process import *
-    from agent.chat_history import clear_chat_history
     from utils.db import (
         screenshot_path,
-        save_api_key,
-        load_api_key,
-        activate_just_text_model,
-        deactivate_just_text_model,
-        is_just_text_model_active,
-        set_profile,
-        get_profile,
     )
     from screen.shot import take_screenshot
 
@@ -58,7 +50,11 @@ class ButtonHandler:
         )
 
     def toggle_recording(
-        self, no_screenshot=False, take_system_audio=False, dont_save_image=False, new_record=False
+        self,
+        no_screenshot=False,
+        take_system_audio=False,
+        dont_save_image=False,
+        new_record=False,
     ):
         """Toggle audio recording."""
 
@@ -75,9 +71,17 @@ class ButtonHandler:
             self.dont_save_image = dont_save_image
 
             global recording_thread
-            if recording_thread is None or not recording_thread.is_alive() or new_record:
+            if (
+                recording_thread is None
+                or not recording_thread.is_alive()
+                or new_record
+            ):
                 recording_thread = threading.Thread(
-                    target=start_recording, args=(take_system_audio,self,)
+                    target=start_recording,
+                    args=(
+                        take_system_audio,
+                        self,
+                    ),
                 )
                 recording_thread.start()
             signal_handler.recording_started.emit()

@@ -6,15 +6,15 @@ try:
     from .top_bar_wrapper import wrapper
     from .agent.agent_tools import get_tools
 except ImportError:
-    from utils.db import load_api_key
     from llm import get_model
     from top_bar_wrapper import wrapper
     from agent.agent_tools import get_tools
 
 
-
 @wrapper
-def search_on_internet_and_report_team_(the_subject:str, copy_to_clipboard: bool=False) -> str:
+def search_on_internet_and_report_team_(
+    the_subject: str, copy_to_clipboard: bool = False
+) -> str:
     """
     A function to search the internet generates a report. Just use in detailed searches
 
@@ -26,11 +26,8 @@ def search_on_internet_and_report_team_(the_subject:str, copy_to_clipboard: bool
     - str: The report of the search.
     """
 
-
-
     from crewai import Task, Crew, Agent
 
-    
     tools = get_tools()
 
     the_tool_list = []
@@ -40,7 +37,6 @@ def search_on_internet_and_report_team_(the_subject:str, copy_to_clipboard: bool
 
     # Create the agents
 
-
     search_engine_master = Agent(
         role="search_engine_master",
         goal="To meticulously comb through the vast expanse of the internet, utilizing advanced search algorithms and techniques to find the most relevant, accurate, and up-to-date information on the given subject.",
@@ -48,7 +44,6 @@ def search_on_internet_and_report_team_(the_subject:str, copy_to_clipboard: bool
         max_iter=15,
         llm=get_model(high_context=True),
     )
-
 
     report_generator = Agent(
         role="report_generator",
@@ -60,23 +55,30 @@ def search_on_internet_and_report_team_(the_subject:str, copy_to_clipboard: bool
 
     agents = [search_engine_master, report_generator]
 
-
     print("Tools:", the_tool_list)
 
     task = Task(
-        description=f"Make a search about {the_subject} in the search engines and get the websites", expected_output="Website list", agent=search_engine_master, tools=the_tool_list
+        description=f"Make a search about {the_subject} in the search engines and get the websites",
+        expected_output="Website list",
+        agent=search_engine_master,
+        tools=the_tool_list,
     )
 
     task_2 = Task(
-        description="Read the websites and summarize the information", expected_output="Summary", agent=report_generator, tools=the_tool_list, context=[task]
+        description="Read the websites and summarize the information",
+        expected_output="Summary",
+        agent=report_generator,
+        tools=the_tool_list,
+        context=[task],
     )
-
 
     task_3 = Task(
-        description="Generate a report", expected_output="Report", agent=report_generator, tools=the_tool_list, context=[task, task_2]
+        description="Generate a report",
+        expected_output="Report",
+        agent=report_generator,
+        tools=the_tool_list,
+        context=[task, task_2],
     )
-
-
 
     the_tasks = [task, task_2, task_3]
 
@@ -91,14 +93,10 @@ def search_on_internet_and_report_team_(the_subject:str, copy_to_clipboard: bool
 
     if copy_to_clipboard:
         from .standard_tools import copy
+
         copy(result)
 
-
     return result
-
-
-
-
 
 
 search_on_internet_and_report_team = tool(search_on_internet_and_report_team_)
@@ -112,7 +110,7 @@ def currently_codes():
     return lastly_generated_codes
 
 
-def get_code(name:str):
+def get_code(name: str):
     """
     returns the code
     """
@@ -129,7 +127,6 @@ def required_old_code(aim):
     try:
         from crewai import Task, Crew, Agent
 
-
         requirement_analyzer = Agent(
             role="requirement_analyzer",
             goal="To understand and analyze the given aim to ensure the generated code meets the specified requirements.",
@@ -143,7 +140,6 @@ def required_old_code(aim):
             expected_output="Require old code names in a list",
             agent=requirement_analyzer,
         )
-
 
         the_crew = Crew(
             agents=[requirement_analyzer],
@@ -164,8 +160,7 @@ def required_old_code(aim):
         return the_string
 
     except:
-        return "An exception occurred" 
-
+        return "An exception occurred"
 
 
 @wrapper
@@ -181,7 +176,6 @@ def generate_code_with_aim_team_(aim: str, copy_to_clipboard: bool = False) -> s
     - str: The generated code.
     """
     try:
-
         print("\nCOde generating\n")
         print("Previously codes", currently_codes())
         try:
@@ -189,9 +183,7 @@ def generate_code_with_aim_team_(aim: str, copy_to_clipboard: bool = False) -> s
         except:
             pass
 
-
         from crewai import Task, Crew, Agent
-
 
         tools = get_tools()
 
@@ -225,10 +217,8 @@ def generate_code_with_aim_team_(aim: str, copy_to_clipboard: bool = False) -> s
             tools=the_tool_list,
         )
 
-
         old_code_requirements = required_old_code(aim)
         print("Old_code_requirements", old_code_requirements)
-
 
         generate_code_task = Task(
             description=f"Generate code based on the outlined requirements. The other codes in the repo are: {old_code_requirements}",
@@ -243,7 +233,6 @@ def generate_code_with_aim_team_(aim: str, copy_to_clipboard: bool = False) -> s
             agent=code_generator,
             context=[generate_code_task],
         )
-
 
         # Create the crew and assign tasks
         the_crew = Crew(
@@ -261,6 +250,7 @@ def generate_code_with_aim_team_(aim: str, copy_to_clipboard: bool = False) -> s
         # Optionally copy the result to the clipboard
         if copy_to_clipboard:
             from .standard_tools import copy
+
             copy(result)
 
         print("name", name_of_work.output.raw_output)
@@ -268,7 +258,7 @@ def generate_code_with_aim_team_(aim: str, copy_to_clipboard: bool = False) -> s
 
         return result
     except:
-        return "An exception occurred" 
+        return "An exception occurred"
 
 
 generate_code_with_aim_team = tool(generate_code_with_aim_team_)

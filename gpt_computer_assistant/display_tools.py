@@ -7,11 +7,11 @@ try:
     from .top_bar_wrapper import wrapper
 except ImportError:
     from utils.db import load_api_key
-    from llm import get_model
     from top_bar_wrapper import wrapper
 
+
 @wrapper
-def click_on_a_text_on_the_screen_(text:str, click_type: str = "singular") -> bool:
+def click_on_a_text_on_the_screen_(text: str, click_type: str = "singular") -> bool:
     """
     A function to click on a text on the screen.
 
@@ -24,14 +24,10 @@ def click_on_a_text_on_the_screen_(text:str, click_type: str = "singular") -> bo
     """
     try:
         import pyautogui
+
         pyautogui.FAILSAFE = False
 
-
         from interpreter import OpenInterpreter
-
-
-
-
 
         interpreter = OpenInterpreter()
 
@@ -39,10 +35,11 @@ def click_on_a_text_on_the_screen_(text:str, click_type: str = "singular") -> bo
 
         screenshot = pyautogui.screenshot()
 
-        text_locations = interpreter.computer.display.find_text(text, screenshot=screenshot)
+        text_locations = interpreter.computer.display.find_text(
+            text, screenshot=screenshot
+        )
 
         print(text_locations)
-
 
         x, y = text_locations[0]["coordinates"]
         x *= interpreter.computer.display.width
@@ -63,9 +60,8 @@ def click_on_a_text_on_the_screen_(text:str, click_type: str = "singular") -> bo
 click_on_a_text_on_the_screen = tool(click_on_a_text_on_the_screen_)
 
 
-
 @wrapper
-def move_on_a_text_on_the_screen_(text:str) -> bool:
+def move_on_a_text_on_the_screen_(text: str) -> bool:
     """
     A function to move on a text on the screen.
 
@@ -77,14 +73,10 @@ def move_on_a_text_on_the_screen_(text:str) -> bool:
     """
     try:
         import pyautogui
+
         pyautogui.FAILSAFE = False
 
-
         from interpreter import OpenInterpreter
-
-
-
-
 
         interpreter = OpenInterpreter()
 
@@ -92,10 +84,11 @@ def move_on_a_text_on_the_screen_(text:str) -> bool:
 
         screenshot = pyautogui.screenshot()
 
-        text_locations = interpreter.computer.display.find_text(text, screenshot=screenshot)
+        text_locations = interpreter.computer.display.find_text(
+            text, screenshot=screenshot
+        )
 
         print(text_locations)
-
 
         x, y = text_locations[0]["coordinates"]
         x *= interpreter.computer.display.width
@@ -115,7 +108,9 @@ move_on_a_text_on_the_screen = tool(move_on_a_text_on_the_screen_)
 
 
 @wrapper
-def click_on_a_icon_on_the_screen_(icon_name:str, click_type: str = "singular") -> bool:
+def click_on_a_icon_on_the_screen_(
+    icon_name: str, click_type: str = "singular"
+) -> bool:
     """
     A function to click on a icon name on the screen.
 
@@ -128,37 +123,37 @@ def click_on_a_icon_on_the_screen_(icon_name:str, click_type: str = "singular") 
     """
     try:
         import pyautogui
-        pyautogui.FAILSAFE = False
 
+        pyautogui.FAILSAFE = False
 
         from interpreter import OpenInterpreter
 
-
         screenshot = pyautogui.screenshot()
-
 
         interpreter = OpenInterpreter()
 
         interpreter.llm.api_key = load_api_key()
 
-
-
         if click_type == "singular":
             interpreter.computer.mouse.click(icon=icon_name, screenshot=screenshot)
         elif click_type == "double":
-            interpreter.computer.mouse.double_click(icon=icon_name, screenshot=screenshot)
+            interpreter.computer.mouse.double_click(
+                icon=icon_name, screenshot=screenshot
+            )
         return True
 
     except:
         traceback.print_exc()
         return False
 
+
 click_on_a_icon_on_the_screen = tool(click_on_a_icon_on_the_screen_)
 
 
-
 @wrapper
-def move_on_a_icon_on_the_screen_(icon_name:str,) -> bool:
+def move_on_a_icon_on_the_screen_(
+    icon_name: str,
+) -> bool:
     """
     A function to move on a icon name on the screen.
 
@@ -170,14 +165,12 @@ def move_on_a_icon_on_the_screen_(icon_name:str,) -> bool:
     """
     try:
         import pyautogui
-        pyautogui.FAILSAFE = False
 
+        pyautogui.FAILSAFE = False
 
         from interpreter import OpenInterpreter
 
-
         screenshot = pyautogui.screenshot()
-
 
         interpreter = OpenInterpreter()
 
@@ -190,9 +183,8 @@ def move_on_a_icon_on_the_screen_(icon_name:str,) -> bool:
         traceback.print_exc()
         return False
 
+
 move_on_a_icon_on_the_screen = tool(move_on_a_icon_on_the_screen_)
-
-
 
 
 def mouse_scroll_(direction: str, amount: int = 1) -> bool:
@@ -208,6 +200,7 @@ def mouse_scroll_(direction: str, amount: int = 1) -> bool:
     """
     try:
         import pyautogui
+
         pyautogui.FAILSAFE = False
 
         if direction == "up":
@@ -219,10 +212,8 @@ def mouse_scroll_(direction: str, amount: int = 1) -> bool:
         traceback.print_exc()
         return False
 
+
 mouse_scroll = tool(mouse_scroll_)
-
-
-
 
 
 @wrapper
@@ -230,26 +221,22 @@ def get_texts_on_the_screen_() -> str:
     """
     It returns the texts on the screen.
     """
-    from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-
 
     try:
-        from .llm import get_model
+        pass
 
     except:
-        from llm import get_model
-
-
+        pass
 
     import pyautogui
+
     the_screenshot_path = "temp_screenshot.png"
     the_screenshot = pyautogui.screenshot()
     the_screenshot.save(the_screenshot_path)
 
     from interpreter.core.computer.utils.computer_vision import pytesseract_get_text
 
-
-    import pytesseract
     return pytesseract_get_text(the_screenshot_path)
+
 
 get_texts_on_the_screen = tool(get_texts_on_the_screen_)

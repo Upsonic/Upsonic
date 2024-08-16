@@ -33,31 +33,24 @@ def train(url: str) -> bool:
             if tag.get("property") in meta_properties:
                 data[tag.get("property")] = tag.get("content")
 
-
-
         # Also add the other useful information texts from the webpage
         data["title"] = soup.title.string
         data["h1"] = soup.h1.string
         data["p"] = soup.p.string
 
-        
-        text = soup.get_text(separator='\n', strip=True)
-        
+        text = soup.get_text(separator="\n", strip=True)
+
         data["text"] = text
 
         data["url"] = url
 
-
         # Now create an string with good looking like this
         # Title: {title}
-
 
         the_string = ""
 
         for key, value in data.items():
             the_string += f"{key}: {value}\n"
-
-
 
         set_website_content(the_string)
 
@@ -65,5 +58,3 @@ def train(url: str) -> bool:
 
     except Exception as e:
         return e
-
-

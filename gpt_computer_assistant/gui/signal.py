@@ -1,7 +1,6 @@
 from PyQt5.QtCore import pyqtSignal, QObject
 
 
-
 class SignalHandler(QObject):
     """
     A QObject subclass to handle signals used in the GUI application.
@@ -24,5 +23,5 @@ class SignalHandler(QObject):
     assistant_response_ready = pyqtSignal()
     assistant_response_stopped = pyqtSignal()
 
-signal_handler = SignalHandler()
 
+signal_handler = SignalHandler()

@@ -4,7 +4,6 @@ try:
     from .stt_providers.openai import stt_openai
     from .stt_providers.openai_whisper_local import stt_openai_whisper_local
 except ImportError:
-    from llm import get_client
     from utils.db import *
     from audio.stt_providers.openai import stt_openai
     from audio.stt_providers.openai_whisper_local import stt_openai_whisper_local
@@ -13,15 +12,11 @@ import os
 from pydub import AudioSegment
 
 
-
-
 def is_local_stt_available():
     try:
-        import whisper
         return True
     except:
         return False
-
 
 
 def split_audio(file_path, max_size=20 * 1024 * 1024):
@@ -78,7 +73,5 @@ def speech_to_text(location):
         os.remove(part_path)  # Clean up the temporary file immediately after processing
 
     # Merge transcriptions (assuming it's a list of text segments)
-    full_transcription = " ".join(
-        transcription for transcription in transcriptions
-    )
+    full_transcription = " ".join(transcription for transcription in transcriptions)
     return full_transcription
