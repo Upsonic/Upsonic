@@ -65,7 +65,7 @@ def write_version(version):
     """
     with open('gpt_computer_assistant/__init__.py', 'r+') as file:
         content = file.read()
-        content = re.sub(r"__version__ = '.*'", f"__version__ = '{version}'", content)
+        content = re.sub(r"__version__ = '.*'", f"__version__ = '{version}'", content) # fmt: off
         file.seek(0)
         file.write(content)
 
@@ -81,7 +81,7 @@ def update_version(version):
     for file in files:
         with open(file, 'r+') as f:
             content = f.read()
-            content = re.sub(r'    version=".*"', f'    version="{version}"', content)
+            content = re.sub(r'    version=".*"', f'    version="{version}"', content) # fmt: off
             f.seek(0)
             f.write(content)
 
