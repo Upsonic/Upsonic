@@ -9,14 +9,6 @@
   <a href="https://docs.gca.dev">
     <img src="https://github.com/user-attachments/assets/c60562bf-540e-47d9-b578-994285071128" width="250">
   </a>
-  .
-  <a href="https://github.com/Upsonic/gpt-computer-assistant/releases/latest/download/gpt-computer-assistant-openai.dmg">
-    <img src="https://github.com/user-attachments/assets/a0475f31-9dfd-4a0c-91b0-7ae128c3c773" width="250">
-  </a>
-  .
-  <a href="https://github.com/Upsonic/gpt-computer-assistant/releases/latest/download/gpt-computer-assistant-openai.exe">
-    <img src="https://github.com/user-attachments/assets/c94139fd-609c-4780-9541-6e9e01dd0e47" width="250">
-  </a>
 
 </p>
 
