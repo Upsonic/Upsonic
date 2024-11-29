@@ -2,11 +2,17 @@ import os
 import uuid
 from dotenv import load_dotenv
 
+try:
+    from .folder import currently_dir, artifacts_dir, media_dir
+    from .kot_db import kot_db_
+except:
+    from folder import currently_dir, artifacts_dir, media_dir
+    from kot_db import kot_db_
+
+
 load_dotenv(".env")
 
-currently_dir = os.path.dirname(os.path.abspath(__file__))
-artifacts_dir = os.path.join(currently_dir, "artifacts")
-media_dir = os.path.join(currently_dir, "media")
+
 
 if not os.path.exists(artifacts_dir):
     os.makedirs(artifacts_dir)
@@ -37,43 +43,39 @@ def get_history_db():
     return os.path.join(artifacts_dir, f"history_{the_profile}.db")
 
 
-openaikey = os.path.join(artifacts_dir, "openaikey.db")
 
-
+# API KEY SAVING AND LOADING
 def save_api_key(api_key):
-    """Save the OpenAI API key to a file."""
-    with open(openaikey, "w") as f:
-        f.write(api_key)
-
-
+    kot_db_.set("openai_api_key", api_key)
 def load_api_key():
-    """Load the OpenAI API key from a file or environment variables."""
-    if not os.path.exists(openaikey):
-        env = os.getenv("OPENAI_API_KEY")
-        if env:
-            save_api_key(env)
-            return env
-        else:
-            return "CHANGE_ME"
-    with open(openaikey, "r") as f:
-        return f.read()
+    if kot_db_.get("openai_api_key"):
+        return kot_db_.get("openai_api_key")
+    else:
+        env_variable = os.getenv("OPENAI_API_KEY")
+        if env_variable:
+            save_api_key(env_variable)
+            return env_variable
+        return "CHANGE_ME"
 
 
-openai_url_db = os.path.join(artifacts_dir, "openai_url.db")
-
-
+# OPENAI URL SAVING AND LOADING
 def save_openai_url(url):
-    """Save the custom OpenAI base URL to a file."""
-    with open(openai_url_db, "w") as f:
-        f.write(url)
-
-
+    kot_db_.set("openai_url", url)
 def load_openai_url():
-    """Load the custom OpenAI base URL from a file."""
-    if not os.path.exists(openai_url_db):
+    if kot_db_.get("openai_url"):
+        return kot_db_.get("openai_url")
+    else:
         return "default"
-    with open(openai_url_db, "r") as f:
-        return f.read()
+
+
+# API VERSION SAVING AND LOADING
+def save_api_version(url):
+    kot_db_.set("api_version", url)
+def load_api_version():
+    if kot_db_.get("api_version"):
+        return kot_db_.get("api_version")
+    else:
+        return "CHANGE_ME"
 
 
 model_settings_db = os.path.join(artifacts_dir, "model_settings.db")

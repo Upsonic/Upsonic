@@ -1,27 +1,15 @@
 from openai import OpenAI
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, AzureChatOpenAI
 from langchain_community.chat_models import ChatOllama
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 
 try:
-    from .utils.db import (
-        load_api_key,
-        load_openai_url,
-        load_model_settings,
-        load_groq_api_key,
-        load_google_api_key,
-    )
+    from .utils.db import *
     from .custom_callback import customcallback
     from .llm_settings import llm_settings
 except ImportError:
-    from utils.db import (
-        load_api_key,
-        load_openai_url,
-        load_model_settings,
-        load_groq_api_key,
-        load_google_api_key,
-    )
+    from utils.db import *
     from custom_callback import customcallback
     from llm_settings import llm_settings
 
@@ -35,6 +23,7 @@ def get_model(high_context=False):
     the_groq_api_key = load_groq_api_key()
     the_google_api_key = load_google_api_key()
     the_openai_url = load_openai_url()
+    the_api_version = load_api_version()
 
     def open_ai_base(high_context):
         if the_openai_url == "default":
@@ -60,6 +49,13 @@ def get_model(high_context=False):
 
     args_mapping = {
         ChatOpenAI: open_ai_base(high_context=high_context),
+        AzureChatOpenAI: {
+            "azure_deployment": the_model.replace("-azureopenai", ""),
+            "api_version": the_api_version,
+            "max_retries": 15,
+            "streaming": True,
+            "callbacks": [the_callback],
+        },
         ChatOllama: {"model": the_model},
         ChatGroq: {
             "temperature": 0,
@@ -78,6 +74,11 @@ def get_model(high_context=False):
         the_tuple = None
         if model_args["provider"] == "openai":
             the_tuple = (ChatOpenAI, args_mapping[ChatOpenAI])
+        elif model_args["provider"] == "azureai":
+            import os
+            os.environ["AZURE_OPENAI_API_KEY"] = the_api_key
+            os.environ["AZURE_OPENAI_ENDPOINT"] = the_openai_url
+            the_tuple = (AzureChatOpenAI, args_mapping[AzureChatOpenAI])
         elif model_args["provider"] == "ollama":
             the_tuple = (
                 ChatOpenAI,

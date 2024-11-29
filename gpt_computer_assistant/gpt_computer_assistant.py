@@ -338,12 +338,19 @@ class CustomTextEdit(QTextEdit):
         super(CustomTextEdit, self).__init__(parent)
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
+        if (event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter) and not (event.modifiers() & Qt.ShiftModifier):
             global return_key_event
             return_key_event()
         super(CustomTextEdit, self).keyPressEvent(
             event
         )  # Process other key events normally
+
+    def insertFromMimeData(self, source):
+        newData = QtCore.QMimeData()
+        for format in source.formats():
+            if format == 'text/plain':
+                newData.setData(format, source.data(format))
+        super().insertFromMimeData(newData)
 
 
 class Worker_2(QThread):
@@ -1174,8 +1181,9 @@ class MainWindow(QMainWindow):
 
         input_box.setFixedHeight(80)
 
-        # Set text wrapping. I dont wat to cut the text
-        input_box.setWordWrapMode(QtGui.QTextOption.NoWrap)
+
+        # If its used for a chat, you can use the following line to disable word wrap
+        #input_box.setWordWrapMode(QtGui.QTextOption.NoWrap)
 
         # Change the font size
         font = QtGui.QFont()
@@ -1192,7 +1200,7 @@ class MainWindow(QMainWindow):
                     input_box.setPlaceholderText("Type here \nsand ↵ ")
                 else:
                     input_box.setPlaceholderText(
-                        "Type here \nand ↵ \nor ⌘ + ↵ (+screenshot)"
+                        "Type here \nand ↵ \nor ⌘ + ↵ (+screenshot) \n\nNew line: shift + ↵"
                     )
             else:
                 if llm_settings[load_model_settings()]["vision"] is False:

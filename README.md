@@ -267,6 +267,8 @@ print(output)
 | **Local TTS**              | Completed     | Q3 2024        |
 | **Local STT**              | Completed     | Q3 2024        |
 | Tray Menu              | Completed     | Q3 2024        |
+| New Line (Shift + Enter)              | Completed     | Q4 2024        |
+| Copy Pasting Text Compatibility            | Completed     | Q4 2024        |
 | **Global Hotkey**              | On the way     | Q3 2024        |
 | DeepFace Integration (Facial Recognition)                    | Planned  | Q3 2024        |
 
