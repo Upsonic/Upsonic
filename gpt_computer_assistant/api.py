@@ -617,7 +617,7 @@ def get_openai_models():
     return jsonify({"response": get_openai_models()})
 
 @app.route("/get_azureai_models", methods=["POST"])
-def get_openai_models():
+def get_azureai_models():
     """
     This api returns the list of Azure AI models
     """
