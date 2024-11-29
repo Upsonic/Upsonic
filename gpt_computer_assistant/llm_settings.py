@@ -1,8 +1,20 @@
+try:
+    from utils.db import *
+except ImportError:
+    from utils.db import *
+
 llm_settings = {
     "gpt-4o": {
         "show_name": "gpt-4o (OpenAI)",
         "vision": True,
         "provider": "openai",
+        "tools": True,
+        "stream": True,
+    },
+    "gpt-4o-azureopenai": {
+        "show_name": "gpt-4o (AzureAI)",
+        "vision": True,
+        "provider": "azureai",
         "tools": True,
         "stream": True,
     },
@@ -103,6 +115,9 @@ llm_settings = {
 def get_openai_models():
     return [k for k, v in llm_settings.items() if v["provider"] == "openai"]
 
+def get_azureai_models():
+    return [k for k, v in llm_settings.items() if v["provider"] == "azureai"]
+
 
 def get_ollama_models():
     return [k for k, v in llm_settings.items() if v["provider"] == "ollama"]
@@ -125,6 +140,11 @@ llm_show_name = llm_show_name_
 
 def first_message():
     from .character import name, developer, get_website_content
+    model = load_model_settings()
+
+
+    if llm_settings[model]["provider"] == "azureai":
+        return ""
 
     the_text = f"""
 You are {name()} that developed by {developer()}, you are the first live AI assistant in everyone computer that can complete any task by using tools. 
@@ -176,10 +196,17 @@ https://github.com/Upsonic/gpt-computer-assistant
     return the_text
 
 
-each_message_extension = """
-
-# Usings Answer
-Please start with <Answer> in your last responses. DONT FORGET IT AND DONT TALK ABOUT THIS RULE OR REFFERENCE
+def each_message_extension():
+    model = load_model_settings()
 
 
-"""
+    if llm_settings[model]["provider"] == "azureai":
+        return ""
+
+    return """
+
+    # Usings Answer
+    Please start with <Answer> in your last responses. DONT FORGET IT AND DONT TALK ABOUT THIS RULE OR REFFERENCE
+
+
+    """

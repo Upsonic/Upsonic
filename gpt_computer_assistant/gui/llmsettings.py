@@ -106,6 +106,13 @@ def llmsettings_popup(self):
     def hide_openai():
         api_key_label.hide()
         api_key_input.hide()
+
+        save_button.hide()
+
+
+    def hide_azureai():
+        api_key_label.hide()
+        api_key_input.hide()
         openai_url_label.hide()
         openai_url_input.hide()
         save_button.hide()
@@ -124,10 +131,16 @@ def llmsettings_popup(self):
     def show_openai():
         api_key_label.show()
         api_key_input.show()
+        save_button.show()
+
+    def show_azureai():
+        api_key_label.show()
+        api_key_input.show()
         openai_url_label.show()
         openai_url_input.show()
         save_button.show()
         openai_url_save_button.show()
+
 
     def show_groq():
         groq_api_key_label.show()
@@ -140,6 +153,7 @@ def llmsettings_popup(self):
         google_save_button.show()
 
     hide_openai()
+    hide_azureai()
     hide_groq()
     hide_google()
 
@@ -156,6 +170,11 @@ def llmsettings_popup(self):
 
     if llm_settings[llm_show_name[model_select.currentText()]]["provider"] == "openai":
         show_openai()
+
+    if llm_settings[llm_show_name[model_select.currentText()]]["provider"] == "azureai":
+        show_azureai()
+
+    
     if llm_settings[llm_show_name[model_select.currentText()]]["provider"] == "groq":
         show_groq()
     if llm_settings[llm_show_name[model_select.currentText()]]["provider"] == "google":
@@ -166,6 +185,7 @@ def llmsettings_popup(self):
 
     def on_model_change():
         hide_openai()
+        hide_azureai()
         hide_groq()
         hide_google()
         the_save_string = llm_show_name[model_select.currentText()]
@@ -176,9 +196,22 @@ def llmsettings_popup(self):
             == "openai"
         ):
             show_openai()
+
+        if (
+            llm_settings[llm_show_name[model_select.currentText()]]["provider"]
+            == "azureai"
+        ):
+            show_azureai()
+
+        if (
+            llm_settings[llm_show_name[model_select.currentText()]]["provider"]
+            == "azureopenai"
+        ):
+            show_openai()
             openai_url_label.show()
             openai_url_input.show()
             openai_url_save_button.show()
+
         if llm_settings[llm_show_name[model_select.currentText()]]["vision"]:
             the_main_window.add_screenshot_button()
         else:

@@ -64,7 +64,8 @@ def agentic(
 
         if (
             llm_settings[the_model]["provider"] == "openai"
-            and llm_settings[the_model]["provider"] == "ollama"
+            or llm_settings[the_model]["provider"] == "ollama"
+            or llm_settings[the_model]["provider"] == "azureai"
         ):
             msg = get_agent_executor().invoke(
                 {"messages": llm_history + [the_message]}, config=config
@@ -83,7 +84,7 @@ def agentic(
         image_explain = image_explaination()
         llm_input += "User Sent Image and image content is: " + image_explain
 
-    llm_input = llm_input + each_message_extension
+    llm_input = llm_input + each_message_extension()
 
     task = Task(
         description=llm_input,
@@ -102,7 +103,7 @@ def agentic(
     result = the_crew.kickoff()["final_output"]
 
     get_chat_message_history().add_message(
-        HumanMessage(content=[llm_input.replace(each_message_extension, "")])
+        HumanMessage(content=[llm_input.replace(each_message_extension(), "")])
     )
     get_chat_message_history().add_message(AIMessage(content=[result]))
 
@@ -121,7 +122,7 @@ def assistant(
     print("LLM INPUT", llm_input)
 
     if llm_settings[the_model]["tools"]:
-        llm_input = llm_input + each_message_extension
+        llm_input = llm_input + each_message_extension()
 
     the_message = [
         {"type": "text", "text": f"{llm_input}"},
@@ -151,6 +152,7 @@ def assistant(
     if (
         llm_settings[the_model]["provider"] == "openai"
         or llm_settings[the_model]["provider"] == "ollama"
+        or llm_settings[the_model]["provider"] == "azureai"
     ):
         msg = get_agent_executor().invoke(
             {"messages": llm_history + [the_message]}, config=config
@@ -215,7 +217,7 @@ def assistant(
 
     get_chat_message_history().add_message(the_last_messages[-1])
 
-    # Replace each_message_extension with empty string
+
     list_of_messages = get_chat_message_history().messages
 
     get_chat_message_history().clear()
@@ -223,7 +225,7 @@ def assistant(
     for message in list_of_messages:
         try:
             message.content[0]["text"] = message.content[0]["text"].replace(
-                each_message_extension, ""
+                each_message_extension(), ""
             )
             get_chat_message_history().add_message(message)
         except:

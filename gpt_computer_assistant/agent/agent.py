@@ -67,11 +67,21 @@ def get_agent_executor():
             mouse_scroll,
         ]
 
+    if llm_settings[model]["provider"] == "azureai":
+        tools += [
+            click_on_a_text_on_the_screen,
+            click_on_a_icon_on_the_screen,
+            move_on_a_text_on_the_screen,
+            move_on_a_icon_on_the_screen,
+            mouse_scroll,
+        ]
+
     tools += [get_texts_on_the_screen]
 
     if (
         llm_settings[model]["provider"] == "openai"
         or llm_settings[model]["provider"] == "groq"
+        or llm_settings[model]["provider"] == "azureai"
     ):
         return chat_agent_executor.create_tool_calling_executor(get_model(), tools)
 
