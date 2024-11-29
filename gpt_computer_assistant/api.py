@@ -602,6 +602,15 @@ def get_openai_models():
 
     return jsonify({"response": get_openai_models()})
 
+@app.route("/get_azureai_models", methods=["POST"])
+def get_openai_models():
+    """
+    This api returns the list of Azure AI models
+    """
+    from .llm_settings import get_azureai_models
+
+    return jsonify({"response": get_azureai_models()})
+
 
 @app.route("/get_ollama_models", methods=["POST"])
 def get_ollama_models():

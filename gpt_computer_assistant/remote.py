@@ -232,6 +232,11 @@ class Remote_Client:
         response = self.send_request("/get_openai_models", data)
         return response["response"]
 
+    def get_azureai_models(self):
+        data = {}
+        response = self.send_request("/get_azureai_models", data)
+        return response["response"]
+
     def get_ollama_models(self):
         data = {}
         response = self.send_request("/get_ollama_models", data)
