@@ -400,9 +400,7 @@ pyperclip==1.8.2
     # via
     #   -r requirements.in
     #   mouseinfo
-pyqt5
-
-
+pyqt5==5.15.*
     # via pyqt5
 pyreadline3==3.4.1
     # via open-interpreter

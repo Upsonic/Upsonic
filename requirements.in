@@ -1,6 +1,6 @@
 langgraph==0.0.51
 #pyqt5==5.15.10
-pyqt5
+pyqt5==5.15.*
 scipy==1.13.1
 pygame==2.5.2
 soundcard==0.4.3
