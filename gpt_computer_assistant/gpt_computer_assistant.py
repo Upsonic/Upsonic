@@ -345,6 +345,13 @@ class CustomTextEdit(QTextEdit):
             event
         )  # Process other key events normally
 
+    def insertFromMimeData(self, source):
+        newData = QtCore.QMimeData()
+        for format in source.formats():
+            if format == 'text/plain':
+                newData.setData(format, source.data(format))
+        super().insertFromMimeData(newData)
+
 
 class Worker_2(QThread):
     text_to_set = pyqtSignal(str)
