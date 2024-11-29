@@ -338,7 +338,7 @@ class CustomTextEdit(QTextEdit):
         super(CustomTextEdit, self).__init__(parent)
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
+        if (event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter) and not (event.modifiers() & Qt.ShiftModifier):
             global return_key_event
             return_key_event()
         super(CustomTextEdit, self).keyPressEvent(
@@ -1193,7 +1193,7 @@ class MainWindow(QMainWindow):
                     input_box.setPlaceholderText("Type here \nsand ↵ ")
                 else:
                     input_box.setPlaceholderText(
-                        "Type here \nand ↵ \nor ⌘ + ↵ (+screenshot)"
+                        "Type here \nand ↵ \nor ⌘ + ↵ (+screenshot) \n\nNew line: shift + ↵"
                     )
             else:
                 if llm_settings[load_model_settings()]["vision"] is False:
