@@ -1174,8 +1174,9 @@ class MainWindow(QMainWindow):
 
         input_box.setFixedHeight(80)
 
-        # Set text wrapping. I dont wat to cut the text
-        input_box.setWordWrapMode(QtGui.QTextOption.NoWrap)
+
+        # If its used for a chat, you can use the following line to disable word wrap
+        #input_box.setWordWrapMode(QtGui.QTextOption.NoWrap)
 
         # Change the font size
         font = QtGui.QFont()
