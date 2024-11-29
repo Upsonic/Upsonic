@@ -65,6 +65,30 @@ def llmsettings_popup(self):
     openai_url_save_button.clicked.connect(save_openai_url_)
     settings_dialog.layout().addWidget(openai_url_save_button)
 
+
+
+
+    api_version_label = QLabel("API Version")
+    settings_dialog.layout().addWidget(api_version_label)
+    api_version_input = QLineEdit()
+    api_version = load_api_version()
+    api_version_input.setText(api_version)
+    settings_dialog.layout().addWidget(api_version_input)
+
+    def save_api_version_():
+        api_version = api_version_input.text()
+        save_api_version(api_version)
+        the_main_window.update_from_thread("Saved API Version")
+        the_main_window.input_box.setPlaceholderText("Type here")
+        settings_dialog.close()
+
+    api_version_save_button = QPushButton("Save URL")
+    api_version_save_button.clicked.connect(save_api_version_)
+    settings_dialog.layout().addWidget(api_version_save_button)
+
+
+    
+
     groq_api_key_label = QLabel("Groq API Key")
     settings_dialog.layout().addWidget(groq_api_key_label)
     groq_api_key_input = QLineEdit()
@@ -113,10 +137,14 @@ def llmsettings_popup(self):
     def hide_azureai():
         api_key_label.hide()
         api_key_input.hide()
+        save_button.hide()
         openai_url_label.hide()
         openai_url_input.hide()
-        save_button.hide()
         openai_url_save_button.hide()
+        api_version_label.hide()
+        api_version_input.hide()
+        api_version_save_button.hide()
+        
 
     def hide_groq():
         groq_api_key_label.hide()
@@ -136,11 +164,13 @@ def llmsettings_popup(self):
     def show_azureai():
         api_key_label.show()
         api_key_input.show()
+        save_button.show()
         openai_url_label.show()
         openai_url_input.show()
-        save_button.show()
         openai_url_save_button.show()
-
+        api_version_label.show()
+        api_version_input.show()
+        api_version_save_button.show()
 
     def show_groq():
         groq_api_key_label.show()

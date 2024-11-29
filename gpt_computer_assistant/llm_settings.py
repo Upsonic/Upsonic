@@ -1,5 +1,5 @@
 try:
-    from utils.db import *
+    from .utils.db import *
 except ImportError:
     from utils.db import *
 
