@@ -4,7 +4,7 @@ try:
     from .chat_history import *
     from ..audio.tts import text_to_speech
     from ..audio.stt import speech_to_text
-    from ..audio.record import audio_data
+
     from ..gui.signal import signal_handler
     from ..utils.db import *
     from ..utils.telemetry import my_tracer, os_name
@@ -88,6 +88,7 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
         span.set_attribute("user_id", user_id)
         span.set_attribute("os_name", os_name_)
         try:
+            from ..audio.record import audio_data
             global audio_data, last_ai_response
             from ..gpt_computer_assistant import the_input_box, the_main_window
             from ..audio.record import audio_data, the_input_box_pre

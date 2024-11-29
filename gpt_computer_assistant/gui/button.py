@@ -3,7 +3,7 @@ from .signal import *
 import threading
 
 try:
-    from ..audio.record import *
+
     from ..screen.shot import *
     from ..agent.process import *
     from ..agent.chat_history import clear_chat_history
@@ -19,7 +19,7 @@ try:
     )
     from ..screen.shot import take_screenshot
 except ImportError:
-    from audio.record import *
+
     from screen.shot import *
     from agent.process import *
     from utils.db import (
@@ -57,6 +57,11 @@ class ButtonHandler:
         new_record=False,
     ):
         """Toggle audio recording."""
+
+        try:
+            from ..audio.record import stop_recording, start_recording
+        except ImportError:
+            from audio.record import stop_recording, start_recording
 
         if self.recording and not new_record:
             stop_recording()
