@@ -4,4 +4,4 @@ from .agentic import Agent
 
 from .tooler import Tool
 
-__version__ = '0.22.3'  # fmt: skip
+__version__ = '0.23.0'  # fmt: skip
