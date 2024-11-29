@@ -199,6 +199,12 @@ class Remote_Client:
         response = self.send_request("/save_openai_url", data)
         return response["response"]
 
+
+    def save_api_version(self, api_version):
+        data = {"api_version": api_version}
+        response = self.send_request("/save_api_version", data)
+        return response["response"]
+
     def save_model_settings(self, model_name):
         data = {"model_name": model_name}
         response = self.send_request("/save_model_settings", data)

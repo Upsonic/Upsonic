@@ -422,6 +422,20 @@ def save_openai_url():
     return jsonify({"response": "OpenAI base URL saved."})
 
 
+
+
+@app.route("/save_api_version", methods=["POST"])
+def save_api_version():
+    """
+    This api saves the OpenAI base URL
+    """
+    data = request.json
+    api_version = data["api_version"]
+    from .utils.db import save_api_version
+
+    save_api_version(api_version)
+    return jsonify({"response": "API version saved."})
+
 @app.route("/save_model_settings", methods=["POST"])
 def save_model_settings():
     """
