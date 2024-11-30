@@ -53,6 +53,10 @@ setup(
         "api": [
             "flask==3.0.3",
         ],
+        "display": [
+
+            "opencv-python",
+        ],
         "local_tts": [
             "tensorflow==2.17.0",
             "datasets[audio]==2.20.0",
