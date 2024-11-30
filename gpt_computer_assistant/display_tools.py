@@ -2,13 +2,14 @@ from langchain.tools import tool
 import traceback
 
 try:
-    from .utils.db import load_api_key
+    from .utils.db import *
     from .llm import get_model
     from .top_bar_wrapper import wrapper
+    from .llm_settings import llm_settings
 except ImportError:
-    from utils.db import load_api_key
+    from utils.db import *
     from top_bar_wrapper import wrapper
-
+    from llm_settings import llm_settings
 
 @wrapper
 def click_on_a_text_on_the_screen_(text: str, click_type: str = "singular") -> bool:
@@ -31,7 +32,16 @@ def click_on_a_text_on_the_screen_(text: str, click_type: str = "singular") -> b
 
         interpreter = OpenInterpreter()
 
-        interpreter.llm.api_key = load_api_key()
+        model = load_model_settings()
+        if llm_settings[model]["provider"] == "azureai":
+            interpreter.llm.model = f"azure/{model}"
+            import os 
+            os.environ["AZURE_API_KEY"] = load_api_key()
+            os.environ["AZURE_API_BASE"] = load_openai_url()
+            os.environ["AZURE_API_VERSION"] = load_api_version()
+
+        else:
+            interpreter.llm.api_key = load_api_key()
 
         screenshot = pyautogui.screenshot()
 
@@ -80,7 +90,16 @@ def move_on_a_text_on_the_screen_(text: str) -> bool:
 
         interpreter = OpenInterpreter()
 
-        interpreter.llm.api_key = load_api_key()
+        model = load_model_settings()
+        if llm_settings[model]["provider"] == "azureai":
+            interpreter.llm.model = f"azure/{model}"
+            import os 
+            os.environ["AZURE_API_KEY"] = load_api_key()
+            os.environ["AZURE_API_BASE"] = load_openai_url()
+            os.environ["AZURE_API_VERSION"] = load_api_version()
+
+        else:
+            interpreter.llm.api_key = load_api_key()
 
         screenshot = pyautogui.screenshot()
 
@@ -132,7 +151,16 @@ def click_on_a_icon_on_the_screen_(
 
         interpreter = OpenInterpreter()
 
-        interpreter.llm.api_key = load_api_key()
+        model = load_model_settings()
+        if llm_settings[model]["provider"] == "azureai":
+            interpreter.llm.model = f"azure/{model}"
+            import os 
+            os.environ["AZURE_API_KEY"] = load_api_key()
+            os.environ["AZURE_API_BASE"] = load_openai_url()
+            os.environ["AZURE_API_VERSION"] = load_api_version()
+
+        else:
+            interpreter.llm.api_key = load_api_key()
 
         if click_type == "singular":
             interpreter.computer.mouse.click(icon=icon_name, screenshot=screenshot)
@@ -174,7 +202,16 @@ def move_on_a_icon_on_the_screen_(
 
         interpreter = OpenInterpreter()
 
-        interpreter.llm.api_key = load_api_key()
+        model = load_model_settings()
+        if llm_settings[model]["provider"] == "azureai":
+            interpreter.llm.model = f"azure/{model}"
+            import os 
+            os.environ["AZURE_API_KEY"] = load_api_key()
+            os.environ["AZURE_API_BASE"] = load_openai_url()
+            os.environ["AZURE_API_VERSION"] = load_api_version()
+
+        else:
+            interpreter.llm.api_key = load_api_key()
 
         interpreter.computer.mouse.move(icon=icon_name, screenshot=screenshot)
         return True
