@@ -39,16 +39,34 @@ def input():
     else:
         the_main_window.button_handler.input_text_screenshot(text)
 
-    while the_input_box.toPlainText() == firsst_text:
-        time.sleep(0.3)
+    time.sleep(1)
 
-    while the_input_box.toPlainText().startswith("System:"):
-        time.sleep(0.3)
+    return_okay = False
+    
+
+    while return_okay == False:
+        response = the_input_box.toPlainText()
+
+        if response == firsst_text:
+            time.sleep(0.3)
+            continue
+
+        if response.startswith("System:"):
+            time.sleep(0.3)
+            continue
+
+        if response.startswith("Thinking..."):
+            time.sleep(0.3)
+            continue
+
+        return_okay = True
 
     while not the_main_window.state == "idle":
         time.sleep(0.3)
 
-    response = the_input_box.toPlainText()
+        
+
+    
 
     the_main_window.tts_available = original_tts
 
