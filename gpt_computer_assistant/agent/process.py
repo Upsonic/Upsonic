@@ -202,6 +202,7 @@ def process_screenshot():
                 get_client(),
                 screenshot_path=just_screenshot_path,
                 dont_save_image=False,
+                just_screenshot=True,
             )
 
             last_ai_response = llm_output.replace("<Answer>", "")

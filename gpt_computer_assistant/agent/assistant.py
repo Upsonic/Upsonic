@@ -1,3 +1,6 @@
+import time
+
+
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 from .chat_history import *
@@ -111,7 +114,7 @@ def agentic(
 
 
 def assistant(
-    llm_input, llm_history, client, screenshot_path=None, dont_save_image=False
+    llm_input, llm_history, client, screenshot_path=None, dont_save_image=False, just_screenshot=False
 ):
     the_model = load_model_settings()
 
@@ -149,14 +152,23 @@ def assistant(
     the_message = HumanMessage(content=the_message)
     get_chat_message_history().add_message(the_message)
 
+
+
+
+    
+
     if (
         llm_settings[the_model]["provider"] == "openai"
         or llm_settings[the_model]["provider"] == "ollama"
         or llm_settings[the_model]["provider"] == "azureai"
     ):
-        msg = get_agent_executor().invoke(
-            {"messages": llm_history + [the_message]}, config=config
-        )
+        if just_screenshot:
+            msg = {"messages": llm_history + [the_message]}
+            time.sleep(1)
+        else:
+            msg = get_agent_executor().invoke(
+                {"messages": llm_history + [the_message]}, config=config
+            )
 
     if llm_settings[the_model]["provider"] == "google":
         the_history = []
@@ -176,9 +188,13 @@ def assistant(
                 the_history.append(the_mes)
 
         the_last_message = HumanMessage(content=llm_input)
-        msg = get_agent_executor().invoke(
-            {"messages": the_history + [the_last_message]}, config=config
-        )
+        if just_screenshot:
+            msg = {"messages": the_history + [the_last_message]}
+            time.sleep(1)
+        else:
+            msg = get_agent_executor().invoke(
+                {"messages": the_history + [the_last_message]}, config=config
+            )
 
     elif llm_settings[the_model]["provider"] == "groq":
         the_history = []
@@ -198,11 +214,24 @@ def assistant(
                 the_history.append(the_mes)
 
         the_last_message = HumanMessage(content=llm_input)
-        msg = get_agent_executor().invoke(
-            {"messages": the_history + [the_last_message]}, config=config
-        )
+
+        if just_screenshot:
+            msg = {"messages": the_history + [the_last_message]}
+            time.sleep(1)
+        else:
+            msg = get_agent_executor().invoke(
+                {"messages": the_history + [the_last_message]}, config=config
+            )
+
+
 
     the_last_messages = msg["messages"]
+
+
+
+
+
+
 
     if dont_save_image and screenshot_path is not None:
         currently_messages = get_chat_message_history().messages
@@ -236,5 +265,9 @@ def assistant(
     return_value = the_last_messages[-1].content
     if return_value == "":
         return_value = "No response"
+
+
+    if just_screenshot:
+        return "OK"
 
     return return_value
