@@ -295,11 +295,14 @@ def split_with_multiple_delimiters(text, delimiters):
 
 
 def click_sound():
-    pygame.mixer.init()
+    try:
+        pygame.mixer.init()
 
-    retro = pygame.mixer.Sound(click_sound_path)
-    retro.set_volume(0.1)
-    retro.play()
+        retro = pygame.mixer.Sound(click_sound_path)
+        retro.set_volume(0.1)
+        retro.play()
+    except:
+        pass
 
 
 class Worker(QThread):
