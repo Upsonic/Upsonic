@@ -656,6 +656,38 @@ def get_groq_models():
     return jsonify({"response": get_groq_models()})
 
 
+
+
+
+
+
+
+
+@app.route("/mouse_scroll_down", methods=["POST"])
+def mouse_scroll_down():
+
+    data = request.json
+    amount = data["amount"]
+
+    from .display_tools import mouse_scroll_
+    mouse_scroll_("down", amount)
+    return jsonify({"response": f"Mouse scrolled down by {amount}"})
+@app.route("/mouse_scroll_up", methods=["POST"])
+def mouse_scroll_up():
+
+    data = request.json
+    amount = data["amount"]
+
+    from .display_tools import mouse_scroll_
+    mouse_scroll_("up", amount)
+    return jsonify({"response": f"Mouse scrolled up by {amount}"})
+
+
+
+
+
+
+
 class ServerThread(threading.Thread):
     def __init__(self, app, host, port):
         threading.Thread.__init__(self)

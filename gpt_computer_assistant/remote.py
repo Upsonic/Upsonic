@@ -295,8 +295,22 @@ class Remote_Client:
         response = self.send_request("/train", data)
         return response["response"]
 
+
+    def mouse_scroll_down(self, amount):
+        data = {"amount": amount}
+        response = self.send_request("/mouse_scroll_down", data)
+        return response["response"]
+
+
+    def mouse_scroll_up(self, amount):
+        data = {"amount": amount}
+        response = self.send_request("/mouse_scroll_up", data)
+        return response["response"]
+
     def wait(self, second):
         time.sleep(second)
+
+
 
 
 remote = Remote_Client("http://localhost:7541")
