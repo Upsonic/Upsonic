@@ -728,7 +728,7 @@ server_thread = None
 def start_api():
     global server_thread
     if server_thread is None:
-        server_thread = ServerThread(app, "localhost", 7541)
+        server_thread = ServerThread(app, "0.0.0.0", 7541)
         server_thread.start()
         print("API started")
     else:
