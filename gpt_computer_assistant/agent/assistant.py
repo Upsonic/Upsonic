@@ -233,4 +233,8 @@ def assistant(
 
     print("The return", the_last_messages[-1].content)
 
-    return the_last_messages[-1].content
+    return_value = the_last_messages[-1].content
+    if return_value == "":
+        return_value = "No response"
+
+    return return_value
