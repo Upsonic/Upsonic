@@ -2,7 +2,7 @@ import textwrap
 import requests
 
 import time
-from upsonic import Tiger
+
 
 
 the_upsonic_ = None
@@ -12,6 +12,7 @@ def the_upsonic():
     global the_upsonic_
 
     if not the_upsonic_:
+        from upsonic import Tiger
         the_upsonic_ = Tiger()
 
     return the_upsonic_
