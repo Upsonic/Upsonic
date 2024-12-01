@@ -91,7 +91,8 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
             from ..audio.record import audio_data
             global audio_data, last_ai_response
             from ..gpt_computer_assistant import the_input_box, the_main_window
-            from ..audio.record import audio_data, the_input_box_pre
+            from ..audio.record import audio_data
+            from ..audio.input_box import the_input_box_pre
 
             transcription = speech_to_text(mic_record_location)
 
@@ -178,7 +179,8 @@ def process_screenshot():
         try:
             global last_ai_response
             from ..gpt_computer_assistant import the_input_box, the_main_window
-            from ..audio.record import the_input_box_pre
+
+            from ..audio.input_box import the_input_box_pre
 
             llm_input = "I just take a screenshot. for you to remember. Just say 'Ok.' if the user doesnt want anything before."
 

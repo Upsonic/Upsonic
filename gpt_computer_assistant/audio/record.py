@@ -2,10 +2,12 @@ try:
     from ..gui.signal import *
     from ..utils.db import *
     from ..utils.telemetry import my_tracer, os_name
+    from .input_box import the_input_box
 except ImportError:
     from gui.signal import *
     from utils.db import *
     from utils.telemetry import my_tracer, os_name
+    from input_box import the_input_box
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
@@ -24,7 +26,7 @@ audio_data = None
 user_id = load_user_id()
 os_name_ = os_name()
 
-the_input_box_pre = ""
+
 
 
 import queue
