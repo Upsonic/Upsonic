@@ -3,14 +3,15 @@ import platform
 import sys
 import webbrowser
 
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtGui import *
-from PyQt5.QtWidgets import *
-from PyQt5.QtCore import Qt
-from pynput import keyboard
+
 
 
 def start(api=False):
+    from PyQt5.QtWidgets import QApplication
+    from PyQt5.QtGui import QIcon
+    from PyQt5.QtWidgets import QSystemTrayIcon, QMenu, QAction
+    from PyQt5.QtCore import Qt
+    from pynput import keyboard
     """
     Starts the computer assistant application.
 
