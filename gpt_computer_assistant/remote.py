@@ -206,7 +206,7 @@ class Remote_Client:
         return response["response"]
 
     def save_model_settings(self, model_name):
-        data = {"model_name": model_name}
+        data = {"model_settings": model_name}
         response = self.send_request("/save_model_settings", data)
         return response["response"]
 
