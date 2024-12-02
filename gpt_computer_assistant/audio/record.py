@@ -2,12 +2,12 @@ try:
     from ..gui.signal import *
     from ..utils.db import *
     from ..utils.telemetry import my_tracer, os_name
-    from .input_box import the_input_box
+    from ..gpt_computer_assistant import the_input_box
 except ImportError:
     from gui.signal import *
     from utils.db import *
     from utils.telemetry import my_tracer, os_name
-    from input_box import the_input_box
+    from gpt_computer_assistant import the_input_box
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
