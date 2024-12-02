@@ -23,7 +23,7 @@ class Remote_Client:
         self.url = url
 
         if self.status != True:
-            raise Exception("The server is not running")
+            print("\n\nThe server is not running\n\n")
 
     def send_request(self, path, data, files=None, dont_error=False):
         try:
