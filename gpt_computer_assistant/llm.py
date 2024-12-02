@@ -44,7 +44,6 @@ def get_model(high_context=False):
                 "max_retries": 15,
                 "streaming": True,
                 "callbacks": [the_callback],
-                "base_url": the_openai_url,
             }
 
     args_mapping = {
