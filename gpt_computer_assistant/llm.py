@@ -101,8 +101,4 @@ def get_model(high_context=False):
 
 def get_client():
     the_api_key = load_api_key()
-    the_openai_url = load_openai_url()
-    if the_openai_url == "default":
-        return OpenAI(api_key=the_api_key)
-    else:
-        return OpenAI(api_key=the_api_key, base_url=the_openai_url)
+    return OpenAI(api_key=the_api_key)
