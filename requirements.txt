@@ -592,5 +592,5 @@ pywifi-controls==0.7
 
 pynput==1.7.7
 
-kot==0.1.1
+kot==0.1.2
 
