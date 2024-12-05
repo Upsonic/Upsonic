@@ -56,8 +56,8 @@ class Remote_Client:
         response = self.send_request("/input", data)
         return response["response"]
 
-    def request(self, request: str, response: str) -> str:
-        data = {"request": request, "response": response}
+    def request(self, request: str, response: str, screen: bool = False) -> str:
+        data = {"request": request, "response": response, "screen": str(screen).lower()}
         response = self.send_request("/request", data)
         return response["response"]
 

@@ -94,10 +94,14 @@ def the_request():
     data = request.json
     the_request = data["request"]
     the_response = data["response"]
+    if "screen" in data:
+        screen = data["screen"]
+    else:
+        screen = "false"
 
     combined = the_request + "\n" + the_response
 
-    return the_input(combined, "false", "false")
+    return the_input(combined, screen, "false")
 
 
 
