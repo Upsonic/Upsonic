@@ -1,8 +1,9 @@
 <p align="center">
   <a href="#">
-    <img src="https://github.com/user-attachments/assets/df1a3ec1-8c03-43c8-9432-c71358c35b9e" >
+    <img src="https://github.com/user-attachments/assets/27778034-29f5-4a71-b696-4e3f70760b26" >
   </a>
   <br>
+
 
 <p align="center">
 
@@ -23,7 +24,7 @@
 
   <p align="center">
     <br />
-    Intelligence development framework
+    Dockerized Computer Use Agents with Production Ready API’s - Supports MCP
     <br />
     </p>
     <br>
@@ -41,69 +42,141 @@
 
 |ENGLISH|[简体中文](README.zh_CN.md)|[正體中文](README.zh_TW.md)|[TÜRKÇE](README.TR.md)
 
+<p align="center">
+<br>
+  <br>
+  <br>
+  <br>
+  <br>
+</p>
+
 # GPT Computer Assistant(GCA)
-Hi, this is an alternative work for providing ChatGPT MacOS app to Windows and Linux. In this way this is a fresh and stable work. You can easily install as Python library for this time but we will prepare a pipeline for providing native install scripts (.exe).
-
-Powered by <a href="https://github.com/Upsonic/Tiger"><strong>Upsonic Tiger 🐅</strong></a> A function hub for llm agents.
+GCA is an innovative AI agent designed to seamlessly control systems across Windows, macOS, and Ubuntu. With its advanced capabilities, GCA enables you to delegate repetitive, logic-based tasks to an AI, drastically improving efficiency and productivity. Whether you’re a developer, analyst, or IT professional, GCA can empower you to accomplish more in less time.
 
 
+<b>Imagine this:</b>
+
+| Task                         | Human       | Time | GCA Can | GCA Time | Optimization |
+|---------------------------------|--------------|----------------|---|---|---|
+| Extract the tech stacks of xxx Company         | Sales Development Representer    | Human: 30 Minute        | Yes | GCA: 5 Minute| %80 Faster|
+| Identify Relevant tables for Analysis for xxx         | Data Analytics    | Human: 20 Minute        | Yes | GCA: 2 Minute| %80 Faster|
+| Check the logs to find core cause of this incident         | Technical Support Engineer    | Human: 20 Minute        | Yes | GCA: 3 Minute| %80 Faster|
+| Making CloudFlare Security Settings         | Security Specialist   | Human: 1 Day       | Yes | GCA: 10 Minute| %80 Faster|
 
 
-## 1. Install and run
-**Python 3.10 or 3.11 is required**
 
+These examples illustrate how GCA is revolutionizing the concept of <b>Vertical AI Agents</b>—tailored solutions that not only replicate human tasks but perform them at unparalleled speed and precision.
+
+
+<p align="center">
+<br>
+  <br>
+
+</p>
+
+
+# How GCA Works?
+
+
+GCA is a Python-based project that runs on multiple operating systems, including Windows, macOS, and Ubuntu. It integrates external concepts, like the Model Context Protocol (MCP), along with its own modules, to interact with and control a computer efficiently. The system performs both routine and advanced tasks by mimicking human-like actions and applying computational precision.
+
+Core Functionalities:
+
+## 1.	Human-like Actions:
+GCA can replicate common user actions, such as:
+-	<b>Clicking</b>: Interact with buttons or other UI elements.
+-	<b>Reading</b>: Recognize and interpret text on the screen.
+-	<b>Scrolling</b>: Navigate through documents or web pages.
+-	<b>Typing</b>: Enter text into forms or other input fields.
+## 2.	Advanced Capabilities:
+Through MCP and GCA’s own modules, it achieves tasks that go beyond standard human interaction, such as:
+
+-	<b>Updating dependencies</b> of a project in seconds.
+-	<b>Analyzing entire database</b> tables to locate specific data almost instantly.
+- <b>Automating cloud security</b> configurations with minimal input.
+
+
+
+
+<p align="center">
+<br>
+  <br>
+  <br>
+  <br>
+  <br>
+</p>
+
+
+## Prequisites
+- Python 3.10
+
+<p align="center">
+<br>
+  <br>
+
+</p>
+
+## Using GCA.dev Cloud
+
+<b>Installation</b>
+```console
+pip install gpt-computer-assistant
+```
+
+Single Instance:
+```python
+from gpt_computer_assistant import cloud
+
+# Starting instance
+instance = cloud.instance()
+
+
+# Asking and getting result
+result = instance.request("Extract the tech stacks of gpt-computer-assitant Company", "i want a list")
+print(result)
+
+
+instance.close()
+```
+
+<p align="center">
+<br>
+  <br>
+  <br>
+  <br>
+  <br>
+</p>
+
+
+## Self-Hosted GCA Server
+
+### Local
+<b>Installation</b>
 ```console
 pip install 'gpt-computer-assistant[base]'
 pip install 'gpt-computer-assistant[api]'
 ```
 
-To run gpt-computer-assistant, simply type
-
-```console
-computerassistant --api
-```
-
-
-<p align="center">
-
-  <a href="#">
-    <img src="https://github.com/user-attachments/assets/890b4e0a-4484-4870-a158-2d365b0d969e" >
-  </a>
-
-</p>
-
-
-
-
-<p align="center">
-<br>
-  <br>
-  <br>
-  <br>
-  <br>
-</p>
-
-
-
-
-
-
-## 2. LLM Settings
+<b>LLM Settings</b>
 
 ```python
-from gpt_computer_assistant.remote import remote
+from gpt_computer_assistant import local
 
-remote.save_models("gpt-4o")
-remote.save_openai_api_key("sk-**")
+# Starting instance
+instance = local.instance()
+
+# Connecting to OpenAI
+instance.client.save_models("gpt-4o")
+instance.client.save_openai_api_key("sk-**")
+
+# Asking and getting result
+result = instance.request("Extract the tech stacks of gpt-computer-assitant Company", "i want a list")
+print(result)
+
+instance.close()
 ```
 
-<p align="start">
 
-  <a href="https://docs.upsonic.co/gca/dev_guides/llm_settings">
-    <img src="https://github.com/user-attachments/assets/a75c8ddf-f9df-436b-9dc8-c5220211e15e" width="150">
-  </a>
-
-</p>
 
 
 
@@ -114,131 +187,6 @@ remote.save_openai_api_key("sk-**")
 </p>
 
 
-
-## 3. Characteristic API
-
-
-```python
-# Name of the assitant:
-remote.change_name("X Intelligence")
-
-#Developer personna of the assistant:
-remote.change_developer("X Company")
-```
-
-<p align="start">
-
-  <a href="https://docs.upsonic.co/gca/dev_guides/characteristic">
-    <img src="https://github.com/user-attachments/assets/d7e02ac6-e40c-4b35-8e65-4621bf3fb9a1" width="150">
-  </a>
-
-</p>
-
-
-
-<p align="center">
-<br>
-  <br>
-  <br>
-</p>
-
-
-
-## 4. Connect Your Functions API
-
-
-```python
-# Installing an library:
-remote.install_library("numpy")
-
-
-
-# Adding functianility as python functions:
-@remote.custom_tool
-def my_server_status() -> bool:
-  """
-  Check the server status.
-  """
-  return True
-```
-
-
-
-<p align="center">
-<br>
-  <br>
-  <br>
-</p>
-
-
-
-## 5. Interact with User API
-
-
-### remote.input
-
-Talk with assistant, about user and computer. With this api you can create an consulting process.
-
-```markdown
-`Hi, look to user window and return which app using now`
-
-`Ask user to is user need any kind of supoprt`
-
-`Extract the user redis config file.`
-```
-
-With this questions you will make a shortcut for your needs. 
-**You can collect informations from user computer or directly from user or user computer.**
-
-```python
-output = remote.input("Extract the user redis config file.", screen=False)
-print(output)
-```
-
-
-<p align="start">
-
-  <a href="https://docs.upsonic.co/gca/dev_guides/interact">
-    <img src="https://github.com/user-attachments/assets/81614347-ab85-4965-9b77-225d0f2961e9" width="150">
-  </a>
-  .
-  <a href="https://docs.upsonic.co/gca/dev_guides/interact">
-    <img src="https://github.com/user-attachments/assets/ecaa7590-f4c5-4eda-9482-462cef54aeff" width="150">
-  </a>
-  .
-  <a href="https://docs.upsonic.co/gca/dev_guides/interact">
-    <img src="https://github.com/user-attachments/assets/0f35df10-b32e-4fa1-936e-b336be46b1bd" width="150">
-  </a>
-
-</p>
-
-
-
-<p align="start">
-
-  <a href="https://docs.upsonic.co/gca/dev_guides/interact">
-    <img src="https://github.com/user-attachments/assets/a893c50c-3ede-4b42-90ee-92e2fea82120" width="150">
-  </a>
-
-</p>
-
-
-<p align="center">
-<br>
-  <br>
-  <br>
-</p>
-
-
-## Usage
-![options](https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/37d34745-ae4b-4b37-9bfa-aec070c97897)
-
-
-
-### Use cases
-
-
-<img alt="Screenshot 2024-08-13 at 18 33 52" src="https://github.com/user-attachments/assets/8f994160-893a-4f56-bbf0-4a7aa87af650">
 
 
 

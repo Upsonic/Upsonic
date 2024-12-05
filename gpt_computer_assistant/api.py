@@ -14,15 +14,9 @@ def status():
     return jsonify({"response": True})
 
 
-@app.route("/input", methods=["POST"])
-def input():
-    """
-    This function receives input from the user and returns the response.
-    """
-    data = request.json
-    text = data["text"]
-    screen = data["screen"]
-    talk = data["talk"]
+
+
+def the_input(text, screen, talk):
     print("Input:", text)
     from .gpt_computer_assistant import the_main_window, the_input_box
 
@@ -71,6 +65,39 @@ def input():
     the_main_window.tts_available = original_tts
 
     return jsonify({"response": response})
+
+
+
+@app.route("/input", methods=["POST"])
+def input():
+    """
+    This function receives input from the user and returns the response.
+    """
+    data = request.json
+    text = data["text"]
+    screen = data["screen"]
+    talk = data["talk"]
+
+    return the_input(text, screen, talk)
+
+
+
+
+
+@app.route("/request", methods=["POST"])
+def the_request():
+    """
+    This function receives input from the user and returns the response.
+    """
+    data = request.json
+    the_request = data["request"]
+    the_response = data["response"]
+
+    combined = the_request + "\n" + the_response
+
+    return the_input(combined, "false", "false")
+
+
 
 
 @app.route("/screenshot", methods=["POST"])
