@@ -62,6 +62,7 @@ def get_agent_executor():
         tools += [
             click_on_a_text_on_the_screen,
             extract_possible_coordinates_of_text,
+            ocr_test,
             click_on_a_icon_on_the_screen,
             move_on_a_text_on_the_screen,
             move_on_a_icon_on_the_screen,
@@ -72,6 +73,7 @@ def get_agent_executor():
         tools += [
             click_on_a_text_on_the_screen,
             extract_possible_coordinates_of_text,
+            ocr_test,
             click_on_a_icon_on_the_screen,
             move_on_a_text_on_the_screen,
             move_on_a_icon_on_the_screen,
