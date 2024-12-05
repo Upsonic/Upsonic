@@ -97,8 +97,12 @@ class cloud_instance(instance):
 
     def request(self, the_request, the_response):
         response = requests.post(self.url+"request", data={"request": the_request, "response": the_response, "instance":self.instance_id}, verify=False)
-        json_response = response.json()
-        return json_response["result"]
+        try:
+            json_response = response.json()
+            return json_response["result"]
+        except:
+            return response.text
+        
 
 
     def current_screenshot(self):
