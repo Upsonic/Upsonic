@@ -22,48 +22,53 @@ def ocr_test_(psm:int =11, oem:int=3, confidence:int=70) -> dict:
     A function to extract possible coordinates of a text on the screen.
     """
 
+    try:
 
-    import pyautogui
-    import pytesseract
-    from PIL import ImageGrab
-    import cv2
-    import numpy as np
-
-
-
+        import pyautogui
+        import pytesseract
+        from PIL import ImageGrab
+        import cv2
+        import numpy as np
 
 
-    def capture_screen():
-        # Capture the entire screen
-        screenshot = ImageGrab.grab()
-        screenshot_np = np.array(screenshot)
-        return cv2.cvtColor(screenshot_np, cv2.COLOR_RGB2BGR)
-
-    def find_all_text_coordinates(confidence=confidence):
-        # Capture the screen and convert it to grayscale
-        img = capture_screen()
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-        # Use pytesseract to get data about the text on the screen
-        data = pytesseract.image_to_data(gray, output_type=pytesseract.Output.DICT, config=f"--psm {psm} --oem {oem}")
-
-        texts_with_coordinates = []
-        for i in range(len(data['text'])):
-            if data['text'][i].strip() and int(data['conf'][i]) > confidence:
-                x, y, w, h = data['left'][i], data['top'][i], data['width'][i], data['height'][i]
-                texts_with_coordinates.append({
-                    'text': data['text'][i],
-                    'coordinates': (x + w // 2, y + h // 2)
-                })
-        
-        return texts_with_coordinates
 
 
-    # return a list of possible coordinates of the text
-    texts_with_coordinates = find_all_text_coordinates()
-    result =  [{"name": item["text"], "coordinates": {"x":item["coordinates"][0], "y":item["coordinates"][1]}} for item in texts_with_coordinates]
-    return result
 
+        def capture_screen():
+            # Capture the entire screen
+            screenshot = ImageGrab.grab()
+            screenshot_np = np.array(screenshot)
+            return cv2.cvtColor(screenshot_np, cv2.COLOR_RGB2BGR)
+
+        def find_all_text_coordinates(confidence=confidence):
+            # Capture the screen and convert it to grayscale
+            img = capture_screen()
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+            # Use pytesseract to get data about the text on the screen
+            data = pytesseract.image_to_data(gray, output_type=pytesseract.Output.DICT, config=f"--psm {psm} --oem {oem}")
+
+            texts_with_coordinates = []
+            for i in range(len(data['text'])):
+                if data['text'][i].strip() and int(data['conf'][i]) > confidence:
+                    x, y, w, h = data['left'][i], data['top'][i], data['width'][i], data['height'][i]
+                    texts_with_coordinates.append({
+                        'text': data['text'][i],
+                        'coordinates': (x + w // 2, y + h // 2)
+                    })
+            
+            return texts_with_coordinates
+
+
+        # return a list of possible coordinates of the text
+        texts_with_coordinates = find_all_text_coordinates()
+        result =  [{"name": item["text"], "coordinates": {"x":item["coordinates"][0], "y":item["coordinates"][1]}} for item in texts_with_coordinates]
+        return result
+
+    except:
+        traceback.print_exc()
+        exception_str = traceback.format_exc()
+        return {"error": exception_str}
 
 ocr_test = tool(ocr_test_)
 
