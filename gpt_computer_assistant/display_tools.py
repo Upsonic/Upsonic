@@ -41,7 +41,7 @@ def extract_possible_coordinates_of_text_(text:str) -> dict:
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
         # Use pytesseract to get data about the text on the screen
-        data = pytesseract.image_to_data(gray, output_type=pytesseract.Output.DICT)
+        data = pytesseract.image_to_data(gray, output_type=pytesseract.Output.DICT, config='--psm 11')
 
         texts_with_coordinates = []
         for i in range(len(data['text'])):
