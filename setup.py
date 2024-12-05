@@ -39,7 +39,7 @@ setup(
         "gpt_computer_assistant.audio.stt_providers",
     ],
     include_package_data=True,
-    install_requires=["requests==2.32.3"],
+    install_requires=["requests==2.32.3", "matplotlib==3.9.0"],
     entry_points={
         "console_scripts": ["computerassistant=gpt_computer_assistant.start:start"],
     },
