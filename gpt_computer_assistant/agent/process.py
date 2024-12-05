@@ -167,7 +167,9 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
             traceback.print_exc()
             from ..gpt_computer_assistant import the_input_box, the_main_window
 
-            the_main_window.update_from_thread("EXCEPTION: " + str(e))
+            exception_str = traceback.format_exc()
+
+            the_main_window.update_from_thread("EXCEPTION: " + str(exception_str))
             tts_if_you_can("Exception occurred. Please check the logs.")
             signal_handler.assistant_response_stopped.emit()
 
@@ -242,7 +244,9 @@ def process_screenshot():
             traceback.print_exc()
             from ..gpt_computer_assistant import the_input_box, the_main_window
 
-            the_main_window.update_from_thread("EXCEPTION: " + str(e))
+            exception_str = traceback.format_exc()
+
+            the_main_window.update_from_thread("EXCEPTION: " + str(exception_str))
             tts_if_you_can("Exception occurred. Please check the logs.")
             signal_handler.assistant_response_stopped.emit()
 
@@ -298,6 +302,8 @@ def process_text(text, screenshot_path=None):
             traceback.print_exc()
             from ..gpt_computer_assistant import the_main_window
 
-            the_main_window.update_from_thread("EXCEPTION: " + str(e))
+            exception_str = traceback.format_exc()
+
+            the_main_window.update_from_thread("EXCEPTION: " + str(exception_str))
             tts_if_you_can("Exception occurred. Please check the logs.")
             signal_handler.assistant_response_stopped.emit()
