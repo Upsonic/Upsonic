@@ -17,7 +17,7 @@ except ImportError:
 
 
 @wrapper
-def ocr_test_(text:str, psm:int =11, oem:int=3, confidence:int=70) -> dict:
+def ocr_test_(psm:int =11, oem:int=3, confidence:int=70) -> dict:
     """
     A function to extract possible coordinates of a text on the screen.
     """
