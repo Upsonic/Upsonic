@@ -93,6 +93,35 @@ class cloud_instance(instance):
         json_response = response.json()
         return json_response["result"]
 
+
+    def current_screenshot(self):
+        response = requests.post(self.url+"screenshot_instance", data={"instance":self.instance_id}, verify=False)
+
+        its_an_error = False
+
+        try:
+            the_json = response.json()
+            if "result" in the_json:
+                its_an_error = True
+        except:
+            pass
+
+
+        if not its_an_error:
+            with open('current_screenshot.png', 'wb') as file:
+                file.write(response.content)
+            import matplotlib.pyplot as plt
+            import matplotlib.image as mpimg
+
+            img = mpimg.imread('current_screenshot.png')
+            plt.imshow(img)
+            plt.axis('off')
+            plt.show()
+
+
+
+
+
     def start(self):
         req = requests.get(self.url+"start_instance", verify=False)
         the_json = req.json()
