@@ -45,9 +45,9 @@ class local_instance(instance):
 
         self.client = Remote_Client(self.url)
 
-    def request(self, the_request, the_response):
+    def request(self, the_request, the_response, screen=False):
 
-        return self.client.request(the_request, the_response)
+        return self.client.request(the_request, the_response, screen)
 
 
     def start(self):
@@ -95,8 +95,10 @@ class cloud_instance(instance):
         super().__init__("https://free_cloud_1.gca.dev/")
 
 
-    def request(self, the_request, the_response):
-        response = requests.post(self.url+"request", data={"request": the_request, "response": the_response, "instance":self.instance_id}, verify=False)
+    def request(self, the_request, the_response, screen=False):
+        screen = "false" if not screen else "true"
+
+        response = requests.post(self.url+"request", data={"request": the_request, "response": the_response, "screen":screen, "instance":self.instance_id}, verify=False)
         try:
             json_response = response.json()
             return json_response["result"]
