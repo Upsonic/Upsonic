@@ -46,6 +46,8 @@ def the_input(text, screen, talk):
             continue
 
         if response.startswith("System:"):
+            if "EXCEPTION" in response:
+                break
             time.sleep(0.3)
             continue
 
