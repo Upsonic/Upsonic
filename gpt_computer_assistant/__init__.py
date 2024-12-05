@@ -15,6 +15,11 @@ import subprocess
 import requests
 
 
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+
 
 class instance:
     def __init__(self, url):
@@ -84,16 +89,21 @@ class cloud_instance(instance):
 
 
     def request(self, the_request, the_response):
-        response = requests.post(self.url+"request", data={"request": the_request, "response": the_response}, verify=False)
+        response = requests.post(self.url+"request", data={"request": the_request, "response": the_response, "instance":self.instance_id}, verify=False)
         json_response = response.json()
         return json_response["result"]
 
     def start(self):
-        pass
+        req = requests.get(self.url+"start_instance", verify=False)
+        the_json = req.json()
+
+        self.instance_id = the_json["result"]
 
 
     def close(self):
-        pass
+        req = requests.post(self.url+"stop_instance", data={"instance": self.instance_id}, verify=False)
+        the_json = req.json()
+        return the_json["result"]
 
     def client_status(self):
         return True
@@ -104,4 +114,7 @@ class cloud(interface):
 
     @staticmethod
     def instance():
-        return cloud_instance()
+        the_instance = cloud_instance()
+        the_instance.start()
+
+        return the_instance
