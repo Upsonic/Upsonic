@@ -66,6 +66,11 @@ class Remote_Client:
         response = self.send_request("/screenshot", data)
         return response["response"]
 
+    def stop_server(self) -> str:
+        data = {}
+        response = self.send_request("/stop_server", data)
+        return True
+
     def screenshot_to_memory(self) -> str:
         return self.just_screenshot()
 

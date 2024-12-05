@@ -728,7 +728,20 @@ def mouse_scroll_up():
     return jsonify({"response": f"Mouse scrolled up by {amount}"})
 
 
+@app.route("/stop_server", methods=["POST"])
+def stop_server():
 
+
+
+    try:
+        from .gpt_computer_assistant import the_main_window
+    except ImportError:
+        from gpt_computer_assistant import the_main_window
+
+    the_main_window.close()
+
+    stop_api()
+    exit(0)
 
 
 

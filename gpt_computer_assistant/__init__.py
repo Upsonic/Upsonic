@@ -56,8 +56,15 @@ class local_instance(instance):
 
 
     def close(self):
+        try:
+            self.client.stop_server()
+        except:
+            pass
+
         self.process.terminate()
         self.process.wait()
+
+
 
     def client_status(self):
         return self.client.status
