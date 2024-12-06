@@ -2,34 +2,31 @@
   <a href="#">
     <img src="https://github.com/user-attachments/assets/27778034-29f5-4a71-b696-4e3f70760b26" >
   </a>
-  <br>
-
-
-<p align="center">
-
-  <a href="https://docs.gca.dev">
-    <img src="https://github.com/user-attachments/assets/c60562bf-540e-47d9-b578-994285071128" width="250">
-  </a>
-
 </p>
 
-  <p align="center">
-    <a href="https://www.producthunt.com/posts/gpt-computer-assistant?embed=true&utm_source=badge-top-post-badge&utm_medium=badge&utm_souce=badge-gpt&#0045;computer&#0045;assistant" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/top-post-badge.svg?post_id=465468&theme=dark&period=daily" alt="GPT&#0032;Computer&#0032;Assistant - Create&#0032;intelligence&#0032;for&#0032;your&#0032;products | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" /></a>
+## What is GCA?
+
+Hi, this is an open source framework to build vertical AI agent. We just support many llms and new technologies like mcp. You can build your own vertical ai agent army in few commands with the stucturized API.
+
+
+<p>
+
+
+
+
+
+  <p >
+    <a href="https://www.producthunt.com/posts/gpt-computer-assistant?embed=true&utm_source=badge-top-post-badge&utm_medium=badge&utm_souce=badge-gpt&#0045;computer&#0045;assistant" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/top-post-badge.svg?post_id=465468&theme=dark&period=daily" alt="GPT&#0032;Computer&#0032;Assistant - Create&#0032;intelligence&#0032;for&#0032;your&#0032;products | Product Hunt" width="200"  /></a>
     .
-    <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/badge/Discord-Join?style=social&logo=discord" width=150></a>
+    <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/badge/Discord-Join?style=social&logo=discord" width=120></a>
     .
-    <a href="https://x.com/GPTCompAsst"><img alt="Static Badge" src="https://img.shields.io/badge/X_App-Join?style=social&logo=x" width=150></a>
+    <a href="https://x.com/GPTCompAsst"><img alt="Static Badge" src="https://img.shields.io/badge/X_App-Join?style=social&logo=x" width=100></a>
   </p>
 
 
-  <p align="center">
-    <br />
-    Dockerized Computer Use Agents with Production Ready API’s - Supports MCP
-    <br />
-    </p>
-    <br>
 
-  <p align="center">
+
+  <p>
   <a href="https://www.python.org/">
   <img src="https://img.shields.io/badge/Made%20with-Python-1f425f.svg" alt="Made_with_python">
   </a>
@@ -40,7 +37,6 @@
 
 
 
-|ENGLISH|[简体中文](README.zh_CN.md)|[正體中文](README.zh_TW.md)|[TÜRKÇE](README.TR.md)
 
 <p align="center">
 <br>
@@ -66,7 +62,7 @@ With [playground.gca.dev](https://playground.gca.dev/) you are ready to test and
 </p>
 
 # GPT Computer Assistant(GCA)
-GCA is an innovative AI agent designed to seamlessly control systems across Windows, macOS, and Ubuntu. With its advanced capabilities, GCA enables you to delegate repetitive, logic-based tasks to an AI, drastically improving efficiency and productivity. Whether you’re a developer, analyst, or IT professional, GCA can empower you to accomplish more in less time.
+GCA is an AI agent framework designed to make computer use across Windows, macOS, and Ubuntu. GCA enables you to replace repetitive, small-logic-based tasks worker to an AI. There is an really important potential that we believe. Whether you’re a developer, analyst, or IT professional, GCA can empower you to accomplish more in less time.
 
 
 Imagine this:
@@ -79,7 +75,7 @@ Imagine this:
 - <b>Making CloudFlare Security Settings</b>                | Security Specialist
 
 
-These examples illustrate how GCA is revolutionizing the concept of <b>Vertical AI Agents</b>—tailored solutions that not only replicate human tasks but perform them at unparalleled speed and precision.
+These examples shows how GCA is realize the concept of <b>Vertical AI Agents</b> solutions that not only replicate human tasks, GCA also in the beyond of human speed at same cases.
 
 
 <p align="center">
@@ -116,8 +112,7 @@ Through MCP and GCA’s own modules, it achieves tasks that go beyond standard h
 <br>
   <br>
   <br>
-  <br>
-  <br>
+
 </p>
 
 
@@ -155,17 +150,14 @@ print(result)
 instance.close()
 ```
 
-<img src="https://github.com/user-attachments/assets/3fd70530-6b86-43b4-9025-dce7853e4a38" alt="Cloud"  width=500>
+<img src="https://github.com/user-attachments/assets/3fd70530-6b86-43b4-9025-dce7853e4a38" alt="Cloud"  width=1000>
 
 
 
 
 <p align="center">
 <br>
-  <br>
-  <br>
-  <br>
-  <br>
+
 </p>
 
 
@@ -198,7 +190,7 @@ instance.close()
 ```
 
 
-<img width="500" src="https://github.com/user-attachments/assets/327cdceb-49e7-4a8a-a724-e386553f43d8">
+<img width="1000" src="https://github.com/user-attachments/assets/327cdceb-49e7-4a8a-a724-e386553f43d8">
 
 
 <p align="center">
