@@ -182,6 +182,21 @@ def python_repl(code: str) -> str:
     return the_py_client.run(code)
 
 
+
+@register_tool
+@wrapper
+def terminal_command(command: str) -> str:
+    """
+    Run the given terminal command and return the output.
+    """
+    import subprocess
+
+    try:
+        output = subprocess.check_output(command, shell=True, text=True)
+        return output
+    except subprocess.CalledProcessError as e:
+        return f"Error: {e}"
+
 @register_tool
 @wrapper
 def app_open(app_name: str) -> bool:
