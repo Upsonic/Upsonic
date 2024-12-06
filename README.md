@@ -44,25 +44,39 @@
 
 <p align="center">
 <br>
+
   <br>
+</p>
+
+
+# Playground of GCA | NEW
+
+With [playground.gca.dev](https://playground.gca.dev/) you are ready to test and create your own strategies for creating an Vertical AI Agent.
+
+- Playground sessions limited to <b>10 minute</b>.
+
+<a href="https://playground.gca.dev/">
+  <img src="https://github.com/user-attachments/assets/6eb98bc0-5050-4a78-93f9-6913ef7a23b0" alt="Playground"  width=1000>
+</a>
+
+<p align="center">
+<br>
   <br>
-  <br>
-  <br>
+
 </p>
 
 # GPT Computer Assistant(GCA)
 GCA is an innovative AI agent designed to seamlessly control systems across Windows, macOS, and Ubuntu. With its advanced capabilities, GCA enables you to delegate repetitive, logic-based tasks to an AI, drastically improving efficiency and productivity. Whether you’re a developer, analyst, or IT professional, GCA can empower you to accomplish more in less time.
 
 
-<b>Imagine this:</b>
+Imagine this:
 
-| Task                         | Human       | Time | GCA Can | GCA Time | Optimization |
-|---------------------------------|--------------|----------------|---|---|---|
-| Extract the tech stacks of xxx Company         | Sales Development Representer    | Human: 30 Minute        | Yes | GCA: 5 Minute| %80 Faster|
-| Identify Relevant tables for Analysis for xxx         | Data Analytics    | Human: 20 Minute        | Yes | GCA: 2 Minute| %80 Faster|
-| Check the logs to find core cause of this incident         | Technical Support Engineer    | Human: 20 Minute        | Yes | GCA: 3 Minute| %80 Faster|
-| Making CloudFlare Security Settings         | Security Specialist   | Human: 1 Day       | Yes | GCA: 10 Minute| %80 Faster|
 
+
+- <b>Extract the tech stacks of xxx Company</b>             | Sales Development Representer
+- <b>Identify Relevant tables for Analysis for xxx</b>      | Data Analytics
+- <b>Check the logs to find core cause of this incident</b> | Technical Support Engineer
+- <b>Making CloudFlare Security Settings</b>                | Security Specialist
 
 
 These examples illustrate how GCA is revolutionizing the concept of <b>Vertical AI Agents</b>—tailored solutions that not only replicate human tasks but perform them at unparalleled speed and precision.
@@ -75,20 +89,20 @@ These examples illustrate how GCA is revolutionizing the concept of <b>Vertical 
 </p>
 
 
-# How GCA Works?
+## How GCA Works?
 
 
 GCA is a Python-based project that runs on multiple operating systems, including Windows, macOS, and Ubuntu. It integrates external concepts, like the Model Context Protocol (MCP), along with its own modules, to interact with and control a computer efficiently. The system performs both routine and advanced tasks by mimicking human-like actions and applying computational precision.
 
-Core Functionalities:
 
-## 1.	Human-like Actions:
+
+### 1.	Human-like Actions:
 GCA can replicate common user actions, such as:
 -	<b>Clicking</b>: Interact with buttons or other UI elements.
 -	<b>Reading</b>: Recognize and interpret text on the screen.
 -	<b>Scrolling</b>: Navigate through documents or web pages.
 -	<b>Typing</b>: Enter text into forms or other input fields.
-## 2.	Advanced Capabilities:
+### 2.	Advanced Capabilities:
 Through MCP and GCA’s own modules, it achieves tasks that go beyond standard human interaction, such as:
 
 -	<b>Updating dependencies</b> of a project in seconds.
@@ -130,6 +144,8 @@ from gpt_computer_assistant import cloud
 # Starting instance
 instance = cloud.instance()
 
+#
+instance = cloud.current_screenshot()
 
 # Asking and getting result
 result = instance.request("Extract the tech stacks of gpt-computer-assitant Company", "i want a list")
@@ -138,6 +154,11 @@ print(result)
 
 instance.close()
 ```
+
+<img src="https://github.com/user-attachments/assets/3fd70530-6b86-43b4-9025-dce7853e4a38" alt="Cloud"  width=500>
+
+
+
 
 <p align="center">
 <br>
@@ -177,7 +198,7 @@ instance.close()
 ```
 
 
-
+<img width="500" src="https://github.com/user-attachments/assets/327cdceb-49e7-4a8a-a724-e386553f43d8">
 
 
 <p align="center">
@@ -185,6 +206,7 @@ instance.close()
   <br>
   <br>
 </p>
+
 
 
 
