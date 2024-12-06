@@ -13,11 +13,46 @@ except ImportError:
 
 
 
+def capture_screen():
+    from PIL import ImageGrab
+    import cv2
+    import numpy as np
+    # Capture the entire screen
+    screenshot = ImageGrab.grab()
+    screenshot_np = np.array(screenshot)
+    return cv2.cvtColor(screenshot_np, cv2.COLOR_RGB2BGR)
+
+def find_all_text_coordinates(confidence, psm, oem, binarize=False, binarize_threshold=127):
+    import cv2
+    import pytesseract
+    # Capture the screen and convert it to grayscale
+    img = capture_screen()
+    if binarize:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        _, gray = cv2.threshold(gray, binarize_threshold, 255, cv2.THRESH_BINARY)
+   
+    else:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # Use pytesseract to get data about the text on the screen
+    data = pytesseract.image_to_data(gray, output_type=pytesseract.Output.DICT, config=f"--psm {psm} --oem {oem}")
+
+    texts_with_coordinates = []
+    for i in range(len(data['text'])):
+        if data['text'][i].strip() and int(data['conf'][i]) > confidence:
+            x, y, w, h = data['left'][i], data['top'][i], data['width'][i], data['height'][i]
+            texts_with_coordinates.append({
+                'text': data['text'][i],
+                'coordinates': (x + w // 2, y + h // 2)
+            })
+    
+    return texts_with_coordinates
+
 
 
 
 @wrapper
-def ocr_test_(psm:int =6, oem:int=1, confidence:int=60) -> dict:
+def ocr_test_(psm:int =6, oem:int=1, confidence:int=60, binarize:bool=False, binarize_threshold:int=127) -> dict:
     """
     A function to extract possible coordinates of a text on the screen.
     """
@@ -32,36 +67,8 @@ def ocr_test_(psm:int =6, oem:int=1, confidence:int=60) -> dict:
 
 
 
-
-
-        def capture_screen():
-            # Capture the entire screen
-            screenshot = ImageGrab.grab()
-            screenshot_np = np.array(screenshot)
-            return cv2.cvtColor(screenshot_np, cv2.COLOR_RGB2BGR)
-
-        def find_all_text_coordinates(confidence=confidence):
-            # Capture the screen and convert it to grayscale
-            img = capture_screen()
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-            # Use pytesseract to get data about the text on the screen
-            data = pytesseract.image_to_data(gray, output_type=pytesseract.Output.DICT, config=f"--psm {psm} --oem {oem}")
-
-            texts_with_coordinates = []
-            for i in range(len(data['text'])):
-                if data['text'][i].strip() and int(data['conf'][i]) > confidence:
-                    x, y, w, h = data['left'][i], data['top'][i], data['width'][i], data['height'][i]
-                    texts_with_coordinates.append({
-                        'text': data['text'][i],
-                        'coordinates': (x + w // 2, y + h // 2)
-                    })
-            
-            return texts_with_coordinates
-
-
         # return a list of possible coordinates of the text
-        texts_with_coordinates = find_all_text_coordinates()
+        texts_with_coordinates = find_all_text_coordinates(confidence=confidence, psm=psm, oem=oem, binarize=binarize, binarize_threshold=binarize_threshold)
         result =  [{"name": item["text"], "coordinates": {"x":item["coordinates"][0], "y":item["coordinates"][1]}} for item in texts_with_coordinates]
         return result
 
@@ -75,7 +82,7 @@ ocr_test = tool(ocr_test_)
 
 
 @wrapper
-def extract_possible_coordinates_of_text_(text:str, psm:int =6, oem:int=1, confidence:int=60) -> dict:
+def extract_possible_coordinates_of_text_(text:str, psm:int =6, oem:int=1, confidence:int=60, binarize:bool=False, binarize_threshold:int=127) -> dict:
     """
     A function to extract possible coordinates of a text on the screen.
     """
@@ -88,37 +95,8 @@ def extract_possible_coordinates_of_text_(text:str, psm:int =6, oem:int=1, confi
     import numpy as np
 
 
-
-
-
-    def capture_screen():
-        # Capture the entire screen
-        screenshot = ImageGrab.grab()
-        screenshot_np = np.array(screenshot)
-        return cv2.cvtColor(screenshot_np, cv2.COLOR_RGB2BGR)
-
-    def find_all_text_coordinates(confidence=confidence):
-        # Capture the screen and convert it to grayscale
-        img = capture_screen()
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-        # Use pytesseract to get data about the text on the screen
-        data = pytesseract.image_to_data(gray, output_type=pytesseract.Output.DICT, config=f"--psm {psm} --oem {oem}")
-
-        texts_with_coordinates = []
-        for i in range(len(data['text'])):
-            if data['text'][i].strip() and int(data['conf'][i]) > confidence:
-                x, y, w, h = data['left'][i], data['top'][i], data['width'][i], data['height'][i]
-                texts_with_coordinates.append({
-                    'text': data['text'][i],
-                    'coordinates': (x + w // 2, y + h // 2)
-                })
-        
-        return texts_with_coordinates
-
-
     # return a list of possible coordinates of the text
-    texts_with_coordinates = find_all_text_coordinates()
+    texts_with_coordinates = find_all_text_coordinates(confidence=confidence, psm=psm, oem=oem, binarize=binarize, binarize_threshold=binarize_threshold)
     result =  [{"name": item["text"], "coordinates": {"x":item["coordinates"][0], "y":item["coordinates"][1]}} for item in texts_with_coordinates if item["text"].startswith(text)]
     return result
 
@@ -128,7 +106,7 @@ extract_possible_coordinates_of_text = tool(extract_possible_coordinates_of_text
 
 
 @wrapper
-def click_on_a_text_on_the_screen_(text: str, click_type: str = "singular", psm:int =6, oem:int=1, confidence:int=60) -> bool:
+def click_on_a_text_on_the_screen_(text: str, click_type: str = "singular", psm:int =6, oem:int=1, confidence:int=60, binarize:bool=False, binarize_threshold:int=127) -> bool:
     """
     A function to click on a text on the screen.
 
@@ -161,7 +139,7 @@ def click_on_a_text_on_the_screen_(text: str, click_type: str = "singular", psm:
             interpreter.llm.api_key = load_api_key()
 
 
-        text_locations = extract_possible_coordinates_of_text_(text, psm=psm, oem=oem, confidence=confidence)
+        text_locations = extract_possible_coordinates_of_text_(text, psm=psm, oem=oem, confidence=confidence, binarize=binarize, binarize_threshold=binarize_threshold)
 
         x, y = text_locations[0]["coordinates"]["x"], text_locations[0]["coordinates"]["y"]
  
