@@ -17,7 +17,7 @@ except ImportError:
 
 
 @wrapper
-def ocr_test_(psm:int =11, oem:int=3, confidence:int=70) -> dict:
+def ocr_test_(psm:int =6, oem:int=1, confidence:int=60) -> dict:
     """
     A function to extract possible coordinates of a text on the screen.
     """
@@ -75,7 +75,7 @@ ocr_test = tool(ocr_test_)
 
 
 @wrapper
-def extract_possible_coordinates_of_text_(text:str) -> dict:
+def extract_possible_coordinates_of_text_(text:str, psm:int =6, oem:int=1, confidence:int=60) -> dict:
     """
     A function to extract possible coordinates of a text on the screen.
     """
@@ -97,13 +97,13 @@ def extract_possible_coordinates_of_text_(text:str) -> dict:
         screenshot_np = np.array(screenshot)
         return cv2.cvtColor(screenshot_np, cv2.COLOR_RGB2BGR)
 
-    def find_all_text_coordinates(confidence=70):
+    def find_all_text_coordinates(confidence=confidence):
         # Capture the screen and convert it to grayscale
         img = capture_screen()
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
         # Use pytesseract to get data about the text on the screen
-        data = pytesseract.image_to_data(gray, output_type=pytesseract.Output.DICT, config='--psm 11')
+        data = pytesseract.image_to_data(gray, output_type=pytesseract.Output.DICT, config=f"--psm {psm} --oem {oem}")
 
         texts_with_coordinates = []
         for i in range(len(data['text'])):
@@ -128,7 +128,7 @@ extract_possible_coordinates_of_text = tool(extract_possible_coordinates_of_text
 
 
 @wrapper
-def click_on_a_text_on_the_screen_(text: str, click_type: str = "singular") -> bool:
+def click_on_a_text_on_the_screen_(text: str, click_type: str = "singular", psm:int =6, oem:int=1, confidence:int=60) -> bool:
     """
     A function to click on a text on the screen.
 
@@ -161,7 +161,7 @@ def click_on_a_text_on_the_screen_(text: str, click_type: str = "singular") -> b
             interpreter.llm.api_key = load_api_key()
 
 
-        text_locations = extract_possible_coordinates_of_text_(text)
+        text_locations = extract_possible_coordinates_of_text_(text, psm=psm, oem=oem, confidence=confidence)
 
         x, y = text_locations[0]["coordinates"]["x"], text_locations[0]["coordinates"]["y"]
  
