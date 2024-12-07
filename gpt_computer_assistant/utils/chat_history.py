@@ -116,6 +116,10 @@ class ChatHistory:
         the_time = time.time()
 
 
+        if content == []:
+            content = {"type":"text", "text": "No response"}
+
+
         if message_type == "human":
             message = Human(content, the_time, auto_delete)
         elif message_type == "assistant":
