@@ -1,4 +1,5 @@
-import time
+import 
+import random
 
 
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
@@ -21,6 +22,12 @@ except ImportError:
     from llm_settings import each_message_extension, llm_settings
 
 config = {"configurable": {"thread_id": "abc123"}}
+
+
+
+def random_charachter(length=10):
+    return "".join(random.choices("abcdefghijklmnopqrstuvwxyz0123456789", k=length))
+
 
 
 def agentic(
@@ -220,7 +227,8 @@ def assistant(
         return_value = the_text
 
     if return_value == "":
-        return_value = "No response"
+        return_value = "No response "
+        return_value += str(random_charachter())
 
 
     if just_screenshot:
