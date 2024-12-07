@@ -49,16 +49,4 @@ if is_online_tools_setting_active():
 
 
 def get_tools():
-    model = load_model_settings()
-
-    if not llm_settings[model]["tools"]:
-        return []
-
-    if is_online_tools_setting_active():
-        tools = get_tiger_tools()
-        if not tools:
-            tools = load_default_tools()
-    else:
-        tools = load_default_tools()
-
-    return tools
+    return []

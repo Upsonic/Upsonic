@@ -4,14 +4,17 @@ try:
     from ..llm_settings import llm_settings
     from ..tooler import *
     from ..display_tools import *
+    from ..cu.computer import *
     from ..teams import *
     from .agent_tools import get_tools
+    
 except ImportError:
     from llm import get_model
     from utils.db import *
     from llm_settings import llm_settings
     from tooler import *
     from display_tools import *
+    from cu.computer import *
     from teams import *
     from agent.agent_tools import get_tools
 
@@ -58,34 +61,15 @@ def get_agent_executor():
         except ImportError:
             pass
 
-    if llm_settings[model]["provider"] == "openai":
-        tools += [
-            click_on_a_text_on_the_screen,
-            extract_possible_coordinates_of_text,
-            ocr_test,
-            click_on_a_icon_on_the_screen,
-            move_on_a_text_on_the_screen,
-            move_on_a_icon_on_the_screen,
-            mouse_scroll,
-        ]
 
-    if llm_settings[model]["provider"] == "azureai":
-        tools += [
-            click_on_a_text_on_the_screen,
-            extract_possible_coordinates_of_text,
-            ocr_test,
-            click_on_a_icon_on_the_screen,
-            move_on_a_text_on_the_screen,
-            move_on_a_icon_on_the_screen,
-            mouse_scroll,
-        ]
+    tools += [computer_tool]
 
-    tools += [get_texts_on_the_screen]
 
     if (
         llm_settings[model]["provider"] == "openai"
         or llm_settings[model]["provider"] == "groq"
-        or llm_settings[model]["provider"] == "azureai"
+        or llm_settings[model]["provider"] == "azureai",
+        llm_settings[model]["provider"] == "anthropic",
     ):
         return chat_agent_executor.create_tool_calling_executor(get_model(), tools)
 

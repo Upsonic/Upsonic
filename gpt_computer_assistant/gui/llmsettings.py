@@ -229,6 +229,12 @@ def llmsettings_popup(self):
 
         if (
             llm_settings[llm_show_name[model_select.currentText()]]["provider"]
+            == "anthropic"
+        ):
+            show_openai()
+
+        if (
+            llm_settings[llm_show_name[model_select.currentText()]]["provider"]
             == "azureai"
         ):
             show_azureai()

@@ -4,9 +4,11 @@ import pyautogui
 try:
     from ..gui.signal import signal_handler
     from ..utils.db import just_screenshot_path
+    from ..cu.computer import screenshot_action_
 except ImportError:
     from gui.signal import signal_handler
     from utils.db import just_screenshot_path
+    from cu.computer import screenshot_action_
 
 
 def encode_image(image_path):
@@ -42,8 +44,7 @@ def take_screenshot():
     - None
     """
     try:
-        screenshot = pyautogui.screenshot()
-        screenshot.save(just_screenshot_path)
+        screenshot_action_(just_screenshot_path)
         signal_handler.assistant_thinking.emit()
     except Exception as e:
         print(f"An error occurred while taking the screenshot: {e}")

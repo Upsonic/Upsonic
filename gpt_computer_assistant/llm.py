@@ -3,6 +3,7 @@ from langchain_openai import ChatOpenAI, AzureChatOpenAI
 from langchain_community.chat_models import ChatOllama
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
+from langchain_anthropic import ChatAnthropic
 
 try:
     from .utils.db import *
@@ -48,6 +49,13 @@ def get_model(high_context=False):
 
     args_mapping = {
         ChatOpenAI: open_ai_base(high_context=high_context),
+        ChatAnthropic: {
+            "model": the_model,
+            "api_key": the_api_key,
+            "max_retries": 15,
+            "streaming": False,
+            "callbacks": [the_callback],
+        },
         AzureChatOpenAI: {
             "azure_deployment": the_model.replace("-azureopenai", ""),
             "api_version": the_api_version,
@@ -73,6 +81,8 @@ def get_model(high_context=False):
         the_tuple = None
         if model_args["provider"] == "openai":
             the_tuple = (ChatOpenAI, args_mapping[ChatOpenAI])
+        elif model_args["provider"] == "anthropic":
+            the_tuple = (ChatAnthropic, args_mapping[ChatAnthropic])
         elif model_args["provider"] == "azureai":
             import os
             os.environ["AZURE_OPENAI_API_KEY"] = the_api_key

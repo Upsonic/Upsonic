@@ -69,6 +69,7 @@ def agentic(
             llm_settings[the_model]["provider"] == "openai"
             or llm_settings[the_model]["provider"] == "ollama"
             or llm_settings[the_model]["provider"] == "azureai"
+            or llm_settings[the_model]["provider"] == "anthropic"
         ):
             msg = get_agent_executor().invoke(
                 {"messages": llm_history + [the_message]}, config=config
@@ -144,7 +145,7 @@ def assistant(
             the_message.append(
                 {
                     "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+                    "image_url": {"url": f"data:image/png;base64,{base64_image}"},
                 },
             )
         print("LEN OF IMAGE", len(base64_image))
@@ -161,6 +162,7 @@ def assistant(
         llm_settings[the_model]["provider"] == "openai"
         or llm_settings[the_model]["provider"] == "ollama"
         or llm_settings[the_model]["provider"] == "azureai"
+        or llm_settings[the_model]["provider"] == "anthropic"
     ):
         if just_screenshot:
             msg = {"messages": llm_history + [the_message]}
@@ -169,6 +171,9 @@ def assistant(
             msg = get_agent_executor().invoke(
                 {"messages": llm_history + [the_message]}, config=config
             )
+
+
+
 
     if llm_settings[the_model]["provider"] == "google":
         the_history = []
