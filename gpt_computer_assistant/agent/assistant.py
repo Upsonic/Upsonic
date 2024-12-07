@@ -164,6 +164,26 @@ def assistant(
         or llm_settings[the_model]["provider"] == "azureai"
         or llm_settings[the_model]["provider"] == "anthropic"
     ):
+        
+        if llm_settings[the_model]["provider"] == "anthropic":
+            # Filter all llm_history and if there is an "" in the content, Change it with "No response"
+            the_history = []
+            for message in llm_history:
+                if message.content == "":
+                    if isinstance(message, SystemMessage):
+                        the_mes = SystemMessage(content="No response")
+                        the_history.append(the_mes)
+                    elif isinstance(message, HumanMessage):
+                        the_mes = HumanMessage(content="No response")
+                        the_history.append(the_mes)
+                    else:
+                        the_mes = AIMessage(content="No response")
+                        the_history.append(the_mes)
+                else:
+                    the_history.append(message)
+            llm_history = the_history
+            
+
         if just_screenshot:
             msg = {"messages": llm_history + [the_message]}
             time.sleep(1)
