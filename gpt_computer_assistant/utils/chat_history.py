@@ -1,0 +1,188 @@
+
+from kot import KOT
+
+
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+
+
+try:
+    from .db import *
+
+except:
+    from db import *
+
+
+import time
+
+
+
+class Human:
+    def __init__(self, content, the_time, auto_delete:int=None):
+
+        if isinstance(content, dict):
+            if "text" in content:
+                if content["text"] == "":
+                    content["text"] = "No response"
+
+        if isinstance(content, list):
+            for i in range(len(content)):
+                if "text" in content[i]:
+                    if content[i]["text"] == "":
+                        content[i]["text"] = "No response"
+
+
+        self.content = content
+        self.timestamp = the_time
+        self.auto_delete = auto_delete
+
+    def __dict__(self):
+        current_time = time.time()
+
+        if self.auto_delete is not None:
+            print(current_time, self.timestamp, self.auto_delete)
+            if current_time - self.timestamp > self.auto_delete:
+                return {"type": "human", "content": "This content deleted.", "timestamp": self.timestamp, "auto_delete": self.auto_delete}
+
+        return {"type": "human", "content": self.content, "timestamp": self.timestamp, "auto_delete": self.auto_delete}
+
+class Assistant:
+    def __init__(self, content, the_time):
+
+        if isinstance(content, dict):
+            if "text" in content:
+                if content["text"] == "":
+                    content["text"] = "No response"
+
+        if isinstance(content, list):
+            for i in range(len(content)):
+                if "text" in content[i]:
+                    if content[i]["text"] == "":
+                        content[i]["text"] = "No response"
+
+        self.content = content
+        self.timestamp = the_time
+
+    def __dict__(self):
+        return {"type": "assistant", "content": self.content, "timestamp": self.timestamp}
+
+class System:
+    def __init__(self, content, the_time):
+
+
+        if isinstance(content, dict):
+            if "text" in content:
+                if content["text"] == "":
+                    content["text"] = "No response"
+
+        if isinstance(content, list):
+            for i in range(len(content)):
+                if "text" in content[i]:
+                    if content[i]["text"] == "":
+                        content[i]["text"] = "No response"
+
+
+        self.content = content
+        self.timestamp = the_time
+
+    def __dict__(self):
+        return {"type": "system", "content": self.content, "timestamp": self.timestamp}
+
+
+class ChatHistory:
+
+    def __init__(self):
+        self.chat_id = get_profile()
+        self.db = KOT(f"chat_history_{self.chat_id}")
+
+        if self.db.get("chat") is None:
+            self.db.set("chat", [])
+
+
+
+    def add_message(self, message_type:str, content, auto_delete:int=None):
+
+        the_time = time.time()
+
+
+        if message_type == "human":
+            message = Human(content, the_time, auto_delete)
+        elif message_type == "assistant":
+            message = Assistant(content, the_time)
+        elif message_type == "system":
+            message = System(content, the_time)
+        else:
+            raise ValueError("Invalid message type")
+
+       
+        chat = self.db.get("chat")
+        chat.append(message.__dict__())
+
+
+        self.db.set("chat", chat)
+
+    def get_chat(self):
+        chat = self.db.get("chat")
+        chat = sorted(chat, key=lambda x: x["timestamp"])
+
+        # Transform dict to Message objects
+
+        the_chat = []
+        for message in chat:
+            if message["type"] == "human":
+                the_chat.append(Human(content=message["content"], the_time=message["timestamp"], auto_delete=message["auto_delete"]))
+            elif message["type"] == "assistant":
+                the_chat.append(Assistant(content=message["content"], the_time=message["timestamp"]))
+            elif message["type"] == "system":
+                the_chat.append(System(content=message["content"], the_time=message["timestamp"]))
+
+        
+        last_chat = []
+        for message in the_chat:
+            last_chat.append(message.__dict__())
+
+
+        chat = last_chat
+
+        langchain_messages = []
+
+        for message in chat:
+
+            if isinstance(message["content"], tuple):
+                message["content"] = list(message["content"])
+            if isinstance(message["content"], dict):
+                message["content"] = [message["content"]]
+            
+
+
+
+
+
+
+
+
+
+
+            if message["type"] == "human":
+                
+                langchain_messages.append(HumanMessage(content=
+                    message["content"]
+                    ))
+            elif message["type"] == "assistant":
+                langchain_messages.append(AIMessage(content=
+                    message["content"]
+                    ))
+            elif message["type"] == "system":
+                langchain_messages.append(SystemMessage(content=
+                    message["content"]
+                    ))
+
+
+        return langchain_messages
+    
+
+    def clear_chat(self):
+        self.db.set("chat", [])
+
+    
+
+        

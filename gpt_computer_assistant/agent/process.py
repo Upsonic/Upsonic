@@ -124,7 +124,6 @@ def process_audio(take_screenshot=True, take_system_audio=False, dont_save_image
 
             llm_output = assistant(
                 llm_input,
-                get_chat_message_history().messages,
                 get_client(),
                 screenshot_path=screenshot_path if take_screenshot else None,
                 dont_save_image=dont_save_image,
@@ -202,7 +201,6 @@ def process_screenshot():
 
             llm_output = assistant(
                 llm_input,
-                get_chat_message_history().messages,
                 get_client(),
                 screenshot_path=just_screenshot_path,
                 dont_save_image=False,
@@ -262,7 +260,6 @@ def process_text(text, screenshot_path=None):
 
             llm_output = assistant(
                 llm_input,
-                get_chat_message_history().messages,
                 get_client(),
                 screenshot_path=screenshot_path,
                 dont_save_image=True,

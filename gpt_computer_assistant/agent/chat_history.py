@@ -5,9 +5,11 @@ try:
     from ..utils.db import get_history_db
     from ..utils.db import load_model_settings, agents
     from ..llm_settings import each_message_extension, llm_settings
+    from ..utils.chat_history import ChatHistory
 except ImportError:
     from utils.db import get_history_db
     from utils.db import load_model_settings
+    from utils.chat_history import ChatHistory
     from llm_settings import llm_settings
 
 
@@ -24,8 +26,4 @@ def get_chat_message_history():
 
 
 def clear_chat_history():
-    get_chat_message_history().clear()
-
-    the_model = load_model_settings()
-    if llm_settings[the_model]["tools"]:
-        get_chat_message_history().add_message(llm_history_oiginal()[0])
+    ChatHistory().clear_chat()
