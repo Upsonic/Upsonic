@@ -169,7 +169,7 @@ def assistant(
             # Filter all llm_history and if there is an "" in the content, Change it with "No response"
             the_history = []
             for message in llm_history:
-                if message.content == "":
+                if message.content == "" or message.content is None:
                     if isinstance(message, SystemMessage):
                         the_mes = SystemMessage(content="No response")
                         the_history.append(the_mes)
@@ -188,9 +188,13 @@ def assistant(
             msg = {"messages": llm_history + [the_message]}
             time.sleep(1)
         else:
-            msg = get_agent_executor().invoke(
-                {"messages": llm_history + [the_message]}, config=config
-            )
+            try:
+                msg = get_agent_executor().invoke(
+                    {"messages": llm_history + [the_message]}, config=config
+                )
+            except:
+                
+            
 
 
 
@@ -271,6 +275,9 @@ def assistant(
             last_message = "No response"
         get_chat_message_history().add_message(HumanMessage(content=[last_message]))
 
+
+    if the_last_messages[-1].content == "":
+        the_last_messages[-1].content = "No response"
     get_chat_message_history().add_message(the_last_messages[-1])
 
 
