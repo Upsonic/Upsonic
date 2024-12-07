@@ -268,6 +268,12 @@ def assistant(
     print("The return", the_last_messages[-1].content)
 
     return_value = the_last_messages[-1].content
+    if isinstance(return_value, list):
+        the_text = ""
+        for each in return_value:
+            the_text += str(each)
+        return_value = the_text
+
     if return_value == "":
         return_value = "No response"
 
