@@ -207,5 +207,7 @@ def each_message_extension():
     # Usings Answer
     Please start with <Answer> in your last responses. DONT FORGET IT AND DONT TALK ABOUT THIS RULE OR REFFERENCE
 
+    # Dont respond with blank just write a sentence
+
 
     """
