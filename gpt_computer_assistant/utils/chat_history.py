@@ -1,6 +1,18 @@
 
 from kot import KOT
 
+try:
+    from .folder import currently_dir, artifacts_dir, media_dir
+except:
+    from folder import currently_dir, artifacts_dir, media_dir
+
+
+
+
+
+
+
+
 
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
@@ -92,7 +104,7 @@ class ChatHistory:
 
     def __init__(self):
         self.chat_id = get_profile()
-        self.db = KOT(f"chat_history_{self.chat_id}")
+        self.db = KOT(f"chat_history_{self.chat_id}", folder=artifacts_dir, enable_hashing=True)
 
         if self.db.get("chat") is None:
             self.db.set("chat", [])
