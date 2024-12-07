@@ -6,7 +6,7 @@ try:
     from .tooler import Tool
 except:
     pass
-__version__ = '0.23.27'  # fmt: skip
+__version__ = '0.24.0'  # fmt: skip
 
 
 import os
@@ -159,4 +159,4 @@ class cloud(interface):
         the_instance = cloud_instance()
         the_instance.start()
 
-        return the_instance
+        return the_instancee
