@@ -247,6 +247,8 @@ def assistant(
         get_chat_message_history().clear()
         for message in currently_messages:
             get_chat_message_history().add_message(message)
+        if last_message == "":
+            last_message = "No response"
         get_chat_message_history().add_message(HumanMessage(content=[last_message]))
 
     get_chat_message_history().add_message(the_last_messages[-1])
