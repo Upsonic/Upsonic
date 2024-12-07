@@ -150,7 +150,7 @@ def assistant(
                 "type": "image_url",
                 "image_url": base64_image,
             }
-            the_chat_history.add_message("human", human_second_message, auto_delete=50)
+            the_chat_history.add_message("human", human_second_message, auto_delete=10)
 
 
         else:
@@ -158,7 +158,7 @@ def assistant(
                 "type": "image_url",
                 "image_url": {"url": f"data:image/png;base64,{base64_image}"},
             }
-            the_chat_history.add_message("human", human_second_message, auto_delete=50)
+            the_chat_history.add_message("human", human_second_message, auto_delete=10)
 
 
         print("LEN OF IMAGE", len(base64_image))
