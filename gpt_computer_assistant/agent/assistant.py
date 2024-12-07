@@ -188,11 +188,11 @@ def assistant(
             msg = {"messages": llm_history + [the_message]}
             time.sleep(1)
         else:
-            try:
-                msg = get_agent_executor().invoke(
-                    {"messages": llm_history + [the_message]}, config=config
-                )
-            except:
+     
+            msg = get_agent_executor().invoke(
+                {"messages": llm_history + [the_message]}, config=config
+            )
+      
                 
             
 
