@@ -252,37 +252,39 @@ def computer_tool_(action: Action, text: str | None = None, coordinate: tuple[in
     - coordinate: The coordinate to move the mouse to or click at.
 
     """
-    print(f"ComputerTool: action={action}, text={text}, coordinate={coordinate}")
-    if action in ("mouse_move", "mouse_move_and_left_click", "left_click_drag"):
-        if coordinate is None:
-            raise ToolError(f"coordinate is required for {action}")
-        x, y = scale_coordinates(ScalingSource.API, coordinate[0], coordinate[1])
+    try:
+        print(f"ComputerTool: action={action}, text={text}, coordinate={coordinate}")
+        if action in ("mouse_move", "mouse_move_and_left_click", "left_click_drag"):
+            if coordinate is None:
+                raise ToolError(f"coordinate is required for {action}")
+            x, y = scale_coordinates(ScalingSource.API, coordinate[0], coordinate[1])
 
-        if action == "mouse_move":
-            smooth_move_to(x, y)
-        if action == "mouse_move_and_left_click":
-            smooth_move_to(x, y)
-            pyautogui.click()
-        elif action == "left_click_drag":
-            smooth_move_to(x, y)
-            pyautogui.dragTo(x, y, button="left")
+            if action == "mouse_move":
+                smooth_move_to(x, y)
+            if action == "mouse_move_and_left_click":
+                smooth_move_to(x, y)
+                pyautogui.click()
+            elif action == "left_click_drag":
+                smooth_move_to(x, y)
+                pyautogui.dragTo(x, y, button="left")
 
-    elif action in ("key", "type"):
-        if text is None:
-            raise ToolError(f"text is required for {action}")
+        elif action in ("key", "type"):
+            if text is None:
+                raise ToolError(f"text is required for {action}")
 
-        if action == "key":
-            key_action(text)
-        elif action == "type":
-            type_action(text)
+            if action == "key":
+                key_action(text)
+            elif action == "type":
+                type_action(text)
 
-    elif action in ("left_click", "right_click", "double_click", "middle_click"):
-        click_action(action)
+        elif action in ("left_click", "right_click", "double_click", "middle_click"):
+            click_action(action)
 
 
-    else:
-        raise ToolError(f"Invalid action: {action}")
-
+        else:
+            raise ToolError(f"Invalid action: {action}")
+    except:
+        raise ToolError(f"Failed to perform action: {action}")
 
 
 
