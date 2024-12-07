@@ -241,6 +241,7 @@ def computer_tool_(action: Action, text: str | None = None, coordinate: tuple[in
         - key: Press a key.
         - type: Type text.
         - mouse_move: Move the mouse to the specified coordinate.
+        - mouse_move_and_left_click: Move the mouse to the specified coordinate and perform a left click.
         - left_click: Perform a left click.
         - right_click: Perform a right click.
         - middle_click: Perform a middle click.
@@ -252,13 +253,16 @@ def computer_tool_(action: Action, text: str | None = None, coordinate: tuple[in
 
     """
     print(f"ComputerTool: action={action}, text={text}, coordinate={coordinate}")
-    if action in ("mouse_move", "left_click_drag"):
+    if action in ("mouse_move", "mouse_move_and_left_click", "left_click_drag"):
         if coordinate is None:
             raise ToolError(f"coordinate is required for {action}")
         x, y = scale_coordinates(ScalingSource.API, coordinate[0], coordinate[1])
 
         if action == "mouse_move":
             smooth_move_to(x, y)
+        if action == "mouse_move_and_left_click":
+            smooth_move_to(x, y)
+            pyautogui.click()
         elif action == "left_click_drag":
             smooth_move_to(x, y)
             pyautogui.dragTo(x, y, button="left")

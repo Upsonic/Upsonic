@@ -170,6 +170,8 @@ Use a mouse and keyboard to interact with a computer.
 * The screen's resolution is {{ width }}x{{ height }}.
 * The display number is {{ display_num }}
 
+- If the user absolutely try to click somthing, you can use mouse_move_and_left_click action.
+
 * This is an interface to a desktop GUI. You do not have access to a terminal or applications menu. You must click on desktop icons to start applications.
 
 * Make sure to click any buttons, links, icons, etc with the cursor tip in the center of the element. Don't click boxes on their edges unless asked.
