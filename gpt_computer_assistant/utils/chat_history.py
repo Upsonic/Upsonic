@@ -119,8 +119,10 @@ class ChatHistory:
         if message_type == "human":
             message = Human(content, the_time, auto_delete)
         elif message_type == "assistant":
+            print("ASSISTANT", content)
             message = Assistant(content, the_time)
         elif message_type == "system":
+            print("SYSTEM", content)
             message = System(content, the_time)
         else:
             raise ValueError("Invalid message type")
