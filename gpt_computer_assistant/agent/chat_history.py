@@ -4,7 +4,7 @@ from .background import llm_history_oiginal
 try:
     from ..utils.db import get_history_db
     from ..utils.db import load_model_settings, agents
-    from ..llm_settings import each_message_extension, llm_settings
+    from ..llm_settings import llm_settings
     from ..utils.chat_history import ChatHistory
 except ImportError:
     from utils.db import get_history_db

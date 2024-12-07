@@ -3,7 +3,7 @@ try:
     from ..tooler import *
     from ..display_tools import *
     from ..teams import *
-    from ..llm_settings import each_message_extension, llm_settings
+    from ..llm_settings import llm_settings
 except ImportError:
     from utils.db import *
 

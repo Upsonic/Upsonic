@@ -31,15 +31,19 @@ import time
 class Human:
     def __init__(self, content, the_time, auto_delete:int=None):
 
+        self.that_was_empty = False
+
         if isinstance(content, dict):
             if "text" in content:
                 if content["text"] == "":
+                    self.that_was_empty = True
                     content["text"] = "No response"
 
         if isinstance(content, list):
             for i in range(len(content)):
                 if "text" in content[i]:
                     if content[i]["text"] == "":
+                        self.that_was_empty = True
                         content[i]["text"] = "No response"
 
 
@@ -53,43 +57,49 @@ class Human:
         if self.auto_delete is not None:
             print(current_time, self.timestamp, self.auto_delete)
             if current_time - self.timestamp > self.auto_delete:
-                return {"type": "human", "content": "This content deleted.", "timestamp": self.timestamp, "auto_delete": self.auto_delete}
+                return {"type": "human", "content": "This content deleted.", "timestamp": self.timestamp, "auto_delete": self.auto_delete, "that_was_empty": self.that_was_empty}
 
-        return {"type": "human", "content": self.content, "timestamp": self.timestamp, "auto_delete": self.auto_delete}
+        return {"type": "human", "content": self.content, "timestamp": self.timestamp, "auto_delete": self.auto_delete, "that_was_empty": self.that_was_empty}
 
 class Assistant:
     def __init__(self, content, the_time):
 
+        self.that_was_empty = False
+
         if isinstance(content, dict):
             if "text" in content:
                 if content["text"] == "":
+                    self.that_was_empty = True
                     content["text"] = "No response"
 
         if isinstance(content, list):
             for i in range(len(content)):
                 if "text" in content[i]:
                     if content[i]["text"] == "":
+                        self.that_was_empty = True
                         content[i]["text"] = "No response"
-
         self.content = content
         self.timestamp = the_time
 
     def __dict__(self):
-        return {"type": "assistant", "content": self.content, "timestamp": self.timestamp}
+        return {"type": "assistant", "content": self.content, "timestamp": self.timestamp, "that_was_empty": self.that_was_empty}
 
 class System:
     def __init__(self, content, the_time):
 
+        self.that_was_empty = False
 
         if isinstance(content, dict):
             if "text" in content:
                 if content["text"] == "":
+                    self.that_was_empty = True
                     content["text"] = "No response"
 
         if isinstance(content, list):
             for i in range(len(content)):
                 if "text" in content[i]:
                     if content[i]["text"] == "":
+                        self.that_was_empty = True
                         content[i]["text"] = "No response"
 
 
@@ -97,7 +107,7 @@ class System:
         self.timestamp = the_time
 
     def __dict__(self):
-        return {"type": "system", "content": self.content, "timestamp": self.timestamp}
+        return {"type": "system", "content": self.content, "timestamp": self.timestamp, "that_was_empty": self.that_was_empty}
 
 
 class ChatHistory:
@@ -156,6 +166,8 @@ class ChatHistory:
         
         last_chat = []
         for message in the_chat:
+            if message.that_was_empty:
+                continue
             last_chat.append(message.__dict__())
 
 
@@ -170,8 +182,6 @@ class ChatHistory:
             if isinstance(message["content"], dict):
                 message["content"] = [message["content"]]
             
-
-
 
 
 

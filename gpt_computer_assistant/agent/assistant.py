@@ -11,14 +11,14 @@ try:
     from ..screen.shot import *
     from ..utils.db import load_model_settings, agents
     from ..llm import get_model
-    from ..llm_settings import each_message_extension, llm_settings
+    from ..llm_settings import llm_settings
     from ..utils.chat_history import ChatHistory
 except ImportError:
     from screen.shot import *
     from utils.db import load_model_settings, agents
     from utils.chat_history import ChatHistory
     from llm import get_model
-    from llm_settings import each_message_extension, llm_settings
+    from llm_settings import llm_settings
 
 config = {"configurable": {"thread_id": "abc123"}}
 
@@ -96,7 +96,7 @@ def agentic(
         image_explain = image_explaination()
         llm_input += "User Sent Image and image content is: " + image_explain
 
-    llm_input = llm_input + each_message_extension()
+    llm_input = llm_input 
 
     task = Task(
         description=llm_input,
@@ -115,7 +115,7 @@ def agentic(
     result = the_crew.kickoff()["final_output"]
 
     get_chat_message_history().add_message(
-        HumanMessage(content=[llm_input.replace(each_message_extension(), "")])
+        HumanMessage(content=[llm_input])
     )
     get_chat_message_history().add_message(AIMessage(content=[result]))
 
@@ -133,7 +133,7 @@ def assistant(
     print("LLM INPUT", llm_input)
 
     if llm_settings[the_model]["tools"]:
-        llm_input = llm_input + each_message_extension()
+        llm_input = llm_input 
 
 
     human_first_message = {"type": "text", "text": f"{llm_input}"}
