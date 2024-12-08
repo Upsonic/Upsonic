@@ -25,8 +25,8 @@ setup(
     long_description="".join(open("README.md", encoding="utf-8").readlines()),
     long_description_content_type="text/markdown",
     url="https://github.com/onuratakan/gpt-computer-assistant",
-    author="Onur Atakan ULUSOY",
-    author_email="atadogan06@gmail.com",
+    author="Upsonic",
+    author_email="onur@upsonic.co",
     license="MIT",
     packages=[
         "gpt_computer_assistant",
