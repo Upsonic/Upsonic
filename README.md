@@ -139,8 +139,8 @@ from gpt_computer_assistant import cloud
 # Starting instance
 instance = cloud.instance()
 
-#
-instance = cloud.current_screenshot()
+# Show Screenshot
+instance.current_screenshot()
 
 # Asking and getting result
 result = instance.request("Extract the tech stacks of gpt-computer-assitant Company", "i want a list")
