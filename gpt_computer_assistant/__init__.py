@@ -159,4 +159,4 @@ class cloud(interface):
         the_instance = cloud_instance()
         the_instance.start()
 
-        return the_instancee
+        return the_instance
