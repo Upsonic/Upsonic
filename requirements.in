@@ -48,3 +48,6 @@ langchain-anthropic==0.3.0
 
 
 StrEnum==0.4.15
+
+
+langchain-mcp==0.1.0a1

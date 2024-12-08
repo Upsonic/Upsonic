@@ -7,6 +7,7 @@ try:
     from ..cu.computer import *
     from ..teams import *
     from .agent_tools import get_tools
+    from ..mcp.tool import mcp_tools
     
 except ImportError:
     from llm import get_model
@@ -17,6 +18,7 @@ except ImportError:
     from cu.computer import *
     from teams import *
     from agent.agent_tools import get_tools
+    from mcp.tool import mcp_tools
 
 
 from langgraph.prebuilt import chat_agent_executor
@@ -62,7 +64,7 @@ def get_agent_executor():
             pass
 
 
-    tools += [computer_tool]
+    tools += [computer_tool] + mcp_tools()
 
 
     if (

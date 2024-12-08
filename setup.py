@@ -32,6 +32,7 @@ setup(
         "gpt_computer_assistant",
         "gpt_computer_assistant.agent",
         "gpt_computer_assistant.cu",
+        "gpt_computer_assistant.mcp",
         "gpt_computer_assistant.gui",
         "gpt_computer_assistant.screen",
         "gpt_computer_assistant.utils",
