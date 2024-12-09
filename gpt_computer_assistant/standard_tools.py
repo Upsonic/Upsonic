@@ -104,16 +104,7 @@ def duckduckgo(query: str, max_number: int = 20) -> list:
         return "An exception occurred"
 
 
-@register_tool
-@wrapper
-def copy(text: str):
-    """
-    Copy the text to the clipboard.
-    """
-    import pyperclip
 
-    pyperclip.copy(text)
-    pyperclip.copy(text)
 
 
 @register_tool
@@ -131,7 +122,7 @@ def open_url(url) -> bool:
         return True
     except:
         return False
-        return False
+
 
 
 @register_tool
@@ -163,42 +154,9 @@ def python_repl(code: str) -> str:
 
 
 
-@register_tool
-@wrapper
-def app_open(app_name: str) -> bool:
-    """
-    Opens the native apps.
-    """
-    try:
-        from AppOpener import open
-
-        open(app_name, throw_error=True)
-        return True
-    except:
-        try:
-            from MacAppOpener import open
-
-            open(app_name)
-        except:
-            return False
 
 
-@register_tool
-@wrapper
-def app_close(app_name: str) -> bool:
-    """
-    Closes the native apps.
-    """
-    try:
-        from AppOpener import close
 
-        close(app_name, throw_error=True)
-        return True
-    except:
-        try:
-            close(app_name)
-        except:
-            return False
 
 
 @register_tool

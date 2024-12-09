@@ -67,14 +67,14 @@ def get_agent_executor(the_anthropic_model=False):
 
 
     if the_anthropic_model:
-        tools += [] + computer_tool
+        tools += []
         model_catch = get_model(the_model="claude-3-5-sonnet-20241022")
 
         print("Anthropic model catch", model_catch)
         print("Anthropic tools len", len(tools))
         return chat_agent_executor.create_tool_calling_executor(model_catch, tools)
     else:
-        tools += [click_to_text, click_to_icon] + mcp_tools() + get_standard_tools()
+        tools += [click_to_text, click_to_icon, click_to_area] + mcp_tools() + get_standard_tools()
 
 
 

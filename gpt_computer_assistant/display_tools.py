@@ -55,7 +55,17 @@ mouse_scroll = tool(mouse_scroll_)
 
 
 
-def click_to_text_(text:str):
+def extract_code_from_result(llm_output):
+    """
+    Extract the Python code from the LLM output.
+    """
+    code_match = re.search(r'```json\n(.*?)```', llm_output, re.DOTALL)
+    if code_match:
+        return code_match.group(1).strip()
+    return llm_output.strip()
+
+
+def click_to_text_(text:str) -> bool:
     """
     Click on the text
    
@@ -63,24 +73,31 @@ def click_to_text_(text:str):
 
     try:
         from .cu.ask_anthropic import ask_anthropic
+        from .cu.computer import click_action, mouse_move_action
     except ImportError:
         from cu.ask_anthropic import ask_anthropic
+        from cu.computer import click_action, mouse_move_action
 
     print("click_to_text")
     print("text", text)
-    x_y = ask_anthropic(f"dont use tools, give me exactly location of '{text}' text as x,y")
+    x_y = ask_anthropic(f"dont use tools, give me exactly location of '{text}' text as json x,y like"+ """{'x': 0, 'y': 0}"""+". Only return the json with ```json ```")
     print("result", x_y)
 
-    result = ask_anthropic(f"click on {x_y} text")
+    x_y = extract_code_from_result(x_y)
 
-    return result
+    x_y = json.loads(x_y)
+
+    mouse_move_action((x_y['x'], x_y['y']))
+    click_action("left_click")
+
+    return True
 
 
 click_to_text = tool(click_to_text_)
 
 
 
-def click_to_icon_(icon:str):
+def click_to_icon_(icon:str) -> bool:
     """
     Click on the icon
    
@@ -88,20 +105,58 @@ def click_to_icon_(icon:str):
 
     try:
         from .cu.ask_anthropic import ask_anthropic
+        from .cu.computer import click_action, mouse_move_action
     except ImportError:
         from cu.ask_anthropic import ask_anthropic
+        from cu.computer import click_action, mouse_move_action
 
     print("click_to_icon")
     print("icon", icon)
-    x_y = ask_anthropic(f"dont use tools, give me exactly location of '{icon}' icon as x,y")
+    x_y = ask_anthropic(f"dont use tools, give me exactly location of '{icon}' icon as json x,y like"+ """{'x': 0, 'y': 0}"""+". Only return the json with ```json ```")
     print("result", x_y)
 
-    result = ask_anthropic(f"click on {x_y} icon")
+    x_y = extract_code_from_result(x_y)
 
-    return result   
+    x_y = json.loads(x_y)
+
+    mouse_move_action((x_y['x'], x_y['y']))
+    click_action("left_click")
+
+    return True
 
 
 click_to_icon = tool(click_to_icon_)
 
 
+def click_to_area_(
+    area:str
+) -> bool:
+    """
+    Click on the area like search bar
+    """
 
+    try:
+        from .cu.ask_anthropic import ask_anthropic
+        from .cu.computer import click_action, mouse_move_action
+    except ImportError:
+        from cu.ask_anthropic import ask_anthropic
+        from cu.computer import click_action, mouse_move_action
+
+    print("click_to_area")
+    print("area", area)
+    x_y = ask_anthropic(f"dont use tools, give me exactly location of '{area}' area as json x,y like"+ """{'x': 0, 'y': 0}"""+". Only return the json with ```json ```")
+    print("result", x_y)
+
+    x_y = extract_code_from_result(x_y)
+
+    x_y = json.loads(x_y)
+
+    mouse_move_action((x_y['x'], x_y['y']))
+    click_action("left_click")
+
+    return True
+
+
+
+
+click_to_area = tool(click_to_area_)
