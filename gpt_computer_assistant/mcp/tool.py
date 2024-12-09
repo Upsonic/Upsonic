@@ -232,5 +232,5 @@ the_tools_ = None
 def mcp_tools():
     global the_tools_
     if the_tools_ is None:
-        the_tools_ = file_system_tool() + memory_tool() + youtube_transcript() + fetch()
+        the_tools_ = file_system_tool()
     return the_tools_

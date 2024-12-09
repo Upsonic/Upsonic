@@ -8,6 +8,7 @@ try:
     from ..teams import *
     from .agent_tools import get_tools
     from ..mcp.tool import mcp_tools
+    from ..standard_tools import get_standard_tools
     
 except ImportError:
     from llm import get_model
@@ -19,6 +20,7 @@ except ImportError:
     from teams import *
     from agent.agent_tools import get_tools
     from mcp.tool import mcp_tools
+    from standard_tools import get_standard_tools
 
 
 from langgraph.prebuilt import chat_agent_executor
@@ -72,7 +74,7 @@ def get_agent_executor(the_anthropic_model=False):
         print("Anthropic tools len", len(tools))
         return chat_agent_executor.create_tool_calling_executor(model_catch, tools)
     else:
-        tools += [smart_mouse_] + mcp_tools()
+        tools += [smart_mouse_] + mcp_tools() + get_standard_tools()
 
 
 
