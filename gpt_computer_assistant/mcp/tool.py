@@ -34,7 +34,9 @@ class MCPToolWrapper(BaseTool):
     def _run(self, **kwargs: Any) -> Any:
         """Run the tool synchronously using the SyncInvocationManager."""
 
-  
+        print("Running tool", self.name)
+        print("With args", kwargs)
+
         result = self._manager.invoke_tool_sync(self._tool, kwargs)
 
         return result
