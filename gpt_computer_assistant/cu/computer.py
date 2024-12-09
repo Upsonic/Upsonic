@@ -155,6 +155,11 @@ def click_action(action: str):
 
 
 def screenshot_action(direct_base64: bool = False) -> ToolResult:
+    """
+    See the screenshot of the current screen.
+    """
+
+
     temp_dir = Path(tempfile.gettempdir())
     path = temp_dir / f"screenshot_{uuid4().hex}.png"
 
@@ -197,12 +202,19 @@ def screenshot_action_(path):
 
 
 def cursor_position_action():
+    """
+    Get the current position of the cursor as (x, y).
+    """
+
     x, y = pyautogui.position()
     x, y = scale_coordinates(ScalingSource.COMPUTER, x, y)
     return ToolResult(output=f"X={x},Y={y}")
 
 
 def shell_action(command: str, take_screenshot=True) -> ToolResult:
+    """
+    Run a shell command and return the output.
+    """
     _, stdout, stderr = run(command)
     base64_image = None
 
@@ -235,58 +247,59 @@ def scale_coordinates(source: ScalingSource, x: int, y: int):
 
 
 @wrapper
-def computer_tool_(action: Action, text: str | None = None, coordinate: tuple[int, int] | None = None, **kwargs):
-    """
-    Perform the specified action using the computer.
+def mouse_move_action(coordinate: tuple[int, int]):
+    """Move the mouse to the specified coordinate."""
+    if coordinate is None:
+        raise ToolError("coordinate is required for mouse_move")
+    x, y = scale_coordinates(ScalingSource.API, coordinate[0], coordinate[1])
+    smooth_move_to(x, y)
 
-    - action: The action to perform.
-        - key: Press a key.
-        - type: Type text.
-        - mouse_move: Move the mouse to the specified coordinate.
-        - mouse_move_and_left_click: Move the mouse to the specified coordinate and perform a left click.
-        - left_click: Perform a left click.
-        - right_click: Perform a right click.
-        - middle_click: Perform a middle click.
-        - double_click: Perform a double click.
-        - left_click_drag: Perform a left click and drag.
+@wrapper
+def left_click_drag_action(coordinate: tuple[int, int]):
+    """Perform a left click and drag to the specified coordinate."""
+    if coordinate is None:
+        raise ToolError("coordinate is required for left_click_drag")
+    x, y = scale_coordinates(ScalingSource.API, coordinate[0], coordinate[1])
+    smooth_move_to(x, y)
+    pyautogui.dragTo(x, y, button="left")
 
-    - text: The text to type or the key to press.
-    - coordinate: The coordinate to move the mouse to or click at.
+@wrapper
+def key_action_handler(text: str):
+    """Press a specific key."""
+    if text is None:
+        raise ToolError("text is required for key")
+    key_action(text)
 
-    """
-    try:
-        print(f"ComputerTool: action={action}, text={text}, coordinate={coordinate}")
-        if action in ("mouse_move", "mouse_move_and_left_click", "left_click_drag"):
-            if coordinate is None:
-                raise ToolError(f"coordinate is required for {action}")
-            x, y = scale_coordinates(ScalingSource.API, coordinate[0], coordinate[1])
+@wrapper
+def type_action_handler(text: str):
+    """Type the specified text."""
+    if text is None:
+        raise ToolError("text is required for type")
+    type_action(text)
 
-            if action == "mouse_move":
-                smooth_move_to(x, y)
-            if action == "mouse_move_and_left_click":
-                smooth_move_to(x, y)
-                pyautogui.click()
-            elif action == "left_click_drag":
-                smooth_move_to(x, y)
-                pyautogui.dragTo(x, y, button="left")
+@wrapper
+def left_click_action():
+    """Perform a left click."""
+    click_action("left_click")
 
-        elif action in ("key", "type"):
-            if text is None:
-                raise ToolError(f"text is required for {action}")
+@wrapper
+def right_click_action():
+    """Perform a right click."""
+    click_action("right_click")
 
-            if action == "key":
-                key_action(text)
-            elif action == "type":
-                type_action(text)
+@wrapper
+def middle_click_action():
+    """Perform a middle click."""
+    click_action("middle_click")
 
-        elif action in ("left_click", "right_click", "double_click", "middle_click"):
-            click_action(action)
+@wrapper
+def double_click_action():
+    """Perform a double click."""
+    click_action("double_click")
 
 
-        else:
-            raise ToolError(f"Invalid action: {action}")
-    except:
-        raise ToolError(f"Failed to perform action: {action}")
+
+
 
 
 
@@ -300,4 +313,4 @@ _scaling_enabled = True
 
 
 
-computer_tool = tool(computer_tool_)
+computer_tool = [tool(mouse_move_action), tool(left_click_drag_action), tool(key_action_handler), tool(type_action_handler), tool(left_click_action), tool(right_click_action), tool(middle_click_action), tool(double_click_action), tool(screenshot_action), tool(cursor_position_action), tool(shell_action)]

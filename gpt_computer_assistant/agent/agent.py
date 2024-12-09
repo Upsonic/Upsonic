@@ -67,7 +67,7 @@ def get_agent_executor(the_anthropic_model=False):
 
 
     if the_anthropic_model:
-        tools += [computer_tool]
+        tools += [] + computer_tool
         model_catch = get_model(the_model="claude-3-5-sonnet-20241022")
 
         print("Anthropic model catch", model_catch)
