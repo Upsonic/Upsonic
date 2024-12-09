@@ -32,7 +32,7 @@ def the_input(text, screen, talk):
     else:
         screenshot = pyautogui.screenshot()
         screenshot.save(screenshot_path)
-        result = process_text_api(text, screenshot)
+        result = process_text_api(text, screenshot_path)
 
     time.sleep(1)
 
