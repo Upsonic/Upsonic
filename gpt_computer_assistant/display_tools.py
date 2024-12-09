@@ -55,9 +55,10 @@ mouse_scroll = tool(mouse_scroll_)
 
 
 
-def smart_mouse_(goto:str):
+def click_to_text_(text:str):
     """
-    This is an smart mouse you can say the location that you want to move, for example click to search bar. Left click to Pricing column. Click to Login button. 
+    Click on the text
+   
     """
 
     try:
@@ -65,16 +66,42 @@ def smart_mouse_(goto:str):
     except ImportError:
         from cu.ask_anthropic import ask_anthropic
 
-    print("smart_mouse_")
-    print("goto", goto)
-    result = ask_anthropic(f"You are an smart mouse and the user want to {goto}")
-    print("result", result)
+    print("click_to_text")
+    print("text", text)
+    x_y = ask_anthropic(f"dont use tools, give me exactly location of '{text}' text as x,y")
+    print("result", x_y)
+
+    result = ask_anthropic(f"click on {x_y} text")
+
     return result
 
 
-smart_mouse = tool(smart_mouse_)
+click_to_text = tool(click_to_text_)
 
 
 
-if __name__ == "__main__":
-    print(smart_mouse("click to search bar"))
+def click_to_icon_(icon:str):
+    """
+    Click on the icon
+   
+    """
+
+    try:
+        from .cu.ask_anthropic import ask_anthropic
+    except ImportError:
+        from cu.ask_anthropic import ask_anthropic
+
+    print("click_to_icon")
+    print("icon", icon)
+    x_y = ask_anthropic(f"dont use tools, give me exactly location of '{icon}' icon as x,y")
+    print("result", x_y)
+
+    result = ask_anthropic(f"click on {x_y} icon")
+
+    return result   
+
+
+click_to_icon = tool(click_to_icon_)
+
+
+
