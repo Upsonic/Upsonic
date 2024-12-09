@@ -74,7 +74,7 @@ def get_agent_executor(the_anthropic_model=False):
         print("Anthropic tools len", len(tools))
         return chat_agent_executor.create_tool_calling_executor(model_catch, tools)
     else:
-        tools += [click_to_text, click_to_icon, click_to_area] + mcp_tools() + get_standard_tools()
+        tools += [mouse_scroll, click_to_text, click_to_icon, click_to_area] + mcp_tools() + get_standard_tools()
 
 
 

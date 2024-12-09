@@ -77,24 +77,6 @@ def chunks(s: str, chunk_size: int) -> list[str]:
 
 
 def smooth_move_to(x, y, duration=1.2):
-    start_x, start_y = pyautogui.position()
-    dx = x - start_x
-    dy = y - start_y
-    distance = math.hypot(dx, dy)
-
-    start_time = time.time()
-
-    while True:
-        elapsed_time = time.time() - start_time
-        if (elapsed_time > duration):
-            break
-
-        t = elapsed_time / duration
-        eased_t = (1 - math.cos(t * math.pi)) / 2
-
-        target_x = start_x + dx * eased_t
-        target_y = start_y + dy * eased_t
-        pyautogui.moveTo(target_x, target_y)
 
     pyautogui.moveTo(x, y)
 
