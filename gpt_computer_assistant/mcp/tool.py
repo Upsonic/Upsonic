@@ -210,7 +210,7 @@ This is websearch
             """)
 
 
-    manager = SyncInvocationManager(command="npx", args=["-y", "@executeautomation/playwright-mcp-server"])
+    manager = SyncInvocationManager(command="npx", args=["-y", "@mzxrai/mcp-webresearch"])
     manager.start()
     tool_manager = MCPToolManager(manager)
     tools =  tool_manager.load_tools()

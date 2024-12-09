@@ -698,13 +698,15 @@ def mouse_scroll_up():
 def stop_server():
 
 
-
     try:
-        from .gpt_computer_assistant import the_main_window
-        the_main_window.close()
-    except ImportError:
-        from gpt_computer_assistant import the_main_window
-        the_main_window.close()
+        try:
+            from .gpt_computer_assistant import the_main_window
+            the_main_window.close()
+        except ImportError:
+            from gpt_computer_assistant import the_main_window
+            the_main_window.close()
+    except:
+        pass
 
     
 
