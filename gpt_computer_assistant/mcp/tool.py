@@ -34,27 +34,8 @@ class MCPToolWrapper(BaseTool):
     def _run(self, **kwargs: Any) -> Any:
         """Run the tool synchronously using the SyncInvocationManager."""
 
-                
-
-        try:
-            from ..gpt_computer_assistant import the_main_window
-        except ImportError:
-            from gpt_computer_assistant import the_main_window
-
-
-
-
-
-        function_name = "Tool: " + self.name
-        the_main_window.active_border_animation(function_name)
-        try:
-            result = self._manager.invoke_tool_sync(self._tool, kwargs)
-        except Exception as e:
-            time.sleep(1)
-            the_main_window.deactive_border_animation(function_name)
-            return e
-        time.sleep(1)
-        the_main_window.deactive_border_animation(function_name)
+  
+        result = self._manager.invoke_tool_sync(self._tool, kwargs)
 
         return result
 
