@@ -51,3 +51,6 @@ StrEnum==0.4.15
 
 
 langchain-mcp==0.1.0a1
+
+
+waitress==3.0.2

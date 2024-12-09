@@ -3,9 +3,10 @@
 from flask import Flask, request, jsonify
 import threading
 import time
-
+import pyautogui
 from werkzeug.serving import make_server
 
+from waitress import serve
 app = Flask(__name__)
 
 
@@ -18,55 +19,26 @@ def status():
 
 def the_input(text, screen, talk):
     print("Input:", text)
-    from .gpt_computer_assistant import the_main_window, the_input_box
 
-    firsst_text = the_input_box.toPlainText()
+    from .agent.process import process_text_api
+    from .utils.db import (
+        screenshot_path,
+    )
 
-    original_tts = the_main_window.tts_available
 
-    if talk == "true":
-        the_main_window.tts_available = True
-        the_main_window.manuel_stop = True
 
     if screen != "true":
-        the_main_window.button_handler.input_text(text)
+        result = process_text_api(text, None)
     else:
-        the_main_window.button_handler.input_text_screenshot(text)
+        screenshot = pyautogui.screenshot()
+        screenshot.save(screenshot_path)
+        result = process_text_api(text, screenshot)
 
     time.sleep(1)
 
-    return_okay = False
-    
 
-    while return_okay == False:
-        response = the_input_box.toPlainText()
 
-        if response == firsst_text:
-            time.sleep(0.3)
-            continue
-
-        if response.startswith("System:"):
-            if "EXCEPTION" in response:
-                break
-            time.sleep(0.3)
-            continue
-
-        if response.startswith("Thinking..."):
-            time.sleep(0.3)
-            continue
-
-        return_okay = True
-
-    while not the_main_window.state == "idle":
-        time.sleep(0.3)
-
-        
-
-    
-
-    the_main_window.tts_available = original_tts
-
-    return jsonify({"response": response})
+    return jsonify({"response": result})
 
 
 
@@ -741,10 +713,12 @@ def stop_server():
 
     try:
         from .gpt_computer_assistant import the_main_window
+        the_main_window.close()
     except ImportError:
         from gpt_computer_assistant import the_main_window
+        the_main_window.close()
 
-    the_main_window.close()
+    
 
     stop_api()
     exit(0)
@@ -771,15 +745,18 @@ class ServerThread(threading.Thread):
 server_thread = None
 
 
-def start_api():
-    global server_thread
-    if server_thread is None:
-        server_thread = ServerThread(app, "0.0.0.0", 7541)
-        server_thread.start()
-        print("API started")
-    else:
-        print("API is already running")
+def start_api(api=False):
+    if api == False:
+        global server_thread
+        if server_thread is None:
+            server_thread = ServerThread(app, "0.0.0.0", 7541)
+            server_thread.start()
+            print("API started")
+        else:
+            print("API is already running")
 
+    else:
+        serve(app, host="0.0.0.0", port=7541)
 
 def stop_api():
     global server_thread

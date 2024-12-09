@@ -304,3 +304,29 @@ def process_text(text, screenshot_path=None):
             the_main_window.update_from_thread("EXCEPTION: " + str(exception_str))
             tts_if_you_can("Exception occurred. Please check the logs.")
             signal_handler.assistant_response_stopped.emit()
+
+
+
+def process_text_api(text, screenshot_path=None):
+    with my_tracer.start_span("process_text_api") as span:
+        span.set_attribute("user_id", user_id)
+        span.set_attribute("os_name", os_name_)
+        try:
+            global last_ai_response
+
+            llm_input = text
+
+            llm_output = assistant(
+                llm_input,
+                get_client(),
+                screenshot_path=screenshot_path,
+                dont_save_image=True,
+            )
+
+            return llm_output
+
+
+        except Exception as e:
+            print("Error in process_text", e)
+            traceback.print_exc()
+            
