@@ -154,7 +154,7 @@ def click_action(action: str):
         pyautogui.click(button=button.get(action, "left"))
 
 
-def screenshot_action():
+def screenshot_action(direct_base64: bool = False) -> ToolResult:
     temp_dir = Path(tempfile.gettempdir())
     path = temp_dir / f"screenshot_{uuid4().hex}.png"
 
@@ -174,6 +174,8 @@ def screenshot_action():
             base64_image = base64.b64encode(image_file.read()).decode("utf-8")
 
         path.unlink()
+        if direct_base64:
+            return base64_image
         return ToolResult(base64_image=base64_image)
     raise ToolError(f"Failed to take screenshot")
 

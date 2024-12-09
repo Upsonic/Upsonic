@@ -419,6 +419,19 @@ def save_openai_api_key():
     save_api_key(openai_api_key)
     return jsonify({"response": "OpenAI API key saved."})
 
+@app.route("/save_anthropic_api_key", methods=["POST"])
+def save_anthropic_api_key():
+    """
+    This api saves the 
+    """
+    data = request.json
+    anthropic_api_key = data["anthropic_api_key"]
+    from .utils.db import save_anthropic_api_key
+
+    save_anthropic_api_key(anthropic_api_key)
+    return jsonify({"response": "Anthropic API key saved."})
+
+
 
 @app.route("/save_openai_url", methods=["POST"])
 def save_openai_url():

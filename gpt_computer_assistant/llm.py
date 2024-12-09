@@ -18,9 +18,10 @@ except ImportError:
 the_callback = customcallback(strip_tokens=False, answer_prefix_tokens=["Answer"])
 
 
-def get_model(high_context=False):
-    the_model = load_model_settings()
+def get_model(high_context=False, the_model=None):
+    the_model = load_model_settings() if not the_model else the_model
     the_api_key = load_api_key()
+    the_anthropic_api_key = load_anthropic_api_key()
     the_groq_api_key = load_groq_api_key()
     the_google_api_key = load_google_api_key()
     the_openai_url = load_openai_url()
@@ -51,7 +52,7 @@ def get_model(high_context=False):
         ChatOpenAI: open_ai_base(high_context=high_context),
         ChatAnthropic: {
             "model": the_model,
-            "api_key": the_api_key,
+            "api_key": the_anthropic_api_key,
             "max_retries": 15,
             "streaming": False,
             "callbacks": [the_callback],

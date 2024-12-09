@@ -57,6 +57,18 @@ def load_api_key():
             return env_variable
         return "CHANGE_ME"
 
+def save_anthropic_api_key(api_key):
+    kot_db_.set("anthropic_api_key", api_key)
+def load_anthropic_api_key():
+    if kot_db_.get("anthropic_api_key"):
+        return kot_db_.get("anthropic_api_key")
+    else:
+        env_variable = os.getenv("ANTHROPIC_API_KEY")
+        if env_variable:
+            save_api_key(env_variable)
+            return env_variable
+        return "CHANGE_ME"
+
 
 # OPENAI URL SAVING AND LOADING
 def save_openai_url(url):

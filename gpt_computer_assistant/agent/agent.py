@@ -49,7 +49,7 @@ def get_prompt(name):
         return prompt
 
 
-def get_agent_executor():
+def get_agent_executor(the_anthropic_model=False):
     tools = get_tools()
     tools += custom_tools()
 
@@ -64,7 +64,18 @@ def get_agent_executor():
             pass
 
 
-    tools += [computer_tool] + mcp_tools()
+    if the_anthropic_model:
+        tools += [computer_tool]
+        model_catch = get_model(the_model="claude-3-5-sonnet-20241022")
+
+        print("Anthropic model catch", model_catch)
+        print("Anthropic tools len", len(tools))
+        return chat_agent_executor.create_tool_calling_executor(model_catch, tools)
+    else:
+        tools += [smart_mouse_] + mcp_tools()
+
+
+
 
 
     if (
