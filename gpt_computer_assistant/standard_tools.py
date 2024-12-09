@@ -154,7 +154,24 @@ def python_repl(code: str) -> str:
 
 
 
+@register_tool
+@wrapper
+def keyboard_write(text: str):
+    """
+    Write the text using the keyboard (its use pyautogui).
+    """
+    import pyautogui
+    pyautogui.write(text)
 
+@register_tool
+@wrapper
+def keyboard_press(key: str):
+    """
+    Press the key using the keyboard (its use pyautogui).
+    """
+    import pyautogui
+    pyautogui.press(key)
+    pyautogui.press(key)
 
 
 
