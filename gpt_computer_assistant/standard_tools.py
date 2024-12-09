@@ -21,7 +21,59 @@ def register_tool(func):
     return func
 
 
+@register_tool
+@wrapper
+def read_website(url: str, max_content_length: int = 5000) -> dict:
+    """
+    Read the content of a website and return the title, meta data, content, and sub-links.
+    """
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        html = response.text
+    except requests.RequestException as e:
+        return {"error": f"Failed to retrieve the website content: {e}"}
 
+    soup = BeautifulSoup(html, "html.parser")
+
+    meta_properties = [
+        "og:description",
+        "og:site_name",
+        "og:title",
+        "og:type",
+        "og:url",
+        "description",
+        "keywords",
+        "author",
+    ]
+    meta = {}
+    for property_name in meta_properties:
+        tag = soup.find("meta", property=property_name) or soup.find(
+            "meta", attrs={"name": property_name}
+        )
+        if tag:
+            meta[property_name] = tag.get("content", "")
+
+    for ignore_tag in soup(["script", "style"]):
+        ignore_tag.decompose()
+
+    title = soup.title.string.strip() if soup.title else ""
+    content = soup.body.get_text(separator="\n") if soup.body else ""
+
+    links = []
+    for a in soup.find_all("a", href=True):
+        link_url = urljoin(url, a["href"])
+        links.append({"title": a.text.strip(), "link": link_url})
+
+    content = re.sub(r"[\n\r\t]+", "\n", content)
+    content = re.sub(r" +", " ", content)
+    content = re.sub(r"[\n ]{3,}", "\n\n", content)
+    content = content.strip()
+
+    if len(content) > max_content_length:
+        content = content[:max_content_length].rsplit(" ", 1)[0] + "..."
+
+    return {"meta": meta, "title": title, "content": content, "sub_links": links}
 
 
 @register_tool
