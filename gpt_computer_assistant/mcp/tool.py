@@ -39,6 +39,8 @@ class MCPToolWrapper(BaseTool):
 
         result = self._manager.invoke_tool_sync(self._tool, kwargs)
 
+        print("Result", result)
+
         return result
 
     async def _arun(self, **kwargs: Any) -> Any:
