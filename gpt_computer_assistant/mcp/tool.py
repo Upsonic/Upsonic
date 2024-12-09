@@ -33,15 +33,17 @@ class MCPToolWrapper(BaseTool):
 
     def _run(self, **kwargs: Any) -> Any:
         """Run the tool synchronously using the SyncInvocationManager."""
-
-        print("Running tool", self.name)
-        print("With args", kwargs)
-
-        result = self._manager.invoke_tool_sync(self._tool, kwargs)
-
-        print("Result", result)
-
-        return result
+        try:
+            print(f"Running tool: {self.name} with args: {kwargs}")
+            result = self._manager.invoke_tool_sync(self._tool, kwargs)
+            if result is None:
+                print(f"Tool {self.name} returned no result.")
+            else:
+                print(f"Tool {self.name} result: {result}")
+            return result
+        except Exception as e:
+            print(f"Error while running tool {self.name}: {e}")
+            return None
 
     async def _arun(self, **kwargs: Any) -> Any:
         """Asynchronous run (if needed), wraps the synchronous call."""
@@ -98,7 +100,11 @@ class SyncInvocationManager:
         return self.toolkit.get_tools()
 
     def invoke_tool_sync(self, tool: BaseTool, input_data: Dict[str, Any]) -> Any:
-        return self.loop.run_until_complete(tool.ainvoke(input_data))
+        try:
+            return self.loop.run_until_complete(tool.ainvoke(input_data))
+        except Exception as e:
+            print(f"Error invoking tool {tool.name}: {e}")
+            return None
 
     def start(self):
         asyncio.set_event_loop(self.loop)
@@ -226,5 +232,5 @@ the_tools_ = None
 def mcp_tools():
     global the_tools_
     if the_tools_ is None:
-        the_tools_ = file_system_tool() + memory_tool() + playwright() + youtube_transcript() + fetch() + websearch()
+        the_tools_ = file_system_tool() + memory_tool() + youtube_transcript() + fetch()
     return the_tools_
