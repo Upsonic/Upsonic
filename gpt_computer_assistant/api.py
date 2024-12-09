@@ -136,9 +136,7 @@ def profile():
     from .utils.db import set_profile
 
     set_profile(profile)
-    from .gpt_computer_assistant import the_main_window
 
-    the_main_window.update_from_thread("Profile set to " + profile)
     return jsonify({"response": "Profile set to " + profile})
 
 
@@ -150,9 +148,7 @@ def reset_memory():
     from .agent.chat_history import clear_chat_history
 
     clear_chat_history()
-    from .gpt_computer_assistant import the_main_window
 
-    the_main_window.update_from_thread("Memory reset")
     return jsonify({"response": "Memory reset"})
 
 
@@ -164,9 +160,7 @@ def enable_predefined_agents():
     from .utils.db import activate_predefined_agents_setting
 
     activate_predefined_agents_setting()
-    from .gpt_computer_assistant import the_main_window
 
-    the_main_window.update_from_thread("Predefined agents enabled")
     return jsonify({"response": "Predefined agents enabled"})
 
 
@@ -178,9 +172,7 @@ def disable_predefined_agents():
     from .utils.db import deactivate_predefined_agents_setting
 
     deactivate_predefined_agents_setting()
-    from .gpt_computer_assistant import the_main_window
 
-    the_main_window.update_from_thread("Predefined agents disabled")
     return jsonify({"response": "Predefined agents disabled"})
 
 
@@ -192,9 +184,7 @@ def enable_online_tools():
     from .utils.db import activate_online_tools_setting
 
     activate_online_tools_setting()
-    from .gpt_computer_assistant import the_main_window
 
-    the_main_window.update_from_thread("Online tools enabled")
     return jsonify({"response": "Online tools enabled"})
 
 
@@ -206,9 +196,7 @@ def disable_online_tools():
     from .utils.db import deactivate_online_tools_setting
 
     deactivate_online_tools_setting()
-    from .gpt_computer_assistant import the_main_window
 
-    the_main_window.update_from_thread("Online tools disabled")
     return jsonify({"response": "Online tools disabled"})
 
 
