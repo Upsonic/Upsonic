@@ -160,3 +160,101 @@ def click_to_area_(
 
 
 click_to_area = tool(click_to_area_)
+
+
+
+
+def screenshot_(checking:str):
+    """
+    Returns the current screenshot. Explain what should we check on the screenshot.
+    """
+
+    from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+
+    try:
+        from .cu.computer import screenshot_action
+        from .agent.agent import get_agent_executor
+    except ImportError:
+        from cu.computer import screenshot_action
+        from agent.agent import get_agent_executor
+
+    the_base64 = screenshot_action(direct_base64=True)
+
+
+
+
+
+
+    human_first_message = {"type": "text", "text": f"Explain the image and check '{checking}' on the image."}
+
+
+
+    the_message = [
+        human_first_message
+    ]
+
+
+
+    human_second_message = None
+
+    if screenshot_path:
+
+
+        human_second_message = {
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{the_base64}"},
+        }
+
+
+
+    if human_second_message:
+        the_message.append(human_second_message)
+
+
+
+
+
+    the_message = HumanMessage(content=the_message)
+
+
+
+
+
+
+
+    msg = get_agent_executor().invoke(
+        {"messages": [the_message]}
+    )
+
+
+
+
+
+    the_last_messages = msg["messages"]
+
+
+
+
+
+
+
+
+
+    return_value = the_last_messages[-1].content
+    if isinstance(return_value, list):
+        the_text = ""
+        for each in return_value:
+            the_text += str(each)
+        return_value = the_text
+
+    if return_value == "":
+        return_value = "No response "
+
+
+
+
+    return return_value
+
+
+
+screenshot = tool(screenshot_)
