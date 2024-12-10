@@ -118,7 +118,10 @@ class ChatHistory:
 
         if self.db.get("chat") is None:
             self.db.set("chat", [])
-
+  
+        if self.get_chat() == []:
+            print("SETTING CHAT")
+            self.add_message("system", {"type":"text", "text": load_system_prompt()})
 
 
     def add_message(self, message_type:str, content, auto_delete:int=None):
@@ -152,6 +155,7 @@ class ChatHistory:
         chat = self.db.get("chat")
         chat = sorted(chat, key=lambda x: x["timestamp"])
 
+        print("CHAT", chat)
         # Transform dict to Message objects
 
         the_chat = []
