@@ -205,6 +205,11 @@ class Remote_Client:
         response = self.send_request("/save_openai_api_key", data)
         return response["response"]
 
+    def save_system_prompt(self, prompt):
+        data = {"prompt": prompt}
+        response = self.send_request("/save_system_prompt", data)
+        return response["response"]
+
     def save_anthropic_api_key(self, anthropic_api_key):
         data = {"anthropic_api_key": anthropic_api_key}
         response = self.send_request("/save_anthropic_api_key", data)

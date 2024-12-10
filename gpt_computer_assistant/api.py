@@ -419,6 +419,21 @@ def save_openai_api_key():
     save_api_key(openai_api_key)
     return jsonify({"response": "OpenAI API key saved."})
 
+
+
+
+@app.route("/save_system_prompt", methods=["POST"])
+def save_system_prompt():
+    """
+    This api saves the prompt
+    """
+    data = request.json
+    prompt = data["prompt"]
+    from .utils.db import save_system_prompt
+
+    save_system_prompt(prompt)
+    return jsonify({"response": "prompt saved."})
+
 @app.route("/save_anthropic_api_key", methods=["POST"])
 def save_anthropic_api_key():
     """

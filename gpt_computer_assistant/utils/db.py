@@ -80,6 +80,18 @@ def load_openai_url():
         return "default"
 
 
+
+
+def save_system_prompt(prompt):
+    kot_db_.set("system_prompt", prompt)
+def load_system_prompt():
+    if kot_db_.get("system_prompt"):
+        return kot_db_.get("system_prompt")
+    else:
+        return "Hi, you are an platform for vertical AI. You need to understant the user aspect and then trying to do these things and give valuation."
+
+
+
 # API VERSION SAVING AND LOADING
 def save_api_version(url):
     kot_db_.set("api_version", url)

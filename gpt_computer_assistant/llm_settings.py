@@ -149,12 +149,11 @@ llm_show_name = llm_show_name_
 def first_message():
     from .character import name, developer, get_website_content
     from .cu.computer import width, height, display_num
+    from .utils.db import load_system_prompt
     model = load_model_settings()
 
     the_text = f"""
-Hi, you are an platform for vertical AI. You need to understant the user aspect and then trying to do these things and give valuation.
-
-
+{load_system_prompt()}
 """
 
     the_website_content = get_website_content()
