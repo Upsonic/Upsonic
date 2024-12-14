@@ -99,9 +99,15 @@ class cloud_instance(instance):
         screen = "false" if not screen else "true"
 
         response = requests.post(self.url+"request", data={"request": the_request, "response": the_response, "screen":screen, "instance":self.instance_id}, verify=False)
+        json_response = response.json()
+        request_id = json_response["request_id"]
         try:
-            json_response = response.json()
-            return json_response["result"]
+            while True:
+                response = requests.post(self.url+"request_result", data={"request_id": request_id}, verify=False)
+                the_json = response.json()
+                if the_json["status"] == True:
+                    return the_json["result"]
+                time.sleep(1)
         except:
             return response.text
         
