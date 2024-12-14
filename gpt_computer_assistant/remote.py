@@ -219,6 +219,12 @@ class Remote_Client:
         data = {"openai_url": openai_url}
         response = self.send_request("/save_openai_url", data)
         return response["response"]
+    
+
+    def add_mcp_server(self, name, command, args):
+        data = {"name": name, "command": command, "args": args}
+        response = self.send_request("/add_mcp", data)
+        return response["response"]
 
 
     def save_api_version(self, api_version):

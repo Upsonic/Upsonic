@@ -227,10 +227,76 @@ This is websearch
 
 
 
+custom_mcp_severs_ = []
+previous_mcp_servers = []
+
+loaded_mcp_servers = []
+
+def custom_mcp_servers():
+
+    print("Custom MCP Servers")
+    global custom_mcp_severs_
+    global previous_mcp_servers
+    global loaded_mcp_servers
+    if custom_mcp_severs_ == previous_mcp_servers:
+        print("Returning loaded mcp servers")
+        return loaded_mcp_servers
+    
+    else:
+        # The custom_mcp_servers_ list is like [{name: "file_system_tool", command:"npx", args:["-y", "@mzxrai/mcp-webresearch"]}, {name: "memory_tool", command:"npx", args:["-y", "@mzxrai/mcp-webresearch"]}]    
+        # We shouldnt load same mcp server twice. For that we need to intersect the custom_mcp_servers_ and previous_mcp_servers
+        # and load only the difference
+        # This is to avoid loading the same mcp server twice
+
+        # Get the names of the mcp servers that are already loaded
+        previous_mcp_server_names = [mcp_server["name"] for mcp_server in loaded_mcp_servers]
+        # Get the names of the mcp servers that are in the custom_mcp_servers_ list
+        custom_mcp_server_names = [mcp_server["name"] for mcp_server in custom_mcp_severs_]
+        # Get the names of the mcp servers that are not loaded
+        mcp_server_names_to_load = list(set(custom_mcp_server_names) - set(previous_mcp_server_names))
+
+        # Load the mcp servers that are not loaded
+
+        for mcp_server in custom_mcp_severs_:
+            if mcp_server["name"] in mcp_server_names_to_load:
+                manager = SyncInvocationManager(command=mcp_server["command"], args=mcp_server["args"])
+                manager.start()
+                tool_manager = MCPToolManager(manager)
+                tools =  tool_manager.load_tools()
+                loaded_mcp_servers = loaded_mcp_servers + tools
+        previous_mcp_servers = custom_mcp_severs_
+        print("Returning loaded mcp servers", loaded_mcp_servers)
+        return loaded_mcp_servers
+    
+def add_custom_mcp_server(name: str, command: str, args: List[str]):
+    global custom_mcp_severs_
+    print("****************\nAdding custom mcp server")
+    print(name, command, args)
+    custom_mcp_severs_.append({"name": name, "command": command, "args": args})
+
+def remove_custom_mcp_server(name: str):
+    global custom_mcp_severs_
+    custom_mcp_severs_ = [mcp_server for mcp_server in custom_mcp_severs_ if mcp_server["name"] != name]
+
+def get_custom_mcp_server(name: str):
+    global custom_mcp_severs_
+    for mcp_server in custom_mcp_severs_:
+        if mcp_server["name"] == name:
+            return mcp_server
+    return None
+
+
+            
+        
+
+    
+
+
+
 
 the_tools_ = None
 def mcp_tools():
     global the_tools_
     if the_tools_ is None:
         the_tools_ = file_system_tool()
-    return the_tools_
+    return the_tools_ + custom_mcp_servers()

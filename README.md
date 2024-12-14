@@ -201,6 +201,11 @@ instance.close()
 
 
 
+## Adding Custom MCP Server to GCA
+
+```python
+instance.client.add_mcp_server("websearch", "npx", ["-y", "@mzxrai/mcp-webresearch"])
+```
 
 
 

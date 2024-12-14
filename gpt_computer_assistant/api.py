@@ -722,6 +722,27 @@ def mouse_scroll_up():
     return jsonify({"response": f"Mouse scrolled up by {amount}"})
 
 
+
+
+
+
+
+
+@app.route("/add_mcp", methods=["POST"])
+def add_mcp():
+
+    data = request.json
+    name = data["name"]
+    command = data["command"]
+    args = data["args"]
+    from .mcp.tool import add_custom_mcp_server
+
+    add_custom_mcp_server(name, command, args)
+    return jsonify({"response": "MCP added."})
+
+
+
+
 @app.route("/stop_server", methods=["POST"])
 def stop_server():
 
