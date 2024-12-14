@@ -135,7 +135,7 @@ This is file_system_tool
           """)
 
 
-    manager = SyncInvocationManager(command="npx", args=["-y", "@modelcontextprotocol/server-filesystem", str(pathlib.Path(__file__).parent.parent)])
+    manager = SyncInvocationManager(command="npx", args=["-y", "@modelcontextprotocol/server-filesystem", "/"])
     manager.start()
     tool_manager = MCPToolManager(manager)
     tools =  tool_manager.load_tools()
