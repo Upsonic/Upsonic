@@ -1,4 +1,4 @@
-<p align="center">
+<img width="1509" alt="Screenshot 2024-12-14 at 15 09 42" src="https://github.com/user-attachments/assets/256456d9-01d0-43d3-ae1c-b2e3dbba336c" /><p align="center">
   <a href="#">
     <img src="https://github.com/user-attachments/assets/27778034-29f5-4a71-b696-4e3f70760b26" >
   </a>
@@ -10,8 +10,6 @@ Hi, this is an open source framework to build vertical AI agent. We just support
 
 
 <p>
-
-
 
 
 
@@ -52,7 +50,7 @@ With [playground.gca.dev](https://playground.gca.dev/) you are ready to test and
 - Playground sessions limited to <b>10 minute</b>.
 
 <a href="https://playground.gca.dev/">
-  <img src="https://github.com/user-attachments/assets/6eb98bc0-5050-4a78-93f9-6913ef7a23b0" alt="Playground"  width=1000>
+  <img src="https://github.com/user-attachments/assets/125a1a15-0fee-4c7e-bfc5-1a23ef83c92d" alt="Playground"  width=1000>
 </a>
 
 <p align="center">
