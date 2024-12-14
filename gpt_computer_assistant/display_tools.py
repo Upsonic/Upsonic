@@ -3,6 +3,9 @@ import re
 from langchain.tools import tool
 import traceback
 
+import pyautogui
+import time
+
 try:
     from .utils.db import *
     from .llm import get_model
@@ -65,7 +68,7 @@ def extract_code_from_result(llm_output):
     return llm_output.strip()
 
 
-def click_to_text_(text:str) -> bool:
+def click_to_text_(text:str, double_click=False) -> bool:
     """
     Click on the text
    
@@ -87,8 +90,11 @@ def click_to_text_(text:str) -> bool:
 
     x_y = json.loads(x_y)
 
-    mouse_move_action((x_y['x'], x_y['y']))
-    click_action("left_click")
+
+    pyautogui.click(x_y['x'], x_y['y'], button='left')
+    if double_click:
+        time.sleep(0.1)
+        pyautogui.click(x_y['x'], x_y['y'], button='left')
 
     return True
 
@@ -97,7 +103,7 @@ click_to_text = tool(click_to_text_)
 
 
 
-def click_to_icon_(icon:str) -> bool:
+def click_to_icon_(icon:str, double_click=False) -> bool:
     """
     Click on the icon
    
@@ -119,8 +125,11 @@ def click_to_icon_(icon:str) -> bool:
 
     x_y = json.loads(x_y)
 
-    mouse_move_action((x_y['x'], x_y['y']))
-    click_action("left_click")
+    pyautogui.click(x_y['x'], x_y['y'], button='left')
+    if double_click:
+        time.sleep(0.1)
+        pyautogui.click(x_y['x'], x_y['y'], button='left')
+
 
     return True
 
@@ -129,7 +138,7 @@ click_to_icon = tool(click_to_icon_)
 
 
 def click_to_area_(
-    area:str
+    area:str, double_click=False
 ) -> bool:
     """
     Click on the area like search bar
@@ -151,8 +160,11 @@ def click_to_area_(
 
     x_y = json.loads(x_y)
 
-    mouse_move_action((x_y['x'], x_y['y']))
-    click_action("left_click")
+    pyautogui.click(x_y['x'], x_y['y'], button='left')
+    if double_click:
+        time.sleep(0.1)
+        pyautogui.click(x_y['x'], x_y['y'], button='left')
+
 
     return True
 
