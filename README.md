@@ -174,7 +174,7 @@ instance.close()
 docker pull upsonic/gca_docker_ubuntu:dev0-AMD64
 ```
 
-** Starting container **
+**Starting container**
 
 ```console
 docker run -d -p 5901:5901 -p 7541:7541 upsonic/gca_docker_ubuntu:dev0-AMD64
