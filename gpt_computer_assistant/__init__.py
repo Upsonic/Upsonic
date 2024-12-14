@@ -160,3 +160,52 @@ class cloud(interface):
         the_instance.start()
 
         return the_instance
+    
+
+
+
+
+
+
+class docker_instance(instance):
+    def __init__(self, url):
+        super().__init__(url)
+        from .remote import Remote_Client
+
+        self.client = Remote_Client(self.url)
+
+    def request(self, the_request, the_response, screen=False):
+
+        return self.client.request(the_request, the_response, screen)
+
+
+    def start(self):
+        pass
+
+
+    def close(self):
+        pass
+
+
+
+    def client_status(self):
+        return self.client.status
+
+
+
+
+class docker(interface):
+
+    @staticmethod
+    def instance(url):
+        the_instance = docker_instance(url)
+        the_instance.start()
+
+
+        client_status = the_instance.client_status()
+
+        if not client_status:
+            raise Exception("Failed to start the docker instance")
+        
+        return the_instance
+        

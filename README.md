@@ -163,6 +163,43 @@ instance.close()
 
 ## Self-Hosted GCA Server
 
+### Docker
+
+**Pulling Image**
+
+* If you are using ARM computer like M Chipset macbooks you should use *ARM64* at the end.
+
+```console
+docker pull upsonic/gca_docker_ubuntu:dev0-AMD64
+```
+
+** Starting container
+
+```console
+docker run -d -p 5901:5901 -p 7541:7541 upsonic/gca_docker_ubuntu:dev0-AMD64
+```
+
+**LLM Settings&Using**
+
+```python
+from gpt_computer_assistant import docker
+
+# Starting instance
+instance = docker.instance("http://localhost:7541/")
+
+# Connecting to OpenAI and Anthropic
+instance.client.save_models("gpt-4o")
+instance.client.save_openai_api_key("sk-**")
+instance.client.save_anthropic_api_key("sk-**")
+
+# Asking and getting result
+result = instance.request("Extract the tech stacks of gpt-computer-assitant Company", "i want a list")
+print(result)
+
+instance.close()
+```
+
+
 ### Local
 <b>Installation</b>
 ```console
@@ -170,7 +207,7 @@ pip install 'gpt-computer-assistant[base]'
 pip install 'gpt-computer-assistant[api]'
 ```
 
-<b>LLM Settings</b>
+<b>LLM Settings&Using</b>
 
 ```python
 from gpt_computer_assistant import local
@@ -178,9 +215,10 @@ from gpt_computer_assistant import local
 # Starting instance
 instance = local.instance()
 
-# Connecting to OpenAI
+# Connecting to OpenAI and Anthropic
 instance.client.save_models("gpt-4o")
 instance.client.save_openai_api_key("sk-**")
+instance.client.save_anthropic_api_key("sk-**")
 
 # Asking and getting result
 result = instance.request("Extract the tech stacks of gpt-computer-assitant Company", "i want a list")
