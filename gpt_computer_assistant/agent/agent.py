@@ -68,7 +68,7 @@ def get_agent_executor(the_anthropic_model=False):
 
     if the_anthropic_model:
         tools += []
-        if not llm_settings[model]["provider"] == "aws":
+        if load_aws_access_key_id() == "default":
             model_catch = get_model(the_model="claude-3-5-sonnet-20241022")
         else:
             model_catch = get_model(the_model="us.anthropic.claude-3-5-sonnet-20241022-v2:0")
