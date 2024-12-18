@@ -63,6 +63,7 @@ def get_model(high_context=False, the_model=None):
             "model_id": the_model,
             "aws_access_key_id": load_aws_access_key_id(),
             "aws_secret_access_key": load_aws_secret_access_key(),
+            "region_name":"us-east-1",
             "streaming": False,
             "callbacks": [the_callback],
         },
