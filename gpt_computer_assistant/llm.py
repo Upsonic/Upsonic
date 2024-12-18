@@ -63,7 +63,6 @@ def get_model(high_context=False, the_model=None):
             "model_id": the_model,
             "aws_access_key_id": load_aws_access_key_id(),
             "aws_secret_access_key": load_aws_secret_access_key(),
-            "max_retries": 15,
             "streaming": False,
             "callbacks": [the_callback],
         },
