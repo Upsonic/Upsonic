@@ -83,8 +83,11 @@ def get_agent_executor(the_anthropic_model=False):
     if (
         llm_settings[model]["provider"] == "openai"
         or llm_settings[model]["provider"] == "groq"
-        or llm_settings[model]["provider"] == "azureai",
-        llm_settings[model]["provider"] == "anthropic",
+        or llm_settings[model]["provider"] == "azureai"
+        or llm_settings[model]["provider"] == "anthropic"
+        or llm_settings[model]["provider"] == "aws"
+
+
     ):
         return chat_agent_executor.create_tool_calling_executor(get_model(), tools)
 

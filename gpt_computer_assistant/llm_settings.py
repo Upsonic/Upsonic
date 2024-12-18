@@ -19,6 +19,13 @@ llm_settings = {
         "tools": True,
         "stream": False,
     },
+    "us.anthropic.claude-3-5-sonnet-20241022-v2:0-aws": {
+        "show_name": "claude-3-5-sonnet-20241022 (AWS)",
+        "vision": True,
+        "provider": "aws",
+        "tools": True,
+        "stream": False,
+    },
     "gpt-4o-azureopenai": {
         "show_name": "gpt-4o (AzureAI)",
         "vision": True,

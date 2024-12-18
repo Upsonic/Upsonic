@@ -205,6 +205,16 @@ class Remote_Client:
         response = self.send_request("/save_openai_api_key", data)
         return response["response"]
 
+    def save_aws_access_key_id(self, aws_access_key_id):
+        data = {"aws_access_key_id": aws_access_key_id}
+        response = self.send_request("/save_aws_access_key_id", data)
+        return response["response"]
+    def save_aws_secret_access_key(self, aws_secret_access_key):
+        data = {"aws_secret_access_key": aws_secret_access_key}
+        response = self.send_request("/save_aws_secret_access_key", data)
+        return response["response"]
+
+
     def save_system_prompt(self, prompt):
         data = {"prompt": prompt}
         response = self.send_request("/save_system_prompt", data)

@@ -78,6 +78,7 @@ def agentic(
             or llm_settings[the_model]["provider"] == "ollama"
             or llm_settings[the_model]["provider"] == "azureai"
             or llm_settings[the_model]["provider"] == "anthropic"
+            or llm_settings[the_model]["provider"] == "aws"
         ):
             msg = get_agent_executor().invoke(
                 {"messages": llm_history + [the_message]}, config=config
@@ -193,6 +194,7 @@ def assistant(
         llm_settings[the_model]["provider"] == "openai"
         or llm_settings[the_model]["provider"] == "azureai"
         or llm_settings[the_model]["provider"] == "anthropic"
+        or llm_settings[the_model]["provider"] == "aws"
     ):
         if just_screenshot:
             msg = {"messages": llm_history + [the_message]}

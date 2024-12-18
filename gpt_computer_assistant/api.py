@@ -420,6 +420,26 @@ def save_openai_api_key():
     return jsonify({"response": "OpenAI API key saved."})
 
 
+@app.route("/save_aws_access_key_id", methods=["POST"])
+def save_aws_access_key_id():
+
+    data = request.json
+    aws_access_key_id = data["aws_access_key_id"]
+    from .utils.db import save_aws_access_key_id
+
+    save_aws_access_key_id(aws_access_key_id)
+    return jsonify({"response": "aws_access_key_id key saved."})
+
+
+@app.route("/save_aws_secret_access_key", methods=["POST"])
+def save_aws_secret_access_key():
+
+    data = request.json
+    aws_secret_access_key = data["aws_secret_access_key"]
+    from .utils.db import save_aws_secret_access_key
+
+    save_aws_secret_access_key(aws_secret_access_key)
+    return jsonify({"response": "aws_secret_access_key key saved."})
 
 
 @app.route("/save_system_prompt", methods=["POST"])

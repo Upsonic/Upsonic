@@ -551,3 +551,25 @@ def load_location_setting():
         return "right"
     with open(location_setting, "r") as f:
         return f.read()
+
+
+
+# OPENAI URL SAVING AND LOADING
+def save_aws_access_key_id(id):
+    kot_db_.set("aws_access_key_id", id)
+def load_aws_access_key_id():
+    if kot_db_.get("aws_access_key_id"):
+        return kot_db_.get("aws_access_key_id")
+    else:
+        return "default"
+
+
+# OPENAI URL SAVING AND LOADING
+def save_aws_secret_access_key(key):
+    kot_db_.set("aws_secret_access_key", key)
+def load_aws_secret_access_key():
+    if kot_db_.get("aws_secret_access_key"):
+        return kot_db_.get("aws_secret_access_key")
+    else:
+        return "default"
+
