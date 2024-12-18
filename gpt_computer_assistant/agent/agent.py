@@ -68,7 +68,10 @@ def get_agent_executor(the_anthropic_model=False):
 
     if the_anthropic_model:
         tools += []
-        model_catch = get_model(the_model="claude-3-5-sonnet-20241022")
+        if not llm_settings[model]["provider"] == "aws":
+            model_catch = get_model(the_model="claude-3-5-sonnet-20241022")
+        else:
+            model_catch = get_model(the_model="us.anthropic.claude-3-5-sonnet-20241022-v2:0")
 
         print("Anthropic model catch", model_catch)
         print("Anthropic tools len", len(tools))
