@@ -200,7 +200,7 @@ def assistant(
             msg = {"messages": llm_history + [the_message]}
             time.sleep(1)
         else:
-
+            print("The model:", the_model)
             msg = get_agent_executor().invoke(
                 {"messages": llm_history + [the_message]}, config=config
             )
