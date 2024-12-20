@@ -350,4 +350,4 @@ class Remote_Client:
 
 
 
-remote = Remote_Client("http://localhost:7541")
+#remote = Remote_Client("http://localhost:7541")

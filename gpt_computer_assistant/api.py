@@ -34,7 +34,7 @@ def the_input(text, screen, talk):
         screenshot.save(screenshot_path)
         result = process_text_api(text, screenshot_path)
 
-    time.sleep(1)
+
 
 
 

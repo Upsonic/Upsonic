@@ -9,6 +9,9 @@ except:
 __version__ = '0.26.7'  # fmt: skip
 
 
+
+from .classes import BaseClass, BaseVerifier, TypeVerifier, Task
+
 import os
 import time
 import subprocess
@@ -22,13 +25,37 @@ requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 
 class instance:
-    def __init__(self, url):
+    def __init__(self, url, tasks=[]):
         self.url = url
+        self.task = []
+        for t in tasks:
+            self.add_task(t)
 
 
     def request(self):
         pass
 
+    def add_task(self, task):
+        if isinstance(task, list):
+            for t in task:
+                self.task.append(t)
+        else:
+            self.task.append(task)
+
+        for t in self.task:
+            t.add_client(self)
+
+    def run(self):
+        for t in self.task:
+            t.run()
+
+        results = []
+        for t in self.task:
+            results.append(t.result)
+
+        return results
+
+    
 
 
 
@@ -39,8 +66,8 @@ class interface:
 
 
 class local_instance(instance):
-    def __init__(self):
-        super().__init__("http://localhost:7541")
+    def __init__(self, *args, **kwargs):
+        super().__init__("http://localhost:7541", *args, **kwargs)
         from .remote import Remote_Client
 
         self.client = Remote_Client(self.url)
@@ -75,8 +102,8 @@ class local_instance(instance):
 class local(interface):
 
     @staticmethod
-    def instance():
-        the_instance = local_instance()
+    def instance( *args, **kwargs):
+        the_instance = local_instance( *args, **kwargs)
         the_instance.start()
 
         time.sleep(5)
@@ -91,8 +118,8 @@ class local(interface):
 
 
 class cloud_instance(instance):
-    def __init__(self):
-        super().__init__("https://free_cloud_1.gca.dev/")
+    def __init__(self, *args, **kwargs):
+        super().__init__("https://free_cloud_1.gca.dev/", *args, **kwargs)
 
 
     def request(self, the_request, the_response, screen=False):
@@ -112,6 +139,10 @@ class cloud_instance(instance):
             return response.text
         
 
+    def reset_memory(self):
+        response = requests.post(self.url+"reset_memory", data={"instance":self.instance_id}, verify=False)
+        the_json = response.json()
+        return the_json["result"]
 
     def current_screenshot(self):
         response = requests.post(self.url+"screenshot_instance", data={"instance":self.instance_id}, verify=False)
@@ -161,8 +192,8 @@ class cloud_instance(instance):
 class cloud(interface):
 
     @staticmethod
-    def instance():
-        the_instance = cloud_instance()
+    def instance(*args, **kwargs):
+        the_instance = cloud_instance( *args, **kwargs)
         the_instance.start()
 
         return the_instance
@@ -174,8 +205,8 @@ class cloud(interface):
 
 
 class docker_instance(instance):
-    def __init__(self, url):
-        super().__init__(url)
+    def __init__(self, url, *args, **kwargs):
+        super().__init__(url, *args, **kwargs)
         from .remote import Remote_Client
 
         self.client = Remote_Client(self.url)
@@ -203,8 +234,8 @@ class docker_instance(instance):
 class docker(interface):
 
     @staticmethod
-    def instance(url):
-        the_instance = docker_instance(url)
+    def instance(url, *args, **kwargs):
+        the_instance = docker_instance(url, *args, **kwargs)
         the_instance.start()
 
 
