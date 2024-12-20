@@ -235,6 +235,29 @@ def connect_wifi(ssid: str, password: str) -> bool:
 
 
 
+import subprocess
+
+
+@register_tool
+@wrapper
+def run_terminal_command(command:str) -> str:
+    """
+    Executes a terminal command and returns the result.
+
+    Args:
+        command (str): The command to run in the terminal.
+
+    Returns:
+        str: The output of the command.
+    """
+    try:
+        result = subprocess.run(command, shell=True, capture_output=True, text=True)
+        return result.stdout.strip()
+    except Exception as e:
+        return str(e)
+
+
+
 def get_standard_tools():
     print("Tool len", len(_standard_tools_))
     last_list = [_standard_tools_[each] for each in _standard_tools_]
