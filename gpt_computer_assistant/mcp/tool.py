@@ -298,5 +298,6 @@ the_tools_ = None
 def mcp_tools():
     global the_tools_
     if the_tools_ is None:
-        the_tools_ = file_system_tool()
+        #the_tools_ = file_system_tool()
+        the_tools_ = []
     return the_tools_ + custom_mcp_servers()
