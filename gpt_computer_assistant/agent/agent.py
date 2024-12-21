@@ -51,7 +51,7 @@ def get_prompt(name):
         return prompt
 
 
-def get_agent_executor(the_anthropic_model=False):
+def get_agent_executor(the_anthropic_model=False, no_tools=False):
     tools = get_tools()
     tools += custom_tools()
 
@@ -81,6 +81,8 @@ def get_agent_executor(the_anthropic_model=False):
 
 
 
+    if no_tools:
+        tools = []
 
 
     if (

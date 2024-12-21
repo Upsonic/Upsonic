@@ -207,20 +207,15 @@ def screenshot_(checking:str):
 
 
 
-    human_second_message = None
-
-    if screenshot_path:
-
-
-        human_second_message = {
+    human_second_message = {
             "type": "image_url",
             "image_url": {"url": f"data:image/png;base64,{the_base64}"},
         }
 
 
 
-    if human_second_message:
-        the_message.append(human_second_message)
+
+    the_message.append(human_second_message)
 
 
 
@@ -234,7 +229,7 @@ def screenshot_(checking:str):
 
 
 
-    msg = get_agent_executor().invoke(
+    msg = get_agent_executor(no_tools=True).invoke(
         {"messages": [the_message]}
     )
 
