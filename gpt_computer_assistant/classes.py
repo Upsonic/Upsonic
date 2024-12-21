@@ -2,7 +2,7 @@ import traceback
 from .remote import Remote_Client
 import json
 import re
-
+import hashlib
 
 
 def extract_json(llm_output):
@@ -35,6 +35,17 @@ class BaseClass:
 
             self.verifier.add_client(client)
 
+    def add_task(self, task):
+        self.task = task
+
+
+
+
+    def sha_hash(self, text):
+        
+        return hashlib.sha256(text.encode()).hexdigest()
+
+
 
 class BaseVerifier(BaseClass):
     def __init__(self, try_count=5, exception_return=None, *args, **kwargs):
@@ -50,14 +61,20 @@ class TypeVerifier(BaseVerifier):
         super().__init__(*args, **kwargs)
         self.type = type
 
-    def verify(self):
+    def verify(self, description, result):
 
-        print("Verifying the result")
 
 
         control_point = self.client.request(
-            """
-Now critically analyze the result of the task you just completed.
+            f"""
+User Request:
+{description}
+
+AI Result:
+{result}
+
+
+Now critically analyze the result of the task you just completed. If the request is impossible to complete you can respond with "This task is impossible to complete" and "Reason:" to stop the task.
 
 Getting current state:
 - See the screen
@@ -68,13 +85,13 @@ If the result fails respond onyl with “I am sorry” and "Reason:" to trigger 
             """
             , "", screen=self.screen_task)
 
-        print("Verify control point", control_point)
 
         if "I am sorry" in control_point:
-            print("RETRYING")
-            raise Exception("Not satisfied with the result")
+
+            raise Exception(f"Not satisfied with the result {self.task.description}")
 
 
+        
         prompt = """
         Hi, now your responsibility is returning the answer in the requested format.
 
@@ -135,8 +152,8 @@ If the result fails respond onyl with “I am sorry” and "Reason:" to trigger 
         End of the day return result in ```json ``` format.
         """
 
+        self.client.change_profile(self.task.hash)
         result = self.client.request(prompt, "", screen=self.screen_task)
-        print("Verify result", result)
 
 
 
@@ -157,11 +174,19 @@ class Task(BaseClass):
         self.description = description
         self.output = ""
         self.verifier = verifier
+        if self.verifier:
+            self.verifier.add_task(self)
 
         self.result = None
 
+        self.hash = self.sha_hash(description)
+
+
+
     def run(self):
-        print("Task is running")
+
+
+        
 
         # Verify the result
         if self.verifier:
@@ -172,14 +197,16 @@ class Task(BaseClass):
                 try_count += 1
                 if try_count > 1:
                     self.output = "User is not satisfied with the result. Please try again."
+                self.client.change_profile(self.hash)
                 result = self.client.request(self.description, self.output, screen=self.screen_task)
-                print("the request", result)
+
                 try:
-                    result = self.verifier.verify()
+                    self.client.change_profile(self.hash+"VERIFY")
+                    result = self.verifier.verify(self.description, result)
                     break
                 except:
                     traceback.print_exc()
-                    print("the error after result", result)
+
                     result = self.verifier.exception_return
                     
 
