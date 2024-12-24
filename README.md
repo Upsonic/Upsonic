@@ -187,7 +187,7 @@ from gpt_computer_assistant import docker
 instance = docker.instance("http://localhost:7541/")
 
 # Connecting to OpenAI and Anthropic
-instance.client.save_models("gpt-4o")
+instance.client.save_model("gpt-4o")
 instance.client.save_openai_api_key("sk-**")
 instance.client.save_anthropic_api_key("sk-**")
 
@@ -221,7 +221,7 @@ from gpt_computer_assistant import local
 instance = local.instance()
 
 # Connecting to OpenAI and Anthropic
-instance.client.save_models("gpt-4o")
+instance.client.save_model("gpt-4o")
 instance.client.save_openai_api_key("sk-**")
 instance.client.save_anthropic_api_key("sk-**")
 
