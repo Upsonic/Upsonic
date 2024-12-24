@@ -335,6 +335,6 @@ If you enable it your assistant will work with these teams:
 
 ## Contributors
 
-<a href="https://github.com/onuratakan/gpt-computer-assistant/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=onuratakan/gpt-computer-assistant" />
+<a href="https://github.com/upsonic/gpt-computer-assistant/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=upsonic/gpt-computer-assistant" />
 </a>
