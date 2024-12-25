@@ -174,7 +174,7 @@ If the result fails respond onyl with “I am sorry” and "Reason:" to trigger 
 
 
 
-        console.print("[bold green]Verification successful![/bold green]\n")
+      
 
         result = extract_json(result)
         return result
@@ -222,7 +222,7 @@ class Task(BaseClass):
 
                 console.print(
                     Panel(
-                        f"[yellow]Attempt {try_count}[/yellow]",
+                        f"[yellow]Attempt {try_count}[/yellow]  ",
                         title="Retry",
                         style=Style(color="bright_white", bgcolor="black", bold=True)
                     )
@@ -236,6 +236,7 @@ class Task(BaseClass):
                 try:
                     self.client.change_profile(self.hash+"VERIFY")
                     result = self.verifier.verify(self.description, result)
+                    console.print("[bold green]Verification successful![/bold green]\n")
                     break
                 except Exception as e:
                     console.print(
