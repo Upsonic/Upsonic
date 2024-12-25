@@ -238,7 +238,6 @@ class Task(BaseClass):
                     result = self.verifier.verify(self.description, result)
                     break
                 except Exception as e:
-                    traceback.print_exc()
                     console.print(
                         Panel(
                             f"[red]Verification failed[/red]\nReason: {e}\nAI Output: {ai_result}",
