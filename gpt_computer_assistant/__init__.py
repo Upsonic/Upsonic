@@ -145,6 +145,11 @@ class cloud_instance(instance):
         the_json = response.json()
         return the_json["result"]
     
+    def add_system_message(self, system_message):
+        response = requests.post(self.url+"add_system_message", data={"system_message": system_message, "instance":self.instance_id}, verify=False)
+        the_json = response.json()
+        return the_json["result"]
+
     def get_logs(self):
         response = requests.post(self.url+"get_logs", data={"instance":self.instance_id}, verify=False)
         the_json = response.json()
