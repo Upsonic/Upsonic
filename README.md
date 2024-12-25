@@ -137,13 +137,18 @@ from gpt_computer_assistant import cloud
 # Starting instance
 instance = cloud.instance()
 
-# Show Screenshot
-instance.current_screenshot()
 
-# Asking and getting result
-result = instance.request("Extract the tech stacks of gpt-computer-assitant Company", "i want a list")
+# Add task
+instance.add_task(
+    Task(
+        "Extract the github star number of https://github.com/Upsonic/gpt-computer-assistant", 
+        TypeVerifier("integer")
+    )
+)
+
+# Run tasks and get results
+results = instance.run()
 print(result)
-
 
 instance.close()
 ```
