@@ -232,7 +232,7 @@ class Task(BaseClass):
                     self.output = "User is not satisfied with the result. Please try again."
                 self.client.change_profile(self.hash)
                 result = self.client.request(self.description, self.output, screen=self.screen_task)
-
+                ai_result = result
                 try:
                     self.client.change_profile(self.hash+"VERIFY")
                     result = self.verifier.verify(self.description, result)
@@ -241,7 +241,7 @@ class Task(BaseClass):
                     traceback.print_exc()
                     console.print(
                         Panel(
-                            f"[red]Verification failed[/red]\nReason: {e}",
+                            f"[red]Verification failed[/red]\nReason: {e}\nAI Output: {ai_result}",
                             title="Verification Error",
                             style=Style(color="bright_white", bgcolor="black", bold=True)
                         )
