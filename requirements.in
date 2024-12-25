@@ -56,3 +56,5 @@ langchain-mcp==0.1.0a1
 waitress==3.0.2
 
 langchain-aws==0.2.9
+
+rich

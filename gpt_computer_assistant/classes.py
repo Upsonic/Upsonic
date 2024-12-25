@@ -1,8 +1,17 @@
 import traceback
-from .remote import Remote_Client
 import json
 import re
 import hashlib
+
+# Rich imports
+from rich.console import Console
+from rich.panel import Panel
+from rich.style import Style
+
+from .remote import Remote_Client
+
+# Create a global Console object for styled output
+console = Console()
 
 
 def extract_json(llm_output):
@@ -62,7 +71,15 @@ class TypeVerifier(BaseVerifier):
         self.type = type
 
     def verify(self, description, result):
+        console.print(
+            Panel(
+                "[bold yellow]Verifying result with TypeVerifier...[/bold yellow]",
+                title="Verifier",
+                style=Style(color="bright_white", bgcolor="black", bold=True)
+            )
+        )
 
+        console.print(f"[bold]Expected type:[/bold] [green]{self.type}[/green]\n")
 
 
         control_point = self.client.request(
@@ -157,7 +174,7 @@ If the result fails respond onyl with “I am sorry” and "Reason:" to trigger 
 
 
 
-
+        console.print("[bold green]Verification successful![/bold green]\n")
 
         result = extract_json(result)
         return result
@@ -185,6 +202,13 @@ class Task(BaseClass):
 
     def run(self):
 
+        console.print(
+            Panel(
+                f"[bold green]Starting Task[/bold green]\n[b]Task Description:[/b] {self.description}",
+                title="Task",
+                style=Style(color="bright_white", bgcolor="black", bold=True)
+            )
+        )
 
         
 
@@ -195,6 +219,15 @@ class Task(BaseClass):
 
             while try_count < self.verifier.try_count:
                 try_count += 1
+
+                console.print(
+                    Panel(
+                        f"[yellow]Attempt {try_count}[/yellow] for Task: {self.description}\n",
+                        title="Retry",
+                        style=Style(color="bright_white", bgcolor="black", bold=True)
+                    )
+                )
+
                 if try_count > 1:
                     self.output = "User is not satisfied with the result. Please try again."
                 self.client.change_profile(self.hash)
@@ -204,15 +237,28 @@ class Task(BaseClass):
                     self.client.change_profile(self.hash+"VERIFY")
                     result = self.verifier.verify(self.description, result)
                     break
-                except:
+                except Exception as e:
                     traceback.print_exc()
+                    console.print(
+                        Panel(
+                            f"[red]Verification failed[/red]\nReason: {e}",
+                            title="Verification Error",
+                            style=Style(color="bright_white", bgcolor="black", bold=True)
+                        )
+                    )
 
                     result = self.verifier.exception_return
                     
 
             
 
-
+        console.print(
+            Panel(
+                "[bold green]Task Completed[/bold green]\n[bold]Final result ready.[/bold]",
+                title="Task Finished",
+                style=Style(color="bright_white", bgcolor="black", bold=True)
+            )
+        )
 
         self.result = result
         return result

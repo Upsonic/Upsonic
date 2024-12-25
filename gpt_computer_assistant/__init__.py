@@ -139,6 +139,17 @@ class cloud_instance(instance):
             return response.text
         
 
+
+    def change_profile(self, profile):
+        response = requests.post(self.url+"change_profile", data={"profile": profile, "instance":self.instance_id}, verify=False)
+        the_json = response.json()
+        return the_json["result"]
+    
+    def get_logs(self):
+        response = requests.post(self.url+"get_logs", data={"instance":self.instance_id}, verify=False)
+        the_json = response.json()
+        return the_json["result"]
+
     def reset_memory(self):
         response = requests.post(self.url+"reset_memory", data={"instance":self.instance_id}, verify=False)
         the_json = response.json()
