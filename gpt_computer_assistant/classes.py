@@ -222,7 +222,7 @@ class Task(BaseClass):
 
                 console.print(
                     Panel(
-                        f"[yellow]Attempt {try_count}[/yellow] for Task: {self.description}\n",
+                        f"[yellow]Attempt {try_count}[/yellow]",
                         title="Retry",
                         style=Style(color="bright_white", bgcolor="black", bold=True)
                     )
