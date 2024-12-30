@@ -135,11 +135,11 @@ Single Instance:
 from gpt_computer_assistant import Cloud, Task, TypeVerifier
 
 # Starting instance
-instance = Cloud.instance()
+agent = Cloud.agent()
 
 
 # Run task
-star_number = instance.run(
+star_number = agent.run(
     Task(
         "Extract the github star number of https://github.com/Upsonic/gpt-computer-assistant", 
         TypeVerifier("integer")
@@ -148,7 +148,7 @@ star_number = instance.run(
 print(star_number)
 
 
-instance.close()
+agent.close()
 ```
 
 <img src="https://github.com/user-attachments/assets/3fd70530-6b86-43b4-9025-dce7853e4a38" alt="Cloud"  width=1000>
@@ -187,18 +187,18 @@ docker run -d -p 5901:5901 -p 7541:7541 upsonic/gca_docker_ubuntu:dev0-AMD64
 from gpt_computer_assistant import docker
 
 # Starting instance
-instance = docker.instance("http://localhost:7541/")
+agent = docker.agent("http://localhost:7541/")
 
 # Connecting to OpenAI and Anthropic
-instance.client.save_model("gpt-4o")
-instance.client.save_openai_api_key("sk-**")
-instance.client.save_anthropic_api_key("sk-**")
+agent.client.save_model("gpt-4o")
+agent.client.save_openai_api_key("sk-**")
+agent.client.save_anthropic_api_key("sk-**")
 
 # Asking and getting result
-result = instance.request("Extract the tech stacks of gpt-computer-assitant Company", "i want a list")
+result = agent.request("Extract the tech stacks of gpt-computer-assitant Company", "i want a list")
 print(result)
 
-instance.close()
+agent.close()
 ```
 
 
@@ -220,19 +220,19 @@ pip install 'gpt-computer-assistant[api]'
 ```python
 from gpt_computer_assistant import local
 
-# Starting instance
-instance = local.instance()
+# Starting agent
+agent = local.agent()
 
 # Connecting to OpenAI and Anthropic
-instance.client.save_model("gpt-4o")
-instance.client.save_openai_api_key("sk-**")
-instance.client.save_anthropic_api_key("sk-**")
+agent.client.save_model("gpt-4o")
+agent.client.save_openai_api_key("sk-**")
+agent.client.save_anthropic_api_key("sk-**")
 
 # Asking and getting result
-result = instance.request("Extract the tech stacks of gpt-computer-assitant Company", "i want a list")
+result = agent.request("Extract the tech stacks of gpt-computer-assitant Company", "i want a list")
 print(result)
 
-instance.close()
+agent.close()
 ```
 
 

@@ -107,7 +107,7 @@ class local_instance(instance):
 class local(interface):
 
     @staticmethod
-    def instance( *args, **kwargs):
+    def agent( *args, **kwargs):
         the_instance = local_instance( *args, **kwargs)
         the_instance.start()
 
@@ -213,7 +213,7 @@ class cloud_instance(instance):
 class Cloud(interface):
 
     @staticmethod
-    def instance(*args, **kwargs):
+    def agent(*args, **kwargs):
         start_time = time.time()
 
         the_instance = cloud_instance( *args, **kwargs)
@@ -262,7 +262,7 @@ class docker_instance(instance):
 class docker(interface):
 
     @staticmethod
-    def instance(url, *args, **kwargs):
+    def agent(url, *args, **kwargs):
         the_instance = docker_instance(url, *args, **kwargs)
         the_instance.start()
 
