@@ -21,7 +21,7 @@ sentry_sdk.init(
     traces_sample_rate=1.0,
     release=f"gcs@{__version__}",
 )
-from .utils.db import load_user_id
+from .utils.user_id import load_user_id
 sentry_sdk.set_user({"id": load_user_id()})
 
 print("Sentry sdk is initialized")

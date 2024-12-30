@@ -55,4 +55,4 @@ langchain-aws==0.2.9
 rich
 
 sentry-sdk==2.19.2
-sentry-sdk[opentelemetry]
+sentry-sdk==[opentelemetry]
