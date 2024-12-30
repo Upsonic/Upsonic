@@ -10,6 +10,7 @@ from rich.panel import Panel
 from rich.style import Style
 
 from .remote import Remote_Client
+from . import __version__
 
 print("I am on sentry sdk")
 import sentry_sdk
@@ -18,6 +19,7 @@ sentry_sdk.init(
     # Set traces_sample_rate to 1.0 to capture 100%
     # of transactions for tracing.
     traces_sample_rate=1.0,
+    release=f"gcs@{__version__}",
 )
 from .utils.db import load_user_id
 sentry_sdk.set_user({"id": load_user_id()})
