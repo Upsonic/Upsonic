@@ -12,7 +12,7 @@ from rich.style import Style
 from .remote import Remote_Client
 from . import __version__
 
-print("I am on sentry sdk")
+
 import sentry_sdk
 sentry_sdk.init(
     dsn="https://eed76b3c8eb23bbe1c2f6a796a03f1a9@o4508336623583232.ingest.us.sentry.io/4508556319195136",   
@@ -24,7 +24,7 @@ sentry_sdk.init(
 from .utils.user_id import load_user_id
 sentry_sdk.set_user({"id": load_user_id()})
 
-print("Sentry sdk is initialized")
+
 
 
 
