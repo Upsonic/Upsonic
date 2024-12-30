@@ -28,14 +28,7 @@ print("Sentry sdk is initialized")
 
 
 
-def test():
-    with sentry_sdk.start_transaction(op="task", name="Eat Pizza"):
-        print("Wow")
-        span = sentry_sdk.start_span(name="Eat Slice")
-        print("Nice")    
-        span.finish()
-    
-test()
+
 
 
 # Create a global Console object for styled output
