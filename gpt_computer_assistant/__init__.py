@@ -6,7 +6,7 @@ try:
     from .tooler import Tool
 except:
     pass
-__version__ = '0.27.2'  # fmt: skip
+__version__ = '0.27.3'  # fmt: skip
 
 
 
