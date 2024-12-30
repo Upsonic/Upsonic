@@ -14,8 +14,7 @@ load_dotenv(".env")
 
 
 
-if not os.path.exists(artifacts_dir):
-    os.makedirs(artifacts_dir)
+
 
 mic_record_location = os.path.join(artifacts_dir, "mic_record.wav")
 system_sound_location = os.path.join(artifacts_dir, "system_sound.wav")
