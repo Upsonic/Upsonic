@@ -5,9 +5,13 @@ from dotenv import load_dotenv
 try:
     from .folder import currently_dir, artifacts_dir, media_dir
     from .kot_db import kot_db_
+    from .user_id import *
 except:
     from folder import currently_dir, artifacts_dir, media_dir
     from kot_db import kot_db_
+    from user_id import *
+
+
 
 
 load_dotenv(".env")

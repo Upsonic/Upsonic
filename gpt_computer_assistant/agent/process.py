@@ -8,6 +8,7 @@ try:
     from ..gui.signal import signal_handler
     from ..utils.db import *
     from ..utils.telemetry import my_tracer, os_name
+    from ..version import get_version
 except ImportError:
     from llm import *
     from agent.assistant import *
@@ -17,6 +18,7 @@ except ImportError:
     from gui.signal import signal_handler
     from utils.db import *
     from utils.telemetry import my_tracer, os_name
+    from version import get_version
 
 
 import threading
@@ -307,6 +309,19 @@ def process_text(text, screenshot_path=None):
 
 
 
+
+
+
+import sentry_sdk
+sentry_sdk.init(
+    dsn="https://eed76b3c8eb23bbe1c2f6a796a03f1a9@o4508336623583232.ingest.us.sentry.io/4508556319195136",   
+    # Set traces_sample_rate to 1.0 to capture 100%
+    # of transactions for tracing.
+    traces_sample_rate=1.0,
+    release=f"gcs@{get_version()}",
+    server_name="gca_client",
+)
+
 def process_text_api(text, screenshot_path=None):
     with my_tracer.start_span("process_text_api") as span:
         span.set_attribute("user_id", user_id)
@@ -316,12 +331,14 @@ def process_text_api(text, screenshot_path=None):
 
             llm_input = text
 
+            sentry_sdk.profiler.start_profiler()
             llm_output = assistant(
                 llm_input,
                 get_client(),
                 screenshot_path=screenshot_path,
                 dont_save_image=True,
             )
+            sentry_sdk.profiler.stop_profiler()
 
             return llm_output
 
