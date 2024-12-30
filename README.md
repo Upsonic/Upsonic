@@ -132,23 +132,21 @@ pip install gpt-computer-assistant
 
 Single Instance:
 ```python
-from gpt_computer_assistant import cloud, Task, TypeVerifier
+from gpt_computer_assistant import Cloud, Task, TypeVerifier
 
 # Starting instance
-instance = cloud.instance()
+instance = Cloud.instance()
 
 
-# Add task
-instance.add_task(
+# Run task
+star_number = instance.run(
     Task(
         "Extract the github star number of https://github.com/Upsonic/gpt-computer-assistant", 
         TypeVerifier("integer")
     )
 )
+print(star_number)
 
-# Run tasks and get results
-results = instance.run()
-print(result)
 
 instance.close()
 ```

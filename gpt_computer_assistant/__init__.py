@@ -10,6 +10,8 @@ __version__ = '0.26.11'  # fmt: skip
 
 
 
+
+
 from .classes import BaseClass, BaseVerifier, TypeVerifier, Task
 
 import os
@@ -45,7 +47,7 @@ class instance:
         for t in self.task:
             t.add_client(self)
 
-    def run(self):
+    def kick(self):
         for t in self.task:
             t.run()
 
@@ -56,7 +58,10 @@ class instance:
         return results
 
     
-
+    def run(self, task):
+        task.add_client(self)   
+        task.run()
+        return task.result
 
 
 
@@ -160,7 +165,7 @@ class cloud_instance(instance):
         the_json = response.json()
         return the_json["result"]
 
-    def current_screenshot(self):
+    def screenshot(self):
         response = requests.post(self.url+"screenshot_instance", data={"instance":self.instance_id}, verify=False)
 
         its_an_error = False
@@ -205,12 +210,19 @@ class cloud_instance(instance):
 
 
 
-class cloud(interface):
+class Cloud(interface):
 
     @staticmethod
     def instance(*args, **kwargs):
+        start_time = time.time()
+
         the_instance = cloud_instance( *args, **kwargs)
         the_instance.start()
+        time.sleep(1)
+
+        end_time = time.time()
+
+        print(f"Time to start the instance: {end_time - start_time}")
 
         return the_instance
     
