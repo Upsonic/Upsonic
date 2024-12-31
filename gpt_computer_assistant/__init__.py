@@ -6,7 +6,7 @@ try:
     from .tooler import Tool
 except:
     pass
-__version__ = '0.27.10'  # fmt: skip
+__version__ = '0.28.0'  # fmt: skip
 
 
 
@@ -277,4 +277,4 @@ class docker(interface):
             raise Exception("Failed to start the docker instance")
         
         return the_instance
-          
+           
