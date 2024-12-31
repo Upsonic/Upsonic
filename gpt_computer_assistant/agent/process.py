@@ -8,6 +8,7 @@ try:
     from ..gui.signal import signal_handler
     from ..utils.db import *
     from ..utils.telemetry import my_tracer, os_name
+    from ..utils.user_id import load_user_id
     from ..version import get_version
 except ImportError:
     from llm import *
@@ -17,6 +18,7 @@ except ImportError:
     from audio.stt import speech_to_text
     from gui.signal import signal_handler
     from utils.db import *
+    from utils.user_id import load_user_id
     from utils.telemetry import my_tracer, os_name
     from version import get_version
 
@@ -330,6 +332,10 @@ def process_text_api(text, screenshot_path=None):
             global last_ai_response
 
             llm_input = text
+
+            
+            sentry_sdk.set_user({"id": load_user_id()})
+
 
             sentry_sdk.profiler.start_profiler()
             llm_output = assistant(

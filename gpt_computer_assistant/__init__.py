@@ -129,6 +129,7 @@ class local(interface):
 class cloud_instance(instance):
     def __init__(self, *args, **kwargs):
         super().__init__("https://free_cloud_1.gca.dev/", *args, **kwargs)
+        self.add_user_id(self.user_id())
 
 
     def request(self, the_request, the_response, screen=False):
@@ -156,6 +157,12 @@ class cloud_instance(instance):
     
     def add_system_message(self, system_message):
         response = requests.post(self.url+"add_system_message", data={"system_message": system_message, "instance":self.instance_id}, verify=False)
+        the_json = response.json()
+        return the_json["result"]
+
+
+    def add_user_id(self, user_id):
+        response = requests.post(self.url+"add_user_id", data={"user_id": user_id, "instance":self.instance_id}, verify=False)
         the_json = response.json()
         return the_json["result"]
 
@@ -277,4 +284,4 @@ class docker(interface):
             raise Exception("Failed to start the docker instance")
         
         return the_instance
-           
+          
