@@ -77,7 +77,7 @@ def get_agent_executor(the_anthropic_model=False, no_tools=False):
         print("Anthropic tools len", len(tools))
         return create_react_agent(model_catch, tools)
     else:
-        tools += [mouse_scroll, click_to_text, click_to_icon, click_to_area, screenshot] + mcp_tools() + get_standard_tools()
+        tools += [mouse_scroll, click_to_text, click_to_icon, click_to_area] + mcp_tools() + get_standard_tools()
 
 
 

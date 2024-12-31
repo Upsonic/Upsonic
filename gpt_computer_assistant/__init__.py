@@ -129,8 +129,7 @@ class local(interface):
 class cloud_instance(instance):
     def __init__(self, *args, **kwargs):
         super().__init__("https://free_cloud_1.gca.dev/", *args, **kwargs)
-        self.add_user_id(self.user_id())
-
+        
 
     def request(self, the_request, the_response, screen=False):
         screen = "false" if not screen else "true"
@@ -209,6 +208,8 @@ class cloud_instance(instance):
         the_json = req.json()
 
         self.instance_id = the_json["result"]
+        self.add_user_id(self.user_id())
+
 
 
     def close(self):
