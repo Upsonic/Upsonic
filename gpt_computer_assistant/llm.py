@@ -45,7 +45,7 @@ def get_model(high_context=False, the_model=None):
             return {
                 "model": the_model,
                 "api_key": the_api_key,
-                "max_retries": 15,
+                "max_retries": 35,
                 "streaming": True,
                 "callbacks": [the_callback],
             }
@@ -55,7 +55,7 @@ def get_model(high_context=False, the_model=None):
         ChatAnthropic: {
             "model": the_model,
             "api_key": the_anthropic_api_key,
-            "max_retries": 15,
+            "max_retries": 35,
             "streaming": False,
             "callbacks": [the_callback],
         },
@@ -70,7 +70,7 @@ def get_model(high_context=False, the_model=None):
         AzureChatOpenAI: {
             "azure_deployment": the_model.replace("-azureopenai", ""),
             "api_version": the_api_version,
-            "max_retries": 15,
+            "max_retries": 35,
             "streaming": True,
             "callbacks": [the_callback],
         },

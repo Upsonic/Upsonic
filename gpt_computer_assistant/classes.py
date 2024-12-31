@@ -115,8 +115,8 @@ class TypeVerifier(BaseVerifier):
                 the_ai_result_if_we_have = f"AI Result:\n{result}\n"
 
             control_point_span = sentry_sdk.start_span(name="Control Point")
-            control_point = self.client.request(
-                f"""
+
+            the_request = f"""
     User Request:
     {description}
 
@@ -124,6 +124,12 @@ class TypeVerifier(BaseVerifier):
 
 
     Now critically analyze the result of the task you just completed.
+
+Rules:
+- If the result is not verified , no problem its enough to "I am satified" to continue to the next task.
+- If the result is not true give an resolve cookbook as Feedback to resolve.
+
+    
 
     Getting current state:
     - See the screen (Optional, If the ai output is not enough)
@@ -136,6 +142,11 @@ class TypeVerifier(BaseVerifier):
 
     Current Date Time: {current_date_time()}
                 """
+
+            control_point_span.set_data("request", the_request)
+            control_point_span.set_data("screen", self.screen_task)
+            control_point = self.client.request(
+                the_request
                 , "", screen=self.screen_task)
             
             control_point_span.finish()
@@ -207,9 +218,15 @@ class TypeVerifier(BaseVerifier):
             End of the day return result in ```json ``` format.
             """
 
+            
+
             self.client.change_profile(self.task.hash)
 
+
+            
+
             extracting_output_span = sentry_sdk.start_span(name="Extracting Output")
+            control_point_span.set_data("extracting_output_span", extracting_output_span)
             result = self.client.request(prompt, "", screen=self.screen_task)
             extracting_output_span.finish()
 

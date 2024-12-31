@@ -20,7 +20,7 @@ except ImportError:
     from llm import get_model
     from llm_settings import llm_settings
 
-config = {"configurable": {"thread_id": "abc123"}, "recursion_limit":40}
+config = {"configurable": {"thread_id": "abc123"}, "recursion_limit":100}
 
 
 
