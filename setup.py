@@ -41,7 +41,7 @@ setup(
         "gpt_computer_assistant.audio.stt_providers",
     ],
     include_package_data=True,
-    install_requires=["requests==2.32.3", "matplotlib==3.9.0"],
+    install_requires=["requests==2.32.3", "matplotlib==3.9.0", "sentry-sdk==2.19.2", "sentry-sdk[opentelemetry]"],
     entry_points={
         "console_scripts": ["computerassistant=gpt_computer_assistant.start:start"],
     },
