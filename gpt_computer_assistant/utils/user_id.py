@@ -26,3 +26,14 @@ def load_user_id():
         return save_user_id()
     with open(user_id_db, "r") as f:
         return f.read()
+
+
+def change_user_id(user_id):
+    """Change the unique user ID."""
+    with open(user_id_db, "w") as f:
+        f.write(user_id)
+        return user_id
+    
+
+
+

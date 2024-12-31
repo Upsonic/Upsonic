@@ -420,6 +420,19 @@ def save_openai_api_key():
     return jsonify({"response": "OpenAI API key saved."})
 
 
+@app.route("/save_user_id", methods=["POST"])
+def save_user_id():
+    """
+    This api saves the user id
+    """
+    data = request.json
+    user_id = data["user_id"]
+    from .utils.db import change_user_id
+
+    change_user_id(user_id)
+    return jsonify({"response": "User id changed."})
+
+
 @app.route("/save_aws_access_key_id", methods=["POST"])
 def save_aws_access_key_id():
 

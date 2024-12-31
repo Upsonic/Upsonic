@@ -205,6 +205,11 @@ class Remote_Client:
         response = self.send_request("/save_openai_api_key", data)
         return response["response"]
 
+    def save_user_id(self, user_id):
+        data = {"user_id": user_id}
+        response = self.send_request("/save_user_id", data)
+        return response["response"]
+
     def save_aws_access_key_id(self, aws_access_key_id):
         data = {"aws_access_key_id": aws_access_key_id}
         response = self.send_request("/save_aws_access_key_id", data)
@@ -230,6 +235,8 @@ class Remote_Client:
         response = self.send_request("/save_openai_url", data)
         return response["response"]
     
+
+
 
     def add_mcp_server(self, name, command, args):
         data = {"name": name, "command": command, "args": args}

@@ -64,6 +64,10 @@ class instance:
         return task.result
 
 
+    def user_id(self):
+        from .utils.user_id import load_user_id
+        return load_user_id()
+
 
 class interface:
     pass
