@@ -11,7 +11,9 @@ def get_version():
     with open(os.path.join(current_dir, "__init__.py")) as f:
         for line in f:
             if "__version__" in line:
-                return line.split("=")[1].strip().strip("'")
+                the_str = line.split("=")[1].strip().strip("'")
+                the_str = the_str.replace("'  # fmt: skip", "")
+                return the_str
     return None
 
 
