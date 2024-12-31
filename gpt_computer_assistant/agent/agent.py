@@ -23,7 +23,7 @@ except ImportError:
     from standard_tools import get_standard_tools
 
 
-from langgraph.prebuilt import chat_agent_executor
+from langgraph.prebuilt import create_react_agent
 
 
 custom_tools_ = []
@@ -75,7 +75,7 @@ def get_agent_executor(the_anthropic_model=False, no_tools=False):
 
         print("Anthropic model catch", model_catch)
         print("Anthropic tools len", len(tools))
-        return chat_agent_executor.create_tool_calling_executor(model_catch, tools)
+        return create_react_agent(model_catch, tools)
     else:
         tools += [mouse_scroll, click_to_text, click_to_icon, click_to_area, screenshot] + mcp_tools() + get_standard_tools()
 
@@ -85,17 +85,6 @@ def get_agent_executor(the_anthropic_model=False, no_tools=False):
         tools = []
 
 
-    if (
-        llm_settings[model]["provider"] == "openai"
-        or llm_settings[model]["provider"] == "groq"
-        or llm_settings[model]["provider"] == "azureai"
-        or llm_settings[model]["provider"] == "anthropic"
-        or llm_settings[model]["provider"] == "aws"
+    return create_react_agent(get_model(), tools)
 
 
-    ):
-        return chat_agent_executor.create_tool_calling_executor(get_model(), tools)
-
-    if llm_settings[model]["provider"] == "ollama":
-        print("Ollama tool len", len(tools))
-        return chat_agent_executor.create_tool_calling_executor(get_model(), tools)
