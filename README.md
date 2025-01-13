@@ -1,7 +1,6 @@
 
-  <a href="#">
-    <img src="https://github.com/user-attachments/assets/27778034-29f5-4a71-b696-4e3f70760b26" >
-  </a>
+
+  
 </p>
 
 ## What is GCA?
@@ -14,13 +13,10 @@ Hi, this is an open source framework to build vertical AI agent. We just support
 
 
   <p >
-    <a href="https://www.producthunt.com/posts/gpt-computer-assistant?embed=true&utm_source=badge-top-post-badge&utm_medium=badge&utm_souce=badge-gpt&#0045;computer&#0045;assistant" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/top-post-badge.svg?post_id=465468&theme=dark&period=daily" alt="GPT&#0032;Computer&#0032;Assistant - Create&#0032;intelligence&#0032;for&#0032;your&#0032;products | Product Hunt" width="200"  /></a>
+    <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/badge/Discord-Join?style=social&logo=discord" width=200></a>
     .
-    <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/badge/Discord-Join?style=social&logo=discord" width=120></a>
-    .
-    <a href="https://x.com/GPTCompAsst"><img alt="Static Badge" src="https://img.shields.io/badge/X_App-Join?style=social&logo=x" width=100></a>
+    <a href="https://x.com/GPTCompAsst"><img alt="Static Badge" src="https://img.shields.io/badge/X_App-Join?style=social&logo=x" width=160></a>
   </p>
-
 
 
 
@@ -34,30 +30,11 @@ Hi, this is an open source framework to build vertical AI agent. We just support
 
 
 
-
-
 <p align="center">
 <br>
 
   <br>
-</p>
 
-
-# Playground of GCA | NEW
-
-With [playground.gca.dev](https://playground.gca.dev/) you are ready to test and create your own strategies for creating an Vertical AI Agent.
-
-- Playground sessions limited to <b>10 minute</b>.
-
-<a href="https://playground.gca.dev/">
-  <img src="https://github.com/user-attachments/assets/125a1a15-0fee-4c7e-bfc5-1a23ef83c92d" alt="Playground"  width=1000>
-</a>
-
-<p align="center">
-<br>
-  <br>
-
-</p>
 
 # GPT Computer Assistant(GCA)
 GCA is an AI agent framework designed to make computer use across Windows, macOS, and Ubuntu. GCA enables you to replace repetitive, small-logic-based tasks worker to an AI. There is an really important potential that we believe. Whether you’re a developer, analyst, or IT professional, GCA can empower you to accomplish more in less time.
@@ -105,23 +82,11 @@ Through MCP and GCA’s own modules, it achieves tasks that go beyond standard h
 
 
 
-
 <p align="center">
 <br>
   <br>
   <br>
 
-</p>
-
-
-## Prequisites
-- Python 3.10
-
-<p align="center">
-<br>
-  <br>
-
-</p>
 
 ## Using GCA.dev Cloud
 
@@ -150,9 +115,6 @@ print(star_number)
 
 agent.close()
 ```
-
-<img src="https://github.com/user-attachments/assets/3fd70530-6b86-43b4-9025-dce7853e4a38" alt="Cloud"  width=1000>
-
 
 
 
@@ -235,10 +197,6 @@ print(result)
 agent.close()
 ```
 
-
-<img width="1000" src="https://github.com/user-attachments/assets/327cdceb-49e7-4a8a-a724-e386553f43d8">
-
-
 <p align="center">
 <br>
   <br>
@@ -254,70 +212,6 @@ instance.client.add_mcp_server("websearch", "npx", ["-y", "@mzxrai/mcp-webresear
 ```
 
 
-
-
-## Roadmap
-| Feature                         | Status       | Target Release |
-|---------------------------------|--------------|----------------|
-| Clear Chat History         | Completed    | Q2 2024        |
-| Long Audios Support (Split 20mb)      | Completed    | Q2 2024        |
-| Text Inputs               | Completed      | Q2 2024        |
-| Just Text Mode (Mute Speech)           | Completed  | Q2 2024        |
-| Added profiles (Different Chats)          | Completed    | Q2 2024        |
-| More Feedback About Assistant Status                  | Completed    | Q2 2024        |
-| Local Model Vision and Text (With Ollama, and vision models)  | Completed  | Q2 2024        |
-| **Our Customizable Agent Infrastructure**              | Completed      | Q2 2024        |
-| Supporting Groq Models  | Completed  | Q2 2024        |
-| **Adding Custom Tools**  | Completed  | Q2 2024        |
-| Click on something on the screen (text and icon)              | Completed      | Q2 2024        |
-| New UI              | Completed      | Q2 2024        |
-| Native Applications, exe, dmg              | Completed     | Q3 2024        |
-| **Collaborated Speaking Different Voice Models on long responses.**              | Completed     | Q2 2024        |
-| **Auto Stop Recording, when you complate talking**              | Completed     | Q2 2024        |
-| **Wakeup Word**              | Completed     | Q2 2024        |
-| **Continuously Conversations**              | Completed     | Q2 2024        |
-| **Adding more capability on device**              | Completed     | Q2 2024        |
-| **Local TTS**              | Completed     | Q3 2024        |
-| **Local STT**              | Completed     | Q3 2024        |
-| Tray Menu              | Completed     | Q3 2024        |
-| New Line (Shift + Enter)              | Completed     | Q4 2024        |
-| Copy Pasting Text Compatibility            | Completed     | Q4 2024        |
-| **Global Hotkey**              | On the way     | Q3 2024        |
-| DeepFace Integration (Facial Recognition)                    | Planned  | Q3 2024        |
-
-
-
-
-
-
-
-## Capabilities
-At this time we have many infrastructure elements. We just aim to provide whole things that already in ChatGPT app.
-
-| Capability                         | Status                      |
-|------------------------------------|----------------------------------|
-| **Local LLM with Vision (Ollama)**                    |            OK                    |
-| Local text-to-speech                    |            OK                    |
-| Local speech-to-text                    |            OK                    |
-| **Screen Read**                    |            OK                    |
-| **Click to and Text or Icon in the screen**                    |            OK                    |
-| **Move to and Text or Icon in the screen**                    |            OK                    |
-| **Typing Something**                    |            OK                    |
-| **Pressing to Any Key**                    |            OK                    |
-| **Scrolling**                    |            OK                    |
-| **Microphone**                     |            OK                    |
-| **System Audio**                  |            OK                    |
-| **Memory**                         |            OK                    |
-| **Open and Close App**             |            OK                    |
-| **Open a URL**                     |            OK                    |
-| **Clipboard**                       |            OK                    |
-| **Search Engines**                 |            OK                    |
-| **Writing and running Python**     |            OK                    |
-| **Writing and running SH**    |            OK                    |
-| **Using your Telegram Account**    |            OK                    |
-| **Knowledge Management**           |            OK                    |
-| **[Add more tool](https://github.com/onuratakan/gpt-computer-assistant/blob/master/gpt_computer_assistant/standard_tools.py)**           |            ?                    |
-
 ### Predefined Agents
 If you enable it your assistant will work with these teams:
 
@@ -326,6 +220,7 @@ If you enable it your assistant will work with these teams:
 | **search_on_internet_and_report_team**                    |            OK                    |
 | **generate_code_with_aim_team_**                    |            OK                    |
 | **[Add your own one](https://github.com/onuratakan/gpt-computer-assistant/blob/master/gpt_computer_assistant/teams.py)**                    |            ?                    |
+
 
 
 
