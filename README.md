@@ -212,17 +212,6 @@ instance.client.add_mcp_server("websearch", "npx", ["-y", "@mzxrai/mcp-webresear
 ```
 
 
-### Predefined Agents
-If you enable it your assistant will work with these teams:
-
-| Team Name                         | Status                      |
-|------------------------------------|----------------------------------|
-| **search_on_internet_and_report_team**                    |            OK                    |
-| **generate_code_with_aim_team_**                    |            OK                    |
-| **[Add your own one](https://github.com/onuratakan/gpt-computer-assistant/blob/master/gpt_computer_assistant/teams.py)**                    |            ?                    |
-
-
-
 
   <a href="#">
     <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/ba590bf8-6059-4cb6-8c4e-6d105ce4edd2" alt="Logo"  >
