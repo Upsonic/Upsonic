@@ -1,4 +1,7 @@
-
+<p>
+    <a href="https://trendshift.io/repositories/10584" target="_blank"><img src="https://trendshift.io/api/badge/repositories/10584" alt="unclecode%2Fcrawl4ai | Trendshift" style="width: 360px; height: 80px;"     
+       width="250" height="55"/></a>
+</p> 
 
   
 </p>
@@ -12,7 +15,7 @@ Hi, this is an open source framework to build vertical AI agent. We just support
 
 
 
-  <p >
+  <p>
     <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/badge/Discord-Join?style=social&logo=discord" width=200></a>
     .
     <a href="https://x.com/GPTCompAsst"><img alt="Static Badge" src="https://img.shields.io/badge/X_App-Join?style=social&logo=x" width=160></a>
