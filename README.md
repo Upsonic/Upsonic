@@ -1,3 +1,5 @@
+# We dont have any Crypto Project, they are totaly SCAM
+
 
 <img src="https://github.com/user-attachments/assets/10a3a9ca-1f39-410c-ac48-a7365de589d9" >
 
