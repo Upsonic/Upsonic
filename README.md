@@ -1,4 +1,4 @@
-# We dont have any Crypto Project, they are totaly SCAM
+# We do NOT and WILL not have any Crypto Projects, they are a complete SCAM
 
 
 <img src="https://github.com/user-attachments/assets/10a3a9ca-1f39-410c-ac48-a7365de589d9" >
