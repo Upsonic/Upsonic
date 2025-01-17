@@ -1,21 +1,15 @@
 
-  
-</p>
+<img src="https://github.com/user-attachments/assets/10a3a9ca-1f39-410c-ac48-a7365de589d9" >
 
-## What is GCA?
-
-Hi, this is an open source framework to build vertical AI agent. We just support many llms and new technologies like mcp. You can build your own vertical ai agent army in few commands with the stucturized API.
-
-
-<p>
-
-
+<br>
+<br>
 
   <p>
-    <a href="https://x.com/GPTCompAsst"><img alt="Static Badge" src="https://img.shields.io/badge/X_App-Join?style=social&logo=x" width=160></a>
+    <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/badge/Discord-Join?style=social&logo=discord" height=30></a>
     .
-    <a href="https://trendshift.io/repositories/10584" target="_blank"><img src="https://trendshift.io/api/badge/repositories/10584" alt="unclecode%2Fcrawl4ai | Trendshift" style="width: 250px; height: 55px;"     
-       width="160" height="35"/></a>
+    <a href="https://trendshift.io/repositories/10584" target="_blank"><img src="https://trendshift.io/api/badge/repositories/10584" alt="unclecode%2Fcrawl4ai | Trendshift" height=30/></a>
+    .
+<a href="https://www.producthunt.com/posts/gpt-computer-assistant?embed=true&utm_source=badge-top-post-badge&utm_medium=badge&utm_souce=badge-gpt&#0045;computer&#0045;assistant" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/top-post-badge.svg?post_id=465468&theme=dark&period=daily" alt="GPT&#0032;Computer&#0032;Assistant - Create&#0032;intelligence&#0032;for&#0032;your&#0032;products | Product Hunt" height=30  /></a>
   </p>
 
 
@@ -30,198 +24,254 @@ Hi, this is an open source framework to build vertical AI agent. We just support
 
 
 
-<p align="center">
+# What is Upsonic?
+Upsonic offers a cutting-edge enterprise-ready framework where you can orchestrate LLM calls, agents, and computer use to complete tasks cost-effectively. It provides more reliable systems, scalability, and a task-oriented structure that you need while completing real-world cases.
+
+**Key features:**
+
+- **Production-Ready Scalability**: Deploy seamlessly on AWS, GCP, or locally using Docker.
+- **Task-Centric Design**: Focus on practical task execution, with options for:
+    - Basic tasks via LLM calls.
+    - Advanced tasks with V1 agents.
+    - Complex automation using V2 agents with MCP integration.
+- **MCP Server Support**: Utilize multi-client processing for high-performance tasks.
+- **Tool-Calling Server**: Exception-secure tool management with robust server API interactions.
+- **Computer Use Integration**: Execute human-like tasks using Anthropic’s ‘Computer Use’ capabilities.
+- **Easily adding tools:** You can add your custom tools and MCP tools with a single line of code.
+- **Client-server arthitecture**: Production ready stateless enterprise ready system
+
+<br>
 <br>
 
-  <br>
+# 🛠️ Getting Started
 
+### Prerequisites
 
-# GPT Computer Assistant(GCA)
-GCA is an AI agent framework designed to make computer use across Windows, macOS, and Ubuntu. GCA enables you to replace repetitive, small-logic-based tasks worker to an AI. There is an really important potential that we believe. Whether you’re a developer, analyst, or IT professional, GCA can empower you to accomplish more in less time.
+- Python 3.10 or higher
+- Access to OpenAI or Anthropic API keys (Azure and Bedrock Supported)
 
+## Installation
 
-Imagine this:
+```bash
+pip install 'upsonic[server]'==0.35.0a1737122839
 
-
-
-- <b>Extract the tech stacks of xxx Company</b>             | Sales Development Representer
-- <b>Identify Relevant tables for Analysis for xxx</b>      | Data Analytics
-- <b>Check the logs to find core cause of this incident</b> | Technical Support Engineer
-- <b>Making CloudFlare Security Settings</b>                | Security Specialist
-
-
-These examples shows how GCA is realize the concept of <b>Vertical AI Agents</b> solutions that not only replicate human tasks, GCA also in the beyond of human speed at same cases.
-
-
-<p align="center">
+```
 <br>
-  <br>
-
-</p>
-
-
-## How GCA Works?
-
-
-GCA is a Python-based project that runs on multiple operating systems, including Windows, macOS, and Ubuntu. It integrates external concepts, like the Model Context Protocol (MCP), along with its own modules, to interact with and control a computer efficiently. The system performs both routine and advanced tasks by mimicking human-like actions and applying computational precision.
-
-
-
-### 1.	Human-like Actions:
-GCA can replicate common user actions, such as:
--	<b>Clicking</b>: Interact with buttons or other UI elements.
--	<b>Reading</b>: Recognize and interpret text on the screen.
--	<b>Scrolling</b>: Navigate through documents or web pages.
--	<b>Typing</b>: Enter text into forms or other input fields.
-### 2.	Advanced Capabilities:
-Through MCP and GCA’s own modules, it achieves tasks that go beyond standard human interaction, such as:
-
--	<b>Updating dependencies</b> of a project in seconds.
--	<b>Analyzing entire database</b> tables to locate specific data almost instantly.
-- <b>Automating cloud security</b> configurations with minimal input.
-
-
-
-<p align="center">
 <br>
-  <br>
-  <br>
 
+## Creating a Client
 
-## Using GCA.dev Cloud
+Create a client to manage tools and tasks:
 
-<b>Installation</b>
-```console
-pip install gpt-computer-assistant
+```python
+from upsonic import UpsonicClient, ObjectResponse, Task, AgentConfiguration
+from upsonic.client.tools import Search
+
+# Create an Upsonic client instance
+client = UpsonicClient("devserver")
+
+client.set_config("OPENAI_API_KEY", "YOUR_API_KEY")
+client.default_llm_model = "gpt-4o"
+
 ```
 
-Single Instance:
+<br>
+<br>
+
+## Defining a Task
+
+### 1) Description
+
+The task is based on the description. We have a mechanism to automatically generate sub-tasks from a high-level task description. For example, a task to track AI industry developments might be described as: "Research latest news in Anthropic and OpenAI." This will be turned into smaller, more manageable tasks ("Make a Google search for Anthropic and OpenAI," "Read the blogs," "Read the official descriptions of Anthropic and OpenAI").
+
 ```python
-from gpt_computer_assistant import Cloud, Task, TypeVerifier
+# Define a new Task
+description = "Research latest news in Anthropic and OpenAI"
 
-# Starting instance
-agent = Cloud.agent()
+```
 
+### 2) Response Format
 
-# Run task
-star_number = agent.run(
-    Task(
-        "Extract the github star number of https://github.com/Upsonic/gpt-computer-assistant", 
-        TypeVerifier("integer")
-    )
+The output is essential for deploying an AI agent across apps or as a service. In Upsonic, we use Pydantic BaseClass as input for the task system. This allows you to configure the output exactly how you want it, such as a list of news with title, body, and URL. You can create a flexible yet robust output mechanism that improves interoperability between the agent and your app.
+
+```python
+# Example ObjectResponse usage
+class News(ObjectResponse):
+    title: str
+    body: str
+    url: str
+    tags: list[str]
+
+class response_format(ObjectResponse):
+    news_list: list[News]
+
+```
+
+### 3) Tool Integration
+
+Our Framework officially supports Model Context Protocol (MCP) and custom tools. You can use hundreds of MCP servers at https://glama.ai/mcp/servers or https://smithery.ai/ We also support Python functions inside a class as a tool. You can easily generate your integrations with that.
+
+```python
+@client.mcp()
+class hackernews_mcp:
+    command = "uvx"
+    args = ["mcp-hn"]
+
+@client.tool()
+class MyTools:
+    def our_server_status():
+        return True
+
+tools = [Search, MyTools] # GitHub
+
+```
+
+### 4) Task Defination
+
+After defining these terms, you are ready to generate your first task. This structure is a key component of the Upsonic task-oriented structure. Once you define a task, you can run it with agents or directly via an LLM call to obtain the result over the Task object. The automatic sub-task mechanism is also essential for enhancing quality and precision. 
+
+This simplicity is a hallmark of Upsonic.
+
+```python
+task1 = Task(description=description, response_format=response_format, tools=tools)
+
+```
+
+<br>
+<br>
+
+## Defining an Agent
+
+Agents are the standard way to configure an LLM for your employees to work on your requests. It is essential to consider the goals and context of tasks. In Upsonic, we have an automatic characterization mechanism that enriches the given information by researchers agents working on Upsonic. For example, a Product Manager Agent can be configured with job title, company URL, and company objectives. Representing agents as roles like it supports practical agents aligned with their unique objectives.
+
+```python
+product_manager_agent = AgentConfiguration(
+    job_title="Product Manager",
+    company_url="https://upsonic.ai",
+    company_objective="To build AI Agent framework that helps people get things done",
 )
-print(star_number)
 
-
-agent.close()
 ```
 
-
-
-<p align="center">
 <br>
 <br>
-<br>
-</p>
 
+## Running Tasks
 
-## Self-Hosted GCA Server
-
-### Docker
-
-**Pulling Image**
-
-* If you are using ARM computer like M Chipset macbooks you should use *ARM64* at the end.
-
-```console
-docker pull upsonic/gca_docker_ubuntu:dev0-AMD64
-```
-
-**Starting container**
-
-```console
-docker run -d -p 5901:5901 -p 7541:7541 upsonic/gca_docker_ubuntu:dev0-AMD64
-```
-
-**LLM Settings&Using**
+Define the task and the agent, then combine them and run. The Upsonic Server will prepare and run the task. This standard method simplifies the use of agents in your SaaS applications or your new vertical AI agents.
 
 ```python
-from gpt_computer_assistant import docker
+client.agent(product_manager_agent, task1)
 
-# Starting instance
-agent = docker.agent("http://localhost:7541/")
+print(task1.response)
 
-# Connecting to OpenAI and Anthropic
-agent.client.save_model("gpt-4o")
-agent.client.save_openai_api_key("sk-**")
-agent.client.save_anthropic_api_key("sk-**")
-
-# Asking and getting result
-result = agent.request("Extract the tech stacks of gpt-computer-assitant Company", "i want a list")
-print(result)
-
-agent.close()
 ```
-
-
-<p align="center">
 <br>
 <br>
-</p>
 
+## Features (Beta)
 
-### Local
-<b>Installation</b>
-```console
-pip install 'gpt-computer-assistant[base]'
-pip install 'gpt-computer-assistant[api]'
-```
+### Only One LLM Call
 
-<b>LLM Settings&Using</b>
+LLMs have always been intelligent. We know exactly when to call an agent or an LLM. This creates a smooth transition from LLM to agent systems. The call method works like an agent, based on tasks and optimizing cost and latency for your requirements. Focus on the task. Don't waste time with complex architectures.
 
 ```python
-from gpt_computer_assistant import local
+client.call(task1)
 
-# Starting agent
-agent = local.agent()
-
-# Connecting to OpenAI and Anthropic
-agent.client.save_model("gpt-4o")
-agent.client.save_openai_api_key("sk-**")
-agent.client.save_anthropic_api_key("sk-**")
-
-# Asking and getting result
-result = agent.request("Extract the tech stacks of gpt-computer-assitant Company", "i want a list")
-print(result)
-
-agent.close()
 ```
 
-<p align="center">
-<br>
-  <br>
-  <br>
-</p>
+### Memory
 
-
-
-## Adding Custom MCP Server to GCA
+Humans have an incredible capacity for context length, which reflects their comprehensive context awareness and consistently produces superior results. In Upsonic, our memory system adeptly handles complex workflows, delivering highly personalized outcomes. It seamlessly remembers prior tasks and preferences, ensuring optimal performance. You can confidently set up memory settings within AgentConfiguration, leveraging the agent_id system. Agents, each with their distinct personality, are uniquely identified by their ID, ensuring precise and efficient execution.
 
 ```python
-instance.client.add_mcp_server("websearch", "npx", ["-y", "@mzxrai/mcp-webresearch"])
+
+agent_id_ = "product_manager_agent"
+
+product_manager_agent = AgentConfiguration(
+    agent_id_=agent_id_
+    ...
+    memory=True
+)
+
+```
+
+### Knowledge Base
+
+The Knowledge Base provides private or public content to your agent to ensure accurate and context-aware tasks. For example, you can provide a PDF and URL to the agent. The Knowledge Base seamlessly integrates with the Task System, requiring these sources. 
+
+```python
+from upsonic import KnowledgeBase
+
+my_knowledge_base = KnowledgeBase(files=["sample.pdf", "<https://upsonic.ai>"])
+
+task1 = Task(
+    ...
+    context[my_knowledge_base]
+)
+
+```
+
+### Connecting Task Outputs
+
+Chaining tasks is essential for complex workflows where one task's output informs the next. You can assign a task to another as context for performing the job. This will prepare the response of task 1 for task 2.
+
+```python
+
+task1 = Task(
+    ...
+)
+
+task2 = Task(
+    ...
+    context[task1]
+)
+
+```
+
+### Be an Human
+
+Agent and characterization are based on LLM itself. We are trying to characterize the developer, PM, and marketing. Sometimes, we need to give a human name. This is required for tasks like sending personalized messages or outreach. For these requirements, we have name and contact settings in AgentConfiguration. The agent will feel like a human as you specify.
+
+```python
+product_manager_agent = AgentConfiguration(
+    ...
+    name="John Walk"
+    contact="john@upsonic.ai"
+)
+
+```
+
+### Multi Agent
+
+Distribute tasks effectively across agents with our automated task distribution mechanism. This tool matches tasks based on the relationship between agent and task, ensuring collaborative problem-solving across agents and tasks. 
+
+```python
+client.multi_agent([agent1, agent2], [task1, task2])
+```
+
+### Reliable Computer Use
+Computer use can able to human task like humans, mouse move, mouse click, typing and scrolling and etc. So you can build tasks over non-API systems. It can help your linkedin cases, internal tools. Computer use is supported by only Claude for now.
+
+```python
+
+from upsonic.client.tools import ComputerUse
+
+...
+
+tools = [ComputerUse]
+...
+
 ```
 
 
+<br>
+<br>
+<br>
+<br>
 
-  <a href="#">
-    <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/ba590bf8-6059-4cb6-8c4e-6d105ce4edd2" alt="Logo"  >
-  </a>
+### Coming Soon
 
-
-
-
-## Contributors
-
-<a href="https://github.com/upsonic/gpt-computer-assistant/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=upsonic/gpt-computer-assistant" />
-</a>
+- **Dockerized Server Deploy**
+- **Refrection**
+- **Verifiers**

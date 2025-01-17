@@ -1,0 +1,32 @@
+# publish.yml
+
+name: "Publish"
+
+on:
+  release:
+    types: ["published"]
+
+jobs:
+  run:
+    name: "Build and publish release"
+    runs-on: ubuntu-latest
+    environment: pypi
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Run UV Sync
+        run: |
+          uv sync
+
+      - name: Build
+        run: uv build
+
+      - name: Publish
+        run: uv publish -t ${{ secrets.THE_PYPI_TOKEN }}

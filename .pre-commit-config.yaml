@@ -1,0 +1,25 @@
+repos:
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    # uv version.
+    rev: 0.5.14
+    hooks:
+      # Update the uv lockfile
+      - id: uv-lock
+        always_run: true
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    # uv version.
+    rev: 0.5.14
+    hooks:
+      - id: uv-sync
+        always_run: true
+
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: uv run pytest tests/server/
+        language: python
+        pass_filenames: false
+        always_run: true

@@ -1,0 +1,93 @@
+name: Unit Tests
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  server-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.12'
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xvfb python3-tk python3-dev scrot
+
+    - name: Install UV
+      run: |
+        pip install uv
+
+    - name: Run UV Sync
+      run: |
+        uv sync --all-groups --all-extras
+
+    - name: Set Environment Variables
+      run: |
+        echo "AZURE_OPENAI_ENDPOINT=${{ secrets.AZURE_OPENAI_ENDPOINT }}" >> $GITHUB_ENV
+        echo "AZURE_OPENAI_API_VERSION=${{ secrets.AZURE_OPENAI_API_VERSION }}" >> $GITHUB_ENV
+        echo "AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }}" >> $GITHUB_ENV
+
+    - name: Run Server Tests
+      run: |
+        # Start Xvfb
+        Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+        # Export display for GUI applications
+        export DISPLAY=:99
+        # Wait for Xvfb to start
+        sleep 3
+        # Run the tests
+        uv run run_tools_server.py & uv run run_main_server.py & sleep 10 && uv run pytest tests/server/
+
+
+  client-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.12'
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xvfb python3-tk python3-dev scrot
+
+    - name: Install UV
+      run: |
+        pip install uv
+
+    - name: Run UV Sync
+      run: |
+        uv sync --all-groups --all-extras
+
+    - name: Set Environment Variables
+      run: |
+        echo "AZURE_OPENAI_ENDPOINT=${{ secrets.AZURE_OPENAI_ENDPOINT }}" >> $GITHUB_ENV
+        echo "AZURE_OPENAI_API_VERSION=${{ secrets.AZURE_OPENAI_API_VERSION }}" >> $GITHUB_ENV
+        echo "AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }}" >> $GITHUB_ENV
+
+
+    - name: Run Client Tests
+      run: |
+        # Start Xvfb
+        Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+        # Export display for GUI applications
+        export DISPLAY=:99
+        # Wait for Xvfb to start
+        sleep 3
+        # Run the tests
+        uv run run_tools_server.py & uv run run_main_server.py & sleep 10 && uv run pytest tests/server/

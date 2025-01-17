@@ -1,0 +1,70 @@
+[project]
+name = "upsonic"
+version = "0.35.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Onur ULUSOY", email = "onur@upsonic.co" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "cloudpickle>=3.1.0",
+    "dill>=0.3.9",
+    "httpx>=0.27.2",
+    "pickledb==0.9.2",
+    "psutil==6.1.1",
+    "pydantic>=2.10.4",
+    "rich>=13.9.4",
+    "sentry-sdk[opentelemetry]>=2.19.2",
+    "toml>=0.10.2",
+    "uv>=0.5.20",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+
+[tool.uv]
+default-groups = ["dev"]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.14.1",
+    "pre-commit>=4.0.1",
+    "pytest>=8.3.4",
+    "pytest-asyncio>=0.25.1",
+]
+
+
+[project.optional-dependencies]
+server = [
+    "fastapi>=0.115.6",
+    "mcp[cli]>=1.2.0",
+    "pydantic-ai>=0.0.17",
+    "python-dotenv>=1.0.1",
+    "uvicorn>=0.34.0",
+    "beautifulsoup4>=4.12.3",
+    "boto3>=1.35.99",
+    "botocore>=1.35.99",
+    "google>=3.0.0",
+    "markitdown>=0.0.1a3",
+    "matplotlib>=3.10.0",
+    "pyautogui>=0.9.54",
+    "python-multipart>=0.0.20",
+    "requests>=2.32.3",
+]
+
+
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple/"
+publish-url = "https://upload.pypi.org/legacy/"
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+
+

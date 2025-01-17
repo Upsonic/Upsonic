@@ -1,29 +1,122 @@
 name: "Test Publish"
 
 on:
-
   workflow_dispatch:
 
 jobs:
-  run:
-    name: "Build and publish test release"
+
+  generate_version:
+    name: "Generate Random Version"
+    runs-on: ubuntu-latest
+    outputs:
+      random_version: ${{ steps.set_version.outputs.random_version }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Install Poetry
+        run: pip install poetry>=2.0.0
+
+      - name: Generate Randomized Alpha Version
+        id: set_version
+        run: |
+          BASE_VERSION=$(poetry version | awk '{print $2}')
+          RANDOM_VERSION="${BASE_VERSION}a$(date +%s)"
+          echo "Generated Version: $RANDOM_VERSION"
+          echo "random_version=$RANDOM_VERSION" >> $GITHUB_OUTPUT
+
+  pypi:
+    name: "Build and Publish Test Release"
+    needs: generate_version
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
+      - name: Install uv and Dependencies
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
-      - name: Run UV Sync
+      - name: dev
+        run: pip install poetry>=2.0.0
+
+      - name: Set Version from generate_version
         run: |
-          uv sync
+          poetry version ${{ needs.generate_version.outputs.random_version }}
 
       - name: Build
         run: uv build
 
       - name: Publish to TestPyPI
-        run: uv publish --index testpypi -t ${{ secrets.TEST_THE_PYPI_TOKEN }} 
+        run: uv publish -t ${{ secrets.THE_PYPI_TOKEN }}
+
+  build_docker:
+    name: "Build and Publish for AMD"
+    needs: generate_version
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          platforms: linux/amd64
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and Publish Docker Images
+        env:
+          VERSION: ${{ needs.generate_version.outputs.random_version }}
+        run: |
+
+          cd ..
+
+          cp -r gpt-computer-assistant Upsonic
+
+          docker buildx build --platform linux/amd64 -f Upsonic/Dockerfile --push -t upsonic/server_test:$VERSION \
+          --cache-to type=gha,mode=max \
+          --cache-from type=gha .
+
+  build_docker_arm:
+    name: "Build and Publish for ARM"
+    needs: generate_version
+    runs-on: armlinux
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          platforms: linux/arm64
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and Publish Docker Images for ARM
+        env:
+          VERSION: ${{ needs.generate_version.outputs.random_version }}
+        run: |
+
+          cd ..
+          cp -r gpt-computer-assistant Upsonic
+
+          docker buildx build --platform linux/arm64 -f Upsonic/Dockerfile --push -t upsonic/server_test:$VERSION-ARM64 \
+          --cache-to type=gha,mode=max \
+          --cache-from type=gha .
