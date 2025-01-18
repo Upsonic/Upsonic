@@ -19,7 +19,7 @@ class AgentConfiguration(BaseModel):
 
     sub_task: bool = True
 
-    retries: int = 1
+    retries: int = 5
 
     memory: bool = False
 

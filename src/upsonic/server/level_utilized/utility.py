@@ -1,4 +1,5 @@
 import inspect
+import traceback
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.models.anthropic import AnthropicModel
@@ -104,31 +105,41 @@ def agent_creator(
 
         context_string = ""
         if context is not None:
+            if not isinstance(context, list):
+                context = [context]
+
             if isinstance(context, list):
                 for each in context:
-                    the_response_format = None
-                    try:
-                        the_response_format = each.response_format.model_json_schema()
-                    except:
-                        pass
-                    the_response = None
-                    try:
-                        the_response = each.response
-                    except:
-                        pass
-                    context_string += f"The context is: {each} {the_response} {the_response_format}"
-            else:
-                the_response_format = None
-                try:
-                    the_response_format = context.response_format.model_json_schema()
-                except:
-                    pass
-                the_response = None
-                try:
-                    the_response = context.response
-                except:
-                    pass
-                context_string = f"The context is: {context} {the_response} {the_response_format}"
+
+                    from ...client.level_two.agent import Characterization
+                    from ...client.level_two.agent import OtherTask
+                    from ...client.tasks.tasks import Task
+                    from ...client.knowledge_base.knowledge_base import KnowledgeBase
+                    type_string = type(each).__name__
+
+                    if type_string == Characterization.__name__:
+                        context_string += f"\n\nThis is your character ```character {each.model_dump()}```"
+                    elif type_string == OtherTask.__name__:
+                        context_string += f"\n\nContexts from old tasks: ```old_task {each.task} {each.result}```"
+                    elif type_string == Task.__name__:
+                        response = None
+                        try:
+                            response = each.response.dict()
+                        except:
+                            try:
+                                response = each.response.model_json_schema()
+                            except:
+                                response = each.response
+                                
+                        context_string += f"\n\nContexts from old tasks: ```old_task {each.description} {response}```   "
+                    else:
+                        context_string += f"\n\nContexts ```context {each}```"
+
+
+
+
+
+
 
         system_prompt_ = ()
 
@@ -137,7 +148,7 @@ def agent_creator(
         elif context_string != "":
             system_prompt_ = f"You are a helpful assistant. User want to add an old task context to the task. The context is: {context_string}"
         
-        print("system_prompt", system_prompt)
+        print("system_prompt", system_prompt_)
 
 
         roulette_agent = Agent(

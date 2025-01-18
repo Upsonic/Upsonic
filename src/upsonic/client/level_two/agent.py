@@ -29,9 +29,33 @@ from ..level_utilized.utility import context_serializer, response_format_seriali
 from ...storage.caching import save_to_cache_with_expiry, get_from_cache_with_expiry
 
 
+class SearchResult(ObjectResponse):
+    any_customers: bool
+    products: List[str]
+    services: List[str]
+    potential_competitors: List[str]
+class CompanyObjective(ObjectResponse):
+    objective: str
+    goals: List[str]
+    state: str
+class HumanObjective(ObjectResponse):
+    job_title: str
+    job_description: str
+    job_goals: List[str]
+    
 
 
+class Characterization(ObjectResponse):
+    website_content: Union[SearchResult, None]
+    company_objective: Union[CompanyObjective, None]
+    human_objective: Union[HumanObjective, None]
+    name_of_the_human_of_tasks: str = None
+    contact_of_the_human_of_tasks: str = None
 
+
+class OtherTask(ObjectResponse):
+    task: str
+    result: Any
 
 
 
@@ -186,11 +210,7 @@ class Agent:
     def create_characterization(self, agent_configuration: AgentConfiguration, llm_model: str = None):
         tools = ["google", "read_website"]
 
-        class SearchResult(ObjectResponse):
-            any_customers: bool
-            products: List[str]
-            services: List[str]
-            potential_competitors: List[str]
+
 
 
         search_task = Task(description=f"Make a search for {agent_configuration.company_url}", tools=tools, response_format=SearchResult)
@@ -198,10 +218,7 @@ class Agent:
         self.call(search_task, llm_model=llm_model)
 
 
-        class CompanyObjective(ObjectResponse):
-            objective: str
-            goals: List[str]
-            state: str
+
 
 
         company_objective_task = Task(description=f"Make a characterization for {agent_configuration.company_url}", tools=tools, response_format=CompanyObjective, context=search_task)
@@ -209,23 +226,14 @@ class Agent:
         self.call(company_objective_task, llm_model=llm_model)
 
 
-        class HumanObjective(ObjectResponse):
-            job_title: str
-            job_description: str
-            job_goals: List[str]
-    
+
 
         human_objective_task = Task(description=f"Make a characterization for {agent_configuration.job_title}", tools=tools, response_format=HumanObjective, context=[search_task, company_objective_task])
 
         self.call(human_objective_task, llm_model=llm_model)
 
 
-        class Characterization(ObjectResponse):
-            website_content: Union[SearchResult, None]
-            company_objective: Union[CompanyObjective, None]
-            human_objective: Union[HumanObjective, None]
-            name_of_the_human_of_tasks: str = None
-            contact_of_the_human_of_tasks: str = None
+
 
 
         total_character = Characterization(website_content=search_task.response, company_objective=company_objective_task.response, human_objective=human_objective_task.response, name_of_the_human_of_tasks=agent_configuration.name, contact_of_the_human_of_tasks=agent_configuration.contact)
@@ -273,25 +281,43 @@ class Agent:
         
         the_task = task
 
+        is_it_sub_task = False
+        shared_context = []
+
         if agent_configuration.sub_task:
             sub_tasks = self.multiple(task, llm_model)
-
-
+            is_it_sub_task = True
+            print("AGENT SİDE")
             for each in sub_tasks:
+                print("Each: ", type(each))
 
-                if isinstance(each.context, list):
-                    each.context.append(the_characterization)
-                else:
-                    each.context = [the_characterization]
+
+
 
 
             the_task = sub_tasks
-        else:
-            if isinstance(task.context, list):
-                task.context.append(the_characterization)
-            else:
-                task.context = [the_characterization]
+    
 
+
+
+        if not isinstance(the_task, list):
+            the_task = [the_task]
+
+
+        for each in the_task:
+            if not isinstance(each.context, list):
+                each.context = [each.context]
+
+
+        last_task = []
+        for each in the_task:
+            if isinstance(each.context, list):
+                last_task.append(each)
+        the_task = last_task
+
+
+        for each in the_task:
+            each.context.append(the_characterization)
 
         # Add knowledge base to the context for each task
         if knowledge_base:
@@ -301,36 +327,38 @@ class Agent:
                         each.context.append(knowledge_base)
                     else:
                         each.context = [knowledge_base]
-            else:
-                if the_task.context:
-                    the_task.context.append(knowledge_base)
-                else:
-                    the_task.context = [knowledge_base]
 
 
         if agent_configuration.tools:
             if isinstance(the_task, list):
                 for each in the_task:
                     each.tools = agent_configuration.tools
-            else:
-                the_task.tools = agent_configuration.tools
+
         
+
 
         results = []    
         if isinstance(the_task, list):
             for each in the_task:
+                if is_it_sub_task:
+                    if shared_context:
+                        each.context += shared_context
+
+
                 result = self.agent_(agent_configuration, each, llm_model=llm_model)
                 results += result
-        else:
-            result = self.agent_(agent_configuration, the_task, llm_model=llm_model)
-            results += result
+
+                if is_it_sub_task:
+                    
+                    shared_context.append(OtherTask(task=each.description, result=each.response))
+
+                print("Shared context: ", shared_context)
 
 
-        if agent_configuration.sub_task:
-            original_task._response = the_task[-1].response
+        print("The task: ", the_task)
 
-        else:
-            original_task._response = the_task.response
+        original_task._response = the_task[-1].response
+
 
         
         total_time = 0
@@ -360,26 +388,38 @@ class Agent:
         
         class SubTask(ObjectResponse):
             description: str
-
+            sources_can_be_used: List[str]
+            required_output: str
+            tools: List[str]
         class SubTaskList(ObjectResponse):
             sub_tasks: List[SubTask]
 
-        prompt = "You are a helpful assistant. User have an general task. You need to generate a list of sub tasks. Each sub task should be a Actionable step of main task. Do not duplicate your self each next task can see older tasks. You need to return a list of sub tasks. You should say to agent to make this job not making plan again and again. We need actions. If  If you have tools that can help you for the task specify them in the task. At the latest task focus on to use older task contexts and returning the wide answer."
 
-        sub_tasker = Task(description=prompt, response_format=SubTaskList, context=task, tools=task.tools)
+
+
+        prompt = "You are a helpful assistant. User have an general task. You need to generate a list of sub tasks. Each sub task should be a Actionable step of main task. You need to return a list of sub tasks. You should say to agent to make this job not making plan again and again. We need actions. If  If you have tools that can help you for the task specify them in the task. If there is an context its the user want to see so create tasks to fill them all. Create rich tasks for every user requested field."
+
+        sub_tasker = Task(description=prompt, response_format=SubTaskList, context=[task, task.response_format], tools=task.tools)
 
         self.call(sub_tasker, llm_model)
 
         sub_tasks = []
-        previous_tasks = []
-        for each in sub_tasker.response.sub_tasks:
-            new_task = Task(description=each.description)
-            new_task.tools = task.tools
-            new_task.context = previous_tasks.copy()  # Only include previous tasks in context
-            sub_tasks.append(new_task)
-            previous_tasks.append(new_task)
 
-        sub_tasks[-1].response_format = task.response_format
+        for each in sub_tasker.response.sub_tasks:
+            print(each)
+            new_task = Task(description=each.description+ " " + each.required_output + " " + str(each.sources_can_be_used) + " " + str(each.tools))
+            new_task.tools = task.tools
+            sub_tasks.append(new_task)
+
+
+
+
+        end_task = Task(description=f"Use the all context to make a final task.", response_format=task.response_format)
+        sub_tasks.append(end_task)
+
+
+        print("Sub tasks: ", sub_tasks)
+
 
         return sub_tasks
 
