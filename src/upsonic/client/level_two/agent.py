@@ -287,9 +287,7 @@ class Agent:
         if agent_configuration.sub_task:
             sub_tasks = self.multiple(task, llm_model)
             is_it_sub_task = True
-            print("AGENT SİDE")
-            for each in sub_tasks:
-                print("Each: ", type(each))
+
 
 
 
@@ -352,10 +350,10 @@ class Agent:
                     
                     shared_context.append(OtherTask(task=each.description, result=each.response))
 
-                print("Shared context: ", shared_context)
 
 
-        print("The task: ", the_task)
+
+
 
         original_task._response = the_task[-1].response
 
@@ -406,7 +404,7 @@ class Agent:
         sub_tasks = []
 
         for each in sub_tasker.response.sub_tasks:
-            print(each)
+
             new_task = Task(description=each.description+ " " + each.required_output + " " + str(each.sources_can_be_used) + " " + str(each.tools))
             new_task.tools = task.tools
             sub_tasks.append(new_task)
@@ -418,7 +416,6 @@ class Agent:
         sub_tasks.append(end_task)
 
 
-        print("Sub tasks: ", sub_tasks)
 
 
         return sub_tasks
