@@ -165,7 +165,7 @@ Define the task and the agent, then combine them and run. The Upsonic Server wil
 ```python
 client.agent(product_manager_agent, task1)
 
-print(task1.response)
+print(task1.response.news_list)
 
 ```
 <br>
