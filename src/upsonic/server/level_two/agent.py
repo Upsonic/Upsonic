@@ -66,6 +66,7 @@ class AgentManager:
                     print("Error", e)
 
         
+        feedback = ""
 
 
         satisfied = False
@@ -73,6 +74,11 @@ class AgentManager:
         total_response_tokens = 0
         total_retries = 0
         while not satisfied:
+            
+            #adding_feedback
+            message[0]["text"] = message[0]["text"] + "\n\n" + feedback
+
+
             result = roulette_agent.run_sync(message, message_history=message_history)
             total_request_tokens += result.usage().request_tokens
             total_response_tokens += result.usage().response_tokens
@@ -90,6 +96,7 @@ class AgentManager:
                 try:
                     class Satisfying(ObjectResponse):
                         satisfied: bool
+                        feedback: str
                         
                     from ...client.level_two.agent import OtherTask
 
@@ -97,13 +104,15 @@ class AgentManager:
 
 
                     satify_result = Call.gpt_4o("Check if the result is satisfied", response_format=Satisfying, context=other_task)
-
+                    feedback = satify_result["result"].feedback
       
 
                     if satify_result["result"].satisfied:
                         satisfied = True
                     else:
                         satisfied = False
+
+                    
                 except Exception as e:
                     traceback.print_exc()
 

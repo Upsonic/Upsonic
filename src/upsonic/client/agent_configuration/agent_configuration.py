@@ -19,7 +19,7 @@ class AgentConfiguration(BaseModel):
 
     sub_task: bool = True
 
-    retries: int = 5
+    reflection: bool = False
 
     memory: bool = False
 
@@ -29,6 +29,13 @@ class AgentConfiguration(BaseModel):
     knowledge_base: KnowledgeBase = None
     tools: List[Any] = []
 
+
+    @property
+    def retries(self):
+        if self.reflection:
+            return 5
+        else:
+            return 1
 
 
     @property
