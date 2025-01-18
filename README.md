@@ -1,4 +1,4 @@
-# We do NOT and WILL not have any Crypto Projects, they are a complete SCAM
+!!! We do NOT and WILL not have any Crypto Projects, they are a complete SCAM !!!
 
 
 
