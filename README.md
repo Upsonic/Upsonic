@@ -55,7 +55,7 @@ Upsonic offers a cutting-edge enterprise-ready framework where you can orchestra
 ## Installation
 
 ```bash
-pip install 'upsonic[server]'==0.35.0a1737218956
+pip install 'upsonic[server]'==0.35.0a1737227112
 
 ```
 <br>
