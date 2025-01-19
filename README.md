@@ -290,5 +290,4 @@ product_manager_agent = AgentConfiguration(
 ### Coming Soon
 
 - **Dockerized Server Deploy**
-- **Refrection**
-- **Verifiers**
+- **Verifiers For Computer Use**
