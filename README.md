@@ -1,9 +1,20 @@
-
-
+<img src="https://github.com/user-attachments/assets/10a3a9ca-1f39-410c-ac48-a7365de589d9" >
 <br>
 <br>
-
-
+  <p>
+    <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/badge/Discord-Join?style=social&logo=discord" width=200></a>
+    .
+    <a href="https://x.com/upsonicai"><img alt="Static Badge" src="https://img.shields.io/badge/X_App-Join?style=social&logo=x" width=160></a>
+    .
+    <a href="https://trendshift.io/repositories/10584" target="_blank"><img src="https://trendshift.io/api/badge/repositories/10584" alt="unclecode%2Fcrawl4ai | Trendshift" style="width: 250px; height: 55px;"     
+  </p>
+  <p>
+  <a href="https://www.python.org/">
+  <img src="https://img.shields.io/badge/Made%20with-Python-1f425f.svg" alt="Made_with_python">
+  </a>
+  .
+  <img src="https://static.pepy.tech/personalized-badge/gpt-computer-assistant?period=total&units=international_system&left_color=grey&right_color=blue&left_text=PyPI%20Downloads" alt="pypi_downloads">
+  </p>
 
 
 # What is Upsonic?
