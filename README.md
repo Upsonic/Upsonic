@@ -260,16 +260,6 @@ product_manager_agent = AgentConfiguration(
 ```
 
 
-### Reflection
-LLM's by their nature oriented to finish your process. By the way its mean sometimes you can get empty result. Its effect your business logic and your application progress. We support reflection mechanism for that to check the result is staisfying and if not give a feedback. So you can use the reflection for preventing blank messages and other things.
-
-```python
-product_manager_agent = AgentConfiguration(
-    ...
-    reflection=True
-)
-
-```
 
 
 ### Compress Context
