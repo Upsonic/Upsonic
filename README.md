@@ -251,6 +251,37 @@ tools = [ComputerUse]
 ### Reflection
 LLM's by their nature oriented to finish your process. By the way its mean sometimes you can get empty result. Its effect your business logic and your application progress. We support reflection mechanism for that to check the result is staisfying and if not give a feedback. So you can use the reflection for preventing blank messages and other things.
 
+```python
+product_manager_agent = AgentConfiguration(
+    ...
+    reflection=True
+)
+
+```
+
+
+### Reflection
+LLM's by their nature oriented to finish your process. By the way its mean sometimes you can get empty result. Its effect your business logic and your application progress. We support reflection mechanism for that to check the result is staisfying and if not give a feedback. So you can use the reflection for preventing blank messages and other things.
+
+```python
+product_manager_agent = AgentConfiguration(
+    ...
+    reflection=True
+)
+
+```
+
+
+### Compress Context
+The context windows can be small as in OpenAI models. In this kind of situations we have a mechanism that compresses the message, system_message and the contexts. If you are working with situations like deepsearching or writing a long content and giving it as context of another task. The compress_context is full fit with you. This mechanism will only work in context overflow situations otherwise everything is just normal.
+
+```python
+product_manager_agent = AgentConfiguration(
+    ...
+    compress_context=True
+)
+
+```
 
 <br>
 <br>
