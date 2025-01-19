@@ -38,12 +38,155 @@ def tool_wrapper(func: Callable) -> Callable:
     return wrapper
 
 
+def summarize_text(text: str, llm_model: Any, chunk_size: int = 100000, max_size: int = 300000) -> str:
+    """Base function to summarize any text by splitting into chunks and summarizing each."""
+    # Return early if text is None or empty
+    if text is None:
+        return ""
+    
+    if not isinstance(text, str):
+        try:
+            text = str(text)
+        except:
+            return ""
+
+    if not text:
+        return ""
+
+    # If text is already under max_size, return it
+    if len(text) <= max_size:
+        return text
+
+    # Adjust chunk size based on model
+    if "gpt" in str(llm_model).lower():
+        # OpenAI has a 1M character limit, we'll use a much smaller chunk size to be safe
+        chunk_size = min(chunk_size, 100000)  # 100K per chunk for OpenAI
+    elif "claude" in str(llm_model).lower():
+        chunk_size = min(chunk_size, 200000)  # 200K per chunk for Claude
+    
+    try:
+        print(f"Original text length: {len(text)}")
+        
+        # If text is extremely long, do an initial aggressive truncation
+        if len(text) > 2000000:  # If over 2M characters
+            text = text[:2000000]  # Take first 2M characters
+            print("Text was extremely long, truncated to 2M characters")
+        
+        chunks = [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
+        print(f"Number of chunks: {len(chunks)}")
+        
+        model = agent_creator(response_format=str, tools=[], context=None, llm_model=llm_model, system_prompt=None)
+        if isinstance(model, dict) and "status_code" in model:
+            print(f"Error creating model: {model}")
+            return text[:max_size]
+        
+        # Process chunks in smaller batches if there are too many
+        batch_size = 5
+        summarized_chunks = []
+        
+        for batch_start in range(0, len(chunks), batch_size):
+            batch_end = min(batch_start + batch_size, len(chunks))
+            batch = chunks[batch_start:batch_end]
+            
+            for i, chunk in enumerate(batch):
+                chunk_num = batch_start + i + 1
+                try:
+                    print(f"Processing chunk {chunk_num}/{len(chunks)}, length: {len(chunk)}")
+                    
+                    # Create a more focused prompt for better summarization
+                    prompt = (
+                        "Please provide an extremely concise summary of the following text. "
+                        "Focus only on the most important points and key information. "
+                        "Be as brief as possible while retaining critical meaning:\n\n"
+                    )
+                    
+                    message = [{"type": "text", "text": prompt + chunk}]
+                    result = model.run_sync(message)
+                    
+                    if result and hasattr(result, 'data') and result.data:
+                        # Ensure the summary isn't too long
+                        summary = result.data[:max_size//len(chunks)]
+                        summarized_chunks.append(summary)
+                    else:
+                        print(f"Warning: Empty or invalid result for chunk {chunk_num}")
+                        # Include a shorter truncated version as fallback
+                        summarized_chunks.append(chunk[:500] + "...")
+                except Exception as e:
+                    print(f"Error summarizing chunk {chunk_num}: {str(e)}")
+                    # Include a shorter truncated version as fallback
+                    summarized_chunks.append(chunk[:500] + "...")
+
+        # Combine all summarized chunks
+        combined_summary = "\n\n".join(summarized_chunks)
+        
+        # If still too long, recursively summarize with smaller chunks
+        if len(combined_summary) > max_size:
+            print(f"Combined summary still too long ({len(combined_summary)} chars), recursively summarizing...")
+            return summarize_text(
+                combined_summary, 
+                llm_model, 
+                chunk_size=max(5000, chunk_size//4),  # Reduce chunk size more aggressively
+                max_size=max_size
+            )
+            
+        print(f"Final summary length: {len(combined_summary)}")
+        return combined_summary
+    except Exception as e:
+        traceback.print_exc()
+        print(f"Error in summarize_text: {str(e)}")
+        # If all else fails, return a truncated version
+        return text[:max_size]
+
+def summarize_message_prompt(message_prompt: str, llm_model: Any) -> str:
+    """Summarizes the message prompt to reduce its length while preserving key information."""
+    print("\n\n\n****************Summarizing message prompt****************\n\n\n")
+    if message_prompt is None:
+        return ""
+    
+    try:
+        # Use a smaller max size for message prompts
+        max_size = 100000  # 100K for messages
+        summarized_message_prompt = summarize_text(message_prompt, llm_model, max_size=max_size)
+        if summarized_message_prompt is None:
+            return ""
+        print(f"Summarized message prompt length: {len(summarized_message_prompt)}")
+        return summarized_message_prompt
+    except Exception as e:
+        print(f"Error in summarize_message_prompt: {str(e)}")
+        try:
+            return str(message_prompt)[:100000] if message_prompt else ""
+        except:
+            return ""
+
+def summarize_system_prompt(system_prompt: str, llm_model: Any) -> str:
+    """Summarizes the system prompt to reduce its length while preserving key information."""
+    print("\n\n\n****************Summarizing system prompt****************\n\n\n")
+    if system_prompt is None:
+        return ""
+    
+    try:
+        # Use a smaller max size for system prompts
+        max_size = 100000  # 100K for system prompts
+        summarized_system_prompt = summarize_text(system_prompt, llm_model, max_size=max_size)
+        if summarized_system_prompt is None:
+            return ""
+        print(f"Summarized system prompt length: {len(summarized_system_prompt)}")
+        return summarized_system_prompt
+    except Exception as e:
+        print(f"Error in summarize_system_prompt: {str(e)}")
+        try:
+            return str(system_prompt)[:100000] if system_prompt else ""
+        except:
+            return ""
+
+
 def agent_creator(
         response_format: BaseModel = str,
         tools: list[str] = [],
         context: Any = None,
         llm_model: str = "gpt-4o",
-        system_prompt: Optional[Any] = None 
+        system_prompt: Optional[Any] = None,
+        context_compress: bool = False
     ) -> ResultData:
 
         if llm_model == "gpt-4o":
@@ -131,7 +274,7 @@ def agent_creator(
                             except:
                                 response = each.response
                                 
-                        context_string += f"\n\nContexts from old tasks: ```old_task {each.description} {response}```   "
+                        context_string += f"\n\nContexts from old tasks: ```old_task {response}```   "
                     else:
                         context_string += f"\n\nContexts ```context {each}```"
 
@@ -148,7 +291,7 @@ def agent_creator(
         elif context_string != "":
             system_prompt_ = f"You are a helpful assistant. User want to add an old task context to the task. The context is: {context_string}"
         
-        print("system_prompt", system_prompt_)
+
 
 
         roulette_agent = Agent(

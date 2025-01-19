@@ -23,9 +23,10 @@ class AgentRequest(BaseModel):
     llm_model: Optional[Any] = "gpt-4o"
     system_prompt: Optional[Any] = None
     retries: Optional[Any] = 1
+    context_compress: Optional[Any] = False
     memory: Optional[Any] = False
 
-def run_sync_agent(agent_id, prompt, response_format, tools, context, llm_model, system_prompt, retries, memory):
+def run_sync_agent(agent_id, prompt, response_format, tools, context, llm_model, system_prompt, retries, context_compress, memory):
     # Create a new event loop for this thread
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -39,6 +40,7 @@ def run_sync_agent(agent_id, prompt, response_format, tools, context, llm_model,
             llm_model=llm_model,
             system_prompt=system_prompt,
             retries=retries,
+            context_compress=context_compress,
             memory=memory
         )
     finally:
@@ -103,6 +105,7 @@ async def call_agent(request: AgentRequest):
                 request.llm_model,
                 request.system_prompt,
                 request.retries,
+                request.context_compress,   
                 request.memory
             )
 

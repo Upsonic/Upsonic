@@ -1,5 +1,3 @@
-
-
 import traceback
 import openai
 from pydantic import BaseModel
@@ -7,15 +5,11 @@ from pydantic_ai.result import ResultData
 
 from typing import Any, Optional
 
-
-
 from ...storage.configuration import Configuration
-
-
 
 from ..level_utilized.memory import save_temporary_memory, get_temporary_memory
 
-from ..level_utilized.utility import agent_creator
+from ..level_utilized.utility import agent_creator, summarize_system_prompt, summarize_message_prompt
 
 from ...client.tasks.tasks import Task
 from ...client.tasks.task_response import ObjectResponse
@@ -33,6 +27,7 @@ class AgentManager:
         llm_model: str = "gpt-4o",
         system_prompt: Optional[Any] = None,
         retries: int = 1,
+        context_compress: bool = False,
         memory: bool = False
     ) -> ResultData:
 
@@ -80,14 +75,53 @@ class AgentManager:
             message[0]["text"] = message[0]["text"] + "\n\n" + feedback
 
 
+            print("message: ", message)
+
             try:
                 result = roulette_agent.run_sync(message, message_history=message_history)
             except openai.BadRequestError as e:
                 str_e = str(e)
-                if "400" in str_e:
-                    return {"status_code": 402, "detail": "The model context window is small for this task. Please try to make the task shorter."}
+                if "400" in str_e and context_compress:
+                    # Try to compress both system prompt and message prompt
+                    try:
+                        compressed_prompt = summarize_system_prompt(system_prompt, llm_model)
+                        if compressed_prompt:
+                            print("compressed_prompt", compressed_prompt)
+                        message[0]["text"] = summarize_message_prompt(message[0]["text"], llm_model)
+                        if message[0]["text"]:
+                            print("compressed_message", message[0]["text"])
+
+                        roulette_agent = agent_creator(
+                            response_format=response_format,
+                            tools=tools,
+                            context=context,
+                            llm_model=llm_model,
+                            system_prompt=compressed_prompt,
+                            context_compress=False  # Prevent infinite recursion
+                        )
+                        # Also compress the message prompt
+                        
+
+                        print("agent side")
+                        print("len of message", len(message))
+                        print("len of message[0]", len(message[0]["text"]))
+                        print("message", message)
+                        try:
+                            print("len of message_history", len(message_history))
+                        except:
+                            pass
+                        
+                        result = roulette_agent.run_sync(message, message_history=message_history)
+                    except Exception:
+                        traceback.print_exc()
+                        return {"status_code": 402, "detail": "Failed to compress context window. Please try to make the task shorter."}
+                elif "400" in str_e:
+                    return {"status_code": 402, "detail": "The model context window is small for this task. Please try to make the task shorter or enable context compression."}
                 else:
                     return {"status_code": 403, "detail": "Error processing Agent request: " + str(e)}
+                
+
+                
             total_request_tokens += result.usage().request_tokens
             total_response_tokens += result.usage().response_tokens
 

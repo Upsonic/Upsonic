@@ -1,18 +1,14 @@
-
-
 from pydantic import BaseModel
 from pydantic_ai.result import ResultData
 
 from typing import Any, Optional
 
-
-
 from ...storage.configuration import Configuration
 
+from ..level_utilized.utility import agent_creator, summarize_message_prompt
 
-
-
-from ..level_utilized.utility import agent_creator
+import openai
+import traceback
 
 class CallManager:
     def gpt_4o(
@@ -48,7 +44,7 @@ class CallManager:
                         print("Error", e)
 
         
-            print("Message", message)
+
 
 
             result = roulette_agent.run_sync(message)
@@ -58,5 +54,21 @@ class CallManager:
             return {"status_code": 200, "result": result.data, "usage": {"input_tokens": usage.request_tokens, "output_tokens": usage.response_tokens}}
         except AttributeError:
             return roulette_agent
+        except openai.BadRequestError as e:
+            str_e = str(e)
+            if "400" in str_e:
+                # Try to compress the message prompt
+                try:
+                    message[0]["text"] = summarize_message_prompt(message[0]["text"], llm_model)
+                    result = roulette_agent.run_sync(message)
+                except Exception:
+                    traceback.print_exc()
+                    return {"status_code": 402, "detail": "Failed to compress message. Please try to make the task shorter."}
+            else:
+                return {"status_code": 403, "detail": "Error processing request: " + str(e)}
+
+        usage = result.usage()
+
+        return {"status_code": 200, "result": result.data, "usage": {"input_tokens": usage.request_tokens, "output_tokens": usage.response_tokens}}
 
 Call = CallManager()

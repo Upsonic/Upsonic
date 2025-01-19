@@ -157,6 +157,7 @@ class Agent:
                     "llm_model": llm_model,
                     "system_prompt": None,
                     "retries": agent_configuration.retries,
+                    "context_compress": agent_configuration.context_compress,
                     "memory": agent_configuration.memory
                 }
 
