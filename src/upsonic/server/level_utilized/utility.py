@@ -127,7 +127,7 @@ def agent_creator(
                             response = each.response.dict()
                         except:
                             try:
-                                response = each.response.model_json_schema()
+                                response = each.response.model_dump()
                             except:
                                 response = each.response
                                 
