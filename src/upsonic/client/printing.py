@@ -111,7 +111,7 @@ def agent_end(result: Any, llm_model: str, response_format: str, start_time: flo
     table.add_row("")
     table.add_row("[bold]Response Format:[/bold]", f"{response_format}")
     
-    table.add_row("[bold]Tools Used:[/bold]", f"{tool_count} [bold]Context Used:[/bold]", f"{context_count}")
+    table.add_row("[bold]Tools:[/bold]", f"{tool_count} [bold]Context Used:[/bold]", f"{context_count}")
     table.add_row("[bold]Estimated Cost:[/bold]", f"{get_estimated_cost(usage['input_tokens'], usage['output_tokens'], llm_model)}$")
     time_taken = end_time - start_time
     time_taken_str = f"{time_taken:.2f} seconds"

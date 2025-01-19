@@ -103,6 +103,11 @@ def tools_serializer(tools_):
 class NoAPIKeyException(Exception):
     pass
 
+class ContextWindowTooSmallException(Exception):
+    pass
+
+class InvalidRequestException(Exception):
+    pass
 
 class UnsupportedLLMModelException(Exception):
     pass
@@ -116,6 +121,12 @@ def error_handler(result):
     if result["status_code"] == 401:
         raise NoAPIKeyException(result["detail"])
     
+    if result["status_code"] == 402:
+        raise ContextWindowTooSmallException(result["detail"])
+
+    if result["status_code"] == 403:
+        raise InvalidRequestException(result["detail"])
+
     if result["status_code"] == 400:
         raise UnsupportedLLMModelException(result["detail"])
 

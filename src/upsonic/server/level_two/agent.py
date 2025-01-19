@@ -1,6 +1,7 @@
 
 
 import traceback
+import openai
 from pydantic import BaseModel
 from pydantic_ai.result import ResultData
 
@@ -79,7 +80,14 @@ class AgentManager:
             message[0]["text"] = message[0]["text"] + "\n\n" + feedback
 
 
-            result = roulette_agent.run_sync(message, message_history=message_history)
+            try:
+                result = roulette_agent.run_sync(message, message_history=message_history)
+            except openai.BadRequestError as e:
+                str_e = str(e)
+                if "400" in str_e:
+                    return {"status_code": 402, "detail": "The model context window is small for this task. Please try to make the task shorter."}
+                else:
+                    return {"status_code": 403, "detail": "Error processing Agent request: " + str(e)}
             total_request_tokens += result.usage().request_tokens
             total_response_tokens += result.usage().response_tokens
 
