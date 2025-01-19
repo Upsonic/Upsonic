@@ -222,14 +222,14 @@ class Agent:
 
 
 
-        company_objective_task = Task(description=f"Make a characterization for {agent_configuration.company_url}", tools=tools, response_format=CompanyObjective, context=search_task)
+        company_objective_task = Task(description=f"Generate the company objective for {agent_configuration.company_url}", tools=tools, response_format=CompanyObjective, context=search_task)
 
         self.call(company_objective_task, llm_model=llm_model)
 
 
 
 
-        human_objective_task = Task(description=f"Make a characterization for {agent_configuration.job_title}", tools=tools, response_format=HumanObjective, context=[search_task, company_objective_task])
+        human_objective_task = Task(description=f"Generate the human objective for {agent_configuration.job_title}", tools=tools, response_format=HumanObjective, context=[search_task, company_objective_task])
 
         self.call(human_objective_task, llm_model=llm_model)
 
