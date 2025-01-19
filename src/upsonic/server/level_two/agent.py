@@ -1,4 +1,5 @@
 import traceback
+import anthropic
 import openai
 from pydantic import BaseModel
 from pydantic_ai.result import ResultData
@@ -79,7 +80,7 @@ class AgentManager:
 
             try:
                 result = roulette_agent.run_sync(message, message_history=message_history)
-            except openai.BadRequestError as e:
+            except (openai.BadRequestError, anthropic.BadRequestError) as e:
                 str_e = str(e)
                 if "400" in str_e and context_compress:
                     # Try to compress both system prompt and message prompt

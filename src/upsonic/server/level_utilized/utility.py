@@ -145,7 +145,7 @@ def summarize_message_prompt(message_prompt: str, llm_model: Any) -> str:
     
     try:
         # Use a smaller max size for message prompts
-        max_size = 100000  # 100K for messages
+        max_size = 50000  # 100K for messages
         summarized_message_prompt = summarize_text(message_prompt, llm_model, max_size=max_size)
         if summarized_message_prompt is None:
             return ""
@@ -154,7 +154,7 @@ def summarize_message_prompt(message_prompt: str, llm_model: Any) -> str:
     except Exception as e:
         print(f"Error in summarize_message_prompt: {str(e)}")
         try:
-            return str(message_prompt)[:100000] if message_prompt else ""
+            return str(message_prompt)[:50000] if message_prompt else ""
         except:
             return ""
 
@@ -166,7 +166,7 @@ def summarize_system_prompt(system_prompt: str, llm_model: Any) -> str:
     
     try:
         # Use a smaller max size for system prompts
-        max_size = 100000  # 100K for system prompts
+        max_size = 50000  # 100K for system prompts
         summarized_system_prompt = summarize_text(system_prompt, llm_model, max_size=max_size)
         if summarized_system_prompt is None:
             return ""
@@ -175,7 +175,7 @@ def summarize_system_prompt(system_prompt: str, llm_model: Any) -> str:
     except Exception as e:
         print(f"Error in summarize_system_prompt: {str(e)}")
         try:
-            return str(system_prompt)[:100000] if system_prompt else ""
+            return str(system_prompt)[:50000] if system_prompt else ""
         except:
             return ""
 
