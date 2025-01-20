@@ -35,10 +35,10 @@ class Call:
             if isinstance(task, list):
                 for each in task:
                     the_result = self.call_(each, llm_model)
-                    call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"])
+                    call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
             else:
                 the_result = self.call_(task, llm_model)
-                call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"])
+                call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
         except Exception as e:
 
             try:

@@ -80,12 +80,12 @@ class Agent:
                     the_result = self.send_agent_request(agent_configuration, each, llm_model)
                     the_result["time"] = time.time() - start_time
                     results.append(the_result)
-                    agent_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_count"], the_result["context_count"])
+                    agent_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_count"], the_result["context_count"], self.debug)
             else:
                 the_result = self.send_agent_request(agent_configuration, task, llm_model)
                 the_result["time"] = time.time() - start_time
                 results.append(the_result)
-                agent_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_count"], the_result["context_count"])
+                agent_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_count"], the_result["context_count"], self.debug)
         except Exception as e:
 
             try:

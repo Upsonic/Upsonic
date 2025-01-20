@@ -26,7 +26,7 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
 
     def __init__(self, url: str, debug: bool = False):
 
-
+        self.debug = debug
 
         if "0.0.0.0" in url:
             self.server_type = "Local(Docker)"

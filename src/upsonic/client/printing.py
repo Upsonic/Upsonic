@@ -40,7 +40,7 @@ def connected_to_server(server_type: str, status: str):
     table.add_row("[bold]Server Type:[/bold]", f"[yellow]{server_type}[/yellow]")
     table.add_row("[bold]Connection Status:[/bold]", status_text)
 
-    table.width = 40
+    table.width = 60
 
     # Wrap the table in a Panel that also expands full width
     panel = Panel(
@@ -56,16 +56,17 @@ def connected_to_server(server_type: str, status: str):
 
     spacing()
 
-def call_end(result: Any, llm_model: str, response_format: str, start_time: float, end_time: float, usage: dict):
+def call_end(result: Any, llm_model: str, response_format: str, start_time: float, end_time: float, usage: dict, debug: bool = False):
     table = Table(show_header=False, expand=True, box=None)
-    table.width = 40
+    table.width = 60
 
     table.add_row("[bold]LLM Model:[/bold]", f"{llm_model}")
     # Add spacing
     table.add_row("")
     result_str = str(result)
     # Limit result to 370 characters
-    result_str = result_str[:370]
+    if not debug:
+        result_str = result_str[:370]
     # Add ellipsis if result is truncated
     if len(result_str) < len(str(result)):
         result_str += "[bold white]...[/bold white]"
@@ -92,16 +93,17 @@ def call_end(result: Any, llm_model: str, response_format: str, start_time: floa
 
 
 
-def agent_end(result: Any, llm_model: str, response_format: str, start_time: float, end_time: float, usage: dict, tool_count: int, context_count: int):
+def agent_end(result: Any, llm_model: str, response_format: str, start_time: float, end_time: float, usage: dict, tool_count: int, context_count: int, debug: bool = False):
     table = Table(show_header=False, expand=True, box=None)
-    table.width = 40
+    table.width = 60
 
     table.add_row("[bold]LLM Model:[/bold]", f"{llm_model}")
     # Add spacing
     table.add_row("")
     result_str = str(result)
     # Limit result to 370 characters
-    result_str = result_str[:370]
+    if not debug:
+        result_str = result_str[:370]
     # Add ellipsis if result is truncated
     if len(result_str) < len(str(result)):
         result_str += "[bold white]...[/bold white]"
@@ -130,7 +132,7 @@ def agent_end(result: Any, llm_model: str, response_format: str, start_time: flo
 
 def agent_total_cost(total_input_tokens: int, total_output_tokens: int, total_time: float, llm_model: str):
     table = Table(show_header=False, expand=True, box=None)
-    table.width = 40
+    table.width = 60
 
     table.add_row("[bold]Estimated Cost:[/bold]", f"{get_estimated_cost(total_input_tokens, total_output_tokens, llm_model)}$")
     table.add_row("[bold]Time Taken:[/bold]", f"{total_time:.2f} seconds")
