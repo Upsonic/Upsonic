@@ -69,7 +69,7 @@ client.default_llm_model = "gpt-4o"
 ```
 
 <details>
-<summary><h2>Other LLM's</h2></summary>
+<summary><h4>Other LLM's</h4></summary>
 
 - claude-3-5-sonnet
 
