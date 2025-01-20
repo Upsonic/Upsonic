@@ -203,7 +203,7 @@ result = task1.response
 
 for i in result.news_list:
     print()
-    print("Blog Suggestion")
+    print("News list")
     print("Title: ", i.title)
     print("Body: ", i.body)
     print("URL: ", i.url)
