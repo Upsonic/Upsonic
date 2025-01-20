@@ -33,7 +33,14 @@ class AgentManager:
     ) -> ResultData:
 
         
-        roulette_agent = agent_creator(response_format, tools, context, llm_model, system_prompt)
+        roulette_agent = agent_creator(
+            response_format=response_format, 
+            tools=tools, 
+            context=context, 
+            llm_model=llm_model, 
+            system_prompt=system_prompt,
+            context_compress=context_compress
+        )
 
         roulette_agent.retries = retries
         

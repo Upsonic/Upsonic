@@ -179,6 +179,26 @@ def summarize_system_prompt(system_prompt: str, llm_model: Any) -> str:
         except:
             return ""
 
+def summarize_context_string(context_string: str, llm_model: Any) -> str:
+    """Summarizes the context string to reduce its length while preserving key information."""
+    print("\n\n\n****************Summarizing context string****************\n\n\n")
+    if context_string is None or context_string == "":
+        return ""
+    
+    try:
+        # Use a smaller max size for context strings
+        max_size = 50000  # 50K for context strings
+        summarized_context = summarize_text(context_string, llm_model, max_size=max_size)
+        if summarized_context is None:
+            return ""
+        print(f"Summarized context string length: {len(summarized_context)}")
+        return summarized_context
+    except Exception as e:
+        print(f"Error in summarize_context_string: {str(e)}")
+        try:
+            return str(context_string)[:50000] if context_string else ""
+        except:
+            return ""
 
 def agent_creator(
         response_format: BaseModel = str,
@@ -192,22 +212,17 @@ def agent_creator(
         if llm_model == "gpt-4o":
             openai_api_key = Configuration.get("OPENAI_API_KEY")
             if not openai_api_key:
-
                 return {"status_code": 401, "detail": "No API key provided. Please set OPENAI_API_KEY in your configuration."}
             model = OpenAIModel(llm_model, api_key=openai_api_key)
         elif llm_model == "claude-3-5-sonnet":
             anthropic_api_key = Configuration.get("ANTHROPIC_API_KEY")
             if not anthropic_api_key:
-
                 return {"status_code": 401, "detail": "No API key provided. Please set ANTHROPIC_API_KEY in your configuration."}
             model = AnthropicModel("claude-3-5-sonnet-latest", api_key=anthropic_api_key)
-
-        
         elif llm_model == "claude-3-5-sonnet-aws":
             aws_access_key_id = Configuration.get("AWS_ACCESS_KEY_ID")
             aws_secret_access_key = Configuration.get("AWS_SECRET_ACCESS_KEY")
             aws_region = Configuration.get("AWS_REGION")
-
 
             if not aws_access_key_id or not aws_secret_access_key or not aws_region:
                 return {"status_code": 401, "detail": "No AWS credentials provided. Please set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION in your configuration."}
@@ -243,7 +258,6 @@ def agent_creator(
             model = OpenAIModel('gpt-4o', openai_client=model)
 
         else:
-
             return {"status_code": 400, "detail": f"Unsupported LLM model: {llm_model}"}
 
         context_string = ""
@@ -253,7 +267,6 @@ def agent_creator(
 
             if isinstance(context, list):
                 for each in context:
-
                     from ...client.level_two.agent import Characterization
                     from ...client.level_two.agent import OtherTask
                     from ...client.tasks.tasks import Task
@@ -266,6 +279,7 @@ def agent_creator(
                         context_string += f"\n\nContexts from old tasks: ```old_task {each.task} {each.result}```"
                     elif type_string == Task.__name__:
                         response = None
+                        description = each.description
                         try:
                             response = each.response.dict()
                         except:
@@ -274,15 +288,13 @@ def agent_creator(
                             except:
                                 response = each.response
                                 
-                        context_string += f"\n\nContexts from old tasks: ```old_task {response}```   "
+                        context_string += f"\n\nContexts from old tasks: ```old_task {description} {response}```   "
                     else:
                         context_string += f"\n\nContexts ```context {each}```"
 
-
-
-
-
-
+        # Compress context string if enabled
+        if context_compress and context_string:
+            context_string = summarize_context_string(context_string, llm_model)
 
         system_prompt_ = ()
 
