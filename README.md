@@ -132,7 +132,7 @@ class News(ObjectResponse):
     url: str
     tags: list[str]
 
-class response_format(ObjectResponse):
+class ResponseFormat(ObjectResponse):
     news_list: list[News]
 
 ```
@@ -143,7 +143,7 @@ Our Framework officially supports Model Context Protocol (MCP) and custom tools.
 
 ```python
 @client.mcp()
-class hackernews_mcp:
+class HackerNewsMCP:
     command = "uvx"
     args = ["mcp-hn"]
 
@@ -152,7 +152,7 @@ class MyTools:
     def our_server_status():
         return True
 
-tools = [Search, MyTools] # GitHub
+tools = [Search, MyTools] # HackerNewsMCP
 
 ```
 
@@ -163,7 +163,7 @@ After defining these terms, you are ready to generate your first task. This stru
 This simplicity is a hallmark of Upsonic.
 
 ```python
-task1 = Task(description=description, response_format=response_format, tools=tools)
+task1 = Task(description=description, response_format=ResponseFormat, tools=tools)
 
 ```
 
@@ -193,7 +193,15 @@ Define the task and the agent, then combine them and run. The Upsonic Server wil
 ```python
 client.agent(product_manager_agent, task1)
 
-print(task1.response.news_list)
+result = task1.response
+
+for i in result.news_list:
+    print()
+    print("Blog Suggestion")
+    print("Title: ", i.title)
+    print("Body: ", i.body)
+    print("URL: ", i.url)
+    print("Tags: ", i.tags)
 
 ```
 <br>
