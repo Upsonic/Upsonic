@@ -1,19 +1,26 @@
 <img src="https://github.com/user-attachments/assets/10a3a9ca-1f39-410c-ac48-a7365de589d9" >
 <br>
 <br>
+<a name="readme-top"></a>
+
+<div align="center">
+
+
+</div>
+
+
   <p>
-    <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/badge/Discord-Join?style=social&logo=discord" width=200></a>
-    .
-    <a href="https://x.com/upsonicai"><img alt="Static Badge" src="https://img.shields.io/badge/X_App-Join?style=social&logo=x" width=160></a>
-    .
-    <a href="https://trendshift.io/repositories/10584" target="_blank"><img src="https://trendshift.io/api/badge/repositories/10584" alt="unclecode%2Fcrawl4ai | Trendshift" style="width: 250px; height: 55px;"     
-  </p>
-  <p>
-  <a href="https://www.python.org/">
-  <img src="https://img.shields.io/badge/Made%20with-Python-1f425f.svg" alt="Made_with_python">
-  </a>
-  .
-  <img src="https://static.pepy.tech/personalized-badge/gpt-computer-assistant?period=total&units=international_system&left_color=grey&right_color=blue&left_text=PyPI%20Downloads" alt="pypi_downloads">
+    <a href="https://discord.gg/u22sunnvtQ">
+    <img src="https://img.shields.io/badge/Discord-Join-7289DA?logo=discord&logoColor=white">
+    </a>
+    <a href="https://twitter.com/upsonicai">
+    <img src="https://img.shields.io/twitter/follow/upsonicai?style=social">
+    </a>
+    <a href="https://trendshift.io/repositories/10584" target="_blank"><img src="https://trendshift.io/api/badge/repositories/10584" alt="unclecode%2Fcrawl4ai | Trendshift" style="width: 100px; height: 20px;"     
+    <a href="https://www.python.org/">
+    <img src="https://img.shields.io/badge/Made%20with-Python-1f425f.svg" alt="Made_with_python">
+    </a>
+    <img src="https://static.pepy.tech/personalized-badge/gpt-computer-assistant?period=total&units=international_system&left_color=grey&right_color=blue&left_text=PyPI%20Downloads" alt="pypi_downloads">
   </p>
 
 
@@ -139,8 +146,7 @@ class ResponseFormat(ObjectResponse):
 
 ### 3) Tool Integration
 
-Our Framework officially supports Model Context Protocol (MCP) and custom tools. You can use hundreds of MCP servers at https://glama.ai/mcp/servers or https://smithery.ai/ We also support Python functions inside a class as a tool. You can easily generate your integrations with that.
-
+Our Framework officially supports [Model Context Protocol (MCP)](https://www.claudemcp.com/) and custom tools. You can use hundreds of MCP servers at https://glama.ai/mcp/servers or https://smithery.ai/ We also support Python functions inside a class as a tool. You can easily generate your integrations with that.
 ```python
 @client.mcp()
 class HackerNewsMCP:
@@ -188,7 +194,7 @@ product_manager_agent = AgentConfiguration(
 
 ## Running Tasks
 
-Define the task and the agent, then combine them and run. The Upsonic Server will prepare and run the task. This standard method simplifies the use of agents in your SaaS applications or your new vertical AI agents.
+Define the task and the agent, then combine them and run. The Upsonic Server will prepare and run the task. This standard method simplifies the use of agents in your SaaS applications or your new vertical AI agents. 🤖 You are now completely ready to run your first agent.
 
 ```python
 client.agent(product_manager_agent, task1)
@@ -332,7 +338,7 @@ product_manager_agent = AgentConfiguration(
 
 ### Telemetry
 
-We are using Sentry for telemetry. You can disable it by setting the UPSONIC_TELEMETRY environment variable to false.
+We use anonymous telemetry to collect usage data. We do this to focus our developments on more accurate points. You can disable it by setting the UPSONIC_TELEMETRY environment variable to false.
 
 ```python
 import os
