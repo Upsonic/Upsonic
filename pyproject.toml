@@ -1,7 +1,7 @@
 [project]
 name = "upsonic"
-version = "0.35.0"
-description = "Add your description here"
+version = "0.36.0"
+description = "Task oriented AI agent framework for digital workers and vertical AI agents"
 readme = "README.md"
 authors = [
     { name = "Onur ULUSOY", email = "onur@upsonic.co" }
@@ -18,6 +18,20 @@ dependencies = [
     "sentry-sdk[opentelemetry]>=2.19.2",
     "toml>=0.10.2",
     "uv>=0.5.20",
+    "fastapi>=0.115.6",
+    "mcp[cli]>=1.2.0",
+    "pydantic-ai>=0.0.17",
+    "python-dotenv>=1.0.1",
+    "uvicorn>=0.34.0",
+    "beautifulsoup4>=4.12.3",
+    "boto3>=1.35.99",
+    "botocore>=1.35.99",
+    "google>=3.0.0",
+    "markitdown>=0.0.1a3",
+    "matplotlib>=3.10.0",
+    "pyautogui>=0.9.54",
+    "python-multipart>=0.0.20",
+    "requests>=2.32.3",
 ]
 
 [build-system]
@@ -37,23 +51,6 @@ dev = [
 ]
 
 
-[project.optional-dependencies]
-server = [
-    "fastapi>=0.115.6",
-    "mcp[cli]>=1.2.0",
-    "pydantic-ai>=0.0.17",
-    "python-dotenv>=1.0.1",
-    "uvicorn>=0.34.0",
-    "beautifulsoup4>=4.12.3",
-    "boto3>=1.35.99",
-    "botocore>=1.35.99",
-    "google>=3.0.0",
-    "markitdown>=0.0.1a3",
-    "matplotlib>=3.10.0",
-    "pyautogui>=0.9.54",
-    "python-multipart>=0.0.20",
-    "requests>=2.32.3",
-]
 
 
 

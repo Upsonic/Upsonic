@@ -2291,36 +2291,32 @@ wheels = [
 
 [[package]]
 name = "upsonic"
-version = "0.35.0"
+version = "0.36.0"
 source = { editable = "." }
 dependencies = [
-    { name = "cloudpickle" },
-    { name = "dill" },
-    { name = "httpx" },
-    { name = "pickledb" },
-    { name = "psutil" },
-    { name = "pydantic" },
-    { name = "rich" },
-    { name = "sentry-sdk", extra = ["opentelemetry"] },
-    { name = "toml" },
-    { name = "uv" },
-]
-
-[package.optional-dependencies]
-server = [
     { name = "beautifulsoup4" },
     { name = "boto3" },
     { name = "botocore" },
+    { name = "cloudpickle" },
+    { name = "dill" },
     { name = "fastapi" },
     { name = "google" },
+    { name = "httpx" },
     { name = "markitdown" },
     { name = "matplotlib" },
     { name = "mcp", extra = ["cli"] },
+    { name = "pickledb" },
+    { name = "psutil" },
     { name = "pyautogui" },
+    { name = "pydantic" },
     { name = "pydantic-ai" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "requests" },
+    { name = "rich" },
+    { name = "sentry-sdk", extra = ["opentelemetry"] },
+    { name = "toml" },
+    { name = "uv" },
     { name = "uvicorn" },
 ]
 
@@ -2334,30 +2330,30 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "beautifulsoup4", marker = "extra == 'server'", specifier = ">=4.12.3" },
-    { name = "boto3", marker = "extra == 'server'", specifier = ">=1.35.99" },
-    { name = "botocore", marker = "extra == 'server'", specifier = ">=1.35.99" },
+    { name = "beautifulsoup4", specifier = ">=4.12.3" },
+    { name = "boto3", specifier = ">=1.35.99" },
+    { name = "botocore", specifier = ">=1.35.99" },
     { name = "cloudpickle", specifier = ">=3.1.0" },
     { name = "dill", specifier = ">=0.3.9" },
-    { name = "fastapi", marker = "extra == 'server'", specifier = ">=0.115.6" },
-    { name = "google", marker = "extra == 'server'", specifier = ">=3.0.0" },
+    { name = "fastapi", specifier = ">=0.115.6" },
+    { name = "google", specifier = ">=3.0.0" },
     { name = "httpx", specifier = ">=0.27.2" },
-    { name = "markitdown", marker = "extra == 'server'", specifier = ">=0.0.1a3" },
-    { name = "matplotlib", marker = "extra == 'server'", specifier = ">=3.10.0" },
-    { name = "mcp", extras = ["cli"], marker = "extra == 'server'", specifier = ">=1.2.0" },
+    { name = "markitdown", specifier = ">=0.0.1a3" },
+    { name = "matplotlib", specifier = ">=3.10.0" },
+    { name = "mcp", extras = ["cli"], specifier = ">=1.2.0" },
     { name = "pickledb", specifier = "==0.9.2" },
     { name = "psutil", specifier = "==6.1.1" },
-    { name = "pyautogui", marker = "extra == 'server'", specifier = ">=0.9.54" },
+    { name = "pyautogui", specifier = ">=0.9.54" },
     { name = "pydantic", specifier = ">=2.10.4" },
-    { name = "pydantic-ai", marker = "extra == 'server'", specifier = ">=0.0.17" },
-    { name = "python-dotenv", marker = "extra == 'server'", specifier = ">=1.0.1" },
-    { name = "python-multipart", marker = "extra == 'server'", specifier = ">=0.0.20" },
-    { name = "requests", marker = "extra == 'server'", specifier = ">=2.32.3" },
+    { name = "pydantic-ai", specifier = ">=0.0.17" },
+    { name = "python-dotenv", specifier = ">=1.0.1" },
+    { name = "python-multipart", specifier = ">=0.0.20" },
+    { name = "requests", specifier = ">=2.32.3" },
     { name = "rich", specifier = ">=13.9.4" },
     { name = "sentry-sdk", extras = ["opentelemetry"], specifier = ">=2.19.2" },
     { name = "toml", specifier = ">=0.10.2" },
     { name = "uv", specifier = ">=0.5.20" },
-    { name = "uvicorn", marker = "extra == 'server'", specifier = ">=0.34.0" },
+    { name = "uvicorn", specifier = ">=0.34.0" },
 ]
 
 [package.metadata.requires-dev]
