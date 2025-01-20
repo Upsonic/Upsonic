@@ -10,7 +10,7 @@
 
 
   <p>
-    <a href="https://discord.gg/u22sunnvtQ">
+    <a href="https://discord.gg/dNKGm4dfnR">
     <img src="https://img.shields.io/badge/Discord-Join-7289DA?logo=discord&logoColor=white">
     </a>
     <a href="https://twitter.com/upsonicai">
