@@ -329,8 +329,19 @@ product_manager_agent = AgentConfiguration(
 
 <br>
 <br>
+
+### Telemetry
+
+We are using Sentry for telemetry. You can disable it by setting the UPSONIC_TELEMETRY environment variable to false.
+
+```python
+import os
+os.environ["UPSONIC_TELEMETRY"] = "False"
+```
 <br>
 <br>
+
+
 
 ### Coming Soon
 

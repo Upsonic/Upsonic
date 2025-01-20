@@ -10,6 +10,9 @@ import os
 
 the_dsn = os.getenv("UPSONIC_TELEMETRY", "https://7023ec3e0699da14a8013478e50b9142@o4508336623583232.ingest.us.sentry.io/4508607159599104")
 
+if the_dsn.lower() == "false":
+    the_dsn = ""
+
 sentry_sdk_.init(
     dsn=the_dsn,
     traces_sample_rate=1.0,
