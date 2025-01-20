@@ -213,7 +213,7 @@ for i in result.news_list:
 <br>
 <br>
 
-## Features (Beta)
+## Other Features (Beta)
 
 ### Only One LLM Call
 
