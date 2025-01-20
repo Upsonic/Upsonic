@@ -61,12 +61,49 @@ from upsonic import UpsonicClient, ObjectResponse, Task, AgentConfiguration
 from upsonic.client.tools import Search
 
 # Create an Upsonic client instance
-client = UpsonicClient("devserver")
+client = UpsonicClient("localserver")
 
 client.set_config("OPENAI_API_KEY", "YOUR_API_KEY")
 client.default_llm_model = "gpt-4o"
 
 ```
+
+<details>
+<summary><h2>Other LLM's</h2></summary>
+
+- claude-3-5-sonnet
+
+```python
+
+client.set_config("ANTHROPIC_API_KEY", "YOUR_ANTHROPIC_API_KEY")
+client.default_llm_model = "claude-3-5-sonnet"
+
+```
+
+- gpt-4o-azure
+
+```python
+
+client.set_config("AZURE_OPENAI_ENDPOINT", "YOUR_AZURE_OPENAI_ENDPOINT")
+client.set_config("AZURE_OPENAI_API_VERSION", "YOUR_AZURE_OPENAI_API_VERSION")
+client.set_config("AZURE_OPENAI_API_KEY", "YOUR_AZURE_OPENAI_API_KEY")
+
+client.default_llm_model = "gpt-4o-azure"
+
+```
+
+
+- claude-3-5-sonnet-aws
+
+```python
+
+client.set_config("AWS_ACCESS_KEY_ID", "YOUR_AWS_ACCESS_KEY_ID")
+client.set_config("AWS_SECRET_ACCESS_KEY", "YOUR_AWS_SECRET_ACCESS_KEY")
+client.set_config("AWS_REGION", "YOUR_AWS_REGION")
+
+```
+
+</details>
 
 <br>
 <br>
