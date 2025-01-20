@@ -24,7 +24,7 @@ class Storage:
         """
         from ..trace import sentry_sdk
         with sentry_sdk.start_transaction(op="task", name="Storage.get_config") as transaction:
-            with sentry_sdk.start_span(op="send_request", name="Send request to get config"):
+            with sentry_sdk.start_span(op="send_request"):
                 data = {"key": key}
                 response = self.send_request("/storage/config/get", data=data)
             return response.get("value")
@@ -42,7 +42,7 @@ class Storage:
         """
         from ..trace import sentry_sdk
         with sentry_sdk.start_transaction(op="task", name="Storage.set_config") as transaction:
-            with sentry_sdk.start_span(op="send_request", name="Send request to set config"):
+            with sentry_sdk.start_span(op="send_request"):
                 data = {"key": key, "value": value}
                 response = self.send_request("/storage/config/set", data=data)
             return response.get("message")
