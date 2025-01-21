@@ -45,7 +45,7 @@ class CustomOpenAIAgentModel(OpenAIAgentModel):
             model=self.model_name,
             messages=openai_messages,
             n=1,
-            parallel_tool_calls=False,  # Force parallel_tool_calls to False
+            parallel_tool_calls=False if self.tools else NOT_GIVEN,  # Force parallel_tool_calls to False
             tools=self.tools or NOT_GIVEN,
             tool_choice=tool_choice or NOT_GIVEN,
             stream=stream,
