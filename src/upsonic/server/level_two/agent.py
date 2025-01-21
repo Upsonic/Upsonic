@@ -120,9 +120,9 @@ class AgentManager:
                             pass
                         
                         result = roulette_agent.run_sync(message, message_history=message_history)
-                    except Exception:
+                    except (openai.BadRequestError, anthropic.BadRequestError) as e:
                         traceback.print_exc()
-                        return {"status_code": 402, "detail": "Failed to compress context window. Please try to make the task shorter."}
+                        return {"status_code": 403, "detail": "Error processing Agent request: " + str(e)}
                 elif "400" in str_e:
                     return {"status_code": 402, "detail": "The model context window is small for this task. Please try to make the task shorter or enable context compression."}
                 else:
