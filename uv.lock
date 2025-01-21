@@ -2362,7 +2362,7 @@ requires-dist = [
     { name = "psutil", specifier = "==6.1.1" },
     { name = "pyautogui", specifier = ">=0.9.54" },
     { name = "pydantic", specifier = ">=2.10.4" },
-    { name = "pydantic-ai", specifier = ">=0.0.19" },
+    { name = "pydantic-ai", specifier = "==0.0.19" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "python-multipart", specifier = ">=0.0.20" },
     { name = "requests", specifier = ">=2.32.3" },
