@@ -1,9 +1,11 @@
 import inspect
 import traceback
+import types
+from itertools import chain
 from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIModel, OpenAIAgentModel
 from pydantic_ai.models.anthropic import AnthropicModel
-
+from openai import AsyncOpenAI, NOT_GIVEN
 from openai import AsyncAzureOpenAI
 
 from pydantic import BaseModel
@@ -13,11 +15,64 @@ from functools import wraps
 from typing import Any, Callable, Optional
 from pydantic_ai import RunContext, Tool
 from anthropic import AsyncAnthropicBedrock
+from dataclasses import dataclass
+from openai.types.chat import ChatCompletion, ChatCompletionChunk
+from openai.types import chat
+from collections.abc import AsyncIterator
+from typing import Literal
+from openai import AsyncStream
 
 
 from ...storage.configuration import Configuration
 
 from ...tools_server.function_client import FunctionToolManager
+
+class CustomOpenAIAgentModel(OpenAIAgentModel):
+    async def _completions_create(
+        self, messages: list[Any], stream: bool, model_settings: Any | None
+    ) -> ChatCompletion | AsyncStream[ChatCompletionChunk]:
+        if not self.tools:
+            tool_choice: Literal['none', 'required', 'auto'] | None = None
+        elif not self.allow_text_result:
+            tool_choice = 'required'
+        else:
+            tool_choice = 'auto'
+
+        openai_messages = list(chain(*(self._map_message(m) for m in messages)))
+        model_settings = model_settings or {}
+
+        return await self.client.chat.completions.create(
+            model=self.model_name,
+            messages=openai_messages,
+            n=1,
+            parallel_tool_calls=False,  # Force parallel_tool_calls to False
+            tools=self.tools or NOT_GIVEN,
+            tool_choice=tool_choice or NOT_GIVEN,
+            stream=stream,
+            stream_options={'include_usage': True} if stream else NOT_GIVEN,
+            max_tokens=model_settings.get('max_tokens', NOT_GIVEN),
+            temperature=model_settings.get('temperature', NOT_GIVEN),
+            top_p=model_settings.get('top_p', NOT_GIVEN),
+            timeout=model_settings.get('timeout', NOT_GIVEN),
+        )
+
+class CustomOpenAIModel(OpenAIModel):
+    async def agent_model(
+        self,
+        *,
+        function_tools: list[Any],
+        allow_text_result: bool,
+        result_tools: list[Any],
+    ) -> Any:
+        tools = [self._map_tool_definition(r) for r in function_tools]
+        if result_tools:
+            tools += [self._map_tool_definition(r) for r in result_tools]
+        return CustomOpenAIAgentModel(
+            self.client,
+            self.model_name,
+            allow_text_result,
+            tools,
+        )
 
 def tool_wrapper(func: Callable) -> Callable:
     @wraps(func)
@@ -213,7 +268,10 @@ def agent_creator(
             openai_api_key = Configuration.get("OPENAI_API_KEY")
             if not openai_api_key:
                 return {"status_code": 401, "detail": "No API key provided. Please set OPENAI_API_KEY in your configuration."}
-            model = OpenAIModel(llm_model, api_key=openai_api_key)
+            client = AsyncOpenAI(
+                api_key=openai_api_key,  # This is the default and can be omitted
+            )
+            model = CustomOpenAIModel(llm_model, openai_client=client)
         elif llm_model == "claude-3-5-sonnet":
             anthropic_api_key = Configuration.get("ANTHROPIC_API_KEY")
             if not anthropic_api_key:
@@ -255,7 +313,7 @@ def agent_creator(
                 }
 
             model = AsyncAzureOpenAI(api_version=azure_api_version, azure_endpoint=azure_endpoint, api_key=azure_api_key)
-            model = OpenAIModel('gpt-4o', openai_client=model)
+            model = CustomOpenAIModel('gpt-4o', openai_client=model)
 
         else:
             return {"status_code": 400, "detail": f"Unsupported LLM model: {llm_model}"}
