@@ -48,7 +48,7 @@ def connected_to_server(server_type: str, status: str):
         title="[bold cyan]Upsonic - Server Connection[/bold cyan]",
         border_style="cyan",
         expand=True,  # panel takes the full terminal width
-        width=50  # Adjust as preferred
+        width=70  # Adjust as preferred
     )
 
     # Print the panel (it will fill the entire width, with two columns inside)
@@ -85,7 +85,7 @@ def call_end(result: Any, llm_model: str, response_format: str, start_time: floa
         title="[bold white]Upsonic - Call Result[/bold white]",
         border_style="white",
         expand=True,
-        width=50
+        width=70
     )
 
     console.print(panel)
@@ -123,7 +123,7 @@ def agent_end(result: Any, llm_model: str, response_format: str, start_time: flo
         title="[bold white]Upsonic - Agent Result[/bold white]",
         border_style="white",
         expand=True,
-        width=50
+        width=70
     )
 
     console.print(panel)
@@ -141,7 +141,7 @@ def agent_total_cost(total_input_tokens: int, total_output_tokens: int, total_ti
         title="[bold white]Upsonic - Agent Total Cost[/bold white]",
         border_style="white",
         expand=True,
-        width=50
+        width=70
     )
     console.print(panel)
     spacing()
