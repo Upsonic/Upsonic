@@ -413,8 +413,9 @@ class Agent:
 
 
 
-        end_task = Task(description=f"Use the all context to make a final task.", response_format=task.response_format)
+        end_task = Task(description=task.description, response_format=task.response_format)
         sub_tasks.append(end_task)
+
 
 
 
