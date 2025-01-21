@@ -71,7 +71,7 @@ from upsonic.client.tools import Search
 client = UpsonicClient("localserver")
 
 client.set_config("OPENAI_API_KEY", "YOUR_API_KEY")
-client.default_llm_model = "gpt-4o"
+client.default_llm_model = "openai/gpt-4o"
 
 ```
 
@@ -83,7 +83,7 @@ client.default_llm_model = "gpt-4o"
 ```python
 
 client.set_config("ANTHROPIC_API_KEY", "YOUR_ANTHROPIC_API_KEY")
-client.default_llm_model = "claude-3-5-sonnet"
+client.default_llm_model = "claude/claude-3-5-sonnet"
 
 ```
 
@@ -95,7 +95,7 @@ client.set_config("AZURE_OPENAI_ENDPOINT", "YOUR_AZURE_OPENAI_ENDPOINT")
 client.set_config("AZURE_OPENAI_API_VERSION", "YOUR_AZURE_OPENAI_API_VERSION")
 client.set_config("AZURE_OPENAI_API_KEY", "YOUR_AZURE_OPENAI_API_KEY")
 
-client.default_llm_model = "gpt-4o-azure"
+client.default_llm_model = "azure/gpt-4o"
 
 ```
 
@@ -107,6 +107,8 @@ client.default_llm_model = "gpt-4o-azure"
 client.set_config("AWS_ACCESS_KEY_ID", "YOUR_AWS_ACCESS_KEY_ID")
 client.set_config("AWS_SECRET_ACCESS_KEY", "YOUR_AWS_SECRET_ACCESS_KEY")
 client.set_config("AWS_REGION", "YOUR_AWS_REGION")
+
+client.default_llm_model = "bedrock/claude-3-5-sonnet"
 
 ```
 

@@ -61,9 +61,9 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
 
 
         self.url = url
-        self.default_llm_model = "gpt-4o"
+        self.default_llm_model = "openai/gpt-4o"
         self.url = url
-        self.default_llm_model = "gpt-4o"
+        self.default_llm_model = "openai/gpt-4o"
         if not self.status():
             connected_to_server(self.server_type, "Failed")
             raise ServerStatusException("Failed to connect to the server at initialization.")

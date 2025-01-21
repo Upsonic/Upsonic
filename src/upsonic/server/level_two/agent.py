@@ -25,7 +25,7 @@ class AgentManager:
         response_format: BaseModel = str,
         tools: list[str] = [],
         context: Any = None,
-        llm_model: str = "gpt-4o",
+        llm_model: str = "openai/gpt-4o",
         system_prompt: Optional[Any] = None,
         retries: int = 1,
         context_compress: bool = False,
@@ -60,7 +60,7 @@ class AgentManager:
 
 
 
-        if "claude-3-5-sonnet" in llm_model:
+        if "claude/claude-3-5-sonnet" in llm_model:
             print("Tools", tools)
             if "ComputerUse.*" in tools:
                 try:

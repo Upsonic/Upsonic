@@ -1,8 +1,8 @@
 pricing_data = {
-    "gpt-4o": {"input": 0.0000025, "output": 0.00001},
-    "gpt-4o-azure": {"input": 0.0000025, "output": 0.00001},
-    "claude-3-5-sonnet": {"input": 0.000003, "output": 0.000015},
-    "claude-3-5-sonnet-aws": {"input": 0.000003, "output": 0.000015},
+    "openai/gpt-4o": {"input": 0.0000025, "output": 0.00001},
+    "azure/gpt-4o": {"input": 0.0000025, "output": 0.00001},
+    "claude/claude-3-5-sonnet": {"input": 0.000003, "output": 0.000015},
+    "bedrock/claude-3-5-sonnet": {"input": 0.000003, "output": 0.000015},
 }
 
 def get_estimated_cost(input_tokens: int, output_tokens: int, llm_model: str):

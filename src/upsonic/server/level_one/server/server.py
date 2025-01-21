@@ -19,7 +19,7 @@ class GPT4ORequest(BaseModel):
     response_format: Optional[Any] = []
     tools: Optional[Any] = []
     context: Optional[Any] = None
-    llm_model: Optional[Any] = "gpt-4o"
+    llm_model: Optional[Any] = "openai/gpt-4o"
     system_prompt: Optional[Any] = None
 
 

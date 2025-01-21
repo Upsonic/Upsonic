@@ -259,25 +259,34 @@ def agent_creator(
         response_format: BaseModel = str,
         tools: list[str] = [],
         context: Any = None,
-        llm_model: str = "gpt-4o",
+        llm_model: str = "openai/gpt-4o",
         system_prompt: Optional[Any] = None,
         context_compress: bool = False
     ) -> ResultData:
 
-        if llm_model == "gpt-4o":
+        if llm_model == "openai/gpt-4o" or llm_model == "gpt-4o":
             openai_api_key = Configuration.get("OPENAI_API_KEY")
             if not openai_api_key:
                 return {"status_code": 401, "detail": "No API key provided. Please set OPENAI_API_KEY in your configuration."}
             client = AsyncOpenAI(
                 api_key=openai_api_key,  # This is the default and can be omitted
             )
-            model = CustomOpenAIModel(llm_model, openai_client=client)
-        elif llm_model == "claude-3-5-sonnet":
+
+            model = CustomOpenAIModel('gpt-4o', openai_client=client)
+
+
+
+
+        elif llm_model == "claude/claude-3-5-sonnet" or llm_model == "claude-3-5-sonnet":
             anthropic_api_key = Configuration.get("ANTHROPIC_API_KEY")
             if not anthropic_api_key:
                 return {"status_code": 401, "detail": "No API key provided. Please set ANTHROPIC_API_KEY in your configuration."}
             model = AnthropicModel("claude-3-5-sonnet-latest", api_key=anthropic_api_key)
-        elif llm_model == "claude-3-5-sonnet-aws":
+
+
+
+
+        elif llm_model == "bedrock/claude-3-5-sonnet" or llm_model == "claude-3-5-sonnet-aws":
             aws_access_key_id = Configuration.get("AWS_ACCESS_KEY_ID")
             aws_secret_access_key = Configuration.get("AWS_SECRET_ACCESS_KEY")
             aws_region = Configuration.get("AWS_REGION")
@@ -293,7 +302,11 @@ def agent_creator(
 
             model = AnthropicModel("us.anthropic.claude-3-5-sonnet-20241022-v2:0", anthropic_client=model)
 
-        elif llm_model == "gpt-4o-azure":
+
+
+
+
+        elif llm_model == "azure/gpt-4o" or llm_model == "gpt-4o-azure":
             azure_endpoint = Configuration.get("AZURE_OPENAI_ENDPOINT")
             azure_api_version = Configuration.get("AZURE_OPENAI_API_VERSION")
             azure_api_key = Configuration.get("AZURE_OPENAI_API_KEY")
@@ -402,7 +415,7 @@ def agent_creator(
 
         # Computer use
 
-        if "claude-3-5-sonnet" in llm_model:
+        if "claude/claude-3-5-sonnet" in llm_model:
             print("Tools", tools)
             if "ComputerUse.*" in tools:
                 try:
