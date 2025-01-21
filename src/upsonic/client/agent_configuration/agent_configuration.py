@@ -29,7 +29,7 @@ class AgentConfiguration(BaseModel):
     knowledge_base: KnowledgeBase = None
     tools: List[Any] = []
 
-    context_compress: bool = False
+    context_compress: bool = True
 
 
     @property
