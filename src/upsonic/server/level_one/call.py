@@ -63,7 +63,7 @@ class CallManager:
                     result = roulette_agent.run_sync(message)
                 except Exception:
                     traceback.print_exc()
-                    return {"status_code": 402, "detail": "Failed to compress message. Please try to make the task shorter."}
+                    return {"status_code": 403, "detail": "Failed to compress message. Please try to make the task shorter."}
             else:
                 return {"status_code": 403, "detail": "Error processing request: " + str(e)}
 
