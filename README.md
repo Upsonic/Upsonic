@@ -53,7 +53,7 @@ Upsonic offers a cutting-edge enterprise-ready framework where you can orchestra
 ## Installation
 
 ```bash
-pip install upsonic==0.36.0a1737482268
+pip install upsonic==0.36.0a1737496270
 
 ```
 <br>
