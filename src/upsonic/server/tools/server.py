@@ -74,6 +74,9 @@ async def add_mcp_tool(request: AddMCPToolRequest):
     """
     Endpoint to add a tool.
     """
-    with ToolManager() as tool_client:
-        tool_client.add_mcp_tool(request.name, request.command, request.args, request.env)
-    return {"message": "Tool added successfully"}
+    try:
+        with ToolManager() as tool_client:
+            tool_client.add_mcp_tool(request.name, request.command, request.args, request.env)
+        return {"status_code": 200, "message": "Tool added successfully"}
+    except Exception as e:
+        return {"status_code": 500, "message": f"Error adding tool: This tool seems not okay to use."}

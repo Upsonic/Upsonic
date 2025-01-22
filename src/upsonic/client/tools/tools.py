@@ -1,5 +1,7 @@
 import inspect
 import cloudpickle
+
+from ..level_utilized.utility import error_handler
 cloudpickle.DEFAULT_PROTOCOL = 2
 import dill
 import base64
@@ -97,7 +99,11 @@ class Tools:
 
 
     def add_mcp_tool(self, name: str, command: str, args: List[str], env: Dict[str, str] = {}) -> Dict[str, Any]:
+        print("********* ADDING MCP TOOL *********")
         result = self.send_request("/tools/add_mcp_tool", {"name": name, "command": command, "args": args, "env": env})
+        error_handler(result)
+        print(result)
+        print("********* MCP TOOL ADDED *********")
         return result
 
     def install_library(self, library: str) -> Dict[str, Any]:
