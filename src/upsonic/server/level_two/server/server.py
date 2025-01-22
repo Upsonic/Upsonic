@@ -2,6 +2,8 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional, Union
 import traceback
+
+import pydantic_ai
 from ...api import app, timeout
 from ..agent import Agent
 import asyncio
@@ -114,6 +116,11 @@ async def call_agent(request: AgentRequest):
             result["result"] = cloudpickle.dumps(result["result"])
             result["result"] = base64.b64encode(result["result"]).decode('utf-8')
         return {"result": result, "status_code": 200}
+
+    except pydantic_ai.exceptions.UnexpectedModelBehavior as e:
+        return {"result": {"status_code": 500, "detail": f"Change your response format to a simple format or improve your task description. Your response format is too hard for the model to understand. Try to make it more small parts.", "status_code": 500}}
+    
+
     except Exception as e:
         traceback.print_exc()
 
