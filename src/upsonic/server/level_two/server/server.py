@@ -40,6 +40,7 @@ def run_sync_agent(agent_id, prompt, response_format, tools, context, llm_model,
             llm_model=llm_model,
             system_prompt=system_prompt,
             retries=retries,
+            result_retries=30,
             context_compress=context_compress,
             memory=memory
         )
