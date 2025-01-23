@@ -314,6 +314,11 @@ class Agent:
                     else:
                         each.context = [knowledge_base]
 
+        if task.context:
+            for each in the_task:
+                each.context.append(task.context)
+                
+
 
         if agent_configuration.tools:
             if isinstance(the_task, list):
