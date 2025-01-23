@@ -56,9 +56,52 @@ Upsonic offers a cutting-edge enterprise-ready framework where you can orchestra
 pip install upsonic
 
 ```
+
+
+
+# Basic Example
+
+
+```python
+
+from upsonic import UpsonicClient, ObjectResponse, Task, AgentConfiguration
+from upsonic.client.tools import Search
+
+# Create Client and and Set Configurations
+client = UpsonicClient("localserver")
+client.set_config("OPENAI_API_KEY", "YOUR_API_KEY")
+
+
+
+# Generating Task and Agent
+task1 = Task(description="Research latest news in Anthropic and OpenAI", tools=[Search])
+
+product_manager_agent = AgentConfiguration(
+    job_title="Product Manager",
+    company_url="https://upsonic.ai",
+    company_objective="To build AI Agent framework that helps people get things done",
+)
+
+
+# Run and see the result
+client.agent(product_manager_agent, task1)
+
+result = task1.response
+
+print(result)
+```
+
+
+
 <br>
 <br>
 
+<br>
+<br>
+
+
+
+# Hard Example
 ## Creating a Client
 
 Create a client to manage tools and tasks:
