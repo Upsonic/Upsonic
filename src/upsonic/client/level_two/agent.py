@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from ..tasks.tasks import Task
 
-from ..printing import agent_end, agent_total_cost
+from ..printing import agent_end, agent_total_cost, agent_retry
 
 
 
@@ -27,6 +27,17 @@ from ..level_utilized.utility import context_serializer, response_format_seriali
 
 
 from ...storage.caching import save_to_cache_with_expiry, get_from_cache_with_expiry
+
+
+
+class SubTask(ObjectResponse):
+    description: str
+    sources_can_be_used: List[str]
+    required_output: str
+    tools: List[str]
+class SubTaskList(ObjectResponse):
+    sub_tasks: List[SubTask]
+
 
 
 class SearchResult(ObjectResponse):
@@ -111,10 +122,10 @@ class Agent:
         self,
         agent_configuration: AgentConfiguration,
         task: Task,
-
         llm_model: str = None,
     ) -> Any:
         from ..trace import sentry_sdk
+        from ..level_utilized.utility import CallErrorException
         """
         Call GPT-4 with optional tools and MCP servers.
 
@@ -131,80 +142,73 @@ class Agent:
         if llm_model is None:
             llm_model = self.default_llm_model
 
+        retry_count = 0
+        last_error = None
 
 
-        tools = tools_serializer(task.tools)
+        while retry_count <= agent_configuration.retries:
+            try:
+                if retry_count > 0:
+                    agent_retry(retry_count, agent_configuration.retries)
 
-        response_format = task.response_format
-        with sentry_sdk.start_transaction(op="task", name="Agent.send_agent_request") as transaction:
-            with sentry_sdk.start_span(op="serialize"):
-                # Serialize the response format if it's a type or BaseModel
-                response_format_str = response_format_serializer(task.response_format)
+                tools = tools_serializer(task.tools)
 
+                response_format = task.response_format
+                with sentry_sdk.start_transaction(op="task", name="Agent.send_agent_request") as transaction:
+                    with sentry_sdk.start_span(op="serialize"):
+                        # Serialize the response format if it's a type or BaseModel
+                        response_format_str = response_format_serializer(task.response_format)
 
-                context = context_serializer(task.context, self)
+                        context = context_serializer(task.context, self)
 
+                    with sentry_sdk.start_span(op="prepare_request"):
+                        # Prepare the request data
+                        data = {
+                            "agent_id": agent_configuration.agent_id,
+                            "prompt": task.description,
+                            "response_format": response_format_str,
+                            "tools": tools or [],
+                            "context": context,
+                            "llm_model": llm_model,
+                            "system_prompt": None,
+                            "retries": agent_configuration.retries,
+                            "context_compress": agent_configuration.context_compress,
+                            "memory": agent_configuration.memory
+                        }
 
+                    with sentry_sdk.start_span(op="send_request"):
+    
+                        result = self.send_request("/level_two/agent", data)
 
-            with sentry_sdk.start_span(op="prepare_request"):
-                # Prepare the request data
-                data = {
-                    "agent_id": agent_configuration.agent_id,
-                    "prompt": task.description,
-                    "response_format": response_format_str,
-                    "tools": tools or [],
-                    "context": context,
-                    "llm_model": llm_model,
-                    "system_prompt": None,
-                    "retries": agent_configuration.retries,
-                    "context_compress": agent_configuration.context_compress,
-                    "memory": agent_configuration.memory
-                }
+                        result = result["result"]
 
+                        error_handler(result)
 
+                    with sentry_sdk.start_span(op="deserialize"):
+                        deserialized_result = response_format_deserializer(response_format_str, result)
 
-            with sentry_sdk.start_span(op="send_request"):
-                result = self.send_request("/level_two/agent", data)
+                task._response = deserialized_result["result"]
 
-
-
-                result = result["result"]
-
-
-                error_handler(result)
-
+                response_format_req = None
+                if response_format_str == "str":
+                    response_format_req = response_format_str
+                else:
+                    # Class name
+                    response_format_req = response_format.__name__
                 
+                if context is None:
+                    context = []
 
+                len_of_context = len(task.context) if task.context is not None else 0
 
-            with sentry_sdk.start_span(op="deserialize"):
+                return {"result": deserialized_result["result"], "llm_model": llm_model, "response_format": response_format_req, "usage": deserialized_result["usage"], "tool_count": len(tools), "context_count": len_of_context}
 
-                deserialized_result = response_format_deserializer(response_format_str, result)
-
-
-
-
-        task._response = deserialized_result["result"]
-
-
-
-        response_format_req = None
-        if response_format_str == "str":
-            response_format_req = response_format_str
-        else:
-            # Class name
-            response_format_req = response_format.__name__
-        
-        if context is None:
-            context = []
-
-        len_of_context = len(task.context) if task.context is not None else 0
-
-        return {"result": deserialized_result["result"], "llm_model": llm_model, "response_format": response_format_req, "usage": deserialized_result["usage"], "tool_count": len(tools), "context_count": len_of_context}
-
-
-
-
-
+            except CallErrorException as e:
+                last_error = e
+                retry_count += 1
+                if retry_count > agent_configuration.retries:
+                    raise last_error
+                continue
 
 
 
@@ -385,13 +389,7 @@ class Agent:
 
 
         
-        class SubTask(ObjectResponse):
-            description: str
-            sources_can_be_used: List[str]
-            required_output: str
-            tools: List[str]
-        class SubTaskList(ObjectResponse):
-            sub_tasks: List[SubTask]
+
 
 
 

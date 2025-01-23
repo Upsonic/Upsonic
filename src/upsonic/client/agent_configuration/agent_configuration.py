@@ -37,7 +37,7 @@ class AgentConfiguration(BaseModel):
         if self.reflection:
             return 5
         else:
-            return 1
+            return 2
 
 
     @property

@@ -5,6 +5,8 @@ from rich.table import Table
 from rich.align import Align
 from .price import get_estimated_cost
 
+
+
 console = Console()
 
 def spacing():
@@ -63,15 +65,36 @@ def call_end(result: Any, llm_model: str, response_format: str, start_time: floa
     table.add_row("[bold]LLM Model:[/bold]", f"{llm_model}")
     # Add spacing
     table.add_row("")
-    result_str = str(result)
-    # Limit result to 370 characters
-    if not debug:
-        result_str = result_str[:370]
-    # Add ellipsis if result is truncated
-    if len(result_str) < len(str(result)):
-        result_str += "[bold white]...[/bold white]"
 
-    table.add_row("[bold]Result:[/bold]", f"[green]{result_str}[/green]")
+    from ..client.level_two.agent import SubTaskList
+
+    is_it_subtask = isinstance(result, SubTaskList)
+
+
+    if is_it_subtask:
+        # Print total task count
+        table.add_row(f"[bold]Total Subtasks:[/bold]", f"[yellow]{len(result.sub_tasks)}[/yellow]")
+        table.add_row("")
+        # Print each task as well as bullet list
+        for each in result.sub_tasks:
+            table.add_row(f"[bold]Subtask:[/bold]", f"[green]{each.description}[/green]")
+            table.add_row(f"[bold]Required Output:[/bold]", f"[green]{each.required_output}[/green]")
+            table.add_row(f"[bold]Tools:[/bold]", f"[green]{each.tools}[/green]")
+            table.add_row("")
+    else:
+
+        result_str = str(result)
+        # Limit result to 370 characters
+        if not debug:
+            result_str = result_str[:370]
+        # Add ellipsis if result is truncated
+        if len(result_str) < len(str(result)):
+            result_str += "[bold white]...[/bold white]"
+
+        table.add_row("[bold]Result:[/bold]", f"[green]{result_str}[/green]")
+
+
+
     # Add spacing
     table.add_row("")
     table.add_row("[bold]Response Format:[/bold]", f"{response_format}")
@@ -143,5 +166,22 @@ def agent_total_cost(total_input_tokens: int, total_output_tokens: int, total_ti
         expand=True,
         width=70
     )
+    console.print(panel)
+    spacing()
+
+def agent_retry(retry_count: int, max_retries: int):
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+
+    table.add_row("[bold]Retry Status:[/bold]", f"[yellow]Attempt {retry_count + 1} of {max_retries + 1}[/yellow]")
+    
+    panel = Panel(
+        table,
+        title="[bold yellow]Upsonic - Agent Retry[/bold yellow]",
+        border_style="yellow",
+        expand=True,
+        width=70
+    )
+
     console.print(panel)
     spacing()
