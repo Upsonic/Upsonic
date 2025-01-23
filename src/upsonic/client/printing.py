@@ -66,10 +66,12 @@ def call_end(result: Any, llm_model: str, response_format: str, start_time: floa
     # Add spacing
     table.add_row("")
 
-    from ..client.level_two.agent import SubTaskList
+    from ..client.level_two.agent import SubTaskList, SearchResult, CompanyObjective, HumanObjective
 
     is_it_subtask = isinstance(result, SubTaskList)
-
+    is_it_search = isinstance(result, SearchResult)
+    is_it_company = isinstance(result, CompanyObjective)
+    is_it_human = isinstance(result, HumanObjective)
 
     if is_it_subtask:
         # Print total task count
@@ -81,8 +83,40 @@ def call_end(result: Any, llm_model: str, response_format: str, start_time: floa
             table.add_row(f"[bold]Required Output:[/bold]", f"[green]{each.required_output}[/green]")
             table.add_row(f"[bold]Tools:[/bold]", f"[green]{each.tools}[/green]")
             table.add_row("")
+    elif is_it_search:
+        table.add_row("[bold]Has Customers:[/bold]", f"[green]{'Yes' if result.any_customers else 'No'}[/green]")
+        table.add_row("")
+        table.add_row("[bold]Products:[/bold]")
+        for product in result.products:
+            table.add_row("", f"[green]• {product}[/green]")
+        table.add_row("")
+        table.add_row("[bold]Services:[/bold]")
+        for service in result.services:
+            table.add_row("", f"[green]• {service}[/green]")
+        table.add_row("")
+        table.add_row("[bold]Potential Competitors:[/bold]")
+        for competitor in result.potential_competitors:
+            table.add_row("", f"[yellow]• {competitor}[/yellow]")
+        table.add_row("")
+    elif is_it_company:
+        table.add_row("[bold]Company Objective:[/bold]", f"[blue]{result.objective}[/blue]")
+        table.add_row("")
+        table.add_row("[bold]Goals:[/bold]")
+        for goal in result.goals:
+            table.add_row("", f"[blue]• {goal}[/blue]")
+        table.add_row("")
+        table.add_row("[bold]State:[/bold]", f"[blue]{result.state}[/blue]")
+        table.add_row("")
+    elif is_it_human:
+        table.add_row("[bold]Job Title:[/bold]", f"[magenta]{result.job_title}[/magenta]")
+        table.add_row("")
+        table.add_row("[bold]Job Description:[/bold]", f"[magenta]{result.job_description}[/magenta]")
+        table.add_row("")
+        table.add_row("[bold]Job Goals:[/bold]")
+        for goal in result.job_goals:
+            table.add_row("", f"[magenta]• {goal}[/magenta]")
+        table.add_row("")
     else:
-
         result_str = str(result)
         # Limit result to 370 characters
         if not debug:
@@ -92,8 +126,6 @@ def call_end(result: Any, llm_model: str, response_format: str, start_time: floa
             result_str += "[bold white]...[/bold white]"
 
         table.add_row("[bold]Result:[/bold]", f"[green]{result_str}[/green]")
-
-
 
     # Add spacing
     table.add_row("")

@@ -215,31 +215,14 @@ class Agent:
     def create_characterization(self, agent_configuration: AgentConfiguration, llm_model: str = None):
         tools = ["google", "read_website"]
 
-
-
-
         search_task = Task(description=f"Make a search for {agent_configuration.company_url}", tools=tools, response_format=SearchResult)
-
         self.call(search_task, llm_model=llm_model)
 
-
-
-
-
         company_objective_task = Task(description=f"Generate the company objective for {agent_configuration.company_url}", tools=tools, response_format=CompanyObjective, context=search_task)
-
         self.call(company_objective_task, llm_model=llm_model)
 
-
-
-
         human_objective_task = Task(description=f"Generate the human objective for {agent_configuration.job_title}", tools=tools, response_format=HumanObjective, context=[search_task, company_objective_task])
-
         self.call(human_objective_task, llm_model=llm_model)
-
-
-
-
 
         total_character = Characterization(website_content=search_task.response, company_objective=company_objective_task.response, human_objective=human_objective_task.response, name_of_the_human_of_tasks=agent_configuration.name, contact_of_the_human_of_tasks=agent_configuration.contact)
 
