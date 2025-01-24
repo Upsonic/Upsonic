@@ -38,7 +38,7 @@ Upsonic offers a cutting-edge enterprise-ready framework where you can orchestra
 - **Tool-Calling Server**: Exception-secure tool management with robust server API interactions.
 - **Computer Use Integration**: Execute human-like tasks using Anthropic’s ‘Computer Use’ capabilities.
 - **Easily adding tools:** You can add your custom tools and MCP tools with a single line of code.
-- **Client-server arthitecture**: Production ready stateless enterprise ready system
+- **Client-server architecture**: Production-ready stateless enterprise-ready system
 
 <br>
 <br>
