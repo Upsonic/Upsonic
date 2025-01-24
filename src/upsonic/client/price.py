@@ -3,7 +3,7 @@ pricing_data = {
     "azure/gpt-4o": {"input": 0.0000025, "output": 0.00001},
     "claude/claude-3-5-sonnet": {"input": 0.000003, "output": 0.000015},
     "bedrock/claude-3-5-sonnet": {"input": 0.000003, "output": 0.000015},
-    "deepseek/deepseek-reasoner": {"input": 0.00000055, "output": 0.00000219},
+    "deepseek/deepseek-chat": {"input": 0.00000055, "output": 0.00000219},
 }
 
 def get_estimated_cost(input_tokens: int, output_tokens: int, llm_model: str):

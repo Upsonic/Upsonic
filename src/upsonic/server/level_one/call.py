@@ -61,9 +61,9 @@ class CallManager:
                 try:
                     message[0]["text"] = summarize_message_prompt(message[0]["text"], llm_model)
                     result = roulette_agent.run_sync(message)
-                except Exception:
+                except Exception as e:
                     traceback.print_exc()
-                    return {"status_code": 403, "detail": "Failed to compress message. Please try to make the task shorter."}
+                    return {"status_code": 403, "detail": "Error processing request: " + str(e)}
             else:
                 return {"status_code": 403, "detail": "Error processing request: " + str(e)}
 

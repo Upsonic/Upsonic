@@ -275,13 +275,13 @@ def agent_creator(
             model = CustomOpenAIModel('gpt-4o', openai_client=client)
 
 
-        if llm_model == "deepseek/deepseek-reasoner":
+        if llm_model == "deepseek/deepseek-chat":
             deepseek_api_key = Configuration.get("DEEPSEEK_API_KEY")
             if not deepseek_api_key:
                 return {"status_code": 401, "detail": "No API key provided. Please set DEEPSEEK_API_KEY in your configuration."}
 
             model = OpenAIModel(
-                'deepseek-reasoner',
+                'deepseek-chat',
                 base_url='https://api.deepseek.com',
                 api_key=deepseek_api_key,
             )
