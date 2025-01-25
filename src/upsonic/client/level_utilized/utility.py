@@ -1,4 +1,5 @@
 import copy
+from datetime import datetime
 import dill
 import cloudpickle
 cloudpickle.DEFAULT_PROTOCOL = 2
@@ -15,42 +16,41 @@ def serialize_context(context, client):
     return context
 
 def context_serializer(context, client):
-    if context is not None:
-        copy_of_context = copy.deepcopy(context)
-        
-        if isinstance(copy_of_context, list):
-            for i, each in enumerate(copy_of_context):
-                try:
-                    each.tools = []
-                except:
-                    pass
-                try:
-                    each.response_format = None
-                except:
-                    pass
 
-                copy_of_context[i] = serialize_context(each, client)
-        else:
+    if context is None:
+        context = []
+
+
+    copy_of_context = copy.deepcopy(context)
+
+    if not isinstance(copy_of_context, list):
+        copy_of_context = [copy_of_context]
+    
+
+    # Adding current date time to the context
+    copy_of_context.append(f"Current date and time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+    for i, each in enumerate(copy_of_context):
             try:
-                copy_of_context.tools = []
+                each.tools = []
             except:
                 pass
             try:
-                copy_of_context.response_format = None
+                each.response_format = None
             except:
                 pass
 
-            copy_of_context = serialize_context(copy_of_context, client)
-
-            the_module = dill.detect.getmodule(copy_of_context)
-            if the_module is not None:
-                cloudpickle.register_pickle_by_value(the_module)
+            copy_of_context[i] = serialize_context(each, client)
 
 
-        pickled_context = cloudpickle.dumps(copy_of_context)
-        context = base64.b64encode(pickled_context).decode("utf-8")
-    else:
-        context = None
+    the_module = dill.detect.getmodule(copy_of_context)
+    if the_module is not None:
+        cloudpickle.register_pickle_by_value(the_module)
+
+
+    pickled_context = cloudpickle.dumps(copy_of_context)
+    context = base64.b64encode(pickled_context).decode("utf-8")
+
 
     return context
 
