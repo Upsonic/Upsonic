@@ -71,8 +71,6 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
         connected_to_server(self.server_type, "Established")
 
 
-    def set_default_llm_model(self, llm_model: str):
-        self.default_llm_model = llm_model
 
 
     def status(self) -> bool:

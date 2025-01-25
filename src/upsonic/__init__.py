@@ -12,6 +12,7 @@ from .client.agent_configuration.agent_configuration import AgentConfiguration
 from .client.knowledge_base.knowledge_base import KnowledgeBase
 
 
+from .client.storage.storage import ClientConfig
 
 from pydantic import Field
 
@@ -20,4 +21,4 @@ def hello() -> str:
     return "Hello from upsonic!"
 
 
-__all__ = ["hello", "UpsonicClient", "ObjectResponse", "StrResponse", "IntResponse", "FloatResponse", "BoolResponse", "Task", "StrInListResponse", "AgentConfiguration", "Field", "KnowledgeBase"]
+__all__ = ["hello", "UpsonicClient", "ObjectResponse", "StrResponse", "IntResponse", "FloatResponse", "BoolResponse", "Task", "StrInListResponse", "AgentConfiguration", "Field", "KnowledgeBase", "ClientConfig"]
