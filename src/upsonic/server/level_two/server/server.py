@@ -118,7 +118,7 @@ async def call_agent(request: AgentRequest):
         return {"result": result, "status_code": 200}
 
     except pydantic_ai.exceptions.UnexpectedModelBehavior as e:
-        return {"result": {"status_code": 500, "detail": f"Change your response format to a simple format or improve your task description. Your response format is too hard for the model to understand. Try to make it more small parts.", "status_code": 500}}
+        return {"result": {"status_code": 500, "detail": f"Change your response format to a simple format or improve your task description. Your response format is too hard for the model to understand (Dont use 'dict' like things in your response format, define everything explicitly). Try to make it more small parts.", "status_code": 500}}
     
 
     except Exception as e:
