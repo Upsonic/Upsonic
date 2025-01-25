@@ -9,16 +9,9 @@ from .storage.storage import Storage
 from .tools.tools import Tools
 from .markdown.markdown import Markdown
 from .others.others import Others
+from ..exception import ServerStatusException, TimeoutException
 
 from .printing import connected_to_server
-
-class ServerStatusException(Exception):
-    """Custom exception for server status check failures."""
-    pass
-
-class TimeoutException(Exception):
-    """Custom exception for request timeout."""
-    pass
 
 # Create a base class with url
 class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):

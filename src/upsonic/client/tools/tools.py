@@ -11,12 +11,7 @@ from pydantic import BaseModel
 from functools import wraps
 
 from ..tasks.tasks import Task
-
-class NoAPIKeyException(Exception):
-    pass
-
-class UnsupportedLLMModelException(Exception):
-    pass
+from ...exception import NoAPIKeyException, UnsupportedLLMModelException
 
 class ComputerUse:
     pass

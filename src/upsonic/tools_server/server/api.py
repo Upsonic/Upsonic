@@ -1,12 +1,9 @@
 from fastapi import FastAPI, HTTPException
 import asyncio
 from functools import wraps
+from ...exception import TimeoutException
 
 app = FastAPI()
-
-
-class TimeoutException(Exception):
-    pass
 
 
 async def timeout_handler(duration: float, coro):

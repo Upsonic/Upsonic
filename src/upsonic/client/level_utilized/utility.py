@@ -7,6 +7,13 @@ import base64
 
 from pydantic import BaseModel
 from ..knowledge_base.knowledge_base import KnowledgeBase
+from ...exception import (
+    NoAPIKeyException,
+    ContextWindowTooSmallException,
+    InvalidRequestException,
+    UnsupportedLLMModelException,
+    CallErrorException
+)
 
 
 def serialize_context(context, client):
@@ -98,23 +105,6 @@ def tools_serializer(tools_):
             tools.append(i)
     return tools
 
-
-
-class NoAPIKeyException(Exception):
-    pass
-
-class ContextWindowTooSmallException(Exception):
-    pass
-
-class InvalidRequestException(Exception):
-    pass
-
-class UnsupportedLLMModelException(Exception):
-    pass
-
-
-class CallErrorException(Exception):
-    pass
 
 
 def error_handler(result):

@@ -3,6 +3,7 @@ from dataclasses import dataclass, fields, replace
 from typing import Any
 
 from anthropic.types.beta import BetaToolUnionParam
+from ....exception import ToolError
 
 
 class BaseAnthropicTool(metaclass=ABCMeta):
