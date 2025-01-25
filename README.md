@@ -20,7 +20,7 @@
     <a href="https://www.python.org/">
     <img src="https://img.shields.io/badge/Made%20with-Python-1f425f.svg" alt="Made_with_python">
     </a>
-    <img src="https://static.pepy.tech/personalized-badge/gpt-computer-assistant?period=total&units=international_system&left_color=grey&right_color=blue&left_text=PyPI%20Downloads" alt="pypi_downloads">
+    <img src="https://static.pepy.tech/personalized-badge/upsonic?period=total&units=international_system&left_color=grey&right_color=blue&left_text=PyPI%20Downloads" alt="pypi_downloads">
   </p>
 
 
