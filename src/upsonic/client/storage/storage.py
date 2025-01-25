@@ -76,7 +76,6 @@ class Storage:
 
 
     def config(self, config: ClientConfig):
-        print(config)
         # Parse it and use set_config to set it 
         # Exclude the default_llm_model and None values
         for key, value in config.model_dump().items():
