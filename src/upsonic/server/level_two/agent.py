@@ -151,7 +151,7 @@ class AgentManager:
                     other_task = OtherTask(task=prompt, result=result.data)
 
 
-                    satify_result = Call.gpt_4o("Check if the result is satisfied", response_format=Satisfying, context=other_task)
+                    satify_result = Call.gpt_4o("Check if the result is satisfied", response_format=Satisfying, context=other_task, llm_model=llm_model)
                     feedback = satify_result["result"].feedback
       
 
