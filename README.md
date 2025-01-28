@@ -121,6 +121,16 @@ client.default_llm_model = "openai/gpt-4o"
 <details>
 <summary><h4>Other LLM's</h4></summary>
 
+- deepseek-chat
+
+```python
+
+client.set_config("DEEPSEEK_API_KEY", "YOUR_DEEPSEEK_API_KEY")
+
+client.default_llm_model = "deepseek/deepseek-chat"
+
+```
+
 - claude-3-5-sonnet
 
 ```python
