@@ -302,7 +302,7 @@ The Knowledge Base provides private or public content to your agent to ensure ac
 ```python
 from upsonic import KnowledgeBase
 
-my_knowledge_base = KnowledgeBase(files=["sample.pdf", "<https://upsonic.ai>"])
+my_knowledge_base = KnowledgeBase(files=["sample.pdf", "https://upsonic.ai"])
 
 task1 = Task(
     ...
