@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - '**'
+    paths:
+      - 'src/**'
+      - '.github/**'
 
 jobs:
   server-tests:
