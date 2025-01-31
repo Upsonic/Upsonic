@@ -274,6 +274,16 @@ def agent_creator(
 
             model = CustomOpenAIModel('gpt-4o', openai_client=client)
 
+        elif llm_model == "openai/o3-mini":
+            openai_api_key = Configuration.get("OPENAI_API_KEY")
+            if not openai_api_key:
+                return {"status_code": 401, "detail": "No API key provided. Please set OPENAI_API_KEY in your configuration."}
+            client = AsyncOpenAI(
+                api_key=openai_api_key,  # This is the default and can be omitted
+            )
+
+            model = CustomOpenAIModel('o3-mini', openai_client=client)
+
 
         elif llm_model == "deepseek/deepseek-chat":
             deepseek_api_key = Configuration.get("DEEPSEEK_API_KEY")

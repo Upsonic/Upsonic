@@ -121,6 +121,16 @@ client.default_llm_model = "openai/gpt-4o"
 <details>
 <summary><h4>Other LLM's</h4></summary>
 
+- o3-mini
+
+```python
+
+client.set_config("OPENAI_API_KEY", "YOUR_API_KEY")
+
+client.default_llm_model = "openai/o3-mini"
+
+```
+
 - deepseek-chat
 
 ```python
