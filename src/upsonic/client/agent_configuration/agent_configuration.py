@@ -60,6 +60,25 @@ class AgentConfiguration(BaseModel):
         if latest_upsonic_client is None:
             from ..base import UpsonicClient
             the_client = UpsonicClient("localserver")
+
+            if task.tools is not None:
+
+                
+                for tool in task.tools:
+                    # Get all attributes of the tool class
+                    tool_attrs = dir(tool)
+                    
+                    # Filter out special methods and get only callable attributes
+                    functions = [attr for attr in tool_attrs 
+                               if not attr.startswith('__') and callable(getattr(tool, attr))]
+                    
+                    if functions:
+                        # If the tool has functions, use the tool() decorator
+                        the_client.tool()(tool)
+                    else:
+                        # If the tool has no functions, use mcp()
+                        the_client.mcp()(tool)
+
             latest_upsonic_client = the_client
 
         the_client.run(self, task)
