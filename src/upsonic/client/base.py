@@ -5,6 +5,8 @@ import httpx
 
 from .level_one.call import Call
 from .level_two.agent import Agent
+from .tasks.tasks import Task
+from .agent_configuration.agent_configuration import AgentConfiguration
 from .storage.storage import Storage
 from .tools.tools import Tools
 from .markdown.markdown import Markdown
@@ -103,3 +105,19 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
             response.raise_for_status()
             
             return response.content if return_raw else response.json()
+        
+
+    def run(self, *args, **kwargs):
+
+
+        # If there is an two positional arguments we will run it in self.agent(first argument, second argument)
+        if len(args) == 2:
+            
+            if isinstance(args[0], AgentConfiguration) and isinstance(args[1], Task):
+                return self.agent(args[0], args[1])
+            elif isinstance(args[0], list):
+                return self.multi_agent(args[0], args[1])
+        
+
+        if len(args) == 1:
+            return self.call(args[0])
