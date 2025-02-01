@@ -12,8 +12,8 @@ from ..knowledge_base.knowledge_base import KnowledgeBase
 class AgentConfiguration(BaseModel):
     agent_id_: str = None
     job_title: str
-    company_url: str
-    company_objective: str
+    company_url: str = None
+    company_objective: str = None
     name: str = ""
     contact: str = ""
     model: str = "openai/gpt-4o"

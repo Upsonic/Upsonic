@@ -216,17 +216,53 @@ class Agent:
 
     def create_characterization(self, agent_configuration: AgentConfiguration, llm_model: str = None):
         tools = ["google", "read_website"]
+        
+        search_result = None
+        company_objective_result = None
+        human_objective_result = None
+        
+        search_task = None
+        company_objective_task = None
 
-        search_task = Task(description=f"Make a search for {agent_configuration.company_url}", tools=tools, response_format=SearchResult)
-        self.call(search_task, llm_model=llm_model)
+        # Handle website search if URL is provided
+        if agent_configuration.company_url:
+            search_task = Task(description=f"Make a search for {agent_configuration.company_url}", tools=tools, response_format=SearchResult)
+            self.call(search_task, llm_model=llm_model)
+            search_result = search_task.response
 
-        company_objective_task = Task(description=f"Generate the company objective for {agent_configuration.company_url}", tools=tools, response_format=CompanyObjective, context=search_task)
-        self.call(company_objective_task, llm_model=llm_model)
+        # Handle company objective if provided
+        if agent_configuration.company_objective:
+            context = [search_task] if search_task else None
+            company_objective_task = Task(description=f"Generate the company objective for {agent_configuration.company_objective}", 
+                                        tools=tools, 
+                                        response_format=CompanyObjective,
+                                        context=context)
+            self.call(company_objective_task, llm_model=llm_model)
+            company_objective_result = company_objective_task.response
 
-        human_objective_task = Task(description=f"Generate the human objective for {agent_configuration.job_title}", tools=tools, response_format=HumanObjective, context=[search_task, company_objective_task])
-        self.call(human_objective_task, llm_model=llm_model)
+        # Handle human objective if job title is provided
+        if agent_configuration.job_title:
+            context = []
+            if search_task:
+                context.append(search_task)
+            if company_objective_task:
+                context.append(company_objective_task)
+            
+            context = context if context else None
+            human_objective_task = Task(description=f"Generate the human objective for {agent_configuration.job_title}", 
+                                      tools=tools, 
+                                      response_format=HumanObjective,
+                                      context=context)
+            self.call(human_objective_task, llm_model=llm_model)
+            human_objective_result = human_objective_task.response
 
-        total_character = Characterization(website_content=search_task.response, company_objective=company_objective_task.response, human_objective=human_objective_task.response, name_of_the_human_of_tasks=agent_configuration.name, contact_of_the_human_of_tasks=agent_configuration.contact)
+        total_character = Characterization(
+            website_content=search_result,
+            company_objective=company_objective_result,
+            human_objective=human_objective_result,
+            name_of_the_human_of_tasks=agent_configuration.name,
+            contact_of_the_human_of_tasks=agent_configuration.contact
+        )
 
         return total_character
 
