@@ -1,6 +1,6 @@
 [project]
 name = "upsonic"
-version = "0.40.2"
+version = "0.40.3"
 description = "Task oriented AI agent framework for digital workers and vertical AI agents"
 readme = "README.md"
 authors = [
