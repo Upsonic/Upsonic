@@ -18,6 +18,11 @@ class AgentConfiguration(BaseModel):
     contact: str = ""
     model: str = "openai/gpt-4o"
 
+    def __init__(self, job_title: str = None, **data):
+        if job_title is not None:
+            data["job_title"] = job_title
+        super().__init__(**data)
+
     sub_task: bool = True
 
     reflection: bool = False

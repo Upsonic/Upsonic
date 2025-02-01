@@ -13,6 +13,10 @@ class Task(BaseModel):
     _response: Any = None
     context: Any = None
     
+    def __init__(self, description: str = None, **data):
+        if description is not None:
+            data["description"] = description
+        super().__init__(**data)
 
     @property
     def response(self):
