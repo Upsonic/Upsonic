@@ -16,6 +16,7 @@ class AgentConfiguration(BaseModel):
     company_objective: str
     name: str = ""
     contact: str = ""
+    model: str = "openai/gpt-4o"
 
     sub_task: bool = True
 

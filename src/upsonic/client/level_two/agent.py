@@ -80,6 +80,8 @@ class Agent:
         llm_model: str = None,
     ) -> Any:
         
+
+        
         start_time = time.time()
 
 
@@ -235,6 +237,9 @@ class Agent:
 
 
     def agent(self, agent_configuration: AgentConfiguration, task: Task,  llm_model: str = None):
+
+        if llm_model is None:
+            llm_model = agent_configuration.model
 
         original_task = task
 
