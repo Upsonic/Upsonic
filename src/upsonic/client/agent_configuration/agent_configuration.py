@@ -16,17 +16,17 @@ def register_tools(client, tools):
         for tool in tools:
             # Handle special tool classes from upsonic.client.tools
             if tool.__module__ == 'upsonic.client.tools':
-                print("SPECIAL TOOL REGISTERED:", tool.__name__)
+
                 client.tool()(tool)
                 continue
                 
             # If tool is a class (not an instance)
             if isinstance(tool, type):
                 if hasattr(tool, 'command') and hasattr(tool, 'args'):
-                    print("MCP TOOL REGISTERED:", tool.__name__)
+
                     client.mcp()(tool)
                 else:
-                    print("CLASS TOOL REGISTERED:", tool.__name__)
+
                     client.tool()(tool)
             else:
                 # Get all attributes of the tool instance/object
