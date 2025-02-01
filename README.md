@@ -61,34 +61,22 @@ pip install upsonic
 
 # Basic Example
 
+Set your OPENAI_API_KEY
+
+```console
+export OPENAI_API_KEY=sk-***
+```
+
+Start the agent 
 
 ```python
+from upsonic import Task, Agent
 
-from upsonic import UpsonicClient, ObjectResponse, Task, AgentConfiguration
-from upsonic.client.tools import Search
+task = Task("Who developed you?")
 
-# Create Client and and Set Configurations
-client = UpsonicClient("localserver")
-client.set_config("OPENAI_API_KEY", "YOUR_API_KEY")
+agent = Agent("Coder")
 
-
-
-# Generating Task and Agent
-task1 = Task(description="Research latest news in Anthropic and OpenAI", tools=[Search])
-
-product_manager_agent = AgentConfiguration(
-    job_title="Product Manager",
-    company_url="https://upsonic.ai",
-    company_objective="To build AI Agent framework that helps people get things done",
-)
-
-
-# Run and see the result
-client.agent(product_manager_agent, task1)
-
-result = task1.response
-
-print(result)
+agent.print_do(task)
 ```
 
 
@@ -102,80 +90,55 @@ print(result)
 
 
 # Hard Example
-## Creating a Client
 
-Create a client to manage tools and tasks:
+### Other LLM's
 
 ```python
-from upsonic import UpsonicClient, ObjectResponse, Task, AgentConfiguration
-from upsonic.client.tools import Search
-
-# Create an Upsonic client instance
-client = UpsonicClient("localserver")
-
-client.set_config("OPENAI_API_KEY", "YOUR_API_KEY")
-client.default_llm_model = "openai/gpt-4o"
-
+agent = Agent("Coder", llm_model="openai/gpt-4o")
 ```
-
-<details>
-<summary><h4>Other LLM's</h4></summary>
 
 - o3-mini
+    - required environment variables
+        - OPENAI_API_KEY
+    - llm_model
+        - openai/o3-mini
 
-```python
 
-client.set_config("OPENAI_API_KEY", "YOUR_API_KEY")
-
-client.default_llm_model = "openai/o3-mini"
-
-```
 
 - deepseek-chat
+    - required environment variables
+        - DEEPSEEK_API_KEY
+    - llm_model
+        - deepseek/deepseek-chat
 
-```python
 
-client.set_config("DEEPSEEK_API_KEY", "YOUR_DEEPSEEK_API_KEY")
-
-client.default_llm_model = "deepseek/deepseek-chat"
-
-```
 
 - claude-3-5-sonnet
-
-```python
-
-client.set_config("ANTHROPIC_API_KEY", "YOUR_ANTHROPIC_API_KEY")
-client.default_llm_model = "claude/claude-3-5-sonnet"
-
-```
+    - required environment variables
+        - ANTHROPIC_API_KEY
+    - llm_model
+        - claude/claude-3-5-sonnet
 
 - gpt-4o-azure
+    - required environment variables
+        - AZURE_OPENAI_ENDPOINT
+        - AZURE_OPENAI_API_VERSION
+        - AZURE_OPENAI_API_KEY
+    - llm_model
+        - azure/gpt-4o
 
-```python
 
-client.set_config("AZURE_OPENAI_ENDPOINT", "YOUR_AZURE_OPENAI_ENDPOINT")
-client.set_config("AZURE_OPENAI_API_VERSION", "YOUR_AZURE_OPENAI_API_VERSION")
-client.set_config("AZURE_OPENAI_API_KEY", "YOUR_AZURE_OPENAI_API_KEY")
-
-client.default_llm_model = "azure/gpt-4o"
-
-```
 
 
 - claude-3-5-sonnet-aws
+    - required environment variables    
+        - AWS_ACCESS_KEY_ID
+        - AWS_SECRET_ACCESS_KEY
+        - AWS_REGION
+    - llm_model
+        - bedrock/claude-3-5-sonnet
 
-```python
 
-client.set_config("AWS_ACCESS_KEY_ID", "YOUR_AWS_ACCESS_KEY_ID")
-client.set_config("AWS_SECRET_ACCESS_KEY", "YOUR_AWS_SECRET_ACCESS_KEY")
-client.set_config("AWS_REGION", "YOUR_AWS_REGION")
-
-client.default_llm_model = "bedrock/claude-3-5-sonnet"
-
-```
-
-</details>
 
 <br>
 <br>
@@ -213,12 +176,12 @@ class ResponseFormat(ObjectResponse):
 
 Our Framework officially supports [Model Context Protocol (MCP)](https://www.claudemcp.com/) and custom tools. You can use hundreds of MCP servers at https://glama.ai/mcp/servers or https://smithery.ai/ We also support Python functions inside a class as a tool. You can easily generate your integrations with that.
 ```python
-@client.mcp()
+# MCP Tool
 class HackerNewsMCP:
     command = "uvx"
     args = ["mcp-hn"]
 
-@client.tool()
+# Custom Tool
 class MyTools:
     def our_server_status():
         return True
@@ -246,11 +209,7 @@ task1 = Task(description=description, response_format=ResponseFormat, tools=tool
 Agents are the standard way to configure an LLM for your employees to work on your requests. It is essential to consider the goals and context of tasks. In Upsonic, we have an automatic characterization mechanism that enriches the given information by researchers agents working on Upsonic. For example, a Product Manager Agent can be configured with job title, company URL, and company objectives. Representing agents as roles like it supports practical agents aligned with their unique objectives.
 
 ```python
-product_manager_agent = AgentConfiguration(
-    job_title="Product Manager",
-    company_url="https://upsonic.ai",
-    company_objective="To build AI Agent framework that helps people get things done",
-)
+agent = Agent("Product Manager")
 
 ```
 
@@ -262,7 +221,7 @@ product_manager_agent = AgentConfiguration(
 Define the task and the agent, then combine them and run. The Upsonic Server will prepare and run the task. This standard method simplifies the use of agents in your SaaS applications or your new vertical AI agents. 🤖 You are now completely ready to run your first agent.
 
 ```python
-client.agent(product_manager_agent, task1)
+agent.do(task)
 
 result = task1.response
 
@@ -280,24 +239,26 @@ for i in result.news_list:
 
 ## Other Features (Beta)
 
-### Only One LLM Call
+### Direct LLM Call
 
 LLMs have always been intelligent. We know exactly when to call an agent or an LLM. This creates a smooth transition from LLM to agent systems. The call method works like an agent, based on tasks and optimizing cost and latency for your requirements. Focus on the task. Don't waste time with complex architectures.
 
 ```python
-client.call(task1)
+from upsonic import Direct
+
+Direct.do(task1)
 
 ```
 
 ### Memory
 
-Humans have an incredible capacity for context length, which reflects their comprehensive context awareness and consistently produces superior results. In Upsonic, our memory system adeptly handles complex workflows, delivering highly personalized outcomes. It seamlessly remembers prior tasks and preferences, ensuring optimal performance. You can confidently set up memory settings within AgentConfiguration, leveraging the agent_id system. Agents, each with their distinct personality, are uniquely identified by their ID, ensuring precise and efficient execution.
+Humans have an incredible capacity for context length, which reflects their comprehensive context awareness and consistently produces superior results. In Upsonic, our memory system adeptly handles complex workflows, delivering highly personalized outcomes. It seamlessly remembers prior tasks and preferences, ensuring optimal performance. You can confidently set up memory settings within Agent, leveraging the agent_id system. Agents, each with their distinct personality, are uniquely identified by their ID, ensuring precise and efficient execution.
 
 ```python
 
 agent_id_ = "product_manager_agent"
 
-product_manager_agent = AgentConfiguration(
+agent = Agent(
     agent_id_=agent_id_
     ...
     memory=True
@@ -340,10 +301,10 @@ task2 = Task(
 
 ### Be an Human
 
-Agent and characterization are based on LLM itself. We are trying to characterize the developer, PM, and marketing. Sometimes, we need to give a human name. This is required for tasks like sending personalized messages or outreach. For these requirements, we have name and contact settings in AgentConfiguration. The agent will feel like a human as you specify.
+Agent and characterization are based on LLM itself. We are trying to characterize the developer, PM, and marketing. Sometimes, we need to give a human name. This is required for tasks like sending personalized messages or outreach. For these requirements, we have name and contact settings in Agent. The agent will feel like a human as you specify.
 
 ```python
-product_manager_agent = AgentConfiguration(
+product_manager_agent = Agent(
     ...
     name="John Walk"
     contact="john@upsonic.ai"
@@ -377,7 +338,7 @@ tools = [ComputerUse]
 LLM's by their nature oriented to finish your process. By the way its mean sometimes you can get empty result. Its effect your business logic and your application progress. We support reflection mechanism for that to check the result is staisfying and if not give a feedback. So you can use the reflection for preventing blank messages and other things.
 
 ```python
-product_manager_agent = AgentConfiguration(
+product_manager_agent = Agent(
     ...
     reflection=True
 )
@@ -391,7 +352,7 @@ product_manager_agent = AgentConfiguration(
 The context windows can be small as in OpenAI models. In this kind of situations we have a mechanism that compresses the message, system_message and the contexts. If you are working with situations like deepsearching or writing a long content and giving it as context of another task. The compress_context is full fit with you. This mechanism will only work in context overflow situations otherwise everything is just normal.
 
 ```python
-product_manager_agent = AgentConfiguration(
+product_manager_agent = Agent(
     ...
     compress_context=True
 )
