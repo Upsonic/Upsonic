@@ -375,8 +375,7 @@ class Agent:
                 if is_it_sub_task:
                     if shared_context:
                         each.context += shared_context
-                        print("SHARED CONTEXT ADDED")
-                        print(shared_context)
+
 
 
                 result = self.agent_(agent_configuration, each, llm_model=llm_model)
