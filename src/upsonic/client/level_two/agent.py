@@ -374,6 +374,8 @@ class Agent:
 
         agent_total_cost(total_input_tokens, total_output_tokens, total_time, the_llm_model)
 
+        return original_task.response
+
 
 
 
