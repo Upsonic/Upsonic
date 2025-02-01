@@ -375,6 +375,8 @@ class Agent:
                 if is_it_sub_task:
                     if shared_context:
                         each.context += shared_context
+                        print("SHARED CONTEXT ADDED")
+                        print(shared_context)
 
 
                 result = self.agent_(agent_configuration, each, llm_model=llm_model)
@@ -425,8 +427,19 @@ class Agent:
 
 
 
-        prompt = "You are a helpful assistant. User have an general task. You need to generate a list of sub tasks. Each sub task should be a Actionable step of main task. You need to return a list of sub tasks. You should say to agent to make this job not making plan again and again. We need actions. If  If you have tools that can help you for the task specify them in the task. If there is an context its the user want to see so create tasks to fill them all. Create rich tasks for every user requested field. Only do user requested things. Dont make any assumptions."
+        prompt = f"""
+You are a Task Decomposition AI that helps break down large tasks into smaller, manageable subtasks.
 
+Given task: "{task.description}"
+
+Please break this task down into logical, sequential subtasks following these rules:
+1. Each subtask should be clear, specific, and actionable
+2. Subtasks should be ordered in a logical sequence
+3. Each subtask should be necessary for completing the main task
+4. Avoid overly broad or vague subtasks
+5. Keep subtasks at a similar level of granularity
+
+"""
         sub_tasker = Task(description=prompt, response_format=SubTaskList, context=[task, task.response_format], tools=task.tools)
 
         self.call(sub_tasker, llm_model)
@@ -435,7 +448,7 @@ class Agent:
 
         for each in sub_tasker.response.sub_tasks:
 
-            new_task = Task(description=each.description+ " " + each.required_output + " " + str(each.sources_can_be_used) + " " + str(each.tools))
+            new_task = Task(description=each.description+ " " + each.required_output + " " + str(each.sources_can_be_used) + " " + str(each.tools) + "Focus to complete the task with right result")
             new_task.tools = task.tools
             sub_tasks.append(new_task)
 
