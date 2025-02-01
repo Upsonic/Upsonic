@@ -7,7 +7,7 @@ from .level_one.call import Call
 from .level_two.agent import Agent
 from .tasks.tasks import Task
 from .agent_configuration.agent_configuration import AgentConfiguration
-from .storage.storage import Storage
+from .storage.storage import Storage, ClientConfig
 from .tools.tools import Tools
 from .markdown.markdown import Markdown
 from .others.others import Others
@@ -18,16 +18,21 @@ from .printing import connected_to_server
 # Create a base class with url
 class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
 
-
-    def __init__(self, url: str, debug: bool = False):
-
+    def __init__(self, url: str, debug: bool = False, **kwargs):
+        """Initialize the Upsonic client.
+        
+        Args:
+            url: The server URL to connect to
+            debug: Whether to enable debug mode
+            **kwargs: Configuration options that match ClientConfig fields
+        """
         self.debug = debug
 
+        # Set server type and URL first
         if "0.0.0.0" in url:
             self.server_type = "Local(Docker)"
         elif "localhost" in url:
             self.server_type = "Local(Docker)"
-
         elif "upsonic.ai" in url:
             self.server_type = "Cloud(Upsonic)"
         elif "devserver" in url or "localserver" in url:
@@ -35,8 +40,8 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
         else:
             self.server_type = "Cloud(Unknown)"
 
+        # Handle local server setup
         if url == "devserver" or url == "localserver":
-            
             url = "http://localhost:7541"
             from ..server import run_dev_server, stop_dev_server, is_tools_server_running, is_main_server_running
             if debug:
@@ -45,28 +50,28 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
                 run_dev_server(redirect_output=True)
 
             import atexit
-
             def exit_handler():
                 if is_tools_server_running() or is_main_server_running():
                     stop_dev_server()
-
             atexit.register(exit_handler)
 
-
-
-
+        # Set URL and default model
         self.url = url
         self.default_llm_model = "openai/gpt-4o"
-        self.url = url
-        self.default_llm_model = "openai/gpt-4o"
+
+        # Check server status before proceeding
         if not self.status():
             connected_to_server(self.server_type, "Failed")
             raise ServerStatusException("Failed to connect to the server at initialization.")
-    
+        
         connected_to_server(self.server_type, "Established")
 
-
-
+        # Handle configuration through ClientConfig model
+        if kwargs:
+            config = ClientConfig(**kwargs)
+            for key, value in config.model_dump().items():
+                if value is not None:
+                    self.set_config(key, value)
 
     def status(self) -> bool:
         """Check the server status."""
@@ -109,6 +114,7 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
 
     def run(self, *args, **kwargs):
 
+        llm_model = kwargs.get("llm_model", None)
 
         # If there is an two positional arguments we will run it in self.agent(first argument, second argument)
         if len(args) == 2:
@@ -120,4 +126,4 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
         
 
         if len(args) == 1:
-            return self.call(args[0])
+            return self.call(args[0], llm_model=llm_model)
