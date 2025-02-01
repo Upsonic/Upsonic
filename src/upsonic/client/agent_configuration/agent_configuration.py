@@ -14,19 +14,36 @@ def register_tools(client, tools):
     """Register tools with the client."""
     if tools is not None:
         for tool in tools:
-            # Get all attributes of the tool class
-            tool_attrs = dir(tool)
-            
-            # Filter out special methods and get only callable attributes
-            functions = [attr for attr in tool_attrs 
-                       if not attr.startswith('__') and callable(getattr(tool, attr))]
-            
-            if functions:
-                # If the tool has functions, use the tool() decorator
+            # Handle special tool classes from upsonic.client.tools
+            if tool.__module__ == 'upsonic.client.tools':
+                print("SPECIAL TOOL REGISTERED:", tool.__name__)
                 client.tool()(tool)
+                continue
+                
+            # If tool is a class (not an instance)
+            if isinstance(tool, type):
+                if hasattr(tool, 'command') and hasattr(tool, 'args'):
+                    print("MCP TOOL REGISTERED:", tool.__name__)
+                    client.mcp()(tool)
+                else:
+                    print("CLASS TOOL REGISTERED:", tool.__name__)
+                    client.tool()(tool)
             else:
-                # If the tool has no functions, use mcp()
-                client.mcp()(tool)
+                # Get all attributes of the tool instance/object
+                tool_attrs = dir(tool)
+                
+                # Filter out special methods and get only callable attributes
+                functions = [attr for attr in tool_attrs 
+                           if not attr.startswith('__') and callable(getattr(tool, attr))]
+                
+                if functions:
+                    # If the tool has functions, use the tool() decorator
+                    print("INSTANCE TOOL REGISTERED:", tool.__class__.__name__)
+                    client.tool()(tool.__class__)
+                else:
+                    # If the tool has no functions, use mcp()
+                    print("INSTANCE MCP REGISTERED:", tool.__class__.__name__)
+                    client.mcp()(tool.__class__)
     return client
 
 
