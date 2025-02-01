@@ -15,6 +15,10 @@ from ..exception import ServerStatusException, TimeoutException
 
 from .printing import connected_to_server
 
+
+from .latest_upsonic_client import latest_upsonic_client
+
+
 # Create a base class with url
 class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
 
@@ -72,6 +76,9 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
             for key, value in config.model_dump().items():
                 if value is not None:
                     self.set_config(key, value)
+
+        global latest_upsonic_client
+        latest_upsonic_client = self
 
     def status(self) -> bool:
         """Check the server status."""

@@ -7,7 +7,7 @@ from typing import Any, List, Dict, Optional, Type, Union
 
 
 from ..knowledge_base.knowledge_base import KnowledgeBase
-
+from ..tasks.tasks import Task
 
 class AgentConfiguration(BaseModel):
     agent_id_: str = None
@@ -46,3 +46,22 @@ class AgentConfiguration(BaseModel):
         if self.agent_id_ is None:
             self.agent_id_ = str(uuid.uuid4())
         return self.agent_id_
+    
+    def do(self, task: Task):
+        from ..latest_upsonic_client import latest_upsonic_client
+
+        the_client = latest_upsonic_client
+
+        if latest_upsonic_client is None:
+            from ..base import UpsonicClient
+            the_client = UpsonicClient("localserver")
+            latest_upsonic_client = the_client
+
+        the_client.run(self, task)
+
+        return task.response
+    
+    def print_do(self, task: Task):
+        result = self.do(task)
+        print(result)
+        return result
