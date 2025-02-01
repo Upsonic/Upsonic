@@ -369,7 +369,7 @@ def agent_creator(
                     if type_string == Characterization.__name__:
                         context_string += f"\n\nThis is your character ```character {each.model_dump()}```"
                     elif type_string == OtherTask.__name__:
-                        context_string += f"\n\nContexts from old tasks: ```old_task {each.task} {each.result}```"
+                        context_string += f"\n\nContexts from question answering: ```question_answering question: {each.task} answer: {each.result}```"
                     elif type_string == Task.__name__:
                         response = None
                         description = each.description
@@ -381,7 +381,7 @@ def agent_creator(
                             except:
                                 response = each.response
                                 
-                        context_string += f"\n\nContexts from old tasks: ```old_task {description} {response}```   "
+                        context_string += f"\n\nContexts from question answering: ```question_answering question: {description} answer: {response}```   "
                     else:
                         context_string += f"\n\nContexts ```context {each}```"
 

@@ -357,7 +357,7 @@ class Agent:
 
         if task.context:
             for each in the_task:
-                each.context.append(task.context)
+                each.context += task.context
                 
 
 
@@ -439,7 +439,10 @@ Please break this task down into logical, sequential subtasks following these ru
 5. Keep subtasks at a similar level of granularity
 
 """
-        sub_tasker = Task(description=prompt, response_format=SubTaskList, context=[task, task.response_format], tools=task.tools)
+        sub_tasker_context = [task, task.response_format]
+        if task.context:
+            sub_tasker_context = task.context
+        sub_tasker = Task(description=prompt, response_format=SubTaskList, context=sub_tasker_context, tools=task.tools)
 
         self.call(sub_tasker, llm_model)
 
