@@ -160,6 +160,8 @@ description = "Research latest news in Anthropic and OpenAI"
 The output is essential for deploying an AI agent across apps or as a service. In Upsonic, we use Pydantic BaseClass as input for the task system. This allows you to configure the output exactly how you want it, such as a list of news with title, body, and URL. You can create a flexible yet robust output mechanism that improves interoperability between the agent and your app.
 
 ```python
+from upsonic import ObjectResponse
+
 # Example ObjectResponse usage
 class News(ObjectResponse):
     title: str
@@ -176,6 +178,9 @@ class ResponseFormat(ObjectResponse):
 
 Our Framework officially supports [Model Context Protocol (MCP)](https://www.claudemcp.com/) and custom tools. You can use hundreds of MCP servers at https://glama.ai/mcp/servers or https://smithery.ai/ We also support Python functions inside a class as a tool. You can easily generate your integrations with that.
 ```python
+
+from upsonic.client.tools import Search
+
 # MCP Tool
 class HackerNewsMCP:
     command = "uvx"
