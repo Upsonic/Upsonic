@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(os.path.join(os.getcwd(), ".env"))
 
 
 class ClientConfig(BaseModel):
