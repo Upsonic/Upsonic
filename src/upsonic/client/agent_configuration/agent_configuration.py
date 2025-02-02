@@ -92,7 +92,7 @@ class AgentConfiguration(BaseModel):
         super().__init__(**data)
 
     sub_task: bool = True
-    reflection: bool = False
+    reflection: bool = True
     memory: bool = False
     caching: bool = True
     cache_expiry: int = 60 * 60
