@@ -394,7 +394,7 @@ def agent_creator(
         if system_prompt is not None:
             system_prompt_ = system_prompt + f"The context is: {context_string}"
         elif context_string != "":
-            system_prompt_ = f"You are a helpful assistant. User want to add an old task context to the task. The context is: {context_string}"
+            system_prompt_ = f"You are a helpful assistant. User want to add an context to the task. The context is: {context_string}"
         
 
 

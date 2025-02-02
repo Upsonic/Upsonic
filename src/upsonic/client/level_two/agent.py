@@ -6,7 +6,7 @@ import dill
 import base64
 import httpx
 import hashlib
-from typing import Any, List, Dict, Optional, Type, Union
+from typing import Any, List, Dict, Optional, Type, Union, Literal
 from pydantic import BaseModel
 
 from ..tasks.tasks import Task
@@ -37,6 +37,11 @@ class SubTask(ObjectResponse):
     tools: List[str]
 class SubTaskList(ObjectResponse):
     sub_tasks: List[SubTask]
+
+class AgentMode(ObjectResponse):
+    """Mode selection for task decomposition"""
+    selected_mode: Literal["level_no_step", "level_one"]
+    reasoning: str
 
 
 
@@ -417,27 +422,91 @@ class Agent:
 
 
     def multiple(self, task: Task, llm_model: str = None):
-        # Generate a list of sub tasks
+        # First, determine the mode of operation
+        mode_selection_prompt = f"""
+You are a Task Analysis AI that helps determine the best mode of task decomposition.
 
+Given task: "{task.description}"
 
+Analyze the task characteristics:
+
+Level No Step (Direct Execution) is suitable for:
+- Tasks that can be completed in a single, atomic operation
+- Tasks where the output format is simple and well-defined
+- Tasks that don't require setup or configuration
+- Tasks where AI can directly generate the complete result
+- Tasks without dependencies or external integrations
+Examples:
+- Simple data transformations
+- Direct text generation
+- Single API call operations
+- Basic calculations or conversions
+
+Level One (Basic Decomposition) is suitable for:
+- Tasks requiring multiple steps or verifications
+- Tasks with clear, linear steps
+- Tasks needing external information or resources
+- Tasks requiring setup or configuration
+- Tasks involving API integrations or data processing
+- Tasks that need error handling
+- Information retrieval and verification tasks
+Examples of Level One Tasks:
+- Finding and verifying documentation
+- Implementation tasks with clear steps
+- Multi-step data processing
+- Tasks requiring setup and configuration
+- Tasks involving API usage
+- Tasks needing error handling
+- Tasks that follow a linear sequence of steps
+
+Select the mode based on these characteristics.
+Prefer level_no_step when the task can be completed directly without any decomposition.
+Use Level One for any task requiring multiple steps or verification.
+"""
+        mode_selector = Task(
+            description=mode_selection_prompt,
+            response_format=AgentMode,
+            context=[task]
+        )
         
+        self.call(mode_selector, llm_model)
+        
+        # If level_no_step is selected, return just the end task
+        if mode_selector.response.selected_mode == "level_no_step":
+            return [Task(description=task.description, response_format=task.response_format, tools=task.tools)]
 
-
-
-
-
+        # Generate a list of sub tasks
         prompt = f"""
 You are a Task Decomposition AI that helps break down large tasks into smaller, manageable subtasks.
 
 Given task: "{task.description}"
+Available tools: {task.tools if task.tools else "No tools available"}
 
-Please break this task down into logical, sequential subtasks following these rules:
+Tool Dependency Guidelines:
+- File Operations: Tasks involving file reading, writing, or manipulation require file system tools
+- Terminal Operations: Tasks requiring command execution need terminal access tools
+- Web Operations: Tasks involving web searches or API calls need web access tools
+- System Operations: Tasks involving system configuration or environment setup need system tools
+
+Task Decomposition Rules:
+1. Only create subtasks that can be completed with the available tools
+2. Skip any operations that would require unavailable tools
+3. Each subtask must be achievable with the given tool set
+4. If a critical operation cannot be performed due to missing tools, note it in the task description
+5. Adapt the approach based on available tools rather than assuming tool availability
+
+General Task Rules:
 1. Each subtask should be clear, specific, and actionable
 2. Subtasks should be ordered in a logical sequence
 3. Each subtask should be necessary for completing the main task
 4. Avoid overly broad or vague subtasks
 5. Keep subtasks at a similar level of granularity
 
+Tool Availability Impact:
+- Without file system tools: Skip file operations
+- Without terminal tools: Avoid command execution tasks
+- Without web tools: Skip online searches, API calls
+- Without system tools: Avoid system configuration tasks
 """
         sub_tasker_context = [task, task.response_format]
         if task.context:
@@ -448,21 +517,15 @@ Please break this task down into logical, sequential subtasks following these ru
 
         sub_tasks = []
 
+        # Create tasks from subtasks
         for each in sub_tasker.response.sub_tasks:
-
-            new_task = Task(description=each.description+ " " + each.required_output + " " + str(each.sources_can_be_used) + " " + str(each.tools) + "Focus to complete the task with right result")
+            new_task = Task(description=each.description + " " + each.required_output + " " + str(each.sources_can_be_used) + " " + str(each.tools) + "Focus to complete the task with right result, Dont ask to human directly do it and give the result.")
             new_task.tools = task.tools
             sub_tasks.append(new_task)
 
-
-
-
+        # Add the final task that will produce the original desired response format
         end_task = Task(description=task.description, response_format=task.response_format)
         sub_tasks.append(end_task)
-
-
-
-
 
         return sub_tasks
 
