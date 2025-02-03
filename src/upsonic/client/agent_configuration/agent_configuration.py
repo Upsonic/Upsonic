@@ -9,6 +9,7 @@ from typing import Any, List, Dict, Optional, Type, Union
 from ..knowledge_base.knowledge_base import KnowledgeBase
 from ..tasks.tasks import Task
 
+from ..latest_upsonic_client import latest_upsonic_client
 
 def register_tools(client, tools):
     """Register tools with the client."""
@@ -49,7 +50,8 @@ def register_tools(client, tools):
 
 def get_or_create_client():
     """Get existing client or create a new one."""
-    from ..latest_upsonic_client import latest_upsonic_client
+    
+    global latest_upsonic_client
     
     if latest_upsonic_client is not None:
         return latest_upsonic_client
@@ -61,7 +63,7 @@ def get_or_create_client():
 def execute_task(agent_config, task: Task):
     """Execute a task with the given agent configuration."""
     global latest_upsonic_client
-    from ..latest_upsonic_client import latest_upsonic_client
+    
 
     # Get or create client
     the_client = get_or_create_client()
