@@ -9,7 +9,6 @@ from openai import AsyncOpenAI, NOT_GIVEN
 from openai import AsyncAzureOpenAI
 
 from pydantic import BaseModel
-from pydantic_ai.result import ResultData
 from fastapi import HTTPException, status
 from functools import wraps
 from typing import Any, Callable, Optional
@@ -27,52 +26,8 @@ from ...storage.configuration import Configuration
 
 from ...tools_server.function_client import FunctionToolManager
 
-class CustomOpenAIAgentModel(OpenAIAgentModel):
-    async def _completions_create(
-        self, messages: list[Any], stream: bool, model_settings: Any | None
-    ) -> ChatCompletion | AsyncStream[ChatCompletionChunk]:
-        if not self.tools:
-            tool_choice: Literal['none', 'required', 'auto'] | None = None
-        elif not self.allow_text_result:
-            tool_choice = 'required'
-        else:
-            tool_choice = 'auto'
 
-        openai_messages = list(chain(*(self._map_message(m) for m in messages)))
-        model_settings = model_settings or {}
 
-        return await self.client.chat.completions.create(
-            model=self.model_name,
-            messages=openai_messages,
-            n=1,
-            parallel_tool_calls=False if self.tools else NOT_GIVEN,  # Force parallel_tool_calls to False
-            tools=self.tools or NOT_GIVEN,
-            tool_choice=tool_choice or NOT_GIVEN,
-            stream=stream,
-            stream_options={'include_usage': True} if stream else NOT_GIVEN,
-            max_tokens=model_settings.get('max_tokens', NOT_GIVEN),
-            temperature=model_settings.get('temperature', NOT_GIVEN),
-            top_p=model_settings.get('top_p', NOT_GIVEN),
-            timeout=model_settings.get('timeout', NOT_GIVEN),
-        )
-
-class CustomOpenAIModel(OpenAIModel):
-    async def agent_model(
-        self,
-        *,
-        function_tools: list[Any],
-        allow_text_result: bool,
-        result_tools: list[Any],
-    ) -> Any:
-        tools = [self._map_tool_definition(r) for r in function_tools]
-        if result_tools:
-            tools += [self._map_tool_definition(r) for r in result_tools]
-        return CustomOpenAIAgentModel(
-            self.client,
-            self.model_name,
-            allow_text_result,
-            tools,
-        )
 
 def tool_wrapper(func: Callable) -> Callable:
     @wraps(func)
@@ -156,7 +111,7 @@ def summarize_text(text: str, llm_model: Any, chunk_size: int = 100000, max_size
                     )
                     
                     message = [{"type": "text", "text": prompt + chunk}]
-                    result = model.run_sync(message)
+                    result = model.run_sync(message, model_settings={"parallel_tool_calls": False})
                     
                     if result and hasattr(result, 'data') and result.data:
                         # Ensure the summary isn't too long
@@ -262,7 +217,7 @@ def agent_creator(
         llm_model: str = "openai/gpt-4o",
         system_prompt: Optional[Any] = None,
         context_compress: bool = False
-    ) -> ResultData:
+    ):
 
         if llm_model == "openai/gpt-4o" or llm_model == "gpt-4o":
             openai_api_key = Configuration.get("OPENAI_API_KEY")
@@ -272,7 +227,7 @@ def agent_creator(
                 api_key=openai_api_key,  # This is the default and can be omitted
             )
 
-            model = CustomOpenAIModel('gpt-4o', openai_client=client)
+            model = OpenAIModel('gpt-4o', openai_client=client,)
 
         elif llm_model == "openai/o3-mini":
             openai_api_key = Configuration.get("OPENAI_API_KEY")
@@ -282,7 +237,7 @@ def agent_creator(
                 api_key=openai_api_key,  # This is the default and can be omitted
             )
 
-            model = CustomOpenAIModel('o3-mini', openai_client=client)
+            model = OpenAIModel('o3-mini', openai_client=client)
 
 
         elif llm_model == "deepseek/deepseek-chat":
@@ -348,7 +303,7 @@ def agent_creator(
                 }
 
             model = AsyncAzureOpenAI(api_version=azure_api_version, azure_endpoint=azure_endpoint, api_key=azure_api_key)
-            model = CustomOpenAIModel('gpt-4o', openai_client=model)
+            model = OpenAIModel('gpt-4o', openai_client=model)
 
         else:
             return {"status_code": 400, "detail": f"Unsupported LLM model: {llm_model}"}
@@ -403,7 +358,7 @@ def agent_creator(
             model,
             result_type=response_format,
             retries=5,
-            system_prompt=system_prompt_
+            system_prompt=system_prompt_,
 
         )
 

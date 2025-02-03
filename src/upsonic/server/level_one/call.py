@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from pydantic_ai.result import ResultData
+from pydantic_ai.result import ResultDataT_inv, ResultDataT
 
 from typing import Any, Optional
 
@@ -19,7 +19,7 @@ class CallManager:
         context: Any = None,
         llm_model: str = "openai/gpt-4o",
         system_prompt: Optional[Any] = None 
-    ) -> ResultData:
+    ):
 
         
         roulette_agent = agent_creator(response_format, tools, context, llm_model, system_prompt)
@@ -47,7 +47,7 @@ class CallManager:
 
 
 
-            result = roulette_agent.run_sync(message)
+            result = roulette_agent.run_sync(message, model_settings={"parallel_tool_calls": False})
 
             usage = result.usage()
 
@@ -60,7 +60,7 @@ class CallManager:
                 # Try to compress the message prompt
                 try:
                     message[0]["text"] = summarize_message_prompt(message[0]["text"], llm_model)
-                    result = roulette_agent.run_sync(message)
+                    result = roulette_agent.run_sync(message, model_settings={"parallel_tool_calls": False})
                 except Exception as e:
                     traceback.print_exc()
                     return {"status_code": 403, "detail": "Error processing request: " + str(e)}

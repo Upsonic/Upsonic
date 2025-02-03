@@ -2,7 +2,7 @@ import traceback
 import anthropic
 import openai
 from pydantic import BaseModel
-from pydantic_ai.result import ResultData
+
 
 from typing import Any, Optional
 
@@ -30,7 +30,7 @@ class AgentManager:
         retries: int = 1,
         context_compress: bool = False,
         memory: bool = False
-    ) -> ResultData:
+    ):
 
         
         roulette_agent = agent_creator(
@@ -86,7 +86,7 @@ class AgentManager:
             print("message: ", message)
 
             try:
-                result = roulette_agent.run_sync(message, message_history=message_history)
+                result = roulette_agent.run_sync(message, message_history=message_history, model_settings={"parallel_tool_calls": False})
             except (openai.BadRequestError, anthropic.BadRequestError) as e:
                 str_e = str(e)
                 if "400" in str_e and context_compress:
@@ -119,7 +119,7 @@ class AgentManager:
                         except:
                             pass
                         
-                        result = roulette_agent.run_sync(message, message_history=message_history)
+                        result = roulette_agent.run_sync(message, message_history=message_history, model_settings={"parallel_tool_calls": False})
                     except (openai.BadRequestError, anthropic.BadRequestError) as e:
                         traceback.print_exc()
                         return {"status_code": 403, "detail": "Error processing Agent request: " + str(e)}
