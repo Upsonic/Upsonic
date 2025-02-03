@@ -534,6 +534,8 @@ Tool Availability Impact:
 
 
     def multi_agent(self, agent_configurations: List[AgentConfiguration], tasks: Any, llm_model: str = None):
+    
+
 
 
         agent_tasks = []
@@ -569,7 +571,8 @@ Tool Availability Impact:
             while is_end == False:
                 selecting_task  = Task(description="Select an agent for this task", response_format=SelectedAgent, context=[the_agents_, each])
 
-                self.call(selecting_task, llm_model)
+                the_call_llm_model = agent_configurations[0].model
+                self.call(selecting_task, the_call_llm_model)
 
                 if selecting_task.response.selected_agent in the_agents:
                     is_end = True

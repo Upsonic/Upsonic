@@ -17,6 +17,13 @@ from ...client.tasks.task_response import ObjectResponse
 
 from ..level_one.call import Call
 
+from pydantic_ai.settings import ModelSettings
+
+my_settings = ModelSettings(
+    parallel_tool_calls=False
+)
+
+
 class AgentManager:
     def agent(
         self,
@@ -86,7 +93,7 @@ class AgentManager:
             print("message: ", message)
 
             try:
-                result = roulette_agent.run_sync(message, message_history=message_history, model_settings={"parallel_tool_calls": False})
+                result = roulette_agent.run_sync(message, message_history=message_history)
             except (openai.BadRequestError, anthropic.BadRequestError) as e:
                 str_e = str(e)
                 if "400" in str_e and context_compress:
@@ -119,7 +126,7 @@ class AgentManager:
                         except:
                             pass
                         
-                        result = roulette_agent.run_sync(message, message_history=message_history, model_settings={"parallel_tool_calls": False})
+                        result = roulette_agent.run_sync(message, message_history=message_history)
                     except (openai.BadRequestError, anthropic.BadRequestError) as e:
                         traceback.print_exc()
                         return {"status_code": 403, "detail": "Error processing Agent request: " + str(e)}

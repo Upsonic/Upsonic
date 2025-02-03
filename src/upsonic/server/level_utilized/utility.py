@@ -26,7 +26,11 @@ from ...storage.configuration import Configuration
 
 from ...tools_server.function_client import FunctionToolManager
 
+from pydantic_ai.settings import ModelSettings
 
+my_settings = ModelSettings(
+    parallel_tool_calls=False
+)
 
 
 def tool_wrapper(func: Callable) -> Callable:
@@ -111,7 +115,7 @@ def summarize_text(text: str, llm_model: Any, chunk_size: int = 100000, max_size
                     )
                     
                     message = [{"type": "text", "text": prompt + chunk}]
-                    result = model.run_sync(message, model_settings={"parallel_tool_calls": False})
+                    result = model.run_sync(message)
                     
                     if result and hasattr(result, 'data') and result.data:
                         # Ensure the summary isn't too long
@@ -359,7 +363,6 @@ def agent_creator(
             result_type=response_format,
             retries=5,
             system_prompt=system_prompt_,
-
         )
 
 
@@ -388,6 +391,10 @@ def agent_creator(
             roulette_agent.tool_plain(each, retries=5)
 
 
+        if len(the_wrapped_tools) > 0:
+            roulette_agent.model_settings = my_settings
+
+
 
 
         # Computer use
@@ -399,6 +406,7 @@ def agent_creator(
                     from .cu import ComputerUse_tools
                     for each in ComputerUse_tools:
                         roulette_agent.tool_plain(each, retries=5)
+                        roulette_agent.model_settings = my_settings
                 except Exception as e:
                     print("Error", e)
 

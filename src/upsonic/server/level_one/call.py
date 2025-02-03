@@ -10,6 +10,13 @@ from ..level_utilized.utility import agent_creator, summarize_message_prompt
 import openai
 import traceback
 
+
+from pydantic_ai.settings import ModelSettings
+
+my_settings = ModelSettings(
+    parallel_tool_calls=False
+)
+
 class CallManager:
     def gpt_4o(
         self,
@@ -47,7 +54,7 @@ class CallManager:
 
 
 
-            result = roulette_agent.run_sync(message, model_settings={"parallel_tool_calls": False})
+            result = roulette_agent.run_sync(message)
 
             usage = result.usage()
 
@@ -60,7 +67,7 @@ class CallManager:
                 # Try to compress the message prompt
                 try:
                     message[0]["text"] = summarize_message_prompt(message[0]["text"], llm_model)
-                    result = roulette_agent.run_sync(message, model_settings={"parallel_tool_calls": False})
+                    result = roulette_agent.run_sync(message)
                 except Exception as e:
                     traceback.print_exc()
                     return {"status_code": 403, "detail": "Error processing request: " + str(e)}
