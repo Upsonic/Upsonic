@@ -26,9 +26,9 @@ class ServerManager:
             try:
                 # Get connections separately since it can't be retrieved in process_iter
                 process = psutil.Process(proc.info['pid'])
-                connections = process.connections()
+                connections = process.net_connections()
                 for conn in connections:
-                    if hasattr(conn, 'laddr') and hasattr(conn.laddr, 'port') and conn.laddr.port == self.port:
+                    if hasattr(conn, 'laddr') and len(conn.laddr) >= 2 and conn.laddr[1] == self.port:
                         # Found a process using our port
                         try:
                             process_info = f"PID: {process.pid}, Name: {process.name()}"
@@ -58,7 +58,7 @@ class ServerManager:
                 continue
 
         if failed_kills:
-            error_msg = "Failed to kill the following processes using port {self.port}:\n" + "\n".join(failed_kills)
+            error_msg = f"Failed to kill the following processes using port {self.port}:\n" + "\n".join(failed_kills)
             raise RuntimeError(error_msg)
             
         return killed_any
@@ -109,28 +109,26 @@ class ServerManager:
             # If normal kill failed, try alternative method using psutil
             try:
                 killed_processes = []
-                for proc in psutil.process_iter(['pid', 'name', 'connections']):
+                for proc in psutil.process_iter(['pid', 'name']):
                     try:
-                        # Get all network connections for the process
-                        connections = proc.connections()
+                        process = psutil.Process(proc.info['pid'])
+                        connections = process.net_connections(kind='inet')
                         for conn in connections:
                             # Check if the connection is using our port
-                            if hasattr(conn, 'laddr') and isinstance(conn.laddr, tuple) and len(conn.laddr) >= 2:
-                                if conn.laddr[1] == self.port:
-                                    process = psutil.Process(proc.pid)
-                                    # Try SIGTERM first
-                                    process.terminate()
-                                    try:
-                                        process.wait(timeout=3)
-                                        killed_processes.append(proc.pid)
-                                    except psutil.TimeoutExpired:
-                                        # If SIGTERM doesn't work, use SIGKILL
-                                        process.kill()
-                                        process.wait(timeout=1)
-                                        killed_processes.append(proc.pid)
+                            if len(conn.laddr) >= 2 and conn.laddr[1] == self.port:
+                                # Try SIGTERM first
+                                process.terminate()
+                                try:
+                                    process.wait(timeout=3)
+                                    killed_processes.append(proc.info['pid'])
+                                except psutil.TimeoutExpired:
+                                    # If SIGTERM doesn't work, use SIGKILL
+                                    process.kill()
+                                    process.wait(timeout=1)
+                                    killed_processes.append(proc.info['pid'])
                     except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
                         continue
-                    except Exception as e:
+                    except Exception:
                         continue
 
                 if not killed_processes:
@@ -144,10 +142,11 @@ class ServerManager:
                         # If we can't bind, try to find what's using it
                         for proc in psutil.process_iter(['pid', 'name']):
                             try:
-                                process = psutil.Process(proc.pid)
-                                if any(conn.laddr.port == self.port for conn in process.connections(kind='inet')):
+                                process = psutil.Process(proc.info['pid'])
+                                if any(len(conn.laddr) >= 2 and conn.laddr[1] == self.port 
+                                      for conn in process.net_connections(kind='inet')):
                                     process.kill()
-                                    killed_processes.append(proc.pid)
+                                    killed_processes.append(proc.info['pid'])
                             except (psutil.NoSuchProcess, psutil.AccessDenied):
                                 continue
                     finally:
