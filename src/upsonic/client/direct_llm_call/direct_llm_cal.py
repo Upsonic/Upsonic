@@ -26,9 +26,7 @@ class Direct:
         # Register tools if needed
         the_client = register_tools(the_client, task.tools)
         
-        # Update the global client reference
-        if latest_upsonic_client is None:
-            latest_upsonic_client = the_client
+
 
         # Execute the direct call
         return the_client.call(task, model)

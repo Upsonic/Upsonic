@@ -62,7 +62,9 @@ def get_or_create_client():
         return latest_upsonic_client
     
     from ..base import UpsonicClient
-    return UpsonicClient("localserver")
+    the_client = UpsonicClient("localserver")
+    latest_upsonic_client = the_client
+    return the_client
 
 
 def execute_task(agent_config, task: Task):
@@ -76,9 +78,6 @@ def execute_task(agent_config, task: Task):
     # Register tools if needed
     the_client = register_tools(the_client, task.tools)
     
-    # Update the global client reference
-    if latest_upsonic_client is None:
-        latest_upsonic_client = the_client
 
     the_client.run(agent_config, task)
     return task.response
