@@ -324,7 +324,14 @@ product_manager_agent = Agent(
 
 ```
 
+### Multi Agent
 
+Distribute tasks effectively across agents with our automated task distribution mechanism. This tool matches tasks based on the relationship between agent and task, ensuring collaborative problem-solving across agents and tasks. 
+```python
+from upsonic import MultiAgent
+
+MultiAgent.do([agent2, agent1], [task1, task2])
+```
 
 ### Reliable Computer Use
 Computer use can able to human task like humans, mouse move, mouse click, typing and scrolling and etc. So you can build tasks over non-API systems. It can help your linkedin cases, internal tools. Computer use is supported by only Claude for now.
