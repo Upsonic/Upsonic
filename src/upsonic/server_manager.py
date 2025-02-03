@@ -106,27 +106,55 @@ class ServerManager:
             # Wait a bit to ensure port is freed
             time.sleep(1)
         except RuntimeError as e:
-            # If normal kill failed, try lsof as last resort
+            # If normal kill failed, try alternative method using psutil
             try:
-                cmd = f"lsof -i :{self.port} -t"
-                pids = subprocess.check_output(cmd, shell=True).decode().strip().split('\n')
-                kill_failed = []
-                for pid in pids:
+                killed_processes = []
+                for proc in psutil.process_iter(['pid', 'name', 'connections']):
                     try:
-                        os.kill(int(pid), signal.SIGKILL)
+                        # Get all network connections for the process
+                        connections = proc.connections()
+                        for conn in connections:
+                            # Check if the connection is using our port
+                            if hasattr(conn, 'laddr') and isinstance(conn.laddr, tuple) and len(conn.laddr) >= 2:
+                                if conn.laddr[1] == self.port:
+                                    process = psutil.Process(proc.pid)
+                                    # Try SIGTERM first
+                                    process.terminate()
+                                    try:
+                                        process.wait(timeout=3)
+                                        killed_processes.append(proc.pid)
+                                    except psutil.TimeoutExpired:
+                                        # If SIGTERM doesn't work, use SIGKILL
+                                        process.kill()
+                                        process.wait(timeout=1)
+                                        killed_processes.append(proc.pid)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                        continue
                     except Exception as e:
-                        kill_failed.append(f"PID {pid} (Error: {str(e)})")
-                
-                if kill_failed:
-                    raise RuntimeError(f"Failed to kill processes using lsof:\n" + "\n".join(kill_failed))
-                    
+                        continue
+
+                if not killed_processes:
+                    # If no processes were found using psutil's connections method,
+                    # try one last attempt using socket connections
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    try:
+                        # Try to bind to the port
+                        sock.bind((self.host, self.port))
+                    except socket.error:
+                        # If we can't bind, try to find what's using it
+                        for proc in psutil.process_iter(['pid', 'name']):
+                            try:
+                                process = psutil.Process(proc.pid)
+                                if any(conn.laddr.port == self.port for conn in process.connections(kind='inet')):
+                                    process.kill()
+                                    killed_processes.append(proc.pid)
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                continue
+                    finally:
+                        sock.close()
+
                 time.sleep(1)
-            except subprocess.CalledProcessError:
-                # lsof command failed
-                raise RuntimeError(f"Could not find processes using port {self.port} with lsof")
-            except RuntimeError as e:
-                # Re-raise the error from kill attempts
-                raise RuntimeError(f"Failed to kill processes: {str(e)}")
+                
             except Exception as e:
                 raise RuntimeError(f"Unexpected error while cleaning up port {self.port}: {str(e)}")
 
