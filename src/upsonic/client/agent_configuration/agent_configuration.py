@@ -56,9 +56,9 @@ def get_or_create_client():
     if latest_upsonic_client is not None:
         # Check if the existing client's status is False
         if not latest_upsonic_client.status():
-            latest_upsonic_client = None
             from ..base import UpsonicClient
-            return UpsonicClient("localserver")
+            new_client = UpsonicClient("localserver")
+            latest_upsonic_client = new_client
         return latest_upsonic_client
     
     from ..base import UpsonicClient
