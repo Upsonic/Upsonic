@@ -17,9 +17,59 @@ class ServerManager:
         self._process: Optional[subprocess.Popen] = None
         self._pid_file = os.path.join(os.path.expanduser("~"), f".upsonic_{name}_server.pid")
 
-    def _is_port_in_use(self) -> bool:
+    def _kill_process_using_port(self) -> bool:
+        """Find and kill all processes using the specified port."""
+        killed_any = False
+        failed_kills = []
+        
+        for proc in psutil.process_iter(['pid', 'name']):
+            try:
+                # Get connections separately since it can't be retrieved in process_iter
+                process = psutil.Process(proc.info['pid'])
+                connections = process.connections()
+                for conn in connections:
+                    if hasattr(conn, 'laddr') and hasattr(conn.laddr, 'port') and conn.laddr.port == self.port:
+                        # Found a process using our port
+                        try:
+                            process_info = f"PID: {process.pid}, Name: {process.name()}"
+                            # Try SIGTERM first
+                            process.terminate()
+                            try:
+                                process.wait(timeout=3)
+                                killed_any = True
+                            except psutil.TimeoutExpired:
+                                # If SIGTERM doesn't work, use SIGKILL
+                                try:
+                                    process.kill()
+                                    process.wait(timeout=1)
+                                    killed_any = True
+                                except Exception as e:
+                                    failed_kills.append(f"{process_info} (Kill failed: {str(e)})")
+                        except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+                            try:
+                                # Last resort: try using system kill command
+                                os.kill(process.pid, signal.SIGKILL)
+                                killed_any = True
+                            except Exception as e:
+                                failed_kills.append(f"{process_info} (System kill failed: {str(e)})")
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired) as e:
+                continue
+            except Exception as e:
+                continue
+
+        if failed_kills:
+            error_msg = "Failed to kill the following processes using port {self.port}:\n" + "\n".join(failed_kills)
+            raise RuntimeError(error_msg)
+            
+        return killed_any
+
+    def _is_port_in_use(self, kill_if_used: bool = False) -> bool:
+        """Check if the port is in use and optionally kill the process using it."""
         with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
-            return sock.connect_ex((self.host, self.port)) == 0
+            result = sock.connect_ex((self.host, self.port)) == 0
+            if result and kill_if_used:
+                return not self._kill_process_using_port()
+            return result
 
     def _write_pid(self):
         """Write the current process ID to the PID file"""
@@ -45,14 +95,56 @@ class ServerManager:
         except OSError:
             pass
 
-    def start(self, redirect_output: bool = False):
+    def _force_cleanup_port(self):
+        """Aggressively clean up the port before starting."""
+        if not self._is_port_in_use():
+            return
+
+        # First try normal port kill
+        try:
+            self._kill_process_using_port()
+            # Wait a bit to ensure port is freed
+            time.sleep(1)
+        except RuntimeError as e:
+            # If normal kill failed, try lsof as last resort
+            try:
+                cmd = f"lsof -i :{self.port} -t"
+                pids = subprocess.check_output(cmd, shell=True).decode().strip().split('\n')
+                kill_failed = []
+                for pid in pids:
+                    try:
+                        os.kill(int(pid), signal.SIGKILL)
+                    except Exception as e:
+                        kill_failed.append(f"PID {pid} (Error: {str(e)})")
+                
+                if kill_failed:
+                    raise RuntimeError(f"Failed to kill processes using lsof:\n" + "\n".join(kill_failed))
+                    
+                time.sleep(1)
+            except subprocess.CalledProcessError:
+                # lsof command failed
+                raise RuntimeError(f"Could not find processes using port {self.port} with lsof")
+            except RuntimeError as e:
+                # Re-raise the error from kill attempts
+                raise RuntimeError(f"Failed to kill processes: {str(e)}")
+            except Exception as e:
+                raise RuntimeError(f"Unexpected error while cleaning up port {self.port}: {str(e)}")
+
+        # Final check
+        if self._is_port_in_use():
+            raise RuntimeError(f"Port {self.port} is still in use after all cleanup attempts. Please check running processes manually.")
+
+    def start(self, redirect_output: bool = False, force: bool = False):
         """Start the server if it's not already running."""
+        # Always do an initial cleanup
+        self._force_cleanup_port()
+        
         if self.is_running():
             return
 
-        # Check if port is already in use
-        if self._is_port_in_use():
-            raise RuntimeError(f"Port {self.port} is already in use")
+        # Check if port is still in use after cleanup
+        if self._is_port_in_use(kill_if_used=force):
+            raise RuntimeError(f"Port {self.port} is still in use and could not be freed")
 
         # Set up logging
         if redirect_output:
