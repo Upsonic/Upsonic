@@ -6,13 +6,13 @@ class Direct:
     """A callable class for making direct LLM calls using the Upsonic client."""
     
     @staticmethod
-    def do(task: Task, llm_model: str | None = None):
+    def do(task: Task, model: str | None = None):
         """
         Execute a direct LLM call with the given task and model.
         
         Args:
             task: The task to execute
-            llm_model: The LLM model to use (default: "openai/gpt-4")
+            model: The LLM model to use (default: "openai/gpt-4")
             
         Returns:
             The response from the LLM
@@ -31,11 +31,11 @@ class Direct:
             latest_upsonic_client = the_client
 
         # Execute the direct call
-        return the_client.call(task, llm_model)
+        return the_client.call(task, model)
     
 
     @staticmethod
-    def print_do(task: Task, llm_model: str | None = None):
-        result = Direct.do(task, llm_model)
+    def print_do(task: Task, model: str | None = None):
+        result = Direct.do(task, model)
         print(result)
         return result
