@@ -127,6 +127,8 @@ async def list_tools():
             }
         )
 
+
+    print(tools)    
     return {"available_tools": {"tools": tools}}
 
 

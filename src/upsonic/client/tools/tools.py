@@ -10,6 +10,9 @@ from typing import Any, List, Dict, Optional, Type, Union, Callable
 from pydantic import BaseModel
 from functools import wraps
 
+import inspect
+import functools
+
 from ..tasks.tasks import Task
 from ...exception import NoAPIKeyException, UnsupportedLLMModelException
 
@@ -19,6 +22,44 @@ class ComputerUse:
 class Search:
     pass
 
+
+def generate_static_method_class(instance):
+
+
+    
+    # Store instance attributes
+    instance_attrs = {name: value for name, value in inspect.getmembers(instance)
+                     if not name.startswith('__') and not callable(value)}
+    
+    # Create new class with the same name as the original class
+    original_class_name = type(instance).__name__
+    TransformedClass = type(original_class_name, (), {})
+    
+    # Set instance attributes as class attributes
+    for attr_name, attr_value in instance_attrs.items():
+        setattr(TransformedClass, attr_name, attr_value)
+    
+
+
+    # Dynamically add each method as static method to the new class
+    for method_name, method in inspect.getmembers(instance, predicate=inspect.ismethod):
+
+        if not method_name.startswith('__'):
+
+            # Create a closure that captures the instance attributes
+            def create_static_method(method, instance_attrs):
+                @functools.wraps(method)
+                def static_wrapper(*args, **kwargs):
+                    # Create a new instance with the stored attributes
+                    temp_instance = type(instance)(**{k: v for k, v in instance_attrs.items()})
+                    return method.__get__(temp_instance, type(instance))(*args, **kwargs)
+                return static_wrapper
+
+            static_method = staticmethod(create_static_method(method, instance_attrs))
+            setattr(TransformedClass, method_name, static_method)
+
+
+    return TransformedClass
 
 class Tools:
     def tool(self, library: Optional[Union[str, List[str]]] = None):
@@ -60,6 +101,29 @@ class Tools:
                     self.add_tool(standalone)
                 
                 return obj
+            
+            if isinstance(obj, object):
+                obj = generate_static_method_class(obj)
+
+
+                # Get all methods that don't start with underscore
+                methods = [(name, getattr(obj, name)) for name in dir(obj) 
+                          if not name.startswith('_') and callable(getattr(obj, name))]
+                
+                # Register each method as a tool
+                for name, method in methods:
+                    # Convert the method to a standalone function
+                    def create_standalone(method, full_name):
+                        @wraps(method)
+                        def standalone(*args, **kwargs):
+                            return method(*args, **kwargs)
+                        standalone.__name__ = full_name
+                        return standalone
+                    
+                    full_name = f"{obj.__name__}__{name}"
+                    standalone = create_standalone(method, full_name)
+                    self.add_tool(standalone)   
+                
             else:
                 # Register the function as a tool
                 @wraps(obj)

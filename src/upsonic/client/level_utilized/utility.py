@@ -103,6 +103,9 @@ def tools_serializer(tools_):
         elif isinstance(i, str):
 
             tools.append(i)
+        elif isinstance(i, object):
+            sub_i = i.__class__
+            tools.append(sub_i.__name__+".*")
     return tools
 
 

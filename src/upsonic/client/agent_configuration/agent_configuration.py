@@ -40,7 +40,11 @@ def register_tools(client, tools):
                 if functions:
                     # If the tool has functions, use the tool() decorator
                     print("INSTANCE TOOL REGISTERED:", tool.__class__.__name__)
-                    client.tool()(tool.__class__)
+
+                    if not isinstance(tool, object):
+                        client.tool()(tool.__class__)
+                    else:
+                        client.tool()(tool)
                 else:
                     # If the tool has no functions, use mcp()
                     print("INSTANCE MCP REGISTERED:", tool.__class__.__name__)
