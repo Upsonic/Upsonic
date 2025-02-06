@@ -261,6 +261,17 @@ def agent_creator(
 
             model = OpenAIModel('o3-mini', openai_client=client)
 
+        elif llm_model == "openai/gpt-4o-mini":
+            openai_api_key = Configuration.get("OPENAI_API_KEY")
+            if not openai_api_key:
+                return {"status_code": 401, "detail": "No API key provided. Please set OPENAI_API_KEY in your configuration."}
+            client = AsyncOpenAI(
+                api_key=openai_api_key,  # This is the default and can be omitted
+            )
+
+            model = OpenAIModel('gpt-4o-mini', openai_client=client)
+
+
 
         elif llm_model == "deepseek/deepseek-chat":
             deepseek_api_key = Configuration.get("DEEPSEEK_API_KEY")
@@ -411,7 +422,7 @@ def agent_creator(
 
         if len(the_wrapped_tools) > 0:
             # Only apply my_settings for GPT-4 and O3 models
-            if llm_model in ["openai/gpt-4o", "azure/gpt-4o", "openai/o3-mini"]:
+            if llm_model in ["openai/gpt-4o", "azure/gpt-4o", "openai/o3-mini", "openai/gpt-4o-mini"]:
                 roulette_agent.model_settings = my_settings
 
 
