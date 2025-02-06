@@ -492,6 +492,20 @@ wheels = [
 ]
 
 [[package]]
+name = "duckduckgo-search"
+version = "7.3.1"
+source = { registry = "https://pypi.org/simple/" }
+dependencies = [
+    { name = "click" },
+    { name = "lxml" },
+    { name = "primp" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/45/31/2203cec2b3a5c5ee4b3b9c7feae354024d315adfad47e2eecd1df8e50fc8/duckduckgo_search-7.3.1.tar.gz", hash = "sha256:59e2430dfcd00b6701fd8e78f109879fd54c291f6a31b65023de3f7d76904d65", size = 24099 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/39/06/f47f51cd92f9adc3971deff3a97a8a036558f117b629e124c9129622c554/duckduckgo_search-7.3.1-py3-none-any.whl", hash = "sha256:09d5aa20061e1a87f8d2687aa2c58d969214149c693216146d4034899adb604a", size = 19860 },
+]
+
+[[package]]
 name = "et-xmlfile"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple/" }
@@ -1620,6 +1634,22 @@ wheels = [
 ]
 
 [[package]]
+name = "primp"
+version = "0.11.0"
+source = { registry = "https://pypi.org/simple/" }
+sdist = { url = "https://files.pythonhosted.org/packages/2f/9a/d15ffe51d91fb2702f0bf1a9538ca3b08d61bd43753ba139c7da4d977928/primp-0.11.0.tar.gz", hash = "sha256:8e3f05f1c4990f1340541be5bd81f3b3bd5abd83d7beb1512e6ca1c0b322faeb", size = 90020 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c7/0f/7c1b7cc81144ddeadd19bf7aaf49858baa2587cdb72c57073ccddc94ca06/primp-0.11.0-cp38-abi3-macosx_10_12_x86_64.whl", hash = "sha256:59f65758dc2b46e5f3512ae1567687fed79c228d4a2b20959671bd1096ba3b49", size = 3176020 },
+    { url = "https://files.pythonhosted.org/packages/18/ae/53ce3e10e06fc2a031e18d4bd0e2597e9c33bc7a36bc3211eb0bf4479f5a/primp-0.11.0-cp38-abi3-macosx_11_0_arm64.whl", hash = "sha256:37c8507dbacb3db162e62af88a81552b8333fc96957a88d1af39c39180b1221d", size = 2947624 },
+    { url = "https://files.pythonhosted.org/packages/c5/a3/5671608fe361de866b54a180a2a5f0c3166f5dfe58e928888ece54690ca3/primp-0.11.0-cp38-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:19cfa9cd6ae933d5580ca25403a27f8000c6a8a394a68365ec7264c264135b4d", size = 3271847 },
+    { url = "https://files.pythonhosted.org/packages/ae/f8/ed6f63c236dd3054f8b67e39ea50f3c83abe74a3fde0ece7cac4db6e3507/primp-0.11.0-cp38-abi3-manylinux_2_34_aarch64.whl", hash = "sha256:ae9325d25dc549fb9e2a32fff44e946eafa6980953b98207df36d2141655f274", size = 3247462 },
+    { url = "https://files.pythonhosted.org/packages/f8/fe/78012539e98407f1d97732868704b043b21d7b213a29c67a4cb0bbb9ec2c/primp-0.11.0-cp38-abi3-manylinux_2_34_armv7l.whl", hash = "sha256:9aa35c8f1b84fac1f65b5d22067dea4c85976252e37c2feb9eee3bbc4a1a72ed", size = 3001606 },
+    { url = "https://files.pythonhosted.org/packages/31/fb/68420d637713dbd184e59f3a8e30f405f1e1e5f4e8f7340af47677258031/primp-0.11.0-cp38-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:2124d403849fc06de36fddc5c483659503fed6b27b73bc7d3671e9a07ecd3713", size = 3406570 },
+    { url = "https://files.pythonhosted.org/packages/03/97/acea5b8aff4adc56da6207c38fa0e8b5a87ddca57611c5696e40d24ac3ed/primp-0.11.0-cp38-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:73f52af05fd8ef7fec16e6a824167fc96645d61ae97e5df576d2fd7e2998a67f", size = 3597805 },
+    { url = "https://files.pythonhosted.org/packages/0a/17/9adffa9b7802a5c960398ada038440e320e85dfbe1b648df26c8a62919d2/primp-0.11.0-cp38-abi3-win_amd64.whl", hash = "sha256:7281c343f8235438295864b347c09f918aca9616c509e5b9fdb3b01201cda1dc", size = 3135289 },
+]
+
+[[package]]
 name = "psutil"
 version = "6.1.1"
 source = { registry = "https://pypi.org/simple/" }
@@ -2435,6 +2465,7 @@ dependencies = [
     { name = "botocore" },
     { name = "cloudpickle" },
     { name = "dill" },
+    { name = "duckduckgo-search" },
     { name = "fastapi" },
     { name = "google" },
     { name = "httpx" },
@@ -2471,6 +2502,7 @@ requires-dist = [
     { name = "botocore", specifier = ">=1.35.99" },
     { name = "cloudpickle", specifier = ">=3.1.0" },
     { name = "dill", specifier = ">=0.3.9" },
+    { name = "duckduckgo-search", specifier = ">=7.3.1" },
     { name = "fastapi", specifier = ">=0.115.6" },
     { name = "google", specifier = ">=3.0.0" },
     { name = "httpx", specifier = ">=0.27.2" },

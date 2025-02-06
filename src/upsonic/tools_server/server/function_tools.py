@@ -173,14 +173,14 @@ def concat_strings(str1: str, str2: str) -> str:
 
 
 @tool()
-def Search__google(query: str, max_number: int = 20) -> list:
+def Search__duckduckgo(query: str, max_results: int = 20) -> list:
     """
-    Search the query on Google and return the results.
+    Search the query on DuckDuckGo and return the results.
     """
     try:
-        from googlesearch import search as gsearch
+        from duckduckgo_search import DDGS
 
-        return list(gsearch(query, stop=max_number))
+        return list(DDGS().text(query, max_results=max_results))
     except:
         return "An exception occurred"
     

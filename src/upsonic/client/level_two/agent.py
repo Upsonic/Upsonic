@@ -28,6 +28,7 @@ from ..level_utilized.utility import context_serializer, response_format_seriali
 
 from ...storage.caching import save_to_cache_with_expiry, get_from_cache_with_expiry
 
+from ..tools.tools import Search
 
 
 class SubTask(ObjectResponse):
@@ -220,7 +221,7 @@ class Agent:
 
 
     def create_characterization(self, agent_configuration: AgentConfiguration, llm_model: str = None):
-        tools = ["google", "read_website"]
+        tools = [Search]
         
         search_result = None
         company_objective_result = None

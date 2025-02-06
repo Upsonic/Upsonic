@@ -32,6 +32,7 @@ dependencies = [
     "pyautogui>=0.9.54",
     "python-multipart>=0.0.20",
     "requests>=2.32.3",
+    "duckduckgo-search>=7.3.1",
 ]
 
 [build-system]
