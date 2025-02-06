@@ -31,7 +31,7 @@ from ...tools_server.function_client import FunctionToolManager
 from pydantic_ai.settings import ModelSettings
 
 my_settings = ModelSettings(
-    parallel_tool_calls=True
+    parallel_tool_calls=False
 )
 
 

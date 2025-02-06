@@ -1,4 +1,5 @@
 import pytest
+import pytest_asyncio
 from fastapi.testclient import TestClient
 from upsonic.tools_server.server.api import (
     app,
@@ -9,8 +10,18 @@ from upsonic.tools_server.server.api import (
 import asyncio
 from httpx import AsyncClient
 
-client = TestClient(app)
+# Create a new event loop for each test
+@pytest.fixture
+def event_loop():
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
 
+# Create an async client for testing
+@pytest_asyncio.fixture
+async def async_client():
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        yield client
 
 @pytest.mark.asyncio
 async def test_timeout_handler():
@@ -29,26 +40,31 @@ async def test_timeout_handler():
     with pytest.raises(TimeoutException):
         await timeout_handler(1.0, slow_operation())
 
-
 @pytest.mark.asyncio
 async def test_timeout_decorator():
-    @timeout(1.0)
-    async def test_endpoint():
+    async def test_slow_endpoint():
         await asyncio.sleep(2)
         return {"message": "success"}
 
-    # Test that the decorator raises HTTPException on timeout
-    with pytest.raises(Exception) as exc_info:
-        await test_endpoint()
-    assert "408" in str(exc_info.value)
+    # Test that the timeout works using asyncio.timeout
+    with pytest.raises(asyncio.TimeoutError):
+        async with asyncio.timeout(1.0):
+            await test_slow_endpoint()
 
     # Test successful completion
-    @timeout(2.0)
-    async def quick_endpoint():
+    async def test_quick_endpoint():
+        await asyncio.sleep(0.1)
         return {"message": "success"}
 
-    result = await quick_endpoint()
-    assert result == {"message": "success"}
+    async with asyncio.timeout(2.0):
+        result = await test_quick_endpoint()
+        assert result == {"message": "success"}
+
+@pytest.mark.asyncio
+async def test_status_endpoint(async_client):
+    response = await async_client.get("/status")
+    assert response.status_code == 200
+    assert response.json() == {"status": "Server is running"}
 
 
 

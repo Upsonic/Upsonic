@@ -195,7 +195,7 @@ def Search__read_website(url: str, max_content_length: int = 5000) -> dict:
     Read the content of a website and return the title, meta data, content, and sub-links.
     """
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=10.0)
         response.raise_for_status()
         html = response.text
     except requests.RequestException as e:
