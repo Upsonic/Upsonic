@@ -11,14 +11,9 @@ import openai
 import traceback
 
 
-from pydantic_ai.settings import ModelSettings
-
-my_settings = ModelSettings(
-    parallel_tool_calls=False
-)
 
 class CallManager:
-    def gpt_4o(
+    async def gpt_4o(
         self,
         prompt: str,
         response_format: BaseModel = str,
@@ -27,19 +22,14 @@ class CallManager:
         llm_model: str = "openai/gpt-4o",
         system_prompt: Optional[Any] = None 
     ):
-
-        
         roulette_agent = agent_creator(response_format, tools, context, llm_model, system_prompt)
         
-        message = [                   {
-                        "type": "text",
-                        "text": f"{prompt}"
-                    }]
-
-
+        message = [{
+            "type": "text",
+            "text": f"{prompt}"
+        }]
 
         try:
-
             if "claude/claude-3-5-sonnet" in llm_model:
                 print("Tools", tools)
                 if "ComputerUse.*" in tools:
@@ -50,12 +40,9 @@ class CallManager:
                     except Exception as e:
                         print("Error", e)
 
-        
-
-
-
-            result = roulette_agent.run_sync(message)
-
+            print("I sent the request1")
+            result = await roulette_agent.run(message)
+            print("I got the response1")
             usage = result.usage()
 
             return {"status_code": 200, "result": result.data, "usage": {"input_tokens": usage.request_tokens, "output_tokens": usage.response_tokens}}
@@ -64,18 +51,19 @@ class CallManager:
         except openai.BadRequestError as e:
             str_e = str(e)
             if "400" in str_e:
-                # Try to compress the message prompt
+                # Try to compress the message prompt - this is not async
                 try:
                     message[0]["text"] = summarize_message_prompt(message[0]["text"], llm_model)
-                    result = roulette_agent.run_sync(message)
+                    print("I sent the request2")
+                    result = await roulette_agent.run(message)
+                    print("I got the response2")
                 except Exception as e:
                     traceback.print_exc()
                     return {"status_code": 403, "detail": "Error processing request: " + str(e)}
             else:
                 return {"status_code": 403, "detail": "Error processing request: " + str(e)}
 
-        usage = result.usage()
-
-        return {"status_code": 200, "result": result.data, "usage": {"input_tokens": usage.request_tokens, "output_tokens": usage.response_tokens}}
+            usage = result.usage()
+            return {"status_code": 200, "result": result.data, "usage": {"input_tokens": usage.request_tokens, "output_tokens": usage.response_tokens}}
 
 Call = CallManager()

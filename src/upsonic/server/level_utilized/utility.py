@@ -7,6 +7,7 @@ from pydantic_ai.models.openai import OpenAIModel, OpenAIAgentModel
 from pydantic_ai.models.anthropic import AnthropicModel
 from openai import AsyncOpenAI, NOT_GIVEN
 from openai import AsyncAzureOpenAI
+import hashlib
 
 from pydantic import BaseModel
 from fastapi import HTTPException, status
@@ -23,13 +24,14 @@ from openai import AsyncStream
 
 
 from ...storage.configuration import Configuration
+from ...storage.caching import save_to_cache_with_expiry, get_from_cache_with_expiry
 
 from ...tools_server.function_client import FunctionToolManager
 
 from pydantic_ai.settings import ModelSettings
 
 my_settings = ModelSettings(
-    parallel_tool_calls=False
+    parallel_tool_calls=True
 )
 
 
@@ -70,6 +72,15 @@ def summarize_text(text: str, llm_model: Any, chunk_size: int = 100000, max_size
     # If text is already under max_size, return it
     if len(text) <= max_size:
         return text
+
+    # Generate a cache key based on text content and parameters
+    cache_key = hashlib.md5(f"{text}{llm_model}{chunk_size}{max_size}".encode()).hexdigest()
+    
+    # Try to get from cache first
+    cached_result = get_from_cache_with_expiry(cache_key)
+    if cached_result is not None:
+        print("Using cached summary")
+        return cached_result
 
     # Adjust chunk size based on model
     if "gpt" in str(llm_model).lower():
@@ -144,6 +155,10 @@ def summarize_text(text: str, llm_model: Any, chunk_size: int = 100000, max_size
             )
             
         print(f"Final summary length: {len(combined_summary)}")
+        
+        # Cache the result for 1 hour (3600 seconds)
+        save_to_cache_with_expiry(combined_summary, cache_key, 3600)
+        
         return combined_summary
     except Exception as e:
         traceback.print_exc()
@@ -163,6 +178,7 @@ def summarize_message_prompt(message_prompt: str, llm_model: Any) -> str:
         summarized_message_prompt = summarize_text(message_prompt, llm_model, max_size=max_size)
         if summarized_message_prompt is None:
             return ""
+        print("Before summarize_message_prompt length: ", len(message_prompt))
         print(f"Summarized message prompt length: {len(summarized_message_prompt)}")
         return summarized_message_prompt
     except Exception as e:
@@ -184,6 +200,7 @@ def summarize_system_prompt(system_prompt: str, llm_model: Any) -> str:
         summarized_system_prompt = summarize_text(system_prompt, llm_model, max_size=max_size)
         if summarized_system_prompt is None:
             return ""
+        print("Before summarize_system_prompt length: ", len(system_prompt))
         print(f"Summarized system prompt length: {len(summarized_system_prompt)}")
         return summarized_system_prompt
     except Exception as e:
@@ -205,6 +222,7 @@ def summarize_context_string(context_string: str, llm_model: Any) -> str:
         summarized_context = summarize_text(context_string, llm_model, max_size=max_size)
         if summarized_context is None:
             return ""
+        print("Before summarize_context_string length: ", len(context_string))
         print(f"Summarized context string length: {len(summarized_context)}")
         return summarized_context
     except Exception as e:
@@ -392,7 +410,9 @@ def agent_creator(
 
 
         if len(the_wrapped_tools) > 0:
-            roulette_agent.model_settings = my_settings
+            # Only apply my_settings for GPT-4 and O3 models
+            if llm_model in ["openai/gpt-4o", "azure/gpt-4o", "openai/o3-mini"]:
+                roulette_agent.model_settings = my_settings
 
 
 
@@ -406,7 +426,6 @@ def agent_creator(
                     from .cu import ComputerUse_tools
                     for each in ComputerUse_tools:
                         roulette_agent.tool_plain(each, retries=5)
-                        roulette_agent.model_settings = my_settings
                 except Exception as e:
                     print("Error", e)
 

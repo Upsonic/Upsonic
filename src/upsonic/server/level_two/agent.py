@@ -17,15 +17,9 @@ from ...client.tasks.task_response import ObjectResponse
 
 from ..level_one.call import Call
 
-from pydantic_ai.settings import ModelSettings
-
-my_settings = ModelSettings(
-    parallel_tool_calls=False
-)
-
 
 class AgentManager:
-    def agent(
+    async def agent(
         self,
         agent_id: str,
         prompt: str,
@@ -38,146 +32,127 @@ class AgentManager:
         context_compress: bool = False,
         memory: bool = False
     ):
+        try:
+            roulette_agent = agent_creator(
+                response_format=response_format, 
+                tools=tools, 
+                context=context, 
+                llm_model=llm_model, 
+                system_prompt=system_prompt,
+                context_compress=context_compress
+            )
 
-        
-        roulette_agent = agent_creator(
-            response_format=response_format, 
-            tools=tools, 
-            context=context, 
-            llm_model=llm_model, 
-            system_prompt=system_prompt,
-            context_compress=context_compress
-        )
-
-        roulette_agent.retries = retries
-        
-
-        message_history = None
-        if memory:
-            message_history = get_temporary_memory(agent_id)
-        
-
-        
-        message = [                   {
-                        "type": "text",
-                        "text": f"{prompt}"
-                    }]
-
-
-
-
-
-        if "claude/claude-3-5-sonnet" in llm_model:
-            print("Tools", tools)
-            if "ComputerUse.*" in tools:
-                try:
-                    from ..level_utilized.cu import ComputerUse__screenshot
-                    message.append(ComputerUse__screenshot())
-                except Exception as e:
-                    print("Error", e)
-
-        
-        feedback = ""
-
-
-        satisfied = False
-        total_request_tokens = 0
-        total_response_tokens = 0
-        total_retries = 0
-        while not satisfied:
+            roulette_agent.retries = retries
             
-            #adding_feedback
-            message[0]["text"] = message[0]["text"] + "\n\n" + feedback
+            message_history = None
+            if memory:
+                message_history = get_temporary_memory(agent_id)
 
+            message = [{
+                "type": "text",
+                "text": f"{prompt}"
+            }]
 
-            print("message: ", message)
-
-            try:
-                result = roulette_agent.run_sync(message, message_history=message_history)
-            except (openai.BadRequestError, anthropic.BadRequestError) as e:
-                str_e = str(e)
-                if "400" in str_e and context_compress:
-                    # Try to compress both system prompt and message prompt
+            if "claude/claude-3-5-sonnet" in llm_model:
+                print("Tools", tools)
+                if "ComputerUse.*" in tools:
                     try:
-                        compressed_prompt = summarize_system_prompt(system_prompt, llm_model)
-                        if compressed_prompt:
-                            print("compressed_prompt", compressed_prompt)
-                        message[0]["text"] = summarize_message_prompt(message[0]["text"], llm_model)
-                        if message[0]["text"]:
-                            print("compressed_message", message[0]["text"])
+                        from ..level_utilized.cu import ComputerUse_screenshot_tool
+                        result_of_screenshot = ComputerUse_screenshot_tool()
+                        message.append(result_of_screenshot)
+                    except Exception as e:
+                        print("Error", e)
 
-                        roulette_agent = agent_creator(
-                            response_format=response_format,
-                            tools=tools,
-                            context=context,
-                            llm_model=llm_model,
-                            system_prompt=compressed_prompt,
-                            context_compress=False  # Prevent infinite recursion
-                        )
-                        # Also compress the message prompt
-                        
+            feedback = ""
+            satisfied = False
+            total_request_tokens = 0
+            total_response_tokens = 0
+            total_retries = 0
 
-                        print("agent side")
-                        print("len of message", len(message))
-                        print("len of message[0]", len(message[0]["text"]))
-                        print("message", message)
-                        try:
-                            print("len of message_history", len(message_history))
-                        except:
-                            pass
-                        
-                        result = roulette_agent.run_sync(message, message_history=message_history)
-                    except (openai.BadRequestError, anthropic.BadRequestError) as e:
-                        traceback.print_exc()
-                        return {"status_code": 403, "detail": "Error processing Agent request: " + str(e)}
-                else:
-                    return {"status_code": 403, "detail": "Error processing Agent request: " + str(e)}
-                
-
-                
-            total_request_tokens += result.usage().request_tokens
-            total_response_tokens += result.usage().response_tokens
-
-
-            if retries == 1:
-                satisfied = True
-            elif total_retries >= retries:
-                satisfied = True
-            else:
-                total_retries += 1
-
-                print("Retrying", total_retries)
+            while not satisfied:
+                message[0]["text"] = message[0]["text"] + "\n\n" + feedback
+                print("message: ", message)
 
                 try:
-                    class Satisfying(ObjectResponse):
-                        satisfied: bool
-                        feedback: str
-                        
-                    from ...client.level_two.agent import OtherTask
+                    print("I sent the request3")
+                    result = await roulette_agent.run(message, message_history=message_history)
+                    print("I got the response3")
+                except (openai.BadRequestError, anthropic.BadRequestError) as e:
+                    str_e = str(e)
+                    if "400" in str_e and context_compress:
+                        try:
+                            # These functions are not async, so don't await them
+                            compressed_prompt = summarize_system_prompt(system_prompt, llm_model)
+                            if compressed_prompt:
+                                print("compressed_prompt", compressed_prompt)
+                            message[0]["text"] = summarize_message_prompt(message[0]["text"], llm_model)
+                            if message[0]["text"]:
+                                print("compressed_message", message[0]["text"])
 
-                    other_task = OtherTask(task=prompt, result=result.data)
-
-
-                    satify_result = Call.gpt_4o("Check if the result is satisfied", response_format=Satisfying, context=other_task, llm_model=llm_model)
-                    feedback = satify_result["result"].feedback
-      
-
-                    if satify_result["result"].satisfied:
-                        satisfied = True
+                            roulette_agent = agent_creator(
+                                response_format=response_format,
+                                tools=tools,
+                                context=context,
+                                llm_model=llm_model,
+                                system_prompt=compressed_prompt,
+                                context_compress=False
+                            )
+                            print("I sent the request4")
+                            result = await roulette_agent.run(message, message_history=message_history)
+                            print("I got the response4")
+                        except Exception as e:
+                            traceback.print_exc()
+                            return {"status_code": 403, "detail": "Error processing Agent request: " + str(e)}
                     else:
-                        satisfied = False
+                        return {"status_code": 403, "detail": "Error processing Agent request: " + str(e)}
 
-                    
-                except Exception as e:
-                    traceback.print_exc()
+                total_request_tokens += result.usage().request_tokens
+                total_response_tokens += result.usage().response_tokens
 
-            
-        usage = result.usage()
+                if retries == 1:
+                    satisfied = True
+                elif total_retries >= retries:
+                    satisfied = True
+                else:
+                    total_retries += 1
+                    print("Retrying", total_retries)
 
-        if memory:
-            save_temporary_memory(result.all_messages(), agent_id)
+                    try:
+                        class Satisfying(ObjectResponse):
+                            satisfied: bool
+                            feedback: str
+                            
+                        from ...client.level_two.agent import OtherTask
+                        other_task = OtherTask(task=prompt, result=result.data)
 
-        return {"status_code": 200, "result": result.data, "usage": {"input_tokens": total_request_tokens, "output_tokens": total_response_tokens}}
+                        satify_result = await Call.gpt_4o(
+                            "Check if the result is satisfied", 
+                            response_format=Satisfying, 
+                            context=other_task, 
+                            llm_model=llm_model
+                        )
+                        feedback = satify_result["result"].feedback
+
+                        satisfied = satify_result["result"].satisfied
+                    except Exception as e:
+                        traceback.print_exc()
+                        satisfied = True  # Break the loop on error
+
+            if memory:
+                save_temporary_memory(result.message_history, agent_id)
+
+            return {
+                "status_code": 200, 
+                "result": result.data, 
+                "usage": {
+                    "input_tokens": total_request_tokens, 
+                    "output_tokens": total_response_tokens
+                }
+            }
+
+        except Exception as e:
+            traceback.print_exc()
+            return {"status_code": 500, "detail": f"Error processing Agent request: {str(e)}"}
 
 
 Agent = AgentManager()

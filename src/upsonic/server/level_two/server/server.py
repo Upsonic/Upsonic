@@ -7,7 +7,6 @@ import pydantic_ai
 from ...api import app, timeout
 from ..agent import Agent
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 import cloudpickle
 cloudpickle.DEFAULT_PROTOCOL = 2
 import base64
@@ -28,26 +27,6 @@ class AgentRequest(BaseModel):
     context_compress: Optional[Any] = False
     memory: Optional[Any] = False
 
-def run_sync_agent(agent_id, prompt, response_format, tools, context, llm_model, system_prompt, retries, context_compress, memory):
-    # Create a new event loop for this thread
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return Agent.agent(
-            agent_id=agent_id,
-            prompt=prompt,
-            response_format=response_format,
-            tools=tools,
-            context=context,
-            llm_model=llm_model,
-            system_prompt=system_prompt,
-            retries=retries,
-            context_compress=context_compress,
-            memory=memory
-        )
-    finally:
-        loop.close()
-
 
 @app.post(f"{prefix}/agent")
 @timeout(500.0)  # 5 minutes timeout for AI operations
@@ -61,8 +40,6 @@ async def call_agent(request: AgentRequest):
     Returns:
         The response from the AI model
     """
-
-
     try:
         # Handle pickled response format
         if request.response_format != "str":
@@ -71,7 +48,6 @@ async def call_agent(request: AgentRequest):
                 pickled_data = base64.b64decode(request.response_format)
                 response_format = cloudpickle.loads(pickled_data)
             except Exception as e:
-       
                 # Fallback to basic type mapping if unpickling fails
                 type_mapping = {
                     "str": str,
@@ -92,37 +68,27 @@ async def call_agent(request: AgentRequest):
         else:
             context = None
 
-
-
-        loop = asyncio.get_running_loop()
-        with ThreadPoolExecutor() as pool:
-            result = await loop.run_in_executor(
-                pool,
-                run_sync_agent,
-                request.agent_id,
-                request.prompt,
-                response_format,
-                request.tools,
-                context,
-                request.llm_model,
-                request.system_prompt,
-                request.retries,
-                request.context_compress,   
-                request.memory
-            )
+        result = await Agent.agent(
+            agent_id=request.agent_id,
+            prompt=request.prompt,
+            response_format=response_format,
+            tools=request.tools,
+            context=context,
+            llm_model=request.llm_model,
+            system_prompt=request.system_prompt,
+            retries=request.retries,
+            context_compress=request.context_compress,
+            memory=request.memory
+        )
 
         if request.response_format != "str" and result["status_code"] == 200:
-
             result["result"] = cloudpickle.dumps(result["result"])
             result["result"] = base64.b64encode(result["result"]).decode('utf-8')
         return {"result": result, "status_code": 200}
 
     except pydantic_ai.exceptions.UnexpectedModelBehavior as e:
         return {"result": {"status_code": 500, "detail": f"Change your response format to a simple format or improve your task description. Your response format is too hard for the model to understand (Dont use 'dict' like things in your response format, define everything explicitly). Try to make it more small parts.", "status_code": 500}}
-    
 
     except Exception as e:
         traceback.print_exc()
-
-
         return {"result": {"status_code": 500, "detail": f"Error processing Agent request: {str(e)}"}, "status_code": 500}
