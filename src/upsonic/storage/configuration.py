@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 import pickledb
+import signal
 from .folder import BASE_PATH
 
 
@@ -8,6 +9,16 @@ class ConfigManager:
     def __init__(self, db_name="config.db"):
         db_path = os.path.join(BASE_PATH, db_name)
         self.db = pickledb.load(db_path, False)
+        # Override pickledb's signal handler with our own
+        signal.signal(signal.SIGTERM, self._handle_signal)
+        signal.signal(signal.SIGINT, self._handle_signal)
+
+    def _handle_signal(self, signum, frame):
+        """Handle termination signals by dumping the database before exit"""
+        if hasattr(self, 'db'):
+            self.db.dump()
+        # Re-raise the signal
+        signal.default_int_handler(signum, frame)
 
     def initialize(self, key):
         load_dotenv()
