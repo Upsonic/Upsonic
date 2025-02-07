@@ -129,9 +129,20 @@ jobs:
       - name: Create and Push Manifest
         env:
           VERSION: ${{ needs.generate_version.outputs.random_version }}
+          DOCKER_CLI_EXPERIMENTAL: enabled
         run: |
+          mkdir -p ~/.docker
+          echo '{"experimental": "enabled"}' > ~/.docker/config.json
+          
+          # Create and push the manifest
           docker manifest create upsonic/server_test:$VERSION \
-            upsonic/server_test:$VERSION-amd64 \
-            upsonic/server_test:$VERSION-arm64
+            --amend upsonic/server_test:$VERSION-amd64 \
+            --amend upsonic/server_test:$VERSION-arm64
+
+          # Annotate the manifest with architecture and OS information
+          docker manifest annotate upsonic/server_test:$VERSION \
+            upsonic/server_test:$VERSION-amd64 --arch amd64 --os linux
+          docker manifest annotate upsonic/server_test:$VERSION \
+            upsonic/server_test:$VERSION-arm64 --arch arm64 --os linux
 
           docker manifest push upsonic/server_test:$VERSION
