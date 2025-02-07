@@ -60,13 +60,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          platforms: linux/amd64
+          version: latest
+          driver-opts: |
+            image=moby/buildkit:master
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -79,9 +78,15 @@ jobs:
           VERSION: ${{ needs.generate_version.outputs.random_version }}
         run: |
           cd ..
-          docker buildx build --platform linux/amd64 -f Upsonic/Dockerfile --push -t upsonic/server_test:$VERSION-amd64 \
-          --cache-to type=gha,mode=max \
-          --cache-from type=gha .
+          # Build for AMD64
+          docker buildx create --use --name single-arch-builder
+          docker buildx build --platform linux/amd64 \
+            -f Upsonic/Dockerfile \
+            --push \
+            --load \
+            -t upsonic/server_test:$VERSION-amd64 \
+            .
+          docker push upsonic/server_test:$VERSION-amd64
 
   build_docker_arm:
     name: "Build and Publish for ARM"
@@ -91,13 +96,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          platforms: linux/arm64
+          version: latest
+          driver-opts: |
+            image=moby/buildkit:master
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -110,9 +114,15 @@ jobs:
           VERSION: ${{ needs.generate_version.outputs.random_version }}
         run: |
           cd ..
-          docker buildx build --platform linux/arm64 -f Upsonic/Dockerfile --push -t upsonic/server_test:$VERSION-arm64 \
-          --cache-to type=gha,mode=max \
-          --cache-from type=gha .
+          # Build for ARM64
+          docker buildx create --use --name single-arch-builder
+          docker buildx build --platform linux/arm64 \
+            -f Upsonic/Dockerfile \
+            --push \
+            --load \
+            -t upsonic/server_test:$VERSION-arm64 \
+            .
+          docker push upsonic/server_test:$VERSION-arm64
 
   create_manifest:
     name: "Create Multi-Architecture Manifest"
@@ -134,10 +144,17 @@ jobs:
           mkdir -p ~/.docker
           echo '{"experimental": "enabled"}' > ~/.docker/config.json
           
+          # Pull the images first to ensure we have the correct manifests locally
+          docker pull upsonic/server_test:$VERSION-amd64
+          docker pull upsonic/server_test:$VERSION-arm64
+          
+          # Remove existing manifest if it exists
+          docker manifest rm upsonic/server_test:$VERSION || true
+          
           # Create and push the manifest
           docker manifest create upsonic/server_test:$VERSION \
-            --amend upsonic/server_test:$VERSION-amd64 \
-            --amend upsonic/server_test:$VERSION-arm64
+            upsonic/server_test:$VERSION-amd64 \
+            upsonic/server_test:$VERSION-arm64
 
           # Annotate the manifest with architecture and OS information
           docker manifest annotate upsonic/server_test:$VERSION \
@@ -145,4 +162,8 @@ jobs:
           docker manifest annotate upsonic/server_test:$VERSION \
             upsonic/server_test:$VERSION-arm64 --arch arm64 --os linux
 
-          docker manifest push upsonic/server_test:$VERSION
+          # Inspect before pushing to verify
+          docker manifest inspect upsonic/server_test:$VERSION
+
+          # Push the manifest
+          docker manifest push --purge upsonic/server_test:$VERSION
