@@ -28,11 +28,8 @@ from ...storage.caching import save_to_cache_with_expiry, get_from_cache_with_ex
 
 from ...tools_server.function_client import FunctionToolManager
 
-from pydantic_ai.settings import ModelSettings
 
-my_settings = ModelSettings(
-    parallel_tool_calls=False
-)
+my_settings = dict(parallel_tool_calls=False)
 
 
 def tool_wrapper(func: Callable) -> Callable:
@@ -392,6 +389,7 @@ def agent_creator(
             result_type=response_format,
             retries=5,
             system_prompt=system_prompt_,
+            model_settings=my_settings if llm_model in ["openai/gpt-4o", "azure/gpt-4o", "openai/o3-mini", "openai/gpt-4o-mini"] else None,
         )
 
 
@@ -413,23 +411,11 @@ def agent_creator(
 
 
         for each in the_wrapped_tools:
-
             # İnspect signature of the tool
             signature = inspect.signature(each)
-
             roulette_agent.tool_plain(each, retries=5)
 
-
-        if len(the_wrapped_tools) > 0:
-            # Only apply my_settings for GPT-4 and O3 models
-            if llm_model in ["openai/gpt-4o", "azure/gpt-4o", "openai/o3-mini", "openai/gpt-4o-mini"]:
-                roulette_agent.model_settings = my_settings
-
-
-
-
         # Computer use
-
         if "claude/claude-3-5-sonnet" in llm_model:
             print("Tools", tools)
             if "ComputerUse.*" in tools:
@@ -439,9 +425,6 @@ def agent_creator(
                         roulette_agent.tool_plain(each, retries=5)
                 except Exception as e:
                     print("Error", e)
-
-        
-
 
         return roulette_agent
 
