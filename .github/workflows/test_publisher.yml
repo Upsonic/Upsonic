@@ -140,9 +140,23 @@ jobs:
         env:
           VERSION: ${{ needs.generate_version.outputs.random_version }}
           DOCKER_CLI_EXPERIMENTAL: enabled
+          DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           mkdir -p ~/.docker
-          echo '{"experimental": "enabled"}' > ~/.docker/config.json
+          
+          # Create proper config with auth
+          echo "{
+            \"experimental\": \"enabled\",
+            \"auths\": {
+              \"https://index.docker.io/v1/\": {
+                \"auth\": \"$(echo -n ${DOCKER_USERNAME}:${DOCKER_PASSWORD} | base64)\"
+              }
+            }
+          }" > ~/.docker/config.json
+          
+          # Ensure we're logged in via docker login command as well
+          echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
           
           # Pull the images first to ensure we have the correct manifests locally
           docker pull upsonic/server_test:$VERSION-amd64
@@ -165,5 +179,17 @@ jobs:
           # Inspect before pushing to verify
           docker manifest inspect upsonic/server_test:$VERSION
 
-          # Push the manifest
-          docker manifest push --purge upsonic/server_test:$VERSION
+          # Push the manifest with retries
+          for i in 1 2 3; do
+            if docker manifest push --purge upsonic/server_test:$VERSION; then
+              echo "Successfully pushed manifest"
+              exit 0
+            fi
+            echo "Push attempt $i failed, retrying..."
+            # Re-login before retry
+            echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
+            sleep 5
+          done
+          
+          echo "Failed to push manifest after 3 attempts"
+          exit 1
