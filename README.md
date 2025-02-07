@@ -86,83 +86,24 @@ agent = Agent("Coder")
 agent.print_do(task)
 ```
 
-
-
 <br>
 <br>
 
-<br>
-<br>
+## Features
 
+### Direct LLM Call
 
-
-# Hard Example
-
-### Other LLM's
+LLMs have always been intelligent. We know exactly when to call an agent or an LLM. This creates a smooth transition from LLM to agent systems. The call method works like an agent, based on tasks and optimizing cost and latency for your requirements. Focus on the task. Don't waste time with complex architectures.
 
 ```python
-agent = Agent("Coder", llm_model="openai/gpt-4o")
-```
+from upsonic import Direct
 
-- o3-mini
-    - required environment variables
-        - OPENAI_API_KEY
-    - llm_model
-        - openai/o3-mini
-
-
-
-- deepseek-chat
-    - required environment variables
-        - DEEPSEEK_API_KEY
-    - llm_model
-        - deepseek/deepseek-chat
-
-
-
-- claude-3-5-sonnet
-    - required environment variables
-        - ANTHROPIC_API_KEY
-    - llm_model
-        - claude/claude-3-5-sonnet
-
-- gpt-4o-azure
-    - required environment variables
-        - AZURE_OPENAI_ENDPOINT
-        - AZURE_OPENAI_API_VERSION
-        - AZURE_OPENAI_API_KEY
-    - llm_model
-        - azure/gpt-4o
-
-
-
-
-- claude-3-5-sonnet-aws
-    - required environment variables    
-        - AWS_ACCESS_KEY_ID
-        - AWS_SECRET_ACCESS_KEY
-        - AWS_REGION
-    - llm_model
-        - bedrock/claude-3-5-sonnet
-
-
-
-<br>
-<br>
-
-## Defining a Task
-
-### 1) Description
-
-The task is based on the description. We have a mechanism to automatically generate sub-tasks from a high-level task description. For example, a task to track AI industry developments might be described as: "Research latest news in Anthropic and OpenAI." This will be turned into smaller, more manageable tasks ("Make a Google search for Anthropic and OpenAI," "Read the blogs," "Read the official descriptions of Anthropic and OpenAI").
-
-```python
-# Define a new Task
-description = "Research latest news in Anthropic and OpenAI"
+Direct.do(task1)
 
 ```
 
-### 2) Response Format
+
+###  Response Format
 
 The output is essential for deploying an AI agent across apps or as a service. In Upsonic, we use Pydantic BaseClass as input for the task system. This allows you to configure the output exactly how you want it, such as a list of news with title, body, and URL. You can create a flexible yet robust output mechanism that improves interoperability between the agent and your app.
 
@@ -181,7 +122,8 @@ class ResponseFormat(ObjectResponse):
 
 ```
 
-### 3) Tool Integration
+
+### Tool Integration
 
 Our Framework officially supports [Model Context Protocol (MCP)](https://www.claudemcp.com/) and custom tools. You can use hundreds of MCP servers at https://glama.ai/mcp/servers or https://smithery.ai/ We also support Python functions inside a class as a tool. You can easily generate your integrations with that.
 ```python
@@ -202,65 +144,14 @@ tools = [Search, MyTools] # HackerNewsMCP
 
 ```
 
-### 4) Task Defination
 
-After defining these terms, you are ready to generate your first task. This structure is a key component of the Upsonic task-oriented structure. Once you define a task, you can run it with agents or directly via an LLM call to obtain the result over the Task object. The automatic sub-task mechanism is also essential for enhancing quality and precision. 
-
-This simplicity is a hallmark of Upsonic.
+### Other LLM's
 
 ```python
-task1 = Task(description=description, response_format=ResponseFormat, tools=tools)
-
+agent = Agent("Coder", llm_model="openai/gpt-4o")
 ```
+Access other LLMs through the [docs](https://docs.upsonic.ai/concepts/llm_support)
 
-<br>
-<br>
-
-## Defining an Agent
-
-Agents are the standard way to configure an LLM for your employees to work on your requests. It is essential to consider the goals and context of tasks. In Upsonic, we have an automatic characterization mechanism that enriches the given information by researchers agents working on Upsonic. For example, a Product Manager Agent can be configured with job title, company URL, and company objectives. Representing agents as roles like it supports practical agents aligned with their unique objectives.
-
-```python
-agent = Agent("Product Manager")
-
-```
-
-<br>
-<br>
-
-## Running Tasks
-
-Define the task and the agent, then combine them and run. The Upsonic Server will prepare and run the task. This standard method simplifies the use of agents in your SaaS applications or your new vertical AI agents. 🤖 You are now completely ready to run your first agent.
-
-```python
-agent.do(task)
-
-result = task1.response
-
-for i in result.news_list:
-    print()
-    print("News")
-    print("Title: ", i.title)
-    print("Body: ", i.body)
-    print("URL: ", i.url)
-    print("Tags: ", i.tags)
-
-```
-<br>
-<br>
-
-## Other Features (Beta)
-
-### Direct LLM Call
-
-LLMs have always been intelligent. We know exactly when to call an agent or an LLM. This creates a smooth transition from LLM to agent systems. The call method works like an agent, based on tasks and optimizing cost and latency for your requirements. Focus on the task. Don't waste time with complex architectures.
-
-```python
-from upsonic import Direct
-
-Direct.do(task1)
-
-```
 
 ### Memory
 
@@ -275,7 +166,6 @@ agent = Agent(
     ...
     memory=True
 )
-
 ```
 
 ### Knowledge Base
