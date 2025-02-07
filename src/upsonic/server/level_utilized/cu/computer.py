@@ -145,9 +145,11 @@ class ComputerTool(BaseAnthropicTool):
 
             if action == "mouse_move":
                 smooth_move_to(x, y)
+                return ToolResult(output=f"Mouse moved to X={x}, Y={y}")
             elif action == "left_click_drag":
                 smooth_move_to(x, y)
                 pyautogui.dragTo(x, y, button="left")
+                return ToolResult(output=f"Mouse dragged to X={x}, Y={y}")
 
         elif action in ("key", "type"):
             if text is None:
@@ -190,8 +192,10 @@ class ComputerTool(BaseAnthropicTool):
                         pyautogui.hotkey(*keys)
                 else:
                     pyautogui.press(keys[0])
+                return ToolResult(output=f"Key pressed: {text}")
             elif action == "type":
                 pyautogui.write(text, interval=TYPING_DELAY_MS / 1000)
+                return ToolResult(output=f"Text typed: {text}")
 
         elif action in ("left_click", "right_click", "double_click", "middle_click"):
             time.sleep(0.1)
@@ -204,11 +208,14 @@ class ComputerTool(BaseAnthropicTool):
                 pyautogui.click()
                 time.sleep(0.1)
                 pyautogui.click()
+                return ToolResult(output="Double click performed")
             else:
                 pyautogui.click(button=button.get(action, "left"))
+                return ToolResult(output=f"{action.replace('_', ' ').title()} performed")
 
         elif action == "screenshot":
-            return self.screenshot()
+            screenshot_result = self.screenshot()
+            return ToolResult(output="Screenshot taken", base64_image=screenshot_result["source"]["data"])
 
         elif action == "cursor_position":
             x, y = pyautogui.position()
@@ -220,7 +227,8 @@ class ComputerTool(BaseAnthropicTool):
 
         # Take a screenshot after the action (except for cursor_position)
         if action != "cursor_position":
-            return self.screenshot()
+            screenshot_result = self.screenshot()
+            return ToolResult(output=f"Action '{action}' completed", base64_image=screenshot_result["source"]["data"])
 
     def screenshot(self):
         """Take a screenshot of the current screen and return the base64 encoded image."""
@@ -305,58 +313,69 @@ class ComputerTool(BaseAnthropicTool):
 async def ComputerUse__type(text: str):
     """Execute a typing action using the ComputerTool."""
     tool = ComputerTool()
-    return await tool(action="type", text=text)
+    result = await tool(action="type", text=text)
+    return result
 
 async def ComputerUse__key(text: str):
     """Execute a key press action using the ComputerTool."""
     tool = ComputerTool()
-    return await tool(action="key", text=text)
+    result = await tool(action="key", text=text)
+    return result
 
 async def ComputerUse__mouse_move(coordinate: tuple[int, int]):
     """Execute a mouse move action using the ComputerTool."""
     tool = ComputerTool()
-    return await tool(action="mouse_move", coordinate=coordinate)
+    result = await tool(action="mouse_move", coordinate=coordinate)
+    return result
 
 async def ComputerUse__left_click():
     """Execute a left click action using the ComputerTool."""
     tool = ComputerTool()
-    return await tool(action="left_click")
+    result = await tool(action="left_click")
+    return result
 
 async def ComputerUse__right_click():
     """Execute a right click action using the ComputerTool."""
     tool = ComputerTool()
-    return await tool(action="right_click")
+    result = await tool(action="right_click")
+    return result
 
 async def ComputerUse__middle_click():
     """Execute a middle click action using the ComputerTool."""
     tool = ComputerTool()
-    return await tool(action="middle_click")
+    result = await tool(action="middle_click")
+    return result
 
 async def ComputerUse__double_click():
     """Execute a double click action using the ComputerTool."""
     tool = ComputerTool()
-    return await tool(action="double_click")
+    result = await tool(action="double_click")
+    return result
 
 async def ComputerUse__left_click_drag(coordinate: tuple[int, int]):
     """Execute a left click drag action using the ComputerTool."""
     tool = ComputerTool()
-    return await tool(action="left_click_drag", coordinate=coordinate)
+    result = await tool(action="left_click_drag", coordinate=coordinate)
+    return result
 
 async def ComputerUse__screenshot():
     """Take a screenshot using the ComputerTool."""
     tool = ComputerTool()
-    return await tool(action="screenshot")
+    result = await tool(action="screenshot")
+    return result
 
 
 def ComputerUse_screenshot_tool():
     """Take a screenshot using the ComputerTool and return the base64 encoded image."""
     tool = ComputerTool()
-    return tool.screenshot()
+    result = tool.screenshot()
+    return ToolResult(output="Screenshot taken", base64_image=result["source"]["data"])
 
 async def ComputerUse__cursor_position():
     """Get the current cursor position using the ComputerTool."""
     tool = ComputerTool()
-    return await tool(action="cursor_position")
+    result = await tool(action="cursor_position")
+    return result
 
 # List of all computer use tools
 ComputerUse_tools = [
