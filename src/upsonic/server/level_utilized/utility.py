@@ -389,7 +389,7 @@ def agent_creator(
             result_type=response_format,
             retries=5,
             system_prompt=system_prompt_,
-            model_settings=my_settings if llm_model in ["openai/gpt-4o", "azure/gpt-4o", "openai/o3-mini", "openai/gpt-4o-mini"] else None,
+            model_settings=my_settings if tools and llm_model in ["openai/gpt-4o", "azure/gpt-4o", "openai/o3-mini", "openai/gpt-4o-mini"] else None,
         )
 
 
