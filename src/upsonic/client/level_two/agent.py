@@ -535,10 +535,6 @@ Tool Availability Impact:
 
 
     def multi_agent(self, agent_configurations: List[AgentConfiguration], tasks: Any, llm_model: str = None):
-    
-
-
-
         agent_tasks = []
 
         the_agents = {}
@@ -587,9 +583,17 @@ Tool Availability Impact:
                     
 
 
+        # Store original client
+        original_client = self
 
         for each in agent_tasks:
-            self.agent(each["agent"], each["task"], llm_model)
+            # Check if agent has a custom client
+            if each["agent"].client is not None:
+                # Use agent's custom client for this task
+                each["agent"].client.agent(each["agent"], each["task"], llm_model)
+            else:
+                # Use the default/automatic client
+                original_client.agent(each["agent"], each["task"], llm_model)
 
 
         return the_agents

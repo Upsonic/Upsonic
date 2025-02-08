@@ -22,18 +22,22 @@ class MultiAgent:
         global latest_upsonic_client
         from ..latest_upsonic_client import latest_upsonic_client
 
-        # Get or create client
+        # Get or create client for agents without custom clients
         the_client = get_or_create_client()
         
-        # Register tools if needed
+        # Register tools for all tasks regardless of client
         for task in tasks:
             the_client = register_tools(the_client, task.tools)
+            # Also register tools for agents with custom clients
+            for agent in agents:
+                if agent.client is not None:
+                    agent.client = register_tools(agent.client, task.tools)
         
         # Update the global client reference
         if latest_upsonic_client is None:
             latest_upsonic_client = the_client
 
-        # Execute the direct call
+        # Execute the multi-agent call
         return the_client.multi_agent(agents, tasks, llm_model)
     
 
