@@ -75,9 +75,9 @@ COPY Upsonic /home/docker/Upsonic
 
 
 RUN python3.12 -m pip install --upgrade pip
-RUN python3.12 -m pip install /home/docker/Upsonic[server]
 RUN python3.12 -m pip install browser-use==0.1.36 langchain-openai langchain-anthropic langchain-community
 RUN python3.12 -m playwright install
+RUN python3.12 -m pip install /home/docker/Upsonic[server]
 
 
 
