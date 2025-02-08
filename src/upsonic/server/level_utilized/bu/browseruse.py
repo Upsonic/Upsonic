@@ -207,7 +207,8 @@ async def BrowserUse__browser_agent(task: str):
     agent = Agent(
         task=task,
         llm=get_llm(),
-        browser_context=context  # Use persistent context
+        browser_context=context,  # Use persistent context
+        generate_gif=False
     )
     
     try:
