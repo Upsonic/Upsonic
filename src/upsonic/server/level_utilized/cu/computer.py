@@ -43,14 +43,40 @@ class Resolution(TypedDict):
     height: int
 
 
-# sizes above XGA/WXGA are not recommended (see README.md)
-# scale down to one of these targets if ComputerTool._scaling_enabled is set
-MAX_SCALING_TARGETS: dict[str, Resolution] = {
-    "XGA": Resolution(width=1024, height=768),  # 4:3
-    "WXGA": Resolution(width=1280, height=800),  # 16:10
-    "FWXGA": Resolution(width=1366, height=768),  # ~16:9
+class ScalingMode(StrEnum):
+    AUTO = "auto"  # Automatically determine best scaling
+    FIXED = "fixed"  # Use fixed target resolutions
+    RELATIVE = "relative"  # Scale by percentage
+    NONE = "none"  # No scaling
+
+
+# Base resolutions for different device categories
+DEVICE_CATEGORIES: dict[str, Resolution] = {
+    "HD": Resolution(width=1280, height=720),      # 720p
+    "FHD": Resolution(width=1920, height=1080),    # 1080p
+    "QHD": Resolution(width=2560, height=1440),    # 1440p
+    "4K": Resolution(width=3840, height=2160),     # 4K
+    "5K": Resolution(width=5120, height=2880),     # 5K (Common in Mac)
+    "6K": Resolution(width=6016, height=3384),     # 6K (Pro Display XDR)
 }
 
+class ScalingConfig(TypedDict):
+    mode: ScalingMode
+    target_resolution: Resolution | None  # Used for FIXED mode
+    scale_factor: float | None  # Used for RELATIVE mode
+    min_scale: float  # Minimum scaling factor
+    max_scale: float  # Maximum scaling factor
+    preserve_aspect_ratio: bool
+
+
+DEFAULT_SCALING_CONFIG = ScalingConfig(
+    mode=ScalingMode.AUTO,
+    target_resolution=None,
+    scale_factor=None,
+    min_scale=0.25,  # Don't scale below 25%
+    max_scale=1.0,   # Don't upscale
+    preserve_aspect_ratio=True
+)
 
 class ScalingSource(StrEnum):
     COMPUTER = "computer"
@@ -101,7 +127,8 @@ class ComputerTool(BaseAnthropicTool):
     api_type: Literal["computer_20241022"] = "computer_20241022"
     width: int
     height: int
-    display_num: None  # Simplified to always be None since we're only using primary display
+    display_num: None
+    scaling_config: ScalingConfig
 
     _screenshot_delay = 2.0
     _scaling_enabled = True
@@ -124,6 +151,93 @@ class ComputerTool(BaseAnthropicTool):
         super().__init__()
         self.width, self.height = pyautogui.size()
         self.display_num = None
+        self.scaling_config = self._determine_optimal_scaling()
+
+    def _determine_optimal_scaling(self) -> ScalingConfig:
+        """Determine the optimal scaling configuration based on the current display."""
+        config = DEFAULT_SCALING_CONFIG.copy()
+        
+        # Get system info
+        system = platform.system().lower()
+        total_pixels = self.width * self.height
+        aspect_ratio = self.width / self.height
+        
+        # Detect Retina/HiDPI displays on macOS
+        is_retina = False
+        if system == "darwin":
+            try:
+                import subprocess
+                result = subprocess.run(['system_profiler', 'SPDisplaysDataType'], capture_output=True, text=True)
+                is_retina = "Retina" in result.stdout
+            except Exception:
+                pass
+
+        # Find the closest standard resolution
+        closest_category = None
+        min_diff = float('inf')
+        
+        for category, resolution in DEVICE_CATEGORIES.items():
+            cat_pixels = resolution["width"] * resolution["height"]
+            diff = abs(cat_pixels - total_pixels)
+            if diff < min_diff:
+                min_diff = diff
+                closest_category = category
+
+        # Determine scaling mode and factors
+        if is_retina:
+            # For Retina displays, we use relative scaling
+            config["mode"] = ScalingMode.RELATIVE
+            config["scale_factor"] = 0.5  # Default for Retina
+        elif total_pixels > DEVICE_CATEGORIES["FHD"]["width"] * DEVICE_CATEGORIES["FHD"]["height"]:
+            # For high-res displays, scale down to FHD
+            config["mode"] = ScalingMode.FIXED
+            config["target_resolution"] = DEVICE_CATEGORIES["FHD"]
+        else:
+            # For standard/lower resolutions, use minimal scaling
+            config["mode"] = ScalingMode.RELATIVE
+            config["scale_factor"] = 1.0
+
+        return config
+
+    def scale_coordinates(self, source: ScalingSource, x: int, y: int) -> tuple[int, int]:
+        """Scale coordinates based on the current scaling configuration."""
+        if not self._scaling_enabled:
+            return x, y
+
+        if self.scaling_config["mode"] == ScalingMode.NONE:
+            return x, y
+
+        # Get current scaling factors
+        if self.scaling_config["mode"] == ScalingMode.FIXED and self.scaling_config["target_resolution"]:
+            x_factor = self.scaling_config["target_resolution"]["width"] / self.width
+            y_factor = self.scaling_config["target_resolution"]["height"] / self.height
+            
+            if self.scaling_config["preserve_aspect_ratio"]:
+                # Use the same factor for both dimensions to preserve aspect ratio
+                x_factor = y_factor = min(x_factor, y_factor)
+        
+        elif self.scaling_config["mode"] == ScalingMode.RELATIVE and self.scaling_config["scale_factor"]:
+            x_factor = y_factor = self.scaling_config["scale_factor"]
+        
+        else:  # AUTO mode
+            # Calculate dynamic scaling factor based on resolution
+            base_factor = min(1.0, 1920 / max(self.width, self.height))  # Use FHD as reference
+            x_factor = y_factor = max(
+                self.scaling_config["min_scale"],
+                min(self.scaling_config["max_scale"], base_factor)
+            )
+
+        # Apply scaling based on source
+        if source == ScalingSource.API:
+            # Scale up (from scaled coordinates to actual screen coordinates)
+            return round(x / x_factor), round(y / y_factor)
+        else:
+            # Scale down (from actual screen coordinates to scaled coordinates)
+            return round(x * x_factor), round(y * y_factor)
+
+    def update_scaling_config(self, new_config: dict) -> None:
+        """Update the scaling configuration with new settings."""
+        self.scaling_config.update(new_config)
 
     async def __call__(
         self,
@@ -290,31 +404,6 @@ class ComputerTool(BaseAnthropicTool):
             }
 
         return result
-
-    def scale_coordinates(self, source: ScalingSource, x: int, y: int):
-        """Scale coordinates to a target maximum resolution."""
-        if not self._scaling_enabled:
-            return x, y
-        ratio = self.width / self.height
-        target_dimension = None
-        for dimension in MAX_SCALING_TARGETS.values():
-            # allow some error in the aspect ratio - not ratios are exactly 16:9
-            if abs(dimension["width"] / dimension["height"] - ratio) < 0.02:
-                if dimension["width"] < self.width:
-                    target_dimension = dimension
-                break
-        if target_dimension is None:
-            return x, y
-        # should be less than 1
-        x_scaling_factor = target_dimension["width"] / self.width
-        y_scaling_factor = target_dimension["height"] / self.height
-        if source == ScalingSource.API:
-            if x > self.width or y > self.height:
-                return {"text": f"Coordinates {x}, {y} are out of bounds"}
-            # scale up
-            return round(x / x_scaling_factor), round(y / y_scaling_factor)
-        # scale down
-        return round(x * x_scaling_factor), round(y * y_scaling_factor)
 
 
 async def ComputerUse__type(text: str):
