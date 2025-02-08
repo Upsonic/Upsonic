@@ -29,7 +29,9 @@ from ...storage.caching import save_to_cache_with_expiry, get_from_cache_with_ex
 from ...tools_server.function_client import FunctionToolManager
 
 
-my_settings = dict(parallel_tool_calls=False)
+my_settings_openai = dict(parallel_tool_calls=False)
+my_settings_anthropic = dict(parallel_tool_calls=False)
+
 
 
 def tool_wrapper(func: Callable) -> Callable:
@@ -383,13 +385,16 @@ def agent_creator(
         
 
 
+        the_model_settings = my_settings_openai if tools and llm_model in ["openai/gpt-4o", "azure/gpt-4o", "openai/o3-mini", "openai/gpt-4o-mini"] else None
+        if the_model_settings is None:
+            the_model_settings = my_settings_anthropic if tools and llm_model in ["claude/claude-3-5-sonnet", "claude-3-5-sonnet", "bedrock/claude-3-5-sonnet"] else None
 
         roulette_agent = Agent(
             model,
             result_type=response_format,
             retries=5,
             system_prompt=system_prompt_,
-            model_settings=my_settings if tools and llm_model in ["openai/gpt-4o", "azure/gpt-4o", "openai/o3-mini", "openai/gpt-4o-mini"] else None,
+            model_settings=the_model_settings
         )
 
 
