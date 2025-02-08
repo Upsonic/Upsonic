@@ -67,8 +67,10 @@ jobs:
             --push \
             --load \
             -t upsonic/server:$VERSION-amd64 \
+            -t upsonic/server:latest-amd64 \
             .
           docker push upsonic/server:$VERSION-amd64
+          docker push upsonic/server:latest-amd64
 
   build_docker_arm:
     name: "Build and Publish for ARM"
@@ -107,8 +109,10 @@ jobs:
             --push \
             --load \
             -t upsonic/server:$VERSION-arm64 \
+            -t upsonic/server:latest-arm64 \
             .
           docker push upsonic/server:$VERSION-arm64
+          docker push upsonic/server:latest-arm64
 
   create_manifest:
     name: "Create Multi-Architecture Manifest"
@@ -151,35 +155,53 @@ jobs:
           # Pull the images first to ensure we have the correct manifests locally
           docker pull upsonic/server:$VERSION-amd64
           docker pull upsonic/server:$VERSION-arm64
+          docker pull upsonic/server:latest-amd64
+          docker pull upsonic/server:latest-arm64
           
-          # Remove existing manifest if it exists
+          # Remove existing manifests if they exist
           docker manifest rm upsonic/server:$VERSION || true
+          docker manifest rm upsonic/server:latest || true
           
-          # Create and push the manifest
+          # Create and push the version manifest
           docker manifest create upsonic/server:$VERSION \
             upsonic/server:$VERSION-amd64 \
             upsonic/server:$VERSION-arm64
 
-          # Annotate the manifest with architecture and OS information
+          # Create and push the latest manifest
+          docker manifest create upsonic/server:latest \
+            upsonic/server:latest-amd64 \
+            upsonic/server:latest-arm64
+
+          # Annotate the version manifest
           docker manifest annotate upsonic/server:$VERSION \
             upsonic/server:$VERSION-amd64 --arch amd64 --os linux
           docker manifest annotate upsonic/server:$VERSION \
             upsonic/server:$VERSION-arm64 --arch arm64 --os linux
 
+          # Annotate the latest manifest
+          docker manifest annotate upsonic/server:latest \
+            upsonic/server:latest-amd64 --arch amd64 --os linux
+          docker manifest annotate upsonic/server:latest \
+            upsonic/server:latest-arm64 --arch arm64 --os linux
+
           # Inspect before pushing to verify
           docker manifest inspect upsonic/server:$VERSION
+          docker manifest inspect upsonic/server:latest
 
-          # Push the manifest with retries
-          for i in 1 2 3; do
-            if docker manifest push --purge upsonic/server:$VERSION; then
-              echo "Successfully pushed manifest"
-              exit 0
-            fi
-            echo "Push attempt $i failed, retrying..."
-            # Re-login before retry
-            echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
-            sleep 5
+          # Push the manifests with retries
+          for manifest in "$VERSION" "latest"; do
+            for i in 1 2 3; do
+              if docker manifest push --purge upsonic/server:$manifest; then
+                echo "Successfully pushed manifest for $manifest"
+                break
+              fi
+              echo "Push attempt $i failed for $manifest, retrying..."
+              # Re-login before retry
+              echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
+              sleep 5
+              if [ $i -eq 3 ]; then
+                echo "Failed to push manifest for $manifest after 3 attempts"
+                exit 1
+              fi
+            done
           done
-          
-          echo "Failed to push manifest after 3 attempts"
-          exit 1

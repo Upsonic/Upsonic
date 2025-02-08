@@ -71,11 +71,10 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
         connected_to_server(self.server_type, "Established")
 
         # Handle configuration through ClientConfig model
-        if kwargs:
-            config = ClientConfig(**kwargs)
-            for key, value in config.model_dump().items():
-                if value is not None:
-                    self.set_config(key, value)
+        config = ClientConfig(**(kwargs or {}))
+        for key, value in config.model_dump().items():
+            if value is not None:
+                self.set_config(key, value)
 
         global latest_upsonic_client
         latest_upsonic_client = self

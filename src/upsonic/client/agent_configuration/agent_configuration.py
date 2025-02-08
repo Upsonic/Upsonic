@@ -75,14 +75,16 @@ def execute_task(agent_config, task: Task):
     """Execute a task with the given agent configuration."""
     global latest_upsonic_client
     
-
-    # Get or create client
-    the_client = get_or_create_client()
+    # If agent has a custom client, use it
+    if hasattr(agent_config, 'client') and agent_config.client is not None:
+        the_client = agent_config.client
+    else:
+        # Get or create client using existing process
+        the_client = get_or_create_client()
     
     # Register tools if needed
     the_client = register_tools(the_client, task.tools)
     
-
     the_client.run(agent_config, task)
     return task.response
 
@@ -95,10 +97,13 @@ class AgentConfiguration(BaseModel):
     name: str = ""
     contact: str = ""
     model: str = "openai/gpt-4o"
+    client: Any = None  # Add client parameter
 
-    def __init__(self, job_title: str = None, **data):
+    def __init__(self, job_title: str = None, client: Any = None, **data):
         if job_title is not None:
             data["job_title"] = job_title
+        if client is not None:
+            data["client"] = client
         super().__init__(**data)
 
     sub_task: bool = True
