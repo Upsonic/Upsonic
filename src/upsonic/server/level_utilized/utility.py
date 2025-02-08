@@ -431,5 +431,16 @@ def agent_creator(
                 except Exception as e:
                     print("Error", e)
 
+        if "BrowserUse.*" in tools:
+            try:
+                from .bu import BrowserUse_tools
+                from .bu.browseruse import LLMManager
+                LLMManager.set_model(llm_model)
+
+                for each in BrowserUse_tools:
+                    roulette_agent.tool_plain(each, retries=5)
+            except Exception as e:
+                print("Error", e)
+
         return roulette_agent
 

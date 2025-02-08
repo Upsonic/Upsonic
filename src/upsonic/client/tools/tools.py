@@ -19,6 +19,9 @@ from ...exception import NoAPIKeyException, UnsupportedLLMModelException
 class ComputerUse:
     pass
 
+class BrowserUse:
+    pass
+
 class Search:
     pass
 

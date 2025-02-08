@@ -1,6 +1,6 @@
-from .tools import ComputerUse, Search
+from .tools import ComputerUse, Search, BrowserUse
 
 
 
 
-__all__ = ["ComputerUse", "Search"]
+__all__ = ["ComputerUse", "Search", "BrowserUse"]
