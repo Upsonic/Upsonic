@@ -387,7 +387,7 @@ def agent_creator(
 
         the_model_settings = my_settings_openai if tools and llm_model in ["openai/gpt-4o", "azure/gpt-4o", "openai/o3-mini", "openai/gpt-4o-mini"] else None
         if the_model_settings is None:
-            the_model_settings = my_settings_anthropic if tools and llm_model in ["claude/claude-3-5-sonnet", "claude-3-5-sonnet", "bedrock/claude-3-5-sonnet"] else None
+            the_model_settings = my_settings_anthropic if tools and llm_model in ["claude/claude-3-5-sonnet", "claude-3-5-sonnet"] else None
 
         roulette_agent = Agent(
             model,
@@ -421,7 +421,7 @@ def agent_creator(
             roulette_agent.tool_plain(each, retries=5)
 
         # Computer use
-        if "claude/claude-3-5-sonnet" in llm_model:
+        if "claude-3-5-sonnet" in llm_model:
             print("Tools", tools)
             if "ComputerUse.*" in tools:
                 try:
