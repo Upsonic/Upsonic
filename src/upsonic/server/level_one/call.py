@@ -30,7 +30,7 @@ class CallManager:
         }]
 
         try:
-            if "claude/claude-3-5-sonnet" in llm_model:
+            if "claude-3-5-sonnet" in llm_model:
                 print("Tools", tools)
                 if "ComputerUse.*" in tools:
                     try:
