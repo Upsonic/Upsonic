@@ -42,7 +42,7 @@ class SubTaskList(ObjectResponse):
 class AgentMode(ObjectResponse):
     """Mode selection for task decomposition"""
     selected_mode: Literal["level_no_step", "level_one"]
-    reasoning: str
+
 
 
 
