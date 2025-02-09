@@ -122,7 +122,7 @@ def get_llm():
     # Handle Azure OpenAI
     if llm_model in ["azure/gpt-4o", "gpt-4o-azure"]:
         azure_endpoint = Configuration.get("AZURE_OPENAI_ENDPOINT")
-        azure_api_key = Configuration.get("AZURE_OPENAI_KEY")
+        azure_api_key = Configuration.get("AZURE_OPENAI_API_KEY")
         azure_api_version = Configuration.get("AZURE_OPENAI_API_VERSION", "2024-10-21")
         
 
