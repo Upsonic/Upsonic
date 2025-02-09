@@ -1527,12 +1527,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pickledb"
-version = "0.9.2"
-source = { registry = "https://pypi.org/simple/" }
-sdist = { url = "https://files.pythonhosted.org/packages/29/7f/ae7a32f125c6165941ed5c547bff7e6fbd385658fc6e490c2ee73c78c4c2/pickleDB-0.9.2.tar.gz", hash = "sha256:ec6973e65d7d112849e78ce522840aa908efb2523470bb8ce5c7942310192240", size = 3745 }
-
-[[package]]
 name = "pillow"
 version = "11.1.0"
 source = { registry = "https://pypi.org/simple/" }
@@ -2472,7 +2466,6 @@ dependencies = [
     { name = "markitdown" },
     { name = "matplotlib" },
     { name = "mcp", extra = ["cli"] },
-    { name = "pickledb" },
     { name = "psutil" },
     { name = "pyautogui" },
     { name = "pydantic" },
@@ -2509,7 +2502,6 @@ requires-dist = [
     { name = "markitdown", specifier = ">=0.0.1a3" },
     { name = "matplotlib", specifier = ">=3.10.0" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.2.0" },
-    { name = "pickledb", specifier = "==0.9.2" },
     { name = "psutil", specifier = "==6.1.1" },
     { name = "pyautogui", specifier = ">=0.9.54" },
     { name = "pydantic", specifier = ">=2.10.4" },

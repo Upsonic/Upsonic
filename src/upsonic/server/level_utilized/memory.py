@@ -8,7 +8,7 @@ from ...storage.configuration import Configuration
 
 def save_temporary_memory(messages: list, agent_id: str) -> None:
     """
-    Save messages for a specific agent ID in temporary memory using pickledb.
+    Save messages for a specific agent ID in temporary memory.
     
     Args:
         messages: List of messages to store

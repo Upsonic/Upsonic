@@ -1,4 +1,6 @@
 agent_history.gif
+*.sqlite
+
 
 KOT-*
 notes.txt
