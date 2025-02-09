@@ -196,7 +196,7 @@ def get_llm():
     return llm
 
 
-async def BrowserUse__browser_agent(task: str):
+async def BrowserUse__browser_agent(task: str, expected_output: str):
     """An AI agent that can browse the web, extract information, and perform actions."""
     from browser_use import Agent
     
@@ -208,7 +208,7 @@ async def BrowserUse__browser_agent(task: str):
     
     # Create the agent with the browser context
     agent = Agent(
-        task=task,
+        task=task+"\n\nExpected Output: "+expected_output,
         llm=get_llm(),
         browser=browser,
         browser_context=context,  # Use persistent context
