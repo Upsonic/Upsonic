@@ -7,6 +7,7 @@ import asyncio
 import atexit
 
 
+
 class BrowserManager:
     _instance = None
     _browser = None
@@ -108,10 +109,10 @@ def get_llm():
     }
 
     claude_model_mapping = {
-        "claude/claude-3-5-sonnet": "claude-3-sonnet-20240229",
-        "claude-3-5-sonnet": "claude-3-sonnet-20240229",
-        "bedrock/claude-3-5-sonnet": "claude-3-sonnet-20240229",
-        "claude-3-5-sonnet-aws": "claude-3-sonnet-20240229"
+        "claude/claude-3-5-sonnet": "claude-3-5-sonnet-latest",
+        "claude-3-5-sonnet": "claude-3-5-sonnet-latest",
+        "bedrock/claude-3-5-sonnet": "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+        "claude-3-5-sonnet-aws": "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
     }
 
     deepseek_model_mapping = {
@@ -121,18 +122,17 @@ def get_llm():
     # Handle Azure OpenAI
     if llm_model in ["azure/gpt-4o", "gpt-4o-azure"]:
         azure_endpoint = Configuration.get("AZURE_OPENAI_ENDPOINT")
-        azure_api_version = Configuration.get("AZURE_OPENAI_API_VERSION")
-        azure_api_key = Configuration.get("AZURE_OPENAI_API_KEY")
+        azure_api_key = Configuration.get("AZURE_OPENAI_KEY")
+        azure_api_version = Configuration.get("AZURE_OPENAI_API_VERSION", "2024-10-21")
         
-        if not all([azure_endpoint, azure_api_version, azure_api_key]):
-            raise ValueError("Azure OpenAI credentials not found in configuration")
+
             
-        llm = ChatOpenAI(
-            deployment_name="gpt-4",
-            openai_api_version=azure_api_version,
+        from langchain_openai import AzureChatOpenAI
+        llm = AzureChatOpenAI(
+            model="gpt-4o",
+            api_version=azure_api_version,
             azure_endpoint=azure_endpoint,
-            openai_api_key=azure_api_key,
-            openai_api_type="azure"
+            api_key=azure_api_key
         )
     
     # Handle regular OpenAI
@@ -143,7 +143,7 @@ def get_llm():
         from langchain_openai import ChatOpenAI
         llm = ChatOpenAI(
             model_name=openai_model_mapping[llm_model],
-            openai_api_key=openai_api_key
+            openai_api_key=openai_api_key,
         )
 
     # Handle Claude (Anthropic)
@@ -172,15 +172,18 @@ def get_llm():
             from langchain_anthropic import ChatAnthropic
             llm = ChatAnthropic(
                 model=claude_model_mapping[llm_model],
-                anthropic_api_key=anthropic_api_key
+                anthropic_api_key=anthropic_api_key,
+                temperature=0.0,
+                timeout=100
             )
 
-    # Handle DeepSeek
+    # Handle DeepSeek models
     elif llm_model in deepseek_model_mapping:
         deepseek_api_key = Configuration.get("DEEPSEEK_API_KEY")
         if not deepseek_api_key:
             raise ValueError("DeepSeek API key not found in configuration")
             
+        from langchain_openai import ChatOpenAI
         llm = ChatOpenAI(
             model_name=deepseek_model_mapping[llm_model],
             api_key=deepseek_api_key,
@@ -207,6 +210,7 @@ async def BrowserUse__browser_agent(task: str):
     agent = Agent(
         task=task,
         llm=get_llm(),
+        browser=browser,
         browser_context=context,  # Use persistent context
         generate_gif=False
     )
