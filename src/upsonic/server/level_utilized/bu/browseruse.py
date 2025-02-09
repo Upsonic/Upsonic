@@ -28,7 +28,7 @@ class BrowserManager:
             browser = Browser()
             instance._browser = browser
             instance._loop = asyncio.get_event_loop()
-            await browser.create()
+            return browser
         return instance._browser
 
     @classmethod
