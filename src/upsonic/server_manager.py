@@ -181,8 +181,8 @@ class ServerManager:
             stdout = open(os.path.join(log_dir, f'{self.name}_server.log'), 'a')
             stderr = open(os.path.join(log_dir, f'{self.name}_server_error.log'), 'a')
         else:
-            stdout = subprocess.PIPE
-            stderr = subprocess.PIPE
+            stdout = None
+            stderr = None
 
         # Prepare the command
         cmd = [

@@ -7,7 +7,7 @@ class Direct:
     """A callable class for making direct LLM calls using the Upsonic client."""
     
     @staticmethod
-    def do(task: Task, model: str | None = None, client: Any = None):
+    def do(task: Task, model: str | None = None, client: Any = None, debug: bool = False):
         """
         Execute a direct LLM call with the given task and model.
         
@@ -26,7 +26,7 @@ class Direct:
         if client is not None:
             the_client = client
         else:
-            the_client = get_or_create_client()
+            the_client = get_or_create_client(debug=debug)
         
         # Register tools if needed
         the_client = register_tools(the_client, task.tools)
