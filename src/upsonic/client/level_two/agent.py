@@ -30,6 +30,8 @@ from ...storage.caching import save_to_cache_with_expiry, get_from_cache_with_ex
 
 from ..tools.tools import Search
 
+from ...reliability_processor import ReliabilityProcessor
+
 
 class SubTask(ObjectResponse):
     description: str
@@ -195,7 +197,14 @@ class Agent:
                     with sentry_sdk.start_span(op="deserialize"):
                         deserialized_result = response_format_deserializer(response_format_str, result)
 
-                task._response = deserialized_result["result"]
+                # Process result through reliability layer
+                processed_result = ReliabilityProcessor.process_result(
+                    deserialized_result["result"], 
+                    agent_configuration.reliability_layer,
+                    task,
+                    llm_model
+                )
+                task._response = processed_result
 
                 response_format_req = None
                 if response_format_str == "str":
@@ -209,7 +218,7 @@ class Agent:
 
                 len_of_context = len(task.context) if task.context is not None else 0
 
-                return {"result": deserialized_result["result"], "llm_model": llm_model, "response_format": response_format_req, "usage": deserialized_result["usage"], "tool_count": len(tools), "context_count": len_of_context}
+                return {"result": processed_result, "llm_model": llm_model, "response_format": response_format_req, "usage": deserialized_result["usage"], "tool_count": len(tools), "context_count": len_of_context}
 
             except CallErrorException as e:
                 last_error = e
