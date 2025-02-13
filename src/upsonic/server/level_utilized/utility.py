@@ -350,8 +350,15 @@ def agent_creator(
                     from ...client.level_two.agent import Characterization
                     from ...client.level_two.agent import OtherTask
                     from ...client.tasks.tasks import Task
+                    from ...client.tasks.task_response import ObjectResponse
                     from ...client.knowledge_base.knowledge_base import KnowledgeBase
                     type_string = type(each).__name__
+                    the_class_string = None
+                    try:
+                        the_class_string = each.__bases__[0].__name__
+                    except:
+                        pass
+                
 
                     if type_string == Characterization.__name__:
                         context_string += f"\n\nThis is your character ```character {each.model_dump()}```"
@@ -369,6 +376,8 @@ def agent_creator(
                                 response = each.response
                                 
                         context_string += f"\n\nContexts from question answering: ```question_answering question: {description} answer: {response}```   "
+                    elif the_class_string == ObjectResponse.__name__:
+                        context_string += f"\n\nContexts from object response: ```Requested Output {each.model_fields}```"
                     else:
                         context_string += f"\n\nContexts ```context {each}```"
 
