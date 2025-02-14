@@ -161,7 +161,7 @@ tools = [Search, MyTools] # HackerNewsMCP
 ## Other LLM's
 
 ```python
-agent = Agent("Coder", llm_model="openai/gpt-4o")
+agent = Agent("Coder", model="openai/gpt-4o")
 ```
 Access other LLMs through the [docs](https://docs.upsonic.ai/concepts/llm_support)
 
