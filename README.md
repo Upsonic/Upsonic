@@ -24,8 +24,21 @@
   </p>
 
 
-# What is Upsonic?
-Upsonic offers a cutting-edge enterprise-ready framework where you can orchestrate LLM calls, agents, and computer use to complete tasks cost-effectively. It provides more reliable systems, scalability, and a task-oriented structure that you need while completing real-world cases.
+# Introduction
+Upsonic is a reliability-focused framework designed for real-world applications. It enables trusted agent workflows in your organization through advanced reliability features, including verification layers, triangular architecture, validator agents, and output evaluation systems.
+
+# Why Choose Upsonic?
+Upsonic is a next-generation framework that makes agents production-ready by solving three critical challenges:
+
+1- **Reliability**: While other frameworks require expertise and complex coding for reliability features, Upsonic offers easy-to-activate reliability layers without disrupting functionality.
+
+2- **Model Context Protocol**: The MCP allows you to leverage tools with various functionalities developed both officially and by third parties without requiring you to build custom tools from scratch.
+
+3- **Secure Runtime**: Isolated environment to run agents
+
+![sdk-server](https://github.com/user-attachments/assets/1b276199-ae60-4221-b8e6-b266443a3641)
+
+<br>
 
 **Key features:**
 
@@ -38,16 +51,12 @@ Upsonic offers a cutting-edge enterprise-ready framework where you can orchestra
 - **Tool-Calling Server**: Exception-secure tool management with robust server API interactions.
 - **Computer Use Integration**: Execute human-like tasks using Anthropic’s ‘Computer Use’ capabilities.
 - **Easily adding tools:** You can add your custom tools and MCP tools with a single line of code.
-- **Client-server architecture**: Production-ready stateless enterprise-ready system
-
-<br>
 <br>
 
 # 📙 Documentation
 
 You can access our documentation at [docs.upsonic.ai](https://docs.upsonic.ai/). All concepts and examples are available there.
 
-<br>
 <br>
 
 # 🛠️ Getting Started
@@ -88,8 +97,6 @@ agent.print_do(task)
 
 <br>
 <br>
-
-# 🚀 Features
 
 
 ## Reliabilty Layer
@@ -158,75 +165,6 @@ tools = [Search, MyTools] # HackerNewsMCP
 ```
 
 
-## Other LLM's
-
-```python
-agent = Agent("Coder", model="openai/gpt-4o")
-```
-Access other LLMs through the [docs](https://docs.upsonic.ai/concepts/llm_support)
-
-
-## Memory
-
-Humans have an incredible capacity for context length, which reflects their comprehensive context awareness and consistently produces superior results. In Upsonic, our memory system adeptly handles complex workflows, delivering highly personalized outcomes. It seamlessly remembers prior tasks and preferences, ensuring optimal performance. You can confidently set up memory settings within Agent, leveraging the agent_id system. Agents, each with their distinct personality, are uniquely identified by their ID, ensuring precise and efficient execution.
-
-```python
-
-agent_id_ = "product_manager_agent"
-
-agent = Agent(
-    agent_id_=agent_id_
-    ...
-    memory=True
-)
-```
-
-## Knowledge Base
-
-The Knowledge Base provides private or public content to your agent to ensure accurate and context-aware tasks. For example, you can provide a PDF and URL to the agent. The Knowledge Base seamlessly integrates with the Task System, requiring these sources. 
-
-```python
-from upsonic import KnowledgeBase
-
-my_knowledge_base = KnowledgeBase(files=["sample.pdf", "https://upsonic.ai"])
-
-task1 = Task(
-    ...
-    context[my_knowledge_base]
-)
-
-```
-
-## Connecting Task Outputs
-
-Chaining tasks is essential for complex workflows where one task's output informs the next. You can assign a task to another as context for performing the job. This will prepare the response of task 1 for task 2.
-
-```python
-
-task1 = Task(
-    ...
-)
-
-task2 = Task(
-    ...
-    context[task1]
-)
-
-```
-
-## Be an Human
-
-Agent and characterization are based on LLM itself. We are trying to characterize the developer, PM, and marketing. Sometimes, we need to give a human name. This is required for tasks like sending personalized messages or outreach. For these requirements, we have name and contact settings in Agent. The agent will feel like a human as you specify.
-
-```python
-product_manager_agent = Agent(
-    ...
-    name="John Walk"
-    contact="john@upsonic.ai"
-)
-
-```
-
 ## Multi Agent
 
 Distribute tasks effectively across agents with our automated task distribution mechanism. This tool matches tasks based on the relationship between agent and task, ensuring collaborative problem-solving across agents and tasks. 
@@ -247,31 +185,6 @@ from upsonic.client.tools import ComputerUse
 
 tools = [ComputerUse]
 ...
-
-```
-
-## Reflection
-LLM's by their nature oriented to finish your process. By the way its mean sometimes you can get empty result. Its effect your business logic and your application progress. We support reflection mechanism for that to check the result is staisfying and if not give a feedback. So you can use the reflection for preventing blank messages and other things.
-
-```python
-product_manager_agent = Agent(
-    ...
-    reflection=True
-)
-
-```
-
-
-
-
-## Compress Context
-The context windows can be small as in OpenAI models. In this kind of situations we have a mechanism that compresses the message, system_message and the contexts. If you are working with situations like deepsearching or writing a long content and giving it as context of another task. The compress_context is full fit with you. This mechanism will only work in context overflow situations otherwise everything is just normal.
-
-```python
-product_manager_agent = Agent(
-    ...
-    compress_context=True
-)
 
 ```
 
