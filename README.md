@@ -99,9 +99,15 @@ agent.print_do(task)
 <br>
 
 
-## Reliabilty Layer
+## Reliability Layer
 
-The most critical issue with LLMs is the very low reliability of their outputs. This problem, especially in cases involving number generation and action-taking, negates all other benefits, resulting in an unusable system. Upsonic includes a reliability layer system that can be adjusted on a scale of 1-10. If desired, you can add a large-scale reliability layer to your system that triggers control agents and runs them in rounds to ensure the reliability of results.
+LLM output reliability is critical, particularly for numerical operations and action execution. Upsonic addresses this through a multi-layered reliability system, enabling control agents and verification rounds to ensure output accuracy.
+
+**Verifier Agent**: Validates outputs, tasks, and formats - detecting inconsistencies, numerical errors, and hallucinations
+**Editor Agent**: Works with verifier feedback to revise and refine outputs until they meet quality standards
+**Rounds**: Implements iterative quality improvement through scored verification cycles
+**Loops**: Ensures accuracy through controlled feedback loops at critical reliability checkpoints
+
 
 ```python
 class ReliabilityLayer:
@@ -111,17 +117,14 @@ agent = Agent("Coder", reliability_layer=ReliabilityLayer)
 ```
 
 
-## Direct LLM Call
+## Multi Agent
 
-LLMs have always been intelligent. We know exactly when to call an agent or an LLM. This creates a smooth transition from LLM to agent systems. The call method works like an agent, based on tasks and optimizing cost and latency for your requirements. Focus on the task. Don't waste time with complex architectures.
-
+Distribute tasks effectively across agents with our automated task distribution mechanism. This tool matches tasks based on the relationship between agent and task, ensuring collaborative problem-solving across agents and tasks. 
 ```python
-from upsonic import Direct
+from upsonic import MultiAgent
 
-Direct.do(task1)
-
+MultiAgent.do([agent2, agent1], [task1, task2])
 ```
-
 
 ##  Response Format
 
@@ -143,35 +146,57 @@ class ResponseFormat(ObjectResponse):
 ```
 
 
-## Tool Integration
+## Tool Integration via MCP
 
-Our Framework officially supports [Model Context Protocol (MCP)](https://www.claudemcp.com/) and custom tools. You can use hundreds of MCP servers at https://glama.ai/mcp/servers or https://smithery.ai/ We also support Python functions inside a class as a tool. You can easily generate your integrations with that.
+Upsonic officially supports [Model Context Protocol (MCP)](https://www.claudemcp.com/) and custom tools. You can use hundreds of MCP servers at https://glama.ai/mcp/servers or https://smithery.ai/ We also support Python functions inside a class as a tool. You can easily generate your integrations with that.
+
 ```python
+from upsonic import Agent, Task, ObjectResponse
 
-from upsonic.tools import Search
-
-# MCP Tool
-class HackerNewsMCP:
+# Define Fetch MCP configuration
+class FetchMCP:
     command = "uvx"
-    args = ["mcp-hn"]
+    args = ["mcp-server-fetch"]
 
-# Custom Tool
-class MyTools:
-    def our_server_status():
-        return True
+# Create response format for web content
+class WebContent(ObjectResponse):
+    title: str
+    content: str
+    summary: str
+    word_count: int
 
-tools = [Search, MyTools] # HackerNewsMCP
+# Initialize agent
+web_agent = Agent(
+    "Web Content Analyzer",
+    model="openai/gpt-4o",  # You can use other models
+)
+
+# Create a task to analyze a web page
+task = Task(
+    description="Fetch and analyze the content from url. Extract the main content, title, and create a brief summary.",
+    context=["https://upsonic.ai"],
+    tools=[FetchMCP],
+    response_format=WebContent
+)
+    
+# Usage
+web_agent.print_do(task)
+print(result.title)
+print(result.summary)
 
 ```
 
 
-## Multi Agent
 
-Distribute tasks effectively across agents with our automated task distribution mechanism. This tool matches tasks based on the relationship between agent and task, ensuring collaborative problem-solving across agents and tasks. 
+## Direct LLM Call
+
+Direct LLM calls offer faster, cheaper solutions for simple tasks. In Upsonic, you can make calls to model providers without any abstraction level and organize structured outputs. You can also use tools with LLM calls.
+
 ```python
-from upsonic import MultiAgent
+from upsonic import Direct
 
-MultiAgent.do([agent2, agent1], [task1, task2])
+Direct.do(task1)
+
 ```
 
 ## Reliable Computer Use
