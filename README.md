@@ -104,8 +104,11 @@ agent.print_do(task)
 LLM output reliability is critical, particularly for numerical operations and action execution. Upsonic addresses this through a multi-layered reliability system, enabling control agents and verification rounds to ensure output accuracy.
 
 **Verifier Agent**: Validates outputs, tasks, and formats - detecting inconsistencies, numerical errors, and hallucinations
+
 **Editor Agent**: Works with verifier feedback to revise and refine outputs until they meet quality standards
+
 **Rounds**: Implements iterative quality improvement through scored verification cycles
+
 **Loops**: Ensures accuracy through controlled feedback loops at critical reliability checkpoints
 
 
@@ -115,36 +118,6 @@ class ReliabilityLayer:
 
 agent = Agent("Coder", reliability_layer=ReliabilityLayer)
 ```
-
-
-## Multi Agent
-
-Distribute tasks effectively across agents with our automated task distribution mechanism. This tool matches tasks based on the relationship between agent and task, ensuring collaborative problem-solving across agents and tasks. 
-```python
-from upsonic import MultiAgent
-
-MultiAgent.do([agent2, agent1], [task1, task2])
-```
-
-##  Response Format
-
-The output is essential for deploying an AI agent across apps or as a service. In Upsonic, we use Pydantic BaseClass as input for the task system. This allows you to configure the output exactly how you want it, such as a list of news with title, body, and URL. You can create a flexible yet robust output mechanism that improves interoperability between the agent and your app.
-
-```python
-from upsonic import ObjectResponse
-
-# Example ObjectResponse usage
-class News(ObjectResponse):
-    title: str
-    body: str
-    url: str
-    tags: list[str]
-
-class ResponseFormat(ObjectResponse):
-    news_list: list[News]
-
-```
-
 
 ## Tool Integration via MCP
 
@@ -185,6 +158,87 @@ print(result.title)
 print(result.summary)
 
 ```
+
+
+## Agent with Multi-Task Example 
+
+Distribute tasks effectively across agents with our automated task distribution mechanism. This tool matches tasks based on the relationship between agent and task, ensuring collaborative problem-solving across agents and tasks. The output is essential for deploying an AI agent across apps or as a service. Upsonic uses Pydantic BaseClass to define structured outputs for tasks, allowing developers to specify exact response formats for their AI agent tasks.
+
+```python
+from upsonic import Agent, Task, MultiAgent, ObjectResponse
+from upsonic.tools import Search
+from typing import List
+
+# Targeted Company and Our Company
+our_company = "https://redis.io/"
+targeted_url = "https://upsonic.ai/"
+
+
+# Response formats
+class CompanyResearch(ObjectResponse):
+   industry: str
+   product_focus: str
+   company_values: List[str]
+   recent_news: List[str]
+
+class Mail(ObjectResponse):
+   subject: str
+   content: str
+
+
+# Creating Agents
+researcher = Agent(
+   "Company Researcher",
+   company_url=our_company
+)
+
+strategist = Agent(
+   "Outreach Strategist", 
+   company_url=our_company
+)
+
+
+# Creating Tasks and connect
+company_task = Task(
+   "Research company website and analyze key information",
+
+   context=[targeted_url],
+   tools=[Search],
+   response_format=CompanyResearch
+)
+
+position_task = Task(
+   "Analyze Senior Developer position context and requirements",
+   context=[company_task, targeted_url],
+)
+
+message_task = Task(
+   "Create personalized outreach message using research",
+   context=[company_task, position_task, targeted_url],
+   response_format=Mail
+)
+
+
+# Run the Tasks over agents
+results = MultiAgent.do(
+   [researcher, strategist],
+   [company_task, position_task, message_task]
+)
+
+
+# Print the results
+print(f"Company Industry: {company_task.response.industry}")
+print(f"Company Focus: {company_task.response.product_focus}")
+print(f"Company Values: {company_task.response.company_values}")
+print(f"Company Recent News: {company_task.response.recent_news}")
+print(f"Position Analyze: {position_task.response}")
+print(f"Outreach Message Subject: {message_task.response.subject}")
+print(f"Outreach Message Content: {message_task.response.content}")
+
+```
+
+
+
 
 
 
