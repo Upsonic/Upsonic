@@ -14,28 +14,81 @@ class ValidationResult(ObjectResponse):
     feedback: str
 
 validator_task_prompt = """
-Evaluate the previous question and its answer for accuracy, consistency, and completeness. Also consider the requested output format. Be extremely vigilant for any non-referenced values or unsupported claims. Pay particular attention to:
+Evaluate the previous question and its answer for accuracy, consistency, and completeness, with special attention to URL validation, standard identifier codes, and data type expectations. Also consider the requested output format. Be extremely vigilant for any non-referenced values, unsupported claims, URL-related issues, and invalid identifiers. Pay particular attention to:
+
+URL Validation and AI-Generated URL Assessment:
+- Identify any URLs that appear to be AI-generated without proper context or verification
+- Flag cases where URLs are presented without evidence of their actual existence
+- Check if the generated URLs align with the expected domain structure and patterns
+- Look for any assumptions about URL existence without proper verification
+- Watch for URLs that might be hypothetical or generated without actual endpoints
+- Verify if the context provides any proof or validation of the URL's existence
+- Flag URLs that are presented as factual but may be speculative or non-existent
+- Pay special attention to URLs that claim to point to specific resources without verification
+- Consider whether the URL generation follows logical patterns or is purely speculative
+
+Standard Identifier Validation:
+- Verify that all standard identifiers follow their respective format rules and industry standards
+- Check for proper length and character composition in identifier codes
+- Validate check digits and control characters where applicable
+- Ensure identifiers match their described categories and specifications
+- Flag any identifier codes that appear malformed or don't match standard patterns
+- Verify that custom IDs follow their documented format requirements
+- Check for consistency in identifier formatting across related items
+
+Data Type and Format Validation:
+- Check if returned data types match user expectations (e.g., human-readable strings vs numeric IDs)
+- Flag cases where numeric or ID values are returned instead of expected descriptive strings
+- Verify that lists contain appropriate content types (e.g., keywords instead of category IDs)
+- Ensure returned data is in a user-friendly format when that is the expectation
+- Watch for system identifiers being exposed instead of their human-readable equivalents
+- Validate that enumerated items use meaningful labels rather than internal codes
+- Check for proper translation of internal representations to user-facing values
+- Ensure categorical data is represented with descriptive terms rather than numeric codes
+- Flag any response where machine-readable formats overshadow human readability
 
 Unverified information: Identify and flag any claims, statistics, or statements that lack credible sources or proper citations.
 
-Unsupported assertions: Watch for any information presented as fact without adequate evidence or references.
+Unsupported assertions: Watch for any information presented as fact without adequate evidence, references, or valid URLs.
 
-Vague attributions: Be wary of phrases like "Studies show..." or "Experts say..." without specific, verifiable sources.
+Vague attributions: Be wary of phrases like "Studies show..." or "Experts say..." without specific, verifiable sources or linked documentation.
 
-Misuse of data: Check for any misinterpretation or misapplication of statistical information.
+Misuse of data: Check for any misinterpretation or misapplication of statistical information and ensure data sources are properly linked.
 
-Temporal inconsistencies: Ensure all historical claims or dates are properly verified and sourced.
+Temporal inconsistencies: Ensure all historical claims or dates are properly verified and sourced with appropriate references.
 
 Speculative content: Identify any conjectures or hypothetical scenarios presented without clear indication of their speculative nature.
 
 Examples of issues to flag:
 
-Any statistic or numerical claim without a specific, credible source
-Historical events or dates mentioned without verifiable references
-Scientific claims or breakthroughs without links to peer-reviewed research
-Expert opinions quoted without naming the expert and their credentials
-Trends or patterns described without supporting data
-Do not allow any unverified information, guesses, or assumptions to pass unchallenged. Rigorously check all data and its sources. If there is any information without a valuable and meaningful reference, highlight it for removal or verification. Ensure all information is factual, current, and properly supported by credible, cited sources.
+- AI-generated URLs without verification of their existence
+- URLs presented without proper context or validation
+- Generated URLs that make assumptions about resource locations
+- Numeric IDs returned where descriptive strings were expected
+- Lists containing internal codes instead of human-readable values
+- Category identifiers without corresponding descriptive names
+- System-level identifiers exposed in user-facing responses
+- Machine-readable formats when human-readable was requested
+- Raw database IDs instead of meaningful descriptions
+- AI-generated URLs without verification of their existence
+- URLs presented without proper context or validation
+- Generated URLs that make assumptions about resource locations
+- URLs that appear to be hypothetical or speculative
+- Links claiming to point to specific resources without verification
+- Any URL patterns that cannot be confirmed as valid
+- Any URL that appears incomplete, malformed, or suspicious
+- Links pointing to non-existent or inaccessible resources
+- URLs that don't match the context or appear randomly inserted
+- Invalid or improperly formatted standard identifiers
+- Inconsistent or non-standard identifier formats
+- Missing validation elements in standard codes
+- Any statistic or numerical claim without a specific, credible source or valid URL
+- Historical events or dates mentioned without verifiable references
+- Scientific claims or breakthroughs without links to peer-reviewed research
+- Expert opinions quoted without naming the expert and their credentials
+- Trends or patterns described without supporting data and proper citations
+
+Do not allow any unverified information, guesses, assumptions, invalid URLs, or improperly formatted identifier codes to pass unchallenged. Be especially careful with AI-generated URLs that lack verification of their actual existence and with data types that don't match user expectations. Watch for cases where internal identifiers or codes are returned instead of human-readable values. Rigorously check all data, sources, URLs, and standard codes. If there is any information without a valuable and meaningful reference, or if URLs or identifier codes appear to be generated without verification, or if the response format doesn't match user expectations, highlight it for removal or verification. Ensure all information is factual, current, properly supported by credible, cited sources with verified URLs, and presented in appropriate, user-friendly formats.
 
 """
 
