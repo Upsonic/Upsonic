@@ -60,33 +60,35 @@ IMPORTANT: If the information cannot be verified, flag it as suspicious.
 """
 
 editor_task_prompt = """
-Validate and clean the output following these rules:
+Clean and validate the output by handling suspicious content:
 
-Validation Rules:
-1. For ANY field that cannot be verified:
-- Set the field value to None
-- Do not provide alternatives
+Processing Rules:
+1. For ANY suspicious content identified in validation:
+- Replace the suspicious value with None
+- Do not suggest alternatives
 - Do not provide explanations
-- Do not attempt modifications
+- Do not modify other parts of the content
 
-2. For fields that can be verified:
-- Keep the original value exactly as is
-- Do not modify or enhance
-- Do not add information
+2. For non-suspicious content:
+- Keep the original value unchanged
+- Do not enhance or modify
+- Do not add additional information
 
-Field Processing:
-- URLs: If source/context not verified = None
+Processing Steps:
+- Set suspicious fields to None
+- Keep other fields as is
+- Remove any suspicious content entirely
+- Maintain original structure
 
-
-Specific issues from validation:
+Validation Issues Found:
 {validation_feedback}
 
 IMPORTANT:
+- Set ALL suspicious values to None
+- Keep verified values unchanged
+- No explanations or suggestions
 - No partial validations
-- No alternative suggestions
-- No explanations
-- Only None or original value
-- Keep response format as specified
+- Maintain response format
 """
 
 class SourceReliability(Enum):
