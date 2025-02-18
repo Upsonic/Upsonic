@@ -29,6 +29,7 @@ Number Verification:
 - Verify if units are appropriate
 - Check if numbers make logical sense in context
 - Dont check lenghts or other calculations needed verifications
+- If the numbers are come from original context thats okay no need to verify these numbers. Check other numbers.
 
 IMPORTANT: If the numbers cannot be verified, flag them as suspicious.
 """
