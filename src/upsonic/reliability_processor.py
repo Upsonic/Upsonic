@@ -1,166 +1,218 @@
 from copy import deepcopy
-from typing import Any, Optional, Union, Type
+from typing import Any, Optional, Union, Type, List
+from pydantic import BaseModel
+from enum import Enum
+import re
+from urllib.parse import urlparse
+import requests
 from .client.tasks.tasks import Task
-
 from .client.agent_configuration.agent_configuration import AgentConfiguration
-
-from pydantic import Field
-
 from .client.tasks.task_response import ObjectResponse
 
+# Define the validation prompts
+url_validation_prompt = """
+Focus on URL and source validation with strict contextual verification:
 
-class ValidationResult(ObjectResponse):
-    any_suspicion: bool
-    feedback: str
+Contextual Verification:
+- MUST verify URL's relationship to the claimed content
+- MUST validate source credibility
+- MUST verify URL matches the context
+- MUST check if source is appropriate for the information
+- MUST verify URL ownership matches claimed organization
 
-validator_task_prompt = """
-Evaluate the previous question and its answer for accuracy, consistency, and completeness, with special attention to URL validation, standard identifier codes, and data type expectations. Also consider the requested output format. Be extremely vigilant for any non-referenced values, unsupported claims, URL-related issues, and invalid identifiers. Pay particular attention to:
+Source Authority:
+- MUST verify source has authority to provide information
+- MUST check if URL represents official source
+- MUST validate source's relationship to topic
+- MUST verify source's credibility
+- MUST check if source is appropriate
 
-URL Validation and AI-Generated URL Assessment:
-- Identify any URLs that appear to be AI-generated without proper context or verification
-- Flag cases where URLs are presented without evidence of their actual existence
-- Check if the generated URLs align with the expected domain structure and patterns
-- Look for any assumptions about URL existence without proper verification
-- Watch for URLs that might be hypothetical or generated without actual endpoints
-- Verify if the context provides any proof or validation of the URL's existence
-- Flag URLs that are presented as factual but may be speculative or non-existent
-- Pay special attention to URLs that claim to point to specific resources without verification
-- Consider whether the URL generation follows logical patterns or is purely speculative
+Red Flags:
+- URLs without clear connection to context
+- Sources claiming authority without verification
+- URLs representing unrelated organizations
+- Marketing URLs without established connection
+- Product URLs without verified relationship
+- URLs making claims beyond their scope
+- Sources without clear authority
 
-Standard Identifier Validation:
-- Verify that all standard identifiers follow their respective format rules and industry standards
-- Check for proper length and character composition in identifier codes
-- Validate check digits and control characters where applicable
-- Ensure identifiers match their described categories and specifications
-- Flag any identifier codes that appear malformed or don't match standard patterns
-- Verify that custom IDs follow their documented format requirements
-- Check for consistency in identifier formatting across related items
-
-Data Type and Format Validation:
-- Check if returned data types match user expectations (e.g., human-readable strings vs numeric IDs)
-- Flag cases where numeric or ID values are returned instead of expected descriptive strings
-- Verify that lists contain appropriate content types (e.g., keywords instead of category IDs)
-- Ensure returned data is in a user-friendly format when that is the expectation
-- Watch for system identifiers being exposed instead of their human-readable equivalents
-- Validate that enumerated items use meaningful labels rather than internal codes
-- Check for proper translation of internal representations to user-facing values
-- Ensure categorical data is represented with descriptive terms rather than numeric codes
-- Flag any response where machine-readable formats overshadow human readability
-
-Unverified information: Identify and flag any claims, statistics, or statements that lack credible sources or proper citations.
-
-Unsupported assertions: Watch for any information presented as fact without adequate evidence, references, or valid URLs.
-
-Vague attributions: Be wary of phrases like "Studies show..." or "Experts say..." without specific, verifiable sources or linked documentation.
-
-Misuse of data: Check for any misinterpretation or misapplication of statistical information and ensure data sources are properly linked.
-
-Temporal inconsistencies: Ensure all historical claims or dates are properly verified and sourced with appropriate references.
-
-Speculative content: Identify any conjectures or hypothetical scenarios presented without clear indication of their speculative nature.
-
-Examples of issues to flag:
-
-- AI-generated URLs without verification of their existence
-- URLs presented without proper context or validation
-- Generated URLs that make assumptions about resource locations
-- Numeric IDs returned where descriptive strings were expected
-- Lists containing internal codes instead of human-readable values
-- Category identifiers without corresponding descriptive names
-- System-level identifiers exposed in user-facing responses
-- Machine-readable formats when human-readable was requested
-- Raw database IDs instead of meaningful descriptions
-- AI-generated URLs without verification of their existence
-- URLs presented without proper context or validation
-- Generated URLs that make assumptions about resource locations
-- URLs that appear to be hypothetical or speculative
-- Links claiming to point to specific resources without verification
-- Any URL patterns that cannot be confirmed as valid
-- Any URL that appears incomplete, malformed, or suspicious
-- Links pointing to non-existent or inaccessible resources
-- URLs that don't match the context or appear randomly inserted
-- Invalid or improperly formatted standard identifiers
-- Inconsistent or non-standard identifier formats
-- Missing validation elements in standard codes
-- Any statistic or numerical claim without a specific, credible source or valid URL
-- Historical events or dates mentioned without verifiable references
-- Scientific claims or breakthroughs without links to peer-reviewed research
-- Expert opinions quoted without naming the expert and their credentials
-- Trends or patterns described without supporting data and proper citations
-
-Do not allow any unverified information, guesses, assumptions, invalid URLs, or improperly formatted identifier codes to pass unchallenged. Be especially careful with AI-generated URLs that lack verification of their actual existence and with data types that don't match user expectations. Watch for cases where internal identifiers or codes are returned instead of human-readable values. Rigorously check all data, sources, URLs, and standard codes. If there is any information without a valuable and meaningful reference, or if URLs or identifier codes appear to be generated without verification, or if the response format doesn't match user expectations, highlight it for removal or verification. Ensure all information is factual, current, properly supported by credible, cited sources with verified URLs, and presented in appropriate, user-friendly formats.
-
+IMPORTANT: Any URL that cannot be verified against these criteria MUST be flagged as suspicious.
 """
 
+number_validation_prompt = """
+Focus on numerical value validation with strict contextual verification:
+
+Contextual Verification:
+- MUST verify if numbers are within reasonable ranges for their context
+- MUST validate numerical relationships and proportions
+- MUST check if units are appropriate and consistent
+- MUST verify if numbers align with known benchmarks
+- MUST check for statistical anomalies
+
+Value Authority:
+- MUST verify if numbers come from reliable sources
+- MUST check if numerical claims are supported by context
+- MUST validate mathematical consistency
+- MUST verify numerical precision matches the context
+- MUST check if numbers follow expected patterns
+
+Red Flags:
+- Numbers outside typical ranges without explanation
+- Statistical impossibilities
+- Inconsistent units or conversions
+- Numbers that contradict known facts
+- Suspiciously round numbers in precise contexts
+- Mathematical impossibilities
+- Numbers without proper context or units
+
+IMPORTANT: Any numerical value that cannot be verified against these criteria MUST be flagged as suspicious.
+"""
 
 editor_task_prompt = """
-As the editor agent, your task is to review and refine the output provided. Pay close attention to the issues highlighted in the previous evaluation. Your primary responsibilities are:
+Validate and clean the output following these rules:
 
-Remove or correct any misunderstandings, unverified information, or hallucinations identified in the output.
+Validation Rules:
+1. For ANY field that cannot be verified:
+- Set the field value to None
+- Do not provide alternatives
+- Do not provide explanations
+- Do not attempt modifications
 
-Ensure all claims are supported by credible, up-to-date sources.
+2. For fields that can be verified:
+- Keep the original value exactly as is
+- Do not modify or enhance
+- Do not add information
 
-Eliminate any statements that present personal opinions as facts.
+Field Processing:
+- URLs: If source/context not verified = None
 
-Verify all statistical data, historical dates, and scientific claims.
 
-Check for and remove any mentions of non-existent technologies, people, or places.
+Specific issues from validation:
+{validation_feedback}
 
-Maintain the requested output format while improving accuracy and reliability.
-
-Remember, you should not return any data that doesn't meet these high standards of verification and accuracy. If you cannot verify a piece of information or find a reliable source for it, remove it from the output.
-
-Your goal is to produce a refined version of the output that is factually accurate, consistently reliable, and complete within the bounds of verified information. Quality and accuracy are paramount - it's better to have less information that is fully verified than more information that includes questionable data.
-
+IMPORTANT:
+- No partial validations
+- No alternative suggestions
+- No explanations
+- Only None or original value
+- Keep response format as specified
 """
 
+class SourceReliability(Enum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    UNKNOWN = "unknown"
+
+class ValidationPoint(ObjectResponse):
+    is_suspicious: bool
+    feedback: str
+    source_reliability: SourceReliability = SourceReliability.UNKNOWN
+    verification_method: str = ""
+    confidence_score: float = 0.0
+
+class ValidationResult(ObjectResponse):
+    url_validation: ValidationPoint
+
+    number_validation: ValidationPoint
+    any_suspicion: bool
+    overall_feedback: str
+    overall_confidence: float = 0.0
+
+    def calculate_suspicion(self):
+        self.any_suspicion = any([
+            self.url_validation.is_suspicious,
+
+            self.number_validation.is_suspicious
+        ])
+
+        suspicious_points = []
+        if self.url_validation.is_suspicious:
+            suspicious_points.append(f"URL Issues: {self.url_validation.feedback}")
+
+        if self.number_validation.is_suspicious:
+            suspicious_points.append(f"Number Issues: {self.number_validation.feedback}")
+
+        self.overall_feedback = " | ".join(suspicious_points) if suspicious_points else "No suspicious content detected."
+        
+        self.overall_confidence = sum([
+            self.url_validation.confidence_score,
+
+            self.number_validation.confidence_score
+        ]) / 4.0
+
 class ReliabilityProcessor:
+    def __init__(self, confidence_threshold: float = 0.7):
+        self.confidence_threshold = confidence_threshold
+
     @staticmethod
     def process_result(
-        result: Any, 
-        reliability_layer: Optional[Any] = None, 
+        result: Any,
+        reliability_layer: Optional[Any] = None,
         task: Optional[Task] = None,
         llm_model: Optional[str] = None
     ) -> Any:
-        """
-        Process the result based on reliability layer settings.
-        If reliability_layer is None or fields are 0, return original result.
-        
-        Args:
-            result: The result to process
-            reliability_layer: Configuration for reliability checks (can be instance or class)
-            task: The original task that generated this result
-            llm_model: The LLM model used to generate the result
-        """
         if reliability_layer is None:
             return result
 
-        # Get prevent_hallucination value
         prevent_hallucination = getattr(reliability_layer, 'prevent_hallucination', 0)
         if isinstance(prevent_hallucination, property):
             prevent_hallucination = prevent_hallucination.fget(reliability_layer)
 
         processed_result = result
 
-        # Check prevent_hallucination
         if prevent_hallucination > 0:
-
             if prevent_hallucination == 10:
-                validator_agent = AgentConfiguration("Information Validator Agent", model=llm_model, sub_task=False)
                 copy_task = deepcopy(task)
                 copy_task._response = result
-                validator_task = Task(validator_task_prompt, context=[copy_task, copy_task.response_format], response_format=ValidationResult, tools=task.tools)
-                validator_agent.do(validator_task)
 
-                if validator_task.response.any_suspicion == False:
-                    return result
-                else:
-                    editor_agent = AgentConfiguration("Information Editor Agent", model=llm_model, sub_task=False)
-                    editor_task = Task(editor_task_prompt, context=[copy_task, copy_task.response_format, validator_task, str(validator_task.response.model_dump(mode="json"))], response_format=task.response_format, tools=task.tools)
+                validation_result = ValidationResult(
+                    url_validation=ValidationPoint(is_suspicious=False, feedback=""),
+
+                    number_validation=ValidationPoint(is_suspicious=False, feedback=""),
+                    any_suspicion=False,
+                    overall_feedback=""
+                )
+
+                # Run validations
+                for validation_type, prompt in [
+                    ("url_validation", url_validation_prompt),
+                    ("number_validation", number_validation_prompt),
+                ]:
+                    validator_agent = AgentConfiguration(
+                        f"{validation_type.replace('_', ' ').title()} Agent",
+                        model=llm_model,
+                        sub_task=False
+                    )
+                    validator_task = Task(
+                        prompt,
+                        context=[copy_task, copy_task.response_format],
+                        response_format=ValidationPoint,
+                        tools=task.tools
+                    )
+                    validator_agent.do(validator_task)
+                    setattr(validation_result, validation_type, validator_task.response)
+
+                validation_result.calculate_suspicion()
+
+                if validation_result.any_suspicion:
+                    editor_agent = AgentConfiguration(
+                        "Information Editor Agent",
+                        model=llm_model,
+                        sub_task=False
+                    )
+                    formatted_prompt = editor_task_prompt.format(
+                        validation_feedback=validation_result.overall_feedback
+                    )
+                    editor_task = Task(
+                        formatted_prompt,
+                        context=[copy_task, copy_task.response_format, validation_result],
+                        response_format=task.response_format,
+                        tools=task.tools
+                    )
                     editor_agent.do(editor_task)
-
                     return editor_task.response
 
+                return result
 
-
-        return processed_result 
+        return processed_result
