@@ -243,15 +243,44 @@ class ReliabilityProcessor:
                         model=llm_model,
                         sub_task=False
                     )
-                    the_context = [copy_task, copy_task.response_format]
-                    the_context += copy_task.context
 
-                    prompt += f"Current AI Response: {old_task_output}"
+                    # Create a list to store context strings
+                    context_strings = []
+                    
+                    # Add the task and response format
+                    context_strings.append(f"Given Task: {copy_task.description}")
+
+                    # Process context items if they exist
+                    if copy_task.context:
+                        context_items = copy_task.context if isinstance(copy_task.context, list) else [copy_task.context]
+                        if copy_task.response_format:
+                            context_items.append(copy_task.response_format)
+                        for item in context_items:
+                            type_string = type(item).__name__
+                            the_class_string = None
+                            try:
+                                the_class_string = item.__bases__[0].__name__
+                            except:
+                                pass
+
+                            if the_class_string == ObjectResponse.__name__:
+                                context_strings.append(f"\n\nUser requested output: ```Requested Output {item.model_fields}```")
+                            elif isinstance(item, str):
+                                context_strings.append(f"\n\nContext That Came From User (Trusted Source): ```User given context {item}```")
+                            else:
+                                pass
+
+
+                    # Create validation task with processed context
+                    context_strings.append(f"\nCurrent AI Response: {old_task_output}")
+
+                    print("CONTEXT STRING", context_strings)
+                    
                     validator_task = Task(
                         prompt,
-                        context=the_context,
                         response_format=ValidationPoint,
-                        tools=task.tools
+                        tools=task.tools,
+                        context=context_strings  # Pass the processed context strings
                     )
                     validator_agent.do(validator_task)
                     setattr(validation_result, validation_type, validator_task.response)
