@@ -14,9 +14,7 @@ url_validation_prompt = """
 Focus on basic URL source validation:
 
 Source Verification:
-- Check if the URL is from a verified source
-- Verify if the source is official
-- Check if the source is appropriate for the content. But dont make assumption just check the context and try to find exact things. If not flag it.
+- Check if the source is come from the content. But dont make assumption just check the context and try to find exact things. If not flag it.
 
 IMPORTANT: If the URL source cannot be verified, flag it as suspicious.
 """
