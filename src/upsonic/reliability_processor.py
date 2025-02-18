@@ -16,7 +16,7 @@ Focus on basic URL source validation:
 Source Verification:
 - Check if the URL is from a verified source
 - Verify if the source is official
-- Check if the source is appropriate for the content
+- Check if the source is appropriate for the content. But dont make assumption just check the context and try to find exact things. If not flag it.
 
 IMPORTANT: If the URL source cannot be verified, flag it as suspicious.
 """
@@ -29,7 +29,7 @@ Number Verification:
 - Verify if units are appropriate
 - Check if numbers make logical sense in context
 - Dont check lenghts or other calculations needed verifications
-- If the numbers are come from original context thats okay no need to verify these numbers. Check other numbers.
+- If the numbers are come from original context thats okay no need to verify these numbers.
 
 IMPORTANT: If the numbers cannot be verified, flag them as suspicious.
 """
