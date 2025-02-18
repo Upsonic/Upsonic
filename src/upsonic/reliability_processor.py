@@ -23,11 +23,7 @@ number_validation_prompt = """
 Focus on basic numerical validation:
 
 Number Verification:
-- Check if numbers are Valid
-- Verify if units are appropriate
-- Check if numbers make logical sense in context
-- Dont check lenghts or other calculations needed verifications
-- If the numbers are come from original context thats okay no need to verify these numbers.
+- Check if the source is come from the content. But dont make assumption just check the context and try to find exact things. If not flag it.
 
 IMPORTANT: If the numbers cannot be verified, flag them as suspicious.
 """
@@ -36,12 +32,7 @@ code_validation_prompt = """
 Focus on basic code validation:
 
 Code Verification:
-- Check if security codes, API keys, Defination Codes, or tokens follow proper formats
-- Verify if code snippets are from trusted sources
-- Check for potential security vulnerabilities or malicious code
-- Validate code syntax and structure
-- Check for sensitive information exposure
-- Verify if code references are appropriate and safe
+- Check if the source is come from the content. But dont make assumption just check the context and try to find exact things. If not flag it.
 
 IMPORTANT: If the code cannot be verified or appears suspicious, flag it as suspicious.
 """
@@ -50,10 +41,7 @@ information_validation_prompt = """
 Focus on basic information validation:
 
 Information Verification:
-- Check if the information is factually correct
-- Verify if the information is consistent
-- Check if the information is relevant to the context
-- Dont check lenghts or other calculations needed verifications
+- Check if the source is come from the content. But dont make assumption just check the context and try to find exact things. If not flag it.
 
 IMPORTANT: If the information cannot be verified, flag it as suspicious.
 """
