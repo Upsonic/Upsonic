@@ -1,6 +1,6 @@
 from copy import deepcopy
 from typing import Any, Optional, Union, Type, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from enum import Enum
 import re
 from urllib.parse import urlparse
@@ -11,61 +11,52 @@ from .client.tasks.task_response import ObjectResponse
 
 # Define the validation prompts
 url_validation_prompt = """
-Focus on URL and source validation with strict contextual verification:
+Focus on basic URL source validation:
 
-Contextual Verification:
-- MUST verify URL's relationship to the claimed content
-- MUST validate source credibility
-- MUST verify URL matches the context
-- MUST check if source is appropriate for the information
-- MUST verify URL ownership matches claimed organization
+Source Verification:
+- Check if the URL is from a verified source
+- Verify if the source is official
+- Check if the source is appropriate for the content
 
-Source Authority:
-- MUST verify source has authority to provide information
-- MUST check if URL represents official source
-- MUST validate source's relationship to topic
-- MUST verify source's credibility
-- MUST check if source is appropriate
-
-Red Flags:
-- URLs without clear connection to context
-- Sources claiming authority without verification
-- URLs representing unrelated organizations
-- Marketing URLs without established connection
-- Product URLs without verified relationship
-- URLs making claims beyond their scope
-- Sources without clear authority
-
-IMPORTANT: Any URL that cannot be verified against these criteria MUST be flagged as suspicious.
+IMPORTANT: If the URL source cannot be verified, flag it as suspicious.
 """
 
 number_validation_prompt = """
-Focus on numerical value validation with strict contextual verification:
+Focus on basic numerical validation:
 
-Contextual Verification:
-- MUST verify if numbers are within reasonable ranges for their context
-- MUST validate numerical relationships and proportions
-- MUST check if units are appropriate and consistent
-- MUST verify if numbers align with known benchmarks
-- MUST check for statistical anomalies
+Number Verification:
+- Check if numbers are Valid
+- Verify if units are appropriate
+- Check if numbers make logical sense in context
+- Dont check lenghts or other calculations needed verifications
 
-Value Authority:
-- MUST verify if numbers come from reliable sources
-- MUST check if numerical claims are supported by context
-- MUST validate mathematical consistency
-- MUST verify numerical precision matches the context
-- MUST check if numbers follow expected patterns
+IMPORTANT: If the numbers cannot be verified, flag them as suspicious.
+"""
 
-Red Flags:
-- Numbers outside typical ranges without explanation
-- Statistical impossibilities
-- Inconsistent units or conversions
-- Numbers that contradict known facts
-- Suspiciously round numbers in precise contexts
-- Mathematical impossibilities
-- Numbers without proper context or units
+code_validation_prompt = """
+Focus on basic code validation:
 
-IMPORTANT: Any numerical value that cannot be verified against these criteria MUST be flagged as suspicious.
+Code Verification:
+- Check if security codes, API keys, Defination Codes, or tokens follow proper formats
+- Verify if code snippets are from trusted sources
+- Check for potential security vulnerabilities or malicious code
+- Validate code syntax and structure
+- Check for sensitive information exposure
+- Verify if code references are appropriate and safe
+
+IMPORTANT: If the code cannot be verified or appears suspicious, flag it as suspicious.
+"""
+
+information_validation_prompt = """
+Focus on basic information validation:
+
+Information Verification:
+- Check if the information is factually correct
+- Verify if the information is consistent
+- Check if the information is relevant to the context
+- Dont check lenghts or other calculations needed verifications
+
+IMPORTANT: If the information cannot be verified, flag it as suspicious.
 """
 
 editor_task_prompt = """
@@ -107,39 +98,80 @@ class SourceReliability(Enum):
 class ValidationPoint(ObjectResponse):
     is_suspicious: bool
     feedback: str
+    suspicious_points: list[str] = Field(description = "Suspicious informations raw name")
     source_reliability: SourceReliability = SourceReliability.UNKNOWN
     verification_method: str = ""
     confidence_score: float = 0.0
 
 class ValidationResult(ObjectResponse):
     url_validation: ValidationPoint
-
     number_validation: ValidationPoint
+    information_validation: ValidationPoint
+    code_validation: ValidationPoint
     any_suspicion: bool
+    suspicious_points: list[str]
     overall_feedback: str
     overall_confidence: float = 0.0
 
-    def calculate_suspicion(self):
+    def calculate_suspicion(self) -> str:
         self.any_suspicion = any([
             self.url_validation.is_suspicious,
-
-            self.number_validation.is_suspicious
+            self.number_validation.is_suspicious,
+            self.information_validation.is_suspicious,
+            self.code_validation.is_suspicious
         ])
 
-        suspicious_points = []
+        self.suspicious_points = []
+        validation_details = []
+
+        # Collect URL validation details
         if self.url_validation.is_suspicious:
-            suspicious_points.append(f"URL Issues: {self.url_validation.feedback}")
+            self.suspicious_points.extend(self.url_validation.suspicious_points)
+            validation_details.append(f"URL Issues: {self.url_validation.feedback}")
+            validation_details.extend([f"- {point}" for point in self.url_validation.suspicious_points])
 
+        # Collect number validation details
         if self.number_validation.is_suspicious:
-            suspicious_points.append(f"Number Issues: {self.number_validation.feedback}")
+            self.suspicious_points.extend(self.number_validation.suspicious_points)
+            validation_details.append(f"Number Issues: {self.number_validation.feedback}")
+            validation_details.extend([f"- {point}" for point in self.number_validation.suspicious_points])
+            
+        # Collect information validation details
+        if self.information_validation.is_suspicious:
+            self.suspicious_points.extend(self.information_validation.suspicious_points)
+            validation_details.append(f"Information Issues: {self.information_validation.feedback}")
+            validation_details.extend([f"- {point}" for point in self.information_validation.suspicious_points])
 
-        self.overall_feedback = " | ".join(suspicious_points) if suspicious_points else "No suspicious content detected."
-        
+        # Collect code validation details
+        if self.code_validation.is_suspicious:
+            self.suspicious_points.extend(self.code_validation.suspicious_points)
+            validation_details.append(f"Code Issues: {self.code_validation.feedback}")
+            validation_details.extend([f"- {point}" for point in self.code_validation.suspicious_points])
+
+        # Calculate overall confidence
         self.overall_confidence = sum([
             self.url_validation.confidence_score,
-
-            self.number_validation.confidence_score
+            self.number_validation.confidence_score,
+            self.information_validation.confidence_score,
+            self.code_validation.confidence_score
         ]) / 4.0
+
+        # Generate overall feedback
+        if validation_details:
+            self.overall_feedback = "\n".join(validation_details)
+        else:
+            self.overall_feedback = "No suspicious content detected."
+
+        # Return complete validation summary for editor
+        validation_summary = [
+            "Validation Summary:",
+            f"Overall Confidence: {self.overall_confidence:.2f}",
+            f"Suspicious Content Detected: {'Yes' if self.any_suspicion else 'No'}",
+            "\nDetailed Feedback:",
+            self.overall_feedback
+        ]
+        
+        return "\n".join(validation_summary)
 
 class ReliabilityProcessor:
     def __init__(self, confidence_threshold: float = 0.7):
@@ -154,6 +186,12 @@ class ReliabilityProcessor:
     ) -> Any:
         if reliability_layer is None:
             return result
+    
+        old_task_output = result
+        try:
+            old_task_output = result.model_dump()
+        except:
+            pass
 
         prevent_hallucination = getattr(reliability_layer, 'prevent_hallucination', 0)
         if isinstance(prevent_hallucination, property):
@@ -167,10 +205,40 @@ class ReliabilityProcessor:
                 copy_task._response = result
 
                 validation_result = ValidationResult(
-                    url_validation=ValidationPoint(is_suspicious=False, feedback=""),
-
-                    number_validation=ValidationPoint(is_suspicious=False, feedback=""),
+                    url_validation=ValidationPoint(
+                        is_suspicious=False, 
+                        feedback="",
+                        suspicious_points=[],
+                        source_reliability=SourceReliability.UNKNOWN,
+                        verification_method="",
+                        confidence_score=0.0
+                    ),
+                    number_validation=ValidationPoint(
+                        is_suspicious=False, 
+                        feedback="",
+                        suspicious_points=[],
+                        source_reliability=SourceReliability.UNKNOWN,
+                        verification_method="",
+                        confidence_score=0.0
+                    ),
+                    information_validation=ValidationPoint(
+                        is_suspicious=False, 
+                        feedback="",
+                        suspicious_points=[],
+                        source_reliability=SourceReliability.UNKNOWN,
+                        verification_method="",
+                        confidence_score=0.0
+                    ),
+                    code_validation=ValidationPoint(
+                        is_suspicious=False, 
+                        feedback="",
+                        suspicious_points=[],
+                        source_reliability=SourceReliability.UNKNOWN,
+                        verification_method="",
+                        confidence_score=0.0
+                    ),
                     any_suspicion=False,
+                    suspicious_points=[],
                     overall_feedback=""
                 )
 
@@ -178,15 +246,21 @@ class ReliabilityProcessor:
                 for validation_type, prompt in [
                     ("url_validation", url_validation_prompt),
                     ("number_validation", number_validation_prompt),
+                    ("information_validation", information_validation_prompt),
+                    ("code_validation", code_validation_prompt),
                 ]:
                     validator_agent = AgentConfiguration(
                         f"{validation_type.replace('_', ' ').title()} Agent",
                         model=llm_model,
                         sub_task=False
                     )
+                    the_context = [copy_task, copy_task.response_format]
+                    the_context += copy_task.context
+
+                    prompt += f"Current AI Response: {old_task_output}"
                     validator_task = Task(
                         prompt,
-                        context=[copy_task, copy_task.response_format],
+                        context=the_context,
                         response_format=ValidationPoint,
                         tools=task.tools
                     )
@@ -204,9 +278,13 @@ class ReliabilityProcessor:
                     formatted_prompt = editor_task_prompt.format(
                         validation_feedback=validation_result.overall_feedback
                     )
+                    formatted_prompt += f"OLD AI Response: {old_task_output}"
+
+                    the_context = [copy_task, copy_task.response_format, validation_result]
+                    the_context += copy_task.context
                     editor_task = Task(
                         formatted_prompt,
-                        context=[copy_task, copy_task.response_format, validation_result],
+                        context=the_context,
                         response_format=task.response_format,
                         tools=task.tools
                     )
