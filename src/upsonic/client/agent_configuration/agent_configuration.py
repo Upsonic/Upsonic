@@ -114,7 +114,7 @@ class AgentConfiguration(BaseModel):
     cache_expiry: int = 60 * 60
     knowledge_base: KnowledgeBase = None
     tools: List[Any] = []
-    context_compress: bool = True
+    context_compress: bool = False
 
     @property
     def retries(self):
