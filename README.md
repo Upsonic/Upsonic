@@ -111,7 +111,6 @@ LLM output reliability is critical, particularly for numerical operations and ac
 
 **Loops**: Ensures accuracy through controlled feedback loops at critical reliability checkpoints
 
-
 ```python
 class ReliabilityLayer:
   prevent_hallucination = 10
@@ -121,7 +120,7 @@ agent = Agent("Coder", reliability_layer=ReliabilityLayer)
 
 ## Tool Integration via MCP
 
-Upsonic officially supports [Model Context Protocol (MCP)](https://www.claudemcp.com/) and custom tools. You can use hundreds of MCP servers at https://glama.ai/mcp/servers or https://smithery.ai/ We also support Python functions inside a class as a tool. You can easily generate your integrations with that.
+Upsonic officially supports [Model Context Protocol (MCP)](https://github.com/modelcontextprotocol/servers) and custom tools. You can use hundreds of MCP servers at [glama](https://glama.ai/mcp/servers) or [mcprun](https://mcp.run) We also support Python functions inside a class as a tool. You can easily generate your integrations with that.
 
 ```python
 from upsonic import Agent, Task, ObjectResponse
