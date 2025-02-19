@@ -276,7 +276,7 @@ class ReliabilityProcessor:
 
 
                     # Create validation task with processed context
-                    context_strings.append(f"\nCurrent AI Response: {old_task_output}")
+                    context_strings.append(f"\nCurrent AI Response (Untrusted Source, last AI responose that we are checking now): {old_task_output}")
 
                     print("CONTEXT STRING", context_strings)
                     
