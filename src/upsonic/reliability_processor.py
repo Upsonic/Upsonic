@@ -15,6 +15,7 @@ Focus on basic URL source validation:
 
 Source Verification:
 - Check if the source is come from the content. But dont make assumption just check the context and try to find exact things. If not flag it.
+- If you can see the things in the context everything okay (Trusted Source).
 
 IMPORTANT: If the URL source cannot be verified, flag it as suspicious.
 """
@@ -24,6 +25,7 @@ Focus on basic numerical validation:
 
 Number Verification:
 - Check if the source is come from the content. But dont make assumption just check the context and try to find exact things. If not flag it.
+- If you can see the things in the context everything okay (Trusted Source).
 
 IMPORTANT: If the numbers cannot be verified, flag them as suspicious.
 """
@@ -33,6 +35,7 @@ Focus on basic code validation:
 
 Code Verification:
 - Check if the source is come from the content. But dont make assumption just check the context and try to find exact things. If not flag it.
+- If you can see the things in the context everything okay (Trusted Source).
 
 IMPORTANT: If the code cannot be verified or appears suspicious, flag it as suspicious.
 """
@@ -42,6 +45,7 @@ Focus on basic information validation:
 
 Information Verification:
 - Check if the source is come from the content. But dont make assumption just check the context and try to find exact things. If not flag it.
+- If you can see the things in the context everything okay (Trusted Source).
 
 IMPORTANT: If the information cannot be verified, flag it as suspicious.
 """
