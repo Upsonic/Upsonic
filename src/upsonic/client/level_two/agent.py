@@ -373,8 +373,18 @@ class Agent:
         if task.context:
             for each in the_task:
                 each.context += task.context
-                
 
+        # Create copies of agent_configuration for all tasks except the last one
+        task_specific_configs = []
+        for i in range(len(the_task)):
+            if i < len(the_task) - 1:
+                # Create a copy and set reliability_layer to None for all except last task
+                task_config = copy.deepcopy(agent_configuration)
+                task_config.reliability_layer = None
+                task_specific_configs.append(task_config)
+            else:
+                # Use original config for the last task
+                task_specific_configs.append(agent_configuration)
 
         if agent_configuration.tools:
             if isinstance(the_task, list):
@@ -386,18 +396,15 @@ class Agent:
 
         results = []    
         if isinstance(the_task, list):
-            for each in the_task:
+            for i, each in enumerate(the_task):
                 if is_it_sub_task:
                     if shared_context:
                         each.context += shared_context
 
-
-
-                result = self.agent_(agent_configuration, each, llm_model=llm_model)
+                result = self.agent_(task_specific_configs[i], each, llm_model=llm_model)
                 results += result
 
                 if is_it_sub_task:
-                    
                     shared_context.append(OtherTask(task=each.description, result=each.response))
 
 
