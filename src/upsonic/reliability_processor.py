@@ -18,7 +18,6 @@ Source Verification:
 - If you can see the things in the context everything okay (Trusted Source).
 
 IMPORTANT: If the URL source cannot be verified, flag it as suspicious.
-IMPORTANT 2: If there is no url at all dont flag it as suspicious.
 """
 
 number_validation_prompt = """
@@ -29,7 +28,6 @@ Number Verification:
 - If you can see the things in the context everything okay (Trusted Source).
 
 IMPORTANT: If the numbers cannot be verified, flag them as suspicious.
-IMPORTANT 2: If there is no numbers at all dont flag it as suspicious.
 """
 
 code_validation_prompt = """
@@ -40,7 +38,6 @@ Code Verification:
 - If you can see the things in the context everything okay (Trusted Source).
 
 IMPORTANT: If the code cannot be verified or appears suspicious, flag it as suspicious.
-IMPORTANT 2: If there is no code at all dont flag it as suspicious.
 """
 
 information_validation_prompt = """
@@ -51,7 +48,6 @@ Information Verification:
 - If you can see the things in the context everything okay (Trusted Source).
 
 IMPORTANT: If the information cannot be verified, flag it as suspicious.
-IMPORTANT 2: If there is no information at all dont flag it as suspicious.
 """
 
 editor_task_prompt = """
@@ -246,6 +242,20 @@ class ReliabilityProcessor:
                     ("information_validation", information_validation_prompt),
                     ("code_validation", code_validation_prompt),
                 ]:
+                    # For URL validation, skip if no URLs are present
+                    if validation_type == "url_validation":
+                        if not contains_urls([prompt] + context_strings):
+                            # Set a default "no URLs found" validation point
+                            setattr(validation_result, validation_type, ValidationPoint(
+                                is_suspicious=False,
+                                feedback="No URLs found in content to validate",
+                                suspicious_points=[],
+                                source_reliability=SourceReliability.UNKNOWN,
+                                verification_method="regex_url_detection",
+                                confidence_score=1.0
+                            ))
+                            continue
+
                     validator_agent = AgentConfiguration(
                         f"{validation_type.replace('_', ' ').title()} Agent",
                         model=llm_model,
@@ -322,3 +332,18 @@ class ReliabilityProcessor:
                 return result
 
         return processed_result
+
+def find_urls_in_text(text: str) -> List[str]:
+    """Find all URLs in the given text using regex pattern matching."""
+    # This pattern matches URLs starting with http://, https://, ftp://, or www.
+    url_pattern = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+    return re.findall(url_pattern, text)
+
+def contains_urls(texts: List[str]) -> bool:
+    """Check if any of the provided texts contain URLs."""
+    for text in texts:
+        if not isinstance(text, str):
+            continue
+        if find_urls_in_text(text):
+            return True
+    return False
