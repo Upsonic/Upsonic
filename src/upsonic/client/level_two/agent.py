@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from ..tasks.tasks import Task
 
-from ..printing import agent_end, agent_total_cost, agent_retry
+from ..printing import agent_end, agent_total_cost, agent_retry, print_price_id_summary
 
 
 
@@ -101,12 +101,12 @@ class Agent:
                     the_result = self.send_agent_request(agent_configuration, each, llm_model)
                     the_result["time"] = time.time() - start_time
                     results.append(the_result)
-                    agent_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_count"], the_result["context_count"], self.debug)
+                    agent_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_count"], the_result["context_count"], self.debug, each.price_id)
             else:
                 the_result = self.send_agent_request(agent_configuration, task, llm_model)
                 the_result["time"] = time.time() - start_time
                 results.append(the_result)
-                agent_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_count"], the_result["context_count"], self.debug)
+                agent_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_count"], the_result["context_count"], self.debug, task.price_id)
         except Exception as e:
 
             try:
@@ -229,7 +229,7 @@ class Agent:
 
 
 
-    def create_characterization(self, agent_configuration: AgentConfiguration, llm_model: str = None):
+    def create_characterization(self, agent_configuration: AgentConfiguration, llm_model: str = None, price_id: str = None):
         tools = [Search]
         
         search_result = None
@@ -241,7 +241,7 @@ class Agent:
 
         # Handle website search if URL is provided
         if agent_configuration.company_url:
-            search_task = Task(description=f"Make a search for {agent_configuration.company_url}", tools=tools, response_format=SearchResult)
+            search_task = Task(description=f"Make a search for {agent_configuration.company_url}", tools=tools, response_format=SearchResult, price_id_=price_id, not_main_task=True)
             self.call(search_task, llm_model=llm_model)
             search_result = search_task.response
 
@@ -251,7 +251,9 @@ class Agent:
             company_objective_task = Task(description=f"Generate the company objective for {agent_configuration.company_objective}", 
                                         tools=tools, 
                                         response_format=CompanyObjective,
-                                        context=context)
+                                        context=context,
+                                        price_id_=price_id,
+                                        not_main_task=True)
             self.call(company_objective_task, llm_model=llm_model)
             company_objective_result = company_objective_task.response
 
@@ -267,7 +269,9 @@ class Agent:
             human_objective_task = Task(description=f"Generate the human objective for {agent_configuration.job_title}", 
                                       tools=tools, 
                                       response_format=HumanObjective,
-                                      context=context)
+                                      context=context,
+                                      price_id_=price_id,
+                                      not_main_task=True)
             self.call(human_objective_task, llm_model=llm_model)
             human_objective_result = human_objective_task.response
 
@@ -307,10 +311,10 @@ class Agent:
         if agent_configuration.caching:
             the_characterization = get_from_cache_with_expiry(the_characterization_cache_key)
             if the_characterization is None:
-                the_characterization = self.create_characterization(agent_configuration, llm_model)
+                the_characterization = self.create_characterization(agent_configuration, llm_model, task.price_id)
                 save_to_cache_with_expiry(the_characterization, the_characterization_cache_key, agent_configuration.cache_expiry)
         else:
-            the_characterization = self.create_characterization(agent_configuration, llm_model)
+            the_characterization = self.create_characterization(agent_configuration, llm_model, task.price_id)
 
 
 
@@ -433,6 +437,9 @@ class Agent:
 
         agent_total_cost(total_input_tokens, total_output_tokens, total_time, the_llm_model)
 
+        if not original_task.not_main_task:
+            print_price_id_summary(original_task.price_id, original_task)
+
         return original_task.response
 
 
@@ -483,14 +490,16 @@ Use Level One for any task requiring multiple steps or verification.
         mode_selector = Task(
             description=mode_selection_prompt,
             response_format=AgentMode,
-            context=[task]
+            context=[task],
+            price_id_=task.price_id,
+            not_main_task=True
         )
         
         self.call(mode_selector, llm_model)
         
         # If level_no_step is selected, return just the end task
         if mode_selector.response.selected_mode == "level_no_step":
-            return [Task(description=task.description, response_format=task.response_format, tools=task.tools)]
+            return [Task(description=task.description, response_format=task.response_format, tools=task.tools, price_id_=task.price_id, not_main_task=True)]
 
         # Generate a list of sub tasks
         prompt = f"""
@@ -528,7 +537,7 @@ Tool Availability Impact:
         sub_tasker_context = [task, task.response_format]
         if task.context:
             sub_tasker_context = task.context
-        sub_tasker = Task(description=prompt, response_format=SubTaskList, context=sub_tasker_context, tools=task.tools)
+        sub_tasker = Task(description=prompt, response_format=SubTaskList, context=sub_tasker_context, tools=task.tools, price_id_=task.price_id, not_main_task=True)
 
         self.call(sub_tasker, llm_model)
 
@@ -536,12 +545,12 @@ Tool Availability Impact:
 
         # Create tasks from subtasks
         for each in sub_tasker.response.sub_tasks:
-            new_task = Task(description=each.description + " " + each.required_output + " " + str(each.sources_can_be_used) + " " + str(each.tools) + "Focus to complete the task with right result, Dont ask to human directly do it and give the result.")
+            new_task = Task(description=each.description + " " + each.required_output + " " + str(each.sources_can_be_used) + " " + str(each.tools) + "Focus to complete the task with right result, Dont ask to human directly do it and give the result.", price_id_=task.price_id, not_main_task=True)
             new_task.tools = task.tools
             sub_tasks.append(new_task)
 
         # Add the final task that will produce the original desired response format
-        end_task = Task(description=task.description, response_format=task.response_format)
+        end_task = Task(description=task.description, response_format=task.response_format, price_id_=task.price_id, not_main_task=True)
         sub_tasks.append(end_task)
 
         return sub_tasks

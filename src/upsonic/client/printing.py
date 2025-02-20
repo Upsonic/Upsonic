@@ -1,4 +1,5 @@
 from typing import Any
+from decimal import Decimal
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -8,6 +9,9 @@ from .price import get_estimated_cost
 
 
 console = Console()
+
+# Global dictionary to store aggregated values by price_id
+price_id_summary = {}
 
 def spacing():
     console.print("")
@@ -148,9 +152,22 @@ def call_end(result: Any, llm_model: str, response_format: str, start_time: floa
 
 
 
-def agent_end(result: Any, llm_model: str, response_format: str, start_time: float, end_time: float, usage: dict, tool_count: int, context_count: int, debug: bool = False):
+def agent_end(result: Any, llm_model: str, response_format: str, start_time: float, end_time: float, usage: dict, tool_count: int, context_count: int, debug: bool = False, price_id:str = None):
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
+
+    # Track values if price_id is provided
+    if price_id:
+        estimated_cost = get_estimated_cost(usage['input_tokens'], usage['output_tokens'], llm_model)
+        if price_id not in price_id_summary:
+            price_id_summary[price_id] = {
+                'input_tokens': 0,
+                'output_tokens': 0,
+                'estimated_cost': 0.0
+            }
+        price_id_summary[price_id]['input_tokens'] += usage['input_tokens']
+        price_id_summary[price_id]['output_tokens'] += usage['output_tokens']
+        price_id_summary[price_id]['estimated_cost'] = Decimal(str(price_id_summary[price_id]['estimated_cost'])) + Decimal(str(estimated_cost).replace('$', '').replace('~', ''))
 
     table.add_row("[bold]LLM Model:[/bold]", f"{llm_model}")
     # Add spacing
@@ -201,6 +218,47 @@ def agent_total_cost(total_input_tokens: int, total_output_tokens: int, total_ti
     console.print(panel)
     spacing()
 
+def print_price_id_summary(price_id: str, task) -> dict:
+    """
+    Get the summary of usage and costs for a specific price ID and print it in a formatted panel.
+    
+    Args:
+        price_id (str): The price ID to look up
+        
+    Returns:
+        dict: A dictionary containing the usage summary, or None if price_id not found
+    """
+    if price_id not in price_id_summary:
+        console.print("[bold red]Price ID not found![/bold red]")
+        return None
+    
+    summary = price_id_summary[price_id].copy()
+    # Format the estimated cost to include $ symbol
+    summary['estimated_cost'] = f"${summary['estimated_cost']:.4f}"
+
+    # Create a table for pretty printing
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+
+    table.add_row("[bold]Price ID:[/bold]", f"[magenta]{price_id}[/magenta]")
+    table.add_row("")  # Add spacing
+    table.add_row("[bold]Input Tokens:[/bold]", f"[magenta]{summary['input_tokens']:,}[/magenta]")
+    table.add_row("[bold]Output Tokens:[/bold]", f"[magenta]{summary['output_tokens']:,}[/magenta]")
+    table.add_row("[bold]Total Estimated Cost:[/bold]", f"[magenta]{summary['estimated_cost']}[/magenta]")
+
+    panel = Panel(
+        table,
+        title="[bold magenta]Upsonic - Price ID Summary[/bold magenta]",
+        border_style="magenta",
+        expand=True,
+        width=70
+    )
+
+    console.print(panel)
+    spacing()
+
+    return summary
+
 def agent_retry(retry_count: int, max_retries: int):
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
@@ -217,3 +275,24 @@ def agent_retry(retry_count: int, max_retries: int):
 
     console.print(panel)
     spacing()
+
+def get_price_id_total_cost(price_id: str):
+    """
+    Get the total cost for a specific price ID.
+    
+    Args:
+        price_id (str): The price ID to get totals for
+        
+    Returns:
+        dict: Dictionary containing input tokens, output tokens, and estimated cost for the price ID.
+        None: If the price ID is not found.
+    """
+    if price_id not in price_id_summary:
+        return None
+
+    data = price_id_summary[price_id]
+    return {
+        'input_tokens': data['input_tokens'],
+        'output_tokens': data['output_tokens'],
+        'estimated_cost': float(data['estimated_cost'])
+    }

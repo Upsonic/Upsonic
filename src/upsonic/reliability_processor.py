@@ -282,7 +282,9 @@ class ReliabilityProcessor:
                         prompt,
                         response_format=ValidationPoint,
                         tools=task.tools,
-                        context=context_strings  # Pass the processed context strings
+                        context=context_strings,  # Pass the processed context strings
+                        price_id_=task.price_id,
+                        not_main_task=True
                     )
                     validator_agent.do(validator_task)
                     setattr(validation_result, validation_type, validator_task.response)
@@ -306,7 +308,9 @@ class ReliabilityProcessor:
                         formatted_prompt,
                         context=the_context,
                         response_format=task.response_format,
-                        tools=task.tools
+                        tools=task.tools,
+                        price_id_=task.price_id,
+                        not_main_task=True
                     )
                     editor_agent.do(editor_task)
                     return editor_task.response
