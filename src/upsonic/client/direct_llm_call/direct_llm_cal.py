@@ -36,7 +36,7 @@ class Direct:
     
 
     @staticmethod
-    def print_do(task: Task, model: str | None = None, client: Any = None):
-        result = Direct.do(task, model, client)
+    def print_do(task: Task, model: str | None = None, client: Any = None, debug: bool = False):
+        result = Direct.do(task, model, client, debug)
         print(result)
         return result
