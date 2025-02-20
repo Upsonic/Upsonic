@@ -18,6 +18,7 @@ Source Verification:
 - If you can see the things in the context everything okay (Trusted Source).
 
 IMPORTANT: If the URL source cannot be verified, flag it as suspicious.
+IMPORTANT 2: If there is no url at all dont flag it as suspicious.
 """
 
 number_validation_prompt = """
@@ -28,6 +29,7 @@ Number Verification:
 - If you can see the things in the context everything okay (Trusted Source).
 
 IMPORTANT: If the numbers cannot be verified, flag them as suspicious.
+IMPORTANT 2: If there is no numbers at all dont flag it as suspicious.
 """
 
 code_validation_prompt = """
@@ -38,6 +40,7 @@ Code Verification:
 - If you can see the things in the context everything okay (Trusted Source).
 
 IMPORTANT: If the code cannot be verified or appears suspicious, flag it as suspicious.
+IMPORTANT 2: If there is no code at all dont flag it as suspicious.
 """
 
 information_validation_prompt = """
@@ -48,6 +51,7 @@ Information Verification:
 - If you can see the things in the context everything okay (Trusted Source).
 
 IMPORTANT: If the information cannot be verified, flag it as suspicious.
+IMPORTANT 2: If there is no information at all dont flag it as suspicious.
 """
 
 editor_task_prompt = """
