@@ -242,26 +242,6 @@ class ReliabilityProcessor:
                     ("information_validation", information_validation_prompt),
                     ("code_validation", code_validation_prompt),
                 ]:
-                    # For URL validation, skip if no URLs are present
-                    if validation_type == "url_validation":
-                        if not contains_urls([prompt] + context_strings):
-                            # Set a default "no URLs found" validation point
-                            setattr(validation_result, validation_type, ValidationPoint(
-                                is_suspicious=False,
-                                feedback="No URLs found in content to validate",
-                                suspicious_points=[],
-                                source_reliability=SourceReliability.UNKNOWN,
-                                verification_method="regex_url_detection",
-                                confidence_score=1.0
-                            ))
-                            continue
-
-                    validator_agent = AgentConfiguration(
-                        f"{validation_type.replace('_', ' ').title()} Agent",
-                        model=llm_model,
-                        sub_task=False
-                    )
-
                     # Create a list to store context strings
                     context_strings = []
                     
@@ -288,10 +268,29 @@ class ReliabilityProcessor:
                             else:
                                 pass
 
-
-                    # Create validation task with processed context
+                    # Add the current AI response to context
                     context_strings.append(f"\nCurrent AI Response (Untrusted Source, last AI responose that we are checking now): {old_task_output}")
-                    
+
+                    # For URL validation, skip if no URLs are present
+                    if validation_type == "url_validation":
+                        if not contains_urls([prompt] + context_strings):
+                            # Set a default "no URLs found" validation point
+                            setattr(validation_result, validation_type, ValidationPoint(
+                                is_suspicious=False,
+                                feedback="No URLs found in content to validate",
+                                suspicious_points=[],
+                                source_reliability=SourceReliability.UNKNOWN,
+                                verification_method="regex_url_detection",
+                                confidence_score=1.0
+                            ))
+                            continue
+
+                    validator_agent = AgentConfiguration(
+                        f"{validation_type.replace('_', ' ').title()} Agent",
+                        model=llm_model,
+                        sub_task=False
+                    )
+
                     validator_task = Task(
                         prompt,
                         response_format=ValidationPoint,
