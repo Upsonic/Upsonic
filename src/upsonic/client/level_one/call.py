@@ -99,7 +99,8 @@ class Call:
             with sentry_sdk.start_span(op="prepare_request"):
                 # Prepare the request data
                 data = {
-                    "prompt": task.description,
+                    "prompt": task.description, 
+                    "images": task.images_base_64,
                     "response_format": response_format_str,
                     "tools": tools or [],
                     "context": context,

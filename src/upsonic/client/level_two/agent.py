@@ -176,6 +176,7 @@ class Agent:
                         data = {
                             "agent_id": agent_configuration.agent_id,
                             "prompt": task.description,
+                            "images": task.images_base_64,
                             "response_format": response_format_str,
                             "tools": tools or [],
                             "context": context,
@@ -489,6 +490,7 @@ Use Level One for any task requiring multiple steps or verification.
 """
         mode_selector = Task(
             description=mode_selection_prompt,
+            images=task.images,
             response_format=AgentMode,
             context=[task],
             price_id_=task.price_id,
@@ -499,7 +501,7 @@ Use Level One for any task requiring multiple steps or verification.
         
         # If level_no_step is selected, return just the end task
         if mode_selector.response.selected_mode == "level_no_step":
-            return [Task(description=task.description, response_format=task.response_format, tools=task.tools, price_id_=task.price_id, not_main_task=True)]
+            return [Task(description=task.description, images=task.images, response_format=task.response_format, tools=task.tools, price_id_=task.price_id, not_main_task=True)]
 
         # Generate a list of sub tasks
         prompt = f"""
@@ -537,7 +539,7 @@ Tool Availability Impact:
         sub_tasker_context = [task, task.response_format]
         if task.context:
             sub_tasker_context = task.context
-        sub_tasker = Task(description=prompt, response_format=SubTaskList, context=sub_tasker_context, tools=task.tools, price_id_=task.price_id, not_main_task=True)
+        sub_tasker = Task(description=prompt, images=task.images, response_format=SubTaskList, context=sub_tasker_context, tools=task.tools, price_id_=task.price_id, not_main_task=True)
 
         self.call(sub_tasker, llm_model)
 
@@ -545,12 +547,12 @@ Tool Availability Impact:
 
         # Create tasks from subtasks
         for each in sub_tasker.response.sub_tasks:
-            new_task = Task(description=each.description + " " + each.required_output + " " + str(each.sources_can_be_used) + " " + str(each.tools) + "Focus to complete the task with right result, Dont ask to human directly do it and give the result.", price_id_=task.price_id, not_main_task=True)
+            new_task = Task(description=each.description + " " + each.required_output + " " + str(each.sources_can_be_used) + " " + str(each.tools) + "Focus to complete the task with right result, Dont ask to human directly do it and give the result.", images=task.images, price_id_=task.price_id, not_main_task=True)
             new_task.tools = task.tools
             sub_tasks.append(new_task)
 
         # Add the final task that will produce the original desired response format
-        end_task = Task(description=task.description, response_format=task.response_format, price_id_=task.price_id, not_main_task=True)
+        end_task = Task(description=task.description, images=task.images, response_format=task.response_format, price_id_=task.price_id, not_main_task=True)
         sub_tasks.append(end_task)
 
         return sub_tasks
@@ -591,7 +593,7 @@ Tool Availability Impact:
         for each in tasks:
             is_end = False
             while is_end == False:
-                selecting_task  = Task(description="Select an agent for this task", response_format=SelectedAgent, context=[the_agents_, each])
+                selecting_task  = Task(description="Select an agent for this task", images=each.images, response_format=SelectedAgent, context=[the_agents_, each])
 
                 the_call_llm_model = agent_configurations[0].model
                 self.call(selecting_task, the_call_llm_model)

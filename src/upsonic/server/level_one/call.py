@@ -1,7 +1,6 @@
 from pydantic import BaseModel
 from pydantic_ai.result import ResultDataT_inv, ResultDataT
-
-from typing import Any, Optional
+from typing import Any, Optional, List
 
 from ...storage.configuration import Configuration
 
@@ -16,6 +15,7 @@ class CallManager:
     async def gpt_4o(
         self,
         prompt: str,
+        images: Optional[List[str]] = None,
         response_format: BaseModel = str,
         tools: list[str] = [],
         context: Any = None,
@@ -29,6 +29,14 @@ class CallManager:
             "text": f"{prompt}"
         }]
 
+        if images:
+            for image in images:
+                message.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{image}"
+                    }
+                })
         try:
             if "claude-3-5-sonnet" in llm_model:
                 print("Tools", tools)

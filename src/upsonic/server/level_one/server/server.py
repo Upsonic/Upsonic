@@ -15,6 +15,7 @@ prefix = "/level_one"
 
 class GPT4ORequest(BaseModel):
     prompt: str
+    images: Optional[List[str]] = None
     response_format: Optional[Any] = []
     tools: Optional[Any] = []
     context: Optional[Any] = None
@@ -66,6 +67,7 @@ async def call_gpt4o(request: GPT4ORequest):
 
         result = await Call.gpt_4o(
             prompt=request.prompt,
+            images=request.images,
             response_format=response_format,
             tools=request.tools,
             context=context,

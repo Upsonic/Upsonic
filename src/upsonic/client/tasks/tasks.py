@@ -1,3 +1,4 @@
+import base64
 from pydantic import BaseModel
 
 
@@ -8,6 +9,7 @@ from .task_response import CustomTaskResponse, ObjectResponse
 from ..printing import get_price_id_total_cost
 class Task(BaseModel):
     description: str
+    images: Optional[List[str]] = None
     tools: list[Any] = []
     response_format: Union[Type[CustomTaskResponse], Type[ObjectResponse], None] = None
     _response: Any = None
@@ -19,6 +21,17 @@ class Task(BaseModel):
         if description is not None:
             data["description"] = description
         super().__init__(**data)
+
+
+    @property
+    def images_base_64(self):
+        if self.images is None:
+            return None
+        base_64_images = []
+        for image in self.images:
+            with open(image, "rb") as image_file:
+                base_64_images.append(base64.b64encode(image_file.read()).decode('utf-8'))
+        return base_64_images
 
     @property
     def price_id(self):

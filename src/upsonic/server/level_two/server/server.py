@@ -18,6 +18,7 @@ prefix = "/level_two"
 class AgentRequest(BaseModel):
     agent_id: str
     prompt: str
+    images: Optional[List[str]] = None
     response_format: Optional[Any] = []
     tools: Optional[Any] = []
     context: Optional[Any] = None
@@ -71,6 +72,7 @@ async def call_agent(request: AgentRequest):
         result = await Agent.agent(
             agent_id=request.agent_id,
             prompt=request.prompt,
+            images=request.images,
             response_format=response_format,
             tools=request.tools,
             context=context,

@@ -4,7 +4,7 @@ import openai
 from pydantic import BaseModel
 
 
-from typing import Any, Optional
+from typing import Any, Optional, List
 
 from ...storage.configuration import Configuration
 
@@ -23,6 +23,7 @@ class AgentManager:
         self,
         agent_id: str,
         prompt: str,
+        images: Optional[List[str]] = None,
         response_format: BaseModel = str,
         tools: list[str] = [],
         context: Any = None,
@@ -52,6 +53,17 @@ class AgentManager:
                 "type": "text",
                 "text": f"{prompt}"
             }]
+
+
+
+            if images:
+                for image in images:
+                    message.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{image}"
+                        }
+                    })
 
             if "claude-3-5-sonnet" in llm_model:
                 print("Tools", tools)
