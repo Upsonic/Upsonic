@@ -111,12 +111,26 @@ LLM output reliability is critical, particularly for numerical operations and ac
 
 **Loops**: Ensures accuracy through controlled feedback loops at critical reliability checkpoints
 
+
+Upsonic is a reliability-focused framework. The results in the table were generated with a small dataset. They show success rates in the transformation of JSON keys. No hard-coded changes were made to the frameworks during testing; only the existing features of each framework were activated and run. GPT-4o was used in the tests.
+
+10 transfers were performed for each section. The numbers show the error count. So if it says 7, it means 7 out of 10 were done **incorrectly**. The table has been created based on initial results. We are expanding the dataset. The tests will become more reliable after creating a larger test set.
+
+
+| Name     | Reliability Score % | ASIN Code | HS Code | CIS Code | Marketing URL | Usage URL | Warranty Time | Policy Link | Policy Description |
+|-----------|--------------------|-----------|---------|----------|---------------|-----------|---------------|-------------|----------------|
+ **Upsonic**   |**99.3**      |0         |1       |0        |0             |0         |0             |0           |0                   |
+| **CrewAI**    |**87.5**       |0         |3       |2        |1             |1         |0             |1           |2                   |
+| **Langgraph** |**6.3**      |10        |10      |7        |10            |8         |10            |10          |10                  |
+
+
 ```python
 class ReliabilityLayer:
   prevent_hallucination = 10
 
 agent = Agent("Coder", reliability_layer=ReliabilityLayer)
 ```
+<br>
 
 ## Tool Integration via MCP
 
@@ -157,7 +171,7 @@ print(result.title)
 print(result.summary)
 
 ```
-
+<br>
 
 ## Agent with Multi-Task Example 
 
@@ -236,11 +250,6 @@ print(f"Outreach Message Content: {message_task.response.content}")
 
 ```
 
-
-
-
-
-
 ## Direct LLM Call
 
 Direct LLM calls offer faster, cheaper solutions for simple tasks. In Upsonic, you can make calls to model providers without any abstraction level and organize structured outputs. You can also use tools with LLM calls.
@@ -252,21 +261,6 @@ Direct.do(task1)
 
 ```
 
-## Reliable Computer Use
-Computer use can able to human task like humans, mouse move, mouse click, typing and scrolling and etc. So you can build tasks over non-API systems. It can help your linkedin cases, internal tools. Computer use is supported by only Claude for now.
-
-```python
-
-from upsonic.client.tools import ComputerUse
-
-...
-
-tools = [ComputerUse]
-...
-
-```
-
-<br>
 <br>
 
 ## Telemetry
