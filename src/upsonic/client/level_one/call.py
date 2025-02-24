@@ -39,18 +39,17 @@ class Call:
             else:
                 the_result = self.call_(task, llm_model)
                 call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
-        except Exception as e:
-
+        except Exception as outer_e:
             try:
                 from ...server import stop_dev_server, stop_main_server, is_tools_server_running, is_main_server_running
 
                 if is_tools_server_running() or is_main_server_running():
                     stop_dev_server()
 
-            except Exception as e:
+            except Exception:
                 pass
 
-            raise e
+            raise outer_e
 
         end_time = time.time()
 
