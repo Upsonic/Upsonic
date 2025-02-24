@@ -55,7 +55,7 @@ Upsonic is a next-generation framework that makes agents production-ready by sol
 
 # 📙 Documentation
 
-You can access our documentation at [docs.upsonic.ai](https://docs.upsonic.ai/). All concepts and examples are available there.
+You can access our documentation at [docs.upsonic.ai](https://docs.upsonic.ai/) All concepts and examples are available there.
 
 <br>
 
@@ -99,7 +99,7 @@ agent.print_do(task)
 <br>
 
 
-## Reliability Layer
+## 📊 Reliability Layer
 
 LLM output reliability is critical, particularly for numerical operations and action execution. Upsonic addresses this through a multi-layered reliability system, enabling control agents and verification rounds to ensure output accuracy.
 
@@ -114,7 +114,7 @@ LLM output reliability is critical, particularly for numerical operations and ac
 
 Upsonic is a reliability-focused framework. The results in the table were generated with a small dataset. They show success rates in the transformation of JSON keys. No hard-coded changes were made to the frameworks during testing; only the existing features of each framework were activated and run. GPT-4o was used in the tests.
 
-10 transfers were performed for each section. The numbers show the error count. So if it says 7, it means 7 out of 10 were done **incorrectly**. The table has been created based on initial results. We are expanding the dataset. The tests will become more reliable after creating a larger test set.
+10 transfers were performed for each section. The numbers show the error count. So if it says 7, it means 7 out of 10 were done **incorrectly**. The table has been created based on initial results. We are expanding the dataset. The tests will become more reliable after creating a larger test set. Reliability benchmark [repo](https://github.com/Upsonic/Reliability-Benchmark)
 
 
 | Name     | Reliability Score % | ASIN Code | HS Code | CIS Code | Marketing URL | Usage URL | Warranty Time | Policy Link | Policy Description |
