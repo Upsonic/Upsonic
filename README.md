@@ -276,7 +276,3 @@ os.environ["UPSONIC_TELEMETRY"] = "False"
 
 
 
-### Coming Soon
-
-- **Dockerized Server Deploy**
-- **Verifiers For Computer Use**
