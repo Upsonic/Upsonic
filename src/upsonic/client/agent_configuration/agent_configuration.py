@@ -99,6 +99,7 @@ class AgentConfiguration(BaseModel):
     client: Any = None  # Add client parameter
     debug: bool = False
     reliability_layer: Any = None  # Changed to Any to accept any class or instance
+    system_prompt: str = None
 
     def __init__(self, job_title: str = None, client: Any = None, **data):
         if job_title is not None:

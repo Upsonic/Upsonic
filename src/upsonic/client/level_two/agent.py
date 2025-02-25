@@ -308,7 +308,9 @@ class Agent:
         
         the_characterization_cache_key = f"characterization_{hashlib.sha256(copy_agent_configuration_json.encode()).hexdigest()}"
 
-        if agent_configuration.caching:
+        if agent_configuration.system_prompt:
+            the_characterization = agent_configuration.system_prompt
+        elif agent_configuration.caching:
             the_characterization = get_from_cache_with_expiry(the_characterization_cache_key)
             if the_characterization is None:
                 the_characterization = self.create_characterization(agent_configuration, llm_model, task.price_id)
