@@ -72,8 +72,7 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
             connected_to_server(self.server_type, "Failed", total_time)
             raise ServerStatusException("Failed to connect to the server at initialization.")
         
-        total_time = time.time() - start_time
-        connected_to_server(self.server_type, "Established", total_time)
+
 
         # Handle configuration through ClientConfig model
         config = ClientConfig(**(kwargs or {}))
@@ -83,6 +82,8 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
 
         global latest_upsonic_client
         latest_upsonic_client = self
+        total_time = time.time() - start_time
+        connected_to_server(self.server_type, "Established", total_time)
 
     def status(self) -> bool:
         """Check the server status."""
