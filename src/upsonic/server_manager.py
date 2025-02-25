@@ -17,246 +17,175 @@ class ServerManager:
         self._process: Optional[subprocess.Popen] = None
         self._pid_file = os.path.join(os.path.expanduser("~"), f".upsonic_{name}_server.pid")
 
+    def _is_port_in_use(self) -> bool:
+        """Check if the port is in use."""
+        with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
+            return sock.connect_ex((self.host, self.port)) == 0
+
     def _kill_process_using_port(self) -> bool:
-        """Find and kill all processes using the specified port."""
-        killed_any = False
-        failed_kills = []
+        """Find and kill processes using the specified port."""
+        killed = False
         
         for proc in psutil.process_iter(['pid', 'name']):
             try:
-                # Get connections separately since it can't be retrieved in process_iter
                 process = psutil.Process(proc.info['pid'])
-                connections = process.net_connections()
-                for conn in connections:
+                for conn in process.net_connections():
                     if hasattr(conn, 'laddr') and len(conn.laddr) >= 2 and conn.laddr[1] == self.port:
-                        # Found a process using our port
                         try:
-                            process_info = f"PID: {process.pid}, Name: {process.name()}"
-                            # Try SIGTERM first
+                            # Try SIGTERM first, then SIGKILL if needed
                             process.terminate()
                             try:
                                 process.wait(timeout=3)
-                                killed_any = True
+                                killed = True
                             except psutil.TimeoutExpired:
-                                # If SIGTERM doesn't work, use SIGKILL
-                                try:
-                                    process.kill()
-                                    process.wait(timeout=1)
-                                    killed_any = True
-                                except Exception as e:
-                                    failed_kills.append(f"{process_info} (Kill failed: {str(e)})")
-                        except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+                                process.kill()
+                                process.wait(timeout=1)
+                                killed = True
+                        except Exception:
+                            # Last resort: try system kill
                             try:
-                                # Last resort: try using system kill command
                                 os.kill(process.pid, signal.SIGKILL)
-                                killed_any = True
-                            except Exception as e:
-                                failed_kills.append(f"{process_info} (System kill failed: {str(e)})")
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired) as e:
+                                killed = True
+                            except Exception:
+                                pass
+            except Exception:
                 continue
-            except Exception as e:
-                continue
+                
+        return killed
 
-        if failed_kills:
-            error_msg = f"Failed to kill the following processes using port {self.port}:\n" + "\n".join(failed_kills)
-            raise RuntimeError(error_msg)
-            
-        return killed_any
-
-    def _is_port_in_use(self, kill_if_used: bool = False) -> bool:
-        """Check if the port is in use and optionally kill the process using it."""
-        with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
-            result = sock.connect_ex((self.host, self.port)) == 0
-            if result and kill_if_used:
-                return not self._kill_process_using_port()
-            return result
-
-    def _write_pid(self):
-        """Write the current process ID to the PID file"""
-        if self._process and self._process.pid:
-            with open(self._pid_file, 'w') as f:
-                f.write(str(self._process.pid))
-
-    def _read_pid(self) -> Optional[int]:
-        """Read the process ID from the PID file"""
+    def _manage_pid_file(self, operation: str):
+        """Manage PID file operations (read/write/cleanup)."""
         try:
-            if os.path.exists(self._pid_file):
+            if operation == "write" and self._process and self._process.pid:
+                with open(self._pid_file, 'w') as f:
+                    f.write(str(self._process.pid))
+            elif operation == "read" and os.path.exists(self._pid_file):
                 with open(self._pid_file, 'r') as f:
                     return int(f.read().strip())
-        except (ValueError, IOError):
-            pass
-        return None
-
-    def _cleanup_pid(self):
-        """Remove the PID file"""
-        try:
-            if os.path.exists(self._pid_file):
+            elif operation == "cleanup" and os.path.exists(self._pid_file):
                 os.remove(self._pid_file)
-        except OSError:
+        except Exception:
             pass
+        
+        return None if operation == "read" else False
 
-    def _force_cleanup_port(self):
-        """Aggressively clean up the port before starting."""
+    def _cleanup_port(self):
+        """Clean up the port before starting."""
         if not self._is_port_in_use():
-            return
-
-        # First try normal port kill
-        try:
-            self._kill_process_using_port()
-            # Wait a bit to ensure port is freed
-            time.sleep(1)
-        except RuntimeError as e:
-            # If normal kill failed, try alternative method using psutil
+            return True
+            
+        # Try to kill processes using the port
+        self._kill_process_using_port()
+        time.sleep(1)
+        
+        # If port is still in use, try one more aggressive approach
+        if self._is_port_in_use():
             try:
-                killed_processes = []
-                for proc in psutil.process_iter(['pid', 'name']):
+                # Try to bind to the port to force it free
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.bind((self.host, self.port))
+                sock.close()
+            except socket.error:
+                # If binding fails, try one more kill attempt
+                for proc in psutil.process_iter(['pid']):
                     try:
                         process = psutil.Process(proc.info['pid'])
-                        connections = process.net_connections(kind='inet')
-                        for conn in connections:
-                            # Check if the connection is using our port
-                            if len(conn.laddr) >= 2 and conn.laddr[1] == self.port:
-                                # Try SIGTERM first
-                                process.terminate()
-                                try:
-                                    process.wait(timeout=3)
-                                    killed_processes.append(proc.info['pid'])
-                                except psutil.TimeoutExpired:
-                                    # If SIGTERM doesn't work, use SIGKILL
-                                    process.kill()
-                                    process.wait(timeout=1)
-                                    killed_processes.append(proc.info['pid'])
-                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
-                        continue
+                        if any(len(conn.laddr) >= 2 and conn.laddr[1] == self.port 
+                              for conn in process.net_connections(kind='inet')):
+                            process.kill()
                     except Exception:
                         continue
-
-                if not killed_processes:
-                    # If no processes were found using psutil's connections method,
-                    # try one last attempt using socket connections
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    try:
-                        # Try to bind to the port
-                        sock.bind((self.host, self.port))
-                    except socket.error:
-                        # If we can't bind, try to find what's using it
-                        for proc in psutil.process_iter(['pid', 'name']):
-                            try:
-                                process = psutil.Process(proc.info['pid'])
-                                if any(len(conn.laddr) >= 2 and conn.laddr[1] == self.port 
-                                      for conn in process.net_connections(kind='inet')):
-                                    process.kill()
-                                    killed_processes.append(proc.info['pid'])
-                            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                                continue
-                    finally:
-                        sock.close()
-
                 time.sleep(1)
-                
-            except Exception as e:
-                raise RuntimeError(f"Unexpected error while cleaning up port {self.port}: {str(e)}")
-
-        # Final check
-        if self._is_port_in_use():
-            raise RuntimeError(f"Port {self.port} is still in use after all cleanup attempts. Please check running processes manually.")
+        
+        return not self._is_port_in_use()
 
     def start(self, redirect_output: bool = False, force: bool = False):
         """Start the server if it's not already running."""
-        # Always do an initial cleanup
-        self._force_cleanup_port()
-        
         if self.is_running():
             return
-
-        # Check if port is still in use after cleanup
-        if self._is_port_in_use(kill_if_used=force):
-            raise RuntimeError(f"Port {self.port} is still in use and could not be freed")
+            
+        # Clean up port
+        if not self._cleanup_port() and not force:
+            raise RuntimeError(f"Port {self.port} is in use and could not be freed")
 
         # Set up logging
+        stdout = stderr = None
         if redirect_output:
             log_dir = "logs"
-            if not os.path.exists(log_dir):
-                os.makedirs(log_dir)
+            os.makedirs(log_dir, exist_ok=True)
             stdout = open(os.path.join(log_dir, f'{self.name}_server.log'), 'a')
             stderr = open(os.path.join(log_dir, f'{self.name}_server_error.log'), 'a')
-        else:
-            stdout = None
-            stderr = None
 
-        # Prepare the command
-        cmd = [
-            sys.executable, "-m", "uvicorn",
-            self.app_path,
-            "--host", self.host,
-            "--port", str(self.port),
-            "--log-level", "error",
-            "--no-access-log"
-        ]
-
+        # Start the server process
         try:
-            # Start the server process
+            cmd = [
+                sys.executable, "-m", "uvicorn",
+                self.app_path,
+                "--host", self.host,
+                "--port", str(self.port),
+                "--log-level", "error",
+                "--no-access-log"
+            ]
+            
             self._process = subprocess.Popen(
-                cmd,
-                stdout=stdout,
-                stderr=stderr,
-                start_new_session=True  # This creates a new process group
+                cmd, stdout=stdout, stderr=stderr, start_new_session=True
             )
-            self._write_pid()
+            self._manage_pid_file("write")
 
             # Wait for server to start
             start_time = time.time()
-            max_wait_time = 30  # Increase wait time for slower systems
-            while not self._is_port_in_use() and time.time() - start_time < max_wait_time:
+            while not self._is_port_in_use() and time.time() - start_time < 30:
                 if self._process.poll() is not None:
-                    # Process has terminated
                     raise RuntimeError(f"Server process terminated unexpectedly with code {self._process.returncode}")
                 time.sleep(0.1)
 
-            if time.time() - start_time >= max_wait_time:
+            if not self._is_port_in_use():
                 raise RuntimeError(f"Timeout waiting for {self.name} server to start")
-
+                
         except Exception as e:
-            self.stop()  # Clean up if startup fails
+            self.stop()
             raise RuntimeError(f"Failed to start {self.name} server: {str(e)}")
 
     def stop(self):
         """Stop the server if it's running."""
-        pid = self._read_pid()
+        # Try to stop process from PID file
+        pid = self._manage_pid_file("read")
         if pid:
             try:
                 process = psutil.Process(pid)
-                # Try to terminate the process group
-                os.killpg(os.getpgid(process.pid), signal.SIGTERM)
                 try:
+                    os.killpg(os.getpgid(process.pid), signal.SIGTERM)
                     process.wait(timeout=5)
-                except psutil.TimeoutExpired:
-                    # If termination fails, force kill the process group
+                except Exception:
                     os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-            except (psutil.NoSuchProcess, ProcessLookupError):
+            except Exception:
                 pass
 
+        # Try to stop process from instance variable
         if self._process:
             try:
                 self._process.terminate()
                 self._process.wait(timeout=5)
-            except (subprocess.TimeoutExpired, ProcessLookupError):
+            except Exception:
                 if self._process.poll() is None:
                     self._process.kill()
 
         self._process = None
-        self._cleanup_pid()
+        self._manage_pid_file("cleanup")
 
     def is_running(self) -> bool:
         """Check if the server is currently running."""
+        # Check if process from instance is running
         if self._process and self._process.poll() is None:
             return True
 
-        pid = self._read_pid()
+        # Check if process from PID file is running
+        pid = self._manage_pid_file("read")
         if pid:
             try:
                 process = psutil.Process(pid)
                 return process.is_running() and process.name().startswith("python")
             except psutil.NoSuchProcess:
-                self._cleanup_pid()
+                self._manage_pid_file("cleanup")
+                
         return False 
