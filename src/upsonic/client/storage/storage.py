@@ -80,12 +80,11 @@ class Storage:
         Returns:
             A success message
         """
-        from ..trace import sentry_sdk
-        with sentry_sdk.start_transaction(op="task", name="Storage.bulk_set_config") as transaction:
-            with sentry_sdk.start_span(op="send_request"):
-                data = {"configs": configs}
-                response = self.send_request("/storage/config/bulk_set", data=data)
-            return response.get("message")
+
+
+        data = {"configs": configs}
+        response = self.send_request("/storage/config/bulk_set", data=data)
+        return response.get("message")
 
     def set_default_llm_model(self, llm_model: str):
         self.default_llm_model = llm_model
