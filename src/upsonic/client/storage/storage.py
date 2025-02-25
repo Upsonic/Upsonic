@@ -70,16 +70,35 @@ class Storage:
                 response = self.send_request("/storage/config/set", data=data)
             return response.get("message")
 
+    def bulk_set_config(self, configs: Dict[str, str]) -> str:
+        """
+        Set multiple configuration values on the server at once.
+
+        Args:
+            configs: Dictionary of configuration key-value pairs
+
+        Returns:
+            A success message
+        """
+        from ..trace import sentry_sdk
+        with sentry_sdk.start_transaction(op="task", name="Storage.bulk_set_config") as transaction:
+            with sentry_sdk.start_span(op="send_request"):
+                data = {"configs": configs}
+                response = self.send_request("/storage/config/bulk_set", data=data)
+            return response.get("message")
 
     def set_default_llm_model(self, llm_model: str):
         self.default_llm_model = llm_model
 
-
     def config(self, config: ClientConfig):
-        # Parse it and use set_config to set it 
-        # Exclude the default_llm_model and None values
-        for key, value in config.model_dump().items():
-            if key != "default_llm_model" and value is not None:
-                self.set_config(key, value)
+        # Create a dictionary of non-None values excluding default_llm_model
+        config_dict = {
+            key: str(value) for key, value in config.model_dump().items() 
+            if key != "DEFAULT_LLM_MODEL" and value is not None
+        }
+        
+        # Bulk set the configurations if there are any
+        if config_dict:
+            self.bulk_set_config(config_dict)
         
         self.default_llm_model = config.DEFAULT_LLM_MODEL

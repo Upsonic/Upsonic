@@ -23,6 +23,9 @@ class ConfigSetRequest(BaseModel):
     key: str
     value: str
 
+class BulkConfigSetRequest(BaseModel):
+    configs: Dict[str, str]
+
 
 @app.post(f"{prefix}/config/get")
 async def get_config(request: ConfigGetRequest):
@@ -53,3 +56,19 @@ async def set_config(request: ConfigSetRequest):
     """
     Configuration.set(request.key, request.value)
     return {"message": "Configuration updated successfully"}
+
+@app.post(f"{prefix}/config/bulk_set")
+async def bulk_set_config(request: BulkConfigSetRequest):
+    """
+    Endpoint to set multiple configuration values at once.
+
+    Args:
+        configs: Dictionary of configuration key-value pairs
+
+    Returns:
+        A success message
+    """
+    for key, value in request.configs.items():
+        Configuration.set(key, value)
+    return {"message": "Bulk configuration updated successfully"}
+

@@ -76,9 +76,16 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
 
         # Handle configuration through ClientConfig model
         config = ClientConfig(**(kwargs or {}))
-        for key, value in config.model_dump().items():
-            if value is not None:
-                self.set_config(key, value)
+        
+        # Create a dictionary of non-None values
+        config_dict = {
+            key: str(value) for key, value in config.model_dump().items() 
+            if value is not None
+        }
+        
+        # Bulk set the configurations if there are any
+        if config_dict:
+            self.bulk_set_config(config_dict)
 
         global latest_upsonic_client
         latest_upsonic_client = self
