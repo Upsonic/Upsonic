@@ -12,12 +12,12 @@ import base64
 from ....storage.configuration import Configuration
 import os
 import tempfile
-from markitdown import MarkItDown
+
 
 from fastapi.responses import FileResponse
 import uuid
 
-md = MarkItDown()
+
 
 
 prefix = "/others"

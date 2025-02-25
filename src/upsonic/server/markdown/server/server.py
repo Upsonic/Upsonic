@@ -12,9 +12,7 @@ import base64
 from ....storage.configuration import Configuration
 import os
 import tempfile
-from markitdown import MarkItDown
 
-md = MarkItDown()
 
 
 prefix = "/markdown"
@@ -44,6 +42,9 @@ async def upload_file(file: UploadFile = File(...)):
             f.write(content)
 
         # Convert to markdown
+        from markitdown import MarkItDown
+
+        md = MarkItDown()
         markdown_content = md.convert(file_path).text_content
 
         # Add filename as heading
