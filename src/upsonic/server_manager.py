@@ -19,8 +19,17 @@ class ServerManager:
 
     def _is_port_in_use(self) -> bool:
         """Check if the port is in use."""
-        with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
-            return sock.connect_ex((self.host, self.port)) == 0
+        try:
+            # Faster method to check port availability
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.2)  # Reduce timeout for faster checks
+            result = sock.connect_ex((self.host, self.port))
+            sock.close()
+            return result == 0
+        except Exception:
+            # Fallback to the original method
+            with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
+                return sock.connect_ex((self.host, self.port)) == 0
 
     def _kill_process_using_port(self) -> bool:
         """Find and kill processes using the specified port."""
@@ -32,15 +41,10 @@ class ServerManager:
                 for conn in process.net_connections():
                     if hasattr(conn, 'laddr') and len(conn.laddr) >= 2 and conn.laddr[1] == self.port:
                         try:
-                            # Try SIGTERM first, then SIGKILL if needed
-                            process.terminate()
-                            try:
-                                process.wait(timeout=3)
-                                killed = True
-                            except psutil.TimeoutExpired:
-                                process.kill()
-                                process.wait(timeout=1)
-                                killed = True
+                            # Kill process more aggressively
+                            process.kill()
+                            process.wait(timeout=0.5)  # Reduced timeout
+                            killed = True
                         except Exception:
                             # Last resort: try system kill
                             try:
@@ -76,13 +80,14 @@ class ServerManager:
             
         # Try to kill processes using the port
         self._kill_process_using_port()
-        time.sleep(1)
+        time.sleep(0.2)  # Reduced sleep time
         
         # If port is still in use, try one more aggressive approach
         if self._is_port_in_use():
             try:
                 # Try to bind to the port to force it free
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 sock.bind((self.host, self.port))
                 sock.close()
             except socket.error:
@@ -95,7 +100,7 @@ class ServerManager:
                             process.kill()
                     except Exception:
                         continue
-                time.sleep(1)
+                time.sleep(0.2)  # Reduced sleep time
         
         return not self._is_port_in_use()
 
@@ -132,12 +137,20 @@ class ServerManager:
             )
             self._manage_pid_file("write")
 
-            # Wait for server to start
+            # Wait for server to start with optimized polling
+            # Initial quick sleep to allow process to start
+            time.sleep(0.1)
+            
+            # Progressive polling with increasing intervals
+            poll_interval = 0.01
+            max_poll_interval = 0.1
             start_time = time.time()
             while not self._is_port_in_use() and time.time() - start_time < 30:
                 if self._process.poll() is not None:
                     raise RuntimeError(f"Server process terminated unexpectedly with code {self._process.returncode}")
-                time.sleep(0.1)
+                time.sleep(poll_interval)
+                # Gradually increase polling interval
+                poll_interval = min(poll_interval * 1.2, max_poll_interval)
 
             if not self._is_port_in_use():
                 raise RuntimeError(f"Timeout waiting for {self.name} server to start")
