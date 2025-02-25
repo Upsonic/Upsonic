@@ -18,7 +18,7 @@ def spacing():
 
 
 
-def connected_to_server(server_type: str, status: str):
+def connected_to_server(server_type: str, status: str, total_time: float = None):
     """
     Prints a 'Connected to Server' section for Upsonic, full width,
     with two columns: 
@@ -45,6 +45,9 @@ def connected_to_server(server_type: str, status: str):
     # Rows: one for server type, one for status
     table.add_row("[bold]Server Type:[/bold]", f"[yellow]{server_type}[/yellow]")
     table.add_row("[bold]Connection Status:[/bold]", status_text)
+    
+    if total_time is not None:
+        table.add_row("[bold]Total Time:[/bold]", f"[cyan]{total_time:.2f} seconds[/cyan]")
 
     table.width = 60
 

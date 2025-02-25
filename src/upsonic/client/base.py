@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Dict, Any, Any
 import httpx
+import time
 
 
 from .level_one.call import Call
@@ -30,6 +31,7 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
             debug: Whether to enable debug mode
             **kwargs: Configuration options that match ClientConfig fields
         """
+        start_time = time.time()
         self.debug = debug
 
         # Set server type and URL first
@@ -64,11 +66,14 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
         self.default_llm_model = "openai/gpt-4o"
 
         # Check server status before proceeding
+        
         if not self.status():
-            connected_to_server(self.server_type, "Failed")
+            total_time = time.time() - start_time
+            connected_to_server(self.server_type, "Failed", total_time)
             raise ServerStatusException("Failed to connect to the server at initialization.")
         
-        connected_to_server(self.server_type, "Established")
+        total_time = time.time() - start_time
+        connected_to_server(self.server_type, "Established", total_time)
 
         # Handle configuration through ClientConfig model
         config = ClientConfig(**(kwargs or {}))
