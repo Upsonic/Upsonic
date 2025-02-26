@@ -32,9 +32,11 @@ Upsonic is a next-generation framework that makes agents production-ready by sol
 
 1- **Reliability**: While other frameworks require expertise and complex coding for reliability features, Upsonic offers easy-to-activate reliability layers without disrupting functionality.
 
-2- **Model Context Protocol**: The MCP allows you to leverage tools with various functionalities developed both officially and by third parties without requiring you to build custom tools from scratch.
+2- **Model Context Protocol (MCP)**: The MCP allows you to leverage tools with various functionalities developed both officially and by third parties without requiring you to build custom tools from scratch.
 
-3- **Secure Runtime**: Isolated environment to run agents
+3- **Integrated Browser Use and Computer Use**: Directly use and deploy agents that works on non-API systems.
+
+4- **Secure Runtime**: Isolated environment to run agents
 
 ![sdk-server](https://github.com/user-attachments/assets/1b276199-ae60-4221-b8e6-b266443a3641)
 
