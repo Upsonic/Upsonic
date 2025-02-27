@@ -3,6 +3,7 @@ pricing_data = {
     "openai/gpt-4o-mini": {"input": 0.00000015, "output": 0.00000008},
     "openai/o3-mini": {"input": 0.0000011, "output": 0.00000055},
     "azure/gpt-4o": {"input": 0.0000025, "output": 0.00001},
+    "azure/gpt-4o-mini": {"input": 0.00000015, "output": 0.00000008},
     "claude/claude-3-5-sonnet": {"input": 0.000003, "output": 0.000015},
     "bedrock/claude-3-5-sonnet": {"input": 0.000003, "output": 0.000015},
     "deepseek/deepseek-chat": {"input": 0.00000027, "output": 0.00000028},

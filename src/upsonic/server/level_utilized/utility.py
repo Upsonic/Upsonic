@@ -337,6 +337,28 @@ def agent_creator(
             model = AsyncAzureOpenAI(api_version=azure_api_version, azure_endpoint=azure_endpoint, api_key=azure_api_key)
             model = OpenAIModel('gpt-4o', openai_client=model)
 
+        elif llm_model == "azure/gpt-4o-mini":
+            azure_endpoint = Configuration.get("AZURE_OPENAI_ENDPOINT")
+            azure_api_version = Configuration.get("AZURE_OPENAI_API_VERSION")
+            azure_api_key = Configuration.get("AZURE_OPENAI_API_KEY")
+
+            missing_keys = []
+            if not azure_endpoint:
+                missing_keys.append("AZURE_OPENAI_ENDPOINT")
+            if not azure_api_version:
+                missing_keys.append("AZURE_OPENAI_API_VERSION")
+            if not azure_api_key:
+                missing_keys.append("AZURE_OPENAI_API_KEY")
+
+            if missing_keys:
+                return {
+                    "status_code": 401,
+                    "detail": f"No API key provided. Please set {', '.join(missing_keys)} in your configuration."
+                }
+
+            model = AsyncAzureOpenAI(api_version=azure_api_version, azure_endpoint=azure_endpoint, api_key=azure_api_key)
+            model = OpenAIModel('gpt-4o-mini', openai_client=model)
+
         else:
             return {"status_code": 400, "detail": f"Unsupported LLM model: {llm_model}"}
 
@@ -394,7 +416,7 @@ def agent_creator(
         
 
 
-        the_model_settings = my_settings_openai if tools and llm_model in ["openai/gpt-4o", "azure/gpt-4o", "openai/o3-mini", "openai/gpt-4o-mini"] else None
+        the_model_settings = my_settings_openai if tools and llm_model in ["openai/gpt-4o", "azure/gpt-4o", "openai/o3-mini", "openai/gpt-4o-mini", "azure/gpt-4o-mini"] else None
         if the_model_settings is None:
             the_model_settings = my_settings_anthropic if tools and llm_model in ["claude/claude-3-5-sonnet", "claude-3-5-sonnet"] else None
 
