@@ -293,6 +293,7 @@ class ReliabilityProcessor:
 
                     validator_task = Task(
                         prompt,
+                        images=task.images,
                         response_format=ValidationPoint,
                         tools=task.tools,
                         context=context_strings,  # Pass the processed context strings
@@ -319,6 +320,7 @@ class ReliabilityProcessor:
                     the_context += copy_task.context
                     editor_task = Task(
                         formatted_prompt,
+                        images=task.images,
                         context=the_context,
                         response_format=task.response_format,
                         tools=task.tools,
