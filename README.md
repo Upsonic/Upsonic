@@ -265,6 +265,11 @@ Direct.do(task1)
 
 <br>
 
+## Cookbook
+You can [check out many examples](https://github.com/Upsonic/cookbook) showing how to build agents using MCP tools and browser use with Upsonic.
+
+<br>
+
 ## Telemetry
 
 We use anonymous telemetry to collect usage data. We do this to focus our developments on more accurate points. You can disable it by setting the UPSONIC_TELEMETRY environment variable to false.
