@@ -155,7 +155,7 @@ async def call_tool(request: ToolRequest):
 
         return {"result": result}
     except Exception as e:
-
+        traceback.print_exc()
         return {"status_code": 500, "detail": f"Failed to call tool: {str(e)}"}
 
 
