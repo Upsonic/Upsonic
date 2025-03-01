@@ -34,17 +34,17 @@ class Task(BaseModel):
             
         for tool in self.tools:
             # Check if the tool is a class
-            if isinstance(tool, type):
+            if isinstance(tool, type) or hasattr(tool, '__class__'):
                 # Check if the class has a __control__ method
                 if hasattr(tool, '__control__') and callable(getattr(tool, '__control__')):
                     try:
                         # Run the __control__ method
                         control_result = tool.__control__()
                         if not control_result:
-                            raise ValueError(f"Tool {tool.__name__} __control__ method returned False")
+                            raise ValueError(f"Tool {tool} __control__ method returned False")
                     except Exception as e:
                         # Re-raise any exceptions from the __control__ method
-                        raise ValueError(f"Error validating tool {tool.__name__}: {str(e)}")
+                        raise ValueError(f"Error validating tool {tool}: {str(e)}")
 
     @property
     def images_base_64(self):
