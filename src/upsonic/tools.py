@@ -13,5 +13,25 @@ class ComputerUse:
 class BrowserUse:
     pass
 
+
+class Wikipedia:
+    def __control__() -> bool:
+        # Check the import wikipedia
+        try:
+            import wikipedia
+        except ImportError:
+            raise ImportError("wikipedia is not installed. Please install it with 'pip install wikipedia'")
+        
+        return True
+        
+    def search(query: str) -> str:
+        import wikipedia
+        return wikipedia.search(query)
+    
+    def summary(query: str) -> str:
+        import wikipedia
+        return wikipedia.summary(query)
+
+
 # Export all tool classes
-__all__ = ["Search", "ComputerUse", "BrowserUse"] 
+__all__ = ["Search", "ComputerUse", "BrowserUse", "Wikipedia"] 
