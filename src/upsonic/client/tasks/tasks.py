@@ -21,7 +21,30 @@ class Task(BaseModel):
         if description is not None:
             data["description"] = description
         super().__init__(**data)
+        self.validate_tools()
 
+    def validate_tools(self):
+        """
+        Validates each tool in the tools list.
+        If a tool is a class and has a __control__ method, runs that method to verify it returns True.
+        Raises an exception if the __control__ method returns False or raises an exception.
+        """
+        if not self.tools:
+            return
+            
+        for tool in self.tools:
+            # Check if the tool is a class
+            if isinstance(tool, type):
+                # Check if the class has a __control__ method
+                if hasattr(tool, '__control__') and callable(getattr(tool, '__control__')):
+                    try:
+                        # Run the __control__ method
+                        control_result = tool.__control__()
+                        if not control_result:
+                            raise ValueError(f"Tool {tool.__name__} __control__ method returned False")
+                    except Exception as e:
+                        # Re-raise any exceptions from the __control__ method
+                        raise ValueError(f"Error validating tool {tool.__name__}: {str(e)}")
 
     @property
     def images_base_64(self):
