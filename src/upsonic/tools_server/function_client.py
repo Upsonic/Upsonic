@@ -65,12 +65,17 @@ class FunctionToolManager:
         Returns:
             Tool execution results
         """
+        print("Tool Calling")
+        print(tool_name)
+        print(arguments)
         with httpx.Client(timeout=600.0) as session:
             response = session.post(
                 f"{self.base_url}/functions/call_tool",
                 json={"tool_name": tool_name, "arguments": arguments},
             )
             response.raise_for_status()
+            print("return")
+            print(response.json())
             return response.json()
 
     def tools(self) -> List[Callable[..., Dict[str, Any]]]:
