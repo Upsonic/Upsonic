@@ -1173,6 +1173,352 @@ class YFinanceTool:
             return []
 
 
+class ArxivTool:
+    @staticmethod
+    def analyze_dependencies() -> Dict[str, bool]:
+        """
+        Analyze the dependencies required for ArxivTool and return their status.
+        
+        Returns:
+            Dictionary with dependency names as keys and their availability status as values
+        """
+        dependencies = {
+            "arxiv": False,
+            "requests": False,
+            "PyPDF2": False
+        }
+        
+        # Check each dependency
+        try:
+            import arxiv
+            dependencies["arxiv"] = True
+        except ImportError:
+            pass
+        
+        try:
+            import requests
+            dependencies["requests"] = True
+        except ImportError:
+            pass
+        
+        try:
+            import PyPDF2
+            dependencies["PyPDF2"] = True
+        except ImportError:
+            pass
+        
+        return dependencies
+    
+    def __control__(self) -> bool:
+        """
+        Check if the required dependencies are installed and print missing ones.
+        
+        Returns:
+            True if all requirements are met
+        
+        Raises:
+            ImportError: If required packages are not installed
+        """
+        # Analyze dependencies
+        dependencies = self.analyze_dependencies()
+        missing = [dep for dep, installed in dependencies.items() if not installed]
+        
+        # Print missing dependencies
+        if missing:
+            # Use the new printing function
+            missing_dependencies("ArxivTool", missing)
+            
+            # Raise ImportError with combined message for all missing dependencies
+            install_cmd = "pip install " + " ".join(missing)
+            raise ImportError(f"Missing dependencies: {', '.join(missing)}. Please install them with: {install_cmd}")
+        
+        return True
+    
+    def __init__(self):
+        """
+        Initialize the ArxivTool.
+        """
+        # Check if dependencies are installed
+        self.__control__()
+    
+    def search(self, query: str, max_results: int = 5, sort_by: str = "relevance", sort_order: str = "descending") -> List[Dict[str, Any]]:
+        """
+        Search for papers on arXiv.
+        
+        Args:
+            query: The search query
+            max_results: Maximum number of results to return (default: 5)
+            sort_by: Sort results by 'relevance', 'lastUpdatedDate', or 'submittedDate' (default: 'relevance')
+            sort_order: Sort order, either 'ascending' or 'descending' (default: 'descending')
+            
+        Returns:
+            List of dictionaries containing paper information
+        """
+        import arxiv
+        
+        # Map sort_by to arxiv.SortCriterion
+        sort_criteria = {
+            "relevance": arxiv.SortCriterion.Relevance,
+            "lastUpdatedDate": arxiv.SortCriterion.LastUpdatedDate,
+            "submittedDate": arxiv.SortCriterion.SubmittedDate
+        }
+        
+        # Map sort_order to arxiv.SortOrder
+        sort_orders = {
+            "ascending": arxiv.SortOrder.Ascending,
+            "descending": arxiv.SortOrder.Descending
+        }
+        
+        # Set default values if invalid options are provided
+        if sort_by not in sort_criteria:
+            sort_by = "relevance"
+        if sort_order not in sort_orders:
+            sort_order = "descending"
+        
+        # Create search client
+        client = arxiv.Client()
+        
+        # Create search query
+        search = arxiv.Search(
+            query=query,
+            max_results=max_results,
+            sort_by=sort_criteria[sort_by],
+            sort_order=sort_orders[sort_order]
+        )
+        
+        # Execute search
+        results = list(client.results(search))
+        
+        # Convert results to dictionaries
+        papers = []
+        for paper in results:
+            papers.append({
+                "title": paper.title,
+                "authors": [author.name for author in paper.authors],
+                "summary": paper.summary,
+                "published": paper.published.strftime("%Y-%m-%d") if paper.published else None,
+                "updated": paper.updated.strftime("%Y-%m-%d") if paper.updated else None,
+                "doi": paper.doi,
+                "primary_category": paper.primary_category,
+                "categories": paper.categories,
+                "links": [link.href for link in paper.links],
+                "pdf_url": paper.pdf_url,
+                "entry_id": paper.entry_id
+            })
+        
+        return papers
+    
+    def get_paper_by_id(self, paper_id: str) -> Dict[str, Any]:
+        """
+        Get a specific paper by its arXiv ID.
+        
+        Args:
+            paper_id: The arXiv ID of the paper (e.g., '2106.09685')
+            
+        Returns:
+            Dictionary containing paper information
+        """
+        import arxiv
+        
+        # Create client
+        client = arxiv.Client()
+        
+        # Search for the specific paper
+        search = arxiv.Search(id_list=[paper_id])
+        
+        # Get the paper
+        results = list(client.results(search))
+        
+        if not results:
+            return {"error": f"Paper with ID {paper_id} not found"}
+        
+        paper = results[0]
+        
+        # Convert to dictionary
+        paper_dict = {
+            "title": paper.title,
+            "authors": [author.name for author in paper.authors],
+            "summary": paper.summary,
+            "published": paper.published.strftime("%Y-%m-%d") if paper.published else None,
+            "updated": paper.updated.strftime("%Y-%m-%d") if paper.updated else None,
+            "doi": paper.doi,
+            "primary_category": paper.primary_category,
+            "categories": paper.categories,
+            "links": [link.href for link in paper.links],
+            "pdf_url": paper.pdf_url,
+            "entry_id": paper.entry_id
+        }
+        
+        return paper_dict
+    
+    def download_paper(self, paper_id: str, output_dir: str = "./") -> Dict[str, Any]:
+        """
+        Download a paper's PDF by its arXiv ID.
+        
+        Args:
+            paper_id: The arXiv ID of the paper (e.g., '2106.09685')
+            output_dir: Directory to save the PDF (default: current directory)
+            
+        Returns:
+            Dictionary containing download information
+        """
+        import arxiv
+        import os
+        import requests
+        
+        # Create client
+        client = arxiv.Client()
+        
+        # Search for the specific paper
+        search = arxiv.Search(id_list=[paper_id])
+        
+        # Get the paper
+        results = list(client.results(search))
+        
+        if not results:
+            return {"error": f"Paper with ID {paper_id} not found"}
+        
+        paper = results[0]
+        
+        # Create output directory if it doesn't exist
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Generate filename
+        filename = f"{paper_id.replace('/', '_')}.pdf"
+        filepath = os.path.join(output_dir, filename)
+        
+        # Download the PDF
+        try:
+            response = requests.get(paper.pdf_url)
+            response.raise_for_status()
+            
+            with open(filepath, 'wb') as f:
+                f.write(response.content)
+            
+            return {
+                "success": True,
+                "paper_id": paper_id,
+                "title": paper.title,
+                "filepath": filepath,
+                "pdf_url": paper.pdf_url
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "paper_id": paper_id,
+                "error": str(e),
+                "pdf_url": paper.pdf_url
+            }
+    
+    def read_paper(self, paper_id: str, max_pages: int = None) -> Dict[str, Any]:
+        """
+        Read a paper's content directly by its arXiv ID.
+        
+        Args:
+            paper_id: The arXiv ID of the paper (e.g., '2106.09685')
+            max_pages: Maximum number of pages to read (default: None, reads all pages)
+            
+        Returns:
+            Dictionary containing the paper's content and metadata
+        """
+        import arxiv
+        import requests
+        import tempfile
+        import os
+        import PyPDF2
+        
+        # Create client
+        client = arxiv.Client()
+        
+        # Search for the specific paper
+        search = arxiv.Search(id_list=[paper_id])
+        
+        # Get the paper
+        results = list(client.results(search))
+        
+        if not results:
+            return {"error": f"Paper with ID {paper_id} not found"}
+        
+        paper = results[0]
+        
+        # Create a temporary directory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Generate filename
+            filename = f"{paper_id.replace('/', '_')}.pdf"
+            filepath = os.path.join(temp_dir, filename)
+            
+            # Download the PDF
+            try:
+                response = requests.get(paper.pdf_url)
+                response.raise_for_status()
+                
+                with open(filepath, 'wb') as f:
+                    f.write(response.content)
+                
+                # Read the PDF content
+                with open(filepath, 'rb') as f:
+                    pdf_reader = PyPDF2.PdfReader(f)
+                    
+                    # Get number of pages
+                    num_pages = len(pdf_reader.pages)
+                    
+                    # Limit pages if max_pages is specified
+                    if max_pages is not None:
+                        num_pages = min(num_pages, max_pages)
+                    
+                    # Extract text from pages with better handling
+                    content = []
+                    for page_num in range(num_pages):
+                        try:
+                            page = pdf_reader.pages[page_num]
+                            page_text = page.extract_text()
+                            
+                            # Skip empty pages or pages with very little content
+                            if page_text and len(page_text.strip()) > 20:
+                                # Clean up the text
+                                page_text = page_text.replace('\n\n', '\n')
+                                content.append(f"--- Page {page_num + 1} ---\n{page_text}")
+                        except Exception as e:
+                            content.append(f"--- Page {page_num + 1} ---\n[Error extracting text: {str(e)}]")
+                    
+                    # Join all pages with clear separation
+                    full_content = "\n\n".join(content)
+                    
+                    # If we couldn't extract meaningful content, try an alternative approach
+                    if not full_content or len(full_content.strip()) < 100:
+                        try:
+                            # Alternative extraction method
+                            full_content = "Content could not be extracted properly. Please try downloading the paper directly."
+                            
+                            # Include the abstract as a fallback
+                            full_content = f"Abstract:\n{paper.summary}\n\n{full_content}"
+                        except Exception:
+                            full_content = "Failed to extract content from the PDF. Please download the paper directly."
+                
+                return {
+                    "success": True,
+                    "paper_id": paper_id,
+                    "title": paper.title,
+                    "authors": [author.name for author in paper.authors],
+                    "summary": paper.summary,
+                    "content": full_content,
+                    "total_pages": len(pdf_reader.pages),
+                    "pages_read": num_pages,
+                    "pdf_url": paper.pdf_url
+                }
+            except Exception as e:
+                # If we failed to process the PDF, return the summary at least
+                return {
+                    "success": False,
+                    "paper_id": paper_id,
+                    "title": paper.title,
+                    "authors": [author.name for author in paper.authors],
+                    "summary": paper.summary,
+                    "error": str(e),
+                    "pdf_url": paper.pdf_url,
+                    "note": "Failed to extract content. You can still access the paper directly using the pdf_url."
+                }
+
 
 # Export all tool classes
-__all__ = ["Search", "ComputerUse", "BrowserUse", "Wikipedia", "DuckDuckGo", "SerperDev", "FirecrawlSearchTool", "FirecrawlScrapeWebsiteTool", "FirecrawlCrawlWebsiteTool", "YFinanceTool"] 
+__all__ = ["Search", "ComputerUse", "BrowserUse", "Wikipedia", "DuckDuckGo", "SerperDev", "FirecrawlSearchTool", "FirecrawlScrapeWebsiteTool", "FirecrawlCrawlWebsiteTool", "YFinanceTool", "ArxivTool"] 
