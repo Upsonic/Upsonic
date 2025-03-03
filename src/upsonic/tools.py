@@ -1709,5 +1709,169 @@ class YouTubeVideo:
             return f"Error generating timestamps: {str(e)}"
 
 
+class YoutubeSearch:
+    @staticmethod
+    def _load_api_key_from_env_file() -> Optional[str]:
+        """
+        Load the Serper API key from the .env file.
+        
+        Returns:
+            The API key if found, None otherwise
+        """
+        try:
+            # Try to load from .env file
+            env_path = pathlib.Path('.env')
+            if env_path.exists():
+                with open(env_path, 'r') as f:
+                    for line in f:
+                        if line.strip().startswith('SERPER_API_KEY='):
+                            api_key = line.strip().split('=', 1)[1].strip()
+                            # Remove quotes if present
+                            if (api_key.startswith('"') and api_key.endswith('"')) or \
+                               (api_key.startswith("'") and api_key.endswith("'")):
+                                api_key = api_key[1:-1]
+                            return api_key
+        except Exception:
+            pass
+        return None
+    
+    @staticmethod
+    def analyze_dependencies() -> Dict[str, bool]:
+        """
+        Analyze the dependencies required for YoutubeSearch and return their status.
+        
+        Returns:
+            Dictionary with dependency names as keys and their availability status as values
+        """
+        dependencies = {
+            "requests": False
+        }
+        
+        # Check each dependency
+        try:
+            import requests
+            dependencies["requests"] = True
+        except ImportError:
+            pass
+        
+        return dependencies
+    
+    def __control__(self) -> bool:
+        # Check if requests is installed
+        try:
+            import requests
+            return True
+        except ImportError:
+            # Use the missing_dependencies function to display the error
+            missing_dependencies("YoutubeSearch", ["requests"])
+            raise ImportError("Missing dependency: requests. Please install it with: pip install requests")
+    
+    def __init__(self, api_key: Optional[str] = None):
+        """
+        Initialize the YoutubeSearch tool.
+        
+        Args:
+            api_key: The Serper API key. If not provided, will try to load from environment or .env file.
+        """
+        # Check dependencies
+        self.__control__()
+        
+        # Set API key
+        self.api_key = api_key
+        
+        # If API key is not provided, try to get it from environment variable
+        if self.api_key is None:
+            import os
+            self.api_key = os.environ.get("SERPER_API_KEY")
+            
+        # If still not found, try to load from .env file
+        if self.api_key is None:
+            self.api_key = self._load_api_key_from_env_file()
+            
+        # If still not found, raise error
+        if self.api_key is None:
+            missing_api_key("YoutubeSearch", "SERPER_API_KEY")
+            raise ValueError("Serper API key not found. Please provide it as an argument, set it as an environment variable, or add it to your .env file.")
+    
+    def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+        """
+        Search for YouTube videos using the Serper API.
+        
+        Args:
+            query: The search query
+            limit: Maximum number of results to return (default: 5)
+            
+        Returns:
+            List of video results with metadata
+        """
+        import requests
+        import json
+        
+        url = "https://google.serper.dev/videos"
+        
+        payload = {
+            "q": query,
+            "gl": "us",
+            "hl": "en"
+        }
+        
+        headers = {
+            "X-API-KEY": self.api_key,
+            "Content-Type": "application/json"
+        }
+        
+        try:
+            response = requests.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # Process and clean up the results
+            videos = []
+            
+            # Check if 'videos' key exists in the response
+            if "videos" in data:
+                for video in data["videos"][:limit]:
+                    # Handle channel data safely
+                    channel_name = ""
+                    channel_link = ""
+                    
+                    if "channel" in video:
+                        if isinstance(video["channel"], dict):
+                            channel_name = video["channel"].get("name", "")
+                            channel_link = video["channel"].get("link", "")
+                    
+                    processed_video = {
+                        "title": video.get("title", ""),
+                        "link": video.get("link", ""),
+                        "thumbnail": video.get("thumbnail", ""),
+                        "channel": channel_name,
+                        "channel_link": channel_link,
+                        "date_published": video.get("date", ""),
+                        "views": video.get("views", ""),
+                        "description": video.get("description", ""),
+                        "duration": video.get("duration", "")
+                    }
+                    videos.append(processed_video)
+            else:
+                # Try to extract videos from a different key if available
+                if "organic" in data:
+                    for item in data["organic"][:limit]:
+                        if "link" in item and ("youtube.com" in item.get("link", "") or "youtu.be" in item.get("link", "")):
+                            videos.append({
+                                "title": item.get("title", ""),
+                                "link": item.get("link", ""),
+                                "thumbnail": item.get("thumbnail", ""),
+                                "description": item.get("snippet", "")
+                            })
+            
+            if not videos:
+                return [{"message": "No YouTube videos found for the query"}]
+            
+            return videos
+        except Exception as e:
+            return [{"error": f"Error searching YouTube videos: {str(e)}"}]
+
+
 # Export all tool classes
-__all__ = ["Search", "ComputerUse", "BrowserUse", "Wikipedia", "DuckDuckGo", "SerperDev", "FirecrawlSearchTool", "FirecrawlScrapeWebsiteTool", "FirecrawlCrawlWebsiteTool", "YFinanceTool", "ArxivTool", "YouTubeVideo"] 
+__all__ = ["Search", "ComputerUse", "BrowserUse", "Wikipedia", "DuckDuckGo", "SerperDev", "FirecrawlSearchTool", "FirecrawlScrapeWebsiteTool", "FirecrawlCrawlWebsiteTool", "YFinanceTool", "ArxivTool", "YouTubeVideo", "YoutubeSearch"] 
