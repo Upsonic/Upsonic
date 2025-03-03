@@ -817,5 +817,168 @@ class FirecrawlCrawlWebsiteTool:
         return _firecrawl.crawl_url(url, options)
 
 
+class YFinanceTool:
+    def __control__(self) -> bool:
+        """
+        Check if the required dependencies are installed.
+        
+        Returns:
+            True if all requirements are met
+        
+        Raises:
+            ImportError: If required packages are not installed
+        """
+        # Check if yfinance is installed
+        try:
+            import yfinance
+        except ImportError:
+            raise ImportError("yfinance is not installed. Please install it with 'pip install yfinance'")
+        
+        # Check if pandas is installed
+        try:
+            import pandas
+        except ImportError:
+            raise ImportError("pandas is not installed. Please install it with 'pip install pandas'")
+        
+        return True
+    
+    def __init__(self):
+        """
+        Initialize the YFinanceTool.
+        """
+        # Check if dependencies are installed
+        self.__control__()
+    
+    def get_ticker_info(self, ticker: str) -> Dict[str, Any]:
+        """
+        Get basic information about a ticker.
+        
+        Args:
+            ticker: The ticker symbol (e.g., 'AAPL' for Apple)
+            
+        Returns:
+            Dictionary containing basic information about the ticker
+        """
+        import yfinance as yf
+        
+        # Get ticker object
+        ticker_obj = yf.Ticker(ticker)
+        
+        # Get basic info
+        info = ticker_obj.info
+        
+        return info
+    
+    def get_historical_data(self, ticker: str, period: str = "1mo", interval: str = "1d") -> Dict[str, Any]:
+        """
+        Get historical market data for a ticker.
+        
+        Args:
+            ticker: The ticker symbol (e.g., 'AAPL' for Apple)
+            period: The period to fetch data for (default: '1mo')
+                Valid periods: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max
+            interval: The interval between data points (default: '1d')
+                Valid intervals: 1m, 2m, 5m, 15m, 30m, 60m, 90m, 1h, 1d, 5d, 1wk, 1mo, 3mo
+            
+        Returns:
+            Dictionary containing historical data
+        """
+        import yfinance as yf
+        import pandas as pd
+        
+        # Get ticker object
+        ticker_obj = yf.Ticker(ticker)
+        
+        # Get historical data
+        hist = ticker_obj.history(period=period, interval=interval)
+        
+        # Convert DataFrame to dictionary
+        hist_dict = hist.reset_index().to_dict(orient='records')
+        
+        return {
+            "data": hist_dict,
+            "period": period,
+            "interval": interval,
+            "ticker": ticker
+        }
+    
+    def get_financials(self, ticker: str) -> Dict[str, Any]:
+        """
+        Get financial statements for a ticker.
+        
+        Args:
+            ticker: The ticker symbol (e.g., 'AAPL' for Apple)
+            
+        Returns:
+            Dictionary containing financial statements
+        """
+        import yfinance as yf
+        import pandas as pd
+        
+        # Get ticker object
+        ticker_obj = yf.Ticker(ticker)
+        
+        # Get financial statements
+        income_stmt = ticker_obj.income_stmt
+        balance_sheet = ticker_obj.balance_sheet
+        cash_flow = ticker_obj.cashflow
+        
+        # Convert DataFrames to dictionaries
+        income_stmt_dict = income_stmt.reset_index().to_dict(orient='records') if not income_stmt.empty else []
+        balance_sheet_dict = balance_sheet.reset_index().to_dict(orient='records') if not balance_sheet.empty else []
+        cash_flow_dict = cash_flow.reset_index().to_dict(orient='records') if not cash_flow.empty else []
+        
+        return {
+            "income_statement": income_stmt_dict,
+            "balance_sheet": balance_sheet_dict,
+            "cash_flow": cash_flow_dict,
+            "ticker": ticker
+        }
+    
+    def search_tickers(self, query: str, limit: int = 10) -> List[Dict[str, str]]:
+        """
+        Search for ticker symbols based on a query.
+        
+        Args:
+            query: The search query (e.g., 'Apple')
+            limit: Maximum number of results to return (default: 10)
+            
+        Returns:
+            List of dictionaries containing ticker symbols and company names
+        """
+        import yfinance as yf
+        
+        try:
+            # Use yfinance's search functionality
+            tickers = yf.Tickers(query)
+            
+            # Get the tickers that were found
+            found_tickers = list(tickers.tickers.keys())
+            
+            # Limit the number of results
+            found_tickers = found_tickers[:limit]
+            
+            # Get info for each ticker
+            result = []
+            for ticker_symbol in found_tickers:
+                try:
+                    ticker_obj = yf.Ticker(ticker_symbol)
+                    info = ticker_obj.info
+                    result.append({
+                        "symbol": ticker_symbol,
+                        "name": info.get("shortName", "Unknown"),
+                        "exchange": info.get("exchange", "Unknown"),
+                        "industry": info.get("industry", "Unknown")
+                    })
+                except Exception as e:
+                    # Skip tickers that cause errors
+                    continue
+            
+            return result
+        except Exception as e:
+            # If the search fails, return an empty list
+            return []
+
+
 # Export all tool classes
-__all__ = ["Search", "ComputerUse", "BrowserUse", "Wikipedia", "DuckDuckGo", "SerperDev", "FirecrawlSearchTool", "FirecrawlScrapeWebsiteTool", "FirecrawlCrawlWebsiteTool"] 
+__all__ = ["Search", "ComputerUse", "BrowserUse", "Wikipedia", "DuckDuckGo", "SerperDev", "FirecrawlSearchTool", "FirecrawlScrapeWebsiteTool", "FirecrawlCrawlWebsiteTool", "YFinanceTool"] 
