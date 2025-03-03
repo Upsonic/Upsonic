@@ -130,7 +130,7 @@ Upsonic is a reliability-focused framework. The results in the table were genera
 class ReliabilityLayer:
   prevent_hallucination = 10
 
-agent = Agent("Coder", reliability_layer=ReliabilityLayer)
+agent = Agent("Coder", reliability_layer=ReliabilityLayer, model="openai/gpt4o")
 ```
 <br>
 
