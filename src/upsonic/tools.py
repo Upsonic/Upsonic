@@ -361,6 +361,461 @@ class SerperDev:
             raise RuntimeError(error_msg)
 
 
+class FirecrawlSearchTool:
+    @staticmethod
+    def _load_api_key_from_env_file() -> Optional[str]:
+        """
+        Try to load the FIRECRAWL_API_KEY from a .env file using python-dotenv.
+        
+        Returns:
+            The API key if found in .env file, None otherwise
+        """
+        try:
+            # Try to import dotenv
+            from dotenv import load_dotenv
+        except ImportError:
+            raise ImportError("python-dotenv is not installed. Please install it with 'pip install python-dotenv'")
+        
+        # Check for .env file in current directory and parent directories
+        current_dir = pathlib.Path.cwd()
+        
+        # Look in current directory and up to 3 parent directories
+        for _ in range(4):
+            env_path = current_dir / '.env'
+            if env_path.exists():
+                # Load the .env file
+                load_dotenv(dotenv_path=env_path)
+                
+                # Check if FIRECRAWL_API_KEY is now in environment
+                if "FIRECRAWL_API_KEY" in os.environ:
+                    return os.environ["FIRECRAWL_API_KEY"]
+            
+            # Move to parent directory
+            parent_dir = current_dir.parent
+            if parent_dir == current_dir:  # Reached root directory
+                break
+            current_dir = parent_dir
+        
+        return None
+    
+    def __control__(self) -> bool:
+        """
+        Check if the required dependencies are installed and API key is available.
+        
+        Returns:
+            True if all requirements are met
+        
+        Raises:
+            ImportError: If required packages are not installed
+            EnvironmentError: If API key is not available
+        """
+        # Check if requests is installed
+        try:
+            import requests
+        except ImportError:
+            raise ImportError("requests is not installed. Please install it with 'pip install requests'")
+        
+        # Check if firecrawl-py is installed
+        try:
+            from firecrawl import FirecrawlApp
+        except ImportError:
+            raise ImportError("firecrawl-py is not installed. Please install it with 'pip install firecrawl-py'")
+        
+        # Check if python-dotenv is installed
+        try:
+            from dotenv import load_dotenv
+        except ImportError:
+            raise ImportError("python-dotenv is not installed. Please install it with 'pip install python-dotenv'")
+        
+        # Try to load from .env file first
+        if "FIRECRAWL_API_KEY" not in os.environ:
+            try:
+                FirecrawlSearchTool._load_api_key_from_env_file()
+            except ImportError:
+                pass  # If dotenv is not installed, we'll check environment variables directly
+        
+        # Check if FIRECRAWL_API_KEY is set in environment variables
+        if "FIRECRAWL_API_KEY" not in os.environ:
+            raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and could not be found in .env file")
+        
+        return True
+    
+    def __init__(self, api_key: Optional[str] = None):
+        """
+        Initialize the FirecrawlSearchTool.
+        
+        Args:
+            api_key: Firecrawl API key (optional, will try to load from environment if not provided)
+        """
+        # Set API key
+        self.api_key = api_key
+        
+        # If API key not provided, try to load from environment or .env file
+        if self.api_key is None:
+            # First check environment variables
+            if "FIRECRAWL_API_KEY" in os.environ:
+                self.api_key = os.environ["FIRECRAWL_API_KEY"]
+            else:
+                # Try to load from .env file
+                try:
+                    api_key = self._load_api_key_from_env_file()
+                    if api_key:
+                        self.api_key = api_key
+                    else:
+                        raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and could not be found in .env file")
+                except ImportError:
+                    # If dotenv is not installed and no API key in environment
+                    if "FIRECRAWL_API_KEY" not in os.environ:
+                        raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and python-dotenv is not installed")
+                    self.api_key = os.environ["FIRECRAWL_API_KEY"]
+        
+        # Initialize FirecrawlApp
+        try:
+            from firecrawl import FirecrawlApp
+        except ImportError:
+            raise ImportError("firecrawl-py is not installed. Please install it with 'pip install firecrawl-py'")
+    
+    def search(self, query: str, limit: int = 5, tbs: Optional[str] = None, 
+               lang: str = "en", country: str = "us", location: Optional[str] = None,
+               timeout: int = 60000, scrape_options: Optional[Dict[str, Any]] = None) -> Any:
+        """
+        Search the web using Firecrawl API.
+        
+        Args:
+            query: The search query
+            limit: Maximum number of results to return (default: 5)
+            tbs: Time-based search parameter
+            lang: Language code for search results (default: 'en')
+            country: Country code for search results (default: 'us')
+            location: Location parameter for search results
+            timeout: Timeout in milliseconds (default: 60000)
+            scrape_options: Options for scraping search results
+            
+        Returns:
+            Search results from Firecrawl
+        """
+
+        
+        options = {
+            
+            "limit": limit,
+            "tbs": tbs,
+            "lang": lang,
+            "country": country,
+            "location": location,
+            "timeout": timeout,
+            "scrapeOptions": scrape_options or {},
+        }
+        from firecrawl import FirecrawlApp
+        _firecrawl = FirecrawlApp(api_key=self.api_key)
+
+        return _firecrawl.search(query=query, params=options)
+
+
+class FirecrawlScrapeWebsiteTool:
+    @staticmethod
+    def _load_api_key_from_env_file() -> Optional[str]:
+        """
+        Try to load the FIRECRAWL_API_KEY from a .env file using python-dotenv.
+        
+        Returns:
+            The API key if found in .env file, None otherwise
+        """
+        try:
+            # Try to import dotenv
+            from dotenv import load_dotenv
+        except ImportError:
+            raise ImportError("python-dotenv is not installed. Please install it with 'pip install python-dotenv'")
+        
+        # Check for .env file in current directory and parent directories
+        current_dir = pathlib.Path.cwd()
+        
+        # Look in current directory and up to 3 parent directories
+        for _ in range(4):
+            env_path = current_dir / '.env'
+            if env_path.exists():
+                # Load the .env file
+                load_dotenv(dotenv_path=env_path)
+                
+                # Check if FIRECRAWL_API_KEY is now in environment
+                if "FIRECRAWL_API_KEY" in os.environ:
+                    return os.environ["FIRECRAWL_API_KEY"]
+            
+            # Move to parent directory
+            parent_dir = current_dir.parent
+            if parent_dir == current_dir:  # Reached root directory
+                break
+            current_dir = parent_dir
+        
+        return None
+    
+    def __control__(self) -> bool:
+        """
+        Check if the required dependencies are installed and API key is available.
+        
+        Returns:
+            True if all requirements are met
+        
+        Raises:
+            ImportError: If required packages are not installed
+            EnvironmentError: If API key is not available
+        """
+        # Check if requests is installed
+        try:
+            import requests
+        except ImportError:
+            raise ImportError("requests is not installed. Please install it with 'pip install requests'")
+        
+        # Check if firecrawl-py is installed
+        try:
+            from firecrawl import FirecrawlApp
+        except ImportError:
+            raise ImportError("firecrawl-py is not installed. Please install it with 'pip install firecrawl-py'")
+        
+        # Check if python-dotenv is installed
+        try:
+            from dotenv import load_dotenv
+        except ImportError:
+            raise ImportError("python-dotenv is not installed. Please install it with 'pip install python-dotenv'")
+        
+        # Try to load from .env file first
+        if "FIRECRAWL_API_KEY" not in os.environ:
+            try:
+                FirecrawlScrapeWebsiteTool._load_api_key_from_env_file()
+            except ImportError:
+                pass  # If dotenv is not installed, we'll check environment variables directly
+        
+        # Check if FIRECRAWL_API_KEY is set in environment variables
+        if "FIRECRAWL_API_KEY" not in os.environ:
+            raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and could not be found in .env file")
+        
+        return True
+    
+    def __init__(self, api_key: Optional[str] = None):
+        """
+        Initialize the FirecrawlScrapeWebsiteTool.
+        
+        Args:
+            api_key: Firecrawl API key (optional, will try to load from environment if not provided)
+        """
+        # Set API key
+        self.api_key = api_key
+        
+        # If API key not provided, try to load from environment or .env file
+        if self.api_key is None:
+            # First check environment variables
+            if "FIRECRAWL_API_KEY" in os.environ:
+                self.api_key = os.environ["FIRECRAWL_API_KEY"]
+            else:
+                # Try to load from .env file
+                try:
+                    api_key = self._load_api_key_from_env_file()
+                    if api_key:
+                        self.api_key = api_key
+                    else:
+                        raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and could not be found in .env file")
+                except ImportError:
+                    # If dotenv is not installed and no API key in environment
+                    if "FIRECRAWL_API_KEY" not in os.environ:
+                        raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and python-dotenv is not installed")
+                    self.api_key = os.environ["FIRECRAWL_API_KEY"]
+        
+        # Initialize FirecrawlApp
+        try:
+            from firecrawl import FirecrawlApp
+        except ImportError:
+            raise ImportError("firecrawl-py is not installed. Please install it with 'pip install firecrawl-py'")
+    
+    def scrape_website(self, url: str, timeout: int = 30000, only_main_content: bool = True, 
+                      formats: List[str] = None, include_tags: List[str] = None, 
+                      exclude_tags: List[str] = None, headers: Dict[str, str] = None, 
+                      wait_for: int = 0) -> Any:
+        """
+        Scrape a website using Firecrawl API.
+        
+        Args:
+            url: Website URL to scrape
+            timeout: Timeout in milliseconds (default: 30000)
+            only_main_content: Whether to extract only the main content (default: True)
+            formats: Output formats (default: ["markdown"])
+            include_tags: HTML tags to include in the extraction
+            exclude_tags: HTML tags to exclude from the extraction
+            headers: Custom HTTP headers to use for the request
+            wait_for: Time to wait for JavaScript execution in milliseconds
+            
+        Returns:
+            Scraped content from the website
+        """
+        # Set default values
+        if formats is None:
+            formats = ["markdown"]
+        if include_tags is None:
+            include_tags = []
+        if exclude_tags is None:
+            exclude_tags = []
+        if headers is None:
+            headers = {}
+        
+        # Prepare scrape options
+        options = {
+            "formats": formats,
+            "onlyMainContent": only_main_content,
+            "includeTags": include_tags,
+            "excludeTags": exclude_tags,
+            "headers": headers,
+            "waitFor": wait_for,
+            "timeout": timeout,
+        }
+        
+        # Initialize FirecrawlApp and scrape the URL
+        from firecrawl import FirecrawlApp
+        _firecrawl = FirecrawlApp(api_key=self.api_key)
+        
+        return _firecrawl.scrape_url(url, options)
+
+
+class FirecrawlCrawlWebsiteTool:
+    @staticmethod
+    def _load_api_key_from_env_file() -> Optional[str]:
+        """
+        Try to load the FIRECRAWL_API_KEY from a .env file using python-dotenv.
+        
+        Returns:
+            The API key if found in .env file, None otherwise
+        """
+        try:
+            # Try to import dotenv
+            from dotenv import load_dotenv
+        except ImportError:
+            raise ImportError("python-dotenv is not installed. Please install it with 'pip install python-dotenv'")
+        
+        # Check for .env file in current directory and parent directories
+        current_dir = pathlib.Path.cwd()
+        
+        # Look in current directory and up to 3 parent directories
+        for _ in range(4):
+            env_path = current_dir / '.env'
+            if env_path.exists():
+                # Load the .env file
+                load_dotenv(dotenv_path=env_path)
+                
+                # Check if FIRECRAWL_API_KEY is now in environment
+                if "FIRECRAWL_API_KEY" in os.environ:
+                    return os.environ["FIRECRAWL_API_KEY"]
+            
+            # Move to parent directory
+            parent_dir = current_dir.parent
+            if parent_dir == current_dir:  # Reached root directory
+                break
+            current_dir = parent_dir
+        
+        return None
+    
+    def __control__(self) -> bool:
+        """
+        Check if the required dependencies are installed and API key is available.
+        
+        Returns:
+            True if all requirements are met
+        
+        Raises:
+            ImportError: If required packages are not installed
+            EnvironmentError: If API key is not available
+        """
+        # Check if requests is installed
+        try:
+            import requests
+        except ImportError:
+            raise ImportError("requests is not installed. Please install it with 'pip install requests'")
+        
+        # Check if firecrawl-py is installed
+        try:
+            from firecrawl import FirecrawlApp
+        except ImportError:
+            raise ImportError("firecrawl-py is not installed. Please install it with 'pip install firecrawl-py'")
+        
+        # Check if python-dotenv is installed
+        try:
+            from dotenv import load_dotenv
+        except ImportError:
+            raise ImportError("python-dotenv is not installed. Please install it with 'pip install python-dotenv'")
+        
+        # Try to load from .env file first
+        if "FIRECRAWL_API_KEY" not in os.environ:
+            try:
+                FirecrawlCrawlWebsiteTool._load_api_key_from_env_file()
+            except ImportError:
+                pass  # If dotenv is not installed, we'll check environment variables directly
+        
+        # Check if FIRECRAWL_API_KEY is set in environment variables
+        if "FIRECRAWL_API_KEY" not in os.environ:
+            raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and could not be found in .env file")
+        
+        return True
+    
+    def __init__(self, api_key: Optional[str] = None):
+        """
+        Initialize the FirecrawlCrawlWebsiteTool.
+        
+        Args:
+            api_key: Firecrawl API key (optional, will try to load from environment if not provided)
+        """
+        # Set API key
+        self.api_key = api_key
+        
+        # If API key not provided, try to load from environment or .env file
+        if self.api_key is None:
+            # First check environment variables
+            if "FIRECRAWL_API_KEY" in os.environ:
+                self.api_key = os.environ["FIRECRAWL_API_KEY"]
+            else:
+                # Try to load from .env file
+                try:
+                    api_key = self._load_api_key_from_env_file()
+                    if api_key:
+                        self.api_key = api_key
+                    else:
+                        raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and could not be found in .env file")
+                except ImportError:
+                    # If dotenv is not installed and no API key in environment
+                    if "FIRECRAWL_API_KEY" not in os.environ:
+                        raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and python-dotenv is not installed")
+                    self.api_key = os.environ["FIRECRAWL_API_KEY"]
+        
+        # Initialize FirecrawlApp
+        try:
+            from firecrawl import FirecrawlApp
+        except ImportError:
+            raise ImportError("firecrawl-py is not installed. Please install it with 'pip install firecrawl-py'")
+    
+    def crawl_website(self, url: str, crawler_options: Dict[str, Any] = None, timeout: int = 30000) -> Any:
+        """
+        Crawl a website using Firecrawl API.
+        
+        Args:
+            url: Website URL to crawl
+            crawler_options: Options for crawling (default: {})
+            timeout: Timeout in milliseconds (default: 30000)
+            
+        Returns:
+            Crawled content from the website
+        """
+        # Set default values
+        if crawler_options is None:
+            crawler_options = {}
+        
+        # Prepare crawl options
+        options = {
+            "crawlerOptions": crawler_options,
+            "timeout": timeout,
+        }
+        
+        # Initialize FirecrawlApp and crawl the URL
+        from firecrawl import FirecrawlApp
+        _firecrawl = FirecrawlApp(api_key=self.api_key)
+        
+        return _firecrawl.crawl_url(url, options)
+
 
 # Export all tool classes
-__all__ = ["Search", "ComputerUse", "BrowserUse", "Wikipedia", "DuckDuckGo", "SerperDev"] 
+__all__ = ["Search", "ComputerUse", "BrowserUse", "Wikipedia", "DuckDuckGo", "SerperDev", "FirecrawlSearchTool", "FirecrawlScrapeWebsiteTool", "FirecrawlCrawlWebsiteTool"] 
