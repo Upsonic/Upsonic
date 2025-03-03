@@ -5,6 +5,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.align import Align
 from .price import get_estimated_cost
+import platform
 
 
 
@@ -299,3 +300,59 @@ def get_price_id_total_cost(price_id: str):
         'output_tokens': data['output_tokens'],
         'estimated_cost': float(data['estimated_cost'])
     }
+
+def missing_dependencies(tool_name: str, missing_deps: list):
+    """
+    Prints a formatted panel with missing dependencies and installation instructions.
+    
+    Args:
+        tool_name: Name of the tool with missing dependencies
+        missing_deps: List of missing dependency names
+    """
+    if not missing_deps:
+        return
+    
+    # Create the installation command
+    install_cmd = "pip install " + " ".join(missing_deps)
+    
+    # Create a bulleted list of dependencies
+    deps_list = "\n".join([f"  • [bold white]{dep}[/bold white]" for dep in missing_deps])
+    
+    # Create the content with the dependencies list and installation command
+    content = f"[bold red]Missing Dependencies for {tool_name}:[/bold red]\n\n{deps_list}\n\n[bold green]Installation Command:[/bold green]\n  {install_cmd}"
+    
+    # Create and print the panel
+    panel = Panel(content, title="[bold yellow]⚠️ Dependencies Required[/bold yellow]", border_style="yellow", expand=False)
+    console.print(panel)
+
+def missing_api_key(tool_name: str, env_var_name: str, dotenv_support: bool = True):
+    """
+    Prints a formatted panel with information about a missing API key and how to set it.
+    
+    Args:
+        tool_name: Name of the tool requiring the API key
+        env_var_name: Name of the environment variable for the API key
+        dotenv_support: Whether the tool supports loading from .env file
+    """
+    # Determine the operating system
+    system = platform.system()
+    
+    # Create OS-specific instructions for setting the API key
+    if system == "Windows":
+        env_instructions = f"setx {env_var_name} your_api_key_here"
+        env_instructions_temp = f"set {env_var_name}=your_api_key_here"
+        env_description = f"[bold green]Option 1: Set environment variable (Windows):[/bold green]\n  • Permanent (new sessions): {env_instructions}\n  • Current session only: {env_instructions_temp}"
+    else:  # macOS or Linux
+        env_instructions_export = f"export {env_var_name}=your_api_key_here"
+        env_instructions_profile = f"echo 'export {env_var_name}=your_api_key_here' >> ~/.bashrc  # or ~/.zshrc"
+        env_description = f"[bold green]Option 1: Set environment variable (macOS/Linux):[/bold green]\n  • Current session: {env_instructions_export}\n  • Permanent: {env_instructions_profile}"
+    
+    if dotenv_support:
+        dotenv_instructions = f"Create a .env file in your project directory with:\n  {env_var_name}=your_api_key_here"
+        content = f"[bold red]Missing API Key for {tool_name}[/bold red]\n\n[bold white]The {env_var_name} environment variable is not set.[/bold white]\n\n{env_description}\n\n[bold green]Option 2: Use a .env file:[/bold green]\n  {dotenv_instructions}"
+    else:
+        content = f"[bold red]Missing API Key for {tool_name}[/bold red]\n\n[bold white]The {env_var_name} environment variable is not set.[/bold white]\n\n{env_description}"
+    
+    # Create and print the panel
+    panel = Panel(content, title="[bold yellow]🔑 API Key Required[/bold yellow]", border_style="yellow", expand=False)
+    console.print(panel)

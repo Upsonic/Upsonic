@@ -8,6 +8,10 @@ import json
 import requests
 import logging
 import pathlib
+from datetime import datetime
+import time
+import re
+from .client.printing import missing_dependencies, missing_api_key
 
 class Search:
     pass
@@ -23,14 +27,37 @@ class BrowserUse:
 
 
 class Wikipedia:
+    @staticmethod
+    def analyze_dependencies() -> Dict[str, bool]:
+        """
+        Analyze the dependencies required for Wikipedia and return their status.
+        
+        Returns:
+            Dictionary with dependency names as keys and their availability status as values
+        """
+        dependencies = {
+            "wikipedia": False
+        }
+        
+        # Check each dependency
+        try:
+            import wikipedia
+            dependencies["wikipedia"] = True
+        except ImportError:
+            pass
+        
+        return dependencies
+        
+    @staticmethod
     def __control__() -> bool:
         # Check the import wikipedia
         try:
             import wikipedia
+            return True
         except ImportError:
-            raise ImportError("wikipedia is not installed. Please install it with 'pip install wikipedia'")
-        
-        return True
+            # Use the missing_dependencies function to display the error
+            missing_dependencies("Wikipedia", ["wikipedia"])
+            raise ImportError("Missing dependency: wikipedia. Please install it with: pip install wikipedia")
         
     def search(query: str) -> str:
         import wikipedia
@@ -42,14 +69,37 @@ class Wikipedia:
 
 
 class DuckDuckGo:
+    @staticmethod
+    def analyze_dependencies() -> Dict[str, bool]:
+        """
+        Analyze the dependencies required for DuckDuckGo and return their status.
+        
+        Returns:
+            Dictionary with dependency names as keys and their availability status as values
+        """
+        dependencies = {
+            "duckduckgo_search": False
+        }
+        
+        # Check each dependency
+        try:
+            import duckduckgo_search
+            dependencies["duckduckgo_search"] = True
+        except ImportError:
+            pass
+        
+        return dependencies
+        
+    @staticmethod
     def __control__() -> bool:
         # Check the import duckduckgo_search
         try:
-            from duckduckgo_search import DDGS
+            import duckduckgo_search
+            return True
         except ImportError:
-            raise ImportError("duckduckgo_search is not installed. Please install it with 'pip install duckduckgo-search'")
-        
-        return True
+            # Use the missing_dependencies function to display the error
+            missing_dependencies("DuckDuckGo", ["duckduckgo_search"])
+            raise ImportError("Missing dependency: duckduckgo_search. Please install it with: pip install duckduckgo-search")
     
     def search(query: str, max_results: int = 10) -> List[Dict[str, str]]:
         """
@@ -113,22 +163,19 @@ class SerperDev:
         except ImportError:
             raise ImportError("requests is not installed. Please install it with 'pip install requests'")
         
-        # Check if python-dotenv is installed
-        try:
-            from dotenv import load_dotenv
-        except ImportError:
-            raise ImportError("python-dotenv is not installed. Please install it with 'pip install python-dotenv'")
-        
-        # Try to load from .env file first
-        if "SERPER_API_KEY" not in os.environ:
-            try:
-                SerperDev._load_api_key_from_env_file()
-            except ImportError:
-                pass  # If dotenv is not installed, we'll check environment variables directly
-        
         # Check if SERPER_API_KEY is set in environment variables
         if "SERPER_API_KEY" not in os.environ:
-            raise EnvironmentError("SERPER_API_KEY environment variable is not set and could not be found in .env file")
+            try:
+                # Try to load API key from .env file
+                api_key = SerperDev._load_api_key_from_env_file()
+                if api_key is None:
+                    # API key not found in .env file
+                    missing_api_key("SerperDev", "SERPER_API_KEY")
+                    raise EnvironmentError("SERPER_API_KEY environment variable is not set and could not be found in .env file")
+            except ImportError:
+                # If dotenv is not installed, we can't load from .env file
+                missing_api_key("SerperDev", "SERPER_API_KEY", dotenv_support=False)
+                raise EnvironmentError("SERPER_API_KEY environment variable is not set and python-dotenv is not installed")
         
         return True
     
@@ -138,11 +185,12 @@ class SerperDev:
         Initialize the SerperDev search tool.
         
         Args:
-            search_type: Type of search to perform ('search' or 'news')
-            n_results: Maximum number of results to return
-            country: Country code for search results
-            location: Location for search results
-            locale: Locale for search results
+            base_url: Base URL for the Serper API (default: "https://google.serper.dev")
+            search_type: Type of search to perform (default: "search")
+            n_results: Number of results to return (default: 10)
+            country: Country code for search (default: "us")
+            location: Location for search (default: None)
+            locale: Locale for search (default: "en")
             api_key: Serper API key (optional, will try to load from environment if not provided)
         """
         self.base_url = base_url
@@ -167,10 +215,14 @@ class SerperDev:
                     if api_key:
                         self.api_key = api_key
                     else:
+                        # Print missing API key message
+                        missing_api_key("SerperDev", "SERPER_API_KEY")
                         raise EnvironmentError("SERPER_API_KEY environment variable is not set and could not be found in .env file")
                 except ImportError:
                     # If dotenv is not installed and no API key in environment
                     if "SERPER_API_KEY" not in os.environ:
+                        # Print missing API key message without dotenv support
+                        missing_api_key("SerperDev", "SERPER_API_KEY", dotenv_support=False)
                         raise EnvironmentError("SERPER_API_KEY environment variable is not set and python-dotenv is not installed")
                     self.api_key = os.environ["SERPER_API_KEY"]
 
@@ -363,6 +415,41 @@ class SerperDev:
 
 class FirecrawlSearchTool:
     @staticmethod
+    def analyze_dependencies() -> Dict[str, bool]:
+        """
+        Analyze the dependencies required for FirecrawlSearchTool and return their status.
+        
+        Returns:
+            Dictionary with dependency names as keys and their availability status as values
+        """
+        dependencies = {
+            "requests": False,
+            "firecrawl": False,
+            "python-dotenv": False
+        }
+        
+        # Check each dependency
+        try:
+            import requests
+            dependencies["requests"] = True
+        except ImportError:
+            pass
+        
+        try:
+            import firecrawl
+            dependencies["firecrawl"] = True
+        except ImportError:
+            pass
+        
+        try:
+            from dotenv import load_dotenv
+            dependencies["python-dotenv"] = True
+        except ImportError:
+            pass
+        
+        return dependencies
+    
+    @staticmethod
     def _load_api_key_from_env_file() -> Optional[str]:
         """
         Try to load the FIRECRAWL_API_KEY from a .env file using python-dotenv.
@@ -409,34 +496,33 @@ class FirecrawlSearchTool:
             ImportError: If required packages are not installed
             EnvironmentError: If API key is not available
         """
-        # Check if requests is installed
-        try:
-            import requests
-        except ImportError:
-            raise ImportError("requests is not installed. Please install it with 'pip install requests'")
+        # Analyze dependencies
+        dependencies = self.analyze_dependencies()
+        missing = [dep for dep, installed in dependencies.items() if not installed]
         
-        # Check if firecrawl-py is installed
-        try:
-            from firecrawl import FirecrawlApp
-        except ImportError:
-            raise ImportError("firecrawl-py is not installed. Please install it with 'pip install firecrawl-py'")
-        
-        # Check if python-dotenv is installed
-        try:
-            from dotenv import load_dotenv
-        except ImportError:
-            raise ImportError("python-dotenv is not installed. Please install it with 'pip install python-dotenv'")
-        
-        # Try to load from .env file first
-        if "FIRECRAWL_API_KEY" not in os.environ:
-            try:
-                FirecrawlSearchTool._load_api_key_from_env_file()
-            except ImportError:
-                pass  # If dotenv is not installed, we'll check environment variables directly
+        # Print missing dependencies
+        if missing:
+            # Use the new printing function
+            missing_dependencies("FirecrawlSearchTool", missing)
+            
+            # Raise ImportError with combined message for all missing dependencies
+            install_cmd = "pip install " + " ".join(missing)
+            raise ImportError(f"Missing dependencies: {', '.join(missing)}. Please install them with: {install_cmd}")
         
         # Check if FIRECRAWL_API_KEY is set in environment variables
         if "FIRECRAWL_API_KEY" not in os.environ:
-            raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and could not be found in .env file")
+            try:
+                # Try to load API key from .env file
+                api_key = FirecrawlSearchTool._load_api_key_from_env_file()
+                if api_key is None:
+                    # Print missing API key message
+                    missing_api_key("FirecrawlSearchTool", "FIRECRAWL_API_KEY")
+                    raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and could not be found in .env file")
+            except ImportError:
+                # If dotenv is not installed, we can't load from .env file
+                # Print missing API key message without dotenv support
+                missing_api_key("FirecrawlSearchTool", "FIRECRAWL_API_KEY", dotenv_support=False)
+                raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and python-dotenv is not installed")
         
         return True
     
@@ -462,10 +548,14 @@ class FirecrawlSearchTool:
                     if api_key:
                         self.api_key = api_key
                     else:
+                        # Print missing API key message
+                        missing_api_key("FirecrawlSearchTool", "FIRECRAWL_API_KEY")
                         raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and could not be found in .env file")
                 except ImportError:
                     # If dotenv is not installed and no API key in environment
                     if "FIRECRAWL_API_KEY" not in os.environ:
+                        # Print missing API key message without dotenv support
+                        missing_api_key("FirecrawlSearchTool", "FIRECRAWL_API_KEY", dotenv_support=False)
                         raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and python-dotenv is not installed")
                     self.api_key = os.environ["FIRECRAWL_API_KEY"]
         
@@ -514,6 +604,81 @@ class FirecrawlSearchTool:
 
 class FirecrawlScrapeWebsiteTool:
     @staticmethod
+    def analyze_dependencies() -> Dict[str, bool]:
+        """
+        Analyze the dependencies required for FirecrawlScrapeWebsiteTool and return their status.
+        
+        Returns:
+            Dictionary with dependency names as keys and their availability status as values
+        """
+        dependencies = {
+            "requests": False,
+            "firecrawl": False,
+            "python-dotenv": False
+        }
+        
+        # Check each dependency
+        try:
+            import requests
+            dependencies["requests"] = True
+        except ImportError:
+            pass
+        
+        try:
+            import firecrawl
+            dependencies["firecrawl"] = True
+        except ImportError:
+            pass
+        
+        try:
+            from dotenv import load_dotenv
+            dependencies["python-dotenv"] = True
+        except ImportError:
+            pass
+        
+        return dependencies
+    
+    def __control__(self) -> bool:
+        """
+        Check if the required dependencies are installed and API key is available.
+        
+        Returns:
+            True if all requirements are met
+        
+        Raises:
+            ImportError: If required packages are not installed
+            EnvironmentError: If API key is not available
+        """
+        # Analyze dependencies
+        dependencies = self.analyze_dependencies()
+        missing = [dep for dep, installed in dependencies.items() if not installed]
+        
+        # Print missing dependencies
+        if missing:
+            # Use the new printing function
+            missing_dependencies("FirecrawlScrapeWebsiteTool", missing)
+            
+            # Raise ImportError with combined message for all missing dependencies
+            install_cmd = "pip install " + " ".join(missing)
+            raise ImportError(f"Missing dependencies: {', '.join(missing)}. Please install them with: {install_cmd}")
+        
+        # Check if FIRECRAWL_API_KEY is set in environment variables
+        if "FIRECRAWL_API_KEY" not in os.environ:
+            try:
+                # Try to load API key from .env file
+                api_key = FirecrawlScrapeWebsiteTool._load_api_key_from_env_file()
+                if api_key is None:
+                    # API key not found in .env file
+                    missing_api_key("FirecrawlScrapeWebsiteTool", "FIRECRAWL_API_KEY")
+                    raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and could not be found in .env file")
+            except ImportError:
+                # If dotenv is not installed, we can't load from .env file
+                missing_api_key("FirecrawlScrapeWebsiteTool", "FIRECRAWL_API_KEY", dotenv_support=False)
+                raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and python-dotenv is not installed")
+        
+        return True
+    
+    @staticmethod
     def _load_api_key_from_env_file() -> Optional[str]:
         """
         Try to load the FIRECRAWL_API_KEY from a .env file using python-dotenv.
@@ -549,48 +714,6 @@ class FirecrawlScrapeWebsiteTool:
         
         return None
     
-    def __control__(self) -> bool:
-        """
-        Check if the required dependencies are installed and API key is available.
-        
-        Returns:
-            True if all requirements are met
-        
-        Raises:
-            ImportError: If required packages are not installed
-            EnvironmentError: If API key is not available
-        """
-        # Check if requests is installed
-        try:
-            import requests
-        except ImportError:
-            raise ImportError("requests is not installed. Please install it with 'pip install requests'")
-        
-        # Check if firecrawl-py is installed
-        try:
-            from firecrawl import FirecrawlApp
-        except ImportError:
-            raise ImportError("firecrawl-py is not installed. Please install it with 'pip install firecrawl-py'")
-        
-        # Check if python-dotenv is installed
-        try:
-            from dotenv import load_dotenv
-        except ImportError:
-            raise ImportError("python-dotenv is not installed. Please install it with 'pip install python-dotenv'")
-        
-        # Try to load from .env file first
-        if "FIRECRAWL_API_KEY" not in os.environ:
-            try:
-                FirecrawlScrapeWebsiteTool._load_api_key_from_env_file()
-            except ImportError:
-                pass  # If dotenv is not installed, we'll check environment variables directly
-        
-        # Check if FIRECRAWL_API_KEY is set in environment variables
-        if "FIRECRAWL_API_KEY" not in os.environ:
-            raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and could not be found in .env file")
-        
-        return True
-    
     def __init__(self, api_key: Optional[str] = None):
         """
         Initialize the FirecrawlScrapeWebsiteTool.
@@ -613,10 +736,14 @@ class FirecrawlScrapeWebsiteTool:
                     if api_key:
                         self.api_key = api_key
                     else:
+                        # Print missing API key message
+                        missing_api_key("FirecrawlScrapeWebsiteTool", "FIRECRAWL_API_KEY")
                         raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and could not be found in .env file")
                 except ImportError:
                     # If dotenv is not installed and no API key in environment
                     if "FIRECRAWL_API_KEY" not in os.environ:
+                        # Print missing API key message without dotenv support
+                        missing_api_key("FirecrawlScrapeWebsiteTool", "FIRECRAWL_API_KEY", dotenv_support=False)
                         raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and python-dotenv is not installed")
                     self.api_key = os.environ["FIRECRAWL_API_KEY"]
         
@@ -676,40 +803,39 @@ class FirecrawlScrapeWebsiteTool:
 
 class FirecrawlCrawlWebsiteTool:
     @staticmethod
-    def _load_api_key_from_env_file() -> Optional[str]:
+    def analyze_dependencies() -> Dict[str, bool]:
         """
-        Try to load the FIRECRAWL_API_KEY from a .env file using python-dotenv.
+        Analyze the dependencies required for FirecrawlCrawlWebsiteTool and return their status.
         
         Returns:
-            The API key if found in .env file, None otherwise
+            Dictionary with dependency names as keys and their availability status as values
         """
+        dependencies = {
+            "requests": False,
+            "firecrawl": False,
+            "python-dotenv": False
+        }
+        
+        # Check each dependency
         try:
-            # Try to import dotenv
-            from dotenv import load_dotenv
+            import requests
+            dependencies["requests"] = True
         except ImportError:
-            raise ImportError("python-dotenv is not installed. Please install it with 'pip install python-dotenv'")
+            pass
         
-        # Check for .env file in current directory and parent directories
-        current_dir = pathlib.Path.cwd()
+        try:
+            import firecrawl
+            dependencies["firecrawl"] = True
+        except ImportError:
+            pass
         
-        # Look in current directory and up to 3 parent directories
-        for _ in range(4):
-            env_path = current_dir / '.env'
-            if env_path.exists():
-                # Load the .env file
-                load_dotenv(dotenv_path=env_path)
-                
-                # Check if FIRECRAWL_API_KEY is now in environment
-                if "FIRECRAWL_API_KEY" in os.environ:
-                    return os.environ["FIRECRAWL_API_KEY"]
-            
-            # Move to parent directory
-            parent_dir = current_dir.parent
-            if parent_dir == current_dir:  # Reached root directory
-                break
-            current_dir = parent_dir
+        try:
+            from dotenv import load_dotenv
+            dependencies["python-dotenv"] = True
+        except ImportError:
+            pass
         
-        return None
+        return dependencies
     
     def __control__(self) -> bool:
         """
@@ -722,34 +848,32 @@ class FirecrawlCrawlWebsiteTool:
             ImportError: If required packages are not installed
             EnvironmentError: If API key is not available
         """
-        # Check if requests is installed
-        try:
-            import requests
-        except ImportError:
-            raise ImportError("requests is not installed. Please install it with 'pip install requests'")
+        # Analyze dependencies
+        dependencies = self.analyze_dependencies()
+        missing = [dep for dep, installed in dependencies.items() if not installed]
         
-        # Check if firecrawl-py is installed
-        try:
-            from firecrawl import FirecrawlApp
-        except ImportError:
-            raise ImportError("firecrawl-py is not installed. Please install it with 'pip install firecrawl-py'")
-        
-        # Check if python-dotenv is installed
-        try:
-            from dotenv import load_dotenv
-        except ImportError:
-            raise ImportError("python-dotenv is not installed. Please install it with 'pip install python-dotenv'")
-        
-        # Try to load from .env file first
-        if "FIRECRAWL_API_KEY" not in os.environ:
-            try:
-                FirecrawlCrawlWebsiteTool._load_api_key_from_env_file()
-            except ImportError:
-                pass  # If dotenv is not installed, we'll check environment variables directly
+        # Print missing dependencies
+        if missing:
+            # Use the new printing function
+            missing_dependencies("FirecrawlCrawlWebsiteTool", missing)
+            
+            # Raise ImportError with combined message for all missing dependencies
+            install_cmd = "pip install " + " ".join(missing)
+            raise ImportError(f"Missing dependencies: {', '.join(missing)}. Please install them with: {install_cmd}")
         
         # Check if FIRECRAWL_API_KEY is set in environment variables
         if "FIRECRAWL_API_KEY" not in os.environ:
-            raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and could not be found in .env file")
+            try:
+                # Try to load API key from .env file
+                api_key = FirecrawlCrawlWebsiteTool._load_api_key_from_env_file()
+                if api_key is None:
+                    # API key not found in .env file
+                    missing_api_key("FirecrawlCrawlWebsiteTool", "FIRECRAWL_API_KEY")
+                    raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and could not be found in .env file")
+            except ImportError:
+                # If dotenv is not installed, we can't load from .env file
+                missing_api_key("FirecrawlCrawlWebsiteTool", "FIRECRAWL_API_KEY", dotenv_support=False)
+                raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and python-dotenv is not installed")
         
         return True
     
@@ -775,10 +899,14 @@ class FirecrawlCrawlWebsiteTool:
                     if api_key:
                         self.api_key = api_key
                     else:
+                        # Print missing API key message
+                        missing_api_key("FirecrawlCrawlWebsiteTool", "FIRECRAWL_API_KEY")
                         raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and could not be found in .env file")
                 except ImportError:
                     # If dotenv is not installed and no API key in environment
                     if "FIRECRAWL_API_KEY" not in os.environ:
+                        # Print missing API key message without dotenv support
+                        missing_api_key("FirecrawlCrawlWebsiteTool", "FIRECRAWL_API_KEY", dotenv_support=False)
                         raise EnvironmentError("FIRECRAWL_API_KEY environment variable is not set and python-dotenv is not installed")
                     self.api_key = os.environ["FIRECRAWL_API_KEY"]
         
@@ -816,11 +944,75 @@ class FirecrawlCrawlWebsiteTool:
         
         return _firecrawl.crawl_url(url, options)
 
+    @staticmethod
+    def _load_api_key_from_env_file() -> Optional[str]:
+        """
+        Try to load the FIRECRAWL_API_KEY from a .env file using python-dotenv.
+        
+        Returns:
+            The API key if found in .env file, None otherwise
+        """
+        try:
+            # Try to import dotenv
+            from dotenv import load_dotenv
+        except ImportError:
+            raise ImportError("python-dotenv is not installed. Please install it with 'pip install python-dotenv'")
+        
+        # Check for .env file in current directory and parent directories
+        current_dir = pathlib.Path.cwd()
+        
+        # Look in current directory and up to 3 parent directories
+        for _ in range(4):
+            env_path = current_dir / '.env'
+            if env_path.exists():
+                # Load the .env file
+                load_dotenv(dotenv_path=env_path)
+                
+                # Check if FIRECRAWL_API_KEY is now in environment
+                if "FIRECRAWL_API_KEY" in os.environ:
+                    return os.environ["FIRECRAWL_API_KEY"]
+            
+            # Move to parent directory
+            parent_dir = current_dir.parent
+            if parent_dir == current_dir:  # Reached root directory
+                break
+            current_dir = parent_dir
+        
+        return None
+
 
 class YFinanceTool:
+    @staticmethod
+    def analyze_dependencies() -> Dict[str, bool]:
+        """
+        Analyze the dependencies required for YFinanceTool and return their status.
+        
+        Returns:
+            Dictionary with dependency names as keys and their availability status as values
+        """
+        dependencies = {
+            "yfinance": False,
+            "pandas": False
+        }
+        
+        # Check each dependency
+        try:
+            import yfinance
+            dependencies["yfinance"] = True
+        except ImportError:
+            pass
+        
+        try:
+            import pandas
+            dependencies["pandas"] = True
+        except ImportError:
+            pass
+        
+        return dependencies
+    
     def __control__(self) -> bool:
         """
-        Check if the required dependencies are installed.
+        Check if the required dependencies are installed and print missing ones.
         
         Returns:
             True if all requirements are met
@@ -828,17 +1020,18 @@ class YFinanceTool:
         Raises:
             ImportError: If required packages are not installed
         """
-        # Check if yfinance is installed
-        try:
-            import yfinance
-        except ImportError:
-            raise ImportError("yfinance is not installed. Please install it with 'pip install yfinance'")
+        # Analyze dependencies
+        dependencies = self.analyze_dependencies()
+        missing = [dep for dep, installed in dependencies.items() if not installed]
         
-        # Check if pandas is installed
-        try:
-            import pandas
-        except ImportError:
-            raise ImportError("pandas is not installed. Please install it with 'pip install pandas'")
+        # Print missing dependencies
+        if missing:
+            # Use the new printing function
+            missing_dependencies("YFinanceTool", missing)
+            
+            # Raise ImportError with combined message for all missing dependencies
+            install_cmd = "pip install " + " ".join(missing)
+            raise ImportError(f"Missing dependencies: {', '.join(missing)}. Please install them with: {install_cmd}")
         
         return True
     
@@ -978,6 +1171,7 @@ class YFinanceTool:
         except Exception as e:
             # If the search fails, return an empty list
             return []
+
 
 
 # Export all tool classes
