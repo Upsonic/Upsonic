@@ -563,6 +563,7 @@ class FirecrawlSearchTool:
         try:
             from firecrawl import FirecrawlApp
         except ImportError:
+            missing_dependencies("FirecrawlSearchTool", ["firecrawl-py"])
             raise ImportError("firecrawl-py is not installed. Please install it with 'pip install firecrawl-py'")
     
     def search(self, query: str, limit: int = 5, tbs: Optional[str] = None, 
@@ -1520,5 +1521,193 @@ class ArxivTool:
                 }
 
 
+class YouTubeVideo:
+    @staticmethod
+    def analyze_dependencies() -> Dict[str, bool]:
+        """
+        Analyze the dependencies required for YouTubeVideo and return their status.
+        
+        Returns:
+            Dictionary with dependency names as keys and their availability status as values
+        """
+        dependencies = {
+            "youtube_transcript_api": False
+        }
+        
+        # Check each dependency
+        try:
+            import youtube_transcript_api
+            dependencies["youtube_transcript_api"] = True
+        except ImportError:
+            pass
+        
+        return dependencies
+        
+    @staticmethod
+    def __control__() -> bool:
+        # Check the import youtube_transcript_api
+        try:
+            import youtube_transcript_api
+            return True
+        except ImportError:
+            # Use the missing_dependencies function to display the error
+            missing_dependencies("YouTubeVideo", ["youtube_transcript_api"])
+            raise ImportError("Missing dependency: youtube_transcript_api. Please install it with: pip install youtube_transcript_api")
+    
+    @staticmethod
+    def get_video_id(url: str) -> Optional[str]:
+        """
+        Extract the YouTube video ID from a URL.
+        
+        Args:
+            url: The URL of the YouTube video
+            
+        Returns:
+            The video ID or None if not found
+        """
+        import re
+        from urllib.parse import urlparse, parse_qs
+        
+        # Handle different YouTube URL formats
+        parsed_url = urlparse(url)
+        hostname = parsed_url.hostname
+        
+        if hostname == "youtu.be":
+            return parsed_url.path[1:]
+        
+        if hostname in ("www.youtube.com", "youtube.com"):
+            if parsed_url.path == "/watch":
+                query_params = parse_qs(parsed_url.query)
+                return query_params.get("v", [None])[0]
+            if parsed_url.path.startswith("/embed/"):
+                return parsed_url.path.split("/")[2]
+            if parsed_url.path.startswith("/v/"):
+                return parsed_url.path.split("/")[2]
+        
+        # Try to extract ID using regex as fallback
+        youtube_regex = r"(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^\"&?\/\s]{11})"
+        match = re.search(youtube_regex, url)
+        if match:
+            return match.group(1)
+            
+        return None
+    
+    @staticmethod
+    def get_captions(url: str, languages: List[str] = None) -> str:
+        """
+        Get captions/transcript from a YouTube video.
+        
+        Args:
+            url: The URL of the YouTube video
+            languages: List of language codes to try (default: ["en"])
+            
+        Returns:
+            The video transcript as text
+        """
+        from youtube_transcript_api import YouTubeTranscriptApi
+        
+        # Default to English if no languages specified
+        if not languages:
+            languages = ["en"]
+            
+        video_id = YouTubeVideo.get_video_id(url)
+        if not video_id:
+            return "Error: Could not extract video ID from URL"
+            
+        try:
+            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
+            return " ".join(line["text"] for line in transcript)
+        except Exception as e:
+            return f"Error getting captions: {str(e)}"
+    
+    @staticmethod
+    def get_video_data(url: str) -> Dict[str, Any]:
+        """
+        Get metadata about a YouTube video.
+        
+        Args:
+            url: The URL of the YouTube video
+            
+        Returns:
+            Dictionary containing video metadata
+        """
+        import json
+        from urllib.request import urlopen
+        from urllib.parse import urlencode
+        
+        video_id = YouTubeVideo.get_video_id(url)
+        if not video_id:
+            return {"error": "Could not extract video ID from URL"}
+            
+        try:
+            params = {"format": "json", "url": f"https://www.youtube.com/watch?v={video_id}"}
+            oembed_url = "https://www.youtube.com/oembed"
+            query_string = urlencode(params)
+            full_url = f"{oembed_url}?{query_string}"
+            
+            with urlopen(full_url) as response:
+                response_text = response.read()
+                video_data = json.loads(response_text.decode())
+                
+                return {
+                    "title": video_data.get("title"),
+                    "author_name": video_data.get("author_name"),
+                    "author_url": video_data.get("author_url"),
+                    "type": video_data.get("type"),
+                    "height": video_data.get("height"),
+                    "width": video_data.get("width"),
+                    "version": video_data.get("version"),
+                    "provider_name": video_data.get("provider_name"),
+                    "provider_url": video_data.get("provider_url"),
+                    "thumbnail_url": video_data.get("thumbnail_url"),
+                    "video_id": video_id,
+                    "video_url": f"https://www.youtube.com/watch?v={video_id}"
+                }
+        except Exception as e:
+            return {"error": f"Error getting video data: {str(e)}"}
+    
+    @staticmethod
+    def get_timestamps(url: str, languages: List[str] = None) -> str:
+        """
+        Generate timestamps with captions for a YouTube video.
+        
+        Args:
+            url: The URL of the YouTube video
+            languages: List of language codes to try (default: ["en"])
+            
+        Returns:
+            Formatted timestamps with captions
+        """
+        from youtube_transcript_api import YouTubeTranscriptApi
+        
+        # Default to English if no languages specified
+        if not languages:
+            languages = ["en"]
+            
+        video_id = YouTubeVideo.get_video_id(url)
+        if not video_id:
+            return "Error: Could not extract video ID from URL"
+            
+        try:
+            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
+            
+            timestamps = []
+            for line in transcript:
+                start_seconds = int(line["start"])
+                minutes, seconds = divmod(start_seconds, 60)
+                hours, minutes = divmod(minutes, 60)
+                
+                if hours > 0:
+                    time_str = f"{hours}:{minutes:02d}:{seconds:02d}"
+                else:
+                    time_str = f"{minutes}:{seconds:02d}"
+                    
+                timestamps.append(f"{time_str} - {line['text']}")
+                
+            return "\n".join(timestamps)
+        except Exception as e:
+            return f"Error generating timestamps: {str(e)}"
+
+
 # Export all tool classes
-__all__ = ["Search", "ComputerUse", "BrowserUse", "Wikipedia", "DuckDuckGo", "SerperDev", "FirecrawlSearchTool", "FirecrawlScrapeWebsiteTool", "FirecrawlCrawlWebsiteTool", "YFinanceTool", "ArxivTool"] 
+__all__ = ["Search", "ComputerUse", "BrowserUse", "Wikipedia", "DuckDuckGo", "SerperDev", "FirecrawlSearchTool", "FirecrawlScrapeWebsiteTool", "FirecrawlCrawlWebsiteTool", "YFinanceTool", "ArxivTool", "YouTubeVideo"] 
