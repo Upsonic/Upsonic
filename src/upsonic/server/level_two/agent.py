@@ -151,7 +151,7 @@ class AgentManager:
                         satisfied = True  # Break the loop on error
 
             if memory:
-                save_temporary_memory(result.message_history, agent_id)
+                save_temporary_memory(result.all_messages(), agent_id)
 
             return {
                 "status_code": 200, 

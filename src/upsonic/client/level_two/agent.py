@@ -8,6 +8,7 @@ import httpx
 import hashlib
 from typing import Any, List, Dict, Optional, Type, Union, Literal
 from pydantic import BaseModel
+import uuid
 
 from ..tasks.tasks import Task
 
@@ -335,14 +336,13 @@ class Agent:
         shared_context = []
 
         if agent_configuration.sub_task:
+            # Create a new agent configuration for sub-tasks with memory enabled
+            sub_task_agent_config = copy.deepcopy(agent_configuration)
+            sub_task_agent_config.agent_id_ = str(uuid.uuid4())  # Generate new agent ID for sub-tasks
+            sub_task_agent_config.memory = True  # Enable memory for sub-tasks
+            
             sub_tasks = self.multiple(task, llm_model)
             is_it_sub_task = True
-
-
-
-
-
-
             the_task = sub_tasks
     
 
@@ -385,7 +385,7 @@ class Agent:
         for i in range(len(the_task)):
             if i < len(the_task) - 1:
                 # Create a copy and set reliability_layer to None for all except last task
-                task_config = copy.deepcopy(agent_configuration)
+                task_config = copy.deepcopy(sub_task_agent_config if agent_configuration.sub_task else agent_configuration)
                 task_config.reliability_layer = None
                 task_specific_configs.append(task_config)
             else:
