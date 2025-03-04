@@ -1,6 +1,7 @@
 agent_history.gif
 *.sqlite
 
+lightrag*
 
 KOT-*
 notes.txt

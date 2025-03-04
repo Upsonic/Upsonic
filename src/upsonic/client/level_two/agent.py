@@ -175,7 +175,7 @@ class Agent:
                         # Prepare the request data
                         data = {
                             "agent_id": agent_configuration.agent_id,
-                            "prompt": task.description,
+                            "prompt": task.description + task.additional_description(self), 
                             "images": task.images_base_64,
                             "response_format": response_format_str,
                             "tools": tools or [],

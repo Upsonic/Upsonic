@@ -13,12 +13,69 @@ class KnowledgeBaseMarkdown(BaseModel):
 
 class KnowledgeBase(BaseModel):
     sources: List[str] = []
+    rag_model: str | None = None
+    _rag = None
+
+    @property
+    def rag(self):
+        # if the rag_model is not None return True
+        if self.rag_model is None:
+            return True
+        return False
+
 
     def add_file(self, file_path: str):
         self.sources.append(file_path)
 
     def remove_file(self, file_path: str):
         self.sources.remove(file_path)
+
+    def setup_rag(self, client):
+        from lightrag import LightRAG, QueryParam
+        from lightrag.llm.openai import openai_embed, gpt_4o_mini_complete
+
+        from lightrag.utils import set_logger
+        set_logger("lightrag", level="WARNING")
+
+        if not self._rag:
+            if not self.rag_model:
+                raise ValueError("rag_model must be set before querying")
+
+            if self.rag_model.startswith("openai"):
+                embedding_func = openai_embed
+            else:
+                raise ValueError(f"Unsupported rag_model type: {self.rag_model}")
+
+            self._rag = LightRAG(embedding_func=embedding_func, llm_model_func=gpt_4o_mini_complete)
+            for each in self.sources:
+                self._rag.insert(client.markdown(each))
+            return self._rag
+
+    def query(self, query: str, mode: str = "naive") -> List[str]:
+        from lightrag import LightRAG, QueryParam
+        from lightrag.llm.openai import openai_embed, gpt_4o_mini_complete
+
+        from lightrag.utils import set_logger
+        set_logger("lightrag", level="WARNING")
+
+        """
+        Unified function to handle RAG operations and querying.
+        
+        Args:
+            query: The query string to search for
+            mode: The search mode (default: "naive")
+            
+        Returns:
+            List of relevant text snippets
+        """
+        if not self._rag:
+            raise ValueError("RAG system not initialized. Call setup_rag first.")
+        
+        # Perform the query
+        results = self._rag.query(query, param=QueryParam(mode=mode, only_need_context=True))
+        return results
+
+
 
 
     def markdown(self, client):

@@ -7,6 +7,9 @@ from typing import Any, List, Dict, Optional, Type, Union
 
 from .task_response import CustomTaskResponse, ObjectResponse
 from ..printing import get_price_id_total_cost
+
+from ..knowledge_base.knowledge_base import KnowledgeBase
+
 class Task(BaseModel):
     description: str
     images: Optional[List[str]] = None
@@ -45,6 +48,18 @@ class Task(BaseModel):
                     except Exception as e:
                         # Re-raise any exceptions from the __control__ method
                         raise ValueError(f"Error validating tool {tool}: {str(e)}")
+
+    
+    def additional_description(self, client):
+        # If the context have an KnowledgeBase element in list and if knowledge_base.rag is not None, then add the description of the rag to the description
+        if not self.context:
+            return ""
+        for context in self.context:
+            if isinstance(context, KnowledgeBase) and context.rag is not None:
+                context.setup_rag(client)
+                return f"The following is the RAG data: <rag>{context.query(self.description)}</rag>"
+        return ""
+
 
     @property
     def images_base_64(self):
