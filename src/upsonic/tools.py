@@ -1873,5 +1873,95 @@ class YoutubeSearch:
             return [{"error": f"Error searching YouTube videos: {str(e)}"}]
 
 
+class Crawl4AISimpleCrawling:
+    @staticmethod
+    def analyze_dependencies() -> Dict[str, bool]:
+        """
+        Analyze the dependencies required for Crawl4AISimpleCrawling and return their status.
+        
+        Returns:
+            Dictionary with dependency names as keys and their availability status as values
+        """
+        dependencies = {
+            "crawl4ai": False,
+            "asyncio": False
+        }
+        
+        # Check each dependency
+        try:
+            import crawl4ai
+            dependencies["crawl4ai"] = True
+        except ImportError:
+            pass
+            
+        try:
+            import asyncio
+            dependencies["asyncio"] = True
+        except ImportError:
+            pass
+        
+        return dependencies
+    
+    def __control__(self) -> bool:
+        # Check if required packages are installed
+        try:
+            import crawl4ai
+            import asyncio
+            return True
+        except ImportError as e:
+            missing_module = str(e).split("'")[1] if "'" in str(e) else str(e)
+            # Use the missing_dependencies function to display the error
+            missing_dependencies("Crawl4AISimpleCrawling", ["crawl4ai", "asyncio"])
+            raise ImportError(f"Missing dependency: {missing_module}. Please install it with: pip install crawl4ai")
+    
+    def __init__(self):
+        """
+        Initialize the Crawl4AISimpleCrawling tool.
+        """
+        # Check dependencies
+        self.__control__()
+    
+    def crawl(self, url: str, browser_config: Dict[str, Any] = None, run_config: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Crawl a website and extract its content using Crawl4AI.
+        
+        Args:
+            url: The URL to crawl
+            browser_config: Optional browser configuration parameters
+            run_config: Optional crawler run configuration parameters
+            
+        Returns:
+            Dictionary containing the crawled content and metadata
+        """
+        try:
+            import asyncio
+            from crawl4ai import AsyncWebCrawler
+            from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig
+            
+            # Create a synchronous wrapper for the async crawling function
+            def sync_crawl(url, browser_config=None, run_config=None):
+                async def _crawl():
+                    # Initialize configs with defaults or provided values
+                    browser_cfg = BrowserConfig(**(browser_config or {}))
+                    run_cfg = CrawlerRunConfig(**(run_config or {}))
+                    
+                    async with AsyncWebCrawler(config=browser_cfg) as crawler:
+                        result = await crawler.arun(url=url, config=run_cfg)
+                        return {
+                            "raw_markdown": result.markdown.raw_markdown,
+                            "media": result.media,
+                            "links": result.links,
+                        }
+                
+                return asyncio.run(_crawl())
+            
+            # Execute the synchronous wrapper
+            result = sync_crawl(url, browser_config, run_config)
+            return result
+            
+        except Exception as e:
+            return {"error": f"Error crawling website: {str(e)}"}
+
+
 # Export all tool classes
-__all__ = ["Search", "ComputerUse", "BrowserUse", "Wikipedia", "DuckDuckGo", "SerperDev", "FirecrawlSearchTool", "FirecrawlScrapeWebsiteTool", "FirecrawlCrawlWebsiteTool", "YFinanceTool", "ArxivTool", "YouTubeVideo", "YoutubeSearch"] 
+__all__ = ["Search", "ComputerUse", "BrowserUse", "Wikipedia", "DuckDuckGo", "SerperDev", "FirecrawlSearchTool", "FirecrawlScrapeWebsiteTool", "FirecrawlCrawlWebsiteTool", "YFinanceTool", "ArxivTool", "YouTubeVideo", "YoutubeSearch", "Crawl4AISimpleCrawling"] 
