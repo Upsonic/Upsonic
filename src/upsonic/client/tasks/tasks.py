@@ -100,3 +100,14 @@ class Task(BaseModel):
         if self.price_id_ is None:
             return None
         return get_price_id_total_cost(self.price_id)
+    
+    @property
+    def total_cost(self) -> Optional[float]:
+        total_task_cost = None
+        the_total_cost = self.get_total_cost()
+        if the_total_cost:
+            if "estimated_cost" in the_total_cost:
+                total_task_cost = the_total_cost["estimated_cost"]
+
+
+        return total_task_cost
