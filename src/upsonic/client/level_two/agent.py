@@ -293,11 +293,14 @@ class Agent:
 
 
     def agent(self, agent_configuration: AgentConfiguration, task: Task,  llm_model: str = None):
+        original_task = task
+        original_task.start_time = time.time()
+        
 
         if llm_model is None:
             llm_model = agent_configuration.model
 
-        original_task = task
+
 
 
 
@@ -442,6 +445,9 @@ class Agent:
         if not original_task.not_main_task:
             print_price_id_summary(original_task.price_id, original_task)
 
+
+
+        original_task.end_time = time.time()
         return original_task.response
 
 

@@ -63,6 +63,7 @@ class Call:
 
         llm_model: str = None,
     ) -> Any:
+        task.start_time = time.time()
         from ..trace import sentry_sdk
         """
         Call GPT-4 with optional tools and MCP servers.
@@ -145,7 +146,7 @@ class Call:
 
 
         
-
+        task.end_time = time.time()
         return {"result": deserialized_result["result"], "llm_model": llm_model, "response_format": response_format_req, "usage": deserialized_result["usage"]}
 
 

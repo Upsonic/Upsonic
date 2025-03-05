@@ -19,6 +19,14 @@ class Task(BaseModel):
     context: Any = None
     price_id_: str = None
     not_main_task: bool = False
+    start_time: Optional[int] = None
+    end_time: Optional[int] = None
+
+    @property
+    def duration(self) -> Optional[float]:
+        if self.start_time is None or self.end_time is None:
+            return None
+        return self.end_time - self.start_time
     
     def __init__(self, description: str = None, **data):
         if description is not None:
