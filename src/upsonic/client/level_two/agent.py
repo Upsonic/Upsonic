@@ -1,6 +1,8 @@
 import copy
 import time
 import cloudpickle
+
+from ..knowledge_base.knowledge_base import KnowledgeBase
 cloudpickle.DEFAULT_PROTOCOL = 2
 import dill
 import base64
@@ -169,7 +171,20 @@ class Agent:
                         # Serialize the response format if it's a type or BaseModel
                         response_format_str = response_format_serializer(task.response_format)
 
-                        context = context_serializer(task.context, self)
+
+
+                    if task.context:
+                        new_context = []
+                        for each in task.context:
+                            if isinstance(each, KnowledgeBase):
+                                if not each.rag:
+                                    new_context.append(each.markdown(self))
+                            else:
+                                new_context.append(each)
+
+                        context = context_serializer(new_context, self)
+
+
 
                     with sentry_sdk.start_span(op="prepare_request"):
                         # Prepare the request data

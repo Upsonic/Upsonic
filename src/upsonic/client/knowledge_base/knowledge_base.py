@@ -18,10 +18,9 @@ class KnowledgeBase(BaseModel):
 
     @property
     def rag(self):
-        # if the rag_model is not None return True
         if self.rag_model is None:
-            return True
-        return False
+            return False
+        return True
 
 
     def add_file(self, file_path: str):

@@ -59,13 +59,19 @@ class Task(BaseModel):
 
     
     def additional_description(self, client):
-        # If the context have an KnowledgeBase element in list and if knowledge_base.rag is not None, then add the description of the rag to the description
         if not self.context:
             return ""
+        
+            
+        rag_results = []
         for context in self.context:
-            if isinstance(context, KnowledgeBase) and context.rag is not None:
+            
+            if isinstance(context, KnowledgeBase) and context.rag == True:
                 context.setup_rag(client)
-                return f"The following is the RAG data: <rag>{context.query(self.description)}</rag>"
+                rag_results.append(context.query(self.description))
+                
+        if rag_results:
+            return f"The following is the RAG data: <rag>{' '.join(rag_results)}</rag>"
         return ""
 
 
