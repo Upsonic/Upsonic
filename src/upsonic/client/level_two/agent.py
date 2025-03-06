@@ -172,9 +172,9 @@ class Agent:
                         response_format_str = response_format_serializer(task.response_format)
 
 
-
+                    new_context = []
                     if task.context:
-                        new_context = []
+                        
                         for each in task.context:
                             if isinstance(each, KnowledgeBase):
                                 if not each.rag:
