@@ -1,0 +1,32 @@
+# Smithery configuration file: https://smithery.ai/docs/config#smitheryyaml
+
+startCommand:
+  type: stdio
+  configSchema:
+    # JSON Schema defining the configuration options for the MCP.
+    type: object
+    required:
+      - openaiApiKey
+    properties:
+      openaiApiKey:
+        type: string
+        description: API key for OpenAI.
+      anthropicApiKey:
+        type: string
+        description: API key for Anthropic.
+      azureOpenaiApiKey:
+        type: string
+        description: API key for Azure OpenAI.
+      awsAccessKeyId:
+        type: string
+        description: AWS Access Key ID.
+      awsSecretAccessKey:
+        type: string
+        description: AWS Secret Access Key.
+      awsRegion:
+        type: string
+        description: AWS Region.
+  commandFunction:
+    # A function that produces the CLI command to start the MCP on stdio.
+    |-
+    config => ({command: 'docker', args: ['run', '--rm', '-e', `OPENAI_API_KEY=${config.openaiApiKey}`, '-e', `ANTHROPIC_API_KEY=${config.anthropicApiKey}`, '-e', `AZURE_OPENAI_API_KEY=${config.azureOpenaiApiKey}`, '-e', `AWS_ACCESS_KEY_ID=${config.awsAccessKeyId}`, '-e', `AWS_SECRET_ACCESS_KEY=${config.awsSecretAccessKey}`, '-e', `AWS_REGION=${config.awsRegion}`, 'upsonic-image']})
