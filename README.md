@@ -94,6 +94,8 @@ agent = Agent("Coder", reliability_layer=ReliabilityLayer, model="openai/gpt4o")
 
 You can access our documentation at [docs.upsonic.ai](https://docs.upsonic.ai/) All concepts and examples are available there.
 
+Additionally, you can find many [MCP tutorials](https://docs.mcp.run/category/tutorials) to help you get started with MCP integration.
+
 <br>
 
 # 🛠️ Getting Started

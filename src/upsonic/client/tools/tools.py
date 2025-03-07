@@ -199,3 +199,13 @@ class Tools:
             self.add_mcp_tool(name, command, args, env)
             return cls
         return decorator
+
+    def register_mcp_tools(self, tools: List[Type]):
+        """
+        Register multiple MCP tools.
+
+        Args:
+            tools: List of MCP tool classes
+        """
+        for tool in tools:
+            self.mcp()(tool)
