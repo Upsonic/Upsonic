@@ -1,7 +1,7 @@
 from dataclasses import Field
 import uuid
 from pydantic import BaseModel
-
+import asyncio
 
 from typing import Any, List, Dict, Optional, Type, Union
 
@@ -87,6 +87,26 @@ def execute_task(agent_config, task: Task, debug: bool = False):
     the_client.run(agent_config, task)
     return task.response
 
+async def execute_task_async(agent_config, task: Task, debug: bool = False):
+    """Execute a task with the given agent configuration asynchronously."""
+    global latest_upsonic_client
+    
+    # If agent has a custom client, use it
+    if hasattr(agent_config, 'client') and agent_config.client is not None:
+        the_client = agent_config.client
+    else:
+        # Get or create client using existing process
+        the_client = get_or_create_client(debug=debug)
+    
+    # Register tools if needed
+    the_client = register_tools(the_client, task.tools)
+    
+    # Run the task in a separate thread to avoid blocking
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, lambda: the_client.run(agent_config, task))
+    
+    return task.response
+
 
 class AgentConfiguration(BaseModel):
     agent_id_: str = None
@@ -132,6 +152,10 @@ class AgentConfiguration(BaseModel):
     
     def do(self, task: Task):
         return execute_task(self, task, self.debug)
+    
+    async def do_async(self, task: Task):
+        """Asynchronous version of the do method."""
+        return await execute_task_async(self, task, self.debug)
     
     def print_do(self, task: Task):
         result = self.do(task)
