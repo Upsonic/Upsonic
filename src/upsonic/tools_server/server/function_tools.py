@@ -136,6 +136,8 @@ async def list_tools():
 @timeout(30.0)
 async def call_tool(request: ToolRequest):
 
+    print("Calling tool")
+    print(request)
 
     if request.tool_name not in registered_functions:
         raise HTTPException(
@@ -152,6 +154,8 @@ async def call_tool(request: ToolRequest):
         else:
             result = func(**request.arguments)
             
+        print("Tool result")
+        print(result)
 
         return {"result": result}
     except Exception as e:

@@ -3,58 +3,156 @@ import inspect
 import subprocess
 import traceback
 import asyncio
+import logging
+import os
+import shutil
 from typing import List, Dict, Any, Optional, Union, Callable
+from contextlib import AsyncExitStack, asynccontextmanager
 from pydantic import BaseModel
-
-
 
 from fastapi import HTTPException
 from pydantic import BaseModel
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.stdio import get_default_environment
-import asyncio
-from contextlib import asynccontextmanager
-@asynccontextmanager
-async def managed_session(command: str, args: list, env: dict | None = None):
 
-    if env is None:
-        env = get_default_environment()
-    else:
-        default_env = get_default_environment()
-        default_env.update(env)
-        env = default_env
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
+# Import the shared server instances dictionary
+from .server_utils import _server_instances
 
-    server_params = StdioServerParameters(
-        command=command,
-        args=args,
-        env=env,
-    )
+class Server:
+    """Manages MCP server connections and tool execution."""
 
+    def __init__(self, command: str, args: list, env: dict | None = None, name: str = "default") -> None:
+        """Initialize a server with connection parameters.
+        
+        Args:
+            command: The command to execute.
+            args: Arguments for the command.
+            env: Environment variables for the command.
+            name: A name for this server instance.
+        """
+        self.name: str = name
+        self.command: str = command
+        self.args: list = args
+        
+        if env is None:
+            self.env = get_default_environment()
+        else:
+            default_env = get_default_environment()
+            default_env.update(env)
+            self.env = default_env
+            
+        self.session: ClientSession | None = None
+        self._cleanup_lock: asyncio.Lock = asyncio.Lock()
+        self.exit_stack: AsyncExitStack = AsyncExitStack()
+
+    async def initialize(self) -> None:
+        """Initialize the server connection."""
+        if self.command is None:
+            raise ValueError("The command must be a valid string and cannot be None.")
+
+        server_params = StdioServerParameters(
+            command=self.command,
+            args=self.args,
+            env=self.env,
+        )
+        
+        try:
+            stdio_transport = await self.exit_stack.enter_async_context(
+                stdio_client(server_params)
+            )
+            read, write = stdio_transport
+            session = await self.exit_stack.enter_async_context(
+                ClientSession(read, write)
+            )
+            await session.initialize()
+            self.session = session
+            logging.info(f"Server {self.name} initialized successfully")
+        except Exception as e:
+            logging.error(f"Error initializing server {self.name}: {e}")
+            await self.cleanup()
+            raise
+
+    async def execute_tool(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        retries: int = 2,
+        delay: float = 1.0,
+    ) -> Any:
     
-    client = None
-    session = None
-    
-    try:
-        client = stdio_client(server_params)
+        """Execute a tool with retry mechanism.
 
-        read, write = await client.__aenter__()
-        session = ClientSession(read, write)
-        await session.__aenter__()
-        await session.initialize()
-        yield session
-    finally:
-        if session:
+        Args:
+            tool_name: Name of the tool to execute.
+            arguments: Tool arguments.
+            retries: Number of retry attempts.
+            delay: Delay between retries in seconds.
+
+        Returns:
+            Tool execution result.
+
+        Raises:
+            RuntimeError: If server is not initialized.
+            Exception: If tool execution fails after all retries.
+        """
+        if not self.session:
+            raise RuntimeError(f"Server {self.name} not initialized")
+
+        attempt = 0
+        while attempt < retries + 1:  # +1 because first attempt is not a retry
             try:
-                await session.__aexit__(None, None, None)
-            except Exception:
-                pass
-        if client:
+                logging.info(f"Executing {tool_name}...")
+                result = await self.session.call_tool(tool_name, arguments)
+                return result
+            except Exception as e:
+                attempt += 1
+                if attempt <= retries:
+                    logging.warning(
+                        f"Error executing tool: {e}. Attempt {attempt} of {retries}."
+                    )
+                    logging.info(f"Retrying in {delay} seconds...")
+                    await asyncio.sleep(delay)
+                else:
+                    logging.error("Max retries reached. Failing.")
+                    raise
+
+    async def list_tools(self) -> Any:
+        """List available tools from the server.
+
+        Returns:
+            A list of available tools.
+
+        Raises:
+            RuntimeError: If the server is not initialized.
+        """
+        if not self.session:
+            raise RuntimeError(f"Server {self.name} not initialized")
+
+        return await self.session.list_tools()
+
+    async def cleanup(self) -> None:
+        """Clean up server resources."""
+        async with self._cleanup_lock:
             try:
-                await client.__aexit__(None, None, None)
-            except Exception:
-                pass
+                await self.exit_stack.aclose()
+                self.session = None
+                
+                # Remove this server from the global instances dictionary
+                for key, srv in list(_server_instances.items()):
+                    if srv is self:
+                        del _server_instances[key]
+                        logging.info(f"Removed server {self.name} from instances registry")
+                        break
+            except Exception as e:
+                logging.error(f"Error during cleanup of server {self.name}: {e}")
+
+
 
 
 def install_library_(library):
@@ -190,7 +288,13 @@ class AddMCPToolRequest(BaseModel):
 
 async def add_mcp_tool_(name: str, command: str, args: List[str], env: Dict[str, str]):
     """
-    Add a tool.
+    Add a tool from an MCP server.
+    
+    Args:
+        name: Name prefix for the tools.
+        command: Command to execute.
+        args: Arguments for the command.
+        env: Environment variables for the command.
     """
     def get_python_type(schema_type: str, format: Optional[str] = None) -> type:
         """Convert JSON schema type to Python type."""
@@ -204,13 +308,29 @@ async def add_mcp_tool_(name: str, command: str, args: List[str], env: Dict[str,
         }
         return type_mapping.get(schema_type, Any)
 
-    async with managed_session(command=command, args=args, env=env) as session:
-        tools = await session.list_tools()
-
-
-        tools = tools.tools
+    # Create a hashable key for the server instance
+    env_items = frozenset(env.items()) if env else frozenset()
+    server_key = (name, command, tuple(args), env_items)
+    
+    # Check if we already have a server instance with this configuration
+    if server_key in _server_instances:
+        server = _server_instances[server_key]
+        logging.info(f"Reusing existing server instance for {name}")
+    else:
+        # Create a new server instance
+        server = Server(command=command, args=args, env=env, name=name)
+        _server_instances[server_key] = server
+        if server.session is None:
+                    await server.initialize()
+        logging.info(f"Created new server instance for {name}")
+    
+    try:
+        # Only initialize if the session is not already initialized
+        
+        tools_response = await server.list_tools()
+        
+        tools = tools_response.tools
         for tool in tools:
-
             tool_name: str = tool.name
             tool_desc: str = tool.description
             input_schema: Dict[str, Any] = tool.inputSchema
@@ -289,11 +409,20 @@ async def add_mcp_tool_(name: str, command: str, args: List[str], env: Dict[str,
                         if param not in all_kwargs:
                             all_kwargs[param] = default
 
-                    async with managed_session(command=tool_function.command, args=tool_function.args, env=tool_function.env) as new_session:
+                    # Get the server that was created at the higher level
+                    env_items = frozenset(tool_function.env.items()) if tool_function.env else frozenset()
+
+                    
+                    try:
+                            
                         # Remove None kwargs
                         all_kwargs = {k: v for k, v in all_kwargs.items() if v is not None}
-                        result = await new_session.call_tool(name=tool_name, arguments=all_kwargs)
+                        result = await server.execute_tool(tool_name=tool_name, arguments=all_kwargs)
                         return {"result": result}
+                    except Exception as e:
+                        # Log the error but don't clean up the server as it's managed at the higher level
+                        logging.error(f"Error executing tool {tool_name}: {str(e)}")
+                        raise
 
                 # Set function name and annotations
                 tool_function.__name__ = tool_name
@@ -318,13 +447,17 @@ async def add_mcp_tool_(name: str, command: str, args: List[str], env: Dict[str,
 
             # Create function with proper annotations
             func = create_tool_function(tool_name, properties, required)
-            #name should be name__function_name
+            # name should be name__function_name
             full_name = f"{name}__{tool_name}"
             func.__name__ = full_name
 
-
-
             add_tool_(func, description=tool_desc, properties=properties, required=required)
+    except Exception as e:
+        # Only clean up the server if there was an error
+        logging.error(f"Error in add_mcp_tool_: {e}")
+        await server.cleanup()
+        raise
+    # We don't clean up the server here to keep it alive for future use
 
 
 @app.post(f"{prefix}/add_mcp_tool")

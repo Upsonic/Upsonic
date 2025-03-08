@@ -22,6 +22,15 @@ import time
 
 app = FastAPI()
 
+# Import the cleanup function from server_utils instead of tools
+from .server_utils import cleanup_all_servers
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """
+    Clean up all server instances when the application shuts down.
+    """
+    await cleanup_all_servers()
 
 
 async def timeout_handler(duration: float, coro):
