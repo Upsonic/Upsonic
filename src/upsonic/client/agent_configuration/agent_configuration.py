@@ -22,7 +22,7 @@ def register_tools(client, tools):
                 
             # If tool is a class (not an instance)
             if isinstance(tool, type):
-                if hasattr(tool, 'command') and hasattr(tool, 'args'):
+                if hasattr(tool, 'command'):
 
                     client.mcp()(tool)
                 else:
