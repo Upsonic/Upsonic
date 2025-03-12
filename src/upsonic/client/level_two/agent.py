@@ -534,7 +534,7 @@ class Agent:
                         deserialized_result = response_format_deserializer(response_format_str, result)
 
                 # Process result through reliability layer
-                processed_result = ReliabilityProcessor.process_result(
+                processed_result = await ReliabilityProcessor.process_result(
                     deserialized_result["result"], 
                     agent_configuration.reliability_layer,
                     task,

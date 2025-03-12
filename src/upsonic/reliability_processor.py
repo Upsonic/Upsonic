@@ -5,11 +5,10 @@ from enum import Enum
 import re
 from urllib.parse import urlparse
 import requests
+import asyncio
 from .client.tasks.tasks import Task
 from .client.agent_configuration.agent_configuration import AgentConfiguration
 from .client.tasks.task_response import ObjectResponse
-import asyncio
-import time
 
 # Define the validation prompts
 url_validation_prompt = """
@@ -173,7 +172,7 @@ class ReliabilityProcessor:
         self.confidence_threshold = confidence_threshold
 
     @staticmethod
-    async def process_result_async(
+    async def process_result(
         result: Any,
         reliability_layer: Optional[Any] = None,
         task: Optional[Task] = None,
@@ -196,8 +195,6 @@ class ReliabilityProcessor:
 
         if prevent_hallucination > 0:
             if prevent_hallucination == 10:
-                start_time = time.time()
-                
                 copy_task = deepcopy(task)
                 copy_task._response = result
 
@@ -239,19 +236,14 @@ class ReliabilityProcessor:
                     overall_feedback=""
                 )
 
-                # Define validation configurations
-                validation_configs = [
-                    ("url_validation", url_validation_prompt),
-                    ("number_validation", number_validation_prompt),
-                    ("information_validation", information_validation_prompt),
-                    ("code_validation", code_validation_prompt),
-                ]
+                # Create a list to store validation tasks
+                validation_tasks = []
+                validation_types = []
+                validator_agents = {}
 
-                # Create a list to store context strings (common for all validations)
-                base_context_strings = []
-                
-                # Add the task and response format
-                base_context_strings.append(f"Given Task: {copy_task.description}")
+                # Process context strings once for all validations
+                context_strings = []
+                context_strings.append(f"Given Task: {copy_task.description}")
 
                 # Process context items if they exist
                 if copy_task.context:
@@ -267,284 +259,30 @@ class ReliabilityProcessor:
                             pass
 
                         if the_class_string == ObjectResponse.__name__:
-                            base_context_strings.append(f"\n\nUser requested output: ```Requested Output {item.model_fields}```")
+                            context_strings.append(f"\n\nUser requested output: ```Requested Output {item.model_fields}```")
                         elif isinstance(item, str):
-                            base_context_strings.append(f"\n\nContext That Came From User (Trusted Source): ```User given context {item}```")
+                            context_strings.append(f"\n\nContext That Came From User (Trusted Source): ```User given context {item}```")
                         else:
                             pass
 
                 # Add the current AI response to context
-                base_context_strings.append(f"\nCurrent AI Response (Untrusted Source, last AI responose that we are checking now): {old_task_output}")
+                context_strings.append(f"\nCurrent AI Response (Untrusted Source, last AI responose that we are checking now): {old_task_output}")
 
-                # Define an async function to run a single validation
-                async def run_validation(validation_type, prompt, context_strings):
-                    validation_start = time.time()
-                    # For URL validation, skip if no URLs are present
-                    if validation_type == "url_validation":
-                        if not contains_urls([prompt] + context_strings):
-                            # Set a default "no URLs found" validation point
-                            validation_end = time.time()
-                            return validation_type, ValidationPoint(
-                                is_suspicious=False,
-                                feedback="No URLs found in content to validate",
-                                suspicious_points=[],
-                                source_reliability=SourceReliability.UNKNOWN,
-                                verification_method="regex_url_detection",
-                                confidence_score=1.0
-                            )
-
-                    validator_agent = AgentConfiguration(
-                        f"{validation_type.replace('_', ' ').title()} Agent",
-                        model=llm_model,
-                        sub_task=False
-                    )
-
-                    validator_task = Task(
-                        prompt,
-                        images=task.images,
-                        response_format=ValidationPoint,
-                        tools=task.tools,
-                        context=context_strings,  # Pass the processed context strings
-                        price_id_=task.price_id,
-                        not_main_task=True
-                    )
-                    # Use the async version of do
-                    await validator_agent.do_async(validator_task)
-                    validation_end = time.time()
-                    return validation_type, validator_task.response
-
-                # Create a list of validation tasks to run concurrently
-                validation_tasks = []
-                for validation_type, prompt in validation_configs:
-                    # Use the base context strings for each validation
-                    validation_tasks.append(run_validation(validation_type, prompt, base_context_strings.copy()))
-
-                # Run all validations concurrently
-                gather_start = time.time()
-                validation_results = await asyncio.gather(*validation_tasks)
-                gather_end = time.time()
-
-                # Process the results
-                for validation_type, result in validation_results:
-                    setattr(validation_result, validation_type, result)
-
-                validation_result.calculate_suspicion()
-
-                if validation_result.any_suspicion:
-                    editor_start = time.time()
-                    editor_agent = AgentConfiguration(
-                        "Information Editor Agent",
-                        model=llm_model,
-                        sub_task=False
-                    )
-                    formatted_prompt = editor_task_prompt.format(
-                        validation_feedback=validation_result.overall_feedback
-                    )
-                    formatted_prompt += f"OLD AI Response: {old_task_output}"
-
-                    the_context = [copy_task, copy_task.response_format, validation_result]
-                    the_context += copy_task.context
-                    editor_task = Task(
-                        formatted_prompt,
-                        images=task.images,
-                        context=the_context,
-                        response_format=task.response_format,
-                        tools=task.tools,
-                        price_id_=task.price_id,
-                        not_main_task=True
-                    )
-                    # Use the async version of do
-                    await editor_agent.do_async(editor_task)
-                    editor_end = time.time()
-                    end_time = time.time()
-                    return editor_task.response
-
-                end_time = time.time()
-                return result
-
-        return processed_result
-
-    @staticmethod
-    def process_result(
-        result: Any,
-        reliability_layer: Optional[Any] = None,
-        task: Optional[Task] = None,
-        llm_model: Optional[str] = None,
-        use_async: bool = True,
-        compare_performance: bool = False
-    ) -> Any:
-        """
-        Process the result with reliability checks.
-        
-        Args:
-            result: The result to process
-            reliability_layer: The reliability layer to use
-            task: The task that generated the result
-            llm_model: The LLM model to use
-            use_async: Whether to use async implementation (default: True)
-            compare_performance: Whether to run both sync and async for comparison (default: False)
-            
-        Returns:
-            The processed result
-        """
-        # If reliability_layer is None, return result immediately
-        if reliability_layer is None:
-            return result
-        
-        # For performance comparison, run both sync and async
-        if compare_performance:
-            sync_result = ReliabilityProcessor.synchronous_process_result(
-                result, reliability_layer, task, llm_model
-            )
-            
-            # Run the async function in a new event loop
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                async_result = loop.run_until_complete(
-                    ReliabilityProcessor.process_result_async(
-                        result, reliability_layer, task, llm_model
-                    )
-                )
-            finally:
-                loop.close()
-                
-            # Return the async result
-            return async_result
-            
-        # For normal operation, use the selected implementation
-        if use_async:
-            try:
-                # Run the async function in a new event loop
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    return loop.run_until_complete(
-                        ReliabilityProcessor.process_result_async(
-                            result, reliability_layer, task, llm_model
-                        )
-                    )
-                finally:
-                    loop.close()
-            except Exception as e:
-                # If there's an error in async processing, fall back to sync
-                return ReliabilityProcessor.synchronous_process_result(
-                    result, reliability_layer, task, llm_model
-                )
-        else:
-            # Use the synchronous implementation
-            return ReliabilityProcessor.synchronous_process_result(
-                result, reliability_layer, task, llm_model
-            )
-
-    @staticmethod
-    def synchronous_process_result(
-        result: Any,
-        reliability_layer: Optional[Any] = None,
-        task: Optional[Task] = None,
-        llm_model: Optional[str] = None
-    ) -> Any:
-        """
-        Original synchronous implementation for comparison purposes.
-        """
-        if reliability_layer is None:
-            return result
-    
-        old_task_output = result
-        try:
-            old_task_output = result.model_dump()
-        except:
-            pass
-
-        prevent_hallucination = getattr(reliability_layer, 'prevent_hallucination', 0)
-        if isinstance(prevent_hallucination, property):
-            prevent_hallucination = prevent_hallucination.fget(reliability_layer)
-
-        processed_result = result
-
-        if prevent_hallucination > 0:
-            if prevent_hallucination == 10:
-                import time
-                start_time = time.time()
-                
-                copy_task = deepcopy(task)
-                copy_task._response = result
-
-                validation_result = ValidationResult(
-                    url_validation=ValidationPoint(
-                        is_suspicious=False, 
-                        feedback="",
-                        suspicious_points=[],
-                        source_reliability=SourceReliability.UNKNOWN,
-                        verification_method="",
-                        confidence_score=0.0
-                    ),
-                    number_validation=ValidationPoint(
-                        is_suspicious=False, 
-                        feedback="",
-                        suspicious_points=[],
-                        source_reliability=SourceReliability.UNKNOWN,
-                        verification_method="",
-                        confidence_score=0.0
-                    ),
-                    information_validation=ValidationPoint(
-                        is_suspicious=False, 
-                        feedback="",
-                        suspicious_points=[],
-                        source_reliability=SourceReliability.UNKNOWN,
-                        verification_method="",
-                        confidence_score=0.0
-                    ),
-                    code_validation=ValidationPoint(
-                        is_suspicious=False, 
-                        feedback="",
-                        suspicious_points=[],
-                        source_reliability=SourceReliability.UNKNOWN,
-                        verification_method="",
-                        confidence_score=0.0
-                    ),
-                    any_suspicion=False,
-                    suspicious_points=[],
-                    overall_feedback=""
-                )
-
-                # Run validations sequentially
+                # Prepare validation tasks
                 for validation_type, prompt in [
                     ("url_validation", url_validation_prompt),
                     ("number_validation", number_validation_prompt),
                     ("information_validation", information_validation_prompt),
                     ("code_validation", code_validation_prompt),
                 ]:
-                    validation_start = time.time()
-                    # Create a list to store context strings
-                    context_strings = []
+                    # Create a specific agent for each validation type
+                    agent_name = f"{validation_type.replace('_', ' ').title()} Agent"
+                    validator_agents[validation_type] = AgentConfiguration(
+                        agent_name,
+                        model=llm_model,
+                        sub_task=False
+                    )
                     
-                    # Add the task and response format
-                    context_strings.append(f"Given Task: {copy_task.description}")
-
-                    # Process context items if they exist
-                    if copy_task.context:
-                        context_items = copy_task.context if isinstance(copy_task.context, list) else [copy_task.context]
-                        if copy_task.response_format:
-                            context_items.append(copy_task.response_format)
-                        for item in context_items:
-                            type_string = type(item).__name__
-                            the_class_string = None
-                            try:
-                                the_class_string = item.__bases__[0].__name__
-                            except:
-                                pass
-
-                            if the_class_string == ObjectResponse.__name__:
-                                context_strings.append(f"\n\nUser requested output: ```Requested Output {item.model_fields}```")
-                            elif isinstance(item, str):
-                                context_strings.append(f"\n\nContext That Came From User (Trusted Source): ```User given context {item}```")
-                            else:
-                                pass
-
-                    # Add the current AI response to context
-                    context_strings.append(f"\nCurrent AI Response (Untrusted Source, last AI responose that we are checking now): {old_task_output}")
-
                     # For URL validation, skip if no URLs are present
                     if validation_type == "url_validation":
                         if not contains_urls([prompt] + context_strings):
@@ -557,15 +295,9 @@ class ReliabilityProcessor:
                                 verification_method="regex_url_detection",
                                 confidence_score=1.0
                             ))
-                            validation_end = time.time()
                             continue
 
-                    validator_agent = AgentConfiguration(
-                        f"{validation_type.replace('_', ' ').title()} Agent",
-                        model=llm_model,
-                        sub_task=False
-                    )
-
+                    # Create validation task
                     validator_task = Task(
                         prompt,
                         images=task.images,
@@ -575,14 +307,30 @@ class ReliabilityProcessor:
                         price_id_=task.price_id,
                         not_main_task=True
                     )
-                    validator_agent.do(validator_task)
-                    setattr(validation_result, validation_type, validator_task.response)
-                    validation_end = time.time()
+                    
+                    # Add task to the list
+                    validation_tasks.append(validator_task)
+                    validation_types.append(validation_type)
+
+                # Execute all validation tasks in parallel if there are any
+                if validation_tasks:
+                    # Run each validation task with its specific agent
+                    validation_coroutines = []
+                    for i, validation_type in enumerate(validation_types):
+                        validation_coroutines.append(
+                            validator_agents[validation_type].do_async(validation_tasks[i])
+                        )
+                    
+                    # Wait for all validation tasks to complete
+                    await asyncio.gather(*validation_coroutines)
+                    
+                    # Process results
+                    for i, validation_type in enumerate(validation_types):
+                        setattr(validation_result, validation_type, validation_tasks[i].response)
 
                 validation_result.calculate_suspicion()
 
                 if validation_result.any_suspicion:
-                    editor_start = time.time()
                     editor_agent = AgentConfiguration(
                         "Information Editor Agent",
                         model=llm_model,
@@ -604,12 +352,9 @@ class ReliabilityProcessor:
                         price_id_=task.price_id,
                         not_main_task=True
                     )
-                    editor_agent.do(editor_task)
-                    editor_end = time.time()
-                    end_time = time.time()
+                    await editor_agent.do_async(editor_task)
                     return editor_task.response
 
-                end_time = time.time()
                 return result
 
         return processed_result
