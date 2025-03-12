@@ -200,3 +200,90 @@ class AgentConfiguration(BaseModel):
         result = await self.do_async(task)
         print(result)
         return result
+    
+    def parallel_do(self, tasks: List[Task]):
+        """Execute multiple tasks in parallel and return their results.
+        
+        Args:
+            tasks: A list of Task objects to execute in parallel
+            
+        Returns:
+            A list of task responses in the same order as the input tasks
+        """
+        import asyncio
+        
+        try:
+            # Check if there's a running event loop
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                # If there's a running loop, run the coroutine in that loop
+                return asyncio.run_coroutine_threadsafe(
+                    self.parallel_do_async(tasks), 
+                    loop
+                ).result()
+        except RuntimeError:
+            # No running event loop
+            pass
+        
+        # If no running loop or exception occurred, create a new one
+        return asyncio.run(self.parallel_do_async(tasks))
+    
+    async def parallel_do_async(self, tasks: List[Task]):
+        """Asynchronous version of the parallel_do method.
+        
+        Args:
+            tasks: A list of Task objects to execute in parallel
+            
+        Returns:
+            A list of task responses in the same order as the input tasks
+        """
+        # Create a list of coroutines for each task
+        coroutines = [self.do_async(task) for task in tasks]
+        
+        # Execute all tasks in parallel and return their results
+        return await asyncio.gather(*coroutines)
+    
+    def parallel_print_do(self, tasks: List[Task]):
+        """Execute multiple tasks in parallel, print their results, and return them.
+        
+        Args:
+            tasks: A list of Task objects to execute in parallel
+            
+        Returns:
+            A list of task responses in the same order as the input tasks
+        """
+        import asyncio
+        
+        try:
+            # Check if there's a running event loop
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                # If there's a running loop, run the coroutine in that loop
+                return asyncio.run_coroutine_threadsafe(
+                    self.parallel_print_do_async(tasks), 
+                    loop
+                ).result()
+        except RuntimeError:
+            # No running event loop
+            pass
+        
+        # If no running loop or exception occurred, create a new one
+        return asyncio.run(self.parallel_print_do_async(tasks))
+    
+    async def parallel_print_do_async(self, tasks: List[Task]):
+        """Asynchronous version of the parallel_print_do method.
+        
+        Args:
+            tasks: A list of Task objects to execute in parallel
+            
+        Returns:
+            A list of task responses in the same order as the input tasks
+        """
+        # Execute all tasks in parallel
+        results = await self.parallel_do_async(tasks)
+        
+        # Print each result
+        for result in results:
+            print(result)
+        
+        return results
