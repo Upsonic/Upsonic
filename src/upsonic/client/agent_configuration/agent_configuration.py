@@ -101,6 +101,10 @@ async def execute_task_async(agent_config, task: Task, debug: bool = False):
         # Get or create client using existing process
         the_client = get_or_create_client(debug=debug)
     
+    # If task has no tools defined but agent has tools, use the agent's tools
+    if not task.tools and hasattr(agent_config, 'tools') and agent_config.tools:
+        task.tools = agent_config.tools
+    
     # Register tools if needed
     the_client = register_tools(the_client, task.tools)
     
@@ -122,13 +126,17 @@ class AgentConfiguration(BaseModel):
     debug: bool = False
     reliability_layer: Any = None  # Changed to Any to accept any class or instance
     system_prompt: str = None
+    tools: List[Any] = []
 
     def __init__(self, job_title: str = None, client: Any = None, **data):
         if job_title is not None:
             data["job_title"] = job_title
         if client is not None:
             data["client"] = client
+               
+
         super().__init__(**data)
+        self.validate_tools() 
 
     sub_task: bool = True
     reflection: bool = False
@@ -136,8 +144,32 @@ class AgentConfiguration(BaseModel):
     caching: bool = True
     cache_expiry: int = 60 * 60
     knowledge_base: KnowledgeBase = None
-    tools: List[Any] = []
     context_compress: bool = False
+
+
+
+    def validate_tools(self):
+        """
+        Validates each tool in the tools list.
+        If a tool is a class and has a __control__ method, runs that method to verify it returns True.
+        Raises an exception if the __control__ method returns False or raises an exception.
+        """
+        if not self.tools:
+            return
+            
+        for tool in self.tools:
+            # Check if the tool is a class
+            if isinstance(tool, type) or hasattr(tool, '__class__'):
+                # Check if the class has a __control__ method
+                if hasattr(tool, '__control__') and callable(getattr(tool, '__control__')):
+                    try:
+                        # Run the __control__ method
+                        control_result = tool.__control__()
+                        if not control_result:
+                            raise ValueError(f"Tool {tool} __control__ method returned False")
+                    except Exception as e:
+                        # Re-raise any exceptions from the __control__ method
+                        raise ValueError(f"Error validating tool {tool}: {str(e)}")
 
     @property
     def retries(self):
