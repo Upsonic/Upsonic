@@ -2,6 +2,9 @@ from pydantic import BaseModel
 from typing import Dict, Any, Any
 import httpx
 import time
+import asyncio
+import concurrent.futures
+import threading
 
 
 from .level_one.call import Call
@@ -18,6 +21,30 @@ from .printing import connected_to_server
 
 
 from .latest_upsonic_client import latest_upsonic_client
+
+
+# Helper function to run a coroutine in a new thread with a new event loop
+def run_coroutine_in_new_thread(coro):
+    """
+    Run a coroutine in a new thread with a new event loop.
+    This is useful when we're in an async context but need a synchronous result.
+    
+    Args:
+        coro: The coroutine to run
+        
+    Returns:
+        The result of the coroutine
+    """
+    def run_coro_in_thread(coro):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        return executor.submit(run_coro_in_thread, coro).result()
 
 
 # Create a base class with url
@@ -65,15 +92,27 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
         self.url = url
         self.default_llm_model = "openai/gpt-4o"
 
+        # Check if we're in an async context
+        try:
+            loop = asyncio.get_running_loop()
+            in_async_context = True
+        except RuntimeError:
+            in_async_context = False
+
         # Check server status before proceeding
-        
-        if not self.status():
+        if in_async_context:
+            # We're in an async context, but __init__ can't be async
+            # We need to run the async method in a new thread
+            status_ok = run_coroutine_in_new_thread(self.status_async())
+        else:
+            # We're not in an async context, use asyncio.run
+            status_ok = asyncio.run(self.status_async())
+            
+        if not status_ok:
             total_time = time.time() - start_time
             connected_to_server(self.server_type, "Failed", total_time)
             raise ServerStatusException("Failed to connect to the server at initialization.")
         
-
-
         # Handle configuration through ClientConfig model
         config = ClientConfig(**(kwargs or {}))
         
@@ -85,7 +124,13 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
         
         # Bulk set the configurations if there are any
         if config_dict:
-            self.bulk_set_config(config_dict)
+            if in_async_context:
+                # We're in an async context, but __init__ can't be async
+                # We need to run the async method in a new thread
+                run_coroutine_in_new_thread(self.bulk_set_config_async(config_dict))
+            else:
+                # We're not in an async context, use asyncio.run
+                asyncio.run(self.bulk_set_config_async(config_dict))
 
         global latest_upsonic_client
         latest_upsonic_client = self
@@ -95,9 +140,16 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
     def status(self) -> bool:
         """Check the server status."""
         try:
-            with httpx.Client() as client:
-                response = client.get(self.url + "/status")
-                return response.status_code == 200
+            # Try to get the current event loop
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    # We're in an async context, but this is a sync method
+                    # We need to run the async method in a new thread
+                    return run_coroutine_in_new_thread(self.status_async())
+            except RuntimeError:
+                # No event loop is running, use asyncio.run
+                return asyncio.run(self.status_async())
         except httpx.RequestError:
             return False
 
@@ -124,21 +176,22 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
         Returns:
             The response from the API, either as JSON or raw content.
         """
-        with httpx.Client() as client:
-            if method.upper() == "GET":
-                response = client.get(self.url + endpoint, params=data, timeout=600.0)
-            else:
-                if files:
-                    response = client.post(self.url + endpoint, data=data, files=files, timeout=600.0)
-                else:
-                    response = client.post(self.url + endpoint, json=data, timeout=600.0)
-                
-            if response.status_code == 408:
-                raise TimeoutException("Request timed out")
-            response.raise_for_status()
-            
-            return response.content if return_raw else response.json()
-        
+        try:
+            # Try to get the current event loop
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    # We're in an async context, but this is a sync method
+                    # We need to run the async method in a new thread
+                    return run_coroutine_in_new_thread(
+                        self.send_request_async(endpoint, data, files, method, return_raw)
+                    )
+            except RuntimeError:
+                # No event loop is running, use asyncio.run
+                return asyncio.run(self.send_request_async(endpoint, data, files, method, return_raw))
+        except httpx.RequestError as e:
+            raise e
+
     async def send_request_async(self, endpoint: str, data: Dict[str, Any], files: Dict[str, Any] = None, method: str = "POST", return_raw: bool = False) -> Any:
         """
         Asynchronous version of send_request.
@@ -170,21 +223,25 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
             return response.content if return_raw else response.json()
 
     def run(self, *args, **kwargs):
+        """
+        Run method that delegates to the appropriate async implementation.
+        """
+        try:
+            # Try to get the current event loop
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    # We're in an async context, but this is a sync method
+                    # We need to run the async method in a new thread
+                    return run_coroutine_in_new_thread(
+                        self.run_async(*args, **kwargs)
+                    )
+            except RuntimeError:
+                # No event loop is running, use asyncio.run
+                return asyncio.run(self.run_async(*args, **kwargs))
+        except Exception as e:
+            raise e
 
-        llm_model = kwargs.get("llm_model", None)
-
-        # If there is an two positional arguments we will run it in self.agent(first argument, second argument)
-        if len(args) == 2:
-            
-            if isinstance(args[0], AgentConfiguration) and isinstance(args[1], Task):
-                return self.agent(args[0], args[1])
-            elif isinstance(args[0], list):
-                return self.multi_agent(args[0], args[1])
-        
-
-        if len(args) == 1:
-            return self.call(args[0], llm_model=llm_model)
-            
     async def run_async(self, *args, **kwargs):
         """
         Asynchronous version of the run method.

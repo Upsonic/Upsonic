@@ -4,6 +4,7 @@ import dill
 import base64
 import httpx
 import os
+import asyncio
 from typing import Any, List, Dict, Optional, Type, Union
 from pydantic import BaseModel, Field
 
@@ -45,11 +46,36 @@ class Storage:
         Returns:
             The configuration value
         """
+        try:
+            # Try to get the current event loop
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    # We're in an async context, but this is a sync method
+                    # We need to run the async method in a new thread
+                    from ..base import run_coroutine_in_new_thread
+                    return run_coroutine_in_new_thread(self.get_config_async(key))
+            except RuntimeError:
+                # No event loop is running, use asyncio.run
+                return asyncio.run(self.get_config_async(key))
+        except Exception as e:
+            raise e
+
+    async def get_config_async(self, key: str) -> Any:
+        """
+        Get a configuration value by key from the server asynchronously.
+
+        Args:
+            key: The configuration key
+
+        Returns:
+            The configuration value
+        """
         from ..trace import sentry_sdk
-        with sentry_sdk.start_transaction(op="task", name="Storage.get_config") as transaction:
-            with sentry_sdk.start_span(op="send_request"):
+        with sentry_sdk.start_transaction(op="task", name="Storage.get_config_async") as transaction:
+            with sentry_sdk.start_span(op="send_request_async"):
                 data = {"key": key}
-                response = self.send_request("/storage/config/get", data=data)
+                response = await self.send_request_async("/storage/config/get", data=data)
             return response.get("value")
 
     def set_config(self, key: str, value: str) -> str:
@@ -63,11 +89,37 @@ class Storage:
         Returns:
             A success message
         """
+        try:
+            # Try to get the current event loop
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    # We're in an async context, but this is a sync method
+                    # We need to run the async method in a new thread
+                    from ..base import run_coroutine_in_new_thread
+                    return run_coroutine_in_new_thread(self.set_config_async(key, value))
+            except RuntimeError:
+                # No event loop is running, use asyncio.run
+                return asyncio.run(self.set_config_async(key, value))
+        except Exception as e:
+            raise e
+
+    async def set_config_async(self, key: str, value: str) -> str:
+        """
+        Set a configuration value on the server asynchronously.
+
+        Args:
+            key: The configuration key
+            value: The configuration value
+
+        Returns:
+            A success message
+        """
         from ..trace import sentry_sdk
-        with sentry_sdk.start_transaction(op="task", name="Storage.set_config") as transaction:
-            with sentry_sdk.start_span(op="send_request"):
+        with sentry_sdk.start_transaction(op="task", name="Storage.set_config_async") as transaction:
+            with sentry_sdk.start_span(op="send_request_async"):
                 data = {"key": key, "value": value}
-                response = self.send_request("/storage/config/set", data=data)
+                response = await self.send_request_async("/storage/config/set", data=data)
             return response.get("message")
 
     def bulk_set_config(self, configs: Dict[str, str]) -> str:
@@ -80,16 +132,67 @@ class Storage:
         Returns:
             A success message
         """
+        try:
+            # Try to get the current event loop
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    # We're in an async context, but this is a sync method
+                    # We need to run the async method in a new thread
+                    from ..base import run_coroutine_in_new_thread
+                    return run_coroutine_in_new_thread(self.bulk_set_config_async(configs))
+            except RuntimeError:
+                # No event loop is running, use asyncio.run
+                return asyncio.run(self.bulk_set_config_async(configs))
+        except Exception as e:
+            raise e
 
+    async def bulk_set_config_async(self, configs: Dict[str, str]) -> str:
+        """
+        Set multiple configuration values on the server at once asynchronously.
 
+        Args:
+            configs: Dictionary of configuration key-value pairs
+
+        Returns:
+            A success message
+        """
         data = {"configs": configs}
-        response = self.send_request("/storage/config/bulk_set", data=data)
+        response = await self.send_request_async("/storage/config/bulk_set", data=data)
         return response.get("message")
 
     def set_default_llm_model(self, llm_model: str):
         self.default_llm_model = llm_model
 
     def config(self, config: ClientConfig):
+        """
+        Configure the client.
+        
+        Args:
+            config: ClientConfig object with configuration values
+        """
+        try:
+            # Try to get the current event loop
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    # We're in an async context, but this is a sync method
+                    # We need to run the async method in a new thread
+                    from ..base import run_coroutine_in_new_thread
+                    return run_coroutine_in_new_thread(self.config_async(config))
+            except RuntimeError:
+                # No event loop is running, use asyncio.run
+                return asyncio.run(self.config_async(config))
+        except Exception as e:
+            raise e
+
+    async def config_async(self, config: ClientConfig):
+        """
+        Configure the client asynchronously.
+        
+        Args:
+            config: ClientConfig object with configuration values
+        """
         # Create a dictionary of non-None values excluding default_llm_model
         config_dict = {
             key: str(value) for key, value in config.model_dump().items() 
@@ -98,6 +201,6 @@ class Storage:
         
         # Bulk set the configurations if there are any
         if config_dict:
-            self.bulk_set_config(config_dict)
+            await self.bulk_set_config_async(config_dict)
         
         self.default_llm_model = config.DEFAULT_LLM_MODEL

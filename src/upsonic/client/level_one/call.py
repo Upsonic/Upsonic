@@ -1,6 +1,7 @@
 import copy
 import time
 import cloudpickle
+import asyncio
 
 from ..knowledge_base.knowledge_base import KnowledgeBase
 cloudpickle.DEFAULT_PROTOCOL = 2
@@ -32,15 +33,37 @@ class Call:
         
         start_time = time.time()
 
-
         try:
-            if isinstance(task, list):
-                for each in task:
-                    the_result = self.call_(each, llm_model)
+            # Try to get the current event loop
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    # If there's a running loop, run the async function in that loop
+                    if isinstance(task, list):
+                        for each in task:
+                            the_result = asyncio.run_coroutine_threadsafe(self.call_async_(each, llm_model), loop).result()
+                            call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
+                    else:
+                        the_result = asyncio.run_coroutine_threadsafe(self.call_async_(task, llm_model), loop).result()
+                        call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
+                else:
+                    # If there's a loop but it's not running, use asyncio.run
+                    if isinstance(task, list):
+                        for each in task:
+                            the_result = asyncio.run(self.call_async_(each, llm_model))
+                            call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
+                    else:
+                        the_result = asyncio.run(self.call_async_(task, llm_model))
+                        call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
+            except RuntimeError:
+                # No event loop exists, create one with asyncio.run
+                if isinstance(task, list):
+                    for each in task:
+                        the_result = asyncio.run(self.call_async_(each, llm_model))
+                        call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
+                else:
+                    the_result = asyncio.run(self.call_async_(task, llm_model))
                     call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
-            else:
-                the_result = self.call_(task, llm_model)
-                call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
         except Exception as outer_e:
             try:
                 from ...server import stop_dev_server, stop_main_server, is_tools_server_running, is_main_server_running
@@ -55,18 +78,13 @@ class Call:
 
         end_time = time.time()
 
-        
-
         return task.response
 
     def call_(
         self,
         task: Task,
-
         llm_model: str = None,
     ) -> Any:
-        task.start_time = time.time()
-        from ..trace import sentry_sdk
         """
         Call GPT-4 with optional tools and MCP servers.
 
@@ -79,86 +97,18 @@ class Call:
         Returns:
             The response in the specified format
         """
-
-        if llm_model is None:
-            llm_model = self.default_llm_model
-
-
-
-        tools = tools_serializer(task.tools)
-
-        response_format = task.response_format
-        with sentry_sdk.start_transaction(op="task", name="Call.call") as transaction:
-            with sentry_sdk.start_span(op="serialize"):
-                # Serialize the response format if it's a type or BaseModel
-                response_format_str = response_format_serializer(task.response_format)
-
-                new_context = []
-                if task.context:
-                    
-                    for each in task.context:
-                        if isinstance(each, KnowledgeBase):
-                            if not each.rag:
-                                new_context.append(each.markdown(self))
-                        else:
-                            new_context.append(each)
-
-                context = context_serializer(new_context, self)
-
-
-
-            with sentry_sdk.start_span(op="prepare_request"):
-                # Prepare the request data
-                data = {
-                    "prompt": task.description + task.additional_description(self), 
-                    "images": task.images_base_64,
-                    "response_format": response_format_str,
-                    "tools": tools or [],
-                    "context": context,
-                    "llm_model": llm_model,
-                    "system_prompt": None
-                }
-
-
-
-            with sentry_sdk.start_span(op="send_request"):
-                result = self.send_request("/level_one/gpt4o", data)
-                original_result = result
-
-                
-                result = result["result"]
-            
-                
-
-
-                error_handler(result)
-
-                
-
-                
-
-
-            with sentry_sdk.start_span(op="deserialize"):
-                deserialized_result = response_format_deserializer(response_format_str, result)
-
-
-
-
-
-        task._response = deserialized_result["result"]
-
-
-        response_format_req = None
-        if response_format_str == "str":
-            response_format_req = response_format_str
-        else:
-            # Class name
-            response_format_req = response_format.__name__
-
-
-        
-        task.end_time = time.time()
-        return {"result": deserialized_result["result"], "llm_model": llm_model, "response_format": response_format_req, "usage": deserialized_result["usage"]}
+        # Try to get the current event loop
+        try:
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                # If there's a running loop, run the async function in that loop
+                return asyncio.run_coroutine_threadsafe(self.call_async_(task, llm_model), loop).result()
+            else:
+                # If there's a loop but it's not running, use asyncio.run
+                return asyncio.run(self.call_async_(task, llm_model))
+        except RuntimeError:
+            # No event loop exists, create one with asyncio.run
+            return asyncio.run(self.call_async_(task, llm_model))
 
     async def call_async(
         self,

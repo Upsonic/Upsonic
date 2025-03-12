@@ -72,20 +72,23 @@ def get_or_create_client(debug: bool = False):
 
 def execute_task(agent_config, task: Task, debug: bool = False):
     """Execute a task with the given agent configuration."""
-    global latest_upsonic_client
+    import asyncio
     
-    # If agent has a custom client, use it
-    if hasattr(agent_config, 'client') and agent_config.client is not None:
-        the_client = agent_config.client
-    else:
-        # Get or create client using existing process
-        the_client = get_or_create_client(debug=debug)
+    try:
+        # Check if there's a running event loop
+        loop = asyncio.get_running_loop()
+        if loop.is_running():
+            # If there's a running loop, run the coroutine in that loop
+            return asyncio.run_coroutine_threadsafe(
+                execute_task_async(agent_config, task, debug), 
+                loop
+            ).result()
+    except RuntimeError:
+        # No running event loop
+        pass
     
-    # Register tools if needed
-    the_client = register_tools(the_client, task.tools)
-    
-    the_client.run(agent_config, task)
-    return task.response
+    # If no running loop or exception occurred, create a new one
+    return asyncio.run(execute_task_async(agent_config, task, debug))
 
 async def execute_task_async(agent_config, task: Task, debug: bool = False):
     """Execute a task with the given agent configuration asynchronously using true async methods."""
@@ -150,16 +153,47 @@ class AgentConfiguration(BaseModel):
         return self.agent_id_
     
     def do(self, task: Task):
-        return execute_task(self, task, self.debug)
+        import asyncio
+        
+        try:
+            # Check if there's a running event loop
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                # If there's a running loop, run the coroutine in that loop
+                return asyncio.run_coroutine_threadsafe(
+                    self.do_async(task), 
+                    loop
+                ).result()
+        except RuntimeError:
+            # No running event loop
+            pass
+        
+        # If no running loop or exception occurred, create a new one
+        return asyncio.run(self.do_async(task))
     
     async def do_async(self, task: Task):
         """Asynchronous version of the do method."""
         return await execute_task_async(self, task, self.debug)
     
     def print_do(self, task: Task):
-        result = self.do(task)
-        print(result)
-        return result
+        import asyncio
+        
+        try:
+            # Check if there's a running event loop
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                # If there's a running loop, run the coroutine in that loop
+                result = asyncio.run_coroutine_threadsafe(
+                    self.print_do_async(task), 
+                    loop
+                ).result()
+                return result
+        except RuntimeError:
+            # No running event loop
+            pass
+        
+        # If no running loop or exception occurred, create a new one
+        return asyncio.run(self.print_do_async(task))
         
     async def print_do_async(self, task: Task):
         """Asynchronous version of the print_do method."""
