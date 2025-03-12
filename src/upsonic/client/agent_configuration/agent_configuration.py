@@ -88,7 +88,7 @@ def execute_task(agent_config, task: Task, debug: bool = False):
     return task.response
 
 async def execute_task_async(agent_config, task: Task, debug: bool = False):
-    """Execute a task with the given agent configuration asynchronously."""
+    """Execute a task with the given agent configuration asynchronously using true async methods."""
     global latest_upsonic_client
     
     # If agent has a custom client, use it
@@ -101,9 +101,8 @@ async def execute_task_async(agent_config, task: Task, debug: bool = False):
     # Register tools if needed
     the_client = register_tools(the_client, task.tools)
     
-    # Run the task in a separate thread to avoid blocking
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, lambda: the_client.run(agent_config, task))
+    # Use the async run method directly
+    await the_client.run_async(agent_config, task)
     
     return task.response
 
@@ -159,5 +158,11 @@ class AgentConfiguration(BaseModel):
     
     def print_do(self, task: Task):
         result = self.do(task)
+        print(result)
+        return result
+        
+    async def print_do_async(self, task: Task):
+        """Asynchronous version of the print_do method."""
+        result = await self.do_async(task)
         print(result)
         return result

@@ -101,6 +101,15 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
         except httpx.RequestError:
             return False
 
+    async def status_async(self) -> bool:
+        """Check the server status asynchronously."""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(self.url + "/status")
+                return response.status_code == 200
+        except httpx.RequestError:
+            return False
+
     def send_request(self, endpoint: str, data: Dict[str, Any], files: Dict[str, Any] = None, method: str = "POST", return_raw: bool = False) -> Any:
         """
         General method to send an API request.
@@ -130,6 +139,35 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
             
             return response.content if return_raw else response.json()
         
+    async def send_request_async(self, endpoint: str, data: Dict[str, Any], files: Dict[str, Any] = None, method: str = "POST", return_raw: bool = False) -> Any:
+        """
+        Asynchronous version of send_request.
+        General method to send an API request asynchronously.
+
+        Args:
+            endpoint: The API endpoint to send the request to.
+            data: The data to send in the request.
+            files: Optional files to upload.
+            method: HTTP method to use (GET or POST)
+            return_raw: Whether to return the raw response content instead of JSON
+
+        Returns:
+            The response from the API, either as JSON or raw content.
+        """
+        async with httpx.AsyncClient() as client:
+            if method.upper() == "GET":
+                response = await client.get(self.url + endpoint, params=data, timeout=600.0)
+            else:
+                if files:
+                    response = await client.post(self.url + endpoint, data=data, files=files, timeout=600.0)
+                else:
+                    response = await client.post(self.url + endpoint, json=data, timeout=600.0)
+                
+            if response.status_code == 408:
+                raise TimeoutException("Request timed out")
+            response.raise_for_status()
+            
+            return response.content if return_raw else response.json()
 
     def run(self, *args, **kwargs):
 
@@ -146,3 +184,21 @@ class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
 
         if len(args) == 1:
             return self.call(args[0], llm_model=llm_model)
+            
+    async def run_async(self, *args, **kwargs):
+        """
+        Asynchronous version of the run method.
+        """
+        llm_model = kwargs.get("llm_model", None)
+
+        # If there is an two positional arguments we will run it in self.agent_async(first argument, second argument)
+        if len(args) == 2:
+            
+            if isinstance(args[0], AgentConfiguration) and isinstance(args[1], Task):
+                return await self.agent_async(args[0], args[1])
+            elif isinstance(args[0], list):
+                return await self.multi_agent_async(args[0], args[1])
+        
+
+        if len(args) == 1:
+            return await self.call_async(args[0], llm_model=llm_model)
