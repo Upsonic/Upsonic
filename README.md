@@ -258,9 +258,13 @@ print(f"Outreach Message Content: {message_task.response.content}")
 Direct LLM calls offer faster, cheaper solutions for simple tasks. In Upsonic, you can make calls to model providers without any abstraction level and organize structured outputs. You can also use tools with LLM calls.
 
 ```python
-from upsonic import Direct
+from upsonic import Task, Direct
 
-Direct.do(task1)
+direct = Direct(model="openai/gpt-4o")
+
+task = Task("Where can I use agents in real life?")
+
+direct.print_do(task)
 
 ```
 
