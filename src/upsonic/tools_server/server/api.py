@@ -19,8 +19,22 @@ import signal
 from concurrent.futures import ThreadPoolExecutor
 import threading
 import time
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
+
+# Remove the middleware and use exception handlers instead
+@app.exception_handler(Exception)
+async def exception_handler(request: Request, exc: Exception):
+    logging.error(f"Error: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)}
+    )
 
 # Import the cleanup function from server_utils instead of tools
 from .server_utils import cleanup_all_servers
