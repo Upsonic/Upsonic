@@ -642,11 +642,16 @@ class Agent:
         Asynchronous version of the multiple method.
         Decomposes a task into multiple subtasks asynchronously.
         """
+        if agent_configuration.system_prompt:
+            system_prompt = "System prompt: " + agent_configuration.system_prompt
+        else:
+            system_prompt = None
         # First, determine the mode of operation
         mode_selection_prompt = f"""
 You are a Task Analysis AI that helps determine the best mode of task decomposition.
 
-Task Agent name: {agent_configuration.name}
+Task Agent name: {agent_configuration.job_title}
+{system_prompt}
 
 Given task: "{task.description}"
 
@@ -705,7 +710,9 @@ Use Level One for any task requiring multiple steps or verification.
         prompt = f"""
 You are a Task Decomposition AI that helps break down large tasks into smaller, manageable subtasks.
 
-Task Agent name: {agent_configuration.name}
+Task Agent name: {agent_configuration.job_title}
+{system_prompt}
+
 Given task: "{task.description}"
 Available tools: {task.tools if task.tools else "No tools available"}
 
