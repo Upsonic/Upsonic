@@ -195,7 +195,7 @@ class Agent:
 
 
 
-    def multiple(self, task: Task, llm_model: str = None):
+    def multiple(self, agent_configuration: AgentConfiguration, task: Task, llm_model: str = None):
         import asyncio
         
         try:
@@ -204,7 +204,7 @@ class Agent:
             if loop.is_running():
                 # If there's a running loop, run the coroutine in that loop
                 return asyncio.run_coroutine_threadsafe(
-                    self.multiple_async(task, llm_model), 
+                    self.multiple_async(agent_configuration, task, llm_model), 
                     loop
                 ).result()
         except RuntimeError:
@@ -212,7 +212,7 @@ class Agent:
             pass
         
         # If no running loop or exception occurred, create a new one
-        return asyncio.run(self.multiple_async(task, llm_model))
+        return asyncio.run(self.multiple_async(agent_configuration, task, llm_model))
 
 
 
@@ -334,7 +334,7 @@ class Agent:
             sub_task_agent_config.memory = True  # Enable memory for sub-tasks
             
             # Use the async version of multiple
-            sub_tasks = await self.multiple_async(task, llm_model)
+            sub_tasks = await self.multiple_async(agent_configuration, task, llm_model)
             is_it_sub_task = True
             the_task = sub_tasks
 
@@ -637,7 +637,7 @@ class Agent:
         task._response = result["result"]
         return task.response
 
-    async def multiple_async(self, task: Task, llm_model: str = None):
+    async def multiple_async(self, agent_configuration: AgentConfiguration, task: Task, llm_model: str = None):
         """
         Asynchronous version of the multiple method.
         Decomposes a task into multiple subtasks asynchronously.
@@ -646,7 +646,7 @@ class Agent:
         mode_selection_prompt = f"""
 You are a Task Analysis AI that helps determine the best mode of task decomposition.
 
-Task Agent name: {self.name}
+Task Agent name: {agent_configuration.name}
 
 Given task: "{task.description}"
 
@@ -705,7 +705,7 @@ Use Level One for any task requiring multiple steps or verification.
         prompt = f"""
 You are a Task Decomposition AI that helps break down large tasks into smaller, manageable subtasks.
 
-Task Agent name: {self.name}
+Task Agent name: {agent_configuration.name}
 Given task: "{task.description}"
 Available tools: {task.tools if task.tools else "No tools available"}
 
