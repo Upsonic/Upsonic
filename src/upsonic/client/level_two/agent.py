@@ -646,6 +646,8 @@ class Agent:
         mode_selection_prompt = f"""
 You are a Task Analysis AI that helps determine the best mode of task decomposition.
 
+Task Agent name: {self.name}
+
 Given task: "{task.description}"
 
 Analyze the task characteristics:
@@ -703,6 +705,7 @@ Use Level One for any task requiring multiple steps or verification.
         prompt = f"""
 You are a Task Decomposition AI that helps break down large tasks into smaller, manageable subtasks.
 
+Task Agent name: {self.name}
 Given task: "{task.description}"
 Available tools: {task.tools if task.tools else "No tools available"}
 
