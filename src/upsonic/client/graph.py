@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.progress import Progress, TextColumn, BarColumn, SpinnerColumn, TimeElapsedColumn, TimeRemainingColumn
 import uuid
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -10,6 +11,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from .printing import console, spacing
 from .tasks.tasks import Task
 from .agent_configuration.agent_configuration import AgentConfiguration
+
+# Import Direct for type checking
+try:
+    from .direct_llm.direct import Direct
+except ImportError:
+    # Define a placeholder for type checking if the import fails
+    class Direct:
+        pass
 
 
 class TaskNode(BaseModel):
@@ -164,10 +173,13 @@ class Graph(BaseModel):
         default_agent: Default agent to use when a task doesn't specify one
         parallel_execution: Whether to execute independent tasks in parallel
         max_parallel_tasks: Maximum number of tasks to execute in parallel
+        show_progress: Whether to display a progress bar during execution
     """
-    default_agent: Optional[AgentConfiguration] = None
+    # Accept either AgentConfiguration or Direct as the default_agent
+    default_agent: Optional[Any] = None
     parallel_execution: bool = False
     max_parallel_tasks: int = 4
+    show_progress: bool = True
     
     # Private attributes (not part of the model schema)
     nodes: List[TaskNode] = Field(default_factory=list)
@@ -176,6 +188,15 @@ class Graph(BaseModel):
     
     class Config:
         arbitrary_types_allowed = True
+    
+    def __init__(self, **data):
+        # Validate that default_agent is either AgentConfiguration or Direct
+        if 'default_agent' in data and data['default_agent'] is not None:
+            agent = data['default_agent']
+            # Check if it has the 'do' method which both types should have
+            if not hasattr(agent, 'do') or not callable(getattr(agent, 'do')):
+                raise ValueError("default_agent must be an instance of AgentConfiguration or Direct with a 'do' method")
+        super().__init__(**data)
     
     def add(self, tasks_chain: Union[Task, TaskNode, TaskChain]) -> 'Graph':
         """
@@ -227,7 +248,9 @@ class Graph(BaseModel):
                 # Create and print a task execution panel
                 table = Table(show_header=False, expand=True, box=None)
                 table.add_row("[bold]Task:[/bold]", f"[cyan]{task.description}[/cyan]")
-                table.add_row("[bold]Agent:[/bold]", f"[yellow]{runner.__class__.__name__}[/yellow]")
+                # Display runner type safely
+                runner_type = runner.__class__.__name__ if hasattr(runner, '__class__') else type(runner).__name__
+                table.add_row("[bold]Agent:[/bold]", f"[yellow]{runner_type}[/yellow]")
                 if task.tools:
                     tool_names = [t.__class__.__name__ if hasattr(t, '__class__') else str(t) for t in task.tools]
                     table.add_row("[bold]Tools:[/bold]", f"[green]{', '.join(tool_names)}[/green]")
@@ -248,7 +271,7 @@ class Graph(BaseModel):
             if previous_outputs and not task.context:
                 task.context = previous_outputs
             
-            # Execute the task
+            # Execute the task - both AgentConfiguration and Direct have the do method
             output = runner.do(task)
             
             # End timing
@@ -402,16 +425,21 @@ class Graph(BaseModel):
         # Reverse to get correct order
         return list(reversed(result))
     
-    def run(self, verbose: bool = False) -> State:
+    def run(self, verbose: bool = False, show_progress: bool = None) -> State:
         """
         Executes the graph, running all tasks in the appropriate order.
         
         Args:
             verbose: Whether to print detailed information
+            show_progress: Whether to display a progress bar during execution. If None, uses the graph's show_progress attribute.
             
         Returns:
             The final state object with all task outputs
         """
+        # Use class attribute if show_progress is not explicitly specified
+        if show_progress is None:
+            show_progress = self.show_progress
+            
         if verbose:
             console.print("[bold blue]Starting Graph Execution[/bold blue]")
             spacing()
@@ -420,16 +448,17 @@ class Graph(BaseModel):
         self.state = State()
         
         if self.parallel_execution:
-            return self._run_parallel(verbose)
+            return self._run_parallel(verbose, show_progress)
         else:
-            return self._run_sequential(verbose)
+            return self._run_sequential(verbose, show_progress)
     
-    def _run_sequential(self, verbose: bool = False) -> State:
+    def _run_sequential(self, verbose: bool = False, show_progress: bool = True) -> State:
         """
         Runs tasks sequentially in topological order.
         
         Args:
             verbose: Whether to print detailed information
+            show_progress: Whether to display a progress bar
             
         Returns:
             The final state object
@@ -441,10 +470,33 @@ class Graph(BaseModel):
             console.print(f"[blue]Executing {len(execution_order)} tasks sequentially[/blue]")
             spacing()
         
-        # Execute each task
-        for node in execution_order:
-            output = self._execute_task(node, self.state, verbose)
-            self.state.update(node.id, output)
+        if show_progress:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeElapsedColumn(),
+                TimeRemainingColumn(),
+                console=console
+            ) as progress:
+                overall_task = progress.add_task(f"[bold blue]Overall Progress ({len(execution_order)} tasks)", total=len(execution_order))
+                
+                # Execute each task
+                for node in execution_order:
+                    # Update task description to show current task
+                    desc = f"[bold blue]Overall Progress ({len(execution_order)} tasks) - Current: [cyan]{node.task.description[:40]}{'...' if len(node.task.description) > 40 else ''}[/cyan]"
+                    progress.update(overall_task, description=desc)
+                    
+                    output = self._execute_task(node, self.state, verbose)
+                    self.state.update(node.id, output)
+                    
+                    progress.update(overall_task, advance=1)
+        else:
+            # Execute each task without progress bar
+            for node in execution_order:
+                output = self._execute_task(node, self.state, verbose)
+                self.state.update(node.id, output)
         
         if verbose:
             console.print("[bold green]Graph Execution Completed[/bold green]")
@@ -452,12 +504,13 @@ class Graph(BaseModel):
         
         return self.state
     
-    def _run_parallel(self, verbose: bool = False) -> State:
+    def _run_parallel(self, verbose: bool = False, show_progress: bool = True) -> State:
         """
         Runs tasks in parallel where possible.
         
         Args:
             verbose: Whether to print detailed information
+            show_progress: Whether to display a progress bar
             
         Returns:
             The final state object
@@ -472,44 +525,104 @@ class Graph(BaseModel):
         # Track completed tasks
         completed_tasks: Set[str] = set()
         
-        # Continue until all tasks are executed
-        while len(completed_tasks) < len(execution_order):
-            # Find tasks that are ready to execute (all predecessors completed)
-            ready_tasks = []
-            for node in execution_order:
-                if node.id in completed_tasks:
-                    continue
+        if show_progress:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeElapsedColumn(),
+                TimeRemainingColumn(),
+                console=console
+            ) as progress:
+                overall_task = progress.add_task(f"[bold blue]Overall Progress ({len(execution_order)} tasks)", total=len(execution_order))
                 
-                predecessors = self._get_predecessors(node)
-                if all(pred.id in completed_tasks for pred in predecessors):
-                    ready_tasks.append(node)
-            
-            if not ready_tasks:
-                raise ValueError("No tasks ready to execute but not all tasks completed - possible cycle in graph")
-            
-            # Limit the number of parallel tasks
-            batch = ready_tasks[:self.max_parallel_tasks]
-            
-            if verbose:
-                console.print(f"[blue]Executing batch of {len(batch)} tasks in parallel[/blue]")
-            
-            # Execute batch in parallel
-            with ThreadPoolExecutor(max_workers=len(batch)) as executor:
-                future_to_node = {
-                    executor.submit(self._execute_task, node, self.state, verbose): node 
-                    for node in batch
-                }
+                # Continue until all tasks are executed
+                while len(completed_tasks) < len(execution_order):
+                    # Find tasks that are ready to execute (all predecessors completed)
+                    ready_tasks = []
+                    for node in execution_order:
+                        if node.id in completed_tasks:
+                            continue
+                        
+                        predecessors = self._get_predecessors(node)
+                        if all(pred.id in completed_tasks for pred in predecessors):
+                            ready_tasks.append(node)
+                    
+                    if not ready_tasks:
+                        raise ValueError("No tasks ready to execute but not all tasks completed - possible cycle in graph")
+                    
+                    # Limit the number of parallel tasks
+                    batch = ready_tasks[:self.max_parallel_tasks]
+                    
+                    if verbose:
+                        console.print(f"[blue]Executing batch of {len(batch)} tasks in parallel[/blue]")
+                    
+                    # Update progress description to show current batch
+                    batch_desc = ", ".join([node.task.description[:20] + ("..." if len(node.task.description) > 20 else "") for node in batch[:3]])
+                    if len(batch) > 3:
+                        batch_desc += f" and {len(batch) - 3} more"
+                    progress.update(overall_task, description=f"[bold blue]Overall Progress ({len(execution_order)} tasks) - Current batch: [cyan]{batch_desc}[/cyan]")
+                    
+                    # Execute batch in parallel
+                    with ThreadPoolExecutor(max_workers=len(batch)) as executor:
+                        future_to_node = {
+                            executor.submit(self._execute_task, node, self.state, verbose): node 
+                            for node in batch
+                        }
+                        
+                        for future in as_completed(future_to_node):
+                            node = future_to_node[future]
+                            try:
+                                output = future.result()
+                                self.state.update(node.id, output)
+                                completed_tasks.add(node.id)
+                                
+                                # Update overall progress
+                                progress.update(overall_task, advance=1)
+                            except Exception as e:
+                                if verbose:
+                                    console.print(f"[bold red]Task '{node.task.description}' failed: {str(e)}[/bold red]")
+                                raise
+        else:
+            # Continue until all tasks are executed without progress bar
+            while len(completed_tasks) < len(execution_order):
+                # Find tasks that are ready to execute (all predecessors completed)
+                ready_tasks = []
+                for node in execution_order:
+                    if node.id in completed_tasks:
+                        continue
+                    
+                    predecessors = self._get_predecessors(node)
+                    if all(pred.id in completed_tasks for pred in predecessors):
+                        ready_tasks.append(node)
                 
-                for future in as_completed(future_to_node):
-                    node = future_to_node[future]
-                    try:
-                        output = future.result()
-                        self.state.update(node.id, output)
-                        completed_tasks.add(node.id)
-                    except Exception as e:
-                        if verbose:
-                            console.print(f"[bold red]Task '{node.task.description}' failed: {str(e)}[/bold red]")
-                        raise
+                if not ready_tasks:
+                    raise ValueError("No tasks ready to execute but not all tasks completed - possible cycle in graph")
+                
+                # Limit the number of parallel tasks
+                batch = ready_tasks[:self.max_parallel_tasks]
+                
+                if verbose:
+                    console.print(f"[blue]Executing batch of {len(batch)} tasks in parallel[/blue]")
+                
+                # Execute batch in parallel
+                with ThreadPoolExecutor(max_workers=len(batch)) as executor:
+                    future_to_node = {
+                        executor.submit(self._execute_task, node, self.state, verbose): node 
+                        for node in batch
+                    }
+                    
+                    for future in as_completed(future_to_node):
+                        node = future_to_node[future]
+                        try:
+                            output = future.result()
+                            self.state.update(node.id, output)
+                            completed_tasks.add(node.id)
+                        except Exception as e:
+                            if verbose:
+                                console.print(f"[bold red]Task '{node.task.description}' failed: {str(e)}[/bold red]")
+                            raise
         
         if verbose:
             console.print("[bold green]Graph Execution Completed[/bold green]")
@@ -571,21 +684,24 @@ def node(task_instance: Task) -> TaskNode:
     """
     return TaskNode(task=task_instance)
 
-def create_graph(default_agent: Optional[AgentConfiguration] = None,
-                 parallel_execution: bool = False) -> Graph:
+def create_graph(default_agent: Optional[Any] = None,
+                 parallel_execution: bool = False,
+                 show_progress: bool = True) -> Graph:
     """
     Creates a new graph with the specified configuration.
     
     Args:
-        default_agent: Default agent to use for tasks
+        default_agent: Default agent to use for tasks (AgentConfiguration or Direct)
         parallel_execution: Whether to execute independent tasks in parallel
+        show_progress: Whether to display a progress bar during execution
         
     Returns:
         A configured Graph instance
     """
     return Graph(
         default_agent=default_agent,
-        parallel_execution=parallel_execution
+        parallel_execution=parallel_execution,
+        show_progress=show_progress
     )
 
 
