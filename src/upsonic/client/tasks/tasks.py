@@ -21,6 +21,7 @@ class Task(BaseModel):
     not_main_task: bool = False
     start_time: Optional[int] = None
     end_time: Optional[int] = None
+    agent: None
 
     @property
     def duration(self) -> Optional[float]:
