@@ -17,7 +17,7 @@ from .client.multi_agent.multi_agent import MultiAgent
 
 from .client.storage.storage import ClientConfig
 
-from .client.graph import Graph
+from .client.graph import Graph, DecisionFunc, DecisionLLM
 
 from pydantic import Field
 
@@ -26,4 +26,4 @@ def hello() -> str:
     return "Hello from upsonic!"
 
 
-__all__ = ["hello", "UpsonicClient", "ObjectResponse", "StrResponse", "IntResponse", "FloatResponse", "BoolResponse", "Task", "StrInListResponse", "AgentConfiguration", "Field", "KnowledgeBase", "ClientConfig", "Agent", "Direct", "MultiAgent", "Graph"]
+__all__ = ["hello", "UpsonicClient", "ObjectResponse", "StrResponse", "IntResponse", "FloatResponse", "BoolResponse", "Task", "StrInListResponse", "AgentConfiguration", "Field", "KnowledgeBase", "ClientConfig", "Agent", "Direct", "MultiAgent", "Graph", "DecisionFunc", "DecisionLLM"]
