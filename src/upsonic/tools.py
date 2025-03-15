@@ -413,6 +413,682 @@ class SerperDev:
             raise RuntimeError(error_msg)
 
 
+class OlostepScrapeWebsiteTool:
+    @staticmethod
+    def analyze_dependencies() -> Dict[str, bool]:
+        """
+        Analyze the dependencies required for OlostepScrapeWebsiteTool and return their status.
+        
+        Returns:
+            Dictionary with dependency names as keys and their availability status as values
+        """
+        dependencies = {
+            "requests": False,
+            "python-dotenv": False
+        }
+        
+        # Check each dependency
+        try:
+            import requests
+            dependencies["requests"] = True
+        except ImportError:
+            pass
+        
+        try:
+            from dotenv import load_dotenv
+            dependencies["python-dotenv"] = True
+        except ImportError:
+            pass
+        
+        return dependencies
+    
+    def __control__(self) -> bool:
+        """
+        Check if the required dependencies are installed and API key is available.
+        
+        Returns:
+            True if all requirements are met
+        
+        Raises:
+            ImportError: If required packages are not installed
+            EnvironmentError: If API key is not available
+        """
+        # Analyze dependencies
+        dependencies = self.analyze_dependencies()
+        missing = [dep for dep, installed in dependencies.items() if not installed]
+        
+        # Print missing dependencies
+        if missing:
+            # Use the new printing function
+            missing_dependencies("OlostepScrapeWebsiteTool", missing)
+            
+            # Raise ImportError with combined message for all missing dependencies
+            install_cmd = "pip install " + " ".join(missing)
+            raise ImportError(f"Missing dependencies: {', '.join(missing)}. Please install them with: {install_cmd}")
+        
+        # Check if OLOSTEP_API_KEY is set in environment variables
+        if "OLOSTEP_API_KEY" not in os.environ:
+            try:
+                # Try to load API key from .env file
+                api_key = OlostepScrapeWebsiteTool._load_api_key_from_env_file()
+                if api_key is None:
+                    # API key not found in .env file
+                    missing_api_key("OlostepScrapeWebsiteTool", "OLOSTEP_API_KEY")
+                    raise EnvironmentError("OLOSTEP_API_KEY environment variable is not set and could not be found in .env file")
+            except ImportError:
+                # If dotenv is not installed, we can't load from .env file
+                missing_api_key("OlostepScrapeWebsiteTool", "OLOSTEP_API_KEY", dotenv_support=False)
+                raise EnvironmentError("OLOSTEP_API_KEY environment variable is not set and python-dotenv is not installed")
+        
+        return True
+    
+    @staticmethod
+    def _load_api_key_from_env_file() -> Optional[str]:
+        """
+        Try to load the OLOSTEP_API_KEY from a .env file using python-dotenv.
+        
+        Returns:
+            The API key if found in .env file, None otherwise
+        """
+        try:
+            # Try to import dotenv
+            from dotenv import load_dotenv
+        except ImportError:
+            raise ImportError("python-dotenv is not installed. Please install it with 'pip install python-dotenv'")
+        
+        # Check for .env file in current directory and parent directories
+        current_dir = pathlib.Path.cwd()
+        
+        # Look in current directory and up to 3 parent directories
+        for _ in range(4):
+            env_path = current_dir / '.env'
+            if env_path.exists():
+                # Load the .env file
+                load_dotenv(dotenv_path=env_path)
+                
+                # Check if OLOSTEP_API_KEY is now in environment
+                if "OLOSTEP_API_KEY" in os.environ:
+                    return os.environ["OLOSTEP_API_KEY"]
+            
+            # Move to parent directory
+            parent_dir = current_dir.parent
+            if parent_dir == current_dir:  # Reached root directory
+                break
+            current_dir = parent_dir
+        
+        return None
+    
+    def __init__(self, api_key: Optional[str] = None, base_url: str = "https://api.olostep.com/v1"):
+        """
+        Initialize the OlostepScrapeWebsiteTool.
+        
+        Args:
+            api_key: Olostep API key (optional, will try to load from environment if not provided)
+            base_url: Base URL for the Olostep API (default: "https://api.olostep.com/v1")
+        """
+        # Set API key
+        self.api_key = api_key
+        self.base_url = base_url
+        
+        # If API key not provided, try to load from environment or .env file
+        if self.api_key is None:
+            # First check environment variables
+            if "OLOSTEP_API_KEY" in os.environ:
+                self.api_key = os.environ["OLOSTEP_API_KEY"]
+            else:
+                # Try to load from .env file
+                try:
+                    api_key = self._load_api_key_from_env_file()
+                    if api_key:
+                        self.api_key = api_key
+                    else:
+                        # Print missing API key message
+                        missing_api_key("OlostepScrapeWebsiteTool", "OLOSTEP_API_KEY")
+                        raise EnvironmentError("OLOSTEP_API_KEY environment variable is not set and could not be found in .env file")
+                except ImportError:
+                    # If dotenv is not installed and no API key in environment
+                    if "OLOSTEP_API_KEY" not in os.environ:
+                        # Print missing API key message without dotenv support
+                        missing_api_key("OlostepScrapeWebsiteTool", "OLOSTEP_API_KEY", dotenv_support=False)
+                        raise EnvironmentError("OLOSTEP_API_KEY environment variable is not set and python-dotenv is not installed")
+                    self.api_key = os.environ["OLOSTEP_API_KEY"]
+        
+        # Check if requests is installed
+        try:
+            import requests
+        except ImportError:
+            missing_dependencies("OlostepScrapeWebsiteTool", ["requests"])
+            raise ImportError("requests is not installed. Please install it with 'pip install requests'")
+    
+    def scrape_website(self, url: str, wait_before_scraping: int = 0, country: str = None) -> Dict[str, Any]:
+        """
+        Scrape a website using Olostep API.
+        
+        Args:
+            url: Website URL to scrape
+            wait_before_scraping: Time to wait in milliseconds before starting the scrape (default: 0)
+            country: Residential country to load the request from (e.g., "US", "CA", "GB")
+            
+        Returns:
+            String containing markdown_content from the scraped website
+        """
+        import requests
+        
+        # Prepare request data
+        data = {
+            "url_to_scrape": url,
+            "wait_before_scraping": wait_before_scraping,
+            "formats": ["markdown"],
+        }
+        
+        # Add optional parameters if provided
+        if country:
+            data["country"] = country
+        
+        # Set headers for the request
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}"
+        }
+        
+        # Make the API request
+        response = requests.post(f"{self.base_url}/scrapes", headers=headers, json=data)
+        
+        # Check if the request was successful
+        if response.status_code == 200:
+            response_data = response.json()
+            # Extract the relevant information from the response
+            return response_data.get("result", {}).get("markdown_content", "")
+        else:
+            error_message = f"Error scraping website: {response.status_code} - {response.text}"
+            raise Exception(error_message)
+
+
+class OlostepWebSearchTool:
+    @staticmethod
+    def analyze_dependencies() -> Dict[str, bool]:
+        """
+        Analyze the dependencies required for OlostepWebSearchTool and return their status.
+        
+        Returns:
+            Dictionary with dependency names as keys and their availability status as values
+        """
+        dependencies = {
+            "requests": False,
+            "python-dotenv": False
+        }
+        
+        # Check each dependency
+        try:
+            import requests
+            dependencies["requests"] = True
+        except ImportError:
+            pass
+        
+        try:
+            from dotenv import load_dotenv
+            dependencies["python-dotenv"] = True
+        except ImportError:
+            pass
+        
+        return dependencies
+    
+    @staticmethod
+    def _load_api_key_from_env_file() -> Optional[str]:
+        """
+        Try to load the OLOSTEP_API_KEY from a .env file using python-dotenv.
+        
+        Returns:
+            The API key if found in .env file, None otherwise
+        """
+        try:
+            # Try to import dotenv
+            from dotenv import load_dotenv
+        except ImportError:
+            raise ImportError("python-dotenv is not installed. Please install it with 'pip install python-dotenv'")
+        
+        # Check for .env file in current directory and parent directories
+        current_dir = pathlib.Path.cwd()
+        
+        # Look in current directory and up to 3 parent directories
+        for _ in range(4):
+            env_path = current_dir / '.env'
+            if env_path.exists():
+                # Load the .env file
+                load_dotenv(dotenv_path=env_path)
+                
+                # Check if OLOSTEP_API_KEY is now in environment
+                if "OLOSTEP_API_KEY" in os.environ:
+                    return os.environ["OLOSTEP_API_KEY"]
+            
+            # Move to parent directory
+            parent_dir = current_dir.parent
+            if parent_dir == current_dir:  # Reached root directory
+                break
+            current_dir = parent_dir
+        
+        return None
+    
+    def __control__(self) -> bool:
+        """
+        Check if the required dependencies are installed and API key is available.
+        
+        Returns:
+            True if all requirements are met
+        
+        Raises:
+            ImportError: If required packages are not installed
+            EnvironmentError: If API key is not available
+        """
+        # Analyze dependencies
+        dependencies = self.analyze_dependencies()
+        missing = [dep for dep, installed in dependencies.items() if not installed]
+        
+        # Print missing dependencies
+        if missing:
+            # Use the new printing function
+            missing_dependencies("OlostepWebSearchTool", missing)
+            
+            # Raise ImportError with combined message for all missing dependencies
+            install_cmd = "pip install " + " ".join(missing)
+            raise ImportError(f"Missing dependencies: {', '.join(missing)}. Please install them with: {install_cmd}")
+        
+        # Check if OLOSTEP_API_KEY is set in environment variables
+        if "OLOSTEP_API_KEY" not in os.environ:
+            try:
+                # Try to load API key from .env file
+                api_key = OlostepWebSearchTool._load_api_key_from_env_file()
+                if api_key is None:
+                    # Print missing API key message
+                    missing_api_key("OlostepWebSearchTool", "OLOSTEP_API_KEY")
+                    raise EnvironmentError("OLOSTEP_API_KEY environment variable is not set and could not be found in .env file")
+            except ImportError:
+                # If dotenv is not installed, we can't load from .env file
+                # Print missing API key message without dotenv support
+                missing_api_key("OlostepWebSearchTool", "OLOSTEP_API_KEY", dotenv_support=False)
+                raise EnvironmentError("OLOSTEP_API_KEY environment variable is not set and python-dotenv is not installed")
+        
+        return True
+    
+    def __init__(self, api_key: Optional[str] = None, base_url: str = "https://api.olostep.com/v1"):
+        """
+        Initialize the OlostepWebSearchTool tool.
+        
+        Args:
+            api_key: Olostep API key (optional, will try to load from environment if not provided)
+            base_url: Base URL for the Olostep API (default: "https://api.olostep.com/v1")
+        """
+        # Set API key
+        self.api_key = api_key
+        self.base_url = base_url
+        
+        # If API key not provided, try to load from environment or .env file
+        if self.api_key is None:
+            # First check environment variables
+            if "OLOSTEP_API_KEY" in os.environ:
+                self.api_key = os.environ["OLOSTEP_API_KEY"]
+            else:
+                # Try to load from .env file
+                try:
+                    api_key = self._load_api_key_from_env_file()
+                    if api_key:
+                        self.api_key = api_key
+                    else:
+                        # Print missing API key message
+                        missing_api_key("OlostepWebSearchTool", "OLOSTEP_API_KEY")
+                        raise EnvironmentError("OLOSTEP_API_KEY environment variable is not set and could not be found in .env file")
+                except ImportError:
+                    # If dotenv is not installed and no API key in environment
+                    if "OLOSTEP_API_KEY" not in os.environ:
+                        # Print missing API key message without dotenv support
+                        missing_api_key("OlostepWebSearchTool", "OLOSTEP_API_KEY", dotenv_support=False)
+                        raise EnvironmentError("OLOSTEP_API_KEY environment variable is not set and python-dotenv is not installed")
+                    self.api_key = os.environ["OLOSTEP_API_KEY"]
+        
+        # Check if requests is installed
+        try:
+            import requests
+        except ImportError:
+            missing_dependencies("OlostepWebSearchTool", ["requests"])
+            raise ImportError("requests is not installed. Please install it with 'pip install requests'")
+    
+    def search(self, query: str, country: str = "us", language: str = "en") -> Dict[str, Any]:
+        """
+        Search the web using Olostep SERP API.
+        
+        Args:
+            query: The search query
+            country: Country code for search results (default: 'us')
+            language: Language code for search results (default: 'en')
+            
+        Returns:
+            Search results from Olostep SERP API
+        """
+        import requests
+        
+        # Construct the Google search URL
+        search_url = f"https://www.google.com/search?q={query}&gl={country}&hl={language}"
+        
+        # Prepare the API request
+        endpoint = f"{self.base_url}/scrapes"
+        
+        payload = {
+            "formats": ["parser_extract"],
+            "parser_extract": {"parser_id": "@olostep/google-search"},
+            "url_to_scrape": search_url
+        }
+        
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        try:
+            # Make the API request
+            response = requests.post(endpoint, json=payload, headers=headers)
+            
+            # Check if the request was successful
+            if response.status_code == 200:
+                result = response.json()
+                
+                # Extract the JSON content from the result
+                if "result" in result and "json_content" in result["result"]:
+                    import json
+                    return json.loads(result["result"]["json_content"])
+                
+                return result
+            else:
+                # Handle API errors
+                error_message = f"Olostep API request failed with status code {response.status_code}: {response.text}"
+                print(error_message)
+                return {"error": error_message}
+                
+        except Exception as e:
+            # Handle any exceptions
+            error_message = f"Error during Olostep API request: {str(e)}"
+            print(error_message)
+            return {"error": error_message}
+
+
+class OlostepCrawlWebsiteTool:
+    @staticmethod
+    def analyze_dependencies() -> Dict[str, bool]:
+        """
+        Analyze the dependencies required for OlostepCrawlWebsiteTool and return their status.
+        
+        Returns:
+            Dictionary with dependency names as keys and their availability status as values
+        """
+        dependencies = {
+            "requests": False,
+            "python-dotenv": False
+        }
+        
+        # Check each dependency
+        try:
+            import requests
+            dependencies["requests"] = True
+        except ImportError:
+            pass
+        
+        try:
+            from dotenv import load_dotenv
+            dependencies["python-dotenv"] = True
+        except ImportError:
+            pass
+        
+        return dependencies
+    
+    @staticmethod
+    def _load_api_key_from_env_file() -> Optional[str]:
+        """
+        Try to load the OLOSTEP_API_KEY from a .env file using python-dotenv.
+        
+        Returns:
+            The API key if found in .env file, None otherwise
+        """
+        try:
+            # Try to import dotenv
+            from dotenv import load_dotenv
+        except ImportError:
+            raise ImportError("python-dotenv is not installed. Please install it with 'pip install python-dotenv'")
+        
+        # Check for .env file in current directory and parent directories
+        current_dir = pathlib.Path.cwd()
+        
+        # Look in current directory and up to 3 parent directories
+        for _ in range(4):
+            env_path = current_dir / '.env'
+            if env_path.exists():
+                # Load the .env file
+                load_dotenv(dotenv_path=env_path)
+                
+                # Check if OLOSTEP_API_KEY is now in environment
+                if "OLOSTEP_API_KEY" in os.environ:
+                    return os.environ["OLOSTEP_API_KEY"]
+            
+            # Move to parent directory
+            parent_dir = current_dir.parent
+            if parent_dir == current_dir:  # Reached root directory
+                break
+            current_dir = parent_dir
+        
+        return None
+    
+    def __control__(self) -> bool:
+        """
+        Check if the required dependencies are installed and API key is available.
+        
+        Returns:
+            True if all requirements are met
+        
+        Raises:
+            ImportError: If required packages are not installed
+            EnvironmentError: If API key is not available
+        """
+        # Analyze dependencies
+        dependencies = self.analyze_dependencies()
+        missing = [dep for dep, installed in dependencies.items() if not installed]
+        
+        # Print missing dependencies
+        if missing:
+            # Use the new printing function
+            missing_dependencies("OlostepCrawlWebsiteTool", missing)
+            
+            # Raise ImportError with combined message for all missing dependencies
+            install_cmd = "pip install " + " ".join(missing)
+            raise ImportError(f"Missing dependencies: {', '.join(missing)}. Please install them with: {install_cmd}")
+        
+        # Check if OLOSTEP_API_KEY is set in environment variables
+        if "OLOSTEP_API_KEY" not in os.environ:
+            try:
+                # Try to load API key from .env file
+                api_key = OlostepCrawlWebsiteTool._load_api_key_from_env_file()
+                if api_key is None:
+                    # Print missing API key message
+                    missing_api_key("OlostepCrawlWebsiteTool", "OLOSTEP_API_KEY")
+                    raise EnvironmentError("OLOSTEP_API_KEY environment variable is not set and could not be found in .env file")
+            except ImportError:
+                # If dotenv is not installed, we can't load from .env file
+                # Print missing API key message without dotenv support
+                missing_api_key("OlostepCrawlWebsiteTool", "OLOSTEP_API_KEY", dotenv_support=False)
+                raise EnvironmentError("OLOSTEP_API_KEY environment variable is not set and python-dotenv is not installed")
+        
+        return True
+    
+    def __init__(self, api_key: Optional[str] = None, base_url: str = "https://api.olostep.com/v1"):
+        """
+        Initialize the OlostepCrawlWebsiteTool.
+        
+        Args:
+            api_key: Olostep API key (optional, will try to load from environment if not provided)
+            base_url: Base URL for the Olostep API (default: "https://api.olostep.com/v1")
+        """
+        # Set API key
+        self.api_key = api_key
+        self.base_url = base_url
+        
+        # If API key not provided, try to load from environment or .env file
+        if self.api_key is None:
+            # First check environment variables
+            if "OLOSTEP_API_KEY" in os.environ:
+                self.api_key = os.environ["OLOSTEP_API_KEY"]
+            else:
+                # Try to load from .env file
+                try:
+                    api_key = self._load_api_key_from_env_file()
+                    if api_key:
+                        self.api_key = api_key
+                    else:
+                        # Print missing API key message
+                        missing_api_key("OlostepCrawlWebsiteTool", "OLOSTEP_API_KEY")
+                        raise EnvironmentError("OLOSTEP_API_KEY environment variable is not set and could not be found in .env file")
+                except ImportError:
+                    # If dotenv is not installed and no API key in environment
+                    if "OLOSTEP_API_KEY" not in os.environ:
+                        # Print missing API key message without dotenv support
+                        missing_api_key("OlostepCrawlWebsiteTool", "OLOSTEP_API_KEY", dotenv_support=False)
+                        raise EnvironmentError("OLOSTEP_API_KEY environment variable is not set and python-dotenv is not installed")
+                    self.api_key = os.environ["OLOSTEP_API_KEY"]
+        
+        # Check if requests is installed
+        try:
+            import requests
+        except ImportError:
+            missing_dependencies("OlostepCrawlWebsiteTool", ["requests"])
+            raise ImportError("requests is not installed. Please install it with 'pip install requests'")
+    
+    def crawl_website(self, start_url: str, max_pages: int = 50) -> str:
+        """
+        Crawl a website using Olostep API and return all crawled content as a single formatted string.
+        
+        Args:
+            start_url: Starting URL for the crawl
+            max_pages: Maximum number of pages to crawl (default: 50)
+            
+        Returns:
+            String containing all crawled content formatted as "url\ncontent\n\nurl\ncontent"
+        """
+        import requests
+        import time
+        import json
+        
+        # Set headers for all requests
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}"
+        }
+        
+        # Step 1: Initiate the crawl
+        crawl_data = {
+            "start_url": start_url,
+            "max_pages": max_pages
+        }
+        
+        # Make the API request to initiate the crawl
+        response = requests.post(f"{self.base_url}/crawls", headers=headers, json=crawl_data)
+        
+        # Check if the request was successful
+        if response.status_code != 200:
+            error_message = f"Error initiating crawl: {response.status_code} - {response.text}"
+            raise Exception(error_message)
+        
+        # Get the crawl ID
+        crawl_response = response.json()
+        crawl_id = crawl_response.get("id")
+        
+        if not crawl_id:
+            raise Exception("Failed to get crawl ID from response")
+        
+        # Step 2: Wait for the crawl to complete
+        while True:
+            # Get crawl information
+            info_response = requests.get(f"{self.base_url}/crawls/{crawl_id}", headers=headers)
+            
+            if info_response.status_code != 200:
+                error_message = f"Error checking crawl status: {info_response.status_code} - {info_response.text}"
+                raise Exception(error_message)
+            
+            info = info_response.json()
+            status = info.get("status")
+            
+            if status == "completed":
+                break
+            elif status == "failed":
+                raise Exception(f"Crawl failed: {info.get('error', 'Unknown error')}")
+            
+            # Wait before checking again
+            time.sleep(5)
+        
+        # Step 3: Get the list of crawled pages
+        pages_response = requests.get(f"{self.base_url}/crawls/{crawl_id}/pages", headers=headers)
+        
+        if pages_response.status_code != 200:
+            error_message = f"Error getting crawled pages: {pages_response.status_code} - {pages_response.text}"
+            raise Exception(error_message)
+        
+        pages_data = pages_response.json()
+        crawled_pages = pages_data.get("pages", [])
+        
+        # Step 4: Retrieve content for each page in parallel and format the output
+        import concurrent.futures
+        
+        # Define a function to retrieve content for a single page
+        def retrieve_page_content(page):
+            url = page.get("url", "")
+            retrieve_id = page.get("retrieve_id")
+            
+            if not url or not retrieve_id:
+                return None
+            
+            # Retrieve content for this page
+            params = {
+                "retrieve_id": retrieve_id,
+                "formats": json.dumps(["markdown"])
+            }
+            
+            try:
+                content_response = requests.get(f"{self.base_url}/retrieve", headers=headers, params=params)
+                
+                if content_response.status_code != 200:
+                    print(f"Error retrieving content for {url}: {content_response.status_code} - {content_response.text}")
+                    return None
+                
+                content_data = content_response.json()
+                markdown_content = content_data.get("markdown_content", "")
+                
+                if url and markdown_content:
+                    return {"url": url, "content": markdown_content}
+                return None
+            except Exception as e:
+                print(f"Exception while retrieving content for {url}: {str(e)}")
+                return None
+        
+        # Use ThreadPoolExecutor to retrieve content in parallel
+        results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            # Submit all tasks and create a future-to-page mapping
+            future_to_page = {executor.submit(retrieve_page_content, page): page for page in crawled_pages}
+            
+            # Process results as they complete
+            for future in concurrent.futures.as_completed(future_to_page):
+                result = future.result()
+                if result:
+                    results.append(result)
+        
+        # Sort results by URL to maintain a consistent order
+        results.sort(key=lambda x: x["url"])
+        
+        # Format the output
+        formatted_output = ""
+        for result in results:
+            if formatted_output:
+                formatted_output += "\n\n"
+            formatted_output += f"{result['url']}\n{result['content']}"
+        
+        return formatted_output
+
+
 class FirecrawlSearchTool:
     @staticmethod
     def analyze_dependencies() -> Dict[str, bool]:
@@ -980,7 +1656,6 @@ class FirecrawlCrawlWebsiteTool:
             current_dir = parent_dir
         
         return None
-
 
 class YFinanceTool:
     @staticmethod
@@ -1964,4 +2639,4 @@ class Crawl4AISimpleCrawling:
 
 
 # Export all tool classes
-__all__ = ["Search", "ComputerUse", "BrowserUse", "Wikipedia", "DuckDuckGo", "SerperDev", "FirecrawlSearchTool", "FirecrawlScrapeWebsiteTool", "FirecrawlCrawlWebsiteTool", "YFinanceTool", "ArxivTool", "YouTubeVideo", "YoutubeSearch", "Crawl4AISimpleCrawling"] 
+__all__ = ["Search", "ComputerUse", "BrowserUse", "Wikipedia", "DuckDuckGo", "SerperDev", "OlostepWebSearchTool", "OlostepScrapeWebsiteTool", "OlostepCrawlWebsiteTool", "FirecrawlSearchTool", "FirecrawlScrapeWebsiteTool", "FirecrawlCrawlWebsiteTool", "YFinanceTool", "ArxivTool", "YouTubeVideo", "YoutubeSearch", "Crawl4AISimpleCrawling"] 
