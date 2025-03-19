@@ -107,7 +107,6 @@ agent = Agent("Coder", reliability_layer=ReliabilityLayer, model="openai/gpt4o")
 
 ```bash
 pip install upsonic
-
 ```
 
 
