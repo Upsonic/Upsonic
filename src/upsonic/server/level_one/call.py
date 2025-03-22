@@ -53,7 +53,8 @@ class CallManager:
             print("I got the response1")
             usage = result.usage()
 
-            return {"status_code": 200, "result": result.data, "usage": {"input_tokens": usage.request_tokens, "output_tokens": usage.response_tokens}}
+            success_response = {"status_code": 200, "result": result.data, "usage": {"input_tokens": usage.request_tokens, "output_tokens": usage.response_tokens}}
+            return success_response
         except AttributeError:
             return roulette_agent
         except openai.BadRequestError as e:
@@ -67,11 +68,14 @@ class CallManager:
                     print("I got the response2")
                 except Exception as e:
                     traceback.print_exc()
-                    return {"status_code": 403, "detail": "Error processing request: " + str(e)}
+                    error_response = {"status_code": 403, "detail": "Error processing request: " + str(e)}
+                    return error_response
             else:
-                return {"status_code": 403, "detail": "Error processing request: " + str(e)}
+                error_response = {"status_code": 403, "detail": "Error processing request: " + str(e)}
+                return error_response
 
             usage = result.usage()
-            return {"status_code": 200, "result": result.data, "usage": {"input_tokens": usage.request_tokens, "output_tokens": usage.response_tokens}}
+            success_response = {"status_code": 200, "result": result.data, "usage": {"input_tokens": usage.request_tokens, "output_tokens": usage.response_tokens}}
+            return success_response
 
 Call = CallManager()
