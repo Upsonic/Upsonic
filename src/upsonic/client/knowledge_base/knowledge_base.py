@@ -33,8 +33,8 @@ class KnowledgeBase(BaseModel):
         from lightrag import LightRAG, QueryParam
         from lightrag.llm.openai import openai_embed, gpt_4o_mini_complete
 
-        from lightrag.utils import set_logger
-        set_logger("lightrag", level="WARNING")
+        from lightrag.utils import setup_logger
+        setup_logger("lightrag", level="WARNING")
 
         if not self._rag:
             if not self.rag_model:
@@ -54,8 +54,8 @@ class KnowledgeBase(BaseModel):
         from lightrag import LightRAG, QueryParam
         from lightrag.llm.openai import openai_embed, gpt_4o_mini_complete
 
-        from lightrag.utils import set_logger
-        set_logger("lightrag", level="WARNING")
+        from lightrag.utils import setup_logger
+        setup_logger("lightrag", level="WARNING")
 
         """
         Unified function to handle RAG operations and querying.
