@@ -36,8 +36,12 @@ dependencies = [
 
 [project.optional-dependencies]
 rag = [
+    "future>=1.0.0",
     "graspologic>=3.4.1",
-    "lightrag-hku==1.2.6"
+    "lightrag-hku==1.2.6",
+    "pipmaster>=0.5.1",
+    "tenacity>=9.0.0",
+    "tiktoken>=0.9.0",
 ]
 
 [build-system]
