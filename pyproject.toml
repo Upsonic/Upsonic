@@ -34,6 +34,12 @@ dependencies = [
     "duckduckgo-search>=7.3.1",
 ]
 
+[project.optional-dependencies]
+rag = [
+    "graspologic>=3.4.1",
+    "lightrag-hku==1.2.6"
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -48,10 +54,6 @@ dev = [
     "pre-commit>=4.0.1",
     "pytest>=8.3.4",
     "pytest-asyncio>=0.25.1",
-]
-rag = [
-    "graspologic>=3.4.1",
-    "lightrag-hku==1.2.6",
 ]
 
 
