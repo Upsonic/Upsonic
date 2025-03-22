@@ -29,7 +29,7 @@ class KnowledgeBase(BaseModel):
     def remove_file(self, file_path: str):
         self.sources.remove(file_path)
 
-    def setup_rag(self, client):
+    async def setup_rag(self, client):
         from lightrag import LightRAG, QueryParam
         from lightrag.llm.openai import openai_embed, gpt_4o_mini_complete
 
@@ -46,11 +46,14 @@ class KnowledgeBase(BaseModel):
                 raise ValueError(f"Unsupported rag_model type: {self.rag_model}")
 
             self._rag = LightRAG(embedding_func=embedding_func, llm_model_func=gpt_4o_mini_complete)
+            await self._rag.initialize_storages()
             for each in self.sources:
-                self._rag.insert(client.markdown(each))
+                self._rag.ainsert(client.markdown(each))
             return self._rag
 
-    def query(self, query: str, mode: str = "naive") -> List[str]:
+
+
+    async def query(self, query: str, mode: str = "naive") -> List[str]:
         from lightrag import LightRAG, QueryParam
         from lightrag.llm.openai import openai_embed, gpt_4o_mini_complete
 
@@ -71,7 +74,8 @@ class KnowledgeBase(BaseModel):
             raise ValueError("RAG system not initialized. Call setup_rag first.")
         
         # Perform the query
-        results = self._rag.query(query, param=QueryParam(mode=mode, only_need_context=True))
+        results = await self._rag.aquery(query, param=QueryParam(mode=mode, only_need_context=True))
+
         return results
 
 

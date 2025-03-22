@@ -59,7 +59,7 @@ class Task(BaseModel):
                         raise ValueError(f"Error validating tool {tool}: {str(e)}")
 
     
-    def additional_description(self, client):
+    async def additional_description(self, client):
         if not self.context:
             return ""
         
@@ -68,8 +68,8 @@ class Task(BaseModel):
         for context in self.context:
             
             if isinstance(context, KnowledgeBase) and context.rag == True:
-                context.setup_rag(client)
-                rag_results.append(context.query(self.description))
+                await context.setup_rag(client)
+                rag_results.append(await context.query(self.description))
                 
         if rag_results:
             return f"The following is the RAG data: <rag>{' '.join(rag_results)}</rag>"
