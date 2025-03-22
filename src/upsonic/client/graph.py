@@ -3,12 +3,13 @@ from pydantic import BaseModel, Field
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.markup import escape
 from rich.progress import Progress, TextColumn, BarColumn, SpinnerColumn, TimeElapsedColumn, TimeRemainingColumn
 import uuid
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from .printing import console, spacing
+from .printing import console, spacing, escape_rich_markup
 from .tasks.tasks import Task
 from .tasks.task_response import ObjectResponse
 from .agent_configuration.agent_configuration import AgentConfiguration
@@ -641,13 +642,13 @@ class Graph(BaseModel):
             if verbose:
                 # Create and print a task execution panel
                 table = Table(show_header=False, expand=True, box=None)
-                table.add_row("[bold]Task:[/bold]", f"[cyan]{task.description}[/cyan]")
+                table.add_row("[bold]Task:[/bold]", f"[cyan]{escape_rich_markup(task.description)}[/cyan]")
                 # Display runner type safely
                 runner_type = runner.__class__.__name__ if hasattr(runner, '__class__') else type(runner).__name__
-                table.add_row("[bold]Agent:[/bold]", f"[yellow]{runner_type}[/yellow]")
+                table.add_row("[bold]Agent:[/bold]", f"[yellow]{escape_rich_markup(runner_type)}[/yellow]")
                 if task.tools:
-                    tool_names = [t.__class__.__name__ if hasattr(t, '__class__') else str(t) for t in task.tools]
-                    table.add_row("[bold]Tools:[/bold]", f"[green]{', '.join(tool_names)}[/green]")
+                    tool_names = [escape_rich_markup(t.__class__.__name__ if hasattr(t, '__class__') else str(t)) for t in task.tools]
+                    table.add_row("[bold]Tools:[/bold]", f"[green]{escape_rich_markup(', '.join(tool_names))}[/green]")
                 panel = Panel(
                     table,
                     title="[bold blue]Upsonic - Executing Task[/bold blue]",
@@ -676,7 +677,7 @@ class Graph(BaseModel):
                 # Create and print a task completion panel
                 time_taken = end_time - start_time
                 table = Table(show_header=False, expand=True, box=None)
-                table.add_row("[bold]Task:[/bold]", f"[cyan]{task.description}[/cyan]")
+                table.add_row("[bold]Task:[/bold]", f"[cyan]{escape_rich_markup(task.description)}[/cyan]")
                 
                 # Handle different output types for display
                 output_str = self._format_output_for_display(output)
@@ -699,7 +700,7 @@ class Graph(BaseModel):
             
         except Exception as e:
             if verbose:
-                console.print(f"[bold red]Task '{task.description}' failed: {str(e)}[/bold red]")
+                console.print(f"[bold red]Task '{escape_rich_markup(task.description)}' failed: {escape_rich_markup(str(e))}[/bold red]")
             raise
     
     def _evaluate_decision(self, decision_node: Union[DecisionFunc, DecisionLLM], state: State, verbose: bool = False) -> Union[TaskNode, TaskChain, None]:
@@ -745,7 +746,7 @@ class Graph(BaseModel):
             result = response.result if hasattr(response, 'result') else False
             
             if verbose:
-                console.print(f"[dim]LLM Decision Response: {response}[/dim]")
+                console.print(f"[dim]LLM Decision Response: {escape_rich_markup(str(response))}[/dim]")
                 console.print(f"[dim]Decision Result: {'Yes' if result else 'No'}[/dim]")
         else:
             raise ValueError(f"Unknown decision node type: {type(decision_node)}")
@@ -753,7 +754,7 @@ class Graph(BaseModel):
         if verbose:
             # Create and print a decision evaluation panel
             table = Table(show_header=False, expand=True, box=None)
-            table.add_row("[bold]Decision:[/bold]", f"[cyan]{decision_node.description}[/cyan]")
+            table.add_row("[bold]Decision:[/bold]", f"[cyan]{escape_rich_markup(decision_node.description)}[/cyan]")
             table.add_row("[bold]Result:[/bold]", f"[green]{result}[/green]")
             panel = Panel(
                 table,
@@ -795,7 +796,7 @@ class Graph(BaseModel):
                 output_str = json.dumps(model_dict, default=str)
                 if len(output_str) > 200:
                     output_str = output_str[:197] + "..."
-                return output_str
+                return escape_rich_markup(output_str)
             except Exception:
                 # Fallback to str if model_dump fails
                 output_str = str(output)
@@ -807,7 +808,7 @@ class Graph(BaseModel):
         if len(output_str) > 200:
             output_str = output_str[:197] + "..."
             
-        return output_str
+        return escape_rich_markup(output_str)
     
     def _get_predecessors(self, node: Union[TaskNode, DecisionFunc, DecisionLLM]) -> List[Union[TaskNode, DecisionFunc, DecisionLLM]]:
         """
@@ -926,9 +927,9 @@ class Graph(BaseModel):
                     
                     # Update progress description
                     if isinstance(node, TaskNode):
-                        desc = f"[bold blue]Graph Execution - Current: [cyan]{node.task.description[:40]}{'...' if len(node.task.description) > 40 else ''}[/cyan]"
+                        desc = f"[bold blue]Graph Execution - Current: [cyan]{escape_rich_markup(node.task.description[:40])}{'...' if len(node.task.description) > 40 else ''}[/cyan]"
                     else:
-                        desc = f"[bold blue]Graph Execution - Evaluating Decision: [yellow]{node.description}[/yellow]"
+                        desc = f"[bold blue]Graph Execution - Evaluating Decision: [yellow]{escape_rich_markup(node.description)}[/yellow]"
                     
                     # Update the progress bar
                     progress.update(overall_task, description=desc)
@@ -940,7 +941,7 @@ class Graph(BaseModel):
                             latest_output = self.state.get_latest_output()
                             if latest_output:
                                 console.print(f"[dim]********latest_output[/dim]")
-                                console.print(f"[dim]{latest_output}[/dim]")
+                                console.print(f"[dim]{escape_rich_markup(str(latest_output))}[/dim]")
                                 
                         # If this task doesn't have context but there are previous outputs, add them as context
                         if not node.task.context and self.state.task_outputs:
@@ -950,7 +951,7 @@ class Graph(BaseModel):
                                 # Set the context for this task
                                 node.task.context = [latest_output]
                                 if verbose:
-                                    console.print(f"[dim]Setting context from previous output for task: {node.task.description}[/dim]")
+                                    console.print(f"[dim]Setting context from previous output for task: {escape_rich_markup(node.task.description)}[/dim]")
                         
                         output = self._execute_task(node, self.state, verbose)
                         self.state.update(node.id, output)
@@ -977,7 +978,7 @@ class Graph(BaseModel):
                                     if latest_output:
                                         branch.task.context = [latest_output]
                                         if verbose:
-                                            console.print(f"[dim]Setting context from previous output for branch task: {branch.task.description}[/dim]")
+                                            console.print(f"[dim]Setting context from previous output for branch task: {escape_rich_markup(branch.task.description)}[/dim]")
                                 
                                 execution_queue.insert(0, branch)
                             elif isinstance(branch, TaskChain):
@@ -992,7 +993,7 @@ class Graph(BaseModel):
                                         if latest_output:
                                             first_task.task.context = [latest_output]
                                             if verbose:
-                                                console.print(f"[dim]Setting context from previous output for first branch chain task: {first_task.task.description}[/dim]")
+                                                console.print(f"[dim]Setting context from previous output for first branch chain task: {escape_rich_markup(first_task.task.description)}[/dim]")
                                 
                                 for branch_node in branch_nodes:
                                     execution_queue.insert(0, branch_node)
@@ -1000,7 +1001,7 @@ class Graph(BaseModel):
                                 # Handle the case where a decision returns another decision node
                                 # Insert at the front of the queue to be processed next
                                 if verbose:
-                                    console.print(f"[dim]Decision returned another decision node: {branch.description}[/dim]")
+                                    console.print(f"[dim]Decision returned another decision node: {escape_rich_markup(branch.description)}[/dim]")
                                 execution_queue.insert(0, branch)
                     
                     # Increment completed nodes and update progress
@@ -1068,7 +1069,7 @@ class Graph(BaseModel):
                             # Handle the case where a decision returns another decision node
                             # Insert at the front of the queue to be processed next
                             if verbose:
-                                console.print(f"[dim]Decision returned another decision node: {branch.description}[/dim]")
+                                console.print(f"[dim]Decision returned another decision node: {escape_rich_markup(branch.description)}[/dim]")
                             execution_queue.insert(0, branch)
         
         if verbose:
