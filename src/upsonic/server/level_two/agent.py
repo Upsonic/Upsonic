@@ -114,9 +114,11 @@ class AgentManager:
                             print("I got the response4")
                         except Exception as e:
                             traceback.print_exc()
-                            return {"status_code": 403, "detail": "Error processing Agent request: " + str(e)}
+                            error_response = {"status_code": 403, "detail": "Error processing Agent request: " + str(e)}
+                            return error_response
                     else:
-                        return {"status_code": 403, "detail": "Error processing Agent request: " + str(e)}
+                        error_response = {"status_code": 403, "detail": "Error processing Agent request: " + str(e)}
+                        return error_response
 
                 total_request_tokens += result.usage().request_tokens
                 total_response_tokens += result.usage().response_tokens
@@ -153,7 +155,8 @@ class AgentManager:
             if memory:
                 save_temporary_memory(result.all_messages(), agent_id)
 
-            return {
+            # Changed from direct dictionary return to consistent style with error returns
+            success_response = {
                 "status_code": 200, 
                 "result": result.data, 
                 "usage": {
@@ -161,10 +164,12 @@ class AgentManager:
                     "output_tokens": total_response_tokens
                 }
             }
+            return success_response
 
         except Exception as e:
             traceback.print_exc()
-            return {"status_code": 500, "detail": f"Error processing Agent request: {str(e)}"}
+            error_response = {"status_code": 500, "detail": f"Error processing Agent request: {str(e)}"}
+            return error_response
 
 
 Agent = AgentManager()
