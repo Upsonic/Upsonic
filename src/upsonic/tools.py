@@ -22,7 +22,37 @@ class ComputerUse:
     pass
 
 class BrowserUse:
-    pass
+    @staticmethod
+    def analyze_dependencies() -> Dict[str, bool]:
+        """
+        Analyze the dependencies required for BrowserUse and return their status.
+        
+        Returns:
+            Dictionary with dependency names as keys and their availability status as values
+        """
+        dependencies = {
+            "browser_use": False
+        }
+        
+        # Check each dependency
+        try:
+            import browser_use
+            dependencies["browser_use"] = True
+        except ImportError:
+            pass
+        
+        return dependencies
+        
+    @staticmethod
+    def __control__() -> bool:
+        # Check the import browser_use
+        try:
+            import browser_use
+            return True
+        except ImportError:
+            # Use the missing_dependencies function to display the error
+            missing_dependencies("BrowserUse", ["browser_use"])
+            raise ImportError("Missing dependency: browser_use. Please install it with: pip install browser-use")
 
 
 
