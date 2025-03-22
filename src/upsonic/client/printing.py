@@ -196,7 +196,20 @@ def agent_end(result: Any, llm_model: str, response_format: str, start_time: flo
             }
         price_id_summary[price_id]['input_tokens'] += usage['input_tokens']
         price_id_summary[price_id]['output_tokens'] += usage['output_tokens']
-        price_id_summary[price_id]['estimated_cost'] = Decimal(str(price_id_summary[price_id]['estimated_cost'])) + Decimal(str(estimated_cost).replace('$', '').replace('~', ''))
+        # Extract the numeric value from the estimated_cost string
+        # Handle the format from get_estimated_cost which returns "~0.0123"
+        try:
+            # Remove tilde and dollar sign (if present) and convert to Decimal
+            cost_str = str(estimated_cost).replace('~', '').replace('$', '').strip()
+            # The cost is already calculated as a number - use it directly
+            if isinstance(price_id_summary[price_id]['estimated_cost'], (float, int)):
+                price_id_summary[price_id]['estimated_cost'] += float(cost_str)
+            else:
+                # If it's stored as Decimal already
+                price_id_summary[price_id]['estimated_cost'] = Decimal(str(price_id_summary[price_id]['estimated_cost'])) + Decimal(cost_str)
+        except Exception as e:
+            # Fallback in case of conversion errors
+            console.print(f"[bold red]Warning: Could not parse cost value: {estimated_cost}. Error: {e}[/bold red]")
 
     table.add_row("[bold]LLM Model:[/bold]", f"{llm_model}")
     # Add spacing
