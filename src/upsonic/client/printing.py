@@ -4,9 +4,10 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.align import Align
+from rich.text import Text
+from rich.markup import escape
 from .price import get_estimated_cost
 import platform
-
 
 
 console = Console()
@@ -18,6 +19,18 @@ def spacing():
     console.print("")
 
 
+def escape_rich_markup(text):
+    """Escape special characters in text to prevent Rich markup interpretation"""
+    if text is None:
+        return ""
+    
+    # Convert to string if not already
+    if not isinstance(text, str):
+        text = str(text)
+    
+    # Use Rich's built-in escape function
+    return escape(text)
+
 
 def connected_to_server(server_type: str, status: str, total_time: float = None):
     """
@@ -27,13 +40,16 @@ def connected_to_server(server_type: str, status: str, total_time: float = None)
       - right column (values) left-aligned, positioned on the right half 
     """
 
+    # Escape input text
+    server_type = escape_rich_markup(server_type)
+
     # Determine color and symbol for the status
     if status.lower() == "established":
         status_text = "[green]✓ Established[/green]"
     elif status.lower() == "failed":
         status_text = "[red]✗ Failed[/red]"
     else:
-        status_text = f"[cyan]… {status}[/cyan]"
+        status_text = f"[cyan]… {escape_rich_markup(status)}[/cyan]"
 
     # Build a table that expands to full console width
     table = Table(show_header=False, expand=True, box=None)
@@ -70,6 +86,10 @@ def call_end(result: Any, llm_model: str, response_format: str, start_time: floa
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
 
+    # Escape input values
+    llm_model = escape_rich_markup(llm_model)
+    response_format = escape_rich_markup(response_format)
+
     table.add_row("[bold]LLM Model:[/bold]", f"{llm_model}")
     # Add spacing
     table.add_row("")
@@ -87,42 +107,42 @@ def call_end(result: Any, llm_model: str, response_format: str, start_time: floa
         table.add_row("")
         # Print each task as well as bullet list
         for each in result.sub_tasks:
-            table.add_row(f"[bold]Subtask:[/bold]", f"[green]{each.description}[/green]")
-            table.add_row(f"[bold]Required Output:[/bold]", f"[green]{each.required_output}[/green]")
-            table.add_row(f"[bold]Tools:[/bold]", f"[green]{each.tools}[/green]")
+            table.add_row(f"[bold]Subtask:[/bold]", f"[green]{escape_rich_markup(each.description)}[/green]")
+            table.add_row(f"[bold]Required Output:[/bold]", f"[green]{escape_rich_markup(each.required_output)}[/green]")
+            table.add_row(f"[bold]Tools:[/bold]", f"[green]{escape_rich_markup(each.tools)}[/green]")
             table.add_row("")
     elif is_it_search:
         table.add_row("[bold]Has Customers:[/bold]", f"[green]{'Yes' if result.any_customers else 'No'}[/green]")
         table.add_row("")
         table.add_row("[bold]Products:[/bold]")
         for product in result.products:
-            table.add_row("", f"[green]• {product}[/green]")
+            table.add_row("", f"[green]• {escape_rich_markup(product)}[/green]")
         table.add_row("")
         table.add_row("[bold]Services:[/bold]")
         for service in result.services:
-            table.add_row("", f"[green]• {service}[/green]")
+            table.add_row("", f"[green]• {escape_rich_markup(service)}[/green]")
         table.add_row("")
         table.add_row("[bold]Potential Competitors:[/bold]")
         for competitor in result.potential_competitors:
-            table.add_row("", f"[yellow]• {competitor}[/yellow]")
+            table.add_row("", f"[yellow]• {escape_rich_markup(competitor)}[/yellow]")
         table.add_row("")
     elif is_it_company:
-        table.add_row("[bold]Company Objective:[/bold]", f"[blue]{result.objective}[/blue]")
+        table.add_row("[bold]Company Objective:[/bold]", f"[blue]{escape_rich_markup(result.objective)}[/blue]")
         table.add_row("")
         table.add_row("[bold]Goals:[/bold]")
         for goal in result.goals:
-            table.add_row("", f"[blue]• {goal}[/blue]")
+            table.add_row("", f"[blue]• {escape_rich_markup(goal)}[/blue]")
         table.add_row("")
-        table.add_row("[bold]State:[/bold]", f"[blue]{result.state}[/blue]")
+        table.add_row("[bold]State:[/bold]", f"[blue]{escape_rich_markup(result.state)}[/blue]")
         table.add_row("")
     elif is_it_human:
-        table.add_row("[bold]Job Title:[/bold]", f"[magenta]{result.job_title}[/magenta]")
+        table.add_row("[bold]Job Title:[/bold]", f"[magenta]{escape_rich_markup(result.job_title)}[/magenta]")
         table.add_row("")
-        table.add_row("[bold]Job Description:[/bold]", f"[magenta]{result.job_description}[/magenta]")
+        table.add_row("[bold]Job Description:[/bold]", f"[magenta]{escape_rich_markup(result.job_description)}[/magenta]")
         table.add_row("")
         table.add_row("[bold]Job Goals:[/bold]")
         for goal in result.job_goals:
-            table.add_row("", f"[magenta]• {goal}[/magenta]")
+            table.add_row("", f"[magenta]• {escape_rich_markup(goal)}[/magenta]")
         table.add_row("")
     else:
         result_str = str(result)
@@ -133,7 +153,7 @@ def call_end(result: Any, llm_model: str, response_format: str, start_time: floa
         if len(result_str) < len(str(result)):
             result_str += "[bold white]...[/bold white]"
 
-        table.add_row("[bold]Result:[/bold]", f"[green]{result_str}[/green]")
+        table.add_row("[bold]Result:[/bold]", f"[green]{escape_rich_markup(result_str)}[/green]")
 
     # Add spacing
     table.add_row("")
@@ -160,6 +180,11 @@ def agent_end(result: Any, llm_model: str, response_format: str, start_time: flo
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
 
+    # Escape input values
+    llm_model = escape_rich_markup(llm_model)
+    response_format = escape_rich_markup(response_format)
+    price_id = escape_rich_markup(price_id) if price_id else None
+
     # Track values if price_id is provided
     if price_id:
         estimated_cost = get_estimated_cost(usage['input_tokens'], usage['output_tokens'], llm_model)
@@ -184,7 +209,7 @@ def agent_end(result: Any, llm_model: str, response_format: str, start_time: flo
     if len(result_str) < len(str(result)):
         result_str += "[bold white]...[/bold white]"
 
-    table.add_row("[bold]Result:[/bold]", f"[green]{result_str}[/green]")
+    table.add_row("[bold]Result:[/bold]", f"[green]{escape_rich_markup(result_str)}[/green]")
     # Add spacing
     table.add_row("")
     table.add_row("[bold]Response Format:[/bold]", f"{response_format}")
@@ -209,6 +234,9 @@ def agent_end(result: Any, llm_model: str, response_format: str, start_time: flo
 def agent_total_cost(total_input_tokens: int, total_output_tokens: int, total_time: float, llm_model: str):
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
+    
+    # Escape input values
+    llm_model = escape_rich_markup(llm_model)
 
     table.add_row("[bold]Estimated Cost:[/bold]", f"{get_estimated_cost(total_input_tokens, total_output_tokens, llm_model)}$")
     table.add_row("[bold]Time Taken:[/bold]", f"{total_time:.2f} seconds")
@@ -232,6 +260,10 @@ def print_price_id_summary(price_id: str, task) -> dict:
     Returns:
         dict: A dictionary containing the usage summary, or None if price_id not found
     """
+    # Escape input values
+    price_id_display = escape_rich_markup(price_id)
+    task_display = escape_rich_markup(str(task))
+    
     if price_id not in price_id_summary:
         console.print("[bold red]Price ID not found![/bold red]")
         return None
@@ -244,7 +276,7 @@ def print_price_id_summary(price_id: str, task) -> dict:
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
 
-    table.add_row("[bold]Price ID:[/bold]", f"[magenta]{price_id}[/magenta]")
+    table.add_row("[bold]Price ID:[/bold]", f"[magenta]{price_id_display}[/magenta]")
     table.add_row("")  # Add spacing
     table.add_row("[bold]Input Tokens:[/bold]", f"[magenta]{summary['input_tokens']:,}[/magenta]")
     table.add_row("[bold]Output Tokens:[/bold]", f"[magenta]{summary['output_tokens']:,}[/magenta]")
@@ -312,6 +344,10 @@ def missing_dependencies(tool_name: str, missing_deps: list):
     if not missing_deps:
         return
     
+    # Escape input values
+    tool_name = escape_rich_markup(tool_name)
+    missing_deps = [escape_rich_markup(dep) for dep in missing_deps]
+    
     # Create the installation command
     install_cmd = "pip install " + " ".join(missing_deps)
     
@@ -334,6 +370,10 @@ def missing_api_key(tool_name: str, env_var_name: str, dotenv_support: bool = Tr
         env_var_name: Name of the environment variable for the API key
         dotenv_support: Whether the tool supports loading from .env file
     """
+    # Escape input values
+    tool_name = escape_rich_markup(tool_name)
+    env_var_name = escape_rich_markup(env_var_name)
+    
     # Determine the operating system
     system = platform.system()
     
