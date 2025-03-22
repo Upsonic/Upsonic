@@ -31,6 +31,32 @@ async def exception_handler(request: Request, exc: Exception):
         content={"detail": str(exc)}
     )
 
+def handle_server_errors(func):
+    """
+    Decorator to catch internal server errors, print the traceback,
+    and return a standardized error response.
+    """
+    @wraps(func)
+    async def async_wrapper(*args, **kwargs):
+        try:
+            if inspect.iscoroutinefunction(func):
+                return await func(*args, **kwargs)
+            else:
+                return func(*args, **kwargs)
+        except Exception as e:
+            traceback.print_exc()
+            return {"result": {"status_code": 500, "detail": f"Error processing Call request: {str(e)}"}, "status_code": 500}
+
+    @wraps(func)
+    def sync_wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            traceback.print_exc()
+            return {"result": {"status_code": 500, "detail": f"Error processing Call request: {str(e)}"}, "status_code": 500}
+
+    return async_wrapper if inspect.iscoroutinefunction(func) else sync_wrapper
+
 @app.get("/status")
 async def get_status():
     async with httpx.AsyncClient() as client:

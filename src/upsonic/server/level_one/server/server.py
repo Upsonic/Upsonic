@@ -2,7 +2,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional, Union
 import traceback
-from ...api import app, timeout
+from ...api import app, timeout, handle_server_errors
 from ..call import Call
 import asyncio
 import cloudpickle
@@ -25,6 +25,7 @@ class GPT4ORequest(BaseModel):
 
 @app.post(f"{prefix}/gpt4o")
 @timeout(300.0)  # 5 minutes timeout for AI operations
+@handle_server_errors
 async def call_gpt4o(request: GPT4ORequest):
     """
     Endpoint to call GPT-4 with optional tools and MCP servers.
