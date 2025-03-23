@@ -111,14 +111,17 @@ class ToolRequest(BaseModel):
 @timeout(30.0)
 async def list_tools():
 
-
     tools = []
     for name, info in registered_functions.items():
-
+        # Truncate description if it's longer than 1024 characters
+        description = info["description"]
+        if len(description) > 1024:
+            description = description[:1020] + "..."
+            
         tools.append(
             {
                 "name": name,
-                "description": info["description"],
+                "description": description,
                 "inputSchema": {
                     "type": "object",
                     "properties": info["properties"],
@@ -126,7 +129,6 @@ async def list_tools():
                 },
             }
         )
-
 
     print(tools)    
     return {"available_tools": {"tools": tools}}
