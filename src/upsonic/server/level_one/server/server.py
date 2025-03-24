@@ -8,6 +8,7 @@ import asyncio
 import cloudpickle
 cloudpickle.DEFAULT_PROTOCOL = 2
 import base64
+import os
 
 
 prefix = "/level_one"
@@ -36,6 +37,7 @@ async def call_gpt4o(request: GPT4ORequest):
     Returns:
         The response from the AI model
     """
+    2/0
     try:
         # Handle pickled response format
         if request.response_format != "str":
@@ -44,6 +46,11 @@ async def call_gpt4o(request: GPT4ORequest):
                 pickled_data = base64.b64decode(request.response_format)
                 response_format = cloudpickle.loads(pickled_data)
             except Exception as e:
+                tb = traceback.extract_tb(e.__traceback__)
+                file_path = tb[-1].filename
+                if "Upsonic/src/" in file_path:
+                    file_path = file_path.split("Upsonic/src/")[1]
+                line_number = tb[-1].lineno
                 traceback.print_exc()
                 # Fallback to basic type mapping if unpickling fails
                 type_mapping = {
@@ -61,6 +68,11 @@ async def call_gpt4o(request: GPT4ORequest):
                 pickled_context = base64.b64decode(request.context)
                 context = cloudpickle.loads(pickled_context)
             except Exception as e:
+                tb = traceback.extract_tb(e.__traceback__)
+                file_path = tb[-1].filename
+                if "Upsonic/src/" in file_path:
+                    file_path = file_path.split("Upsonic/src/")[1]
+                line_number = tb[-1].lineno
                 traceback.print_exc()
                 context = None
         else:
@@ -81,5 +93,10 @@ async def call_gpt4o(request: GPT4ORequest):
             result["result"] = base64.b64encode(result["result"]).decode('utf-8')
         return {"result": result, "status_code": 200}
     except Exception as e:
+        tb = traceback.extract_tb(e.__traceback__)
+        file_path = tb[-1].filename
+        if "Upsonic/src/" in file_path:
+            file_path = file_path.split("Upsonic/src/")[1]
+        line_number = tb[-1].lineno
         traceback.print_exc()
-        return {"result": {"status_code": 500, "detail": f"Error processing Call request: {str(e)}"}, "status_code": 500}
+        return {"result": {"status_code": 500, "detail": f"Error processing Call request in {file_path} at line {line_number}: {str(e)}"}, "status_code": 500}

@@ -15,6 +15,7 @@ import threading
 import time
 import traceback
 import logging
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.ERROR)
@@ -25,10 +26,15 @@ app = FastAPI()
 # Remove the middleware and use exception handlers instead
 @app.exception_handler(Exception)
 async def exception_handler(request: Request, exc: Exception):
-    logging.error(f"Error: {exc}", exc_info=True)
+    tb = traceback.extract_tb(exc.__traceback__)
+    file_path = tb[-1].filename
+    if "Upsonic/src/" in file_path:
+        file_path = file_path.split("Upsonic/src/")[1]
+    line_number = tb[-1].lineno
+    logging.error(f"Error in {file_path} at line {line_number}: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500,
-        content={"detail": str(exc)}
+        content={"detail": f"Error in {file_path} at line {line_number}: {str(exc)}"}
     )
 
 def handle_server_errors(func):
@@ -44,16 +50,26 @@ def handle_server_errors(func):
             else:
                 return func(*args, **kwargs)
         except Exception as e:
+            tb = traceback.extract_tb(e.__traceback__)
+            file_path = tb[-1].filename
+            if "Upsonic/src/" in file_path:
+                file_path = file_path.split("Upsonic/src/")[1]
+            line_number = tb[-1].lineno
             traceback.print_exc()
-            return {"result": {"status_code": 500, "detail": f"Error processing Call request: {str(e)}"}, "status_code": 500}
+            return {"result": {"status_code": 500, "detail": f"Error processing Call request in {file_path} at line {line_number}: {str(e)}"}, "status_code": 500}
 
     @wraps(func)
     def sync_wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
         except Exception as e:
+            tb = traceback.extract_tb(e.__traceback__)
+            file_path = tb[-1].filename
+            if "Upsonic/src/" in file_path:
+                file_path = file_path.split("Upsonic/src/")[1]
+            line_number = tb[-1].lineno
             traceback.print_exc()
-            return {"result": {"status_code": 500, "detail": f"Error processing Call request: {str(e)}"}, "status_code": 500}
+            return {"result": {"status_code": 500, "detail": f"Error processing Call request in {file_path} at line {line_number}: {str(e)}"}, "status_code": 500}
 
     return async_wrapper if inspect.iscoroutinefunction(func) else sync_wrapper
 

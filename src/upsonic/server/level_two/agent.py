@@ -2,6 +2,7 @@ import traceback
 import anthropic
 import openai
 from pydantic import BaseModel
+import os
 
 
 from typing import Any, Optional, List
@@ -113,11 +114,20 @@ class AgentManager:
                             result = await roulette_agent.run(message, message_history=message_history)
                             print("I got the response4")
                         except Exception as e:
-                            traceback.print_exc()
-                            error_response = {"status_code": 403, "detail": "Error processing Agent request: " + str(e)}
+                            tb = traceback.extract_tb(e.__traceback__)
+                            file_path = tb[-1].filename
+                            if "Upsonic/src/" in file_path:
+                                file_path = file_path.split("Upsonic/src/")[1]
+                            line_number = tb[-1].lineno
+                            error_response = {"status_code": 403, "detail": f"Error processing Agent request in {file_path} at line {line_number}: {str(e)}"}
                             return error_response
                     else:
-                        error_response = {"status_code": 403, "detail": "Error processing Agent request: " + str(e)}
+                        tb = traceback.extract_tb(e.__traceback__)
+                        file_path = tb[-1].filename
+                        if "Upsonic/src/" in file_path:
+                            file_path = file_path.split("Upsonic/src/")[1]
+                        line_number = tb[-1].lineno
+                        error_response = {"status_code": 403, "detail": f"Error processing Agent request in {file_path} at line {line_number}: {str(e)}"}
                         return error_response
 
                 total_request_tokens += result.usage().request_tokens
@@ -149,6 +159,11 @@ class AgentManager:
 
                         satisfied = satify_result["result"].satisfied
                     except Exception as e:
+                        tb = traceback.extract_tb(e.__traceback__)
+                        file_path = tb[-1].filename
+                        if "Upsonic/src/" in file_path:
+                            file_path = file_path.split("Upsonic/src/")[1]
+                        line_number = tb[-1].lineno
                         traceback.print_exc()
                         satisfied = True  # Break the loop on error
 
@@ -167,8 +182,13 @@ class AgentManager:
             return success_response
 
         except Exception as e:
+            tb = traceback.extract_tb(e.__traceback__)
+            file_path = tb[-1].filename
+            if "Upsonic/src/" in file_path:
+                file_path = file_path.split("Upsonic/src/")[1]
+            line_number = tb[-1].lineno
             traceback.print_exc()
-            error_response = {"status_code": 500, "detail": f"Error processing Agent request: {str(e)}"}
+            error_response = {"status_code": 500, "detail": f"Error processing Agent request in {file_path} at line {line_number}: {str(e)}"}
             return error_response
 
 
