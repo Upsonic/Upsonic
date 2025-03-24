@@ -19,6 +19,7 @@ from ..printing import call_end
 
 from ..tasks.task_response import ObjectResponse
 
+from ..language import Language
 
 from ..level_utilized.utility import context_serializer, response_format_serializer, tools_serializer, response_format_deserializer, error_handler
 
@@ -201,6 +202,13 @@ class Call:
 
         task._response = deserialized_result["result"]
         
+
+        if task.response_lang:
+            language = Language(task.response_lang, task, llm_model)
+            processed_result = await language.transform()
+            task._response = processed_result
+
+
         response_format_req = None
         if response_format_str == "str":
             response_format_req = response_format_str
