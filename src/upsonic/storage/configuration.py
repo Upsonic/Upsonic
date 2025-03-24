@@ -3,6 +3,7 @@ import sqlite3
 import json
 from dotenv import load_dotenv
 import signal
+import sys
 from .folder import BASE_PATH
 
 
@@ -30,7 +31,10 @@ class ConfigManager:
                 self.conn.close()
             except:
                 pass
-        signal.default_int_handler(signum, frame)
+        try:
+            sys.exit(0)
+        except SystemExit:
+            os._exit(0)
 
     def initialize(self, key):
         load_dotenv()
