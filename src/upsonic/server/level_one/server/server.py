@@ -37,7 +37,6 @@ async def call_gpt4o(request: GPT4ORequest):
     Returns:
         The response from the AI model
     """
-    2/0
     try:
         # Handle pickled response format
         if request.response_format != "str":
