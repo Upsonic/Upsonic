@@ -199,3 +199,29 @@ class Tools:
             self.add_mcp_tool(name, command, args, env)
             return cls
         return decorator
+
+    def sse_mcp(self):
+        """
+        Decorator to register a class as an MCP tool that uses Server-Sent Events (SSE).
+        Usage:
+        @client.sse_mcp()
+        class ToolName:
+            url = "https://example.com/sse"
+        
+        """
+        def decorator(cls):
+            url = getattr(cls, "url", None)
+
+            name = cls.__name__
+
+            if not url:
+                raise ValueError("SSE MCP tool class must have a 'url' attribute")
+            
+            self.add_sse_mcp(name, url)
+            return cls
+        return decorator
+
+
+    def add_sse_mcp(self, name: str, url: str) -> Dict[str, Any]:
+        result = self.send_request("/tools/add_sse_mcp", {"name": name, "url": url})
+        return result
