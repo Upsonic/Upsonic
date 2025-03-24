@@ -22,6 +22,7 @@ class Task(BaseModel):
     start_time: Optional[int] = None
     end_time: Optional[int] = None
     agent: Optional[Any] = None
+    response_lang: Optional[str] = None
 
     @property
     def duration(self) -> Optional[float]:

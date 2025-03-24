@@ -22,6 +22,38 @@ class DirectStatic:
         Returns:
             The response from the LLM
         """
+        import asyncio
+        
+        try:
+            # Check if there's a running event loop
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                # If there's a running loop, run the coroutine in that loop
+                return asyncio.run_coroutine_threadsafe(
+                    DirectStatic.do_async(task, model, client, debug), 
+                    loop
+                ).result()
+        except RuntimeError:
+            # No running event loop
+            pass
+        
+        # If no running loop or exception occurred, create a new one
+        return asyncio.run(DirectStatic.do_async(task, model, client, debug))
+
+    @staticmethod
+    async def do_async(task: Task, model: str | None = None, client: Any = None, debug: bool = False):
+        """
+        Execute a direct LLM call with the given task and model asynchronously.
+        
+        Args:
+            task: The task to execute
+            model: The LLM model to use (default: "openai/gpt-4")
+            client: Optional custom client to use instead of creating a new one
+            debug: Whether to enable debug mode
+            
+        Returns:
+            The response from the LLM
+        """
         global latest_upsonic_client
         from ..latest_upsonic_client import latest_upsonic_client
 
@@ -34,8 +66,9 @@ class DirectStatic:
         # Register tools if needed
         the_client = register_tools(the_client, task.tools)
 
-        # Execute the direct call
-        return the_client.call(task, model)
+        # Execute the direct call asynchronously
+        await the_client.call_async(task, model)
+        return task.response
 
     @staticmethod
     def print_do(task: Task, model: str | None = None, client: Any = None, debug: bool = False):
@@ -51,7 +84,39 @@ class DirectStatic:
         Returns:
             The response from the LLM
         """
-        result = DirectStatic.do(task, model, client, debug)
+        import asyncio
+        
+        try:
+            # Check if there's a running event loop
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                # If there's a running loop, run the coroutine in that loop
+                return asyncio.run_coroutine_threadsafe(
+                    DirectStatic.print_do_async(task, model, client, debug), 
+                    loop
+                ).result()
+        except RuntimeError:
+            # No running event loop
+            pass
+        
+        # If no running loop or exception occurred, create a new one
+        return asyncio.run(DirectStatic.print_do_async(task, model, client, debug))
+
+    @staticmethod
+    async def print_do_async(task: Task, model: str | None = None, client: Any = None, debug: bool = False):
+        """
+        Execute a direct LLM call and print the result asynchronously.
+        
+        Args:
+            task: The task to execute
+            model: The LLM model to use (default: "openai/gpt-4")
+            client: Optional custom client to use instead of creating a new one
+            debug: Whether to enable debug mode
+            
+        Returns:
+            The response from the LLM
+        """
+        result = await DirectStatic.do_async(task, model, client, debug)
         print(result)
         return result
 
@@ -85,13 +150,44 @@ class DirectInstance:
         Returns:
             The response from the LLM
         """
+        import asyncio
+        
+        try:
+            # Check if there's a running event loop
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                # If there's a running loop, run the coroutine in that loop
+                return asyncio.run_coroutine_threadsafe(
+                    self.do_async(task, model, client, debug), 
+                    loop
+                ).result()
+        except RuntimeError:
+            # No running event loop
+            pass
+        
+        # If no running loop or exception occurred, create a new one
+        return asyncio.run(self.do_async(task, model, client, debug))
+
+    async def do_async(self, task: Task, model: str | None = None, client: Any = None, debug: bool = False):
+        """
+        Execute a direct LLM call using instance defaults or overrides asynchronously.
+        
+        Args:
+            task: The task to execute
+            model: The LLM model to use (overrides instance default if provided)
+            client: Optional custom client (overrides instance default if provided)
+            debug: Whether to enable debug mode (overrides instance default if provided)
+            
+        Returns:
+            The response from the LLM
+        """
         # Use provided parameters or instance defaults
         actual_model = model if model is not None else self.model
         actual_client = client if client is not None else self.client
         actual_debug = debug if debug is not False else self.debug
         
         # Call the static method with the resolved parameters
-        return DirectStatic.do(task, actual_model, actual_client, actual_debug)
+        return await DirectStatic.do_async(task, actual_model, actual_client, actual_debug)
         
     def print_do(self, task: Task, model: str | None = None, client: Any = None, debug: bool = False):
         """
@@ -106,7 +202,38 @@ class DirectInstance:
         Returns:
             The response from the LLM
         """
-        result = self.do(task, model, client, debug)
+        import asyncio
+        
+        try:
+            # Check if there's a running event loop
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                # If there's a running loop, run the coroutine in that loop
+                return asyncio.run_coroutine_threadsafe(
+                    self.print_do_async(task, model, client, debug), 
+                    loop
+                ).result()
+        except RuntimeError:
+            # No running event loop
+            pass
+        
+        # If no running loop or exception occurred, create a new one
+        return asyncio.run(self.print_do_async(task, model, client, debug))
+
+    async def print_do_async(self, task: Task, model: str | None = None, client: Any = None, debug: bool = False):
+        """
+        Execute a direct LLM call and print the result asynchronously.
+        
+        Args:
+            task: The task to execute
+            model: The LLM model to use (overrides instance default if provided)
+            client: Optional custom client (overrides instance default if provided)
+            debug: Whether to enable debug mode (overrides instance default if provided)
+            
+        Returns:
+            The response from the LLM
+        """
+        result = await self.do_async(task, model, client, debug)
         print(result)
         return result
 
@@ -127,6 +254,14 @@ class Direct:
     @staticmethod
     def print_do(task: Task, model: str | None = None, client: Any = None, debug: bool = False):
         return DirectStatic.print_do(task, model, client, debug)
+
+    @staticmethod
+    async def do_async(task: Task, model: str | None = None, client: Any = None, debug: bool = False):
+        return await DirectStatic.do_async(task, model, client, debug)
+    
+    @staticmethod
+    async def print_do_async(task: Task, model: str | None = None, client: Any = None, debug: bool = False):
+        return await DirectStatic.print_do_async(task, model, client, debug)
     
     def __new__(cls, model: str | None = None, client: Any = None, debug: bool = False):
         """

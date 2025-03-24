@@ -35,6 +35,7 @@ from ..tools.tools import Search
 
 from ...reliability_processor import ReliabilityProcessor
 
+from ..language import Language
 
 class SubTask(ObjectResponse):
     description: str
@@ -541,6 +542,11 @@ class Agent:
                     llm_model
                 )
                 task._response = processed_result
+
+                if task.response_lang:
+                    language = Language(task.response_lang, task, llm_model)
+                    processed_result = await language.transform()
+                    task._response = processed_result
 
                 response_format_req = None
                 if response_format_str == "str":
