@@ -25,6 +25,8 @@ def register_tools(client, tools):
                 if hasattr(tool, 'command'):
 
                     client.mcp()(tool)
+                elif hasattr(tool, 'url'):
+                    client.sse_mcp()(tool)
                 else:
 
                     client.tool()(tool)

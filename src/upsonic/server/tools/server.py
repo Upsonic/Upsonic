@@ -68,6 +68,9 @@ class AddMCPToolRequest(BaseModel):
     args: List[str]
     env: Dict[str, str]
 
+class AddSSEMCPToolRequest(BaseModel):
+    name: str
+    url: str
 
 @app.post(f"{prefix}/add_mcp_tool")
 async def add_mcp_tool(request: AddMCPToolRequest):
@@ -80,3 +83,12 @@ async def add_mcp_tool(request: AddMCPToolRequest):
         return {"status_code": 200, "message": "Tool added successfully"}
     except Exception as e:
         return {"status_code": 500, "message": f"Error adding tool: This tool seems not okay to use."}
+    
+@app.post(f"{prefix}/add_sse_mcp")
+async def add_sse_mcp(request: AddSSEMCPToolRequest):
+    """
+    Endpoint to add a tool.
+    """
+    with ToolManager() as tool_client:
+        tool_client.add_sse_mcp(request.name, request.url)
+    return {"status_code": 200, "message": "Tool added successfully"}

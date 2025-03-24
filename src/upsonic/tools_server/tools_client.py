@@ -81,3 +81,16 @@ class ToolManager:
             )
             response.raise_for_status()
             return response.json()
+        
+    def add_sse_mcp(self, name: str, url: str) -> Dict[str, Any]:
+        """
+        Add a tool.
+        """
+        with httpx.Client(timeout=600.0) as session:
+            response = session.post(
+                f"{self.base_url}/tools/add_sse_mcp",
+                json={"name": name, "url": url},
+            )
+            response.raise_for_status()
+            return response.json()
+
