@@ -3,7 +3,7 @@ import traceback
 import types
 from itertools import chain
 from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIModel, OpenAIAgentModel
+from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.models.anthropic import AnthropicModel
 from openai import AsyncOpenAI, NOT_GIVEN
 from openai import AsyncAzureOpenAI

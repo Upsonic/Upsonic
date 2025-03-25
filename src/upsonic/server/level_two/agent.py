@@ -3,7 +3,7 @@ import anthropic
 import openai
 from pydantic import BaseModel
 import os
-
+from pydantic_ai.messages import ImageUrl
 
 from typing import Any, Optional, List
 
@@ -46,25 +46,19 @@ class AgentManager:
 
             roulette_agent.retries = retries
             
-            message_history = None
             if memory:
                 message_history = get_temporary_memory(agent_id)
-
-            message = [{
-                "type": "text",
-                "text": f"{prompt}"
-            }]
-
-
+                if message_history == None:
+                    message_history = []
+            else:
+                message_history = []
+                
+            message = prompt
+            message_history.append(prompt)
 
             if images:
                 for image in images:
-                    message.append({
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{image}"
-                        }
-                    })
+                    message_history.append(ImageUrl(url=f"data:image/jpeg;base64,{image}"))
 
             if "claude-3-5-sonnet" in llm_model:
                 print("Tools", tools)
@@ -72,7 +66,7 @@ class AgentManager:
                     try:
                         from ..level_utilized.cu import ComputerUse_screenshot_tool
                         result_of_screenshot = ComputerUse_screenshot_tool()
-                        message.append(result_of_screenshot)
+                        message_history.append(ImageUrl(url=result_of_screenshot["image_url"]["url"]))
                     except Exception as e:
                         print("Error", e)
 
@@ -83,12 +77,18 @@ class AgentManager:
             total_retries = 0
 
             while not satisfied:
-                message[0]["text"] = message[0]["text"] + "\n\n" + feedback
+                if feedback:
+                    current_message = prompt + "\n\n" + feedback
+                    # Update the message history with the new message that includes feedback
+                    if message_history and isinstance(message_history[0], str):
+                        message_history[0] = current_message
+                    message = current_message
+                
                 print("message: ", message)
 
                 try:
                     print("I sent the request3")
-                    result = await roulette_agent.run(message, message_history=message_history)
+                    result = await roulette_agent.run(message_history)
                     print("I got the response3")
                 except (openai.BadRequestError, anthropic.BadRequestError) as e:
                     str_e = str(e)
@@ -98,9 +98,18 @@ class AgentManager:
                             compressed_prompt = summarize_system_prompt(system_prompt, llm_model)
                             if compressed_prompt:
                                 print("compressed_prompt", compressed_prompt)
-                            message[0]["text"] = summarize_message_prompt(message[0]["text"], llm_model)
-                            if message[0]["text"]:
-                                print("compressed_message", message[0]["text"])
+                                
+                            # Compress the message and update message_history
+                            compressed_message = summarize_message_prompt(message, llm_model)
+                            if compressed_message:
+                                print("compressed_message", compressed_message)
+                                message = compressed_message
+                                
+                                # Reset message history with compressed message
+                                message_history = [compressed_message]
+                                if images:
+                                    for image in images:
+                                        message_history.append(ImageUrl(url=f"data:image/jpeg;base64,{image}"))
 
                             roulette_agent = agent_creator(
                                 response_format=response_format,
@@ -111,7 +120,7 @@ class AgentManager:
                                 context_compress=False
                             )
                             print("I sent the request4")
-                            result = await roulette_agent.run(message, message_history=message_history)
+                            result = await roulette_agent.run(message_history)
                             print("I got the response4")
                         except Exception as e:
                             tb = traceback.extract_tb(e.__traceback__)
