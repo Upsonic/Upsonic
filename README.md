@@ -169,7 +169,7 @@ task = Task(
 )
     
 # Usage
-web_agent.print_do(task)
+result = web_agent.print_do(task)
 print(result.title)
 print(result.summary)
 
