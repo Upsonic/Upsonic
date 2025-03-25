@@ -117,38 +117,59 @@ async def execute_task_async(agent_config, task: Task, debug: bool = False):
 
 
 class AgentConfiguration(BaseModel):
-    agent_id_: str = None
-    job_title: str
-    company_url: str = None
-    company_objective: str = None
-    name: str = ""
-    contact: str = ""
-    model: str = "openai/gpt-4o"
-    client: Any = None  # Add client parameter
-    debug: bool = False
-    reliability_layer: Any = None  # Changed to Any to accept any class or instance
-    system_prompt: str = None
-    tools: List[Any] = []
-
-    def __init__(self, job_title: str = None, client: Any = None, **data):
+    def __init__(
+        self, 
+        job_title: str, 
+        company_url: str = None, 
+        company_objective: str = None,
+        name: str = "",
+        contact: str = "",
+        model: str = "openai/gpt-4o",
+        client: Any = None,
+        debug: bool = False,
+        reliability_layer: Any = None,
+        system_prompt: str = None,
+        tools: List[Any] = None,
+        sub_task: bool = True,
+        reflection: bool = False,
+        memory: bool = False,
+        caching: bool = True,
+        cache_expiry: int = 60 * 60,
+        knowledge_base: KnowledgeBase = None,
+        context_compress: bool = False,
+        agent_id_: str = None,
+        **data
+    ):
         if job_title is not None:
             data["job_title"] = job_title
         if client is not None:
             data["client"] = client
-               
+        
+        if tools is None:
+            tools = []
+            
+        data.update({
+            "agent_id_": agent_id_,
+            "company_url": company_url,
+            "company_objective": company_objective,
+            "name": name,
+            "contact": contact,
+            "model": model,
+            "debug": debug,
+            "reliability_layer": reliability_layer,
+            "system_prompt": system_prompt,
+            "tools": tools,
+            "sub_task": sub_task,
+            "reflection": reflection,
+            "memory": memory,
+            "caching": caching,
+            "cache_expiry": cache_expiry,
+            "knowledge_base": knowledge_base,
+            "context_compress": context_compress
+        })
 
         super().__init__(**data)
-        self.validate_tools() 
-
-    sub_task: bool = True
-    reflection: bool = False
-    memory: bool = False
-    caching: bool = True
-    cache_expiry: int = 60 * 60
-    knowledge_base: KnowledgeBase = None
-    context_compress: bool = False
-
-
+        self.validate_tools()
 
     def validate_tools(self):
         """
