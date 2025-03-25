@@ -346,6 +346,38 @@ def get_price_id_total_cost(price_id: str):
         'estimated_cost': float(data['estimated_cost'])
     }
 
+def mcp_tool_operation(operation: str, result=None):
+    """
+    Prints a formatted panel for MCP tool operations.
+    
+    Args:
+        operation: The operation being performed (e.g., "Adding", "Added", "Removing")
+        result: The result of the operation, if available
+    """
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    # Format the operation text
+    operation_text = f"[bold cyan]{escape_rich_markup(operation)}[/bold cyan]"
+    table.add_row(operation_text)
+    
+    # If there's a result, add it to the table
+    if result:
+        result_str = str(result)
+        table.add_row("")  # Add spacing
+        table.add_row(f"[green]{escape_rich_markup(result_str)}[/green]")
+    
+    panel = Panel(
+        table,
+        title="[bold cyan]Upsonic - MCP Tool Operation[/bold cyan]",
+        border_style="cyan",
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
+
 def missing_dependencies(tool_name: str, missing_deps: list):
     """
     Prints a formatted panel with missing dependencies and installation instructions.
