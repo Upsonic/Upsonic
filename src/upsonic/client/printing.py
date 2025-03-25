@@ -378,6 +378,38 @@ def mcp_tool_operation(operation: str, result=None):
     console.print(panel)
     spacing()
 
+def error_message(error_type: str, detail: str, error_code: int = None):
+    """
+    Prints a formatted error panel for API and service errors.
+    
+    Args:
+        error_type: The type of error (e.g., "API Key Error", "Call Error")
+        detail: Detailed error message
+        error_code: Optional HTTP status code
+    """
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    # Add error code if provided
+    if error_code:
+        table.add_row("[bold]Error Code:[/bold]", f"[red]{error_code}[/red]")
+        table.add_row("")  # Add spacing
+    
+    # Add error details
+    table.add_row("[bold]Error Details:[/bold]")
+    table.add_row(f"[red]{escape_rich_markup(detail)}[/red]")
+    
+    panel = Panel(
+        table,
+        title=f"[bold red]Upsonic - {escape_rich_markup(error_type)}[/bold red]",
+        border_style="red",
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
+
 def missing_dependencies(tool_name: str, missing_deps: list):
     """
     Prints a formatted panel with missing dependencies and installation instructions.

@@ -7,6 +7,7 @@ import base64
 
 from pydantic import BaseModel
 from ..knowledge_base.knowledge_base import KnowledgeBase
+from ..printing import error_message
 from ...exception import (
     NoAPIKeyException,
     ContextWindowTooSmallException,
@@ -112,16 +113,23 @@ def tools_serializer(tools_):
 
 def error_handler(result):
     if result["status_code"] == 401:
+        error_message("API Key Error", result["detail"], 401)
         raise NoAPIKeyException(result["detail"])
     
     if result["status_code"] == 402:
+        error_message("Context Window Error", result["detail"], 402)
         raise ContextWindowTooSmallException(result["detail"])
 
     if result["status_code"] == 403:
+        error_message("Invalid Request", result["detail"], 403)
         raise InvalidRequestException(result["detail"])
 
     if result["status_code"] == 400:
+        error_message("Unsupported Model", result["detail"], 400)
         raise UnsupportedLLMModelException(result["detail"])
 
     if result["status_code"] == 500:
+        # Extract meaningful message from the error if available
+        error_detail = result.get("message", str(result))
+        error_message("Call Error", error_detail, 500)
         raise CallErrorException(result)
