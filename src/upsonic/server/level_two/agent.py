@@ -45,13 +45,12 @@ class AgentManager:
             )
 
             roulette_agent.retries = retries
-            
+            agent_memory = []
             if memory:
-                message_history = get_temporary_memory(agent_id)
-                if message_history == None:
-                    message_history = []
-            else:
-                message_history = []
+                agent_memory = get_temporary_memory(agent_id)
+
+      
+            message_history = []
                 
             message = prompt
             message_history.append(prompt)
@@ -88,7 +87,8 @@ class AgentManager:
 
                 try:
                     print("I sent the request3")
-                    result = await roulette_agent.run(message_history)
+                    print("message_history", message_history)
+                    result = await roulette_agent.run(message_history, message_history=agent_memory)
                     print("I got the response3")
                 except (openai.BadRequestError, anthropic.BadRequestError) as e:
                     str_e = str(e)
@@ -120,7 +120,7 @@ class AgentManager:
                                 context_compress=False
                             )
                             print("I sent the request4")
-                            result = await roulette_agent.run(message_history)
+                            result = await roulette_agent.run(message_history, message_history=agent_memory)
                             print("I got the response4")
                         except Exception as e:
                             tb = traceback.extract_tb(e.__traceback__)
