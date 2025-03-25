@@ -710,7 +710,7 @@ Use Level One for any task requiring multiple steps or verification.
         
         # If level_no_step is selected, return just the end task
         if mode_selector.response.selected_mode == "level_no_step":
-            return [Task(description=task.description, images=task.images, response_format=task.response_format, tools=task.tools, price_id_=task.price_id, not_main_task=True)]
+            return [Task(description=task.description, images=task.images, response_format=task.response_format, response_lang=task.response_lang, tools=task.tools, price_id_=task.price_id, not_main_task=True)]
 
         # Generate a list of sub tasks
         prompt = f"""
@@ -765,7 +765,7 @@ Tool Availability Impact:
             sub_tasks.append(new_task)
 
         # Add the final task that will produce the original desired response format
-        end_task = Task(description=task.description, images=task.images, response_format=task.response_format, price_id_=task.price_id, not_main_task=True)
+        end_task = Task(description=task.description, images=task.images, response_format=task.response_format, response_lang=task.response_lang, price_id_=task.price_id, not_main_task=True)
         sub_tasks.append(end_task)
 
         return sub_tasks
