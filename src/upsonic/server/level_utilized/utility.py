@@ -28,9 +28,10 @@ from ...storage.caching import save_to_cache_with_expiry, get_from_cache_with_ex
 
 from ...tools_server.function_client import FunctionToolManager
 
+from pydantic_ai.settings import ModelSettings
 
-my_settings_openai = dict(parallel_tool_calls=False)
-my_settings_anthropic = dict(parallel_tool_calls=False)
+my_settings_openai = ModelSettings(parallel_tool_calls=False)
+my_settings_anthropic = ModelSettings(parallel_tool_calls=False)
 
 
 
