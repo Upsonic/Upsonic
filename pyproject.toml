@@ -32,6 +32,7 @@ dependencies = [
     "python-multipart>=0.0.20",
     "requests>=2.32.3",
     "duckduckgo-search>=7.3.1",
+    "nest-asyncio>=1.6.0",
 ]
 
 [project.optional-dependencies]
