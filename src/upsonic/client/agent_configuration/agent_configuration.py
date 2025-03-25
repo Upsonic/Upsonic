@@ -7,6 +7,7 @@ from typing import Any, List, Dict, Optional, Type, Union
 
 from ..knowledge_base.knowledge_base import KnowledgeBase
 from ..tasks.tasks import Task
+from ..printing import mcp_tool_operation, tool_operation
 
 from ..latest_upsonic_client import latest_upsonic_client
 
@@ -40,7 +41,7 @@ def register_tools(client, tools):
                 
                 if functions:
                     # If the tool has functions, use the tool() decorator
-                    print("INSTANCE TOOL REGISTERED:", tool.__class__.__name__)
+                    tool_operation(f"Tool: {tool.__class__.__name__}", "Successfully Registered")
 
                     if not isinstance(tool, object):
                         client.tool()(tool.__class__)
@@ -48,7 +49,7 @@ def register_tools(client, tools):
                         client.tool()(tool)
                 else:
                     # If the tool has no functions, use mcp()
-                    print("INSTANCE MCP REGISTERED:", tool.__class__.__name__)
+                    mcp_tool_operation(f"MCP Tool: {tool.__class__.__name__}", "Successfully Registered")
                     client.mcp()(tool.__class__)
     return client
 

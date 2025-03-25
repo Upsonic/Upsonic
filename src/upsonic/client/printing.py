@@ -473,3 +473,35 @@ def missing_api_key(tool_name: str, env_var_name: str, dotenv_support: bool = Tr
     # Create and print the panel
     panel = Panel(content, title="[bold yellow]🔑 API Key Required[/bold yellow]", border_style="yellow", expand=False)
     console.print(panel)
+
+def tool_operation(operation: str, result=None):
+    """
+    Prints a formatted panel for regular tool operations.
+    
+    Args:
+        operation: The operation being performed (e.g., "Adding", "Added", "Removing")
+        result: The result of the operation, if available
+    """
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    # Format the operation text
+    operation_text = f"[bold magenta]{escape_rich_markup(operation)}[/bold magenta]"
+    table.add_row(operation_text)
+    
+    # If there's a result, add it to the table
+    if result:
+        result_str = str(result)
+        table.add_row("")  # Add spacing
+        table.add_row(f"[green]{escape_rich_markup(result_str)}[/green]")
+    
+    panel = Panel(
+        table,
+        title="[bold magenta]Upsonic - Tool Operation[/bold magenta]",
+        border_style="magenta",
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
