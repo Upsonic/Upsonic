@@ -75,15 +75,8 @@ def handle_server_errors(func):
 
 @app.get("/status")
 async def get_status():
-    async with httpx.AsyncClient() as client:
-        response = await client.get("http://localhost:8086/status")
-        if response.status_code == 200:
-            return {"status": "Server is running"}
-        else:
-            raise HTTPException(
-                status_code=response.status_code,
-                detail="Failed to reach the server at localhost:8086"
-            )
+    return {"status": "Server is running"}
+
 
 def timeout(seconds: float):
     def decorator(func):
