@@ -117,27 +117,51 @@ async def execute_task_async(agent_config, task: Task, debug: bool = False):
 
 
 class AgentConfiguration(BaseModel):
+
+
+    agent_id_: Optional[str] = None
+    job_title: str
+    company_url: Optional[str] = None
+    company_objective: Optional[str] = None
+    name: str = ""
+    contact: str = ""
+    model: str = "openai/gpt-4o"
+    client: Any = None  # Add client parameter
+    debug: bool = False
+    reliability_layer: Any = None  # Changed to Any to accept any class or instance
+    system_prompt: Optional[str] = None
+    tools: List[Any] = []
+
+
+    sub_task: bool = True
+    reflection: bool = False
+    memory: bool = False
+    caching: bool = True
+    cache_expiry: int = 60 * 60
+    knowledge_base: Optional[KnowledgeBase] = None
+    context_compress: bool = False
+
     def __init__(
         self, 
         job_title: str, 
-        company_url: str = None, 
-        company_objective: str = None,
+        company_url: Optional[str] = None, 
+        company_objective: Optional[str] = None,
         name: str = "",
         contact: str = "",
         model: str = "openai/gpt-4o",
         client: Any = None,
         debug: bool = False,
         reliability_layer: Any = None,
-        system_prompt: str = None,
+        system_prompt: Optional[str] = None,
         tools: List[Any] = None,
         sub_task: bool = True,
         reflection: bool = False,
         memory: bool = False,
         caching: bool = True,
         cache_expiry: int = 60 * 60,
-        knowledge_base: KnowledgeBase = None,
+        knowledge_base: Optional[KnowledgeBase] = None,
         context_compress: bool = False,
-        agent_id_: str = None,
+        agent_id_: Optional[str] = None,
         **data
     ):
         if job_title is not None:

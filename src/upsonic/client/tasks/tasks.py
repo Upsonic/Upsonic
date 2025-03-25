@@ -11,6 +11,21 @@ from ..printing import get_price_id_total_cost
 from ..knowledge_base.knowledge_base import KnowledgeBase
 
 class Task(BaseModel):
+    description: str
+    images: Optional[List[str]] = None
+    tools: list[Any] = []
+    response_format: Union[Type[CustomTaskResponse], Type[ObjectResponse], None] = None
+    _response: Any = None
+    context: Any = None
+    price_id_: Optional[str] = None
+    not_main_task: bool = False
+    start_time: Optional[int] = None
+    end_time: Optional[int] = None
+    agent: Optional[Any] = None
+    response_lang: Optional[str] = None
+
+
+
     def __init__(
         self, 
         description: str, 
@@ -19,7 +34,7 @@ class Task(BaseModel):
         response_format: Union[Type[CustomTaskResponse], Type[ObjectResponse], None] = None,
         response: Any = None,
         context: Any = None,
-        price_id_: str = None,
+        price_id_: Optional[str] = None,
         not_main_task: bool = False,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
