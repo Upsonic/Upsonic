@@ -9,8 +9,6 @@ from functools import wraps
 from ..exception import TimeoutException
 import inspect
 from starlette.responses import JSONResponse
-import signal
-from concurrent.futures import ThreadPoolExecutor
 import threading
 import time
 import traceback
@@ -82,47 +80,45 @@ def timeout(seconds: float):
     def decorator(func):
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
-            def handler(signum, frame):
-                raise TimeoutException(f"Function timed out after {seconds} seconds")
-
-            # Set the signal handler and a timeout
-            signal.signal(signal.SIGALRM, handler)
-            signal.alarm(int(seconds))
-
             try:
-                if inspect.iscoroutinefunction(func):
-                    result = await func(*args, **kwargs)
-                else:
-                    result = func(*args, **kwargs)
+                # Create a task for the function
+                task = asyncio.create_task(func(*args, **kwargs))
+                # Wait for the task to complete with timeout
+                result = await asyncio.wait_for(task, timeout=seconds)
                 return result
-            except TimeoutException as e:
+            except asyncio.TimeoutError:
                 raise HTTPException(
                     status_code=408,
-                    detail=str(e)
+                    detail=f"Function timed out after {seconds} seconds"
                 )
-            finally:
-                # Disable the alarm
-                signal.alarm(0)
 
         @wraps(func)
         def sync_wrapper(*args, **kwargs):
-            def handler(signum, frame):
-                raise TimeoutException(f"Function timed out after {seconds} seconds")
-
-            # Set the signal handler and a timeout
-            signal.signal(signal.SIGALRM, handler)
-            signal.alarm(int(seconds))
-
-            try:
-                return func(*args, **kwargs)
-            except TimeoutException as e:
+            # For synchronous functions, we'll use a thread-based approach
+            result = []
+            error = []
+            
+            def target():
+                try:
+                    result.append(func(*args, **kwargs))
+                except Exception as e:
+                    error.append(e)
+            
+            thread = threading.Thread(target=target)
+            thread.daemon = True
+            thread.start()
+            thread.join(timeout=seconds)  # Wait for the specified timeout
+            
+            if thread.is_alive():
                 raise HTTPException(
                     status_code=408,
-                    detail=str(e)
+                    detail=f"Function timed out after {seconds} seconds"
                 )
-            finally:
-                # Disable the alarm
-                signal.alarm(0)
+            
+            if error:
+                raise error[0]
+            
+            return result[0]
 
         return async_wrapper if inspect.iscoroutinefunction(func) else sync_wrapper
     return decorator
