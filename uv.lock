@@ -2111,19 +2111,19 @@ wheels = [
 
 [[package]]
 name = "pydantic-ai"
-version = "0.0.43"
+version = "0.0.45"
 source = { registry = "https://pypi.org/simple/" }
 dependencies = [
     { name = "pydantic-ai-slim", extra = ["anthropic", "bedrock", "cli", "cohere", "groq", "mcp", "mistral", "openai", "vertexai"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/da/39/6e698f4794dc9af983ccb7f5d2e4bf3dbd887f75cc9d013a50f5d0512a69/pydantic_ai-0.0.43.tar.gz", hash = "sha256:7fb144eeee16abda0956befbee2577071a77a403c3fd7bb4a71562765812e072", size = 11756814 }
+sdist = { url = "https://files.pythonhosted.org/packages/2c/b3/ea95599fb59bdcc28d36a770b50c0227b22f32ed759e98da9c9c1e510d9b/pydantic_ai-0.0.45.tar.gz", hash = "sha256:348edef0581cef826bcb4b1486e2b6f38f5e1344e5167a797ab04f0be052dc67", size = 11758763 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/35/24/5d1d2eea5bee7977961831abb220cf4bd59a2d6f883290824c71256ddef7/pydantic_ai-0.0.43-py3-none-any.whl", hash = "sha256:82dd077771072edcf1d50db3d8a83941456541e272b2bb7e0cb411d1d7533734", size = 9740 },
+    { url = "https://files.pythonhosted.org/packages/70/bb/2fa3ec636afdee88d7de1d668578bd2d605b680211311aad997ae0950993/pydantic_ai-0.0.45-py3-none-any.whl", hash = "sha256:6a5486152314a4a5342904376ee7f6f4b6067b1864eb5a3dbe4049bd484e6078", size = 9740 },
 ]
 
 [[package]]
 name = "pydantic-ai-slim"
-version = "0.0.43"
+version = "0.0.45"
 source = { registry = "https://pypi.org/simple/" }
 dependencies = [
     { name = "eval-type-backport" },
@@ -2135,9 +2135,9 @@ dependencies = [
     { name = "pydantic-graph" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d3/f8/45fa567d4bcd309bf5f08390443f84893dca74cf3ecebcd743f7df1ba9c7/pydantic_ai_slim-0.0.43.tar.gz", hash = "sha256:4e31b079b7a4fd335b775ab07779831b737bc545b130748a18c33bdf08b76424", size = 106556 }
+sdist = { url = "https://files.pythonhosted.org/packages/f2/d1/645b202a0d5171b73e7e0a8fa33492a7768941983517e0a0fa4608ef30d9/pydantic_ai_slim-0.0.45.tar.gz", hash = "sha256:3c87d49ca8ba2662fb902c7e875be58dffe281499266a99897f462aec68bcb8f", size = 103654 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e7/ea/efb0efa1ac0d8254041cab2ed4a72478d68f9311d95f2505de41bc0c2fa7/pydantic_ai_slim-0.0.43-py3-none-any.whl", hash = "sha256:b3bbf353827dc8b38a53979dacdf31d650366204408c574238dd168821b9b9cd", size = 140618 },
+    { url = "https://files.pythonhosted.org/packages/52/a2/e4ed1a8eed1b145de0f50a6b2d93c8b149df1277b1a1ac9df1ee8b7ccc47/pydantic_ai_slim-0.0.45-py3-none-any.whl", hash = "sha256:6b57bd71ba5076b68ff0797b7c851092ce43cb7bc17141e2899ad5c7f2afeb28", size = 136874 },
 ]
 
 [package.optional-dependencies]
@@ -2249,7 +2249,7 @@ wheels = [
 
 [[package]]
 name = "pydantic-graph"
-version = "0.0.43"
+version = "0.0.45"
 source = { registry = "https://pypi.org/simple/" }
 dependencies = [
     { name = "httpx" },
@@ -2257,9 +2257,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/12/50/b7b11e0d75c2f958be8688fde138c413f3c29136e1934602c14c7581fd5c/pydantic_graph-0.0.43.tar.gz", hash = "sha256:648e70c7978e9dee0b79694aa43f57be330c98fd69edf33674e0515fe709ae43", size = 20316 }
+sdist = { url = "https://files.pythonhosted.org/packages/e9/2b/6d19f24ea7fd48b4c75ba4a28bbb3fecfed46644f456bb0855bfc04ad0d3/pydantic_graph-0.0.45.tar.gz", hash = "sha256:62bf4553d39f14356d63dbf11fe2931c8d31a43e8d506b073b86e1f4f6852685", size = 20393 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/46/1f/fb319fcce952f1956a1a27cb66d71dc5c7ed970804a105e766be7e28907e/pydantic_graph-0.0.43-py3-none-any.whl", hash = "sha256:d1670ec8457367cc21452e90beeacf951ccc8ec07baa6f66f1bb56fe1823d472", size = 25807 },
+    { url = "https://files.pythonhosted.org/packages/36/ed/3ce79f8587a92a2024a12f7bfefe397cff50409ec4a0051941ad10eaefe7/pydantic_graph-0.0.45-py3-none-any.whl", hash = "sha256:1fd120668f9040a563b6882c5a85412af83ad3b62fdb80dda805a4c5010f01f1", size = 25899 },
 ]
 
 [[package]]
@@ -3257,7 +3257,7 @@ requires-dist = [
     { name = "psutil", specifier = "==6.1.1" },
     { name = "pyautogui", specifier = ">=0.9.54" },
     { name = "pydantic", specifier = ">=2.10.4" },
-    { name = "pydantic-ai", specifier = "==0.0.43" },
+    { name = "pydantic-ai", specifier = "==0.0.45" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "python-multipart", specifier = ">=0.0.20" },
     { name = "requests", specifier = ">=2.32.3" },
