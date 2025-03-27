@@ -7,6 +7,8 @@ from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.models.anthropic import AnthropicModel
 from openai import AsyncOpenAI, NOT_GIVEN
 from openai import AsyncAzureOpenAI
+from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.providers.anthropic import AnthropicProvider
 import hashlib
 
 from pydantic import BaseModel
@@ -249,7 +251,7 @@ def agent_creator(
                 api_key=openai_api_key,  # This is the default and can be omitted
             )
 
-            model = OpenAIModel('gpt-4o', openai_client=client,)
+            model = OpenAIModel('gpt-4o', provider=OpenAIProvider(openai_client=client))
 
         elif llm_model == "openai/o3-mini":
             openai_api_key = Configuration.get("OPENAI_API_KEY")
@@ -259,7 +261,7 @@ def agent_creator(
                 api_key=openai_api_key,  # This is the default and can be omitted
             )
 
-            model = OpenAIModel('o3-mini', openai_client=client)
+            model = OpenAIModel('o3-mini', provider=OpenAIProvider(openai_client=client))
 
         elif llm_model == "openai/gpt-4o-mini":
             openai_api_key = Configuration.get("OPENAI_API_KEY")
@@ -269,7 +271,7 @@ def agent_creator(
                 api_key=openai_api_key,  # This is the default and can be omitted
             )
 
-            model = OpenAIModel('gpt-4o-mini', openai_client=client)
+            model = OpenAIModel('gpt-4o-mini', provider=OpenAIProvider(openai_client=client))
 
 
 
@@ -310,7 +312,7 @@ def agent_creator(
                 aws_region=aws_region
             )
 
-            model = AnthropicModel("us.anthropic.claude-3-5-sonnet-20241022-v2:0", anthropic_client=model)
+            model = AnthropicModel("us.anthropic.claude-3-5-sonnet-20241022-v2:0", provider=AnthropicProvider(anthropic_client=model))
 
 
 
@@ -336,7 +338,7 @@ def agent_creator(
                 }
 
             model = AsyncAzureOpenAI(api_version=azure_api_version, azure_endpoint=azure_endpoint, api_key=azure_api_key)
-            model = OpenAIModel('gpt-4o', openai_client=model)
+            model = OpenAIModel('gpt-4o', provider=OpenAIProvider(openai_client=model))
 
         elif llm_model == "azure/gpt-4o-mini":
             azure_endpoint = Configuration.get("AZURE_OPENAI_ENDPOINT")
@@ -358,7 +360,7 @@ def agent_creator(
                 }
 
             model = AsyncAzureOpenAI(api_version=azure_api_version, azure_endpoint=azure_endpoint, api_key=azure_api_key)
-            model = OpenAIModel('gpt-4o-mini', openai_client=model)
+            model = OpenAIModel('gpt-4o-mini', provider=OpenAIProvider(openai_client=client))
 
         else:
             return {"status_code": 400, "detail": f"Unsupported LLM model: {llm_model}"}
