@@ -30,7 +30,6 @@ class AgentRequest(BaseModel):
 
 
 @app.post(f"{prefix}/agent")
-@timeout(500.0)  # 5 minutes timeout for AI operations
 @handle_server_errors
 async def call_agent(request: AgentRequest):
     """

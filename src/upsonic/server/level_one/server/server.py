@@ -25,7 +25,6 @@ class GPT4ORequest(BaseModel):
 
 
 @app.post(f"{prefix}/gpt4o")
-@timeout(300.0)  # 5 minutes timeout for AI operations
 @handle_server_errors
 async def call_gpt4o(request: GPT4ORequest):
     """
