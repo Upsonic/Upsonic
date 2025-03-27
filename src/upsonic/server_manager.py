@@ -145,7 +145,7 @@ class ServerManager:
             poll_interval = 0.01
             max_poll_interval = 0.1
             start_time = time.time()
-            while not self._is_port_in_use() and time.time() - start_time < 30:
+            while not self._is_port_in_use() and time.time() - start_time < 300:
                 if self._process.poll() is not None:
                     raise RuntimeError(f"Server process terminated unexpectedly with code {self._process.returncode}")
                 time.sleep(poll_interval)

@@ -82,8 +82,8 @@ def run_dev_server(redirect_output=True):
             
             # Wait for both to complete with a timeout
             try:
-                main_result = main_future.result(timeout=15)
-                tools_result = tools_future.result(timeout=15)
+                main_result = main_future.result(timeout=150)
+                tools_result = tools_future.result(timeout=150)
                 
                 if not main_result or not tools_result:
                     # Clean up if either server failed
