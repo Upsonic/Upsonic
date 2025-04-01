@@ -10,6 +10,7 @@ from openai import AsyncAzureOpenAI
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.providers.anthropic import AnthropicProvider
 import hashlib
+from pydantic_ai.messages import ImageUrl
 
 from pydantic import BaseModel
 from fastapi import HTTPException, status
@@ -234,6 +235,113 @@ def summarize_context_string(context_string: str, llm_model: Any) -> str:
         except:
             return ""
 
+def process_error_traceback(e):
+    """Extract and format error traceback information consistently."""
+    tb = traceback.extract_tb(e.__traceback__)
+    file_path = tb[-1].filename
+    if "Upsonic/src/" in file_path:
+        file_path = file_path.split("Upsonic/src/")[1]
+    line_number = tb[-1].lineno
+    return {"status_code": 500, "detail": f"Error processing request in {file_path} at line {line_number}: {str(e)}"}
+
+def prepare_message_history(prompt, images=None, llm_model=None, tools=None):
+    """Prepare message history with prompt and images, adding screenshot for Claude models if needed."""
+    message_history = [prompt]
+    
+    if images:
+        for image in images:
+            message_history.append(ImageUrl(url=f"data:image/jpeg;base64,{image}"))
+
+    if llm_model and "claude-3-5-sonnet" in llm_model and tools and "ComputerUse.*" in tools:
+        try:
+            from .cu import ComputerUse_screenshot_tool
+            result_of_screenshot = ComputerUse_screenshot_tool()
+            message_history.append(ImageUrl(url=result_of_screenshot["image_url"]["url"]))
+        except Exception as e:
+            print("Error adding screenshot:", e)
+            
+    return message_history
+
+def format_response(result):
+    """Format the successful response consistently."""
+    usage = result.usage()
+    return {
+        "status_code": 200,
+        "result": result.data,
+        "usage": {
+            "input_tokens": usage.request_tokens,
+            "output_tokens": usage.response_tokens
+        }
+    }
+
+async def handle_compression_retry(prompt, images, tools, llm_model, response_format, context, system_prompt=None, agent_memory=None):
+    """Handle compression and retry when facing token limit issues."""
+    try:
+        # Compress prompts
+        compressed_system_prompt = summarize_system_prompt(system_prompt, llm_model) if system_prompt else None
+        compressed_message = summarize_message_prompt(prompt, llm_model)
+        
+        # Prepare new message history
+        message_history = prepare_message_history(compressed_message, images, llm_model, tools)
+        
+        # Create new agent with compressed prompts
+        roulette_agent = agent_creator(
+            response_format=response_format,
+            tools=tools,
+            context=context,
+            llm_model=llm_model,
+            system_prompt=compressed_system_prompt,
+            context_compress=False
+        )
+        
+        # Run the agent with compressed inputs
+        print("Sending request with compressed prompts")
+        if agent_memory:
+            result = await roulette_agent.run(message_history, message_history=agent_memory)
+        else:
+            result = await roulette_agent.run(message_history)
+        print("Received response with compressed prompts")
+        
+        return result
+    except Exception as e:
+        raise e  # Re-raise for consistent error handling
+
+def _create_openai_client(api_key_name="OPENAI_API_KEY"):
+    """Helper function to create an OpenAI client with the specified API key."""
+    api_key = Configuration.get(api_key_name)
+    if not api_key:
+        return None, {"status_code": 401, "detail": f"No API key provided. Please set {api_key_name} in your configuration."}
+    
+    client = AsyncOpenAI(api_key=api_key)
+    return client, None
+
+def _create_azure_openai_client():
+    """Helper function to create an Azure OpenAI client."""
+    azure_endpoint = Configuration.get("AZURE_OPENAI_ENDPOINT")
+    azure_api_version = Configuration.get("AZURE_OPENAI_API_VERSION")
+    azure_api_key = Configuration.get("AZURE_OPENAI_API_KEY")
+
+    missing_keys = []
+    if not azure_endpoint:
+        missing_keys.append("AZURE_OPENAI_ENDPOINT")
+    if not azure_api_version:
+        missing_keys.append("AZURE_OPENAI_API_VERSION")
+    if not azure_api_key:
+        missing_keys.append("AZURE_OPENAI_API_KEY")
+
+    if missing_keys:
+        return None, {
+            "status_code": 401,
+            "detail": f"No API key provided. Please set {', '.join(missing_keys)} in your configuration."
+        }
+
+    client = AsyncAzureOpenAI(
+        api_version=azure_api_version, 
+        azure_endpoint=azure_endpoint, 
+        api_key=azure_api_key
+    )
+    return client, None
+
 def agent_creator(
         response_format: BaseModel = str,
         tools: list[str] = [],
@@ -242,38 +350,26 @@ def agent_creator(
         system_prompt: Optional[Any] = None,
         context_compress: bool = False
     ):
+        model = None
+        error = None
 
-        if llm_model == "openai/gpt-4o" or llm_model == "gpt-4o":
-            openai_api_key = Configuration.get("OPENAI_API_KEY")
-            if not openai_api_key:
-                return {"status_code": 401, "detail": "No API key provided. Please set OPENAI_API_KEY in your configuration."}
-            client = AsyncOpenAI(
-                api_key=openai_api_key,  # This is the default and can be omitted
-            )
-
+        if llm_model in ["openai/gpt-4o", "gpt-4o"]:
+            client, error = _create_openai_client()
+            if error:
+                return error
             model = OpenAIModel('gpt-4o', provider=OpenAIProvider(openai_client=client))
 
         elif llm_model == "openai/o3-mini":
-            openai_api_key = Configuration.get("OPENAI_API_KEY")
-            if not openai_api_key:
-                return {"status_code": 401, "detail": "No API key provided. Please set OPENAI_API_KEY in your configuration."}
-            client = AsyncOpenAI(
-                api_key=openai_api_key,  # This is the default and can be omitted
-            )
-
+            client, error = _create_openai_client()
+            if error:
+                return error
             model = OpenAIModel('o3-mini', provider=OpenAIProvider(openai_client=client))
 
         elif llm_model == "openai/gpt-4o-mini":
-            openai_api_key = Configuration.get("OPENAI_API_KEY")
-            if not openai_api_key:
-                return {"status_code": 401, "detail": "No API key provided. Please set OPENAI_API_KEY in your configuration."}
-            client = AsyncOpenAI(
-                api_key=openai_api_key,  # This is the default and can be omitted
-            )
-
+            client, error = _create_openai_client()
+            if error:
+                return error
             model = OpenAIModel('gpt-4o-mini', provider=OpenAIProvider(openai_client=client))
-
-
 
         elif llm_model == "deepseek/deepseek-chat":
             deepseek_api_key = Configuration.get("DEEPSEEK_API_KEY")
@@ -286,19 +382,13 @@ def agent_creator(
                 api_key=deepseek_api_key,
             )
 
-
-
-
-        elif llm_model == "claude/claude-3-5-sonnet" or llm_model == "claude-3-5-sonnet":
+        elif llm_model in ["claude/claude-3-5-sonnet", "claude-3-5-sonnet"]:
             anthropic_api_key = Configuration.get("ANTHROPIC_API_KEY")
             if not anthropic_api_key:
                 return {"status_code": 401, "detail": "No API key provided. Please set ANTHROPIC_API_KEY in your configuration."}
             model = AnthropicModel("claude-3-5-sonnet-latest", api_key=anthropic_api_key)
 
-
-
-
-        elif llm_model == "bedrock/claude-3-5-sonnet" or llm_model == "claude-3-5-sonnet-aws":
+        elif llm_model in ["bedrock/claude-3-5-sonnet", "claude-3-5-sonnet-aws"]:
             aws_access_key_id = Configuration.get("AWS_ACCESS_KEY_ID")
             aws_secret_access_key = Configuration.get("AWS_SECRET_ACCESS_KEY")
             aws_region = Configuration.get("AWS_REGION")
@@ -306,60 +396,24 @@ def agent_creator(
             if not aws_access_key_id or not aws_secret_access_key or not aws_region:
                 return {"status_code": 401, "detail": "No AWS credentials provided. Please set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION in your configuration."}
             
-            model = AsyncAnthropicBedrock(
+            bedrock_client = AsyncAnthropicBedrock(
                 aws_access_key=aws_access_key_id,
                 aws_secret_key=aws_secret_access_key,
                 aws_region=aws_region
             )
 
-            model = AnthropicModel("us.anthropic.claude-3-5-sonnet-20241022-v2:0", provider=AnthropicProvider(anthropic_client=model))
+            model = AnthropicModel("us.anthropic.claude-3-5-sonnet-20241022-v2:0", provider=AnthropicProvider(anthropic_client=bedrock_client))
 
-
-
-
-
-        elif llm_model == "azure/gpt-4o" or llm_model == "gpt-4o-azure":
-            azure_endpoint = Configuration.get("AZURE_OPENAI_ENDPOINT")
-            azure_api_version = Configuration.get("AZURE_OPENAI_API_VERSION")
-            azure_api_key = Configuration.get("AZURE_OPENAI_API_KEY")
-
-            missing_keys = []
-            if not azure_endpoint:
-                missing_keys.append("AZURE_OPENAI_ENDPOINT")
-            if not azure_api_version:
-                missing_keys.append("AZURE_OPENAI_API_VERSION")
-            if not azure_api_key:
-                missing_keys.append("AZURE_OPENAI_API_KEY")
-
-            if missing_keys:
-                return {
-                    "status_code": 401,
-                    "detail": f"No API key provided. Please set {', '.join(missing_keys)} in your configuration."
-                }
-
-            model = AsyncAzureOpenAI(api_version=azure_api_version, azure_endpoint=azure_endpoint, api_key=azure_api_key)
-            model = OpenAIModel('gpt-4o', provider=OpenAIProvider(openai_client=model))
+        elif llm_model in ["azure/gpt-4o", "gpt-4o-azure"]:
+            client, error = _create_azure_openai_client()
+            if error:
+                return error
+            model = OpenAIModel('gpt-4o', provider=OpenAIProvider(openai_client=client))
 
         elif llm_model == "azure/gpt-4o-mini":
-            azure_endpoint = Configuration.get("AZURE_OPENAI_ENDPOINT")
-            azure_api_version = Configuration.get("AZURE_OPENAI_API_VERSION")
-            azure_api_key = Configuration.get("AZURE_OPENAI_API_KEY")
-
-            missing_keys = []
-            if not azure_endpoint:
-                missing_keys.append("AZURE_OPENAI_ENDPOINT")
-            if not azure_api_version:
-                missing_keys.append("AZURE_OPENAI_API_VERSION")
-            if not azure_api_key:
-                missing_keys.append("AZURE_OPENAI_API_KEY")
-
-            if missing_keys:
-                return {
-                    "status_code": 401,
-                    "detail": f"No API key provided. Please set {', '.join(missing_keys)} in your configuration."
-                }
-
-            model = AsyncAzureOpenAI(api_version=azure_api_version, azure_endpoint=azure_endpoint, api_key=azure_api_key)
+            client, error = _create_azure_openai_client()
+            if error:
+                return error
             model = OpenAIModel('gpt-4o-mini', provider=OpenAIProvider(openai_client=client))
 
         else:

@@ -11,7 +11,13 @@ from ...storage.configuration import Configuration
 
 from ..level_utilized.memory import save_temporary_memory, get_temporary_memory
 
-from ..level_utilized.utility import agent_creator, summarize_system_prompt, summarize_message_prompt
+from ..level_utilized.utility import (
+    agent_creator, 
+    prepare_message_history,
+    process_error_traceback,
+    format_response,
+    handle_compression_retry
+)
 
 from ...client.tasks.tasks import Task
 from ...client.tasks.task_response import ObjectResponse
@@ -43,32 +49,17 @@ class AgentManager:
                 system_prompt=system_prompt,
                 context_compress=context_compress
             )
+            
+            if isinstance(roulette_agent, dict) and "status_code" in roulette_agent:
+                return roulette_agent  # Return error from agent_creator
 
             roulette_agent.retries = retries
             agent_memory = []
             if memory:
                 agent_memory = get_temporary_memory(agent_id)
 
-      
-            message_history = []
+            message_history = prepare_message_history(prompt, images, llm_model, tools)
                 
-            message = prompt
-            message_history.append(prompt)
-
-            if images:
-                for image in images:
-                    message_history.append(ImageUrl(url=f"data:image/jpeg;base64,{image}"))
-
-            if "claude-3-5-sonnet" in llm_model:
-                print("Tools", tools)
-                if "ComputerUse.*" in tools:
-                    try:
-                        from ..level_utilized.cu import ComputerUse_screenshot_tool
-                        result_of_screenshot = ComputerUse_screenshot_tool()
-                        message_history.append(ImageUrl(url=result_of_screenshot["image_url"]["url"]))
-                    except Exception as e:
-                        print("Error", e)
-
             feedback = ""
             satisfied = False
             total_request_tokens = 0
@@ -81,9 +72,8 @@ class AgentManager:
                     # Update the message history with the new message that includes feedback
                     if message_history and isinstance(message_history[0], str):
                         message_history[0] = current_message
-                    message = current_message
                 
-                print("message: ", message)
+                print("message:", message_history[0] if message_history and isinstance(message_history[0], str) else "")
 
                 try:
                     print("I sent the request3")
@@ -94,50 +84,14 @@ class AgentManager:
                     str_e = str(e)
                     if "400" in str_e and context_compress:
                         try:
-                            # These functions are not async, so don't await them
-                            compressed_prompt = summarize_system_prompt(system_prompt, llm_model)
-                            if compressed_prompt:
-                                print("compressed_prompt", compressed_prompt)
-                                
-                            # Compress the message and update message_history
-                            compressed_message = summarize_message_prompt(message, llm_model)
-                            if compressed_message:
-                                print("compressed_message", compressed_message)
-                                message = compressed_message
-                                
-                                # Reset message history with compressed message
-                                message_history = [compressed_message]
-                                if images:
-                                    for image in images:
-                                        message_history.append(ImageUrl(url=f"data:image/jpeg;base64,{image}"))
-
-                            roulette_agent = agent_creator(
-                                response_format=response_format,
-                                tools=tools,
-                                context=context,
-                                llm_model=llm_model,
-                                system_prompt=compressed_prompt,
-                                context_compress=False
+                            result = await handle_compression_retry(
+                                prompt, images, tools, llm_model,
+                                response_format, context, system_prompt, agent_memory
                             )
-                            print("I sent the request4")
-                            result = await roulette_agent.run(message_history, message_history=agent_memory)
-                            print("I got the response4")
                         except Exception as e:
-                            tb = traceback.extract_tb(e.__traceback__)
-                            file_path = tb[-1].filename
-                            if "Upsonic/src/" in file_path:
-                                file_path = file_path.split("Upsonic/src/")[1]
-                            line_number = tb[-1].lineno
-                            error_response = {"status_code": 403, "detail": f"Error processing Agent request in {file_path} at line {line_number}: {str(e)}"}
-                            return error_response
+                            return process_error_traceback(e)
                     else:
-                        tb = traceback.extract_tb(e.__traceback__)
-                        file_path = tb[-1].filename
-                        if "Upsonic/src/" in file_path:
-                            file_path = file_path.split("Upsonic/src/")[1]
-                        line_number = tb[-1].lineno
-                        error_response = {"status_code": 403, "detail": f"Error processing Agent request in {file_path} at line {line_number}: {str(e)}"}
-                        return error_response
+                        return process_error_traceback(e)
 
                 total_request_tokens += result.usage().request_tokens
                 total_response_tokens += result.usage().response_tokens
@@ -168,19 +122,13 @@ class AgentManager:
 
                         satisfied = satify_result["result"].satisfied
                     except Exception as e:
-                        tb = traceback.extract_tb(e.__traceback__)
-                        file_path = tb[-1].filename
-                        if "Upsonic/src/" in file_path:
-                            file_path = file_path.split("Upsonic/src/")[1]
-                        line_number = tb[-1].lineno
                         traceback.print_exc()
                         satisfied = True  # Break the loop on error
 
             if memory:
                 save_temporary_memory(result.all_messages(), agent_id)
 
-            # Changed from direct dictionary return to consistent style with error returns
-            success_response = {
+            return {
                 "status_code": 200, 
                 "result": result.data, 
                 "usage": {
@@ -188,17 +136,9 @@ class AgentManager:
                     "output_tokens": total_response_tokens
                 }
             }
-            return success_response
 
         except Exception as e:
-            tb = traceback.extract_tb(e.__traceback__)
-            file_path = tb[-1].filename
-            if "Upsonic/src/" in file_path:
-                file_path = file_path.split("Upsonic/src/")[1]
-            line_number = tb[-1].lineno
-            traceback.print_exc()
-            error_response = {"status_code": 500, "detail": f"Error processing Agent request in {file_path} at line {line_number}: {str(e)}"}
-            return error_response
+            return process_error_traceback(e)
 
 
 Agent = AgentManager()
