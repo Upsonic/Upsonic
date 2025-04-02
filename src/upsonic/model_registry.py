@@ -70,10 +70,45 @@ MODEL_REGISTRY = {
         "capabilities": [],
         "pricing": {"input": 0.10, "output": 0.40}
     },
+
+    "gemini/gemini-1.5-pro": {
+        "provider": "gemini", 
+        "model_name": "gemini-1.5-pro", 
+        "capabilities": [],
+        "pricing": {"input": 1.25, "output": 5.00}
+    },
+
+    "gemini/gemini-1.5-flash": {
+        "provider": "gemini", 
+        "model_name": "gemini-1.5-flash", 
+        "capabilities": [],
+        "pricing": {"input": 0.075, "output": 0.30}
+    },
     
     "ollama/llama3.2": {
         "provider": "ollama", 
         "model_name": "llama3.2", 
+        "capabilities": [],
+        "pricing": {"input": 0.0, "output": 0.0}
+    },
+
+    "ollama/llama3.1-70b": {
+        "provider": "ollama", 
+        "model_name": "llama3.1:70b", 
+        "capabilities": [],
+        "pricing": {"input": 0.0, "output": 0.0}
+    },
+
+    "ollama/llama3.1": {
+        "provider": "ollama", 
+        "model_name": "llama3.1", 
+        "capabilities": [],
+        "pricing": {"input": 0.0, "output": 0.0}
+    },
+
+    "ollama/llama3.3": {
+        "provider": "ollama", 
+        "model_name": "llama3.3", 
         "capabilities": [],
         "pricing": {"input": 0.0, "output": 0.0}
     },
