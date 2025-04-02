@@ -71,6 +71,13 @@ MODEL_REGISTRY = {
         "pricing": {"input": 0.10, "output": 0.40}
     },
     
+    "ollama/llama3.2": {
+        "provider": "ollama", 
+        "model_name": "llama3.2", 
+        "capabilities": [],
+        "pricing": {"input": 0.0, "output": 0.0}
+    },
+
     # Anthropic models
     "claude/claude-3-5-sonnet": {
         "provider": "anthropic", 
