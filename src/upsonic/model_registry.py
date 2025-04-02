@@ -63,6 +63,12 @@ MODEL_REGISTRY = {
         "capabilities": ["computer_use"],
         "pricing": {"input": 3.00, "output": 15.00}
     },
+    "claude/claude-3-7-sonnet": {
+        "provider": "anthropic", 
+        "model_name": "claude-3-7-sonnet-latest", 
+        "capabilities": ["computer_use"],
+        "pricing": {"input": 3.00, "output": 15.00}
+    },
 
     
     # Bedrock Anthropic models
