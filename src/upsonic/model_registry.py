@@ -1,4 +1,5 @@
 from pydantic_ai.settings import ModelSettings
+from decimal import Decimal
 
 # Define model settings in a centralized dictionary for easier maintenance
 MODEL_SETTINGS = {
@@ -15,28 +16,21 @@ MODEL_REGISTRY = {
         "model_name": "gpt-4o", 
         "api_key": "OPENAI_API_KEY", 
         "capabilities": [],
-        "pricing": {"input": 0.0000025, "output": 0.00001}
-    },
-    "gpt-4o": {
-        "provider": "openai", 
-        "model_name": "gpt-4o", 
-        "api_key": "OPENAI_API_KEY", 
-        "capabilities": [],
-        "pricing": {"input": 0.0000025, "output": 0.00001}
+        "pricing": {"input": 2.50, "output": 10.00}
     },
     "openai/o3-mini": {
         "provider": "openai", 
         "model_name": "o3-mini", 
         "api_key": "OPENAI_API_KEY", 
         "capabilities": [],
-        "pricing": {"input": 0.0000011, "output": 0.00000055}
+        "pricing": {"input": 1.1, "output": 4.4}
     },
     "openai/gpt-4o-mini": {
         "provider": "openai", 
         "model_name": "gpt-4o-mini", 
         "api_key": "OPENAI_API_KEY", 
         "capabilities": [],
-        "pricing": {"input": 0.00000015, "output": 0.00000008}
+        "pricing": {"input": 0.15, "output": 0.60}
     },
     
     # Azure OpenAI models
@@ -44,19 +38,14 @@ MODEL_REGISTRY = {
         "provider": "azure_openai", 
         "model_name": "gpt-4o", 
         "capabilities": [],
-        "pricing": {"input": 0.0000025, "output": 0.00001}
+        "pricing": {"input": 2.50, "output": 10.00}
     },
-    "gpt-4o-azure": {
-        "provider": "azure_openai", 
-        "model_name": "gpt-4o", 
-        "capabilities": [],
-        "pricing": {"input": 0.0000025, "output": 0.00001}
-    },
+
     "azure/gpt-4o-mini": {
         "provider": "azure_openai", 
         "model_name": "gpt-4o-mini", 
         "capabilities": [],
-        "pricing": {"input": 0.00000015, "output": 0.00000008}
+        "pricing":{"input": 0.15, "output": 0.60}
     },
     
     # Deepseek model
@@ -64,7 +53,7 @@ MODEL_REGISTRY = {
         "provider": "deepseek", 
         "model_name": "deepseek-chat", 
         "capabilities": [],
-        "pricing": {"input": 0.00000027, "output": 0.00000028}
+        "pricing": {"input": 0.27, "output": 1.10}
     },
     
     # Anthropic models
@@ -72,30 +61,19 @@ MODEL_REGISTRY = {
         "provider": "anthropic", 
         "model_name": "claude-3-5-sonnet-latest", 
         "capabilities": ["computer_use"],
-        "pricing": {"input": 0.000003, "output": 0.000015}
+        "pricing": {"input": 3.00, "output": 15.00}
     },
-    "claude-3-5-sonnet": {
-        "provider": "anthropic", 
-        "model_name": "claude-3-5-sonnet-latest", 
-        "capabilities": ["computer_use"],
-        "pricing": {"input": 0.000003, "output": 0.000015}
-    },
+
     
     # Bedrock Anthropic models
     "bedrock/claude-3-5-sonnet": {
         "provider": "bedrock_anthropic", 
         "model_name": "us.anthropic.claude-3-5-sonnet-20241022-v2:0", 
         "capabilities": ["computer_use"],
-        "pricing": {"input": 0.000003, "output": 0.000015}
+        "pricing": {"input": 3.00, "output": 15.00}
     },
-    "claude-3-5-sonnet-aws": {
-        "provider": "bedrock_anthropic", 
-        "model_name": "us.anthropic.claude-3-5-sonnet-20241022-v2:0", 
-        "capabilities": ["computer_use"],
-        "pricing": {"input": 0.000003, "output": 0.000015}
-    },
-}
 
+}
 # Helper functions for model registry access
 
 def get_model_registry_entry(llm_model: str):
@@ -156,12 +134,16 @@ def get_estimated_cost(input_tokens: int, output_tokens: int, llm_model: str):
     if not pricing:
         return "Unknown"
     
-    input_cost = pricing["input"] * input_tokens
-    output_cost = pricing["output"] * output_tokens
+    # Convert token counts to millions for pricing calculation using Decimal
+    input_tokens_millions = Decimal(str(input_tokens)) / Decimal('1000000')
+    output_tokens_millions = Decimal(str(output_tokens)) / Decimal('1000000')
+    
+    input_cost = Decimal(str(pricing["input"])) * input_tokens_millions
+    output_cost = Decimal(str(pricing["output"])) * output_tokens_millions
     total = input_cost + output_cost
 
     # to 4 decimal places
-    return f"~${round(total, 4)}"
+    return f"~${float(round(total, 4))}"
 
 def has_capability(llm_model: str, capability: str):
     """Check if a model has a specific capability."""
