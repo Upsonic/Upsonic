@@ -18,6 +18,14 @@ MODEL_REGISTRY = {
         "capabilities": [],
         "pricing": {"input": 2.50, "output": 10.00}
     },
+    "openai/gpt-4.5-preview": {
+        "provider": "openai", 
+        "model_name": "gpt-4.5-preview", 
+        "api_key": "OPENAI_API_KEY", 
+        "capabilities": [],
+        "pricing": {"input": 75.00, "output": 150.00}
+    },
+
     "openai/o3-mini": {
         "provider": "openai", 
         "model_name": "o3-mini", 
