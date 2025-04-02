@@ -5,10 +5,12 @@ from itertools import chain
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.models.anthropic import AnthropicModel
+from pydantic_ai.models.gemini import GeminiModel
 from openai import AsyncOpenAI, NOT_GIVEN
 from openai import AsyncAzureOpenAI
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.providers.anthropic import AnthropicProvider
+from pydantic_ai.providers.google_gla import GoogleGLAProvider
 import hashlib
 from pydantic_ai.messages import ImageUrl
 
@@ -372,6 +374,18 @@ def _create_deepseek_model():
         api_key=deepseek_api_key,
     ), None
 
+
+def _create_gemini_model(model_name: str):
+    """Helper function to create a Gemini model with specified model name."""
+    api_key = Configuration.get("GOOGLE_GLA_API_KEY")
+    if not api_key:
+        return None, {"status_code": 401, "detail": "No API key provided. Please set GOOGLE_GLA_API_KEY in your configuration."}
+    
+    return GeminiModel(
+        model_name,
+        provider=GoogleGLAProvider(api_key=api_key)
+    ), None
+
 def _create_anthropic_model(model_name: str):
     """Helper function to create an Anthropic model with specified model name."""
     anthropic_api_key = Configuration.get("ANTHROPIC_API_KEY")
@@ -500,6 +514,8 @@ def _create_model_from_registry(llm_model: str):
         return _create_anthropic_model(model_name)
     elif provider == "bedrock_anthropic":
         return _create_bedrock_anthropic_model(model_name)
+    elif provider == "gemini":
+        return _create_gemini_model(model_name)
     else:
         return None, {"status_code": 400, "detail": f"Unsupported provider: {provider}"}
 
