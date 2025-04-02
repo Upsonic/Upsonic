@@ -374,6 +374,14 @@ def _create_deepseek_model():
         api_key=deepseek_api_key,
     ), None
 
+def _create_ollama_model(model_name: str):
+    """Helper function to create an Ollama model with specified model name."""
+    # Ollama runs locally, so we don't need API keys
+    base_url = Configuration.get("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+    return OpenAIModel(
+        model_name,
+        provider=OpenAIProvider(base_url=base_url)
+    ), None
 
 def _create_gemini_model(model_name: str):
     """Helper function to create a Gemini model with specified model name."""
@@ -514,6 +522,8 @@ def _create_model_from_registry(llm_model: str):
         return _create_anthropic_model(model_name)
     elif provider == "bedrock_anthropic":
         return _create_bedrock_anthropic_model(model_name)
+    elif provider == "ollama":
+        return _create_ollama_model(model_name)
     elif provider == "gemini":
         return _create_gemini_model(model_name)
     else:
