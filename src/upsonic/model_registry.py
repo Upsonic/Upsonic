@@ -113,6 +113,13 @@ MODEL_REGISTRY = {
         "pricing": {"input": 0.0, "output": 0.0}
     },
 
+    "ollama/qwen2.5": {
+        "provider": "ollama", 
+        "model_name": "qwen2.5", 
+        "capabilities": [],
+        "pricing": {"input": 0.0, "output": 0.0}
+    },
+
     # Anthropic models
     "claude/claude-3-5-sonnet": {
         "provider": "anthropic", 
