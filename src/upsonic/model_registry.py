@@ -15,31 +15,31 @@ MODEL_REGISTRY = {
     "openai/gpt-4o": {
         "provider": "openai", 
         "model_name": "gpt-4o", 
-        "api_key": "OPENAI_API_KEY", 
         "capabilities": [],
-        "pricing": {"input": 2.50, "output": 10.00}
+        "pricing": {"input": 2.50, "output": 10.00},
+        "required_environment_variables": ["OPENAI_API_KEY"]
     },
     "openai/gpt-4.5-preview": {
         "provider": "openai", 
         "model_name": "gpt-4.5-preview", 
-        "api_key": "OPENAI_API_KEY", 
         "capabilities": [],
-        "pricing": {"input": 75.00, "output": 150.00}
+        "pricing": {"input": 75.00, "output": 150.00},
+        "required_environment_variables": ["OPENAI_API_KEY"]
     },
 
     "openai/o3-mini": {
         "provider": "openai", 
         "model_name": "o3-mini", 
-        "api_key": "OPENAI_API_KEY", 
         "capabilities": [],
-        "pricing": {"input": 1.1, "output": 4.4}
+        "pricing": {"input": 1.1, "output": 4.4},
+        "required_environment_variables": ["OPENAI_API_KEY"]
     },
     "openai/gpt-4o-mini": {
         "provider": "openai", 
         "model_name": "gpt-4o-mini", 
-        "api_key": "OPENAI_API_KEY", 
         "capabilities": [],
-        "pricing": {"input": 0.15, "output": 0.60}
+        "pricing": {"input": 0.15, "output": 0.60},
+        "required_environment_variables": ["OPENAI_API_KEY"]
     },
     
     # Azure OpenAI models
@@ -47,14 +47,16 @@ MODEL_REGISTRY = {
         "provider": "azure_openai", 
         "model_name": "gpt-4o", 
         "capabilities": [],
-        "pricing": {"input": 2.50, "output": 10.00}
+        "pricing": {"input": 2.50, "output": 10.00},
+        "required_environment_variables": ["AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_VERSION", "AZURE_OPENAI_API_KEY"]
     },
 
     "azure/gpt-4o-mini": {
         "provider": "azure_openai", 
         "model_name": "gpt-4o-mini", 
         "capabilities": [],
-        "pricing":{"input": 0.15, "output": 0.60}
+        "pricing":{"input": 0.15, "output": 0.60},
+        "required_environment_variables": ["AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_VERSION", "AZURE_OPENAI_API_KEY"]
     },
     
     # Deepseek model
@@ -62,63 +64,72 @@ MODEL_REGISTRY = {
         "provider": "deepseek", 
         "model_name": "deepseek-chat", 
         "capabilities": [],
-        "pricing": {"input": 0.27, "output": 1.10}
+        "pricing": {"input": 0.27, "output": 1.10},
+        "required_environment_variables": ["DEEPSEEK_API_KEY"]
     },
 
     "gemini/gemini-2.0-flash": {
         "provider": "gemini", 
         "model_name": "gemini-2.0-flash", 
         "capabilities": [],
-        "pricing": {"input": 0.10, "output": 0.40}
+        "pricing": {"input": 0.10, "output": 0.40},
+        "required_environment_variables": ["GOOGLE_GLA_API_KEY"]
     },
 
     "gemini/gemini-1.5-pro": {
         "provider": "gemini", 
         "model_name": "gemini-1.5-pro", 
         "capabilities": [],
-        "pricing": {"input": 1.25, "output": 5.00}
+        "pricing": {"input": 1.25, "output": 5.00},
+        "required_environment_variables": ["GOOGLE_GLA_API_KEY"]
     },
 
     "gemini/gemini-1.5-flash": {
         "provider": "gemini", 
         "model_name": "gemini-1.5-flash", 
         "capabilities": [],
-        "pricing": {"input": 0.075, "output": 0.30}
+        "pricing": {"input": 0.075, "output": 0.30},
+        "required_environment_variables": ["GOOGLE_GLA_API_KEY"]
     },
     
     "ollama/llama3.2": {
         "provider": "ollama", 
         "model_name": "llama3.2", 
         "capabilities": [],
-        "pricing": {"input": 0.0, "output": 0.0}
+        "pricing": {"input": 0.0, "output": 0.0},
+        "required_environment_variables": []
     },
 
     "ollama/llama3.1-70b": {
         "provider": "ollama", 
         "model_name": "llama3.1:70b", 
         "capabilities": [],
-        "pricing": {"input": 0.0, "output": 0.0}
+        "pricing": {"input": 0.0, "output": 0.0},
+        "required_environment_variables": []
     },
 
     "ollama/llama3.1": {
         "provider": "ollama", 
         "model_name": "llama3.1", 
         "capabilities": [],
-        "pricing": {"input": 0.0, "output": 0.0}
+        "pricing": {"input": 0.0, "output": 0.0},
+        "required_environment_variables": []
     },
 
     "ollama/llama3.3": {
         "provider": "ollama", 
         "model_name": "llama3.3", 
         "capabilities": [],
-        "pricing": {"input": 0.0, "output": 0.0}
+        "pricing": {"input": 0.0, "output": 0.0},
+        "required_environment_variables": []
     },
 
     "ollama/qwen2.5": {
         "provider": "ollama", 
         "model_name": "qwen2.5", 
         "capabilities": [],
-        "pricing": {"input": 0.0, "output": 0.0}
+        "pricing": {"input": 0.0, "output": 0.0},
+        "required_environment_variables": []
     },
 
     # Anthropic models
@@ -126,13 +137,15 @@ MODEL_REGISTRY = {
         "provider": "anthropic", 
         "model_name": "claude-3-5-sonnet-latest", 
         "capabilities": ["computer_use"],
-        "pricing": {"input": 3.00, "output": 15.00}
+        "pricing": {"input": 3.00, "output": 15.00},
+        "required_environment_variables": ["ANTHROPIC_API_KEY"]
     },
     "claude/claude-3-7-sonnet": {
         "provider": "anthropic", 
         "model_name": "claude-3-7-sonnet-latest", 
         "capabilities": ["computer_use"],
-        "pricing": {"input": 3.00, "output": 15.00}
+        "pricing": {"input": 3.00, "output": 15.00},
+        "required_environment_variables": ["ANTHROPIC_API_KEY"]
     },
 
     
@@ -141,10 +154,11 @@ MODEL_REGISTRY = {
         "provider": "bedrock_anthropic", 
         "model_name": "us.anthropic.claude-3-5-sonnet-20241022-v2:0", 
         "capabilities": ["computer_use"],
-        "pricing": {"input": 3.00, "output": 15.00}
+        "pricing": {"input": 3.00, "output": 15.00},
+        "required_environment_variables": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"]
     },
-
 }
+
 # Helper functions for model registry access
 
 def get_model_registry_entry(llm_model: str):
@@ -159,9 +173,9 @@ def get_model_registry_entry(llm_model: str):
         return {
             "provider": "openrouter",
             "model_name": model_name,  # Use the full model name as provided
-            "api_key": "OPENROUTER_API_KEY",
             "capabilities": [],
-            "pricing": {"input": 0.0, "output": 0.0}
+            "pricing": {"input": 0.0, "output": 0.0},
+            "required_environment_variables": ["OPENROUTER_API_KEY"]
         }
     
     # Try case-insensitive match as fallback
