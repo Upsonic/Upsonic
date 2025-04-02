@@ -377,7 +377,7 @@ def _create_anthropic_model(model_name: str):
     anthropic_api_key = Configuration.get("ANTHROPIC_API_KEY")
     if not anthropic_api_key:
         return None, {"status_code": 401, "detail": "No API key provided. Please set ANTHROPIC_API_KEY in your configuration."}
-    return AnthropicModel(model_name, api_key=anthropic_api_key), None
+    return AnthropicModel(model_name, provider=AnthropicProvider(api_key=anthropic_api_key)), None
 
 def _create_bedrock_anthropic_model(model_name: str):
     """Helper function to create an AWS Bedrock Anthropic model with specified model name."""
