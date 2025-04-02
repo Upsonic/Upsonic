@@ -63,6 +63,13 @@ MODEL_REGISTRY = {
         "capabilities": [],
         "pricing": {"input": 0.27, "output": 1.10}
     },
+
+    "gemini/gemini-2.0-flash": {
+        "provider": "gemini", 
+        "model_name": "gemini-2.0-flash", 
+        "capabilities": [],
+        "pricing": {"input": 0.10, "output": 0.40}
+    },
     
     # Anthropic models
     "claude/claude-3-5-sonnet": {
