@@ -162,7 +162,7 @@ class Agent:
                     loop
                 ).result()
         except RuntimeError:
-            # No running event loop
+            # No running loop
             pass
         
         # If no running loop or exception occurred, create a new one
@@ -312,6 +312,8 @@ class Agent:
 
         if agent_configuration.system_prompt:
             the_characterization = agent_configuration.system_prompt
+        elif llm_model and llm_model.startswith("ollama"):
+            the_characterization = agent_configuration.system_prompt if agent_configuration.system_prompt else agent_configuration.name
         elif agent_configuration.caching:
             the_characterization = get_from_cache_with_expiry(the_characterization_cache_key)
             if the_characterization is None:
