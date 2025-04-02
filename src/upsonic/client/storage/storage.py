@@ -30,6 +30,10 @@ class ClientConfig(BaseModel):
 
     DEEPSEEK_API_KEY: str | None = Field(default_factory=lambda: os.getenv("DEEPSEEK_API_KEY"))
 
+    GOOGLE_GLA_API_KEY: str | None = Field(default_factory=lambda: os.getenv("GOOGLE_GLA_API_KEY"))
+    
+    OPENROUTER_API_KEY: str | None = Field(default_factory=lambda: os.getenv("OPENROUTER_API_KEY"))
+
 
 
 class Storage:

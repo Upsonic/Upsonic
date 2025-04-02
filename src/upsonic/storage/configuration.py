@@ -137,5 +137,6 @@ Configuration.initialize("AWS_SECRET_ACCESS_KEY")
 Configuration.initialize("AWS_REGION")
 Configuration.initialize("DEEPSEEK_API_KEY")
 Configuration.initialize("GOOGLE_GLA_API_KEY")
+Configuration.initialize("OPENROUTER_API_KEY")
 
 ClientConfiguration = ConfigManager(db_name="client_config.sqlite")

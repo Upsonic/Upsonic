@@ -5,6 +5,7 @@ from decimal import Decimal
 MODEL_SETTINGS = {
     "openai": ModelSettings(parallel_tool_calls=False),
     "anthropic": ModelSettings(parallel_tool_calls=False),
+    "openrouter": ModelSettings(parallel_tool_calls=False),
     # Add other provider settings as needed
 }
 
@@ -150,6 +151,18 @@ def get_model_registry_entry(llm_model: str):
     """Get model registry entry or return None if not found."""
     if llm_model in MODEL_REGISTRY:
         return MODEL_REGISTRY[llm_model]
+    
+    # Handle dynamic OpenRouter models
+    if llm_model.startswith("openrouter/"):
+        # Extract the model name after openrouter/
+        model_name = llm_model.split("openrouter/", 1)[1]
+        return {
+            "provider": "openrouter",
+            "model_name": model_name,  # Use the full model name as provided
+            "api_key": "OPENROUTER_API_KEY",
+            "capabilities": [],
+            "pricing": {"input": 3.00, "output": 15.00}  # Default pricing, can be adjusted based on model
+        }
     
     # Try case-insensitive match as fallback
     llm_model_lower = llm_model.lower()

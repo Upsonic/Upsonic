@@ -383,6 +383,24 @@ def _create_ollama_model(model_name: str):
         provider=OpenAIProvider(base_url=base_url)
     ), None
 
+def _create_openrouter_model(model_name: str):
+    """Helper function to create an OpenRouter model with specified model name."""
+    api_key = Configuration.get("OPENROUTER_API_KEY")
+    if not api_key:
+        return None, {"status_code": 401, "detail": "No API key provided. Please set OPENROUTER_API_KEY in your configuration."}
+    
+    # If model_name starts with openrouter/, remove it
+    if model_name.startswith("openrouter/"):
+        model_name = model_name.split("openrouter/", 1)[1]
+    
+    return OpenAIModel(
+        model_name,
+        provider=OpenAIProvider(
+            base_url='https://openrouter.ai/api/v1',
+            api_key=api_key
+        )
+    ), None
+
 def _create_gemini_model(model_name: str):
     """Helper function to create a Gemini model with specified model name."""
     api_key = Configuration.get("GOOGLE_GLA_API_KEY")
@@ -524,6 +542,8 @@ def _create_model_from_registry(llm_model: str):
         return _create_bedrock_anthropic_model(model_name)
     elif provider == "ollama":
         return _create_ollama_model(model_name)
+    elif provider == "openrouter":
+        return _create_openrouter_model(model_name)
     elif provider == "gemini":
         return _create_gemini_model(model_name)
     else:
