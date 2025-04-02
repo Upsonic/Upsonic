@@ -161,7 +161,7 @@ def get_model_registry_entry(llm_model: str):
             "model_name": model_name,  # Use the full model name as provided
             "api_key": "OPENROUTER_API_KEY",
             "capabilities": [],
-            "pricing": {"input": 3.00, "output": 15.00}  # Default pricing, can be adjusted based on model
+            "pricing": {"input": 0.0, "output": 0.0}
         }
     
     # Try case-insensitive match as fallback
