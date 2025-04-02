@@ -370,8 +370,10 @@ def _create_deepseek_model():
 
     return OpenAIModel(
         'deepseek-chat',
-        base_url='https://api.deepseek.com',
-        api_key=deepseek_api_key,
+        provider=OpenAIProvider(
+            base_url='https://api.deepseek.com',
+            api_key=deepseek_api_key
+        )
     ), None
 
 def _create_ollama_model(model_name: str):
