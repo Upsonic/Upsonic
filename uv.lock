@@ -3187,7 +3187,7 @@ wheels = [
 
 [[package]]
 name = "upsonic"
-version = "0.51.1"
+version = "0.51.2"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
