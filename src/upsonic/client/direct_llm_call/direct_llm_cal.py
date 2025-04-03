@@ -244,6 +244,18 @@ class Direct:
     
     When used without initialization, it provides static methods.
     When initialized with parameters, it returns an instance-based object.
+    
+    Example:
+        # Correct usage with named model parameter:
+        direct = Direct(model="openai/gpt-4o")
+        direct = Direct(model="claude/claude-3-5-sonnet")
+        
+        # Incorrect usage:
+        # direct = Direct("openai/gpt-4o")  # Wrong! Must use model=
+        # direct = Direct("Researcher Direct")  # Wrong!
+        
+        # For agent-based operations, use Agent instead:
+        # agent = Agent("Researcher Agent")  # Correct!
     """
     
     # Static methods that delegate to DirectStatic
@@ -263,7 +275,7 @@ class Direct:
     async def print_do_async(task: Task, model: str | None = None, client: Any = None, debug: bool = False):
         return await DirectStatic.print_do_async(task, model, client, debug)
     
-    def __new__(cls, model: str | None = None, client: Any = None, debug: bool = False):
+    def __new__(cls, *args, model: str | None = None, client: Any = None, debug: bool = False):
         """
         Factory method that returns a DirectInstance object when initialized.
         
@@ -274,5 +286,14 @@ class Direct:
             
         Returns:
             A DirectInstance object
+            
+        Raises:
+            ValueError: If positional arguments are provided instead of using the named parameter 'model'
         """
+        if args:
+            raise ValueError(
+                "Direct() does not accept positional arguments. Use named parameter 'model' instead.\n"
+                "Example: Direct(model='openai/gpt-4o') instead of Direct('openai/gpt-4o')"
+            )
+            
         return DirectInstance(model, client, debug)
