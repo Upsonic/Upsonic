@@ -82,7 +82,47 @@ def connected_to_server(server_type: str, status: str, total_time: float = None)
 
     spacing()
 
-def call_end(result: Any, llm_model: str, response_format: str, start_time: float, end_time: float, usage: dict, debug: bool = False):
+def call_end(result: Any, llm_model: str, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, debug: bool = False):
+    # First panel for tool usage if there are any tools used
+    if tool_usage and len(tool_usage) > 0:
+        tool_table = Table(show_header=True, expand=True, box=None)
+        tool_table.width = 60
+        
+        # Add columns for the tool usage table
+        tool_table.add_column("[bold]Tool Name[/bold]", justify="left")
+        tool_table.add_column("[bold]Parameters[/bold]", justify="left")
+        tool_table.add_column("[bold]Result[/bold]", justify="left")
+
+        # Add each tool usage as a row
+        for tool in tool_usage:
+            tool_name = escape_rich_markup(str(tool.get('tool_name', '')))
+            params = escape_rich_markup(str(tool.get('params', '')))
+            result_str = escape_rich_markup(str(tool.get('tool_result', '')))
+            
+            # Truncate long strings
+            if len(params) > 50:
+                params = params[:47] + "..."
+            if len(result_str) > 50:
+                result_str = result_str[:47] + "..."
+                
+            tool_table.add_row(
+                f"[cyan]{tool_name}[/cyan]",
+                f"[yellow]{params}[/yellow]",
+                f"[green]{result_str}[/green]"
+            )
+
+        tool_panel = Panel(
+            tool_table,
+            title=f"[bold cyan]Tool Usage Summary ({len(tool_usage)} tools)[/bold cyan]",
+            border_style="cyan",
+            expand=True,
+            width=70
+        )
+
+        console.print(tool_panel)
+        spacing()
+
+    # Second panel with main results
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
 
@@ -176,7 +216,47 @@ def call_end(result: Any, llm_model: str, response_format: str, start_time: floa
 
 
 
-def agent_end(result: Any, llm_model: str, response_format: str, start_time: float, end_time: float, usage: dict, tool_count: int, context_count: int, debug: bool = False, price_id:str = None):
+def agent_end(result: Any, llm_model: str, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, tool_count: int, context_count: int, debug: bool = False, price_id:str = None):
+    # First panel for tool usage if there are any tools used
+    if tool_usage and len(tool_usage) > 0:
+        tool_table = Table(show_header=True, expand=True, box=None)
+        tool_table.width = 60
+        
+        # Add columns for the tool usage table
+        tool_table.add_column("[bold]Tool Name[/bold]", justify="left")
+        tool_table.add_column("[bold]Parameters[/bold]", justify="left")
+        tool_table.add_column("[bold]Result[/bold]", justify="left")
+
+        # Add each tool usage as a row
+        for tool in tool_usage:
+            tool_name = escape_rich_markup(str(tool.get('tool_name', '')))
+            params = escape_rich_markup(str(tool.get('params', '')))
+            result_str = escape_rich_markup(str(tool.get('tool_result', '')))
+            
+            # Truncate long strings
+            if len(params) > 50:
+                params = params[:47] + "..."
+            if len(result_str) > 50:
+                result_str = result_str[:47] + "..."
+                
+            tool_table.add_row(
+                f"[cyan]{tool_name}[/cyan]",
+                f"[yellow]{params}[/yellow]",
+                f"[green]{result_str}[/green]"
+            )
+
+        tool_panel = Panel(
+            tool_table,
+            title=f"[bold cyan]Tool Usage Summary ({len(tool_usage)} tools)[/bold cyan]",
+            border_style="cyan",
+            expand=True,
+            width=70
+        )
+
+        console.print(tool_panel)
+        spacing()
+
+    # Main result panel
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
 

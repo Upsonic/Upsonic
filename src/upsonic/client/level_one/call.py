@@ -125,10 +125,10 @@ class Call:
             if isinstance(task, list):
                 for each in task:
                     the_result = await self.call_async_(each, llm_model)
-                    call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
+                    call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_usage"], self.debug)
             else:
                 the_result = await self.call_async_(task, llm_model)
-                call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
+                call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_usage"], self.debug)
         except Exception as outer_e:
             try:
                 from ...server import stop_dev_server, stop_main_server, is_tools_server_running, is_main_server_running
@@ -218,7 +218,7 @@ class Call:
         
         task.end_time = time.time()
         
-        return {"result": deserialized_result["result"], "llm_model": llm_model, "response_format": response_format_req, "usage": deserialized_result["usage"]}
+        return {"result": deserialized_result["result"], "llm_model": llm_model, "response_format": response_format_req, "usage": deserialized_result["usage"], "tool_usage": deserialized_result["tool_usage"]}
 
 
 

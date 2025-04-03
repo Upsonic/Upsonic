@@ -25,6 +25,38 @@ from ...client.tasks.task_response import ObjectResponse
 from ..level_one.call import Call
 
 
+def extract_latest_tool_usage(all_messages):
+    """Extract tool usage from the latest interaction only."""
+    tool_usage = []
+    current_tool = None
+    
+    # Find the start of the latest interaction
+    latest_interaction_start = 0
+    for i, msg in enumerate(all_messages):
+        if msg.kind == 'request' and any(part.part_kind == 'user-prompt' for part in msg.parts):
+            latest_interaction_start = i
+            
+    # Process only messages from the latest interaction
+    for msg in all_messages[latest_interaction_start:]:
+        if msg.kind == 'request':
+            for part in msg.parts:
+                if part.part_kind == 'tool-return':
+                    if current_tool and current_tool['tool_name'] != 'final_result':
+                        current_tool['tool_result'] = part.content
+                        tool_usage.append(current_tool)
+                    current_tool = None
+                    
+        elif msg.kind == 'response':
+            for part in msg.parts:
+                if part.part_kind == 'tool-call' and part.tool_name != 'final_result':
+                    current_tool = {
+                        'tool_name': part.tool_name,
+                        'params': part.args,
+                        'tool_result': None
+                    }
+    
+    return tool_usage
+
 class AgentManager:
     async def agent(
         self,
@@ -65,6 +97,7 @@ class AgentManager:
             total_request_tokens = 0
             total_response_tokens = 0
             total_retries = 0
+            final_result = None
 
             while not satisfied:
                 if feedback:
@@ -80,6 +113,7 @@ class AgentManager:
                     print("message_history", message_history)
                     result = await roulette_agent.run(message_history, message_history=agent_memory)
                     print("I got the response3")
+                    final_result = result  # Store the final result for tool usage extraction
                 except (openai.BadRequestError, anthropic.BadRequestError) as e:
                     str_e = str(e)
                     if "400" in str_e and context_compress:
@@ -88,6 +122,7 @@ class AgentManager:
                                 prompt, images, tools, llm_model,
                                 response_format, context, system_prompt, agent_memory
                             )
+                            final_result = result
                         except Exception as e:
                             return process_error_traceback(e)
                     else:
@@ -126,15 +161,19 @@ class AgentManager:
                         satisfied = True  # Break the loop on error
 
             if memory:
-                save_temporary_memory(result.all_messages(), agent_id)
+                save_temporary_memory(final_result.all_messages(), agent_id)
+
+            # Extract tool usage from the latest interaction only
+            tool_usage = extract_latest_tool_usage(final_result.all_messages())
 
             return {
                 "status_code": 200, 
-                "result": result.data, 
+                "result": final_result.data, 
                 "usage": {
                     "input_tokens": total_request_tokens, 
                     "output_tokens": total_response_tokens
-                }
+                },
+                "tool_usage": tool_usage
             }
 
         except Exception as e:
