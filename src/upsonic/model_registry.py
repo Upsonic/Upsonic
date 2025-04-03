@@ -100,7 +100,7 @@ MODEL_REGISTRY = {
         "required_environment_variables": []
     },
 
-    "ollama/llama3.1-70b": {
+    "ollama/llama3.1:70b": {
         "provider": "ollama", 
         "model_name": "llama3.1:70b", 
         "capabilities": [],
