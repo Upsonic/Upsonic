@@ -1,12 +1,18 @@
 from pydantic_ai.settings import ModelSettings
 from decimal import Decimal
-
+from pydantic_ai.models.openai import OpenAIModelSettings
+from pydantic_ai.models.anthropic import AnthropicModelSettings
 # Define model settings in a centralized dictionary for easier maintenance
 MODEL_SETTINGS = {
-    "openai": ModelSettings(parallel_tool_calls=False),
-    "anthropic": ModelSettings(parallel_tool_calls=False),
-    "openrouter": ModelSettings(parallel_tool_calls=False),
+    "openai": OpenAIModelSettings(parallel_tool_calls=False),
+    "anthropic": AnthropicModelSettings(parallel_tool_calls=False),
+    "openrouter": OpenAIModelSettings(parallel_tool_calls=False),
     # Add other provider settings as needed
+}
+
+# OpenAI models that don't support parallel tool calls
+OPENAI_NON_PARALLEL_MODELS = {
+    "o3-mini": True,
 }
 
 # Comprehensive model registry for easier maintenance and extension
@@ -201,18 +207,19 @@ def get_model_settings(llm_model: str, tools=None):
     if not tools:
         return None
     
-    # Convert model name to lowercase for case-insensitive matching    
-    llm_model_lower = llm_model.lower()
+    # Get model info from registry
+    model_info = get_model_registry_entry(llm_model)
+    if not model_info:
+        return None
+
+    # Special handling for OpenAI models that don't support parallel tool calls
+    if model_info["provider"] == "openai" and model_info["model_name"] in OPENAI_NON_PARALLEL_MODELS:
+        return OpenAIModelSettings()
     
-    # Check if the model belongs to the OpenAI family
-    for model_id in OPENAI_MODELS:
-        if model_id.lower() in llm_model_lower:
-            return MODEL_SETTINGS["openai"]
-    
-    # Check if the model belongs to the Anthropic family
-    for model_id in ANTHROPIC_MODELS:
-        if model_id.lower() in llm_model_lower:
-            return MODEL_SETTINGS["anthropic"]
+    # For all other models, return provider settings
+    provider = model_info["provider"]
+    if provider in MODEL_SETTINGS:
+        return MODEL_SETTINGS[provider]
     
     # Log when no settings match is found
     print(f"Warning: No model settings found for {llm_model}")
