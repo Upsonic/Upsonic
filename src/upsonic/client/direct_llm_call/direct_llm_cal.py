@@ -4,12 +4,13 @@ from typing import Any, Callable, TypeVar, cast
 
 T = TypeVar('T')
 
+from ...model_registry import ModelNames
 
 class DirectStatic:
     """Static methods for making direct LLM calls using the Upsonic client."""
     
     @staticmethod
-    def do(task: Task, model: str | None = None, client: Any = None, debug: bool = False):
+    def do(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
         """
         Execute a direct LLM call with the given task and model.
         
@@ -41,7 +42,7 @@ class DirectStatic:
         return asyncio.run(DirectStatic.do_async(task, model, client, debug))
 
     @staticmethod
-    async def do_async(task: Task, model: str | None = None, client: Any = None, debug: bool = False):
+    async def do_async(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
         """
         Execute a direct LLM call with the given task and model asynchronously.
         
@@ -71,7 +72,7 @@ class DirectStatic:
         return task.response
 
     @staticmethod
-    def print_do(task: Task, model: str | None = None, client: Any = None, debug: bool = False):
+    def print_do(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
         """
         Execute a direct LLM call and print the result.
         
@@ -103,7 +104,7 @@ class DirectStatic:
         return asyncio.run(DirectStatic.print_do_async(task, model, client, debug))
 
     @staticmethod
-    async def print_do_async(task: Task, model: str | None = None, client: Any = None, debug: bool = False):
+    async def print_do_async(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
         """
         Execute a direct LLM call and print the result asynchronously.
         
@@ -124,7 +125,7 @@ class DirectStatic:
 class DirectInstance:
     """Instance-based class for making direct LLM calls using the Upsonic client."""
     
-    def __init__(self, model: str | None = None, client: Any = None, debug: bool = False):
+    def __init__(self, model: ModelNames | None = None, client: Any = None, debug: bool = False):
         """
         Initialize a DirectInstance with specific model and client settings.
         
@@ -137,7 +138,7 @@ class DirectInstance:
         self.client = client
         self.debug = debug
     
-    def do(self, task: Task, model: str | None = None, client: Any = None, debug: bool = False):
+    def do(self, task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
         """
         Execute a direct LLM call using instance defaults or overrides.
         
@@ -168,7 +169,7 @@ class DirectInstance:
         # If no running loop or exception occurred, create a new one
         return asyncio.run(self.do_async(task, model, client, debug))
 
-    async def do_async(self, task: Task, model: str | None = None, client: Any = None, debug: bool = False):
+    async def do_async(self, task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
         """
         Execute a direct LLM call using instance defaults or overrides asynchronously.
         
@@ -189,7 +190,7 @@ class DirectInstance:
         # Call the static method with the resolved parameters
         return await DirectStatic.do_async(task, actual_model, actual_client, actual_debug)
         
-    def print_do(self, task: Task, model: str | None = None, client: Any = None, debug: bool = False):
+    def print_do(self, task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
         """
         Execute a direct LLM call and print the result.
         
@@ -220,7 +221,7 @@ class DirectInstance:
         # If no running loop or exception occurred, create a new one
         return asyncio.run(self.print_do_async(task, model, client, debug))
 
-    async def print_do_async(self, task: Task, model: str | None = None, client: Any = None, debug: bool = False):
+    async def print_do_async(self, task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
         """
         Execute a direct LLM call and print the result asynchronously.
         
@@ -260,22 +261,22 @@ class Direct:
     
     # Static methods that delegate to DirectStatic
     @staticmethod
-    def do(task: Task, model: str | None = None, client: Any = None, debug: bool = False):
+    def do(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
         return DirectStatic.do(task, model, client, debug)
     
     @staticmethod
-    def print_do(task: Task, model: str | None = None, client: Any = None, debug: bool = False):
+    def print_do(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
         return DirectStatic.print_do(task, model, client, debug)
 
     @staticmethod
-    async def do_async(task: Task, model: str | None = None, client: Any = None, debug: bool = False):
+    async def do_async(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
         return await DirectStatic.do_async(task, model, client, debug)
     
     @staticmethod
-    async def print_do_async(task: Task, model: str | None = None, client: Any = None, debug: bool = False):
+    async def print_do_async(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
         return await DirectStatic.print_do_async(task, model, client, debug)
     
-    def __new__(cls, *args, model: str | None = None, client: Any = None, debug: bool = False):
+    def __new__(cls, *args, model: ModelNames | None = None, client: Any = None, debug: bool = False):
         """
         Factory method that returns a DirectInstance object when initialized.
         

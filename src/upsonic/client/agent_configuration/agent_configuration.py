@@ -10,6 +10,8 @@ from ..tasks.tasks import Task
 from ..printing import mcp_tool_operation, tool_operation
 
 from ..latest_upsonic_client import latest_upsonic_client
+from ...model_registry import ModelNames
+
 
 def register_tools(client, tools):
     """Register tools with the client."""
@@ -149,12 +151,12 @@ class AgentConfiguration(BaseModel):
         company_objective: Optional[str] = None,
         name: str = "",
         contact: str = "",
-        model: str = "openai/gpt-4o",
+        model: ModelNames = "openai/gpt-4o",
         client: Any = None,
         debug: bool = False,
         reliability_layer: Any = None,
         system_prompt: Optional[str] = None,
-        tools: List[Any] = None,
+        tools: Optional[List[Any]] = None,
         sub_task: bool = True,
         reflection: bool = False,
         memory: bool = False,

@@ -2,6 +2,37 @@ from pydantic_ai.settings import ModelSettings
 from decimal import Decimal
 from pydantic_ai.models.openai import OpenAIModelSettings
 from pydantic_ai.models.anthropic import AnthropicModelSettings
+
+
+from typing import Literal
+# Define all available model names
+ModelNames = Literal[
+    "openai/gpt-4o",
+    "openai/gpt-4.5-preview",
+    "openai/o3-mini",
+    "openai/gpt-4o-mini",
+    "azure/gpt-4o",
+    "azure/gpt-4o-mini",
+    "claude/claude-3-5-sonnet",
+    "claude/claude-3-7-sonnet",
+    "bedrock/claude-3-5-sonnet",
+    "gemini/gemini-2.0-flash",
+    "gemini/gemini-1.5-pro",
+    "gemini/gemini-1.5-flash",
+    "ollama/llama3.2",
+    "ollama/llama3.1:70b",
+    "ollama/llama3.1",
+    "ollama/llama3.3",
+    "ollama/qwen2.5",
+    "deepseek/deepseek-chat",
+    "openrouter/anthropic/claude-3-sonnet",
+    "openrouter/meta-llama/llama-3.1-8b-instruct",
+    "openrouter/google/gemini-pro",
+    "openrouter/<provider>/<model>",
+]
+
+
+
 # Define model settings in a centralized dictionary for easier maintenance
 MODEL_SETTINGS = {
     "openai": OpenAIModelSettings(parallel_tool_calls=False),
@@ -162,6 +193,29 @@ MODEL_REGISTRY = {
         "capabilities": ["computer_use"],
         "pricing": {"input": 3.00, "output": 15.00},
         "required_environment_variables": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"]
+    },
+
+    # OpenRouter models
+    "openrouter/anthropic/claude-3-sonnet": {
+        "provider": "openrouter",
+        "model_name": "anthropic/claude-3-sonnet",
+        "capabilities": [],
+        "pricing": {"input": 0.0, "output": 0.0},
+        "required_environment_variables": ["OPENROUTER_API_KEY"]
+    },
+    "openrouter/meta-llama/llama-3.1-8b-instruct": {
+        "provider": "openrouter",
+        "model_name": "meta-llama/llama-3.1-8b-instruct",
+        "capabilities": [],
+        "pricing": {"input": 0.0, "output": 0.0},
+        "required_environment_variables": ["OPENROUTER_API_KEY"]
+    },
+    "openrouter/google/gemini-pro": {
+        "provider": "openrouter",
+        "model_name": "google/gemini-pro",
+        "capabilities": [],
+        "pricing": {"input": 0.0, "output": 0.0},
+        "required_environment_variables": ["OPENROUTER_API_KEY"]
     },
 }
 
