@@ -445,14 +445,14 @@ class Agent:
                     the_result["time"] = time.time() - start_time
                     results.append(the_result)
                     agent_end(the_result["result"], the_result["llm_model"], the_result["response_format"], 
-                             start_time, time.time(), the_result["usage"], the_result["tool_count"], 
+                             start_time, time.time(), the_result["usage"], the_result["tool_usage"], the_result["tool_count"], 
                              the_result["context_count"], self.debug, each.price_id)
             else:
                 the_result = await self.send_agent_request_async(agent_configuration, task, llm_model)
                 the_result["time"] = time.time() - start_time
                 results.append(the_result)
                 agent_end(the_result["result"], the_result["llm_model"], the_result["response_format"], 
-                         start_time, time.time(), the_result["usage"], the_result["tool_count"], 
+                         start_time, time.time(), the_result["usage"], the_result["tool_usage"], the_result["tool_count"], 
                          the_result["context_count"], self.debug, task.price_id)
         except Exception as outer_e:
             try:
@@ -566,7 +566,8 @@ class Agent:
                     "result": processed_result, 
                     "llm_model": llm_model, 
                     "response_format": response_format_req, 
-                    "usage": deserialized_result["usage"], 
+                    "usage": deserialized_result["usage"],
+                    "tool_usage": deserialized_result["tool_usage"],
                     "tool_count": len(tools), 
                     "context_count": len_of_context
                 }

@@ -270,6 +270,30 @@ def prepare_message_history(prompt, images=None, llm_model=None, tools=None):
 
 def format_response(result):
     """Format the successful response consistently."""
+    messages = result.all_messages()
+    
+    # Track tool usage
+    tool_usage = []
+    current_tool = None
+    
+    for msg in messages:
+        if msg.kind == 'request':
+            for part in msg.parts:
+                if part.part_kind == 'tool-return':
+                    if current_tool and current_tool['tool_name'] != 'final_result':
+                        current_tool['tool_result'] = part.content
+                        tool_usage.append(current_tool)
+                    current_tool = None
+                    
+        elif msg.kind == 'response':
+            for part in msg.parts:
+                if part.part_kind == 'tool-call' and part.tool_name != 'final_result':
+                    current_tool = {
+                        'tool_name': part.tool_name,
+                        'params': part.args,
+                        'tool_result': None
+                    }
+
     usage = result.usage()
     return {
         "status_code": 200,
@@ -277,7 +301,8 @@ def format_response(result):
         "usage": {
             "input_tokens": usage.request_tokens,
             "output_tokens": usage.response_tokens
-        }
+        },
+        "tool_usage": tool_usage
     }
 
 async def handle_compression_retry(prompt, images, tools, llm_model, response_format, context, system_prompt=None, agent_memory=None):
