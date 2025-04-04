@@ -266,6 +266,17 @@ def get_model_settings(llm_model: str, tools=None):
     if not model_info:
         return None
 
+    # Filter out ComputerUse tools if model doesn't support computer_use capability
+    filtered_tools = []
+    for tool in tools:
+        if "ComputerUse" in tool and not has_capability(llm_model, "computer_use"):
+            continue
+        filtered_tools.append(tool)
+    
+    # If no tools remain after filtering, return None
+    if not filtered_tools:
+        return None
+
     # Special handling for OpenAI models that don't support parallel tool calls
     if model_info["provider"] == "openai" and model_info["model_name"] in OPENAI_NON_PARALLEL_MODELS:
         return OpenAIModelSettings()
