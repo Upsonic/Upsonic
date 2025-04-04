@@ -221,12 +221,6 @@ class AgentConfiguration(BaseModel):
                         # Re-raise any exceptions from the __control__ method
                         raise ValueError(f"Error validating tool {tool}: {str(e)}")
 
-    @property
-    def retries(self):
-        if self.reflection:
-            return 5
-        else:
-            return 1
 
     @property
     def agent_id(self):

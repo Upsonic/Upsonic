@@ -24,7 +24,6 @@ class AgentRequest(BaseModel):
     context: Optional[Any] = None
     llm_model: Optional[Any] = "openai/gpt-4o"
     system_prompt: Optional[Any] = None
-    retries: Optional[Any] = 1
     context_compress: Optional[Any] = False
     memory: Optional[Any] = False
 
@@ -78,7 +77,6 @@ async def call_agent(request: AgentRequest):
             context=context,
             llm_model=request.llm_model,
             system_prompt=request.system_prompt,
-            retries=request.retries,
             context_compress=request.context_compress,
             memory=request.memory
         )

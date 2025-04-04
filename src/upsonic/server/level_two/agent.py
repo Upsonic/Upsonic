@@ -68,7 +68,6 @@ class AgentManager:
         context: Any = None,
         llm_model: str = "openai/gpt-4o",
         system_prompt: Optional[Any] = None,
-        retries: int = 1,
         context_compress: bool = False,
         memory: bool = False
     ):
@@ -85,90 +84,42 @@ class AgentManager:
             if isinstance(roulette_agent, dict) and "status_code" in roulette_agent:
                 return roulette_agent  # Return error from agent_creator
 
-            roulette_agent.retries = retries
             agent_memory = []
             if memory:
                 agent_memory = get_temporary_memory(agent_id)
 
             message_history = prepare_message_history(prompt, images, llm_model, tools)
                 
-            feedback = ""
-            satisfied = False
             total_request_tokens = 0
             total_response_tokens = 0
-            total_retries = 0
-            final_result = None
 
-            while not satisfied:
-                if feedback:
-                    current_message = prompt + "\n\n" + feedback
-                    # Update the message history with the new message that includes feedback
-                    if message_history and isinstance(message_history[0], str):
-                        message_history[0] = current_message
-                
-                print("message:", message_history[0] if message_history and isinstance(message_history[0], str) else "")
-
-                try:
-                    print("I sent the request3")
-                    print("message_history", message_history)
-                    result = await roulette_agent.run(message_history, message_history=agent_memory)
-                    print("I got the response3")
-                    final_result = result  # Store the final result for tool usage extraction
-                except (openai.BadRequestError, anthropic.BadRequestError) as e:
-                    str_e = str(e)
-                    if "400" in str_e and context_compress:
-                        try:
-                            result = await handle_compression_retry(
-                                prompt, images, tools, llm_model,
-                                response_format, context, system_prompt, agent_memory
-                            )
-                            final_result = result
-                        except Exception as e:
-                            return process_error_traceback(e)
-                    else:
-                        return process_error_traceback(e)
-
-                total_request_tokens += result.usage().request_tokens
-                total_response_tokens += result.usage().response_tokens
-
-                if retries == 1:
-                    satisfied = True
-                elif total_retries >= retries:
-                    satisfied = True
-                else:
-                    total_retries += 1
-                    print("Retrying", total_retries)
-
+            try:
+                result = await roulette_agent.run(message_history, message_history=agent_memory)
+            except (openai.BadRequestError, anthropic.BadRequestError) as e:
+                str_e = str(e)
+                if "400" in str_e and context_compress:
                     try:
-                        class Satisfying(ObjectResponse):
-                            satisfied: bool
-                            feedback: str
-                            
-                        from ...client.level_two.agent import OtherTask
-                        other_task = OtherTask(task=prompt, result=result.data)
-
-                        satify_result = await Call.gpt_4o(
-                            "Check if the result is satisfied", 
-                            response_format=Satisfying, 
-                            context=other_task, 
-                            llm_model=llm_model
+                        result = await handle_compression_retry(
+                            prompt, images, tools, llm_model,
+                            response_format, context, system_prompt, agent_memory
                         )
-                        feedback = satify_result["result"].feedback
-
-                        satisfied = satify_result["result"].satisfied
                     except Exception as e:
-                        traceback.print_exc()
-                        satisfied = True  # Break the loop on error
+                        return process_error_traceback(e)
+                else:
+                    return process_error_traceback(e)
+
+            total_request_tokens += result.usage().request_tokens
+            total_response_tokens += result.usage().response_tokens
 
             if memory:
-                save_temporary_memory(final_result.all_messages(), agent_id)
+                save_temporary_memory(result.all_messages(), agent_id)
 
             # Extract tool usage from the latest interaction only
-            tool_usage = extract_latest_tool_usage(final_result.all_messages())
+            tool_usage = extract_latest_tool_usage(result.all_messages())
 
             return {
                 "status_code": 200, 
-                "result": final_result.data, 
+                "result": result.data, 
                 "usage": {
                     "input_tokens": total_request_tokens, 
                     "output_tokens": total_response_tokens

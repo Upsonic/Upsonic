@@ -482,102 +482,86 @@ class Agent:
         if llm_model is None:
             llm_model = self.default_llm_model
 
-        retry_count = 0
-        last_error = None
+        tools = tools_serializer(task.tools)
+        response_format = task.response_format
+        
+        with sentry_sdk.start_transaction(op="task", name="Agent.send_agent_request_async") as transaction:
+            with sentry_sdk.start_span(op="serialize"):
+                # Serialize the response format if it's a type or BaseModel
+                response_format_str = response_format_serializer(task.response_format)
 
-        while retry_count <= agent_configuration.retries:
-            try:
-                if retry_count > 0:
-                    agent_retry(retry_count, agent_configuration.retries)
-
-                tools = tools_serializer(task.tools)
-                response_format = task.response_format
-                
-                with sentry_sdk.start_transaction(op="task", name="Agent.send_agent_request_async") as transaction:
-                    with sentry_sdk.start_span(op="serialize"):
-                        # Serialize the response format if it's a type or BaseModel
-                        response_format_str = response_format_serializer(task.response_format)
-
-                    new_context = []
-                    if task.context:
-                        for each in task.context:
-                            if isinstance(each, KnowledgeBase):
-                                if not each.rag:
-                                    new_context.append(each.markdown(self))
-                            else:
-                                new_context.append(each)
-
-                        context = context_serializer(new_context, self)
+            new_context = []
+            if task.context:
+                for each in task.context:
+                    if isinstance(each, KnowledgeBase):
+                        if not each.rag:
+                            new_context.append(each.markdown(self))
                     else:
-                        context = None
+                        new_context.append(each)
 
-                    with sentry_sdk.start_span(op="prepare_request"):
-                        # Prepare the request data
-                        data = {
-                            "agent_id": agent_configuration.agent_id,
-                            "prompt": task.description + await task.additional_description(self), 
-                            "images": task.images_base_64,
-                            "response_format": response_format_str,
-                            "tools": tools or [],
-                            "context": context,
-                            "llm_model": llm_model,
-                            "system_prompt": None,
-                            "retries": agent_configuration.retries,
-                            "context_compress": agent_configuration.context_compress,
-                            "memory": agent_configuration.memory
-                        }
+                context = context_serializer(new_context, self)
+            else:
+                context = None
 
-                    with sentry_sdk.start_span(op="send_request"):
-                        # Send the request asynchronously
-                        result = await self.send_request_async("/level_two/agent", data)
-                        result = result["result"]
-                        error_handler(result)
-
-                    with sentry_sdk.start_span(op="deserialize"):
-                        deserialized_result = response_format_deserializer(response_format_str, result)
-
-                # Process result through reliability layer
-                processed_result = await ReliabilityProcessor.process_result(
-                    deserialized_result["result"], 
-                    agent_configuration.reliability_layer,
-                    task,
-                    llm_model
-                )
-                task._response = processed_result
-
-                if task.response_lang:
-                    language = Language(task.response_lang, task, llm_model)
-                    processed_result = await language.transform()
-                    task._response = processed_result
-
-                response_format_req = None
-                if response_format_str == "str":
-                    response_format_req = response_format_str
-                else:
-                    # Class name
-                    response_format_req = response_format.__name__
-                
-                if context is None:
-                    context = []
-
-                len_of_context = len(task.context) if task.context is not None else 0
-
-                return {
-                    "result": processed_result, 
-                    "llm_model": llm_model, 
-                    "response_format": response_format_req, 
-                    "usage": deserialized_result["usage"],
-                    "tool_usage": deserialized_result["tool_usage"],
-                    "tool_count": len(tools), 
-                    "context_count": len_of_context
+            with sentry_sdk.start_span(op="prepare_request"):
+                # Prepare the request data
+                data = {
+                    "agent_id": agent_configuration.agent_id,
+                    "prompt": task.description + await task.additional_description(self), 
+                    "images": task.images_base_64,
+                    "response_format": response_format_str,
+                    "tools": tools or [],
+                    "context": context,
+                    "llm_model": llm_model,
+                    "system_prompt": None,
+                    "context_compress": agent_configuration.context_compress,
+                    "memory": agent_configuration.memory
                 }
 
-            except CallErrorException as e:
-                last_error = e
-                retry_count += 1
-                if retry_count > agent_configuration.retries:
-                    raise last_error
-                continue
+            with sentry_sdk.start_span(op="send_request"):
+                # Send the request asynchronously
+                result = await self.send_request_async("/level_two/agent", data)
+                result = result["result"]
+                error_handler(result)
+
+            with sentry_sdk.start_span(op="deserialize"):
+                deserialized_result = response_format_deserializer(response_format_str, result)
+
+            # Process result through reliability layer
+            processed_result = await ReliabilityProcessor.process_result(
+                deserialized_result["result"], 
+                agent_configuration.reliability_layer,
+                task,
+                llm_model
+            )
+            task._response = processed_result
+
+            if task.response_lang:
+                language = Language(task.response_lang, task, llm_model)
+                processed_result = await language.transform()
+                task._response = processed_result
+
+            response_format_req = None
+            if response_format_str == "str":
+                response_format_req = response_format_str
+            else:
+                # Class name
+                response_format_req = response_format.__name__
+            
+            if context is None:
+                context = []
+
+            len_of_context = len(task.context) if task.context is not None else 0
+
+            return {
+                "result": processed_result, 
+                "llm_model": llm_model, 
+                "response_format": response_format_req, 
+                "usage": deserialized_result["usage"],
+                "tool_usage": deserialized_result["tool_usage"],
+                "tool_count": len(tools), 
+                "context_count": len_of_context
+            }
 
     async def create_characterization_async(self, agent_configuration: AgentConfiguration, llm_model: str = None, price_id: str = None):
         tools = [Search]
