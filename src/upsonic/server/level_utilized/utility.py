@@ -243,6 +243,8 @@ def process_error_traceback(e):
     """Extract and format error traceback information consistently."""
     tb = traceback.extract_tb(e.__traceback__)
     file_path = tb[-1].filename
+    if "pydantic_ai" in file_path:
+        return {"status_code": 500, "detail": str(e)}
     if "Upsonic/src/" in file_path:
         file_path = file_path.split("Upsonic/src/")[1]
     line_number = tb[-1].lineno
