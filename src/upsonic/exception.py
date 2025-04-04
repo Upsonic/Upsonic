@@ -6,6 +6,10 @@ class UnsupportedLLMModelException(Exception):
     """Raised when an unsupported LLM model is specified."""
     pass
 
+class UnsupportedComputerUseModelException(Exception):
+    """Raised when ComputerUse tools are used with an unsupported model."""
+    pass
+
 class ContextWindowTooSmallException(Exception):
     """Raised when the context window is too small for the input."""
     pass

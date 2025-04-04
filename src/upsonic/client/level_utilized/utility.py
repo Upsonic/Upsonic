@@ -13,6 +13,7 @@ from ...exception import (
     ContextWindowTooSmallException,
     InvalidRequestException,
     UnsupportedLLMModelException,
+    UnsupportedComputerUseModelException,
     CallErrorException
 )
 
@@ -127,6 +128,10 @@ def error_handler(result):
     if result["status_code"] == 400:
         error_message("Unsupported Model", result["detail"], 400)
         raise UnsupportedLLMModelException(result["detail"])
+
+    if result["status_code"] == 405:
+        error_message("Unsupported Computer Use Model", result["detail"], 405)
+        raise UnsupportedComputerUseModelException(result["detail"])
 
     if result["status_code"] == 500:
         # Extract meaningful message from the error if available

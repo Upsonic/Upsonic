@@ -512,6 +512,14 @@ def _setup_tools(roulette_agent, tools, llm_model):
     """Set up the tools for the agent."""
     the_wrapped_tools = []
 
+    # First check for ComputerUse tools compatibility
+    if "ComputerUse.*" in tools:
+        if not has_capability(llm_model, "computer_use"):
+            return {
+                "status_code": 405,
+                "detail": f"ComputerUse tools are not supported by the model {llm_model}. Please use a model that supports computer_use capability."
+            }
+
     # Set up function tools
     with FunctionToolManager() as function_client:
         the_list_of_tools = function_client.get_tools_by_name(tools)
@@ -525,7 +533,7 @@ def _setup_tools(roulette_agent, tools, llm_model):
         roulette_agent.tool_plain(each, retries=5)
 
     # Set up ComputerUse tools for models with that capability
-    if "ComputerUse.*" in tools and has_capability(llm_model, "computer_use"):
+    if "ComputerUse.*" in tools:
         try:
             from .cu import ComputerUse_tools
             for each in ComputerUse_tools:
@@ -620,8 +628,12 @@ def agent_creator(
             model_settings=model_settings
         )
 
-        # Set up tools
-        roulette_agent = _setup_tools(roulette_agent, tools, llm_model)
+        # Set up tools and check for errors
+        result = _setup_tools(roulette_agent, tools, llm_model)
+        
+        # If result is a dict, it means there was an error
+        if isinstance(result, dict) and "status_code" in result:
+            return result
 
-        return roulette_agent
+        return result
 
