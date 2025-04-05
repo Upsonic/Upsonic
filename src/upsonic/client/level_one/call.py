@@ -30,6 +30,7 @@ class Call:
         self,
         task: Union[Task, List[Task]],
         llm_model: str = None,
+        retry: int = 3
     ) -> Any:
         
         start_time = time.time()
@@ -42,28 +43,28 @@ class Call:
                     # If there's a running loop, run the async function in that loop
                     if isinstance(task, list):
                         for each in task:
-                            the_result = asyncio.run_coroutine_threadsafe(self.call_async_(each, llm_model), loop).result()
+                            the_result = asyncio.run_coroutine_threadsafe(self.call_async_(each, llm_model, retry), loop).result()
                             call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
                     else:
-                        the_result = asyncio.run_coroutine_threadsafe(self.call_async_(task, llm_model), loop).result()
+                        the_result = asyncio.run_coroutine_threadsafe(self.call_async_(task, llm_model, retry), loop).result()
                         call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
                 else:
                     # If there's a loop but it's not running, use asyncio.run
                     if isinstance(task, list):
                         for each in task:
-                            the_result = asyncio.run(self.call_async_(each, llm_model))
+                            the_result = asyncio.run(self.call_async_(each, llm_model, retry))
                             call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
                     else:
-                        the_result = asyncio.run(self.call_async_(task, llm_model))
+                        the_result = asyncio.run(self.call_async_(task, llm_model, retry))
                         call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
             except RuntimeError:
                 # No event loop exists, create one with asyncio.run
                 if isinstance(task, list):
                     for each in task:
-                        the_result = asyncio.run(self.call_async_(each, llm_model))
+                        the_result = asyncio.run(self.call_async_(each, llm_model, retry))
                         call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
                 else:
-                    the_result = asyncio.run(self.call_async_(task, llm_model))
+                    the_result = asyncio.run(self.call_async_(task, llm_model, retry))
                     call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
         except Exception as outer_e:
             try:
@@ -85,6 +86,7 @@ class Call:
         self,
         task: Task,
         llm_model: str = None,
+        retry: int = 3
     ) -> Any:
         """
         Call GPT-4 with optional tools and MCP servers.
@@ -93,7 +95,7 @@ class Call:
             prompt: The input prompt for GPT-4
             response_format: The expected response format (can be a type or Pydantic model)
             tools: Optional list of tool names to use
-
+            retry: Number of retries for failed calls (default: 3)
 
         Returns:
             The response in the specified format
@@ -103,18 +105,19 @@ class Call:
             loop = asyncio.get_running_loop()
             if loop.is_running():
                 # If there's a running loop, run the async function in that loop
-                return asyncio.run_coroutine_threadsafe(self.call_async_(task, llm_model), loop).result()
+                return asyncio.run_coroutine_threadsafe(self.call_async_(task, llm_model, retry), loop).result()
             else:
                 # If there's a loop but it's not running, use asyncio.run
-                return asyncio.run(self.call_async_(task, llm_model))
+                return asyncio.run(self.call_async_(task, llm_model, retry))
         except RuntimeError:
             # No event loop exists, create one with asyncio.run
-            return asyncio.run(self.call_async_(task, llm_model))
+            return asyncio.run(self.call_async_(task, llm_model, retry))
 
     async def call_async(
         self,
         task: Union[Task, List[Task]],
         llm_model: str = None,
+        retry: int = 3
     ) -> Any:
         """
         Asynchronous version of the call method.
@@ -124,10 +127,10 @@ class Call:
         try:
             if isinstance(task, list):
                 for each in task:
-                    the_result = await self.call_async_(each, llm_model)
+                    the_result = await self.call_async_(each, llm_model, retry)
                     call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_usage"], self.debug)
             else:
-                the_result = await self.call_async_(task, llm_model)
+                the_result = await self.call_async_(task, llm_model, retry)
                 call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_usage"], self.debug)
         except Exception as outer_e:
             try:
@@ -147,12 +150,14 @@ class Call:
         self,
         task: Task,
         llm_model: str = None,
+        retry: int = 3
     ) -> Any:
         """
         Asynchronous version of the call_ method.
         """
         task.start_time = time.time()
         from ..trace import sentry_sdk
+        from ..level_utilized.utility import CallErrorException
         
         # Use the provided model or default to the client's default
         if llm_model is None:
@@ -189,13 +194,33 @@ class Call:
                     "system_prompt": None
                 }
 
-            with sentry_sdk.start_span(op="send_request"):
-                result = await self.send_request_async("/level_one/gpt4o", data)
-                original_result = result
-                
-                result = result["result"]
-                
-                error_handler(result)
+            retry_count = 0
+            while True:
+                try:
+                    with sentry_sdk.start_span(op="send_request"):
+                        result = await self.send_request_async("/level_one/gpt4o", data)
+                        original_result = result
+                        
+                        result = result["result"]
+                        
+                        if error_handler(result):  # If it's a retriable error
+                            if retry > 0 and retry_count < retry:  # Check if retries are enabled and we can retry
+                                retry_count += 1
+                                from ..printing import agent_retry
+                                agent_retry(retry_count, retry)
+                                continue  # Try again
+                            else:
+                                raise CallErrorException(result)  # No more retries, raise the error
+                        
+                        break  # If no error or non-retriable error, break the loop
+
+                except Exception as e:
+                    if retry > 0 and retry_count < retry:  # Check if retries are enabled and we can retry
+                        retry_count += 1
+                        from ..printing import agent_retry
+                        agent_retry(retry_count, retry)
+                        continue  # Try again
+                    raise e  # No more retries, raise the error
 
             with sentry_sdk.start_span(op="deserialize"):
                 deserialized_result = response_format_deserializer(response_format_str, result)

@@ -13,10 +13,9 @@ from pydantic import BaseModel
 import uuid
 
 from ..tasks.tasks import Task
+from ..direct_llm_call.direct_llm_cal import Direct
 
 from ..printing import agent_end, agent_total_cost, agent_retry, print_price_id_summary
-
-
 
 from ..tasks.task_response import ObjectResponse
 
@@ -24,10 +23,7 @@ from ..agent_configuration.agent_configuration import AgentConfiguration
 
 from ..level_utilized.utility import context_serializer
 
-
 from ..level_utilized.utility import context_serializer, response_format_serializer, tools_serializer, response_format_deserializer, error_handler
-
-
 
 from ...storage.caching import save_to_cache_with_expiry, get_from_cache_with_expiry
 
@@ -49,9 +45,6 @@ class AgentMode(ObjectResponse):
     """Mode selection for task decomposition"""
     selected_mode: Literal["level_no_step", "level_one"]
 
-
-
-
 class SearchResult(ObjectResponse):
     any_customers: bool
     products: List[str]
@@ -66,8 +59,6 @@ class HumanObjective(ObjectResponse):
     job_description: str
     job_goals: List[str]
     
-
-
 class Characterization(ObjectResponse):
     website_content: Union[SearchResult, None]
     company_objective: Union[CompanyObjective, None]
@@ -75,15 +66,11 @@ class Characterization(ObjectResponse):
     name_of_the_human_of_tasks: str = None
     contact_of_the_human_of_tasks: str = None
 
-
 class OtherTask(ObjectResponse):
     task: str
     result: Any
 
-
-
 class Agent:
-
 
     def agent_(
         self,
@@ -108,7 +95,6 @@ class Agent:
         
         # If no running loop or exception occurred, create a new one
         return asyncio.run(self.agent_async_(agent_configuration, task, llm_model))
-
 
     def send_agent_request(
         self,
@@ -148,7 +134,6 @@ class Agent:
         # If no running loop or exception occurred, create a new one
         return asyncio.run(self.send_agent_request_async(agent_configuration, task, llm_model))
 
-
     def create_characterization(self, agent_configuration: AgentConfiguration, llm_model: str = None, price_id: str = None):
         import asyncio
         
@@ -167,12 +152,6 @@ class Agent:
         
         # If no running loop or exception occurred, create a new one
         return asyncio.run(self.create_characterization_async(agent_configuration, llm_model, price_id))
-
-
-
-
-
-
 
     def agent(self, agent_configuration: AgentConfiguration, task: Task,  llm_model: str = None):
         import asyncio
@@ -193,9 +172,6 @@ class Agent:
         # If no running loop or exception occurred, create a new one
         return asyncio.run(self.agent_async(agent_configuration, task, llm_model))
 
-
-
-
     def multiple(self, agent_configuration: AgentConfiguration, task: Task, llm_model: str = None):
         import asyncio
         
@@ -214,9 +190,6 @@ class Agent:
         
         # If no running loop or exception occurred, create a new one
         return asyncio.run(self.multiple_async(agent_configuration, task, llm_model))
-
-
-
 
     def multi_agent(self, agent_configurations: List[AgentConfiguration], tasks: Any, llm_model: str = None):
         import asyncio
@@ -268,8 +241,8 @@ class Agent:
                 selecting_task = Task(description="Select an agent for this task", images=each.images, response_format=SelectedAgent, context=[the_agents_, each])
 
                 the_call_llm_model = agent_configurations[0].model
-                # Use the async version of call
-                await self.call_async(selecting_task, the_call_llm_model)
+                # Use Direct.do_async with the first agent's retry setting
+                await Direct.do_async(selecting_task, the_call_llm_model, retry=agent_configurations[0].retry)
 
                 if selecting_task.response.selected_agent in the_agents:
                     is_end = True
@@ -293,7 +266,6 @@ class Agent:
                 await original_client.agent_async(each["agent"], each["task"], llm_model)
 
         return the_agents
-
 
     async def agent_async(self, agent_configuration: AgentConfiguration, task: Task, llm_model: str = None):
         """
@@ -331,13 +303,13 @@ class Agent:
         shared_context = []
 
         if agent_configuration.sub_task:
-            # Create a new agent configuration for sub-tasks with memory enabled
+            # Create a new agent configuration for sub-tasks with memory enabled and same retry setting
             sub_task_agent_config = copy.deepcopy(agent_configuration)
             sub_task_agent_config.agent_id_ = str(uuid.uuid4())  # Generate new agent ID for sub-tasks
             sub_task_agent_config.memory = True  # Enable memory for sub-tasks
             
             # Use the async version of multiple
-            sub_tasks = await self.multiple_async(agent_configuration, task, llm_model)
+            sub_tasks = await self.multiple_async(sub_task_agent_config, task, llm_model)
             is_it_sub_task = True
             the_task = sub_tasks
 
@@ -518,11 +490,32 @@ class Agent:
                     "memory": agent_configuration.memory
                 }
 
-            with sentry_sdk.start_span(op="send_request"):
-                # Send the request asynchronously
-                result = await self.send_request_async("/level_two/agent", data)
-                result = result["result"]
-                error_handler(result)
+            retry_count = 0
+            while True:
+                try:
+                    with sentry_sdk.start_span(op="send_request"):
+                        # Send the request asynchronously
+                        result = await self.send_request_async("/level_two/agent", data)
+                        result = result["result"]
+                        
+                        if error_handler(result):  # If it's a retriable error
+                            if agent_configuration.retry > 0 and retry_count < agent_configuration.retry:  # Check if retries are enabled and we can retry
+                                retry_count += 1
+                                from ..printing import agent_retry
+                                agent_retry(retry_count, agent_configuration.retry)
+                                continue  # Try again
+                            else:
+                                raise CallErrorException(result)  # No more retries, raise the error
+                        
+                        break  # If no error or non-retriable error, break the loop
+
+                except Exception as e:
+                    if agent_configuration.retry > 0 and retry_count < agent_configuration.retry:  # Check if retries are enabled and we can retry
+                        retry_count += 1
+                        from ..printing import agent_retry
+                        agent_retry(retry_count, agent_configuration.retry)
+                        continue  # Try again
+                    raise e  # No more retries, raise the error
 
             with sentry_sdk.start_span(op="deserialize"):
                 deserialized_result = response_format_deserializer(response_format_str, result)
@@ -565,21 +558,16 @@ class Agent:
 
     async def create_characterization_async(self, agent_configuration: AgentConfiguration, llm_model: str = None, price_id: str = None):
         tools = [Search]
-        
-        search_result = None
-        company_objective_result = None
-        human_objective_result = None
-        
-        search_task = None
-        company_objective_task = None
 
-        # Handle website search if URL is provided
+        search_task = None
+        search_result = None
         if agent_configuration.company_url:
             search_task = Task(description=f"Make a search for {agent_configuration.company_url}", tools=tools, response_format=SearchResult, price_id_=price_id, not_main_task=True)
-            await self.call_async(search_task, llm_model=llm_model)
+            await Direct.do_async(search_task, llm_model, retry=agent_configuration.retry)
             search_result = search_task.response
 
-        # Handle company objective if provided
+        company_objective_task = None
+        company_objective_result = None
         if agent_configuration.company_objective:
             context = [search_task] if search_task else None
             company_objective_task = Task(description=f"Generate the company objective for {agent_configuration.company_objective}", 
@@ -588,9 +576,10 @@ class Agent:
                                         context=context,
                                         price_id_=price_id,
                                         not_main_task=True)
-            await self.call_async(company_objective_task, llm_model=llm_model)
+            await Direct.do_async(company_objective_task, llm_model, retry=agent_configuration.retry)
             company_objective_result = company_objective_task.response
 
+        human_objective_result = None
         # Handle human objective if job title is provided
         if agent_configuration.job_title:
             context = []
@@ -606,7 +595,7 @@ class Agent:
                                       context=context,
                                       price_id_=price_id,
                                       not_main_task=True)
-            await self.call_async(human_objective_task, llm_model=llm_model)
+            await Direct.do_async(human_objective_task, llm_model, retry=agent_configuration.retry)
             human_objective_result = human_objective_task.response
 
         total_character = Characterization(
@@ -626,6 +615,7 @@ class Agent:
         if llm_model is None:
             llm_model = self.default_llm_model
 
+
         result = await self.send_agent_request_async(AgentConfiguration(), task, llm_model)
         task._response = result["result"]
         return task.response
@@ -633,7 +623,6 @@ class Agent:
     async def multiple_async(self, agent_configuration: AgentConfiguration, task: Task, llm_model: str = None):
         """
         Asynchronous version of the multiple method.
-        Decomposes a task into multiple subtasks asynchronously.
         """
         if agent_configuration.system_prompt:
             system_prompt = "System prompt: " + agent_configuration.system_prompt
@@ -692,8 +681,8 @@ Use Level One for any task requiring multiple steps or verification.
             not_main_task=True
         )
         
-        # Use the async version of call
-        await self.call_async(mode_selector, llm_model)
+        # Use Direct.do_async with the agent's retry setting
+        await Direct.do_async(mode_selector, llm_model, retry=agent_configuration.retry)
         
         # If level_no_step is selected, return just the end task
         if mode_selector.response.selected_mode == "level_no_step":
@@ -740,8 +729,8 @@ Tool Availability Impact:
             sub_tasker_context = task.context
         sub_tasker = Task(description=prompt, images=task.images, response_format=SubTaskList, context=sub_tasker_context, tools=task.tools, price_id_=task.price_id, not_main_task=True)
 
-        # Use the async version of call
-        await self.call_async(sub_tasker, llm_model)
+        # Use Direct.do_async with the agent's retry setting
+        await Direct.do_async(sub_tasker, llm_model, retry=agent_configuration.retry)
 
         sub_tasks = []
 

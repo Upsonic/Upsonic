@@ -134,6 +134,7 @@ class AgentConfiguration(BaseModel):
     reliability_layer: Any = None  # Changed to Any to accept any class or instance
     system_prompt: Optional[str] = None
     tools: List[Any] = []
+    retry: int = 3
 
 
     sub_task: bool = True
@@ -165,6 +166,7 @@ class AgentConfiguration(BaseModel):
         knowledge_base: Optional[KnowledgeBase] = None,
         context_compress: bool = False,
         agent_id_: Optional[str] = None,
+        retry: int = 3,
         **data
     ):
         if job_title is not None:
@@ -187,6 +189,7 @@ class AgentConfiguration(BaseModel):
             "system_prompt": system_prompt,
             "tools": tools,
             "sub_task": sub_task,
+            "retry": retry,
             "reflection": reflection,
             "memory": memory,
             "caching": caching,

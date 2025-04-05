@@ -137,4 +137,6 @@ def error_handler(result):
         # Extract meaningful message from the error if available
         error_detail = result.get("message", str(result))
         error_message("Call Error", error_detail, 500)
-        raise CallErrorException(result)
+        return True  # Indicate this is a retriable error
+        
+    return False  # Not a retriable error

@@ -10,7 +10,7 @@ class DirectStatic:
     """Static methods for making direct LLM calls using the Upsonic client."""
     
     @staticmethod
-    def do(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
+    def do(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False, retry: int = 3):
         """
         Execute a direct LLM call with the given task and model.
         
@@ -19,6 +19,7 @@ class DirectStatic:
             model: The LLM model to use (default: "openai/gpt-4")
             client: Optional custom client to use instead of creating a new one
             debug: Whether to enable debug mode
+            retry: Number of retries for failed calls (default: 3)
             
         Returns:
             The response from the LLM
@@ -31,7 +32,7 @@ class DirectStatic:
             if loop.is_running():
                 # If there's a running loop, run the coroutine in that loop
                 return asyncio.run_coroutine_threadsafe(
-                    DirectStatic.do_async(task, model, client, debug), 
+                    DirectStatic.do_async(task, model, client, debug, retry), 
                     loop
                 ).result()
         except RuntimeError:
@@ -39,10 +40,10 @@ class DirectStatic:
             pass
         
         # If no running loop or exception occurred, create a new one
-        return asyncio.run(DirectStatic.do_async(task, model, client, debug))
+        return asyncio.run(DirectStatic.do_async(task, model, client, debug, retry))
 
     @staticmethod
-    async def do_async(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
+    async def do_async(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False, retry: int = 3):
         """
         Execute a direct LLM call with the given task and model asynchronously.
         
@@ -51,6 +52,7 @@ class DirectStatic:
             model: The LLM model to use (default: "openai/gpt-4")
             client: Optional custom client to use instead of creating a new one
             debug: Whether to enable debug mode
+            retry: Number of retries for failed calls (default: 3)
             
         Returns:
             The response from the LLM
@@ -67,12 +69,12 @@ class DirectStatic:
         # Register tools if needed
         the_client = register_tools(the_client, task.tools)
 
-        # Execute the direct call asynchronously
-        await the_client.call_async(task, model)
+        # Execute the direct call asynchronously with retry parameter
+        await the_client.call_async(task, model, retry=retry)
         return task.response
 
     @staticmethod
-    def print_do(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
+    def print_do(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False, retry: int = 3):
         """
         Execute a direct LLM call and print the result.
         
@@ -81,6 +83,7 @@ class DirectStatic:
             model: The LLM model to use (default: "openai/gpt-4")
             client: Optional custom client to use instead of creating a new one
             debug: Whether to enable debug mode
+            retry: Number of retries for failed calls (default: 3)
             
         Returns:
             The response from the LLM
@@ -93,7 +96,7 @@ class DirectStatic:
             if loop.is_running():
                 # If there's a running loop, run the coroutine in that loop
                 return asyncio.run_coroutine_threadsafe(
-                    DirectStatic.print_do_async(task, model, client, debug), 
+                    DirectStatic.print_do_async(task, model, client, debug, retry), 
                     loop
                 ).result()
         except RuntimeError:
@@ -101,10 +104,10 @@ class DirectStatic:
             pass
         
         # If no running loop or exception occurred, create a new one
-        return asyncio.run(DirectStatic.print_do_async(task, model, client, debug))
+        return asyncio.run(DirectStatic.print_do_async(task, model, client, debug, retry))
 
     @staticmethod
-    async def print_do_async(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
+    async def print_do_async(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False, retry: int = 3):
         """
         Execute a direct LLM call and print the result asynchronously.
         
@@ -113,11 +116,12 @@ class DirectStatic:
             model: The LLM model to use (default: "openai/gpt-4")
             client: Optional custom client to use instead of creating a new one
             debug: Whether to enable debug mode
+            retry: Number of retries for failed calls (default: 3)
             
         Returns:
             The response from the LLM
         """
-        result = await DirectStatic.do_async(task, model, client, debug)
+        result = await DirectStatic.do_async(task, model, client, debug, retry)
         print(result)
         return result
 
@@ -125,7 +129,7 @@ class DirectStatic:
 class DirectInstance:
     """Instance-based class for making direct LLM calls using the Upsonic client."""
     
-    def __init__(self, model: ModelNames | None = None, client: Any = None, debug: bool = False):
+    def __init__(self, model: ModelNames | None = None, client: Any = None, debug: bool = False, retry: int = 3):
         """
         Initialize a DirectInstance with specific model and client settings.
         
@@ -133,12 +137,14 @@ class DirectInstance:
             model: The LLM model to use (default: None)
             client: Optional custom client to use instead of creating a new one
             debug: Whether to enable debug mode
+            retry: Number of retries for failed calls (default: 3)
         """
         self.model = model
         self.client = client
         self.debug = debug
+        self.retry = retry
     
-    def do(self, task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
+    def do(self, task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False, retry: int | None = None):
         """
         Execute a direct LLM call using instance defaults or overrides.
         
@@ -147,6 +153,7 @@ class DirectInstance:
             model: The LLM model to use (overrides instance default if provided)
             client: Optional custom client (overrides instance default if provided)
             debug: Whether to enable debug mode (overrides instance default if provided)
+            retry: Number of retries for failed calls (overrides instance default if provided)
             
         Returns:
             The response from the LLM
@@ -159,7 +166,7 @@ class DirectInstance:
             if loop.is_running():
                 # If there's a running loop, run the coroutine in that loop
                 return asyncio.run_coroutine_threadsafe(
-                    self.do_async(task, model, client, debug), 
+                    self.do_async(task, model, client, debug, retry), 
                     loop
                 ).result()
         except RuntimeError:
@@ -167,9 +174,9 @@ class DirectInstance:
             pass
         
         # If no running loop or exception occurred, create a new one
-        return asyncio.run(self.do_async(task, model, client, debug))
+        return asyncio.run(self.do_async(task, model, client, debug, retry))
 
-    async def do_async(self, task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
+    async def do_async(self, task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False, retry: int | None = None):
         """
         Execute a direct LLM call using instance defaults or overrides asynchronously.
         
@@ -178,6 +185,7 @@ class DirectInstance:
             model: The LLM model to use (overrides instance default if provided)
             client: Optional custom client (overrides instance default if provided)
             debug: Whether to enable debug mode (overrides instance default if provided)
+            retry: Number of retries for failed calls (overrides instance default if provided)
             
         Returns:
             The response from the LLM
@@ -186,11 +194,12 @@ class DirectInstance:
         actual_model = model if model is not None else self.model
         actual_client = client if client is not None else self.client
         actual_debug = debug if debug is not False else self.debug
+        actual_retry = retry if retry is not None else self.retry
         
         # Call the static method with the resolved parameters
-        return await DirectStatic.do_async(task, actual_model, actual_client, actual_debug)
+        return await DirectStatic.do_async(task, actual_model, actual_client, actual_debug, actual_retry)
         
-    def print_do(self, task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
+    def print_do(self, task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False, retry: int | None = None):
         """
         Execute a direct LLM call and print the result.
         
@@ -199,6 +208,7 @@ class DirectInstance:
             model: The LLM model to use (overrides instance default if provided)
             client: Optional custom client (overrides instance default if provided)
             debug: Whether to enable debug mode (overrides instance default if provided)
+            retry: Number of retries for failed calls (overrides instance default if provided)
             
         Returns:
             The response from the LLM
@@ -211,7 +221,7 @@ class DirectInstance:
             if loop.is_running():
                 # If there's a running loop, run the coroutine in that loop
                 return asyncio.run_coroutine_threadsafe(
-                    self.print_do_async(task, model, client, debug), 
+                    self.print_do_async(task, model, client, debug, retry), 
                     loop
                 ).result()
         except RuntimeError:
@@ -219,9 +229,9 @@ class DirectInstance:
             pass
         
         # If no running loop or exception occurred, create a new one
-        return asyncio.run(self.print_do_async(task, model, client, debug))
+        return asyncio.run(self.print_do_async(task, model, client, debug, retry))
 
-    async def print_do_async(self, task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
+    async def print_do_async(self, task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False, retry: int | None = None):
         """
         Execute a direct LLM call and print the result asynchronously.
         
@@ -230,11 +240,12 @@ class DirectInstance:
             model: The LLM model to use (overrides instance default if provided)
             client: Optional custom client (overrides instance default if provided)
             debug: Whether to enable debug mode (overrides instance default if provided)
+            retry: Number of retries for failed calls (overrides instance default if provided)
             
         Returns:
             The response from the LLM
         """
-        result = await self.do_async(task, model, client, debug)
+        result = await self.do_async(task, model, client, debug, retry)
         print(result)
         return result
 
@@ -261,22 +272,22 @@ class Direct:
     
     # Static methods that delegate to DirectStatic
     @staticmethod
-    def do(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
-        return DirectStatic.do(task, model, client, debug)
+    def do(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False, retry: int = 3):
+        return DirectStatic.do(task, model, client, debug, retry)
     
     @staticmethod
-    def print_do(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
-        return DirectStatic.print_do(task, model, client, debug)
+    def print_do(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False, retry: int = 3):
+        return DirectStatic.print_do(task, model, client, debug, retry)
 
     @staticmethod
-    async def do_async(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
-        return await DirectStatic.do_async(task, model, client, debug)
+    async def do_async(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False, retry: int = 3):
+        return await DirectStatic.do_async(task, model, client, debug, retry)
     
     @staticmethod
-    async def print_do_async(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False):
-        return await DirectStatic.print_do_async(task, model, client, debug)
+    async def print_do_async(task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False, retry: int = 3):
+        return await DirectStatic.print_do_async(task, model, client, debug, retry)
     
-    def __new__(cls, *args, model: ModelNames | None = None, client: Any = None, debug: bool = False):
+    def __new__(cls, *args, model: ModelNames | None = None, client: Any = None, debug: bool = False, retry: int = 3):
         """
         Factory method that returns a DirectInstance object when initialized.
         
@@ -284,6 +295,7 @@ class Direct:
             model: The LLM model to use (default: None)
             client: Optional custom client to use instead of creating a new one
             debug: Whether to enable debug mode
+            retry: Number of retries for failed calls (default: 3)
             
         Returns:
             A DirectInstance object
@@ -297,4 +309,4 @@ class Direct:
                 "Example: Direct(model='openai/gpt-4o') instead of Direct('openai/gpt-4o')"
             )
             
-        return DirectInstance(model, client, debug)
+        return DirectInstance(model, client, debug, retry)
