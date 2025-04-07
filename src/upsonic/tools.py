@@ -62,147 +62,59 @@ class Canvas:
         self.llm_model = llm_model
 
     def _save_canvas(self, canvas_text: str):
-        """
-        Save the canvas text to a file.
-        
-        Args:
-            canvas_text: The text content to save to the canvas file
-        """
-        # Normalize the canvas name (remove special characters, replace spaces with underscores)
+        """Save the canvas text to a file."""
         normalized_name = re.sub(r'[^\w\s-]', '', self.canvas_name).strip().replace(' ', '_')
-        
-        # Create the filename
         filename = f"{normalized_name}.txt"
-        
-        # Write the content to the file
         with open(filename, 'w', encoding='utf-8') as f:
             f.write(canvas_text)
 
-    def _load_canvas(self):
-        """
-        Load the canvas text from a file.
-        
-        Returns:
-            The text content of the canvas file, or an empty string if the file doesn't exist
-        """
-        # Normalize the canvas name (remove special characters, replace spaces with underscores)
+    def _load_canvas(self) -> str:
+        """Load the canvas text from a file."""
         normalized_name = re.sub(r'[^\w\s-]', '', self.canvas_name).strip().replace(' ', '_')
-        
-        # Create the filename
         filename = f"{normalized_name}.txt"
-        
         try:
-            # Try to read the file
             with open(filename, 'r', encoding='utf-8') as f:
                 return f.read()
         except FileNotFoundError:
-            # If the file doesn't exist, return an empty string
             return ""
 
-    def get_current_state_of_canvas(self):
-        """
-        Get the current state of the text canvas
-        """
+    def get_current_state_of_canvas(self) -> str:
+        """Get the current state of the text canvas"""
         result = self._load_canvas()
-        if result == "":
-            return "Empty Canvas"
-        else:
-            return result
-    
-    def change_in_canvas(self, new_text_of_part: str, part_definition: str):
-        """
-        Change the text of a part of the canvas
-        """
+        return "Empty Canvas" if result == "" else result
 
-        # send a request to http://localhost:8087/status (separate proxy) instead of 8086
-        async def change_in_canvas_async(self, new_text_of_part: str, part_definition: str):
+    async def change_in_canvas(self, new_text_of_part: str, part_definition: str) -> str:
+        """Change the text of a part of the canvas"""
+        from upsonic import Task, Direct, UpsonicClient
         
-            from upsonic import Task, Direct, UpsonicClient
-            client = UpsonicClient("localserver", debug=True, main_port=7542, tools_port=8088)
-            direct = Direct(self.llm_model, client=client)
-            
-            current_canvas = self.get_current_state_of_canvas()
-            
-            # Different prompts based on if the canvas is empty or if it's a new section
-            if current_canvas == "Empty Canvas" or current_canvas == "":
-                # For an empty canvas, simply use the new content directly
-                # No need to send to LLM since it's a direct replacement/creation
-                result = new_text_of_part
-                print("******** SAVING CANVAS *********")
-                print(result)
-                self._save_canvas(result)
-                return result
-            else:
-                # Check if adding a new section or modifying existing
-                prompt = (
-                    f"I have a text document with the following content:\n\n{current_canvas}\n\n"
-                    f"If there is a line or section that contains '{part_definition}', replace it with exactly:\n"
-                    f"{new_text_of_part}\n\n"
-                    f"If the document does NOT contain a section with '{part_definition}', append the following as a new section at the end of the document:\n"
-                    f"{new_text_of_part}\n\n"
-                    f"Return only the complete updated text document without any explanations, code blocks, or additional formatting."
-                )
-                
-                task = Task(prompt)
-                result = await direct.do_async(task)
-                print("******** SAVING CANVAS *********")
-                print(result)
-                self._save_canvas(result)
-                return result
+        client = UpsonicClient("localserver", debug=True, main_port=7542, tools_port=8088)
+        direct = Direct(model=self.llm_model, client=client)
+        
+        current_canvas = self.get_current_state_of_canvas()
+        
+        # For empty canvas, just save the new content directly
+        if current_canvas == "Empty Canvas" or current_canvas == "":
+            print("******** SAVING CANVAS *********")
+            print(new_text_of_part)
+            self._save_canvas(new_text_of_part)
+            return new_text_of_part
 
-        import asyncio
+        # For existing canvas, use LLM to modify or append content
+        prompt = (
+            f"I have a text document with the following content:\n\n{current_canvas}\n\n"
+            f"If there is a line or section that contains '{part_definition}', replace it with exactly:\n"
+            f"{new_text_of_part}\n\n"
+            f"If the document does NOT contain a section with '{part_definition}', append the following as a new section at the end of the document:\n"
+            f"{new_text_of_part}\n\n"
+            f"Return only the complete updated text document without any explanations, code blocks, or additional formatting."
+        )
         
-        # Try to import nest_asyncio for handling nested event loops
-        try:
-            import nest_asyncio
-            have_nest_asyncio = True
-        except ImportError:
-            # If nest_asyncio is not available, we'll try alternate approaches
-            have_nest_asyncio = False
-        
-        try:
-            # Check if we're already in an event loop
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                try:
-                    # If nest_asyncio is available, patch the loop
-                    if have_nest_asyncio:
-                        nest_asyncio.apply()
-                        return asyncio.run(change_in_canvas_async(self, new_text_of_part, part_definition))
-                    else:
-                        # Without nest_asyncio, we need a different approach
-                        # Create a new thread to run the coroutine in a separate event loop
-                        import concurrent.futures
-                        import functools
-                        
-                        def run_async_in_new_loop():
-                            new_loop = asyncio.new_event_loop()
-                            asyncio.set_event_loop(new_loop)
-                            try:
-                                return new_loop.run_until_complete(
-                                    change_in_canvas_async(self, new_text_of_part, part_definition)
-                                )
-                            finally:
-                                new_loop.close()
-                        
-                        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                            future = executor.submit(run_async_in_new_loop)
-                            return future.result()
-                except Exception as e:
-                    print(f"Error in async execution: {e}")
-                    raise
-            else:
-                # No running event loop, safe to use run
-                return asyncio.run(change_in_canvas_async(self, new_text_of_part, part_definition))
-        except RuntimeError as e:
-            print(f"RuntimeError: {e}")
-            # If we can't get the event loop, create a new one
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
-            try:
-                return new_loop.run_until_complete(change_in_canvas_async(self, new_text_of_part, part_definition))
-            finally:
-                new_loop.close()
+        task = Task(prompt)
+        result = await direct.do_async(task)
+        print("******** SAVING CANVAS *********")
+        print(result)
+        self._save_canvas(result)
+        return result
 
 
 
