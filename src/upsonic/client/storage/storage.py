@@ -17,6 +17,7 @@ class ClientConfig(BaseModel):
     DEFAULT_LLM_MODEL: str = Field(default="openai/gpt-4o")
     
     OPENAI_API_KEY: str | None = Field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
+    OPENAI_API_BASE: str | None = Field(default_factory=lambda: os.getenv("OPENAI_API_BASE"))
 
     ANTHROPIC_API_KEY: str | None = Field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY"))
     

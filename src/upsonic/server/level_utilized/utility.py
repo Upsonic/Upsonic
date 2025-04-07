@@ -339,13 +339,14 @@ async def handle_compression_retry(prompt, images, tools, llm_model, response_fo
     except Exception as e:
         raise e  # Re-raise for consistent error handling
 
-def _create_openai_client(api_key_name="OPENAI_API_KEY"):
+def _create_openai_client(api_key_name="OPENAI_API_KEY", base_url_name="OPENAI_API_BASE"):
     """Helper function to create an OpenAI client with the specified API key."""
     api_key = Configuration.get(api_key_name)
     if not api_key:
         return None, {"status_code": 401, "detail": f"No API key provided. Please set {api_key_name} in your configuration."}
+    base_url = Configuration.get(base_url_name)
     
-    client = AsyncOpenAI(api_key=api_key)
+    client = AsyncOpenAI(api_key=api_key, base_url=base_url)
     return client, None
 
 def _create_azure_openai_client():
