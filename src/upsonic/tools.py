@@ -21,6 +21,9 @@ class Search:
 class ComputerUse:
     pass
 
+class Screenshot:
+    pass
+
 class BrowserUse:
     @staticmethod
     def analyze_dependencies() -> Dict[str, bool]:
@@ -2058,4 +2061,4 @@ class Crawl4AISimpleCrawling:
 
 
 # Export all tool classes
-__all__ = ["Search", "ComputerUse", "BrowserUse", "Wikipedia", "DuckDuckGo", "SerperDev", "FirecrawlSearchTool", "FirecrawlScrapeWebsiteTool", "FirecrawlCrawlWebsiteTool", "YFinanceTool", "ArxivTool", "YouTubeVideo", "YoutubeSearch", "Crawl4AISimpleCrawling"] 
+__all__ = ["Search", "ComputerUse", "Screenshot", "BrowserUse", "Wikipedia", "DuckDuckGo", "SerperDev", "FirecrawlSearchTool", "FirecrawlScrapeWebsiteTool", "FirecrawlCrawlWebsiteTool", "YFinanceTool", "ArxivTool", "YouTubeVideo", "YoutubeSearch", "Crawl4AISimpleCrawling"] 
