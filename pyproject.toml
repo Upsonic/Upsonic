@@ -33,6 +33,7 @@ dependencies = [
     "requests>=2.32.3",
     "duckduckgo-search>=7.3.1",
     "nest-asyncio>=1.6.0",
+    "pydantic-ai-slim[anthropic,bedrock,openai]>=0.0.45",
 ]
 
 [project.optional-dependencies]
