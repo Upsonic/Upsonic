@@ -347,7 +347,7 @@ class ComputerTool(BaseAnthropicTool):
                 "source": screenshot_result["source"]
             }
 
-    def screenshot(self):
+    def screenshot(self, return_bytes=False):
         """Take a screenshot of the current screen and return the base64 encoded image."""
         temp_dir = Path(tempfile.gettempdir())
         path = temp_dir / f"screenshot_{uuid4().hex}.png"
@@ -372,8 +372,11 @@ class ComputerTool(BaseAnthropicTool):
 
         if path.exists():
             print(f"Optimized file size: {os.path.getsize(path)} bytes")
-            base64_image = base64.b64encode(path.read_bytes()).decode()
-            path.unlink()  # Remove the temporary file
+            if return_bytes:
+                return path.read_bytes()
+            else:
+                base64_image = base64.b64encode(path.read_bytes()).decode()
+                path.unlink()  # Remove the temporary file
 
             return {
                 "type": "image",
@@ -416,7 +419,7 @@ async def ComputerUse__key(text: str):
     tool = ComputerTool()
     return await tool(action="key", text=text)
 
-async def ComputerUse__mouse_move(coordinate: tuple[int, int]):
+async def ComputerUse__mouse_move(coordinate: list[int, int]):
     """Execute a mouse move action using the ComputerTool."""
     tool = ComputerTool()
     return await tool(action="mouse_move", coordinate=coordinate)
@@ -441,7 +444,7 @@ async def ComputerUse__double_click():
     tool = ComputerTool()
     return await tool(action="double_click")
 
-async def ComputerUse__left_click_drag(coordinate: tuple[int, int]):
+async def ComputerUse__left_click_drag(coordinate: list[int, int]):
     """Execute a left click drag action using the ComputerTool."""
     tool = ComputerTool()
     return await tool(action="left_click_drag", coordinate=coordinate)
@@ -455,6 +458,11 @@ def ComputerUse_screenshot_tool():
     """Take a screenshot using the ComputerTool and return the base64 encoded image."""
     tool = ComputerTool()
     return tool.screenshot()
+
+def ComputerUse_screenshot_tool_bytes():
+    """Take a screenshot using the ComputerTool and return the bytes."""
+    tool = ComputerTool()
+    return tool.screenshot(return_bytes=True)
 
 async def ComputerUse__cursor_position():
     """Get the current cursor position using the ComputerTool."""

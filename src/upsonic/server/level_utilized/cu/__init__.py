@@ -2,7 +2,7 @@
 
 from .computer import ComputerTool
 
-from .computer import ComputerUse_tools, ComputerUse_screenshot_tool
+from .computer import ComputerUse_tools, ComputerUse_screenshot_tool, ComputerUse_screenshot_tool_bytes
 
 __ALL__ = [
 
@@ -12,5 +12,6 @@ __ALL__ = [
 
 
     ComputerUse_tools,
-    ComputerUse_screenshot_tool
+    ComputerUse_screenshot_tool,
+    ComputerUse_screenshot_tool_bytes
 ]

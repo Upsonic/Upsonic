@@ -13,6 +13,7 @@ from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.google_gla import GoogleGLAProvider
 import hashlib
 from pydantic_ai.messages import ImageUrl
+from pydantic_ai import BinaryContent
 
 from pydantic import BaseModel
 from fastapi import HTTPException, status
@@ -259,11 +260,12 @@ def prepare_message_history(prompt, images=None, llm_model=None, tools=None):
             message_history.append(ImageUrl(url=f"data:image/jpeg;base64,{image}"))
 
     # Add screenshot for models with computer_use capability when ComputerUse tools are requested
-    if llm_model and tools and "ComputerUse.*" in tools and has_capability(llm_model, "computer_use"):
+
+    if llm_model and tools and ("ComputerUse.*" in tools or "Screenshot.*" in tools) and has_capability(llm_model, "computer_use"):
         try:
-            from .cu import ComputerUse_screenshot_tool
-            result_of_screenshot = ComputerUse_screenshot_tool()
-            message_history.append(ImageUrl(url=result_of_screenshot["image_url"]["url"]))
+            from .cu import ComputerUse_screenshot_tool_bytes
+            result_of_screenshot = ComputerUse_screenshot_tool_bytes()
+            message_history.append(BinaryContent(data=result_of_screenshot, media_type='image/png'))
             print(f"Added screenshot for model {llm_model} with computer_use capability")
         except Exception as e:
             print(f"Error adding screenshot for {llm_model}: {e}")
