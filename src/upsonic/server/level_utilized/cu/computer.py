@@ -250,24 +250,28 @@ class ComputerTool(BaseAnthropicTool):
         print("action", action)
         print("text", text)
         print("coordinate", coordinate)
+        result = {"text": ""}
+        
         if action in ("mouse_move", "left_click_drag"):
             if coordinate is None:
-                return {"text": f"coordinate is required for {action}"}
+                result = {"text": f"coordinate is required for {action}"}
+                return result
             x, y = self.scale_coordinates(
                 ScalingSource.API, coordinate[0], coordinate[1]
             )
 
             if action == "mouse_move":
                 smooth_move_to(x, y)
-                return {"text": f"Mouse moved to X={x}, Y={y}"}
+                result = {"text": f"Mouse moved to X={x}, Y={y}"}
             elif action == "left_click_drag":
                 smooth_move_to(x, y)
                 pyautogui.dragTo(x, y, button="left")
-                return {"text": f"Mouse dragged to X={x}, Y={y}"}
+                result = {"text": f"Mouse dragged to X={x}, Y={y}"}
 
         elif action in ("key", "type"):
             if text is None:
-                return {"text": f"text is required for {action}"}
+                result = {"text": f"text is required for {action}"}
+                return result
 
             if action == "key":
                 if platform.system() == "Darwin":  # Check if we're on macOS
@@ -305,10 +309,10 @@ class ComputerTool(BaseAnthropicTool):
                         pyautogui.hotkey(*keys)
                 else:
                     pyautogui.press(keys[0])
-                return {"text": f"Key pressed: {text}"}
+                result = {"text": f"Key pressed: {text}"}
             elif action == "type":
                 pyautogui.write(text, interval=TYPING_DELAY_MS / 1000)
-                return {"text": f"Text typed: {text}"}
+                result = {"text": f"Text typed: {text}"}
 
         elif action in ("left_click", "right_click", "double_click", "middle_click"):
             time.sleep(0.1)
@@ -321,10 +325,10 @@ class ComputerTool(BaseAnthropicTool):
                 pyautogui.click()
                 time.sleep(0.1)
                 pyautogui.click()
-                return {"text": "Double click performed"}
+                result = {"text": "Double click performed"}
             else:
                 pyautogui.click(button=button.get(action, "left"))
-                return {"text": f"{action.replace('_', ' ').title()} performed"}
+                result = {"text": f"{action.replace('_', ' ').title()} performed"}
 
         elif action == "screenshot":
             screenshot_result = self.screenshot()
@@ -339,13 +343,16 @@ class ComputerTool(BaseAnthropicTool):
             return {"text": f"Invalid action: {action}"}
 
         # Take a screenshot after the action (except for cursor_position)
-        if action != "cursor_position":
-            screenshot_result = self.screenshot()
-            return {
-                "type": "image",
-                "text": f"Action '{action}' completed",
-                "source": screenshot_result["source"]
-            }
+        if action != "cursor_position" and action != "screenshot":
+            if platform.system().lower() != "darwin":  # Only take screenshot if not on macOS
+                screenshot_result = self.screenshot()
+                return {
+                    "type": "image",
+                    "text": result["text"],
+                    "source": screenshot_result["source"]
+                }
+        
+        return result
 
     def screenshot(self, return_bytes=False):
         """Take a screenshot of the current screen and return the base64 encoded image."""
