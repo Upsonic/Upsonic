@@ -2018,7 +2018,7 @@ class Crawl4AISimpleCrawling:
         # Check dependencies
         self.__control__()
     
-    def crawl(self, url: str, browser_config: Dict[str, Any] = None, run_config: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def crawl(self, url: str, browser_config: Dict[str, Any] = None, run_config: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         Crawl a website and extract its content using Crawl4AI.
         
@@ -2031,34 +2031,23 @@ class Crawl4AISimpleCrawling:
             Dictionary containing the crawled content and metadata
         """
         try:
-            import asyncio
             from crawl4ai import AsyncWebCrawler
             from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig
             
-            # Create a synchronous wrapper for the async crawling function
-            def sync_crawl(url, browser_config=None, run_config=None):
-                async def _crawl():
-                    # Initialize configs with defaults or provided values
-                    browser_cfg = BrowserConfig(**(browser_config or {}))
-                    run_cfg = CrawlerRunConfig(**(run_config or {}))
-                    
-                    async with AsyncWebCrawler(config=browser_cfg) as crawler:
-                        result = await crawler.arun(url=url, config=run_cfg)
-                        return {
-                            "raw_markdown": result.markdown.raw_markdown,
-                            "media": result.media,
-                            "links": result.links,
-                        }
-                
-                return asyncio.run(_crawl())
+            # Initialize configs with defaults or provided values
+            browser_cfg = BrowserConfig(**(browser_config or {}))
+            run_cfg = CrawlerRunConfig(**(run_config or {}))
             
-            # Execute the synchronous wrapper
-            result = sync_crawl(url, browser_config, run_config)
-            return result
+            async with AsyncWebCrawler(config=browser_cfg) as crawler:
+                result = await crawler.arun(url=url, config=run_cfg)
+                return {
+                    "raw_markdown": result.markdown.raw_markdown,
+                    "media": result.media,
+                    "links": result.links,
+                }
             
         except Exception as e:
             return {"error": f"Error crawling website: {str(e)}"}
-
 
 # Export all tool classes
 __all__ = ["Search", "ComputerUse", "Screenshot", "BrowserUse", "Wikipedia", "DuckDuckGo", "SerperDev", "FirecrawlSearchTool", "FirecrawlScrapeWebsiteTool", "FirecrawlCrawlWebsiteTool", "YFinanceTool", "ArxivTool", "YouTubeVideo", "YoutubeSearch", "Crawl4AISimpleCrawling"] 
