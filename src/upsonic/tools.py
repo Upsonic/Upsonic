@@ -1981,7 +1981,6 @@ class Crawl4AISimpleCrawling:
         """
         dependencies = {
             "crawl4ai": False,
-            "asyncio": False
         }
         
         # Check each dependency
@@ -1991,11 +1990,6 @@ class Crawl4AISimpleCrawling:
         except ImportError:
             pass
             
-        try:
-            import asyncio
-            dependencies["asyncio"] = True
-        except ImportError:
-            pass
         
         return dependencies
     
@@ -2003,12 +1997,11 @@ class Crawl4AISimpleCrawling:
         # Check if required packages are installed
         try:
             import crawl4ai
-            import asyncio
             return True
         except ImportError as e:
             missing_module = str(e).split("'")[1] if "'" in str(e) else str(e)
             # Use the missing_dependencies function to display the error
-            missing_dependencies("Crawl4AISimpleCrawling", ["crawl4ai", "asyncio"])
+            missing_dependencies("Crawl4AISimpleCrawling", ["crawl4ai"])
             raise ImportError(f"Missing dependency: {missing_module}. Please install it with: pip install crawl4ai")
     
     def __init__(self):
