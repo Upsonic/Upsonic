@@ -563,7 +563,7 @@ class Agent:
         search_result = None
         if agent_configuration.company_url:
             search_task = Task(description=f"Make a search for {agent_configuration.company_url}", tools=tools, response_format=SearchResult, price_id_=price_id, not_main_task=True)
-            await Direct.do_async(search_task, llm_model, retry=agent_configuration.retry)
+            await Direct.do_async(search_task, llm_model, retry=agent_configuration.retry, client=agent_configuration.client)
             search_result = search_task.response
 
         company_objective_task = None
@@ -576,7 +576,7 @@ class Agent:
                                         context=context,
                                         price_id_=price_id,
                                         not_main_task=True)
-            await Direct.do_async(company_objective_task, llm_model, retry=agent_configuration.retry)
+            await Direct.do_async(company_objective_task, llm_model, retry=agent_configuration.retry, client=agent_configuration.client)
             company_objective_result = company_objective_task.response
 
         human_objective_result = None
@@ -595,7 +595,7 @@ class Agent:
                                       context=context,
                                       price_id_=price_id,
                                       not_main_task=True)
-            await Direct.do_async(human_objective_task, llm_model, retry=agent_configuration.retry)
+            await Direct.do_async(human_objective_task, llm_model, retry=agent_configuration.retry, client=agent_configuration.client)
             human_objective_result = human_objective_task.response
 
         total_character = Characterization(
@@ -682,7 +682,7 @@ Use Level One for any task requiring multiple steps or verification.
         )
         
         # Use Direct.do_async with the agent's retry setting
-        await Direct.do_async(mode_selector, llm_model, retry=agent_configuration.retry)
+        await Direct.do_async(mode_selector, llm_model, retry=agent_configuration.retry, client=agent_configuration.client)
         
         # If level_no_step is selected, return just the end task
         if mode_selector.response.selected_mode == "level_no_step":
@@ -730,7 +730,7 @@ Tool Availability Impact:
         sub_tasker = Task(description=prompt, images=task.images, response_format=SubTaskList, context=sub_tasker_context, tools=task.tools, price_id_=task.price_id, not_main_task=True)
 
         # Use Direct.do_async with the agent's retry setting
-        await Direct.do_async(sub_tasker, llm_model, retry=agent_configuration.retry)
+        await Direct.do_async(sub_tasker, llm_model, retry=agent_configuration.retry, client=agent_configuration.client)
 
         sub_tasks = []
 
