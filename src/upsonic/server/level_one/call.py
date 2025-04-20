@@ -1,5 +1,4 @@
 from pydantic import BaseModel
-from pydantic_ai.result import ResultDataT_inv, ResultDataT
 from typing import Any, Optional, List
 from pydantic_ai.messages import ImageUrl
 
