@@ -505,7 +505,7 @@ def _process_context(context):
                     response = each.response
                     
             context_string += f"\n\nContexts from question answering: ```question_answering question: {description} answer: {response}```   "
-        elif the_class_string == ObjectResponse.__name__:
+        elif the_class_string == ObjectResponse.__name__ or the_class_string == BaseModel.__name__:
             context_string += f"\n\nContexts from object response: ```Requested Output {each.model_fields}```"
         else:
             context_string += f"\n\nContexts ```context {each}```"

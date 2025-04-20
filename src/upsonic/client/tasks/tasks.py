@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import Any, List, Dict, Optional, Type, Union
 
 
-from .task_response import CustomTaskResponse, ObjectResponse
+from .task_response import ObjectResponse
 from ..printing import get_price_id_total_cost
 
 from ..knowledge_base.knowledge_base import KnowledgeBase
@@ -14,7 +14,7 @@ class Task(BaseModel):
     description: str
     images: Optional[List[str]] = None
     tools: list[Any] = []
-    response_format: Union[Type[CustomTaskResponse], Type[ObjectResponse], None] = None
+    response_format: Union[Type[ObjectResponse], Type[BaseModel], None] = None
     _response: Any = None
     context: Any = None
     price_id_: Optional[str] = None
@@ -31,7 +31,7 @@ class Task(BaseModel):
         description: str, 
         images: Optional[List[str]] = None,
         tools: list[Any] = None,
-        response_format: Union[Type[CustomTaskResponse], Type[ObjectResponse], None] = None,
+        response_format: Union[Type[ObjectResponse], Type[BaseModel], None] = None,
         response: Any = None,
         context: Any = None,
         price_id_: Optional[str] = None,
@@ -135,10 +135,7 @@ class Task(BaseModel):
 
 
 
-        if self._response._upsonic_response_type == "custom":
-            return self._response.output()
-        else:
-            return self._response
+        return self._response
 
 
 

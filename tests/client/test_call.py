@@ -1,7 +1,7 @@
 from upsonic import UpsonicClient
 from pydantic import BaseModel
 from upsonic import Task
-from upsonic import StrResponse, IntResponse, FloatResponse, BoolResponse, ObjectResponse, StrInListResponse
+from upsonic import ObjectResponse
 
 
 server = UpsonicClient("http://localhost:7541")

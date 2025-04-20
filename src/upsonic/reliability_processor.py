@@ -258,7 +258,7 @@ class ReliabilityProcessor:
                         except:
                             pass
 
-                        if the_class_string == ObjectResponse.__name__:
+                        if the_class_string == ObjectResponse.__name__ or the_class_string == BaseModel.__name__:
                             context_strings.append(f"\n\nUser requested output: ```Requested Output {item.model_fields}```")
                         elif isinstance(item, str):
                             context_strings.append(f"\n\nContext That Came From User (Trusted Source): ```User given context {item}```")
