@@ -2011,7 +2011,7 @@ class Crawl4AISimpleCrawling:
         # Check dependencies
         self.__control__()
     
-    async def crawl(self, url: str, browser_config: Dict[str, Any] = None, run_config: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def crawl(self, url: str) -> Dict[str, Any]:
         """
         Crawl a website and extract its content using Crawl4AI.
         
@@ -2025,14 +2025,11 @@ class Crawl4AISimpleCrawling:
         """
         try:
             from crawl4ai import AsyncWebCrawler
-            from crawl4ai.async_configs import BrowserConfig, CrawlerRunConfig
+          
             
-            # Initialize configs with defaults or provided values
-            browser_cfg = BrowserConfig(**(browser_config or {}))
-            run_cfg = CrawlerRunConfig(**(run_config or {}))
             
-            async with AsyncWebCrawler(config=browser_cfg) as crawler:
-                result = await crawler.arun(url=url, config=run_cfg)
+            async with AsyncWebCrawler() as crawler:
+                result = await crawler.arun(url=url)
                 return {
                     "raw_markdown": result.markdown.raw_markdown,
                     "media": result.media,
