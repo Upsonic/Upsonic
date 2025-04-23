@@ -896,7 +896,7 @@ class FirecrawlScrapeWebsiteTool:
         from firecrawl import FirecrawlApp
         _firecrawl = FirecrawlApp(api_key=self.api_key)
         
-        return _firecrawl.scrape_url(url, options)
+        return _firecrawl.scrape_url(url, **options)
 
 
 class FirecrawlCrawlWebsiteTool:
