@@ -2,12 +2,14 @@ from dataclasses import Field
 import uuid
 from pydantic import BaseModel
 import asyncio
+import subprocess
+import sys
 
 from typing import Any, List, Dict, Optional, Type, Union
 
 from ..knowledge_base.knowledge_base import KnowledgeBase
 from ..tasks.tasks import Task
-from ..printing import mcp_tool_operation, tool_operation
+from ..printing import mcp_tool_operation, tool_operation, error_message
 
 from ..latest_upsonic_client import latest_upsonic_client
 from ...model_registry import ModelNames
@@ -19,19 +21,42 @@ def register_tools(client, tools):
         for tool in tools:
             # Handle special tool classes from upsonic.client.tools
             if tool.__module__ == 'upsonic.client.tools':
-
                 client.tool()(tool)
                 continue
                 
             # If tool is a class (not an instance)
             if isinstance(tool, type):
                 if hasattr(tool, 'command'):
+                    # Check if command is UVX and UV is not installed
+                    if hasattr(tool, 'command') and tool.command == 'uvx':
+                        try:
+                            # Try to run uv --version to check if it's installed
+                            subprocess.run(['uv', '--version'], capture_output=True, check=True)
+                        except (subprocess.CalledProcessError, FileNotFoundError):
+                            error_message(
+                                "UV Installation Error",
+                                "UV is not installed. Please install UV",
+                                error_code=500
+                            )
+                            sys.exit(1)
+                    
+                    # Check if command is NPX and Node.js is not installed
+                    if hasattr(tool, 'command') and tool.command == 'npx':
+                        try:
+                            # Try to run node --version to check if Node.js is installed
+                            subprocess.run(['node', '--version'], capture_output=True, check=True)
+                        except (subprocess.CalledProcessError, FileNotFoundError):
+                            error_message(
+                                "Node.js Installation Error",
+                                "Node.js is not installed. Please install Node.js to use tools with NPX command.",
+                                error_code=500
+                            )
+                            sys.exit(1)
 
                     client.mcp()(tool)
                 elif hasattr(tool, 'url'):
                     client.sse_mcp()(tool)
                 else:
-
                     client.tool()(tool)
             else:
                 # Get all attributes of the tool instance/object
