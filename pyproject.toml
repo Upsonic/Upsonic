@@ -1,6 +1,6 @@
 [project]
 name = "upsonic"
-version = "0.53.0"
+version = "0.53.1"
 description = "Task oriented AI agent framework for digital workers and vertical AI agents"
 readme = "README.md"
 authors = [
@@ -33,7 +33,7 @@ dependencies = [
     "duckduckgo-search>=7.3.1",
     "nest-asyncio>=1.6.0",
     "pydantic-ai-slim[anthropic,bedrock,openai]>=0.0.45",
-    "pydantic>=2.10.4",
+    "pydantic==2.10.5",
 ]
 
 [project.optional-dependencies]
