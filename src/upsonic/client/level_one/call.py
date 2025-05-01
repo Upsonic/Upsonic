@@ -44,28 +44,28 @@ class Call:
                     if isinstance(task, list):
                         for each in task:
                             the_result = asyncio.run_coroutine_threadsafe(self.call_async_(each, llm_model, retry), loop).result()
-                            call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
+                            call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_usage"], self.debug, each.price_id)
                     else:
                         the_result = asyncio.run_coroutine_threadsafe(self.call_async_(task, llm_model, retry), loop).result()
-                        call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
+                        call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_usage"], self.debug, task.price_id)
                 else:
                     # If there's a loop but it's not running, use asyncio.run
                     if isinstance(task, list):
                         for each in task:
                             the_result = asyncio.run(self.call_async_(each, llm_model, retry))
-                            call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
+                            call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_usage"], self.debug, each.price_id)
                     else:
                         the_result = asyncio.run(self.call_async_(task, llm_model, retry))
-                        call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
+                        call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_usage"], self.debug, task.price_id)
             except RuntimeError:
                 # No event loop exists, create one with asyncio.run
                 if isinstance(task, list):
                     for each in task:
                         the_result = asyncio.run(self.call_async_(each, llm_model, retry))
-                        call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
+                        call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_usage"], self.debug, each.price_id)
                 else:
                     the_result = asyncio.run(self.call_async_(task, llm_model, retry))
-                    call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], self.debug)
+                    call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_usage"], self.debug, task.price_id)
         except Exception as outer_e:
             try:
                 from ...server import stop_dev_server, stop_main_server, is_tools_server_running, is_main_server_running
@@ -128,10 +128,10 @@ class Call:
             if isinstance(task, list):
                 for each in task:
                     the_result = await self.call_async_(each, llm_model, retry)
-                    call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_usage"], self.debug)
+                    call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_usage"], self.debug, each.price_id)
             else:
                 the_result = await self.call_async_(task, llm_model, retry)
-                call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_usage"], self.debug)
+                call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_usage"], self.debug, task.price_id)
         except Exception as outer_e:
             try:
                 from ...server import stop_dev_server, stop_main_server, is_tools_server_running, is_main_server_running
@@ -243,7 +243,20 @@ class Call:
         
         task.end_time = time.time()
         
-        return {"result": deserialized_result["result"], "llm_model": llm_model, "response_format": response_format_req, "usage": deserialized_result["usage"], "tool_usage": deserialized_result["tool_usage"]}
+        # Make sure all necessary fields are extracted properly
+        result_value = deserialized_result["result"]
+        usage_value = deserialized_result.get("usage", {"input_tokens": 0, "output_tokens": 0})
+        
+        # Get tool_usage from the original_result if available, or use an empty dict as default
+        tool_usage_value = original_result.get("tool_usage", [])
+        
+        return {
+            "result": result_value,
+            "llm_model": llm_model,
+            "response_format": response_format_req,
+            "usage": usage_value,
+            "tool_usage": tool_usage_value
+        }
 
 
 

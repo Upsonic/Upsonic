@@ -5,6 +5,7 @@ from typing import Any, Callable, TypeVar, cast
 T = TypeVar('T')
 
 from ...model_registry import ModelNames
+from ..printing import print_price_id_summary
 
 class DirectStatic:
     """Static methods for making direct LLM calls using the Upsonic client."""
@@ -71,6 +72,11 @@ class DirectStatic:
 
         # Execute the direct call asynchronously with retry parameter
         await the_client.call_async(task, model, retry=retry)
+        
+        # Print the price ID summary if the task has a price ID
+        if not task.not_main_task:
+            print_price_id_summary(task.price_id, task)
+            
         return task.response
 
     @staticmethod
@@ -197,7 +203,10 @@ class DirectInstance:
         actual_retry = retry if retry is not None else self.retry
         
         # Call the static method with the resolved parameters
-        return await DirectStatic.do_async(task, actual_model, actual_client, actual_debug, actual_retry)
+        result = await DirectStatic.do_async(task, actual_model, actual_client, actual_debug, actual_retry)
+        
+        # No need to print price_id summary here since DirectStatic.do_async already does it
+        return result
         
     def print_do(self, task: Task, model: ModelNames | None = None, client: Any = None, debug: bool = False, retry: int | None = None):
         """
