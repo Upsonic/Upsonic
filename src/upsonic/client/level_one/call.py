@@ -201,6 +201,11 @@ class Call:
                         result = await self.send_request_async("/level_one/gpt4o", data)
                         original_result = result
                         
+                        # Extract the tool_usage from the result['result'] before changing 'result'
+                        tool_usage_value = []
+                        if isinstance(result, dict) and 'result' in result and isinstance(result['result'], dict) and 'tool_usage' in result['result']:
+                            tool_usage_value = result['result']['tool_usage']
+                        
                         result = result["result"]
                         
                         if error_handler(result):  # If it's a retriable error
@@ -247,8 +252,8 @@ class Call:
         result_value = deserialized_result["result"]
         usage_value = deserialized_result.get("usage", {"input_tokens": 0, "output_tokens": 0})
         
-        # Get tool_usage from the original_result if available, or use an empty dict as default
-        tool_usage_value = original_result.get("tool_usage", [])
+
+
         
         return {
             "result": result_value,
