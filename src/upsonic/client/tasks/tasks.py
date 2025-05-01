@@ -146,11 +146,39 @@ class Task(BaseModel):
     
     @property
     def total_cost(self) -> Optional[float]:
-        total_task_cost = None
+        """
+        Get the total estimated cost of this task.
+        
+        Returns:
+            Optional[float]: The estimated cost in USD, or None if not available
+        """
         the_total_cost = self.get_total_cost()
-        if the_total_cost:
-            if "estimated_cost" in the_total_cost:
-                total_task_cost = the_total_cost["estimated_cost"]
-
-
-        return total_task_cost
+        if the_total_cost and "estimated_cost" in the_total_cost:
+            return the_total_cost["estimated_cost"]
+        return None
+        
+    @property
+    def total_input_token(self) -> Optional[int]:
+        """
+        Get the total number of input tokens used by this task.
+        
+        Returns:
+            Optional[int]: The number of input tokens, or None if not available
+        """
+        the_total_cost = self.get_total_cost()
+        if the_total_cost and "input_tokens" in the_total_cost:
+            return the_total_cost["input_tokens"]
+        return None
+        
+    @property
+    def total_output_token(self) -> Optional[int]:
+        """
+        Get the total number of output tokens used by this task.
+        
+        Returns:
+            Optional[int]: The number of output tokens, or None if not available
+        """
+        the_total_cost = self.get_total_cost()
+        if the_total_cost and "output_tokens" in the_total_cost:
+            return the_total_cost["output_tokens"]
+        return None
