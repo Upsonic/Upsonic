@@ -128,6 +128,7 @@ class ConfigManager:
 Configuration = ConfigManager()
 
 Configuration.initialize("OPENAI_API_KEY")
+Configuration.initialize("OPENAI_API_BASE")
 Configuration.initialize("ANTHROPIC_API_KEY")
 Configuration.initialize("AZURE_OPENAI_ENDPOINT")
 Configuration.initialize("AZURE_OPENAI_API_VERSION")
