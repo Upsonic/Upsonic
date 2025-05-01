@@ -82,7 +82,7 @@ def connected_to_server(server_type: str, status: str, total_time: float = None)
 
     spacing()
 
-def call_end(result: Any, llm_model: str, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, debug: bool = False):
+def call_end(result: Any, llm_model: str, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, debug: bool = False, price_id: str = None):
     # First panel for tool usage if there are any tools used
     if tool_usage and len(tool_usage) > 0:
         tool_table = Table(show_header=True, expand=True, box=None)
@@ -129,6 +129,35 @@ def call_end(result: Any, llm_model: str, response_format: str, start_time: floa
     # Escape input values
     llm_model = escape_rich_markup(llm_model)
     response_format = escape_rich_markup(response_format)
+    price_id_display = escape_rich_markup(price_id) if price_id else None
+
+    # Track values if price_id is provided
+    if price_id:
+        estimated_cost = get_estimated_cost(usage['input_tokens'], usage['output_tokens'], llm_model)
+        if price_id not in price_id_summary:
+            price_id_summary[price_id] = {
+                'input_tokens': 0,
+                'output_tokens': 0,
+                'estimated_cost': 0.0
+            }
+        price_id_summary[price_id]['input_tokens'] += usage['input_tokens']
+        price_id_summary[price_id]['output_tokens'] += usage['output_tokens']
+        # Extract the numeric value from the estimated_cost string
+        # Handle the format from get_estimated_cost which returns "~0.0123"
+        try:
+            # Remove tilde and dollar sign (if present) and convert to Decimal
+            cost_str = str(estimated_cost).replace('~', '').replace('$', '').strip()
+            # The cost is already calculated as a number - use it directly
+            if isinstance(price_id_summary[price_id]['estimated_cost'], (float, int)):
+                price_id_summary[price_id]['estimated_cost'] += float(cost_str)
+            else:
+                # For Decimal objects or other types
+                from decimal import Decimal
+                price_id_summary[price_id]['estimated_cost'] = Decimal(str(price_id_summary[price_id]['estimated_cost'])) + Decimal(cost_str)
+        except Exception as e:
+            # If there's any error in cost calculation, log it but continue
+            if debug:
+                print(f"Error calculating cost: {e}")
 
     table.add_row("[bold]LLM Model:[/bold]", f"{llm_model}")
     # Add spacing
