@@ -205,6 +205,10 @@ class Call:
                         tool_usage_value = []
                         if isinstance(result, dict) and 'result' in result and isinstance(result['result'], dict) and 'tool_usage' in result['result']:
                             tool_usage_value = result['result']['tool_usage']
+                            
+                            # Store tool calls in the task
+                            for tool_call in tool_usage_value:
+                                task.add_tool_call(tool_call)
                         
                         result = result["result"]
                         
@@ -251,9 +255,6 @@ class Call:
         # Make sure all necessary fields are extracted properly
         result_value = deserialized_result["result"]
         usage_value = deserialized_result.get("usage", {"input_tokens": 0, "output_tokens": 0})
-        
-
-
         
         return {
             "result": result_value,
