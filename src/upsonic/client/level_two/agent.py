@@ -296,6 +296,10 @@ class Agent:
                 result = await self.agent_async_(task_specific_configs[i], each, llm_model=llm_model)
                 results += result
 
+                # Collect tool calls from each subtask
+                for tool_call in each.tool_calls:
+                    original_task.add_tool_call(tool_call)
+
                 if is_it_sub_task:
                     shared_context.append(OtherTask(task=each.description, result=each.response))
 
@@ -423,6 +427,11 @@ class Agent:
                         # Send the request asynchronously
                         result = await self.send_request_async("/level_two/agent", data)
                         result = result["result"]
+                        
+                        # Store tool calls in the task if available
+                        if isinstance(result, dict) and 'tool_usage' in result:
+                            for tool_call in result['tool_usage']:
+                                task.add_tool_call(tool_call)
                         
                         if error_handler(result):  # If it's a retriable error
                             if agent_configuration.retry > 0 and retry_count < agent_configuration.retry:  # Check if retries are enabled and we can retry

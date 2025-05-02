@@ -23,6 +23,7 @@ class Task(BaseModel):
     end_time: Optional[int] = None
     agent: Optional[Any] = None
     response_lang: Optional[str] = None
+    _tool_calls: List[Dict[str, Any]] = []
 
 
 
@@ -59,7 +60,8 @@ class Task(BaseModel):
             "start_time": start_time,
             "end_time": end_time,
             "agent": agent,
-            "response_lang": response_lang
+            "response_lang": response_lang,
+            "_tool_calls": []
         })
         
         super().__init__(**data)
@@ -182,3 +184,24 @@ class Task(BaseModel):
         if the_total_cost and "output_tokens" in the_total_cost:
             return the_total_cost["output_tokens"]
         return None
+
+    @property
+    def tool_calls(self) -> List[Dict[str, Any]]:
+        """
+        Get all tool calls made during this task's execution.
+        
+        Returns:
+            List[Dict[str, Any]]: A list of dictionaries containing information about tool calls,
+            including tool name, parameters, and result.
+        """
+        return self._tool_calls
+        
+    def add_tool_call(self, tool_call: Dict[str, Any]) -> None:
+        """
+        Add a tool call to the task's history.
+        
+        Args:
+            tool_call (Dict[str, Any]): Dictionary containing information about the tool call.
+                Should include 'tool_name', 'params', and 'tool_result' keys.
+        """
+        self._tool_calls.append(tool_call)
