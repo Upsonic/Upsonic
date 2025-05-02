@@ -139,4 +139,6 @@ Configuration.initialize("DEEPSEEK_API_KEY")
 Configuration.initialize("GOOGLE_GLA_API_KEY")
 Configuration.initialize("OPENROUTER_API_KEY")
 
+Configuration.initialize("OLLAMA_BASE_URL")
+
 ClientConfiguration = ConfigManager(db_name="client_config.sqlite")
