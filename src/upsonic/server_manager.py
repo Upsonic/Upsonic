@@ -123,13 +123,16 @@ class ServerManager:
 
         # Start the server process
         try:
+            workers_amount = os.getenv("UPSONIC_WORKERS_AMOUNT", 1)
+            
             cmd = [
                 sys.executable, "-m", "uvicorn",
                 self.app_path,
                 "--host", self.host,
                 "--port", str(self.port),
                 "--log-level", "error",
-                "--no-access-log"
+                "--no-access-log",
+                "--workers", str(workers_amount)
             ]
             
             self._process = subprocess.Popen(
