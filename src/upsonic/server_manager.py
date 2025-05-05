@@ -124,6 +124,8 @@ class ServerManager:
         # Start the server process
         try:
             workers_amount = os.getenv("UPSONIC_WORKERS_AMOUNT", 1)
+            if self.app_path == "upsonic.tools_server.server.api:app":
+                workers_amount = 1
             
             cmd = [
                 sys.executable, "-m", "uvicorn",
