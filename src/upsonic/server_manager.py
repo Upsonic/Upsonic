@@ -4,6 +4,7 @@ import sys
 import time
 import socket
 import subprocess
+import traceback
 import psutil
 from contextlib import closing
 from typing import Optional
@@ -162,6 +163,7 @@ class ServerManager:
                 
         except Exception as e:
             self.stop()
+            traceback.print_exc()
             raise RuntimeError(f"Failed to start {self.name} server: {str(e)}")
 
     def stop(self):
