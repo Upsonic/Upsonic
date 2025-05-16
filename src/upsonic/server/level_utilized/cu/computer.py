@@ -53,11 +53,6 @@ class ScalingMode(StrEnum):
 # Base resolutions for different device categories
 DEVICE_CATEGORIES: dict[str, Resolution] = {
     "HD": Resolution(width=1280, height=720),      # 720p
-    "FHD": Resolution(width=1920, height=1080),    # 1080p
-    "QHD": Resolution(width=2560, height=1440),    # 1440p
-    "4K": Resolution(width=3840, height=2160),     # 4K
-    "5K": Resolution(width=5120, height=2880),     # 5K (Common in Mac)
-    "6K": Resolution(width=6016, height=3384),     # 6K (Pro Display XDR)
 }
 
 class ScalingConfig(TypedDict):
@@ -70,11 +65,11 @@ class ScalingConfig(TypedDict):
 
 
 DEFAULT_SCALING_CONFIG = ScalingConfig(
-    mode=ScalingMode.AUTO,
+    mode=ScalingMode.RELATIVE,
     target_resolution=None,
-    scale_factor=None,
-    min_scale=0.25,  # Don't scale below 25%
-    max_scale=1.0,   # Don't upscale
+    scale_factor=1.0,  # No scaling by default for HD resolution
+    min_scale=0.25,
+    max_scale=1.0,
     preserve_aspect_ratio=True
 )
 
@@ -154,49 +149,25 @@ class ComputerTool(BaseAnthropicTool):
         self.scaling_config = self._determine_optimal_scaling()
 
     def _determine_optimal_scaling(self) -> ScalingConfig:
-        """Determine the optimal scaling configuration based on the current display."""
+        """Determine the optimal scaling configuration for HD displays (1280x720)."""
         config = DEFAULT_SCALING_CONFIG.copy()
         
-        # Get system info
-        system = platform.system().lower()
-        total_pixels = self.width * self.height
-        aspect_ratio = self.width / self.height
+        # Get current resolution
+        print(f"Current resolution: {self.width}x{self.height}")
         
-        # Detect Retina/HiDPI displays on macOS
-        is_retina = False
-        if system == "darwin":
-            try:
-                import subprocess
-                result = subprocess.run(['system_profiler', 'SPDisplaysDataType'], capture_output=True, text=True)
-                is_retina = "Retina" in result.stdout
-            except Exception:
-                pass
-
-        # Find the closest standard resolution
-        closest_category = None
-        min_diff = float('inf')
-        
-        for category, resolution in DEVICE_CATEGORIES.items():
-            cat_pixels = resolution["width"] * resolution["height"]
-            diff = abs(cat_pixels - total_pixels)
-            if diff < min_diff:
-                min_diff = diff
-                closest_category = category
-
-        # Determine scaling mode and factors
-        if is_retina:
-            # For Retina displays, we use relative scaling
-            config["mode"] = ScalingMode.RELATIVE
-            config["scale_factor"] = 0.5  # Default for Retina
-        elif total_pixels > DEVICE_CATEGORIES["FHD"]["width"] * DEVICE_CATEGORIES["FHD"]["height"]:
-            # For high-res displays, scale down to FHD
-            config["mode"] = ScalingMode.FIXED
-            config["target_resolution"] = DEVICE_CATEGORIES["FHD"]
-        else:
-            # For standard/lower resolutions, use minimal scaling
+        # For 720p displays, use simple 1:1 scaling (no scaling)
+        if abs(self.width - 1280) <= 100 and abs(self.height - 720) <= 100:
             config["mode"] = ScalingMode.RELATIVE
             config["scale_factor"] = 1.0
-
+            print("Using 1:1 scaling for HD (720p) display")
+        else:
+            # For any other resolution, scale to match HD
+            config["mode"] = ScalingMode.FIXED
+            config["target_resolution"] = DEVICE_CATEGORIES["HD"]
+            print(f"Scaling to target HD resolution: 1280x720")
+        
+        # Print final configuration
+        print(f"Scaling config: mode={config['mode']}, scale_factor={config['scale_factor']}")
         return config
 
     def scale_coordinates(self, source: ScalingSource, x: int, y: int) -> tuple[int, int]:
@@ -208,7 +179,11 @@ class ComputerTool(BaseAnthropicTool):
             return x, y
 
         # Get current scaling factors
+        x_factor = 1.0
+        y_factor = 1.0
+
         if self.scaling_config["mode"] == ScalingMode.FIXED and self.scaling_config["target_resolution"]:
+            # Fixed mode - scale to target resolution
             x_factor = self.scaling_config["target_resolution"]["width"] / self.width
             y_factor = self.scaling_config["target_resolution"]["height"] / self.height
             
@@ -216,17 +191,10 @@ class ComputerTool(BaseAnthropicTool):
                 # Use the same factor for both dimensions to preserve aspect ratio
                 x_factor = y_factor = min(x_factor, y_factor)
         
-        elif self.scaling_config["mode"] == ScalingMode.RELATIVE and self.scaling_config["scale_factor"]:
+        elif self.scaling_config["mode"] == ScalingMode.RELATIVE and self.scaling_config["scale_factor"] is not None:
+            # Relative mode - use scale factor directly
             x_factor = y_factor = self.scaling_config["scale_factor"]
         
-        else:  # AUTO mode
-            # Calculate dynamic scaling factor based on resolution
-            base_factor = min(1.0, 1920 / max(self.width, self.height))  # Use FHD as reference
-            x_factor = y_factor = max(
-                self.scaling_config["min_scale"],
-                min(self.scaling_config["max_scale"], base_factor)
-            )
-
         # Apply scaling based on source
         if source == ScalingSource.API:
             # Scale up (from scaled coordinates to actual screen coordinates)
@@ -354,24 +322,36 @@ class ComputerTool(BaseAnthropicTool):
 
         screenshot = pyautogui.screenshot()
         
-        # print current file size before optimization
+        # Save original screenshot
         screenshot.save(str(path))
         print(f"Original file size: {os.path.getsize(path)} bytes")
 
-        if self._scaling_enabled:
-            x, y = self.scale_coordinates(
-                ScalingSource.COMPUTER, self.width, self.height
-            )
+        # Only apply scaling if enabled and necessary
+        if self._scaling_enabled and self.scaling_config["mode"] != ScalingMode.NONE:
             from PIL import Image
 
-            with Image.open(path) as img:
-                # Resize with high-quality downsampling
-                img = img.resize((x, y), Image.Resampling.LANCZOS)
-                # Save with optimization and reduced quality
-                img.save(path)
+            # Get target dimensions
+            if self.scaling_config["mode"] == ScalingMode.FIXED and self.scaling_config["target_resolution"]:
+                # Fixed mode - use target resolution directly
+                target_width = self.scaling_config["target_resolution"]["width"]
+                target_height = self.scaling_config["target_resolution"]["height"]
+            else:
+                # Use relative scaling
+                scale = self.scaling_config.get("scale_factor", 1.0)
+                target_width = int(self.width * scale)
+                target_height = int(self.height * scale)
+            
+            # Only resize if dimensions are different
+            if target_width != self.width or target_height != self.height:
+                print(f"Resizing screenshot to {target_width}x{target_height}")
+                with Image.open(path) as img:
+                    # Resize with high-quality downsampling
+                    img = img.resize((target_width, target_height), Image.Resampling.LANCZOS)
+                    # Save with optimization
+                    img.save(path, optimize=True, quality=90)
 
         if path.exists():
-            print(f"Optimized file size: {os.path.getsize(path)} bytes")
+            print(f"Final screenshot size: {os.path.getsize(path)} bytes")
             if return_bytes:
                 return path.read_bytes()
             else:
