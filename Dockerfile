@@ -95,7 +95,7 @@ RUN chmod +x /home/docker/.vnc/xstartup
 
 
 
-CMD /bin/bash -c "export DISPLAY=:1 && /usr/bin/vncserver :1 -geometry 1366x768 -depth 24 && \
+CMD /bin/bash -c "export DISPLAY=:1 && /usr/bin/vncserver :1 -geometry 1280x720 -depth 24 && \
     python3.12 -c 'from upsonic.server import run_main_server_internal; run_main_server_internal(reload=False)' & \
     python3.12 -c 'from upsonic.tools_server import run_tools_server_internal; run_tools_server_internal(reload=False)' & \
     wait"
