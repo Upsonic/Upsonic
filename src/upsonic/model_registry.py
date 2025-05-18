@@ -189,7 +189,7 @@ MODEL_REGISTRY = {
     # Bedrock Anthropic models
     "bedrock/claude-3-5-sonnet": {
         "provider": "bedrock_anthropic", 
-        "model_name": "us.anthropic.claude-3-5-sonnet-20241022-v2:0", 
+        "model_name": "us.anthropic.claude-3-5-sonnet-20240620-v1:0", 
         "capabilities": ["computer_use"],
         "pricing": {"input": 3.00, "output": 15.00},
         "required_environment_variables": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"]
