@@ -81,13 +81,19 @@ class KnowledgeBase(BaseModel):
 
 
 
-    def markdown(self, client):
+    def markdown(self):
         knowledge_base = KnowledgeBaseMarkdown(knowledges={})
         the_list_of_files = self.sources
         
 
         for each in the_list_of_files:
-            markdown_content = client.markdown(each)
+
+            # Convert to markdown
+            from markitdown import MarkItDown
+
+            md = MarkItDown()
+            markdown_content = md.convert(each).text_content
+
 
             knowledge_base.knowledges[each] = markdown_content
 
