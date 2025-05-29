@@ -14,7 +14,7 @@ class Task(BaseModel):
     description: str
     images: Optional[List[str]] = None
     tools: list[Any] = []
-    response_format: Union[Type[ObjectResponse], Type[BaseModel], None] = None
+    response_format: Union[Type[ObjectResponse], Type[BaseModel], type[str], None] = str
     _response: Any = None
     context: Any = None
     price_id_: Optional[str] = None
@@ -32,7 +32,7 @@ class Task(BaseModel):
         description: str, 
         images: Optional[List[str]] = None,
         tools: list[Any] = None,
-        response_format: Union[Type[ObjectResponse], Type[BaseModel], None] = None,
+        response_format: Union[Type[ObjectResponse], Type[BaseModel], type[str], None] = str,
         response: Any = None,
         context: Any = None,
         price_id_: Optional[str] = None,

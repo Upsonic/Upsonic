@@ -434,6 +434,23 @@ def agent_retry(retry_count: int, max_retries: int):
     console.print(panel)
     spacing()
 
+def call_retry(retry_count: int, max_retries: int):
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+
+    table.add_row("[bold]Retry Status:[/bold]", f"[yellow]Attempt {retry_count + 1} of {max_retries + 1}[/yellow]")
+    
+    panel = Panel(
+        table,
+        title="[bold yellow]Upsonic - Call Retry[/bold yellow]",
+        border_style="yellow",
+        expand=True,
+        width=70
+    )
+
+    console.print(panel)
+    spacing()
+
 def get_price_id_total_cost(price_id: str):
     """
     Get the total cost for a specific price ID.

@@ -158,7 +158,7 @@ def _create_bedrock_anthropic_model(model_name: str):
 
 
 
-def _create_model_from_registry(llm_model: str):
+def get_agent_model(llm_model: str):
     """Create a model instance based on the registry entry."""
     registry_entry = get_model_registry_entry(llm_model)
     if not registry_entry:

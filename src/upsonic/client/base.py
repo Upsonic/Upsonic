@@ -7,7 +7,7 @@ import concurrent.futures
 import threading
 
 
-from .level_one.call import Call
+
 from .level_two.agent import Agent
 from .tasks.tasks import Task
 from .agent_configuration.agent_configuration import AgentConfiguration
@@ -48,7 +48,7 @@ def run_coroutine_in_new_thread(coro):
 
 
 # Create a base class with url
-class UpsonicClient(Call, Storage, Tools, Agent, Markdown, Others):
+class UpsonicClient(Storage, Tools, Agent, Markdown, Others):
 
     def __init__(self, url: str, debug: bool = False, **kwargs):
         """Initialize the Upsonic client.
