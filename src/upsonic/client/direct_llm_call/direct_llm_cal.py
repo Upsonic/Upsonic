@@ -101,7 +101,7 @@ class Direct:
 
 
 
-        agent = Agent(model, output_type=task.response_format, system_prompt="", end_strategy="exhaustive")
+        agent = Agent(model, output_type=task.response_format, system_prompt="", end_strategy="exhaustive", retries=5, )
 
         agent_tool_register(None, agent, task)
         
