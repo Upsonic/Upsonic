@@ -98,5 +98,15 @@ class KnowledgeBase(BaseModel):
             knowledge_base.knowledges[each] = markdown_content
 
 
+        the_overall_string = ""
+    
+        for each in knowledge_base.knowledges:
+            the_overall_string += f"""
+            <{each}>
+            {knowledge_base.knowledges[each]}
+            </{each}>
+            \n\n
+            """
+        
+        return the_overall_string
 
-        return knowledge_base
