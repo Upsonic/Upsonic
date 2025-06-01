@@ -68,6 +68,7 @@ class Direct:
                 call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_usage"], self.debug, each.price_id)
         else:
             the_result = await self.call_async_(task, llm_model, retry)
+            print(the_result)
             call_end(the_result["result"], the_result["llm_model"], the_result["response_format"], start_time, time.time(), the_result["usage"], the_result["tool_usage"], self.debug, task.price_id)
 
         end_time = time.time()
