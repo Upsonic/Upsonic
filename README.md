@@ -59,13 +59,6 @@ Upsonic is a reliability-focused framework. The results in the table were genera
 10 transfers were performed for each section. The numbers show the error count. So if it says 7, it means 7 out of 10 were done **incorrectly**. The table has been created based on initial results. We are expanding the dataset. The tests will become more reliable after creating a larger test set. Reliability benchmark [repo](https://github.com/Upsonic/Reliability-Benchmark)
 
 
-| Name     | Reliability Score % | ASIN Code | HS Code | CIS Code | Marketing URL | Usage URL | Warranty Time | Policy Link | Policy Description |
-|-----------|--------------------|-----------|---------|----------|---------------|-----------|---------------|-------------|----------------|
- **Upsonic**   |**99.3**      |0         |1       |0        |0             |0         |0             |0           |0                   |
-| **CrewAI**    |**87.5**       |0         |3       |2        |1             |1         |0             |1           |2                   |
-| **Langgraph** |**6.3**      |10        |10      |7        |10            |8         |10            |10          |10                  |
-
-
 ```python
 class ReliabilityLayer:
   prevent_hallucination = 10
