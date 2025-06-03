@@ -22,6 +22,7 @@
     </a>
   </p>
 
+**ENGLISH** | [简体中文](README-zh_CN.md)
 
 # Introduction
 Upsonic is a reliability-focused framework designed for real-world applications. It enables trusted agent workflows in your organization through advanced reliability features, including verification layers, triangular architecture, validator agents, and output evaluation systems.
