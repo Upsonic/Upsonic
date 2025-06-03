@@ -3286,7 +3286,7 @@ requires-dist = [
     { name = "graspologic", marker = "extra == 'rag'", specifier = ">=3.4.1" },
     { name = "httpx", specifier = ">=0.27.2" },
     { name = "lightrag-hku", marker = "extra == 'rag'", specifier = "==1.2.6" },
-    { name = "markitdown", specifier = "==0.0.1" },
+    { name = "markitdown", extras = ["all"], specifier = "==0.0.1" },
     { name = "matplotlib", specifier = ">=3.10.0" },
     { name = "mcp", extras = ["cli"], specifier = "==1.9.0" },
     { name = "nest-asyncio", specifier = ">=1.6.0" },
