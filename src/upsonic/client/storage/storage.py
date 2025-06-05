@@ -34,6 +34,8 @@ class ClientConfig(BaseModel):
     
     OPENROUTER_API_KEY: str | None = Field(default_factory=lambda: os.getenv("OPENROUTER_API_KEY"))
 
+    OLLAMA_BASE_URL: str | None = Field(default_factory=lambda: os.getenv("OLLAMA_BASE_URL"))
+
 
 
 class Storage:
