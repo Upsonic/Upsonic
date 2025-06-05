@@ -11,6 +11,7 @@ ModelNames = Literal[
     "openai/gpt-4.5-preview",
     "openai/o3-mini",
     "openai/gpt-4o-mini",
+    "openai/gpt-4.1-nano",
     "azure/gpt-4o",
     "azure/gpt-4o-mini",
     "claude/claude-3-5-sonnet",
@@ -63,7 +64,13 @@ MODEL_REGISTRY = {
         "pricing": {"input": 75.00, "output": 150.00},
         "required_environment_variables": ["OPENAI_API_KEY"]
     },
-
+    "openai/gpt-4.1-nano": {
+        "provider": "openai", 
+        "model_name": "gpt-4.1-nano", 
+        "capabilities": [],
+        "pricing": {"input": 0.10, "output": 0.40},
+        "required_environment_variables": ["OPENAI_API_KEY"]
+    },
     "openai/o3-mini": {
         "provider": "openai", 
         "model_name": "o3-mini", 
