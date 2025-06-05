@@ -14,12 +14,15 @@ import time
 import asyncio
 from typing import Any, List, Union
 from pydantic_ai import Agent as PydanticAgent
-
+import os
+from ..utils.model_set import model_set
 
 class Direct:
     """Static methods for making direct LLM calls using the Upsonic."""
 
     def __init__(self, model: ModelNames | None = None, debug: bool = False):
+        model = model_set(model)
+
         self.model = model
         self.debug = debug
         self.default_llm_model = model

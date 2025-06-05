@@ -254,9 +254,6 @@ MODEL_REGISTRY = {
 
 def get_model_registry_entry(llm_model: str):
 
-    if llm_model == None:
-        llm_model = os.getenv("LLM_MODEL_KEY").split(":")[0] if os.getenv("LLM_MODEL_KEY", None) else "openai/gpt-4o"
-
 
     
     """Get model registry entry or return None if not found."""
