@@ -6,21 +6,44 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 
-from .client.tasks.tasks import Task
+from .utils.tasks.tasks import Task
 
-from .client.knowledge_base.knowledge_base import KnowledgeBase
-from .client.direct_llm_call.direct_llm_cal import Direct
+from .knowledge_base.knowledge_base import KnowledgeBase
+from .direct.direct_llm_cal import Direct
+from .direct.direct_llm_cal import Direct as Agent
+
+# Export error handling components for advanced users
+from .utils.package.exception import (
+    UupsonicError, 
+    AgentExecutionError, 
+    ModelConnectionError, 
+    TaskProcessingError, 
+    ConfigurationError, 
+    RetryExhaustedError,
+    NoAPIKeyException
+)
+from .utils.error_wrapper import upsonic_error_handler
 
 
-
-
-from .client.graph import Graph, DecisionFunc, DecisionLLM
-
-from pydantic import Field
 
 
 def hello() -> str:
     return "Hello from upsonic!"
 
 
-__all__ = ["hello", "UpsonicClient", "ObjectResponse","Task", "StrInListResponse", "AgentConfiguration", "Field", "KnowledgeBase", "ClientConfig", "Agent", "Direct", "Team", "Graph", "DecisionFunc", "DecisionLLM"]
+__all__ = [
+    "hello", 
+    "Task", 
+    "KnowledgeBase", 
+    "Direct", 
+    "Agent",
+    # Error handling exports
+    "UupsonicError",
+    "AgentExecutionError", 
+    "ModelConnectionError", 
+    "TaskProcessingError", 
+    "ConfigurationError", 
+    "RetryExhaustedError",
+    "NoAPIKeyException",
+    "upsonic_error_handler"
+]
