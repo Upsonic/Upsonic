@@ -12,6 +12,9 @@ ModelNames = Literal[
     "openai/o3-mini",
     "openai/gpt-4o-mini",
     "openai/gpt-4.1-nano",
+    "openai/gpt-4.1-mini",
+    "openai/gpt-4.1",
+    "openai/o4-mini",
     "azure/gpt-4o",
     "azure/gpt-4o-mini",
     "claude/claude-3-5-sonnet",
@@ -71,6 +74,13 @@ MODEL_REGISTRY = {
         "pricing": {"input": 0.10, "output": 0.40},
         "required_environment_variables": ["OPENAI_API_KEY"]
     },
+    "openai/gpt-4.1-mini": {
+        "provider": "openai", 
+        "model_name": "gpt-4.1-mini", 
+        "capabilities": [],
+        "pricing": {"input": 0.40, "output": 1.60},
+        "required_environment_variables": ["OPENAI_API_KEY"]
+    },
     "openai/o3-mini": {
         "provider": "openai", 
         "model_name": "o3-mini", 
@@ -85,7 +95,20 @@ MODEL_REGISTRY = {
         "pricing": {"input": 0.15, "output": 0.60},
         "required_environment_variables": ["OPENAI_API_KEY"]
     },
-    
+    "openai/gpt-4.1": {
+        "provider": "openai", 
+        "model_name": "gpt-4.1", 
+        "capabilities": [],
+        "pricing": {"input": 2.0, "output": 8.0},
+        "required_environment_variables": ["OPENAI_API_KEY"]
+    },
+    "openai/o4-mini": {
+        "provider": "openai", 
+        "model_name": "o4-mini", 
+        "capabilities": [],
+        "pricing": {"input": 1.10, "output": 4.40},
+        "required_environment_variables": ["OPENAI_API_KEY"]
+    },
     # Azure OpenAI models
     "azure/gpt-4o": {
         "provider": "azure_openai", 

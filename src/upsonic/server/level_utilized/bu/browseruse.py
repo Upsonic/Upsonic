@@ -107,7 +107,10 @@ def get_llm():
         "azure/gpt-4o": "gpt-4o",
         "azure/gpt-4o-mini": "gpt-4o-mini",
         "gpt-4o-azure": "gpt-4o",
-        "openai/gpt-4.1-nano": "gpt-4.1-nano"
+        "openai/gpt-4.1-nano": "gpt-4.1-nano",
+        "openai/gpt-4.1-mini": "gpt-4.1-mini",
+        "openai/gpt-4.1": "gpt-4.1",
+        "openai/o4-mini": "o4-mini"
     }
 
     claude_model_mapping = {
