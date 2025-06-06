@@ -13,7 +13,7 @@ from ..utils.error_wrapper import upsonic_error_handler
 import time
 import asyncio
 from typing import Any, List, Union
-from pydantic_ai import Agent as PydanticAgent
+from pydantic_ai import Agent as PydanticAgent, BinaryContent
 import os
 from ..utils.model_set import model_set
 
@@ -26,6 +26,41 @@ class Direct:
         self.model = model
         self.debug = debug
         self.default_llm_model = model
+
+    def _build_agent_input(self, task: Task):
+        """
+        Build the input for the agent run function, including images if present.
+        
+        Args:
+            task: The task containing description and potentially images
+            
+        Returns:
+            Either a string (description only) or a list containing description and BinaryContent objects
+        """
+        if not task.images:
+            return task.description
+            
+        # Build input list with description and images
+        input_list = [task.description]
+        
+        for image_path in task.images:
+            try:
+                with open(image_path, "rb") as image_file:
+                    image_data = image_file.read()
+                
+                # Determine media type based on file extension
+                file_extension = image_path.lower().split('.')[-1]
+                media_type = f'image/{file_extension}'
+                    
+                input_list.append(BinaryContent(data=image_data, media_type=media_type))
+                
+            except Exception as e:
+                # Log error but continue with other images
+                if self.debug:
+                    print(f"Warning: Could not load image {image_path}: {e}")
+                continue
+                
+        return input_list
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
     async def do_async(self, task: Union[Task, List[Task]], model: ModelNames | None = None, debug: bool = False, retry: int = 3):
@@ -74,7 +109,7 @@ class Direct:
 
             # Make request to the model using MCP servers context manager
             async with agent.run_mcp_servers():
-                model_response = await agent.run(single_task.description)
+                model_response = await agent.run(self._build_agent_input(single_task))
 
             # Setting Task Response
             task_response(model_response, single_task)
