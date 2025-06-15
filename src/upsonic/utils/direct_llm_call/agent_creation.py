@@ -7,6 +7,7 @@ from ..error_wrapper import upsonic_error_handler
 async def agent_create(agent_model, single_task):
 
     mcp_servers = []
+    tools_to_remove = []
 
     if len(single_task.tools) > 0:
         # For loop through the tools
@@ -32,8 +33,11 @@ async def agent_create(agent_model, single_task):
                 )
 
                 mcp_servers.append(the_mcp_server)
+                tools_to_remove.append(tool)
 
-                
+        # Remove MCP tools from the tools list
+        for tool in tools_to_remove:
+            single_task.tools.remove(tool)
 
 
     the_agent = PydanticAgent(agent_model, output_type=single_task.response_format, system_prompt="", end_strategy="exhaustive", retries=5, mcp_servers=mcp_servers)
