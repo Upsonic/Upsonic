@@ -1,4 +1,4 @@
-from ..utils.tasks.tasks import Task
+from ..tasks.tasks import Task
 from ..models.model_registry import ModelNames
 from ..utils.printing import print_price_id_summary, call_end
 from ..utils.direct_llm_call.tool_usage import tool_usage
@@ -20,7 +20,19 @@ from ..utils.model_set import model_set
 class Direct:
     """Static methods for making direct LLM calls using the Upsonic."""
 
-    def __init__(self, model: ModelNames | None = None, debug: bool = False):
+    def __init__(self, 
+                 model: ModelNames | None = None, 
+                 debug: bool = False, 
+                 name: str | None = None, 
+                 company_url: str | None = None, 
+                 company_objective: str | None = None,
+                 company_description: str | None = None,
+                 system_prompt: str | None = None,
+                 memory: str | None = None,
+                 reflection: str | None = None,
+                 compress_context: bool = False,
+                 agent_id_: str | None = None,
+                 ):
         model = model_set(model)
 
         self.model = model

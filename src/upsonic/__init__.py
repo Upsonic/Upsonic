@@ -6,11 +6,12 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 
-from .utils.tasks.tasks import Task
+from .tasks.tasks import Task
 
 from .knowledge_base.knowledge_base import KnowledgeBase
 from .direct.direct_llm_cal import Direct
 from .direct.direct_llm_cal import Direct as Agent
+from .graph.graph import Graph
 
 # Export error handling components for advanced users
 from .utils.package.exception import (
@@ -37,6 +38,7 @@ __all__ = [
     "KnowledgeBase", 
     "Direct", 
     "Agent",
+    "Graph",
     # Error handling exports
     "UupsonicError",
     "AgentExecutionError", 
