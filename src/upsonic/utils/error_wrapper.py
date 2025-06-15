@@ -215,7 +215,7 @@ def _is_retryable_error(error: UupsonicError) -> bool:
     )
 
 
-def _display_error(error: UupsonicError) -> None:
+def _display_error(error: Union[UupsonicError, Exception]) -> None:
     """
     Displays error information to the user using the existing error_message function.
     
@@ -234,12 +234,19 @@ def _display_error(error: UupsonicError) -> None:
     error_type_name = error_type_map.get(type(error), "Upsonic Error")
     error_code = getattr(error, 'error_code', None)
     
+    # Get error message based on error type
+    if hasattr(error, 'message'):
+        detail = error.message
+    else:
+        # For simple Exception classes, use str(error)
+        detail = str(error)
+    
     # Convert error code to HTTP-like status for display
     status_code = _get_status_code_from_error_code(error_code) if error_code else None
     
     error_message(
         error_type=error_type_name,
-        detail=error.message,
+        detail=detail,
         error_code=status_code
     )
 
