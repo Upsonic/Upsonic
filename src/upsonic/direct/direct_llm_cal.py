@@ -31,6 +31,7 @@ class Direct:
                  memory: str | None = None,
                  reflection: str | None = None,
                  compress_context: bool = False,
+                 reliability_layer = None,
                  agent_id_: str | None = None,
                  ):
         model = model_set(model)
