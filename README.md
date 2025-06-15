@@ -26,6 +26,46 @@
 # Introduction
 Upsonic is a reliability-focused framework designed for real-world applications. It enables trusted agent workflows in your organization through advanced reliability features, including verification layers, triangular architecture, validator agents, and output evaluation systems.
 
+
+# 🛠️ Getting Started
+
+### Prerequisites
+
+- Python 3.10 or higher
+- Access to OpenAI or Anthropic API keys (Azure and Bedrock Supported)
+
+## Installation
+
+```bash
+pip install upsonic
+
+```
+
+
+
+# Basic Example
+
+Set your OPENAI_API_KEY
+
+```console
+export OPENAI_API_KEY=sk-***
+```
+
+Start the agent 
+
+```python
+from upsonic import Task, Agent
+
+task = Task("Who developed you?")
+
+agent = Agent(name="Coder")
+
+agent.print_do(task)
+```
+
+<br>
+<br>
+
 # Why Choose Upsonic?
 Upsonic is a next-generation framework that makes agents production-ready by solving three critical challenges:
 
@@ -63,7 +103,7 @@ Upsonic is a reliability-focused framework. The results in the table were genera
 class ReliabilityLayer:
   prevent_hallucination = 10
 
-agent = Agent("Coder", reliability_layer=ReliabilityLayer, model="openai/gpt4o")
+agent = Agent(name="Coder", reliability_layer=ReliabilityLayer, model="openai/gpt4o")
 ```
 
 <br>
@@ -88,51 +128,17 @@ You can access our documentation at [docs.upsonic.ai](https://docs.upsonic.ai/) 
 
 <br>
 
-# 🛠️ Getting Started
-
-### Prerequisites
-
-- Python 3.10 or higher
-- Access to OpenAI or Anthropic API keys (Azure and Bedrock Supported)
-
-## Installation
-
-```bash
-pip install upsonic
-
-```
 
 
 
-# Basic Example
-
-Set your OPENAI_API_KEY
-
-```console
-export OPENAI_API_KEY=sk-***
-```
-
-Start the agent 
-
-```python
-from upsonic import Task, Agent
-
-task = Task("Who developed you?")
-
-agent = Agent("Coder")
-
-agent.print_do(task)
-```
-
-<br>
-<br>
 
 ## Tool Integration via MCP
 
 Upsonic officially supports [Model Context Protocol (MCP)](https://github.com/modelcontextprotocol/servers) and custom tools. You can use hundreds of MCP servers at [glama](https://glama.ai/mcp/servers) or [mcprun](https://mcp.run) We also support Python functions inside a class as a tool. You can easily generate your integrations with that.
 
 ```python
-from upsonic import Agent, Task, ObjectResponse
+from upsonic import Agent, Task
+from pydantic import BaseModel
 
 # Define Fetch MCP configuration
 class FetchMCP:
@@ -140,7 +146,7 @@ class FetchMCP:
     args = ["mcp-server-fetch"]
 
 # Create response format for web content
-class WebContent(ObjectResponse):
+class WebContent(BaseModel):
     title: str
     content: str
     summary: str
@@ -148,7 +154,7 @@ class WebContent(ObjectResponse):
 
 # Initialize agent
 web_agent = Agent(
-    "Web Content Analyzer",
+    name="Web Content Analyzer",
     model="openai/gpt-4o",  # You can use other models
 )
 
@@ -168,82 +174,7 @@ print(result.summary)
 ```
 <br>
 
-## Agent with Multi-Task Example 
 
-Distribute tasks effectively across agents with our automated task distribution mechanism. This tool matches tasks based on the relationship between agent and task, ensuring collaborative problem-solving across agents and tasks. The output is essential for deploying an AI agent across apps or as a service. Upsonic uses Pydantic BaseClass to define structured outputs for tasks, allowing developers to specify exact response formats for their AI agent tasks.
-
-```python
-from upsonic import Agent, Task, MultiAgent, ObjectResponse
-from upsonic.tools import Search
-from typing import List
-
-# Targeted Company and Our Company
-our_company = "https://redis.io/"
-targeted_url = "https://upsonic.ai/"
-
-
-# Response formats
-class CompanyResearch(ObjectResponse):
-   industry: str
-   product_focus: str
-   company_values: List[str]
-   recent_news: List[str]
-
-class Mail(ObjectResponse):
-   subject: str
-   content: str
-
-
-# Creating Agents
-researcher = Agent(
-   "Company Researcher",
-   company_url=our_company
-)
-
-strategist = Agent(
-   "Outreach Strategist", 
-   company_url=our_company
-)
-
-
-# Creating Tasks and connect
-company_task = Task(
-   "Research company website and analyze key information",
-
-   context=[targeted_url],
-   tools=[Search],
-   response_format=CompanyResearch
-)
-
-position_task = Task(
-   "Analyze Senior Developer position context and requirements",
-   context=[company_task, targeted_url],
-)
-
-message_task = Task(
-   "Create personalized outreach message using research",
-   context=[company_task, position_task, targeted_url],
-   response_format=Mail
-)
-
-
-# Run the Tasks over agents
-results = MultiAgent.do(
-   [researcher, strategist],
-   [company_task, position_task, message_task]
-)
-
-
-# Print the results
-print(f"Company Industry: {company_task.response.industry}")
-print(f"Company Focus: {company_task.response.product_focus}")
-print(f"Company Values: {company_task.response.company_values}")
-print(f"Company Recent News: {company_task.response.recent_news}")
-print(f"Position Analyze: {position_task.response}")
-print(f"Outreach Message Subject: {message_task.response.subject}")
-print(f"Outreach Message Content: {message_task.response.content}")
-
-```
 
 ## Direct LLM Call
 
