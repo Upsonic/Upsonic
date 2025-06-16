@@ -13,7 +13,7 @@ from .direct.direct_llm_cal import Direct
 from .direct.direct_llm_cal import Direct as Agent
 from .graph.graph import Graph
 from .canvas.canvas import Canvas
-from .multi_agent.multi_agent import MultiAgent
+from .team.team import Team
 
 # Export error handling components for advanced users
 from .utils.package.exception import (

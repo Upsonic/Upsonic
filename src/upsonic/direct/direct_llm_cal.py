@@ -23,9 +23,9 @@ class Direct:
     """Static methods for making direct LLM calls using the Upsonic."""
 
     def __init__(self, 
+                 name: str | None = None, 
                  model: ModelNames | None = None, 
                  debug: bool = False, 
-                 name: str | None = None, 
                  company_url: str | None = None, 
                  company_objective: str | None = None,
                  company_description: str | None = None,
