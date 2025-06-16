@@ -46,8 +46,7 @@ class Canvas:
         
         # For empty canvas, just save the new content directly
         if current_canvas == "Empty Canvas" or current_canvas == "":
-            print("******** SAVING CANVAS *********")
-            print(new_text_of_part)
+
             self._save_canvas(new_text_of_part)
             return new_text_of_part
 
@@ -63,8 +62,7 @@ class Canvas:
         
         task = Task(prompt)
         result = await direct.do_async(task)
-        print("******** SAVING CANVAS *********")
-        print(result)
+
         self._save_canvas(result)
         return result
 
