@@ -13,6 +13,7 @@ from .direct.direct_llm_cal import Direct
 from .direct.direct_llm_cal import Direct as Agent
 from .graph.graph import Graph
 from .canvas.canvas import Canvas
+from .multi_agent.multi_agent import MultiAgent
 
 # Export error handling components for advanced users
 from .utils.package.exception import (
@@ -41,6 +42,7 @@ __all__ = [
     "Agent",
     "Graph",
     "Canvas",
+    "MultiAgent",
     # Error handling exports
     "UupsonicError",
     "AgentExecutionError", 

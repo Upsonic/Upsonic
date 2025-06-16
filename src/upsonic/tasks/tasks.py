@@ -20,6 +20,7 @@ class Task(BaseModel):
     _response: Any = None
     context: Any = None
     price_id_: Optional[str] = None
+    task_id_: Optional[str] = None
     not_main_task: bool = False
     start_time: Optional[int] = None
     end_time: Optional[int] = None
@@ -38,6 +39,7 @@ class Task(BaseModel):
         response: Any = None,
         context: Any = None,
         price_id_: Optional[str] = None,
+        task_id_: Optional[str] = None,
         not_main_task: bool = False,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
@@ -58,6 +60,7 @@ class Task(BaseModel):
             "_response": response,
             "context": context,
             "price_id_": price_id_,
+            "task_id_": task_id_,
             "not_main_task": not_main_task,
             "start_time": start_time,
             "end_time": end_time,
@@ -129,6 +132,16 @@ class Task(BaseModel):
             import uuid
             self.price_id_ = str(uuid.uuid4())
         return self.price_id_
+
+    @property
+    def task_id(self):
+        if self.task_id_ is None:
+            import uuid
+            self.task_id_ = str(uuid.uuid4())
+        return self.task_id_
+    
+    def get_task_id(self):
+        return f"Task_{self.task_id[:8]}"
 
     @property
     def response(self):
