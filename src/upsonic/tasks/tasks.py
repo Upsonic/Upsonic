@@ -209,3 +209,30 @@ class Task(BaseModel):
                 Should include 'tool_name', 'params', and 'tool_result' keys.
         """
         self._tool_calls.append(tool_call)
+
+
+
+    def canvas_agent_description(self):
+        return "You are a canvas agent. You have tools. You can edit the canvas and get the current text of the canvas."
+
+    def add_canvas(self, canvas):
+        # Check if canvas tools have already been added to prevent duplicates
+        canvas_functions = canvas.functions()
+        canvas_description = self.canvas_agent_description()
+        
+        # Check if canvas tools are already present
+        canvas_already_added = False
+        if canvas_functions:
+            # Check if any of the canvas functions are already in tools
+            for canvas_func in canvas_functions:
+                if canvas_func in self.tools:
+                    canvas_already_added = True
+                    break
+        
+        # Only add canvas tools if they haven't been added before
+        if not canvas_already_added:
+            self.tools += canvas_functions
+            
+        # Check if canvas description is already in the task description
+        if canvas_description not in self.description:
+            self.description += canvas_description

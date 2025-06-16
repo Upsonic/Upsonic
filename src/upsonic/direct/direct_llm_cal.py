@@ -1,3 +1,4 @@
+from ..canvas.canvas import Canvas
 from ..tasks.tasks import Task
 from ..models.model_registry import ModelNames
 from ..utils.printing import print_price_id_summary, call_end
@@ -33,8 +34,10 @@ class Direct:
                  compress_context: bool = False,
                  reliability_layer = None,
                  agent_id_: str | None = None,
+                 canvas: Canvas | None = None,
                  ):
         model = model_set(model)
+        self.canvas = canvas
 
         self.model = model
         self.debug = debug
@@ -109,7 +112,7 @@ class Direct:
                 llm_model = self.default_llm_model
 
             # Start Time For Task
-            task_start(single_task)
+            task_start(single_task, self)
 
             # Get the model from registry
             agent_model, error = get_agent_model(llm_model)
