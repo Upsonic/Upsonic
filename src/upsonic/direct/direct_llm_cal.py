@@ -1,3 +1,4 @@
+import uuid
 from ..canvas.canvas import Canvas
 from ..tasks.tasks import Task
 from ..models.model_registry import ModelNames
@@ -42,6 +43,24 @@ class Direct:
         self.model = model
         self.debug = debug
         self.default_llm_model = model
+        self.agent_id_ = agent_id_
+        self.name = name
+        self.company_url = company_url
+        self.company_objective = company_objective
+        self.company_description = company_description
+        self.system_prompt = system_prompt
+        
+
+    @property
+    def agent_id(self):
+        if self.agent_id_ is None:
+            self.agent_id_ = str(uuid.uuid4())
+        return self.agent_id_
+    
+    def get_agent_id(self):
+        if self.name:
+            return self.name
+        return f"Agent_{self.agent_id[:8]}"
 
     def _build_agent_input(self, task: Task):
         """
