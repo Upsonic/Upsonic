@@ -6,11 +6,6 @@ from ..utils.error_wrapper import upsonic_error_handler
 from typing import Any, List, Dict, Optional, Type, Union
 
 
-
-class KnowledgeBaseMarkdown(BaseModel):
-    knowledges: Dict[str, str]
-
-
 class KnowledgeBase(BaseModel):
     sources: List[str] = []
     rag_model: str | None = None
@@ -85,29 +80,24 @@ class KnowledgeBase(BaseModel):
 
     @upsonic_error_handler(max_retries=1, show_error_details=True)
     def markdown(self):
-        knowledge_base = KnowledgeBaseMarkdown(knowledges={})
-        the_list_of_files = self.sources
+        knowledges = {}
         
-
-        for each in the_list_of_files:
-
+        for file_path in self.sources:
             # Convert to markdown
             from markitdown import MarkItDown
 
             md = MarkItDown()
-            markdown_content = md.convert(each).text_content
-
-
-            knowledge_base.knowledges[each] = markdown_content
-
+            markdown_content = md.convert(file_path).text_content
+            print(markdown_content)
+            knowledges[file_path] = markdown_content
 
         the_overall_string = ""
-    
-        for each in knowledge_base.knowledges:
+        
+        for file_path, content in knowledges.items():
             the_overall_string += f"""
-            <{each}>
-            {knowledge_base.knowledges[each]}
-            </{each}>
+            <{file_path}>
+            {content}
+            </{file_path}>
             \n\n
             """
         
