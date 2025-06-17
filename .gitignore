@@ -2,6 +2,7 @@ agent_history.gif
 *.sqlite
 resume.pdf
 lightrag*
+paper.png
 
 KOT-*
 notes.txt
