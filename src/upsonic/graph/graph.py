@@ -1122,7 +1122,7 @@ class Graph(BaseModel):
         # Return the count, minimum of 1 to avoid division by zero
         return max(len(counted), 1)
     
-    async def run(self, verbose: bool = True, show_progress: bool = None) -> State:
+    async def run_async(self, verbose: bool = True, show_progress: bool = None) -> State:
         """
         Executes the graph, running all tasks in the appropriate order.
         
@@ -1146,7 +1146,34 @@ class Graph(BaseModel):
         
         # With decision support, we always use the sequential implementation for now
         return await self._run_sequential(verbose, show_progress)
-    
+
+    def run(self, verbose: bool = True, show_progress: bool = None) -> State:
+        """
+        Executes the graph, running all tasks in the appropriate order synchronously.
+        
+        Args:
+            verbose: Whether to print detailed information
+            show_progress: Whether to display a progress bar during execution. If None, uses the graph's show_progress attribute.
+            
+        Returns:
+            The final state object with all task outputs
+        """
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            # No event loop running, create a new one
+            return asyncio.run(self.run_async(verbose, show_progress))
+        
+        if loop.is_running():
+            # Event loop is already running, we need to run in a new thread
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, self.run_async(verbose, show_progress))
+                return future.result()
+        else:
+            # Event loop exists but not running, we can use it
+            return loop.run_until_complete(self.run_async(verbose, show_progress))
+
     def get_output(self) -> Any:
         """
         Gets the output of the last task executed in the graph.
