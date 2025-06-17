@@ -88,7 +88,6 @@ class KnowledgeBase(BaseModel):
 
             md = MarkItDown()
             markdown_content = md.convert(file_path).text_content
-            print(markdown_content)
             knowledges[file_path] = markdown_content
 
         the_overall_string = ""
