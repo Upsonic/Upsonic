@@ -18,6 +18,7 @@ from typing import Any, List, Union
 from pydantic_ai import Agent as PydanticAgent, BinaryContent
 import os
 from ..utils.model_set import model_set
+from ..memory.memory import get_agent_memory, save_agent_memory
 
 class Direct:
     """Static methods for making direct LLM calls using the Upsonic."""
@@ -49,6 +50,7 @@ class Direct:
         self.company_objective = company_objective
         self.company_description = company_description
         self.system_prompt = system_prompt
+        self.memory = memory
         
 
     @property
@@ -142,9 +144,16 @@ class Direct:
             agent = await agent_create(agent_model, single_task)
             agent_tool_register(None, agent, single_task)
 
+            # Get historical messages count before making the call
+            historical_messages = get_agent_memory(self) if self.memory else []
+            historical_message_count = len(historical_messages)
+
             # Make request to the model using MCP servers context manager
             async with agent.run_mcp_servers():
-                model_response = await agent.run(self._build_agent_input(single_task))
+                model_response = await agent.run(self._build_agent_input(single_task), message_history=historical_messages)
+
+            if self.memory:
+                save_agent_memory(self, model_response)
 
             # Setting Task Response
             task_response(model_response, single_task)
@@ -152,9 +161,9 @@ class Direct:
             # End Time For Task
             task_end(single_task)
             
-            # Calculate usage and tool usage
-            usage = llm_usage(model_response)
-            tool_usage_result = tool_usage(model_response, single_task)
+            # Calculate usage and tool usage only for current interaction
+            usage = llm_usage(model_response, historical_message_count)
+            tool_usage_result = tool_usage(model_response, single_task, historical_message_count)
             
             # Call end logging
             call_end(model_response.output, llm_model, single_task.response_format, task_start_time, time.time(), usage, tool_usage_result, task_debug, single_task.price_id)
