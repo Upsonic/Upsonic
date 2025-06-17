@@ -11,7 +11,7 @@ from .tasks.tasks import Task
 from .knowledge_base.knowledge_base import KnowledgeBase
 from .direct.direct_llm_cal import Direct
 from .direct.direct_llm_cal import Direct as Agent
-from .graph.graph import Graph
+from .graph.graph import Graph, DecisionFunc, DecisionLLM, TaskNode, TaskChain, State
 from .canvas.canvas import Canvas
 from .team.team import Team
 
@@ -41,6 +41,11 @@ __all__ = [
     "Direct", 
     "Agent",
     "Graph",
+    "DecisionFunc",
+    "DecisionLLM",
+    "TaskNode",
+    "TaskChain",
+    "State",
     "Canvas",
     "MultiAgent",
     # Error handling exports
