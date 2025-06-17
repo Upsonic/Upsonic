@@ -25,6 +25,9 @@ example.png
 
 .DS_Store
 
+# Agent memory files (SHA256 hashed JSON files)
+src/upsonic/memory/*.json
+
 *.mp3
 *.wav
 *.wav*
