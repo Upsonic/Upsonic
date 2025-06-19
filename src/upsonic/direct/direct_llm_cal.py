@@ -87,7 +87,10 @@ class Direct:
                 
                 # Determine media type based on file extension
                 file_extension = image_path.lower().split('.')[-1]
-                media_type = f'image/{file_extension}'
+                if file_extension in ['jpg', 'jpeg']:
+                    media_type = 'image/jpeg'
+                else:
+                    media_type = f'image/{file_extension}'
                     
                 input_list.append(BinaryContent(data=image_data, media_type=media_type))
                 
