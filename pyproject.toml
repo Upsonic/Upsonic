@@ -1,6 +1,6 @@
 [project]
 name = "upsonic"
-version = "0.59.6"
+version = "0.59.7"
 description = "Task oriented AI agent framework for digital workers and vertical AI agents"
 readme = "README.md"
 authors = [
@@ -14,7 +14,7 @@ dependencies = [
     "toml>=0.10.2",
     "uv>=0.5.20",
     "mcp[cli]==1.9.4",
-    "pydantic-ai==0.2.19",
+    "pydantic-ai==0.3.2",
     "python-dotenv>=1.0.1",
     "uvicorn>=0.34.0",
     "beautifulsoup4>=4.12.3",
@@ -26,7 +26,7 @@ dependencies = [
     "requests>=2.32.3",
     "duckduckgo-search>=7.3.1",
     "nest-asyncio>=1.6.0",
-    "pydantic-ai-slim[anthropic,bedrock,openai,mcp]>=0.0.45",
+    "pydantic-ai-slim[anthropic,bedrock,openai,mcp]>=0.3.2",
     "pydantic==2.10.5",
 ]
 
