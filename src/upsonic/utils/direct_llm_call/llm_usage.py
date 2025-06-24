@@ -2,6 +2,7 @@ def llm_usage(model_response, historical_message_count=0):
 
         # Extract all messages from model_response
         all_messages = model_response.all_messages()
+        print(all_messages)
         
         # Only process messages from the current interaction (skip historical messages)
         current_interaction_messages = all_messages[historical_message_count:]
@@ -10,20 +11,17 @@ def llm_usage(model_response, historical_message_count=0):
         input_tokens = 0
         output_tokens = 0
         
-        # Process messages to extract actual token usage
+        # Process messages to extract actual token usage from usage data
         for message in current_interaction_messages:
-            # For request messages, estimate tokens from content
-            if hasattr(message, 'parts') and message.parts:
-                for part in message.parts:
-                    if hasattr(part, 'content') and isinstance(part.content, str):
-                        # Simple estimation for current request tokens
-                        part_tokens = int(len(part.content.split()) * 1.33)
-                        input_tokens += part_tokens
-            
-            # For response messages, only count response tokens (not the inflated request_tokens)
+            # Extract actual token counts from usage data
             if hasattr(message, 'usage') and message.usage:
-                resp_tokens = getattr(message.usage, 'response_tokens', 0)
-                output_tokens += resp_tokens
+                # Get actual request tokens (input tokens)
+                request_tokens = getattr(message.usage, 'request_tokens', 0)
+                input_tokens += request_tokens
+                
+                # Get actual response tokens (output tokens)
+                response_tokens = getattr(message.usage, 'response_tokens', 0)
+                output_tokens += response_tokens
         
         # Build usage result structure
         usage_result = {
