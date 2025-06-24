@@ -216,6 +216,17 @@ class Direct:
         Returns:
             The response from the LLM
         """
+        # Refresh price_id and tool call history at the start for each task
+        if isinstance(task, list):
+            for each_task in task:
+                each_task.price_id_ = None  # Reset to generate new price_id
+                _ = each_task.price_id  # Trigger price_id generation
+                each_task._tool_calls = []  # Clear tool call history
+        else:
+            task.price_id_ = None  # Reset to generate new price_id
+            _ = task.price_id  # Trigger price_id generation
+            task._tool_calls = []  # Clear tool call history
+        
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
