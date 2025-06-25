@@ -4,6 +4,7 @@ from ..tasks.tasks import Task
 from .default_prompt import DefaultPrompt
 from ..knowledge_base.knowledge_base import KnowledgeBase
 from .strategy import ContextStrategy
+from ..agent.base import AgentBase
 
 
 class TaskStrategy(ContextStrategy):
@@ -22,9 +23,7 @@ class TaskStrategy(ContextStrategy):
 
 class AgentStrategy(ContextStrategy):
     def matches(self, obj) -> bool:
-        # Avoid circular import by performing the import lazily at runtime
-        from ..direct.direct_llm_cal import Direct as Agent  # noqa: WPS433 (allow runtime import)
-        return isinstance(obj, Agent)
+        return isinstance(obj, AgentBase)
 
     def format(self, obj) -> str:
         payload = {
