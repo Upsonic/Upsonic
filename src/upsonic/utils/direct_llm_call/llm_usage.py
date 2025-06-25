@@ -2,7 +2,6 @@ def llm_usage(model_response, historical_message_count=0):
 
         # Extract all messages from model_response
         all_messages = model_response.all_messages()
-        print(all_messages)
         
         # Only process messages from the current interaction (skip historical messages)
         current_interaction_messages = all_messages[historical_message_count:]
