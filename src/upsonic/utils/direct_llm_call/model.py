@@ -211,9 +211,15 @@ _model_context = ModelCreationContext()
 @upsonic_error_handler(max_retries=1, show_error_details=True)
 def get_agent_model(llm_model: str):
     """Create a model instance based on the registry entry."""
+    from ...utils.package.exception import NoAPIKeyException, ModelConnectionError
+    
     registry_entry = get_model_registry_entry(llm_model)
     if not registry_entry:
-        return None, {"status_code": 400, "detail": f"Unsupported LLM model: {llm_model}"}
+        raise ModelConnectionError(
+            message=f"Unsupported LLM model: {llm_model}",
+            error_code="UNSUPPORTED_MODEL",
+            original_error=None
+        )
     
     provider = registry_entry["provider"]
     model_name = registry_entry["model_name"]
@@ -221,7 +227,19 @@ def get_agent_model(llm_model: str):
     # Extract additional parameters from registry entry
     additional_params = {k: v for k, v in registry_entry.items() if k not in ["provider", "model_name"]}
     
-    return _model_context.create_model(provider, model_name, **additional_params)
+    model, error = _model_context.create_model(provider, model_name, **additional_params)
+    
+    if error:
+        if error.get("status_code") == 401:
+            raise NoAPIKeyException(error.get("detail", "API key error"))
+        else:
+            raise ModelConnectionError(
+                message=error.get("detail", "Model connection error"),
+                error_code="MODEL_ERROR",
+                original_error=None
+            )
+    
+    return model
 
 
 def register_model_strategy(provider: str, strategy: ModelCreationStrategy):
