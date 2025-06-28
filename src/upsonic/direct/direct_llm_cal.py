@@ -38,10 +38,9 @@ class Direct:
                  agent_id_: str | None = None,
                  canvas: Canvas | None = None,
                  ):
-        model = model_set(model)
         self.canvas = canvas
 
-        self.model = model
+        
         self.debug = debug
         self.default_llm_model = model
         self.agent_id_ = agent_id_
@@ -52,6 +51,9 @@ class Direct:
         self.system_prompt = system_prompt
         self.memory = memory
         
+    @property
+    def model(self):
+        return model_set(self.default_llm_model)
 
     @property
     def agent_id(self):
