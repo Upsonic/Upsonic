@@ -135,7 +135,7 @@ class Direct:
             """
             # LLM Selection
             if llm_model is None:
-                llm_model = self.default_llm_model
+                llm_model = self.model
 
             # Start Time For Task
             task_start(single_task, self)
