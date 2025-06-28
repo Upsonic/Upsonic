@@ -141,9 +141,7 @@ class Direct:
             task_start(single_task, self)
 
             # Get the model from registry
-            agent_model, error = get_agent_model(llm_model)
-            if error:
-                return error
+            agent_model = get_agent_model(llm_model)
 
             # Create agent
             agent = await agent_create(agent_model, single_task)
