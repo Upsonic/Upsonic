@@ -28,6 +28,7 @@ dependencies = [
     "nest-asyncio>=1.6.0",
     "pydantic-ai-slim[anthropic,bedrock,openai,mcp]>=0.3.2",
     "pydantic==2.10.5",
+    "celery[redis]>=5.5.3",
 ]
 
 [project.optional-dependencies]
