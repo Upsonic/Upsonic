@@ -38,10 +38,9 @@ class Direct:
                  agent_id_: str | None = None,
                  canvas: Canvas | None = None,
                  ):
-        model = model_set(model)
         self.canvas = canvas
 
-        self.model = model
+        
         self.debug = debug
         self.default_llm_model = model
         self.agent_id_ = agent_id_
@@ -52,6 +51,9 @@ class Direct:
         self.system_prompt = system_prompt
         self.memory = memory
         
+    @property
+    def model(self):
+        return model_set(self.default_llm_model)
 
     @property
     def agent_id(self):
@@ -133,15 +135,13 @@ class Direct:
             """
             # LLM Selection
             if llm_model is None:
-                llm_model = self.default_llm_model
+                llm_model = self.model
 
             # Start Time For Task
             task_start(single_task, self)
 
             # Get the model from registry
-            agent_model, error = get_agent_model(llm_model)
-            if error:
-                return error
+            agent_model = get_agent_model(llm_model)
 
             # Create agent
             agent = await agent_create(agent_model, single_task)
