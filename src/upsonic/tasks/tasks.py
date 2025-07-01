@@ -18,7 +18,7 @@ class Task(BaseModel):
     response_format: Union[Type[ObjectResponse], Type[BaseModel], type[str], None] = str
     response_lang: str = "en"
     _response: Any = None
-    context: Any = None
+    context: Any = []
     price_id_: Optional[str] = None
     task_id_: Optional[str] = None
     not_main_task: bool = False
@@ -37,7 +37,7 @@ class Task(BaseModel):
         tools: list[Any] = None,
         response_format: Union[Type[ObjectResponse], Type[BaseModel], type[str], None] = str,
         response: Any = None,
-        context: Any = None,
+        context: Any = [],
         price_id_: Optional[str] = None,
         task_id_: Optional[str] = None,
         not_main_task: bool = False,

@@ -20,6 +20,8 @@ import os
 from ..utils.model_set import model_set
 from ..memory.memory import get_agent_memory, save_agent_memory
 
+from ..reliability_layer.reliability_layer import ReliabilityProcessor
+
 class Direct:
     """Static methods for making direct LLM calls using the Upsonic."""
 
@@ -50,6 +52,8 @@ class Direct:
         self.company_description = company_description
         self.system_prompt = system_prompt
         self.memory = memory
+
+        self.reliability_layer = reliability_layer
         
     @property
     def model(self):
@@ -155,6 +159,9 @@ class Direct:
             async with agent.run_mcp_servers():
                 model_response = await agent.run(self._build_agent_input(single_task), message_history=historical_messages)
 
+
+
+
             if self.memory:
                 save_agent_memory(self, model_response)
 
@@ -170,6 +177,14 @@ class Direct:
             
             # Call end logging
             call_end(model_response.output, llm_model, single_task.response_format, task_start_time, time.time(), usage, tool_usage_result, task_debug, single_task.price_id)
+
+    
+            processed_result = await ReliabilityProcessor.process_task(
+                single_task, 
+                self.reliability_layer,
+                llm_model
+            )
+            single_task = processed_result
         
         # Handle single task or list of tasks
         if isinstance(task, list):
