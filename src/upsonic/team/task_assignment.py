@@ -56,6 +56,19 @@ class TaskAssignment:
         Returns:
             Selected agent name or None if selection fails
         """
+        # Check if task has a predefined agent (manual assignment)
+        if current_task.agent is not None:
+            # Find the agent name in the registry that matches the predefined agent
+            for agent_name, agent_instance in agents_registry.items():
+                if agent_instance == current_task.agent:
+                    return agent_name
+            
+            # If exact match not found, try to match by agent_id or name
+            predefined_agent_id = getattr(current_task.agent, 'get_agent_id', lambda: None)()
+            if predefined_agent_id and predefined_agent_id in agents_registry:
+                return predefined_agent_id
+        
+        # Use automatic assignment process if no predefined agent
         class SelectedAgent(ObjectResponse):
             selected_agent: str
         
