@@ -4,9 +4,9 @@ from pydantic import BaseModel
 from ..utils.error_wrapper import upsonic_error_handler
 
 from typing import Any, List, Dict, Optional, Type, Union
+from ..visitors.context_element import ContextElement
 
-
-class KnowledgeBase(BaseModel):
+class KnowledgeBase(BaseModel, ContextElement):
     sources: List[str] = []
     rag_model: str | None = None
     _rag = None

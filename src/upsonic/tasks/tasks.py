@@ -10,8 +10,9 @@ from ..utils.printing import get_price_id_total_cost
 from ..utils.error_wrapper import upsonic_error_handler
 
 from ..knowledge_base.knowledge_base import KnowledgeBase
+from ..visitors.context_element import ContextElement
 
-class Task(BaseModel):
+class Task(BaseModel, ContextElement):
     description: str
     images: Optional[List[str]] = None
     tools: list[Any] = []

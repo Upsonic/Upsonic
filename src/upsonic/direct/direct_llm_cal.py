@@ -21,8 +21,8 @@ from ..utils.model_set import model_set
 from ..memory.memory import get_agent_memory, save_agent_memory
 
 from ..reliability_layer.reliability_layer import ReliabilityProcessor
-
-class Direct:
+from ..visitors.context_element import ContextElement
+class Direct(ContextElement):
     """Static methods for making direct LLM calls using the Upsonic."""
 
     def __init__(self, 
