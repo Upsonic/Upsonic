@@ -1,7 +1,7 @@
 from pydantic import BaseModel
+from ..visitors.context_element import ContextElement
 
-
-class DefaultPrompt(BaseModel):
+class DefaultPrompt(BaseModel, ContextElement):
     prompt: str
 
 def default_prompt():
