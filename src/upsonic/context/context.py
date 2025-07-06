@@ -27,6 +27,7 @@ def context_proceess(context):
     TASK_CONTEXT  = "<Tasks>"
 
     DEFAULT_PROMPT_CONTEXT = "<Default Prompt>"
+    ADDITIONAL_CONTEXT = "<Additional Context>"
 
     for each in context:
         if isinstance(each, Task):
@@ -37,18 +38,22 @@ def context_proceess(context):
             DEFAULT_PROMPT_CONTEXT += f"Default Prompt: {each.prompt}\n"
         if isinstance(each, KnowledgeBase):
             KNOWLEDGE_BASE_CONTEXT += f"Knowledge Base: {each.markdown()}\n"
+        if isinstance(each, str):
+            ADDITIONAL_CONTEXT += f"Additional Context: {each}\n"
 
     
     TASK_CONTEXT += "</Tasks>"
     AGENT_CONTEXT += "</Agents>"
     DEFAULT_PROMPT_CONTEXT += "</Default Prompt>"
     KNOWLEDGE_BASE_CONTEXT += "</Knowledge Base>"
+    ADDITIONAL_CONTEXT += "</Additional Context>"
 
 
     TOTAL_CONTEXT += AGENT_CONTEXT
     TOTAL_CONTEXT += TASK_CONTEXT
     TOTAL_CONTEXT += DEFAULT_PROMPT_CONTEXT
     TOTAL_CONTEXT += KNOWLEDGE_BASE_CONTEXT
+    TOTAL_CONTEXT += ADDITIONAL_CONTEXT
     TOTAL_CONTEXT += "</Context>"
 
 
