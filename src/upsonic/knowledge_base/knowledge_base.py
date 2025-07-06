@@ -1,6 +1,8 @@
 from dataclasses import Field
 import uuid
 from pydantic import BaseModel
+
+from upsonic.context.schemas import ContextSections
 from ..utils.error_wrapper import upsonic_error_handler
 
 from typing import Any, List, Dict, Optional, Type, Union
@@ -101,4 +103,13 @@ class KnowledgeBase(BaseModel):
             """
         
         return the_overall_string
+
+    def to_context_string(self) -> str:
+        """Return context string representation for this knowledge base."""
+        return f"Knowledge Base: {self.markdown()}\n"
+
+    def get_context_section(self) -> ContextSections:
+        """Return the context section this knowledge base belongs to."""
+        return ContextSections.KNOWLEDGE_BASE
+
 

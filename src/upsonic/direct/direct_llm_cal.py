@@ -1,4 +1,6 @@
 import uuid
+
+from upsonic.context.schemas import ContextSections
 from ..canvas.canvas import Canvas
 from ..tasks.tasks import Task
 from ..models.model_registry import ModelNames
@@ -276,6 +278,13 @@ class Direct:
         print(result)
         return result
 
+    def to_context_string(self) -> str:
+        from ..context.agent import turn_agent_to_string
+
+        return f"Agent ID ({self.get_agent_id()}): {turn_agent_to_string(self)}\n"
+
+    def get_context_section(self) -> ContextSections:
+        return ContextSections.AGENTS
 
 
 
