@@ -4,6 +4,8 @@ from pydantic import BaseModel
 
 from typing import Any, List, Dict, Optional, Type, Union
 
+from upsonic.context.schemas import ContextSections
+
 
 from .task_response import ObjectResponse
 from ..utils.printing import get_price_id_total_cost
@@ -249,3 +251,12 @@ class Task(BaseModel):
         # Check if canvas description is already in the task description
         if canvas_description not in self.description:
             self.description += canvas_description
+
+
+    def to_context_string(self) -> str:
+        from ..context.task import turn_task_to_string
+
+        return f"Task ID ({self.get_task_id()}): {turn_task_to_string(self)}\n"
+
+    def get_context_section(self) -> ContextSections:
+        return ContextSections.TASKS

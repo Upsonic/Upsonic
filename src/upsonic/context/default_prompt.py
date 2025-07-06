@@ -1,8 +1,16 @@
 from pydantic import BaseModel
+from .context import ContextSections
 
 
 class DefaultPrompt(BaseModel):
     prompt: str
+
+    def to_context_string(self) -> str:
+        return f"Default Prompt: {self.prompt}\n"
+
+    def get_context_section(self) -> ContextSections:
+        return ContextSections.DEFAULT_PROMPT
+
 
 def default_prompt():
     return DefaultPrompt(prompt="""
