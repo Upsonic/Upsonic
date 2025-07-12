@@ -1,62 +1,52 @@
-from .agent import turn_agent_to_string
-from ..tasks.tasks import Task
-from ..direct.direct_llm_cal import Direct as Agent
-from ..direct.direct_llm_cal import Direct
-from .task import turn_task_to_string
-from .default_prompt import default_prompt, DefaultPrompt
-from ..knowledge_base.knowledge_base import KnowledgeBase
+"""
+Context processing module using strategy pattern.
+"""
+
+from typing import Any
+
+from .context_processor import ContextProcessor
+
+# Global instance for backward compatibility
+_context_processor = ContextProcessor()
 
 
-def context_proceess(context):
+def context_proceess(context: Any) -> str:
+    """
+    Process context items and return formatted XML string.
+
+    This function maintains backward compatibility while using the new
+    strategy-based context processing system.
+
+    Args:
+        context: Context items to process
+
+    Returns:
+        Formatted XML string with all context sections
+    """
+    return _context_processor.process_context(context)
 
 
-    if context is None:
-        context = []
+def get_context_processor() -> ContextProcessor:
+    """
+    Get the global context processor instance.
+
+    This allows users to customize the processor by adding/removing strategies.
+
+    Returns:
+        The global ContextProcessor instance
+    """
+    return _context_processor
 
 
-    context.append(default_prompt())
+def set_context_processor(processor: ContextProcessor) -> None:
+    """
+    Set a custom context processor instance.
 
-    
-    TOTAL_CONTEXT = "<Context>"
-
-
-
-    KNOWLEDGE_BASE_CONTEXT = "<Knowledge Base>"
-    AGENT_CONTEXT = "<Agents>"
-
-    TASK_CONTEXT  = "<Tasks>"
-
-    DEFAULT_PROMPT_CONTEXT = "<Default Prompt>"
-
-    for each in context:
-        if isinstance(each, Task):
-            TASK_CONTEXT += f"Task ID ({each.get_task_id()}): " + turn_task_to_string(each) + "\n"
-        if isinstance(each, Agent) or isinstance(each, Direct):
-            AGENT_CONTEXT += f"Agent ID ({each.get_agent_id()}): " + turn_agent_to_string(each) + "\n"
-        if isinstance(each, DefaultPrompt):
-            DEFAULT_PROMPT_CONTEXT += f"Default Prompt: {each.prompt}\n"
-        if isinstance(each, KnowledgeBase):
-            KNOWLEDGE_BASE_CONTEXT += f"Knowledge Base: {each.markdown()}\n"
-
-    
-    TASK_CONTEXT += "</Tasks>"
-    AGENT_CONTEXT += "</Agents>"
-    DEFAULT_PROMPT_CONTEXT += "</Default Prompt>"
-    KNOWLEDGE_BASE_CONTEXT += "</Knowledge Base>"
+    Args:
+        processor: The ContextProcessor instance to use
+    """
+    global _context_processor
+    _context_processor = processor
 
 
-    TOTAL_CONTEXT += AGENT_CONTEXT
-    TOTAL_CONTEXT += TASK_CONTEXT
-    TOTAL_CONTEXT += DEFAULT_PROMPT_CONTEXT
-    TOTAL_CONTEXT += KNOWLEDGE_BASE_CONTEXT
-    TOTAL_CONTEXT += "</Context>"
-
-
-
-    
-    return TOTAL_CONTEXT
-
-    
-
-
-
+# Note: Legacy imports are now handled in __init__.py for proper module organization
