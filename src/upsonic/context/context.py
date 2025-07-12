@@ -49,11 +49,4 @@ def set_context_processor(processor: ContextProcessor) -> None:
     _context_processor = processor
 
 
-# Export legacy imports for backward compatibility
-from .agent import turn_agent_to_string
-from .task import turn_task_to_string
-from .default_prompt import default_prompt, DefaultPrompt
-from ..knowledge_base.knowledge_base import KnowledgeBase
-from ..tasks.tasks import Task
-from ..direct.direct_llm_cal import Direct as Agent
-from ..direct.direct_llm_cal import Direct
+# Note: Legacy imports are now handled in __init__.py for proper module organization
