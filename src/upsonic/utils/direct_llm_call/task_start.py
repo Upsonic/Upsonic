@@ -7,5 +7,5 @@ def task_start(task, agent):
     if agent.canvas:
         task.add_canvas(agent.canvas)
 
-    from ...context.context import context_proceess
-    task.description += context_proceess(task.context)
+    from ...context.context import ContextBuilder
+    task.description += ContextBuilder(task.context).build()
