@@ -4,7 +4,7 @@ from .memory_manager import save_memory, get_memory, reset_memory
 from pydantic_core import to_jsonable_python
 
 
-from pydantic_ai.messages import ModelMessagesTypeAdapter 
+from pydantic_ai.messages import ModelMessagesTypeAdapter
 
 def save_agent_memory(agent, answer):
     history_step_1 = answer.all_messages()
@@ -17,3 +17,5 @@ def get_agent_memory(agent):
     history = ModelMessagesTypeAdapter.validate_python(the_json)
 
     return history
+
+

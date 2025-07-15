@@ -10,6 +10,7 @@ from .llm_usage import llm_usage
 from .agent_tool_register import agent_tool_register
 from .model import get_agent_model
 from .agent_creation import agent_create
+from .context_managers import CallManager, TaskManager, ReliabilityManager, MemoryManager, LLMManager
 
 
 
@@ -20,10 +21,10 @@ import asyncio
 from typing import Any, List, Union
 from pydantic_ai import Agent as PydanticAgent, BinaryContent
 import os
-from ..utils.model_set import model_set
+
 from ..memory.memory import get_agent_memory, save_agent_memory
 
-from ..reliability_layer.reliability_layer import ReliabilityProcessor
+
 
 class Direct:
     """Static methods for making direct LLM calls using the Upsonic."""
@@ -58,9 +59,7 @@ class Direct:
 
         self.reliability_layer = reliability_layer
         
-    @property
-    def model(self):
-        return model_set(self.default_llm_model)
+
 
     @property
     def agent_id(self):
@@ -179,48 +178,33 @@ class Direct:
         Returns:
             The response from the LLM
         """
-        # LLM Selection
-        if model is None:
-            model = self.model
 
-        start_time = time.time()
+        llm_manager = LLMManager(self.default_llm_model, model)
         
-        # Start Time For Task
-        task.task_start(self)
-        agent = await agent_create(model, task)
-        
-
-        # Get historical messages count before making the call
-        historical_messages = get_agent_memory(self) if self.memory else []
-        historical_message_count = len(historical_messages)
-
-        # Make request to the model using MCP servers context manager
-        async with agent.run_mcp_servers():
-            model_response = await agent.run(task.build_agent_input(), message_history=historical_messages)
-
-        if self.memory:
-            save_agent_memory(self, model_response)
-
-        # Setting Task Response
-        task.task_response(model_response)
-        task.task_end()
-        
-        # Calculate usage and tool usage only for current interaction
-        usage = llm_usage(model_response, historical_message_count)
-        tool_usage_result = tool_usage(model_response, task, historical_message_count)
-        
-        # Call end logging
-        call_end(model_response.output, model, task.response_format, start_time, time.time(), usage, tool_usage_result, debug, task.price_id)
-
-        processed_result = await ReliabilityProcessor.process_task(
-            task, 
-            self.reliability_layer,
-            model
-        )
-        task = processed_result
+        async with llm_manager.manage_llm() as llm_handler:
+            selected_model = llm_handler.get_model()
             
+            agent = await agent_create(selected_model, task)
+            memory_manager = MemoryManager(self, task)
+            call_manager = CallManager(selected_model, task, debug)
+            task_manager = TaskManager(task, self)
+            reliability_manager = ReliabilityManager(task, self.reliability_layer, selected_model)
+
+            async with reliability_manager.manage_reliability() as reliability_handler:
+                async with memory_manager.manage_memory() as memory_handler:
+                    async with call_manager.manage_call(memory_handler) as call_handler:
+                        async with task_manager.manage_task() as task_handler:
+                            async with agent.run_mcp_servers():
+                                model_response = await agent.run(task.build_agent_input(), message_history=memory_handler.historical_messages)
+                            
+                            # Save the response to all contexts
+                            model_response = memory_handler.process_response(model_response)
+                            model_response = call_handler.process_response(model_response)
+                            model_response = task_handler.process_response(model_response)
+                            processed_task = await reliability_handler.process_task(task_handler.task)
+        
         # Print the price ID summary if the task has a price ID
-        if not task.not_main_task:
-            print_price_id_summary(task.price_id, task)
+        if not processed_task.not_main_task:
+            print_price_id_summary(processed_task.price_id, processed_task)
             
-        return task.response
+        return processed_task.response
