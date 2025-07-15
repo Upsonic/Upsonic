@@ -1,4 +1,5 @@
 import base64
+import time
 from pydantic import BaseModel
 
 
@@ -254,6 +255,12 @@ class Task(BaseModel):
 
 
 
+
+
+
+    # TASK FUNCTIONS
+
+    
     def _build_agent_input(self):
         """
         Build the input for the agent run function, including images if present.
@@ -290,3 +297,15 @@ class Task(BaseModel):
                 continue
                 
         return input_list
+    
+    def _task_start(self, agent):
+        self.start_time = time.time()
+        if agent.canvas:
+            self.add_canvas(agent.canvas)
+
+        from ...context.context import context_proceess
+        self.description += context_proceess(self.context)
+
+    def _task_response(self, model_response):
+        self._response = model_response.output
+

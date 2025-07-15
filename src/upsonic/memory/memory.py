@@ -17,3 +17,23 @@ def get_agent_memory(agent):
     history = ModelMessagesTypeAdapter.validate_python(the_json)
 
     return history
+
+
+
+class Memory:
+
+
+    @classmethod
+    def get_memory(agent):
+        return get_agent_memory(agent)
+    
+    @classmethod
+    def save_memory(agent, answer):
+        save_agent_memory(agent, answer)
+
+    @classmethod
+    async def historical_messages(agent):
+        # Get historical messages count before making the call
+        historical_messages = get_agent_memory(agent) if agent.memory else []
+        historical_message_count = len(historical_messages)
+        return historical_messages, historical_message_count

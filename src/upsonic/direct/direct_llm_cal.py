@@ -6,8 +6,6 @@ from ..utils.printing import print_price_id_summary, call_end
 from ..utils.direct_llm_call.tool_usage import tool_usage
 from ..utils.direct_llm_call.llm_usage import llm_usage
 from ..utils.direct_llm_call.task_end import task_end
-from ..utils.direct_llm_call.task_start import task_start
-from ..utils.direct_llm_call.task_response import task_response
 from ..utils.direct_llm_call.agent_tool_register import agent_tool_register
 from ..utils.direct_llm_call.model import get_agent_model
 from ..utils.direct_llm_call.agent_creation import agent_create
@@ -18,7 +16,7 @@ from typing import Any, List, Union
 from pydantic_ai import Agent as PydanticAgent, BinaryContent
 import os
 from ..utils.model_set import model_set
-from ..memory.memory import get_agent_memory, save_agent_memory
+from ..memory.memory import get_agent_memory, save_agent_memory, Memory
 
 from ..reliability_layer.reliability_layer import ReliabilityProcessor
 
@@ -71,6 +69,13 @@ class Direct:
         return f"Agent_{self.agent_id[:8]}"
 
 
+
+
+
+
+
+
+
     @upsonic_error_handler(max_retries=3, show_error_details=True)
     async def do_async(self, task: Union[Task, List[Task]], model: ModelNames | None = None, debug: bool = False, retry: int = 3):
         """
@@ -88,6 +93,7 @@ class Direct:
         """
         start_time = time.time()
         
+
         @upsonic_error_handler(max_retries=retry, show_error_details=debug)
         async def _execute_single_task(single_task: Task, llm_model: ModelNames | None, task_start_time: float, task_debug: bool, task_retry: int):
             """
@@ -100,41 +106,31 @@ class Direct:
                 task_debug: Whether to enable debug mode
                 task_retry: Number of retries for failed calls
             """
+
             # LLM Selection
             if llm_model is None:
                 llm_model = self.model
 
-            # Start Time For Task
-            task_start(single_task, self)
+            # START 
+            single_task._task_start(self)
+            agent = await self._create_agent(single_task, llm_model)
+            historical_messages, historical_message_count = Memory.historical_messages(agent)
 
-            # Get the model from registry
-            agent_model = get_agent_model(llm_model)
 
-            # Create agent
-            agent = await agent_create(agent_model, single_task)
-            agent_tool_register(None, agent, single_task)
 
-            # Get historical messages count before making the call
-            historical_messages = get_agent_memory(self) if self.memory else []
-            historical_message_count = len(historical_messages)
 
-            # Make request to the model using MCP servers context manager
+            # RUN
             async with agent.run_mcp_servers():
                 model_response = await agent.run(single_task._build_agent_input(), message_history=historical_messages)
+            single_task._task_response(model_response)
 
 
-
-
-            if self.memory:
-                save_agent_memory(self, model_response)
-
-            # Setting Task Response
-            task_response(model_response, single_task)
-
-            # End Time For Task
-            task_end(single_task)
             
-            # Calculate usage and tool usage only for current interaction
+
+
+            # END
+            single_task._task_end()
+            Memory.save_memory(self, model_response)
             usage = llm_usage(model_response, historical_message_count)
             tool_usage_result = tool_usage(model_response, single_task, historical_message_count)
             
@@ -241,4 +237,15 @@ class Direct:
 
 
 
+
+
+
+
+    async def _create_agent(self, single_task, llm_model):
+        # Create agent
+        agent_model = get_agent_model(llm_model)
+        agent = await agent_create(agent_model, single_task)
+        agent_tool_register(None, agent, single_task)
+        return agent
+    
 
