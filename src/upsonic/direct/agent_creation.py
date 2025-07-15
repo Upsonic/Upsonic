@@ -1,10 +1,14 @@
 from pydantic_ai import Agent as PydanticAgent
 from pydantic_ai.mcp import MCPServerStdio, MCPServerSSE
-from ..utils.error_wrapper import upsonic_error_handler
 
+from .agent_tool_register import agent_tool_register
+from ..utils.error_wrapper import upsonic_error_handler
+from .model import get_agent_model
 
 @upsonic_error_handler(max_retries=2, show_error_details=True)
-async def agent_create(agent_model, single_task):
+async def agent_create(llm_model, single_task):
+
+    agent_model = get_agent_model(llm_model)
 
     mcp_servers = []
     tools_to_remove = []
@@ -49,5 +53,8 @@ async def agent_create(agent_model, single_task):
             single_task.tools.remove(tool)
 
     the_agent = PydanticAgent(agent_model, output_type=single_task.response_format, system_prompt="", end_strategy="exhaustive", retries=5, mcp_servers=mcp_servers)
+
+
+    agent_tool_register(the_agent, single_task)
 
     return the_agent

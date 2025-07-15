@@ -1,4 +1,4 @@
-def agent_tool_register(upsonic_agent, agent, tasks):
+def agent_tool_register(agent, tasks):
 
     # If tasks is not a list
     if not isinstance(tasks, list):

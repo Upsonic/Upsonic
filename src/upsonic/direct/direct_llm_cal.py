@@ -112,7 +112,7 @@ class Direct:
         return input_list
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
-    async def do_async(self, task: Union[Task, List[Task]], model: ModelNames | None = None, debug: bool = False, retry: int = 3):
+    async def do_async(self, task: Task, model: ModelNames | None = None, debug: bool = False, retry: int = 3):
         """
         Execute a direct LLM call with the given task and model asynchronously.
         
@@ -126,33 +126,22 @@ class Direct:
         Returns:
             The response from the LLM
         """
+        # LLM Selection
+        if model is None:
+            model = self.model
+
+
         start_time = time.time()
         
         @upsonic_error_handler(max_retries=retry, show_error_details=debug)
         async def _execute_single_task(single_task: Task, llm_model: ModelNames | None, task_start_time: float, task_debug: bool, task_retry: int):
-            """
-            Execute a single task with the LLM.
-            
-            Args:
-                single_task: The task to execute
-                llm_model: The LLM model to use
-                task_start_time: Start time for timing
-                task_debug: Whether to enable debug mode
-                task_retry: Number of retries for failed calls
-            """
-            # LLM Selection
-            if llm_model is None:
-                llm_model = self.model
+
+
 
             # Start Time For Task
             single_task.task_start(self)
-
-            # Get the model from registry
-            agent_model = get_agent_model(llm_model)
-
-            # Create agent
-            agent = await agent_create(agent_model, single_task)
-            agent_tool_register(None, agent, single_task)
+            agent = await agent_create(llm_model, single_task)
+            
 
             # Get historical messages count before making the call
             historical_messages = get_agent_memory(self) if self.memory else []
@@ -187,18 +176,14 @@ class Direct:
             )
             single_task = processed_result
         
-        # Handle single task or list of tasks
-        if isinstance(task, list):
-            for each_task in task:
-                await _execute_single_task(each_task, model, start_time, debug, retry)
-        else:
-            await _execute_single_task(task, model, start_time, debug, retry)
+
+        await _execute_single_task(task, model, start_time, debug, retry)
             
         # Print the price ID summary if the task has a price ID
-        if not isinstance(task, list) and not task.not_main_task:
+        if not task.not_main_task:
             print_price_id_summary(task.price_id, task)
             
-        return task.response if not isinstance(task, list) else [t.response for t in task]
+        return task.response
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
     async def print_do_async(self, task: Union[Task, List[Task]], model: ModelNames | None = None, debug: bool = False, retry: int = 3):
