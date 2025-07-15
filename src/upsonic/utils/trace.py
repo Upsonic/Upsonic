@@ -2,8 +2,8 @@ import sentry_sdk as sentry_sdk_
 from sentry_sdk.transport import Transport
 from dotenv import load_dotenv
 
-from ..get_version import get_library_version
-from ..system_id import get_system_id
+from upsonic.utils.package.get_version import get_library_version
+from upsonic.utils.package.system_id import get_system_id
 
 
 import os

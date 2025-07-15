@@ -1,29 +1,29 @@
 import uuid
-from ..canvas.canvas import Canvas
-from ..tasks.tasks import Task
-from ..models.model_registry import ModelNames
-from ..utils.printing import print_price_id_summary, call_end
+from upsonic.canvas.canvas import Canvas
+from upsonic.tasks.tasks import Task
+from upsonic.models.model_registry import ModelNames
+from upsonic.utils.printing import print_price_id_summary, call_end
 
 
 
-from .context_managers import CallManager, TaskManager, ReliabilityManager, MemoryManager, LLMManager
+from upsonic.agent.context_managers import CallManager, TaskManager, ReliabilityManager, MemoryManager, LLMManager
 
 from pydantic_ai import Agent as PydanticAgent
 from pydantic_ai.mcp import MCPServerStdio, MCPServerSSE
 
 
-from ..utils.error_wrapper import upsonic_error_handler
-from ..utils.model import get_agent_model
+from upsonic.utils.error_wrapper import upsonic_error_handler
+from upsonic.utils.model import get_agent_model
 
 
-from ..utils.error_wrapper import upsonic_error_handler
+from upsonic.utils.error_wrapper import upsonic_error_handler
 import time
 import asyncio
 from typing import Any, List, Union
 from pydantic_ai import Agent as PydanticAgent, BinaryContent
 import os
 
-from ..memory.memory import get_agent_memory, save_agent_memory
+from upsonic.memory.memory import get_agent_memory, save_agent_memory
 
 
 

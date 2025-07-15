@@ -3,9 +3,9 @@ Result combiner module for combining results from multiple tasks into final answ
 """
 
 from typing import List, Any
-from ..tasks.tasks import Task
-from ..agent.agent import Direct
-from ..models.model_registry import ModelNames
+from upsonic.tasks.tasks import Task
+from upsonic.agent.agent import Direct
+from upsonic.models.model_registry import ModelNames
 
 
 class ResultCombiner:

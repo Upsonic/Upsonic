@@ -1,4 +1,4 @@
-from .memory_manager import save_memory, get_memory, reset_memory
+from upsonic.memory.memory_manager import save_memory, get_memory, reset_memory
 
 
 from pydantic_core import to_jsonable_python

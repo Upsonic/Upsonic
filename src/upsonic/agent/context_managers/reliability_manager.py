@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from ...reliability_layer.reliability_layer import ReliabilityProcessor
+from upsonic.reliability_layer.reliability_layer import ReliabilityProcessor
 
 
 class ReliabilityHandler:

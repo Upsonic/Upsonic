@@ -1,5 +1,5 @@
 import json
-from ..agent.agent import Direct as Agent
+from upsonic.agent.agent import Direct as Agent
 
 def turn_agent_to_string(agent: Agent):
     the_dict = {}

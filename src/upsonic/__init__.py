@@ -6,17 +6,17 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 
-from .tasks.tasks import Task
+from upsonic.tasks.tasks import Task
 
-from .knowledge_base.knowledge_base import KnowledgeBase
-from .agent.agent import Direct
-from .agent.agent import Direct as Agent
-from .graph.graph import Graph, DecisionFunc, DecisionLLM, TaskNode, TaskChain, State
-from .canvas.canvas import Canvas
-from .team.team import Team
+from upsonic.knowledge_base.knowledge_base import KnowledgeBase
+from upsonic.agent.agent import Direct
+from upsonic.agent.agent import Direct as Agent
+from upsonic.graph.graph import Graph, DecisionFunc, DecisionLLM, TaskNode, TaskChain, State
+from upsonic.canvas.canvas import Canvas
+from upsonic.team.team import Team
 
 # Export error handling components for advanced users
-from .utils.package.exception import (
+from upsonic.utils.package.exception import (
     UupsonicError, 
     AgentExecutionError, 
     ModelConnectionError, 
@@ -25,7 +25,7 @@ from .utils.package.exception import (
     RetryExhaustedError,
     NoAPIKeyException
 )
-from .utils.error_wrapper import upsonic_error_handler
+from upsonic.utils.error_wrapper import upsonic_error_handler
 
 
 

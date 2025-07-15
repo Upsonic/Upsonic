@@ -1,7 +1,7 @@
 from dataclasses import Field
 import uuid
 from pydantic import BaseModel
-from ..utils.error_wrapper import upsonic_error_handler
+from upsonic.utils.error_wrapper import upsonic_error_handler
 
 from typing import Any, List, Dict, Optional, Type, Union
 

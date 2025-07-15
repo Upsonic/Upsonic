@@ -6,7 +6,7 @@ This module wraps pydantic-ai errors and converts them to Upsonic-specific error
 import functools
 import asyncio
 from typing import Any, Callable, Union, Optional
-from ..utils.package.exception import (
+from upsonic.utils.package.exception import (
     UupsonicError,
     AgentExecutionError,
     ModelConnectionError,
@@ -16,7 +16,7 @@ from ..utils.package.exception import (
     NoAPIKeyException,
     CallErrorException
 )
-from ..utils.printing import error_message
+from upsonic.utils.printing import error_message
 
 
 def map_pydantic_error_to_upsonic(error: Exception) -> UupsonicError:

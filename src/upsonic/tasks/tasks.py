@@ -6,12 +6,12 @@ from pydantic import BaseModel
 from typing import Any, List, Dict, Optional, Type, Union
 
 
-from .task_response import ObjectResponse
-from ..utils.printing import get_price_id_total_cost
-from ..utils.error_wrapper import upsonic_error_handler
+from upsonic.tasks.task_response import ObjectResponse
+from upsonic.utils.printing import get_price_id_total_cost
+from upsonic.utils.error_wrapper import upsonic_error_handler
 from pydantic_ai import Agent as PydanticAgent, BinaryContent
 
-from ..knowledge_base.knowledge_base import KnowledgeBase
+from upsonic.knowledge_base.knowledge_base import KnowledgeBase
 
 class Task(BaseModel):
     description: str

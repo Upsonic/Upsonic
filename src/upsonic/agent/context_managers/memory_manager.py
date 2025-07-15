@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from ...memory.memory import get_agent_memory, save_agent_memory
+from upsonic.memory.memory import get_agent_memory, save_agent_memory
 
 
 class MemoryHandler:

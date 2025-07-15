@@ -1,8 +1,8 @@
 import time
 from contextlib import asynccontextmanager
-from ...utils.printing import call_end
-from ...utils.llm_usage import llm_usage
-from ...utils.tool_usage import tool_usage
+from upsonic.utils.printing import call_end
+from upsonic.utils.llm_usage import llm_usage
+from upsonic.utils.tool_usage import tool_usage
 
 
 class CallHandler:

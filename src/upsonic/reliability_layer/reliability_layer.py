@@ -6,7 +6,7 @@ import re
 from urllib.parse import urlparse
 import requests
 import asyncio
-from ..tasks.tasks import Task
+from upsonic.tasks.tasks import Task
 
 
 def strip_context_tags(text: str) -> str:
@@ -213,7 +213,7 @@ class ReliabilityProcessor:
         if reliability_layer is None:
             return task
         
-        from ..agent.agent import Direct as AgentConfiguration
+        from upsonic.agent.agent import Direct as AgentConfiguration
     
         # Extract the result from the task
         result = task.response
