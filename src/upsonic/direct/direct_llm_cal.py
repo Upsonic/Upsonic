@@ -73,104 +73,8 @@ class Direct:
             return self.name
         return f"Agent_{self.agent_id[:8]}"
 
-    def _build_agent_input(self, task: Task):
-        """
-        Build the input for the agent run function, including images if present.
-        
-        Args:
-            task: The task containing description and potentially images
-            
-        Returns:
-            Either a string (description only) or a list containing description and BinaryContent objects
-        """
-        if not task.images:
-            return task.description
-            
-        # Build input list with description and images
-        input_list = [task.description]
-        
-        for image_path in task.images:
-            try:
-                with open(image_path, "rb") as image_file:
-                    image_data = image_file.read()
-                
-                # Determine media type based on file extension
-                file_extension = image_path.lower().split('.')[-1]
-                if file_extension in ['jpg', 'jpeg']:
-                    media_type = 'image/jpeg'
-                else:
-                    media_type = f'image/{file_extension}'
-                    
-                input_list.append(BinaryContent(data=image_data, media_type=media_type))
-                
-            except Exception as e:
-                # Log error but continue with other images
-                if self.debug:
-                    print(f"Warning: Could not load image {image_path}: {e}")
-                continue
-                
-        return input_list
 
-    @upsonic_error_handler(max_retries=3, show_error_details=True)
-    async def do_async(self, task: Task, model: ModelNames | None = None, debug: bool = False, retry: int = 3):
-        """
-        Execute a direct LLM call with the given task and model asynchronously.
-        
-        Args:
-            task: The task to execute or list of tasks
-            model: The LLM model to use
 
-            debug: Whether to enable debug mode
-            retry: Number of retries for failed calls (default: 3)
-            
-        Returns:
-            The response from the LLM
-        """
-        # LLM Selection
-        if model is None:
-            model = self.model
-
-        start_time = time.time()
-        
-        # Start Time For Task
-        task.task_start(self)
-        agent = await agent_create(model, task)
-        
-
-        # Get historical messages count before making the call
-        historical_messages = get_agent_memory(self) if self.memory else []
-        historical_message_count = len(historical_messages)
-
-        # Make request to the model using MCP servers context manager
-        async with agent.run_mcp_servers():
-            model_response = await agent.run(self._build_agent_input(task), message_history=historical_messages)
-
-        if self.memory:
-            save_agent_memory(self, model_response)
-
-        # Setting Task Response
-        task.task_response(model_response)
-        task.task_end()
-        
-        # Calculate usage and tool usage only for current interaction
-        usage = llm_usage(model_response, historical_message_count)
-        tool_usage_result = tool_usage(model_response, task, historical_message_count)
-        
-        # Call end logging
-        call_end(model_response.output, model, task.response_format, start_time, time.time(), usage, tool_usage_result, debug, task.price_id)
-
-        processed_result = await ReliabilityProcessor.process_task(
-            task, 
-            self.reliability_layer,
-            model
-        )
-        task = processed_result
-            
-        # Print the price ID summary if the task has a price ID
-        if not task.not_main_task:
-            print_price_id_summary(task.price_id, task)
-            
-        return task.response
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
     async def print_do_async(self, task: Union[Task, List[Task]], model: ModelNames | None = None, debug: bool = False, retry: int = 3):
@@ -252,3 +156,71 @@ class Direct:
 
 
 
+
+
+
+
+
+
+
+
+    @upsonic_error_handler(max_retries=3, show_error_details=True)
+    async def do_async(self, task: Task, model: ModelNames | None = None, debug: bool = False, retry: int = 3):
+        """
+        Execute a direct LLM call with the given task and model asynchronously.
+        
+        Args:
+            task: The task to execute or list of tasks
+            model: The LLM model to use
+
+            debug: Whether to enable debug mode
+            retry: Number of retries for failed calls (default: 3)
+            
+        Returns:
+            The response from the LLM
+        """
+        # LLM Selection
+        if model is None:
+            model = self.model
+
+        start_time = time.time()
+        
+        # Start Time For Task
+        task.task_start(self)
+        agent = await agent_create(model, task)
+        
+
+        # Get historical messages count before making the call
+        historical_messages = get_agent_memory(self) if self.memory else []
+        historical_message_count = len(historical_messages)
+
+        # Make request to the model using MCP servers context manager
+        async with agent.run_mcp_servers():
+            model_response = await agent.run(task.build_agent_input(), message_history=historical_messages)
+
+        if self.memory:
+            save_agent_memory(self, model_response)
+
+        # Setting Task Response
+        task.task_response(model_response)
+        task.task_end()
+        
+        # Calculate usage and tool usage only for current interaction
+        usage = llm_usage(model_response, historical_message_count)
+        tool_usage_result = tool_usage(model_response, task, historical_message_count)
+        
+        # Call end logging
+        call_end(model_response.output, model, task.response_format, start_time, time.time(), usage, tool_usage_result, debug, task.price_id)
+
+        processed_result = await ReliabilityProcessor.process_task(
+            task, 
+            self.reliability_layer,
+            model
+        )
+        task = processed_result
+            
+        # Print the price ID summary if the task has a price ID
+        if not task.not_main_task:
+            print_price_id_summary(task.price_id, task)
+            
+        return task.response

@@ -9,6 +9,7 @@ from typing import Any, List, Dict, Optional, Type, Union
 from .task_response import ObjectResponse
 from ..utils.printing import get_price_id_total_cost
 from ..utils.error_wrapper import upsonic_error_handler
+from pydantic_ai import Agent as PydanticAgent, BinaryContent
 
 from ..knowledge_base.knowledge_base import KnowledgeBase
 
@@ -266,3 +267,43 @@ class Task(BaseModel):
 
     def task_response(self, model_response):
         self._response = model_response.output
+
+
+
+    def build_agent_input(self):
+        """
+        Build the input for the agent run function, including images if present.
+        
+        Args:
+            task: The task containing description and potentially images
+            
+        Returns:
+            Either a string (description only) or a list containing description and BinaryContent objects
+        """
+        if not self.images:
+            return self.description
+            
+        # Build input list with description and images
+        input_list = [self.description]
+        
+        for image_path in self.images:
+            try:
+                with open(image_path, "rb") as image_file:
+                    image_data = image_file.read()
+                
+                # Determine media type based on file extension
+                file_extension = image_path.lower().split('.')[-1]
+                if file_extension in ['jpg', 'jpeg']:
+                    media_type = 'image/jpeg'
+                else:
+                    media_type = f'image/{file_extension}'
+                    
+                input_list.append(BinaryContent(data=image_data, media_type=media_type))
+                
+            except Exception as e:
+                # Log error but continue with other images
+            
+                print(f"Warning: Could not load image {image_path}: {e}")
+                continue
+                
+        return input_list
