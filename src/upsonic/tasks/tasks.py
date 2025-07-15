@@ -1,4 +1,5 @@
 import base64
+import time
 from pydantic import BaseModel
 
 
@@ -249,3 +250,19 @@ class Task(BaseModel):
         # Check if canvas description is already in the task description
         if canvas_description not in self.description:
             self.description += canvas_description
+
+
+
+    def task_start(self, agent):
+        self.start_time = time.time()
+        if agent.canvas:
+            self.add_canvas(agent.canvas)
+
+        from upsonic.context.context import context_proceess
+        self.description += context_proceess(self.context)
+
+    def task_end(self):
+        self.end_time = time.time()
+
+    def task_response(self, model_response):
+        self._response = model_response.output

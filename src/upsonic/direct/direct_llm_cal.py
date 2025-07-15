@@ -5,9 +5,9 @@ from ..models.model_registry import ModelNames
 from ..utils.printing import print_price_id_summary, call_end
 from ..utils.direct_llm_call.tool_usage import tool_usage
 from ..utils.direct_llm_call.llm_usage import llm_usage
-from ..utils.direct_llm_call.task_end import task_end
-from ..utils.direct_llm_call.task_start import task_start
-from ..utils.direct_llm_call.task_response import task_response
+
+
+
 from ..utils.direct_llm_call.agent_tool_register import agent_tool_register
 from ..utils.direct_llm_call.model import get_agent_model
 from ..utils.direct_llm_call.agent_creation import agent_create
@@ -142,7 +142,7 @@ class Direct:
                 llm_model = self.model
 
             # Start Time For Task
-            task_start(single_task, self)
+            single_task.task_start(self)
 
             # Get the model from registry
             agent_model = get_agent_model(llm_model)
@@ -166,10 +166,8 @@ class Direct:
                 save_agent_memory(self, model_response)
 
             # Setting Task Response
-            task_response(model_response, single_task)
-
-            # End Time For Task
-            task_end(single_task)
+            single_task.task_response(model_response)
+            single_task.task_end()
             
             # Calculate usage and tool usage only for current interaction
             usage = llm_usage(model_response, historical_message_count)
