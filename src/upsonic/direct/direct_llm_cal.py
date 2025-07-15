@@ -3,14 +3,17 @@ from ..canvas.canvas import Canvas
 from ..tasks.tasks import Task
 from ..models.model_registry import ModelNames
 from ..utils.printing import print_price_id_summary, call_end
-from ..utils.direct_llm_call.tool_usage import tool_usage
-from ..utils.direct_llm_call.llm_usage import llm_usage
+
+
+from .tool_usage import tool_usage
+from .llm_usage import llm_usage
+from .agent_tool_register import agent_tool_register
+from .model import get_agent_model
+from .agent_creation import agent_create
 
 
 
-from ..utils.direct_llm_call.agent_tool_register import agent_tool_register
-from ..utils.direct_llm_call.model import get_agent_model
-from ..utils.direct_llm_call.agent_creation import agent_create
+
 from ..utils.error_wrapper import upsonic_error_handler
 import time
 import asyncio

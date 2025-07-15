@@ -1,6 +1,6 @@
 from pydantic_ai import Agent as PydanticAgent
 from pydantic_ai.mcp import MCPServerStdio, MCPServerSSE
-from ..error_wrapper import upsonic_error_handler
+from ..utils.error_wrapper import upsonic_error_handler
 
 
 @upsonic_error_handler(max_retries=2, show_error_details=True)
