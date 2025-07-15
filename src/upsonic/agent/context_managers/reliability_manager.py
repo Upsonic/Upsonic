@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from upsonic.reliability_layer.reliability_layer import ReliabilityProcessor
 
 
-class ReliabilityHandler:
+class ReliabilityManager:
     def __init__(self, task, reliability_layer, model):
         self.task = task
         self.reliability_layer = reliability_layer
@@ -19,20 +19,11 @@ class ReliabilityHandler:
         )
         self.processed_task = processed_result
         return processed_result
-
-
-class ReliabilityManager:
-    def __init__(self, task, reliability_layer, model):
-        self.task = task
-        self.reliability_layer = reliability_layer
-        self.model = model
     
     @asynccontextmanager
     async def manage_reliability(self):
-        reliability_handler = ReliabilityHandler(self.task, self.reliability_layer, self.model)
-        
         try:
-            yield reliability_handler
+            yield self
         finally:
             # The processing is now handled by the process_task method
             pass 
