@@ -213,7 +213,7 @@ class ReliabilityProcessor:
         if reliability_layer is None:
             return task
         
-        from ..direct.direct_llm_cal import Direct as AgentConfiguration
+        from ..agent.agent import Direct as AgentConfiguration
     
         # Extract the result from the task
         result = task.response

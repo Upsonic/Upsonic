@@ -9,8 +9,8 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 from .tasks.tasks import Task
 
 from .knowledge_base.knowledge_base import KnowledgeBase
-from .direct.direct_llm_cal import Direct
-from .direct.direct_llm_cal import Direct as Agent
+from .agent.agent import Direct
+from .agent.agent import Direct as Agent
 from .graph.graph import Graph, DecisionFunc, DecisionLLM, TaskNode, TaskChain, State
 from .canvas.canvas import Canvas
 from .team.team import Team

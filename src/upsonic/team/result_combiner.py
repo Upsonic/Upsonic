@@ -4,7 +4,7 @@ Result combiner module for combining results from multiple tasks into final answ
 
 from typing import List, Any
 from ..tasks.tasks import Task
-from ..direct.direct_llm_cal import Direct
+from ..agent.agent import Direct
 from ..models.model_registry import ModelNames
 
 

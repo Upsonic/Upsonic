@@ -1,7 +1,7 @@
 from .agent import turn_agent_to_string
 from ..tasks.tasks import Task
-from ..direct.direct_llm_cal import Direct as Agent
-from ..direct.direct_llm_cal import Direct
+from ..agent.agent import Direct as Agent
+from ..agent.agent import Direct
 from .task import turn_task_to_string
 from .default_prompt import default_prompt, DefaultPrompt
 from ..knowledge_base.knowledge_base import KnowledgeBase

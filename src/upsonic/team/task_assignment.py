@@ -5,7 +5,7 @@ Task assignment module for selecting appropriate agents for tasks in multi-agent
 from typing import List, Any, Optional, Dict
 from ..tasks.tasks import Task
 from ..tasks.task_response import ObjectResponse
-from ..direct.direct_llm_cal import Direct
+from ..agent.agent import Direct
 
 
 class TaskAssignment:

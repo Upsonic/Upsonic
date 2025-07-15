@@ -13,14 +13,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from ..utils.printing import console, spacing, escape_rich_markup
 from ..tasks.tasks import Task
 from ..tasks.task_response import ObjectResponse
-from ..direct.direct_llm_cal import Direct as AgentConfiguration
+from ..agent.agent import Direct as AgentConfiguration
 
 # Define DecisionResponse at module level
 class DecisionResponse(ObjectResponse):
     """Response type for LLM-based decisions that returns a boolean result."""
     result: bool
 
-from ..direct.direct_llm_cal import Direct  
+from ..agent.agent import Direct  
 
 
 class DecisionLLM(BaseModel):

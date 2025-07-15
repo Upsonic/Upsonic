@@ -1,9 +1,9 @@
 from ..tasks.tasks import Task
-from ..direct.direct_llm_cal import Direct
+from ..agent.agent import Direct
 from typing import Any, List, Dict, Optional, Type, Union, Literal
 from ..models.model_registry import ModelNames
 
-from ..direct.direct_llm_cal import Direct as Agent
+from ..agent.agent import Direct as Agent
 from ..context.task import turn_task_to_string
 
 from .context_sharing import ContextSharing
