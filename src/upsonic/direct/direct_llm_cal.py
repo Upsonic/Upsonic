@@ -130,54 +130,41 @@ class Direct:
         if model is None:
             model = self.model
 
-
         start_time = time.time()
         
-        @upsonic_error_handler(max_retries=retry, show_error_details=debug)
-        async def _execute_single_task(single_task: Task, llm_model: ModelNames | None, task_start_time: float, task_debug: bool, task_retry: int):
-
-
-
-            # Start Time For Task
-            single_task.task_start(self)
-            agent = await agent_create(llm_model, single_task)
-            
-
-            # Get historical messages count before making the call
-            historical_messages = get_agent_memory(self) if self.memory else []
-            historical_message_count = len(historical_messages)
-
-            # Make request to the model using MCP servers context manager
-            async with agent.run_mcp_servers():
-                model_response = await agent.run(self._build_agent_input(single_task), message_history=historical_messages)
-
-
-
-
-            if self.memory:
-                save_agent_memory(self, model_response)
-
-            # Setting Task Response
-            single_task.task_response(model_response)
-            single_task.task_end()
-            
-            # Calculate usage and tool usage only for current interaction
-            usage = llm_usage(model_response, historical_message_count)
-            tool_usage_result = tool_usage(model_response, single_task, historical_message_count)
-            
-            # Call end logging
-            call_end(model_response.output, llm_model, single_task.response_format, task_start_time, time.time(), usage, tool_usage_result, task_debug, single_task.price_id)
-
-    
-            processed_result = await ReliabilityProcessor.process_task(
-                single_task, 
-                self.reliability_layer,
-                llm_model
-            )
-            single_task = processed_result
+        # Start Time For Task
+        task.task_start(self)
+        agent = await agent_create(model, task)
         
 
-        await _execute_single_task(task, model, start_time, debug, retry)
+        # Get historical messages count before making the call
+        historical_messages = get_agent_memory(self) if self.memory else []
+        historical_message_count = len(historical_messages)
+
+        # Make request to the model using MCP servers context manager
+        async with agent.run_mcp_servers():
+            model_response = await agent.run(self._build_agent_input(task), message_history=historical_messages)
+
+        if self.memory:
+            save_agent_memory(self, model_response)
+
+        # Setting Task Response
+        task.task_response(model_response)
+        task.task_end()
+        
+        # Calculate usage and tool usage only for current interaction
+        usage = llm_usage(model_response, historical_message_count)
+        tool_usage_result = tool_usage(model_response, task, historical_message_count)
+        
+        # Call end logging
+        call_end(model_response.output, model, task.response_format, start_time, time.time(), usage, tool_usage_result, debug, task.price_id)
+
+        processed_result = await ReliabilityProcessor.process_task(
+            task, 
+            self.reliability_layer,
+            model
+        )
+        task = processed_result
             
         # Print the price ID summary if the task has a price ID
         if not task.not_main_task:
