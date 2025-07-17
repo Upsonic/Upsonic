@@ -3,7 +3,7 @@ Context sharing module for managing context between tasks in multi-agent workflo
 """
 
 from typing import List, Any
-from ..tasks.tasks import Task
+from upsonic.tasks.tasks import Task
 
 
 class ContextSharing:

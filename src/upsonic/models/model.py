@@ -10,7 +10,7 @@ from openai import AsyncAzureOpenAI
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.google_gla import GoogleGLAProvider
-from ..error_wrapper import upsonic_error_handler
+from upsonic.utils.error_wrapper import upsonic_error_handler
 
 
 from anthropic import AsyncAnthropicBedrock
@@ -19,7 +19,7 @@ from anthropic import AsyncAnthropicBedrock
 load_dotenv()
 
 # Import from the centralized model registry
-from ...models.model_registry import (
+from upsonic.models.model_registry import (
     MODEL_SETTINGS,
     MODEL_REGISTRY,
     OPENAI_MODELS,
@@ -211,7 +211,7 @@ _model_context = ModelCreationContext()
 @upsonic_error_handler(max_retries=1, show_error_details=True)
 def get_agent_model(llm_model: str):
     """Create a model instance based on the registry entry."""
-    from ...utils.package.exception import NoAPIKeyException, ModelConnectionError
+    from upsonic.utils.package.exception import NoAPIKeyException, ModelConnectionError
     
     registry_entry = get_model_registry_entry(llm_model)
     if not registry_entry:

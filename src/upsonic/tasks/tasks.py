@@ -1,21 +1,23 @@
 import base64
+import time
 from pydantic import BaseModel
 
 
 from typing import Any, List, Dict, Optional, Type, Union
 
 
-from .task_response import ObjectResponse
-from ..utils.printing import get_price_id_total_cost
-from ..utils.error_wrapper import upsonic_error_handler
 
-from ..knowledge_base.knowledge_base import KnowledgeBase
+from upsonic.utils.printing import get_price_id_total_cost
+from upsonic.utils.error_wrapper import upsonic_error_handler
+from pydantic_ai import Agent as PydanticAgent, BinaryContent
+
+from upsonic.knowledge_base.knowledge_base import KnowledgeBase
 
 class Task(BaseModel):
     description: str
     images: Optional[List[str]] = None
     tools: list[Any] = []
-    response_format: Union[Type[ObjectResponse], Type[BaseModel], type[str], None] = str
+    response_format: Union[Type[BaseModel], type[str], None] = str
     response_lang: str = "en"
     _response: Any = None
     context: Any = []
@@ -35,7 +37,7 @@ class Task(BaseModel):
         description: str, 
         images: Optional[List[str]] = None,
         tools: list[Any] = None,
-        response_format: Union[Type[ObjectResponse], Type[BaseModel], type[str], None] = str,
+        response_format: Union[Type[BaseModel], type[str], None] = str,
         response: Any = None,
         context: Any = [],
         price_id_: Optional[str] = None,
@@ -249,3 +251,59 @@ class Task(BaseModel):
         # Check if canvas description is already in the task description
         if canvas_description not in self.description:
             self.description += canvas_description
+
+
+
+    def task_start(self, agent):
+        self.start_time = time.time()
+        if agent.canvas:
+            self.add_canvas(agent.canvas)
+
+        from upsonic.context.context import context_proceess
+        self.description += context_proceess(self.context)
+
+    def task_end(self):
+        self.end_time = time.time()
+
+    def task_response(self, model_response):
+        self._response = model_response.output
+
+
+
+    def build_agent_input(self):
+        """
+        Build the input for the agent run function, including images if present.
+        
+        Args:
+            task: The task containing description and potentially images
+            
+        Returns:
+            Either a string (description only) or a list containing description and BinaryContent objects
+        """
+        if not self.images:
+            return self.description
+            
+        # Build input list with description and images
+        input_list = [self.description]
+        
+        for image_path in self.images:
+            try:
+                with open(image_path, "rb") as image_file:
+                    image_data = image_file.read()
+                
+                # Determine media type based on file extension
+                file_extension = image_path.lower().split('.')[-1]
+                if file_extension in ['jpg', 'jpeg']:
+                    media_type = 'image/jpeg'
+                else:
+                    media_type = f'image/{file_extension}'
+                    
+                input_list.append(BinaryContent(data=image_data, media_type=media_type))
+                
+            except Exception as e:
+                # Log error but continue with other images
+            
+                print(f"Warning: Could not load image {image_path}: {e}")
+                continue
+                
+        return input_list

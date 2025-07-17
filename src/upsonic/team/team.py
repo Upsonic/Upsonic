@@ -1,14 +1,14 @@
-from ..tasks.tasks import Task
-from ..direct.direct_llm_cal import Direct
+from upsonic.tasks.tasks import Task
+from upsonic.agent.agent import Direct
 from typing import Any, List, Dict, Optional, Type, Union, Literal
-from ..models.model_registry import ModelNames
+from upsonic.models.model_registry import ModelNames
 
-from ..direct.direct_llm_cal import Direct as Agent
-from ..context.task import turn_task_to_string
+from upsonic.agent.agent import Direct as Agent
+from upsonic.context.task import turn_task_to_string
 
-from .context_sharing import ContextSharing
-from .task_assignment import TaskAssignment
-from .result_combiner import ResultCombiner
+from upsonic.team.context_sharing import ContextSharing
+from upsonic.team.task_assignment import TaskAssignment
+from upsonic.team.result_combiner import ResultCombiner
 
 class Team:
     """A callable class for multi-agent operations using the Upsonic client."""

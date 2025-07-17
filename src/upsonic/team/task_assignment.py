@@ -2,10 +2,12 @@
 Task assignment module for selecting appropriate agents for tasks in multi-agent workflows.
 """
 
+from pydantic import BaseModel
+
 from typing import List, Any, Optional, Dict
-from ..tasks.tasks import Task
-from ..tasks.task_response import ObjectResponse
-from ..direct.direct_llm_cal import Direct
+from upsonic.tasks.tasks import Task
+
+from upsonic.agent.agent import Direct
 
 
 class TaskAssignment:
@@ -69,7 +71,7 @@ class TaskAssignment:
                 return predefined_agent_id
         
         # Use automatic assignment process if no predefined agent
-        class SelectedAgent(ObjectResponse):
+        class SelectedAgent(BaseModel):
             selected_agent: str
         
         max_attempts = 3  # Prevent infinite loops

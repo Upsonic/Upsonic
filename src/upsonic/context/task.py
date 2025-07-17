@@ -2,7 +2,7 @@ import json
 from pydantic import BaseModel
 from typing import Any
 
-from ..tasks.tasks import Task
+from upsonic.tasks.tasks import Task
 
 def turn_task_to_string(task: Task):
     the_dict = {}

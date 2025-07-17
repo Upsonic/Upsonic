@@ -1,19 +1,61 @@
-from .memory_manager import save_memory, get_memory, reset_memory
-
+import json
+import hashlib
+from pathlib import Path
 
 from pydantic_core import to_jsonable_python
+from pydantic_ai.messages import ModelMessagesTypeAdapter
 
 
-from pydantic_ai.messages import ModelMessagesTypeAdapter 
+# Memory directory - same as current file location
+MEMORY_DIR = Path(__file__).parent
+
+
+def _get_agent_file_path(agent_id: str) -> Path:
+    """Generate a unique file path for an agent using SHA256 hash."""
+    agent_hash = hashlib.sha256(agent_id.encode('utf-8')).hexdigest()
+    return MEMORY_DIR / f"{agent_hash}.json"
+
 
 def save_agent_memory(agent, answer):
-    history_step_1 = answer.all_messages()
-    as_python_objects = to_jsonable_python(history_step_1)
-    save_memory(agent.get_agent_id(), as_python_objects)
+    """Save agent memory from pydantic response."""
+    history = answer.all_messages()
+    json_data = to_jsonable_python(history)
+    
+    agent_file = _get_agent_file_path(agent.get_agent_id())
+    
+    try:
+        with open(agent_file, 'w', encoding='utf-8') as f:
+            json.dump(json_data, f, indent=2, ensure_ascii=False)
+    except (OSError, UnicodeEncodeError):
+        pass  # Silently fail if we can't write to file
 
 
 def get_agent_memory(agent):
-    the_json = get_memory(agent.get_agent_id())
-    history = ModelMessagesTypeAdapter.validate_python(the_json)
+    """Get agent memory as pydantic messages."""
+    agent_file = _get_agent_file_path(agent.get_agent_id())
+    
+    try:
+        if not agent_file.exists():
+            return []
+        
+        with open(agent_file, 'r', encoding='utf-8') as f:
+            json_data = json.load(f)
+            if isinstance(json_data, list):
+                return ModelMessagesTypeAdapter.validate_python(json_data)
+            else:
+                return []
+    except (json.JSONDecodeError, FileNotFoundError, OSError, UnicodeDecodeError):
+        return []
 
-    return history
+
+def reset_agent_memory(agent):
+    """Reset/clear agent memory."""
+    agent_file = _get_agent_file_path(agent.get_agent_id())
+    
+    try:
+        if agent_file.exists():
+            agent_file.unlink()
+    except OSError:
+        pass  # Silently fail if we can't delete the file
+
+

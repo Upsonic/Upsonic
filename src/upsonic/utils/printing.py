@@ -6,7 +6,7 @@ from rich.table import Table
 from rich.align import Align
 from rich.text import Text
 from rich.markup import escape
-from ..models.model_registry import get_estimated_cost
+from upsonic.models.model_registry import get_estimated_cost
 import platform
 
 
