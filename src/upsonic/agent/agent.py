@@ -13,7 +13,7 @@ from pydantic_ai.mcp import MCPServerStdio, MCPServerSSE
 
 
 from upsonic.utils.error_wrapper import upsonic_error_handler
-from upsonic.utils.model import get_agent_model
+from upsonic.models.model import get_agent_model
 
 
 from upsonic.utils.error_wrapper import upsonic_error_handler

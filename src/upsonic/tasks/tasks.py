@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from typing import Any, List, Dict, Optional, Type, Union
 
 
-from upsonic.tasks.task_response import ObjectResponse
+
 from upsonic.utils.printing import get_price_id_total_cost
 from upsonic.utils.error_wrapper import upsonic_error_handler
 from pydantic_ai import Agent as PydanticAgent, BinaryContent
@@ -17,7 +17,7 @@ class Task(BaseModel):
     description: str
     images: Optional[List[str]] = None
     tools: list[Any] = []
-    response_format: Union[Type[ObjectResponse], Type[BaseModel], type[str], None] = str
+    response_format: Union[Type[BaseModel], type[str], None] = str
     response_lang: str = "en"
     _response: Any = None
     context: Any = []
@@ -37,7 +37,7 @@ class Task(BaseModel):
         description: str, 
         images: Optional[List[str]] = None,
         tools: list[Any] = None,
-        response_format: Union[Type[ObjectResponse], Type[BaseModel], type[str], None] = str,
+        response_format: Union[Type[BaseModel], type[str], None] = str,
         response: Any = None,
         context: Any = [],
         price_id_: Optional[str] = None,

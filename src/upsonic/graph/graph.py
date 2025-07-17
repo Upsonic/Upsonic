@@ -12,11 +12,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from upsonic.utils.printing import console, spacing, escape_rich_markup
 from upsonic.tasks.tasks import Task
-from upsonic.tasks.task_response import ObjectResponse
+
 from upsonic.agent.agent import Direct as AgentConfiguration
 
 # Define DecisionResponse at module level
-class DecisionResponse(ObjectResponse):
+class DecisionResponse(BaseModel):
     """Response type for LLM-based decisions that returns a boolean result."""
     result: bool
 
