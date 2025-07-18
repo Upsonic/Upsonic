@@ -17,7 +17,7 @@ from upsonic.tools.base import Toolkit
 class Task(BaseModel):
     description: str
     images: Optional[List[str]] = None
-    tools: list[Any] = []
+    tools: Optional[list[Any]] = None
     response_format: Union[Type[BaseModel], type[str], None] = str
     response_lang: Optional[str] = "en"
     _response: Any = None
@@ -40,21 +40,28 @@ class Task(BaseModel):
         if not isinstance(v, list):
             return [v]
 
+        processed_tools = []
         for i, tool in enumerate(v):
-            if not isinstance(tool, Toolkit):
-                raise ValueError(
-                    f"Tool at index {i} must be a Toolkit instance, "
-                    f"got {type(tool).__name__}. "
-                    f"Make sure your tool class inherits from Toolkit."
-                )
+            if isinstance(tool, Toolkit):
+                processed_tools.append(tool)
+            elif callable(tool) and hasattr(tool, "_is_tool") and tool._is_tool:
+                from upsonic.tools.base import FunctionToolkit
 
-        return v
+                wrapped_tool = FunctionToolkit(tool)
+                processed_tools.append(wrapped_tool)
+            else:
+                raise ValueError(
+                    f"Tool at index {i} must be a Toolkit instance or a function decorated with @tool, "
+                    f"got {type(tool).__name__}. "
+                    f"Make sure your tool class inherits from Toolkit or use @tool decorator on functions."
+                )
+        return processed_tools
 
     def __init__(
         self,
         description: str,
         images: Optional[List[str]] = None,
-        tools: list[Any] = None,
+        tools: Optional[list[Any]] = None,
         response_format: Union[Type[BaseModel], type[str], None] = str,
         response: Any = None,
         context: Any = [],
