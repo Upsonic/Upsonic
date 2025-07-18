@@ -1,37 +1,41 @@
 from typing import Dict, List
-from duckduckgo_search import DDGS
 
-import yfinance as yf
+
 import json
 import pandas as pd
 
-class YFinanceTools:
-    def __init__(
-        self,
-        stock_price=True,
-        company_info=False,
-        analyst_recommendations=False,
-        company_news=False,
-        enable_all=False,
-    ):
-        self._tools = []
-        if stock_price or enable_all:
-            self._tools.append(self.get_current_stock_price)
-        if company_info or enable_all:
-            self._tools.append(self.get_company_info)
-        if analyst_recommendations or enable_all:
-            self._tools.append(self.get_analyst_recommendations)
-        if company_news or enable_all:
-            self._tools.append(self.get_company_news)
+from upsonic.tools.decorators.tool_decorator import tool
+from upsonic.tools.base import Toolkit
 
+try:
+    import yfinance as yf
+except ImportError:
+    print("yfinance is not installed. Please install it using 'pip install yfinance'")
+    exit(1)
+
+
+class YFinanceTools(Toolkit):
+    def __init__(self):
+        """Initialize YFinance tools with @tool decorator support."""
+        super().__init__(name="YFinanceTools")
+
+    def get_description(self) -> str:
+        return "Tools for fetching financial data and stock information using Yahoo Finance"
+
+    @tool(description="Get the current stock price for a given symbol")
     def get_current_stock_price(self, symbol: str) -> str:
         try:
             stock = yf.Ticker(symbol)
             price = stock.info.get("regularMarketPrice", stock.info.get("currentPrice"))
-            return f"{price:.4f}" if price else f"Could not fetch current price for {symbol}"
+            return (
+                f"{price:.4f}"
+                if price
+                else f"Could not fetch current price for {symbol}"
+            )
         except Exception as e:
             return f"Error fetching current price for {symbol}: {e}"
 
+    @tool(description="Get the company info for a given symbol")
     def get_company_info(self, symbol: str) -> str:
         try:
             info = yf.Ticker(symbol).info
@@ -41,12 +45,15 @@ class YFinanceTools:
         except Exception as e:
             return f"Error fetching company info for {symbol}: {e}"
 
+    @tool(description="Get the analyst recommendations for a given symbol")
     def get_analyst_recommendations(self, symbol: str) -> str:
         try:
             recs = yf.Ticker(symbol).recommendations
             if recs is not None and isinstance(recs, (pd.DataFrame, pd.Series)):
                 result = recs.to_json(orient="index")
-                return result if result is not None else f"No recommendations for {symbol}"
+                return (
+                    result if result is not None else f"No recommendations for {symbol}"
+                )
             elif recs is not None:
                 return json.dumps(recs, indent=2)
             else:
@@ -54,6 +61,7 @@ class YFinanceTools:
         except Exception as e:
             return f"Error fetching analyst recommendations for {symbol}: {e}"
 
+    @tool(description="Get the company news for a given symbol")
     def get_company_news(self, symbol: str, num_stories: int = 3) -> str:
         try:
             news = yf.Ticker(symbol).news
@@ -64,6 +72,7 @@ class YFinanceTools:
         except Exception as e:
             return f"Error fetching company news for {symbol}: {e}"
 
+    @tool(description="Get the stock fundamentals for a given symbol")
     def get_stock_fundamentals(self, symbol: str) -> str:
         try:
             stock = yf.Ticker(symbol)
@@ -86,13 +95,18 @@ class YFinanceTools:
         except Exception as e:
             return f"Error getting fundamentals for {symbol}: {e}"
 
+    @tool(description="Get the income statements for a given symbol")
     def get_income_statements(self, symbol: str) -> str:
         try:
             stock = yf.Ticker(symbol)
             financials = stock.financials
             if isinstance(financials, (pd.DataFrame, pd.Series)):
                 result = financials.to_json(orient="index")
-                return result if result is not None else f"No income statements for {symbol}"
+                return (
+                    result
+                    if result is not None
+                    else f"No income statements for {symbol}"
+                )
             elif financials is not None:
                 return json.dumps(financials, indent=2)
             else:
@@ -100,6 +114,7 @@ class YFinanceTools:
         except Exception as e:
             return f"Error fetching income statements for {symbol}: {e}"
 
+    @tool(description="Get the key financial ratios for a given symbol")
     def get_key_financial_ratios(self, symbol: str) -> str:
         try:
             stock = yf.Ticker(symbol)
@@ -108,13 +123,20 @@ class YFinanceTools:
         except Exception as e:
             return f"Error fetching key financial ratios for {symbol}: {e}"
 
-    def get_historical_stock_prices(self, symbol: str, period: str = "1mo", interval: str = "1d") -> str:
+    @tool(description="Get the historical stock prices for a given symbol")
+    def get_historical_stock_prices(
+        self, symbol: str, period: str = "1mo", interval: str = "1d"
+    ) -> str:
         try:
             stock = yf.Ticker(symbol)
             historical_price = stock.history(period=period, interval=interval)
             if isinstance(historical_price, (pd.DataFrame, pd.Series)):
                 result = historical_price.to_json(orient="index")
-                return result if result is not None else f"No historical prices for {symbol}"
+                return (
+                    result
+                    if result is not None
+                    else f"No historical prices for {symbol}"
+                )
             elif historical_price is not None:
                 return json.dumps(historical_price, indent=2)
             else:
@@ -122,51 +144,20 @@ class YFinanceTools:
         except Exception as e:
             return f"Error fetching historical prices for {symbol}: {e}"
 
+    @tool(description="Get the technical indicators for a given symbol")
     def get_technical_indicators(self, symbol: str, period: str = "3mo") -> str:
         try:
             indicators = yf.Ticker(symbol).history(period=period)
             if isinstance(indicators, (pd.DataFrame, pd.Series)):
                 result = indicators.to_json(orient="index")
-                return result if result is not None else f"No technical indicators for {symbol}"
+                return (
+                    result
+                    if result is not None
+                    else f"No technical indicators for {symbol}"
+                )
             elif indicators is not None:
                 return json.dumps(indicators, indent=2)
             else:
                 return f"No technical indicators for {symbol}"
         except Exception as e:
             return f"Error fetching technical indicators for {symbol}: {e}"
-
-    def functions(self):
-        """Return the list of tool functions to be used by the agent."""
-        return self._tools
-
-    def enable_all_tools(self):
-        self._tools = [
-            self.get_current_stock_price,
-            self.get_company_info,
-            self.get_analyst_recommendations,
-            self.get_company_news,
-            self.get_stock_fundamentals,
-            self.get_income_statements,
-            self.get_key_financial_ratios,
-            self.get_historical_stock_prices,
-            self.get_technical_indicators,
-        ]
-
-
-def Search(query: str, max_results: int = 10) -> List[Dict[str, str]]:
-    """
-    Search DuckDuckGo for the given query and return text results.
-    
-    Args:
-        query: The search query
-        max_results: Maximum number of results to return (default: 10)
-        
-    Returns:
-        List of dictionaries containing search results with keys: title, href, body
-    """
-    
-    
-    ddgs = DDGS()
-    results = list(ddgs.text(query, max_results=max_results))
-    
-    return results
