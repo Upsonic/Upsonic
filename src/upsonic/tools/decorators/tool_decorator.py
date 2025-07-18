@@ -135,7 +135,8 @@ def tool(func: Optional[Callable] = None, *, description: Optional[str] = None):
 
     def decorator(f):
         f._is_tool = True
-        f._tool_description = description
+        # Get the description from the function docstring or the description argument
+        f._tool_description = description or f.__doc__
 
         return f
 
