@@ -14,15 +14,21 @@ from ..utils.direct_llm_call.agent_creation import agent_create
 from ..utils.error_wrapper import upsonic_error_handler
 import time
 import asyncio
-from typing import Any, List, Union
+from typing import Any, List, Union, Optional, TYPE_CHECKING
 from pydantic_ai import Agent as PydanticAgent, BinaryContent
 import os
 from ..utils.model_set import model_set
 from ..memory.memory import get_agent_memory, save_agent_memory
-
 from ..reliability_layer.reliability_layer import ReliabilityProcessor
+from .base import BaseAgent
+from ..context.system_prompt_manager import SystemPromptManager
+from ..context.data_injector import DataInjector
 
-class Direct:
+if TYPE_CHECKING:
+    from ..graph.graph import State
+
+
+class Direct(BaseAgent):
     """Static methods for making direct LLM calls using the Upsonic."""
 
     def __init__(self, 
@@ -33,6 +39,7 @@ class Direct:
                  company_objective: str | None = None,
                  company_description: str | None = None,
                  system_prompt: str | None = None,
+                 override_default_prompt: bool = False,
                  memory: str | None = None,
                  reflection: str | None = None,
                  compress_context: bool = False,
@@ -41,8 +48,6 @@ class Direct:
                  canvas: Canvas | None = None,
                  ):
         self.canvas = canvas
-
-        
         self.debug = debug
         self.default_llm_model = model
         self.agent_id_ = agent_id_
@@ -52,8 +57,11 @@ class Direct:
         self.company_description = company_description
         self.system_prompt = system_prompt
         self.memory = memory
-
         self.reliability_layer = reliability_layer
+        self.override_default_prompt = override_default_prompt
+        
+        self.system_prompt_manager = SystemPromptManager()
+        self.data_injector = DataInjector()
         
     @property
     def model(self):
@@ -109,7 +117,7 @@ class Direct:
         return input_list
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
-    async def do_async(self, task: Union[Task, List[Task]], model: ModelNames | None = None, debug: bool = False, retry: int = 3):
+    async def do_async(self, task: Union[Task, List[Task]], model: ModelNames | None = None, debug: bool = False, retry: int = 3, state: Optional["State"]=None):
         """
         Execute a direct LLM call with the given task and model asynchronously.
         
@@ -126,7 +134,7 @@ class Direct:
         start_time = time.time()
         
         @upsonic_error_handler(max_retries=retry, show_error_details=debug)
-        async def _execute_single_task(single_task: Task, llm_model: ModelNames | None, task_start_time: float, task_debug: bool, task_retry: int):
+        async def _execute_single_task(single_task: Task, llm_model: ModelNames | None, task_start_time: float, task_debug: bool, task_retry: int, state: Optional["State"]=None):
             """
             Execute a single task with the LLM.
             
@@ -137,18 +145,23 @@ class Direct:
                 task_debug: Whether to enable debug mode
                 task_retry: Number of retries for failed calls
             """
-            # LLM Selection
             if llm_model is None:
                 llm_model = self.model
-
-            # Start Time For Task
+            
             task_start(single_task, self)
+            
+            final_system_prompt = await self.system_prompt_manager.build_system_prompt(agent=self, task=single_task)
+            await self.data_injector.prepare_rag_systems(single_task) # this might be placed in another function.
+            data_context = await self.data_injector.get_data_context_string(single_task, state=state)
 
-            # Get the model from registry
+            if data_context:
+                single_task.description = f"{data_context}\n{single_task.description}"
+            # Get agent model based on the LLM model
             agent_model = get_agent_model(llm_model)
-
-            # Create agent
-            agent = await agent_create(agent_model, single_task)
+            # Create the agent with the provided model and system prompt
+            agent = await agent_create(agent_model, single_task, system_prompt=final_system_prompt)
+            
+            # Register the agent with the task
             agent_tool_register(None, agent, single_task)
 
             # Get historical messages count before making the call
@@ -158,9 +171,6 @@ class Direct:
             # Make request to the model using MCP servers context manager
             async with agent.run_mcp_servers():
                 model_response = await agent.run(self._build_agent_input(single_task), message_history=historical_messages)
-
-
-
 
             if self.memory:
                 save_agent_memory(self, model_response)
@@ -178,7 +188,6 @@ class Direct:
             # Call end logging
             call_end(model_response.output, llm_model, single_task.response_format, task_start_time, time.time(), usage, tool_usage_result, task_debug, single_task.price_id)
 
-    
             processed_result = await ReliabilityProcessor.process_task(
                 single_task, 
                 self.reliability_layer,
@@ -189,9 +198,9 @@ class Direct:
         # Handle single task or list of tasks
         if isinstance(task, list):
             for each_task in task:
-                await _execute_single_task(each_task, model, start_time, debug, retry)
+                await _execute_single_task(each_task, model, start_time, debug, retry, state)
         else:
-            await _execute_single_task(task, model, start_time, debug, retry)
+            await _execute_single_task(task, model, start_time, debug, retry, state)
             
         # Print the price ID summary if the task has a price ID
         if not isinstance(task, list) and not task.not_main_task:
@@ -275,7 +284,3 @@ class Direct:
         result = self.do(task, model, debug, retry)
         print(result)
         return result
-
-
-
-

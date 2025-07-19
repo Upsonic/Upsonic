@@ -4,7 +4,7 @@ from ..error_wrapper import upsonic_error_handler
 
 
 @upsonic_error_handler(max_retries=2, show_error_details=True)
-async def agent_create(agent_model, single_task):
+async def agent_create(agent_model, single_task, system_prompt: str = ""):
 
     mcp_servers = []
     tools_to_remove = []
@@ -48,6 +48,13 @@ async def agent_create(agent_model, single_task):
         for tool in tools_to_remove:
             single_task.tools.remove(tool)
 
-    the_agent = PydanticAgent(agent_model, output_type=single_task.response_format, system_prompt="", end_strategy="exhaustive", retries=5, mcp_servers=mcp_servers)
+    the_agent = PydanticAgent(
+        agent_model,
+        output_type=single_task.response_format,
+        system_prompt=system_prompt,
+        end_strategy="exhaustive",
+        retries=5,
+        mcp_servers=mcp_servers
+    )
 
     return the_agent
