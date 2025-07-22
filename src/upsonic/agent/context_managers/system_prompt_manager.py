@@ -58,7 +58,7 @@ class SystemPromptManager:
         
         prompt_parts.append(base_prompt.strip())
 
-        agent_context_str = "<Agents>"
+        agent_context_str = "<YourCharacter>"
         found_agent_context = False
 
         if self.task.context:
@@ -68,7 +68,7 @@ class SystemPromptManager:
                     found_agent_context = True
         
         if found_agent_context:
-            agent_context_str += "\n</Agents>"
+            agent_context_str += "\n</YourCharacter>"
             prompt_parts.append(agent_context_str)
             
         return "\n\n".join(prompt_parts)
