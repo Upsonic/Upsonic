@@ -21,6 +21,7 @@ class Task(BaseModel):
     response_lang: str = "en"
     _response: Any = None
     context: Any = []
+    _context_formatted: str | None = None
     price_id_: Optional[str] = None
     task_id_: Optional[str] = None
     not_main_task: bool = False
@@ -40,6 +41,7 @@ class Task(BaseModel):
         response_format: Union[Type[BaseModel], type[str], None] = str,
         response: Any = None,
         context: Any = [],
+        _context_formatted: str | None = None,
         price_id_: Optional[str] = None,
         task_id_: Optional[str] = None,
         not_main_task: bool = False,
@@ -61,6 +63,7 @@ class Task(BaseModel):
             "response_format": response_format,
             "_response": response,
             "context": context,
+            "_context_formatted": _context_formatted,
             "price_id_": price_id_,
             "task_id_": task_id_,
             "not_main_task": not_main_task,
@@ -98,7 +101,30 @@ class Task(BaseModel):
 
                         control_result = tool.__control__()
 
+    @property
+    def context_formatted(self) -> str | None:
+        """
+        Provides read-only access to the formatted context string.
+        
+        This property retrieves the value of the internal `_context_formatted`
+        attribute, which is expected to be populated by a context management
+        process before task execution.
+        """
+        return self._context_formatted
+    
+    @context_formatted.setter
+    def context_formatted(self, value: str | None):
+        """
+        Sets the internal `_context_formatted` attribute.
 
+        This allows an external process, like a ContextManager, to set the
+        final formatted context string on the task object using natural
+        attribute assignment syntax.
+
+        Args:
+            value: The formatted context string to be assigned.
+        """
+        self._context_formatted = value
     
     @upsonic_error_handler(max_retries=2, show_error_details=True)
     async def additional_description(self, client):
@@ -259,8 +285,6 @@ class Task(BaseModel):
         if agent.canvas:
             self.add_canvas(agent.canvas)
 
-        from upsonic.context.context import context_proceess
-        self.description += context_proceess(self.context)
 
     def task_end(self):
         self.end_time = time.time()
@@ -272,19 +296,18 @@ class Task(BaseModel):
 
     def build_agent_input(self):
         """
-        Build the input for the agent run function, including images if present.
-        
-        Args:
-            task: The task containing description and potentially images
-            
-        Returns:
-            Either a string (description only) or a list containing description and BinaryContent objects
+        Builds the input for the agent, using and then clearing the formatted context.
         """
+        final_description = self.description
+        if self.context_formatted and isinstance(self.context_formatted, str):
+            final_description += "\n" + self.context_formatted
+
+        self.context_formatted = None
+
         if not self.images:
-            return self.description
-            
-        # Build input list with description and images
-        input_list = [self.description]
+            return final_description
+
+        input_list = [final_description]
         
         for image_path in self.images:
             try:
@@ -293,17 +316,11 @@ class Task(BaseModel):
                 
                 # Determine media type based on file extension
                 file_extension = image_path.lower().split('.')[-1]
-                if file_extension in ['jpg', 'jpeg']:
-                    media_type = 'image/jpeg'
-                else:
-                    media_type = f'image/{file_extension}'
+                media_type = f'image/{file_extension.replace("jpg", "jpeg")}'
                     
                 input_list.append(BinaryContent(data=image_data, media_type=media_type))
                 
             except Exception as e:
-                # Log error but continue with other images
-            
                 print(f"Warning: Could not load image {image_path}: {e}")
-                continue
-                
+
         return input_list
