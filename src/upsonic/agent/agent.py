@@ -1,33 +1,34 @@
+import asyncio
+import os
 import uuid
-from upsonic.canvas.canvas import Canvas
-from upsonic.tasks.tasks import Task
-from upsonic.models.model_registry import ModelNames
-from upsonic.utils.printing import print_price_id_summary, call_end
-
-
-
-from upsonic.agent.context_managers import CallManager, TaskManager, ReliabilityManager, MemoryManager, LLMManager
+from typing import Any, List, Union
 
 from pydantic_ai import Agent as PydanticAgent
-from pydantic_ai.mcp import MCPServerStdio, MCPServerSSE
+from pydantic_ai import BinaryContent
+from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio
 
-
-from upsonic.utils.error_wrapper import upsonic_error_handler
+from upsonic.canvas.canvas import Canvas
 from upsonic.models.model import get_agent_model
-
-
+from upsonic.models.model_registry import ModelNames
+from upsonic.tasks.tasks import Task
 from upsonic.utils.error_wrapper import upsonic_error_handler
-import time
-import asyncio
-from typing import Any, List, Union
-from pydantic_ai import Agent as PydanticAgent, BinaryContent
-import os
+from upsonic.utils.printing import call_end, print_price_id_summary
+from upsonic.agent.base import BaseAgent
 
-from upsonic.memory.memory import get_agent_memory, save_agent_memory
+from upsonic.agent.context_managers import (
+    CallManager,
+    ContextManager,
+    LLMManager,
+    MemoryManager,
+    ReliabilityManager,
+    SystemPromptManager,
+    TaskManager,
+)
 
 
 
-class Direct:
+
+class Direct(BaseAgent):
     """Static methods for making direct LLM calls using the Upsonic."""
 
     def __init__(self, 
@@ -178,7 +179,7 @@ class Direct:
 
 
     @upsonic_error_handler(max_retries=2, show_error_details=True)
-    async def agent_create(self, llm_model, single_task):
+    async def agent_create(self, llm_model, single_task, system_prompt: str):
 
         agent_model = get_agent_model(llm_model)
 
@@ -224,7 +225,7 @@ class Direct:
             for tool in tools_to_remove:
                 single_task.tools.remove(tool)
 
-        the_agent = PydanticAgent(agent_model, output_type=single_task.response_format, system_prompt="", end_strategy="exhaustive", retries=5, mcp_servers=mcp_servers)
+        the_agent = PydanticAgent(agent_model, output_type=single_task.response_format, system_prompt=system_prompt, end_strategy="exhaustive", retries=5, mcp_servers=mcp_servers)
 
 
         self.agent_tool_register(the_agent, single_task)
@@ -235,12 +236,8 @@ class Direct:
 
 
 
-
-
-
-
     @upsonic_error_handler(max_retries=3, show_error_details=True)
-    async def do_async(self, task: Task, model: ModelNames | None = None, debug: bool = False, retry: int = 3):
+    async def do_async(self, task: Task, model: ModelNames | None = None, debug: bool = False, retry: int = 3, state: Any = None):
         """
         Execute a direct LLM call with the given task and model asynchronously.
         
@@ -260,24 +257,32 @@ class Direct:
         async with llm_manager.manage_llm() as llm_handler:
             selected_model = llm_handler.get_model()
             
-            agent = await self.agent_create(selected_model, task)
+
+            system_prompt_manager = SystemPromptManager(self, task)
+            context_manager = ContextManager(self, task, state)
             memory_manager = MemoryManager(self, task)
             call_manager = CallManager(selected_model, task, debug)
             task_manager = TaskManager(task, self)
             reliability_manager = ReliabilityManager(task, self.reliability_layer, selected_model)
 
-            async with reliability_manager.manage_reliability() as reliability_handler:
-                async with memory_manager.manage_memory() as memory_handler:
-                    async with call_manager.manage_call(memory_handler) as call_handler:
-                        async with task_manager.manage_task() as task_handler:
-                            async with agent.run_mcp_servers():
-                                model_response = await agent.run(task.build_agent_input(), message_history=memory_handler.historical_messages)
+
+            async with system_prompt_manager.manage_system_prompt() as sp_handler:
+                system_prompt = sp_handler.get_system_prompt()
+                agent = await self.agent_create(selected_model, task, system_prompt)
+
+                async with context_manager.manage_context() as ctx_handler:
+                    async with reliability_manager.manage_reliability() as reliability_handler:
+                        async with memory_manager.manage_memory() as memory_handler:
+                            async with call_manager.manage_call(memory_handler) as call_handler:
+                                async with task_manager.manage_task() as task_handler:
+                                    async with agent.run_mcp_servers():
+                                        model_response = await agent.run(task.build_agent_input(), message_history=memory_handler.historical_messages)
                             
-                            # Save the response to all contexts
-                            model_response = memory_handler.process_response(model_response)
-                            model_response = call_handler.process_response(model_response)
-                            model_response = task_handler.process_response(model_response)
-                            processed_task = await reliability_handler.process_task(task_handler.task)
+                                    # Save the response to all contexts
+                                    model_response = memory_handler.process_response(model_response)
+                                    model_response = call_handler.process_response(model_response)
+                                    model_response = task_handler.process_response(model_response)
+                                    processed_task = await reliability_handler.process_task(task_handler.task)
         
         # Print the price ID summary if the task has a price ID
         if not processed_task.not_main_task:

@@ -1,26 +1,31 @@
-from typing import List, Dict, Any, Optional, Union, Callable, Set
+from __future__ import annotations
+
+import asyncio
+import time
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Callable, Dict, List, Optional, Set, Union
+import copy 
+
 from pydantic import BaseModel, Field
 from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
 from rich.markup import escape
-from rich.progress import Progress, TextColumn, BarColumn, SpinnerColumn, TimeElapsedColumn, TimeRemainingColumn
-import uuid
-import time
-import asyncio
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from rich.panel import Panel
+from rich.progress import (BarColumn, Progress, SpinnerColumn, TextColumn,
+                           TimeElapsedColumn)
+from rich.table import Table
 
-from upsonic.utils.printing import console, spacing, escape_rich_markup
-from upsonic.tasks.tasks import Task
+from ..agent.base import BaseAgent
+from ..tasks.tasks import Task
+from ..utils.printing import console, escape_rich_markup, spacing
 
-from upsonic.agent.agent import Direct as AgentConfiguration
+# This import is essential for the Graph's topological duty.
+from ..context.sources import TaskOutputSource
 
-# Define DecisionResponse at module level
+
 class DecisionResponse(BaseModel):
     """Response type for LLM-based decisions that returns a boolean result."""
     result: bool
-
-from upsonic.agent.agent import Direct  
 
 
 class DecisionLLM(BaseModel):
@@ -51,8 +56,7 @@ class DecisionLLM(BaseModel):
             false_branch: The branch to follow if the LLM decides no/false
             id: Unique identifier for this decision node
         """
-        if id is None:
-            id = str(uuid.uuid4())
+        if id is None: id = str(uuid.uuid4())
         super().__init__(description=description, true_branch=true_branch, false_branch=false_branch, id=id, **kwargs)
     
     async def evaluate(self, data: Any) -> bool:
@@ -68,8 +72,7 @@ class DecisionLLM(BaseModel):
         Returns:
             True if the LLM determines yes/true, False otherwise
         """
-        # This is a placeholder - the actual implementation happens 
-        # during graph execution using the graph's agent
+        # Placeholder; actual implementation is in Graph._evaluate_decision
         return True
     
     def _generate_prompt(self, data: Any) -> str:
@@ -104,10 +107,7 @@ Previous node output:
         Returns:
             Self for method chaining
         """
-        # If given a Task, wrap it in a TaskNode
-        if isinstance(branch, Task):
-            branch = TaskNode(task=branch)
-            
+        if isinstance(branch, Task): branch = TaskNode(task=branch)
         self.true_branch = branch
         return self
     
@@ -121,38 +121,24 @@ Previous node output:
         Returns:
             Self for method chaining
         """
-        # If given a Task, wrap it in a TaskNode
-        if isinstance(branch, Task):
-            branch = TaskNode(task=branch)
-            
+        if isinstance(branch, Task): branch = TaskNode(task=branch)
         self.false_branch = branch
         return self
     
     def __rshift__(self, other: Union['TaskNode', Task, 'TaskChain', 'DecisionFunc', 'DecisionLLM']) -> 'TaskChain':
         """
-        Implements the >> operator to chain this decision with another node.
-        Both the true and false branches will converge to the specified node.
+        Implements the >> operator to chain this decision with another node,
+        creating a new TaskChain.
         
         Args:
-            other: The node, task, or chain to connect after both branches
+            other: The node, task, or chain to connect after this decision.
             
         Returns:
-            A TaskChain containing the decision and its branches
+            A new TaskChain object representing the connection.
         """
         chain = TaskChain()
-        chain.nodes.append(self)
-        
-        # Add the next node/chain
-        if isinstance(other, Task):
-            other_node = TaskNode(task=other)
-            chain.nodes.append(other_node)
-        elif isinstance(other, TaskNode):
-            chain.nodes.append(other)
-        elif isinstance(other, TaskChain):
-            chain.nodes.extend(other.nodes)
-        elif isinstance(other, (DecisionFunc, DecisionLLM)):
-            chain.nodes.append(other)
-            
+        chain.add(self)
+        chain.add(other)
         return chain
 
 
@@ -187,8 +173,7 @@ class DecisionFunc(BaseModel):
             false_branch: The branch to follow if the condition is false
             id: Unique identifier for this decision node
         """
-        if id is None:
-            id = str(uuid.uuid4())
+        if id is None: id = str(uuid.uuid4())
         super().__init__(description=description, func=func, true_branch=true_branch, false_branch=false_branch, id=id, **kwargs)
         
     def evaluate(self, data: Any) -> bool:
@@ -213,10 +198,7 @@ class DecisionFunc(BaseModel):
         Returns:
             Self for method chaining
         """
-        # If given a Task, wrap it in a TaskNode
-        if isinstance(branch, Task):
-            branch = TaskNode(task=branch)
-            
+        if isinstance(branch, Task): branch = TaskNode(task=branch)
         self.true_branch = branch
         return self
     
@@ -230,38 +212,24 @@ class DecisionFunc(BaseModel):
         Returns:
             Self for method chaining
         """
-        # If given a Task, wrap it in a TaskNode
-        if isinstance(branch, Task):
-            branch = TaskNode(task=branch)
-            
+        if isinstance(branch, Task): branch = TaskNode(task=branch)
         self.false_branch = branch
         return self
     
     def __rshift__(self, other: Union['TaskNode', Task, 'TaskChain', 'DecisionFunc', 'DecisionLLM']) -> 'TaskChain':
         """
-        Implements the >> operator to chain this decision with another node.
-        Both the true and false branches will converge to the specified node.
+        Implements the >> operator to chain this decision with another node,
+        creating a new TaskChain.
         
         Args:
-            other: The node, task, or chain to connect after both branches
+            other: The node, task, or chain to connect after this decision.
             
         Returns:
-            A TaskChain containing the decision and its branches
+            A new TaskChain object representing the connection.
         """
         chain = TaskChain()
-        chain.nodes.append(self)
-        
-        # Add the next node/chain
-        if isinstance(other, Task):
-            other_node = TaskNode(task=other)
-            chain.nodes.append(other_node)
-        elif isinstance(other, TaskNode):
-            chain.nodes.append(other)
-        elif isinstance(other, TaskChain):
-            chain.nodes.extend(other.nodes)
-        elif isinstance(other, (DecisionFunc, DecisionLLM)):
-            chain.nodes.append(other)
-            
+        chain.add(self)
+        chain.add(other)
         return chain
 
 
@@ -276,26 +244,18 @@ class TaskNode(BaseModel):
     task: Task
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     
-    # For edge management
-    next_nodes: List['TaskNode'] = Field(default_factory=list)
-    
-    def __rshift__(self, other: Union['TaskNode', Task, 'DecisionFunc', 'DecisionLLM']) -> 'TaskChain':
+    def __rshift__(self, other: Union['TaskNode', Task, 'DecisionFunc', 'DecisionLLM', 'TaskChain']) -> 'TaskChain':
         """
         Implements the >> operator to connect nodes in a chain.
         
         Args:
-            other: The next node or task in the chain
+            other: The next node, task, or chain in the chain
             
         Returns:
             A TaskChain object containing both nodes
         """
         chain = TaskChain()
         chain.add(self)
-        
-        # If the other object is a Task, wrap it in a TaskNode
-        if isinstance(other, Task):
-            other = TaskNode(task=other)
-            
         chain.add(other)
         return chain
 
@@ -306,114 +266,63 @@ class TaskChain:
     
     Attributes:
         nodes: List of nodes in the chain
-        edges: Dictionary mapping node IDs to their next nodes
+        edges: Dictionary mapping node IDs to their next nodes. This is the single source of truth for graph topology.
     """
     def __init__(self):
         self.nodes: List[Union[TaskNode, DecisionFunc, DecisionLLM]] = []
         self.edges: Dict[str, List[str]] = {}
         
-    def add(self, node: Union[TaskNode, Task, 'TaskChain', DecisionFunc, DecisionLLM]) -> 'TaskChain':
+    def _get_leaf_nodes(self) -> List[Union[TaskNode, DecisionFunc, DecisionLLM]]:
+        """Finds all nodes in the chain that have no outgoing edges."""
+        if not self.nodes: return []
+        source_node_ids = set(self.edges.keys())
+        return [node for node in self.nodes if node.id not in source_node_ids]
+
+    def add(self, node_or_chain: Union[TaskNode, Task, 'TaskChain', DecisionFunc, DecisionLLM]) -> 'TaskChain':
         """
-        Adds a node or another chain to this chain.
+        Adds a node or another chain to this chain, connecting it to the current leaf nodes.
+        This method correctly handles branching and convergence.
         
         Args:
-            node: The node, task, or chain to add
+            node_or_chain: The node, task, or chain to add.
             
         Returns:
-            This chain for method chaining
+            This chain for method chaining.
         """
-        # If given a Task, wrap it in a TaskNode
-        if isinstance(node, Task):
-            node = TaskNode(task=node)
-        
-        if isinstance(node, TaskNode):
-            if self.nodes:
-                last_node = self.nodes[-1]
-                if last_node.id not in self.edges:
-                    self.edges[last_node.id] = []
-                self.edges[last_node.id].append(node.id)
-                
-                # If the last node is a TaskNode, update its next_nodes
-                if isinstance(last_node, TaskNode):
-                    last_node.next_nodes.append(node)
-            self.nodes.append(node)
-        elif isinstance(node, (DecisionFunc, DecisionLLM)):
-            # Add the decision node itself
-            self.nodes.append(node)
-            
-            # Connect decision node to its branches
-            if node.true_branch:
-                if isinstance(node.true_branch, TaskNode):
-                    if node.id not in self.edges:
-                        self.edges[node.id] = []
-                    self.edges[node.id].append(node.true_branch.id)
-                    
-                    # Add true branch node if not already in the chain
-                    if node.true_branch not in self.nodes:
-                        self.nodes.append(node.true_branch)
-                elif isinstance(node.true_branch, TaskChain):
-                    # Add all nodes from the true branch chain
-                    if node.true_branch.nodes:
-                        first_node = node.true_branch.nodes[0]
-                        if node.id not in self.edges:
-                            self.edges[node.id] = []
-                        self.edges[node.id].append(first_node.id)
-                        
-                        # Add the nodes from the true branch
-                        for n in node.true_branch.nodes:
-                            if n not in self.nodes:
-                                self.nodes.append(n)
-                        
-                        # Merge the edges from the true branch
-                        for src, targets in node.true_branch.edges.items():
-                            if src not in self.edges:
-                                self.edges[src] = []
-                            self.edges[src].extend(targets)
-            
-            # Connect false branch as well
-            if node.false_branch:
-                if isinstance(node.false_branch, TaskNode):
-                    if node.id not in self.edges:
-                        self.edges[node.id] = []
-                    self.edges[node.id].append(node.false_branch.id)
-                    
-                    # Add false branch node if not already in the chain
-                    if node.false_branch not in self.nodes:
-                        self.nodes.append(node.false_branch)
-                elif isinstance(node.false_branch, TaskChain):
-                    # Add all nodes from the false branch chain
-                    if node.false_branch.nodes:
-                        first_node = node.false_branch.nodes[0]
-                        if node.id not in self.edges:
-                            self.edges[node.id] = []
-                        self.edges[node.id].append(first_node.id)
-                        
-                        # Add the nodes from the false branch
-                        for n in node.false_branch.nodes:
-                            if n not in self.nodes:
-                                self.nodes.append(n)
-                        
-                        # Merge the edges from the false branch
-                        for src, targets in node.false_branch.edges.items():
-                            if src not in self.edges:
-                                self.edges[src] = []
-                            self.edges[src].extend(targets)
-        elif isinstance(node, TaskChain):
-            if self.nodes and node.nodes:
-                last_node = self.nodes[-1]
-                first_of_new = node.nodes[0]
-                if last_node.id not in self.edges:
-                    self.edges[last_node.id] = []
-                self.edges[last_node.id].append(first_of_new.id)
-                
-                # If the last node is a TaskNode, update its next_nodes
-                if isinstance(last_node, TaskNode) and isinstance(first_of_new, TaskNode):
-                    last_node.next_nodes.append(first_of_new)
-            
-            # Merge the other chain's edges into this one
-            self.edges.update(node.edges)
-            self.nodes.extend(node.nodes)
-            
+        previous_leaves = self._get_leaf_nodes()
+        if isinstance(node_or_chain, Task): node_or_chain = TaskNode(task=node_or_chain)
+
+        entry_points = []
+        if isinstance(node_or_chain, (TaskNode, DecisionFunc, DecisionLLM)):
+            new_node = node_or_chain
+            if new_node not in self.nodes: self.nodes.append(new_node)
+            entry_points.append(new_node)
+            if isinstance(new_node, (DecisionFunc, DecisionLLM)):
+                for branch in [new_node.true_branch, new_node.false_branch]:
+                    if not branch: continue
+                    if isinstance(branch, TaskChain):
+                        self.nodes.extend(n for n in branch.nodes if n not in self.nodes)
+                        self.edges.update(branch.edges)
+                        if branch.nodes:
+                            if new_node.id not in self.edges: self.edges[new_node.id] = []
+                            self.edges[new_node.id].append(branch.nodes[0].id)
+                    else:
+                        if branch not in self.nodes: self.nodes.append(branch)
+                        if new_node.id not in self.edges: self.edges[new_node.id] = []
+                        self.edges[new_node.id].append(branch.id)
+        elif isinstance(node_or_chain, TaskChain):
+            incoming_chain = node_or_chain
+            self.nodes.extend(n for n in incoming_chain.nodes if n not in self.nodes)
+            self.edges.update(incoming_chain.edges)
+            all_target_ids = {target for targets in incoming_chain.edges.values() for target in targets}
+            entry_points.extend([n for n in incoming_chain.nodes if n.id not in all_target_ids])
+
+        if entry_points and previous_leaves:
+            for leaf in previous_leaves:
+                for entry_point in entry_points:
+                    if leaf.id not in self.edges: self.edges[leaf.id] = []
+                    if entry_point.id not in self.edges[leaf.id]:
+                        self.edges[leaf.id].append(entry_point.id)
         return self
         
     def __rshift__(self, other: Union[TaskNode, Task, 'TaskChain', DecisionFunc, DecisionLLM]) -> 'TaskChain':
@@ -426,7 +335,8 @@ class TaskChain:
         Returns:
             This chain with the new node(s) added
         """
-        return self.add(other)
+        self.add(other)
+        return self
 
 
 class State(BaseModel):
@@ -469,10 +379,7 @@ class State(BaseModel):
         Returns:
             The output of the most recently executed task
         """
-        if not self.task_outputs:
-            return None
-        
-        # Return the most recently added output
+        if not self.task_outputs: return None
         return list(self.task_outputs.values())[-1]
 
 
@@ -486,106 +393,44 @@ class Graph(BaseModel):
         max_parallel_tasks: Maximum number of tasks to execute in parallel
         show_progress: Whether to display a progress bar during execution
     """
-    # Accept either AgentConfiguration or Direct as the default_agent
-    default_agent: Optional[Any] = None
+    default_agent: Optional[BaseAgent] = None
     parallel_execution: bool = False
     max_parallel_tasks: int = 4
     show_progress: bool = True
     
-    # Private attributes (not part of the model schema)
     nodes: List[Union[TaskNode, DecisionFunc, DecisionLLM]] = Field(default_factory=list)
     edges: Dict[str, List[str]] = Field(default_factory=dict)
     state: State = Field(default_factory=State)
     
     class Config:
         arbitrary_types_allowed = True
-    
+
     def __init__(self, **data):
-        # Validate that default_agent is either AgentConfiguration or Direct
         if 'default_agent' in data and data['default_agent'] is not None:
             agent = data['default_agent']
-            # Check if it has the 'do' method which both types should have
-            if not hasattr(agent, 'do') or not callable(getattr(agent, 'do')):
-                raise ValueError("default_agent must be an instance of AgentConfiguration or Direct with a 'do' method")
+            if not isinstance(agent, BaseAgent):
+                 raise TypeError("default_agent must be an instance of a class that inherits from BaseAgent.")
+            if not hasattr(agent, 'do_async') or not callable(getattr(agent, 'do_async')):
+                raise ValueError("default_agent must have a 'do_async' method.")
         super().__init__(**data)
-    
+
     def add(self, tasks_chain: Union[Task, TaskNode, TaskChain, DecisionFunc, DecisionLLM]) -> 'Graph':
         """
-        Adds tasks to the graph.
+        Adds a complete workflow (chain) to the graph.
         
         Args:
-            tasks_chain: A Task, TaskNode, TaskChain, DecisionFunc, or DecisionLLM to add to the graph
+            tasks_chain: A Task, Node, or fully-formed TaskChain to add to the graph.
             
         Returns:
-            This graph for method chaining
+            This graph for method chaining.
         """
-        # If given a Task, wrap it in a TaskNode
-        if isinstance(tasks_chain, Task):
-            tasks_chain = TaskNode(task=tasks_chain)
+        if not isinstance(tasks_chain, TaskChain):
+            tasks_chain = TaskChain().add(tasks_chain)
         
-        if isinstance(tasks_chain, TaskNode):
-            self.nodes.append(tasks_chain)
-        elif isinstance(tasks_chain, (DecisionFunc, DecisionLLM)):
-            self.nodes.append(tasks_chain)
-            
-            # Handle decision branches
-            if tasks_chain.true_branch:
-                if isinstance(tasks_chain.true_branch, TaskNode):
-                    if tasks_chain.true_branch not in self.nodes:
-                        self.nodes.append(tasks_chain.true_branch)
-                    if tasks_chain.id not in self.edges:
-                        self.edges[tasks_chain.id] = []
-                    self.edges[tasks_chain.id].append(tasks_chain.true_branch.id)
-                elif isinstance(tasks_chain.true_branch, TaskChain):
-                    # Add all nodes and edges from the true branch chain
-                    for node in tasks_chain.true_branch.nodes:
-                        if node not in self.nodes:
-                            self.nodes.append(node)
-                    
-                    # Add the connection from decision to first node of true branch
-                    if tasks_chain.true_branch.nodes:
-                        first_node = tasks_chain.true_branch.nodes[0]
-                        if tasks_chain.id not in self.edges:
-                            self.edges[tasks_chain.id] = []
-                        self.edges[tasks_chain.id].append(first_node.id)
-                    
-                    # Merge edges from the true branch
-                    for src, targets in tasks_chain.true_branch.edges.items():
-                        if src not in self.edges:
-                            self.edges[src] = []
-                        self.edges[src].extend(targets)
-            
-            # Handle false branch
-            if tasks_chain.false_branch:
-                if isinstance(tasks_chain.false_branch, TaskNode):
-                    if tasks_chain.false_branch not in self.nodes:
-                        self.nodes.append(tasks_chain.false_branch)
-                    if tasks_chain.id not in self.edges:
-                        self.edges[tasks_chain.id] = []
-                    self.edges[tasks_chain.id].append(tasks_chain.false_branch.id)
-                elif isinstance(tasks_chain.false_branch, TaskChain):
-                    # Add all nodes and edges from the false branch chain
-                    for node in tasks_chain.false_branch.nodes:
-                        if node not in self.nodes:
-                            self.nodes.append(node)
-                    
-                    # Add the connection from decision to first node of false branch
-                    if tasks_chain.false_branch.nodes:
-                        first_node = tasks_chain.false_branch.nodes[0]
-                        if tasks_chain.id not in self.edges:
-                            self.edges[tasks_chain.id] = []
-                        self.edges[tasks_chain.id].append(first_node.id)
-                    
-                    # Merge edges from the false branch
-                    for src, targets in tasks_chain.false_branch.edges.items():
-                        if src not in self.edges:
-                            self.edges[src] = []
-                        self.edges[src].extend(targets)
-                    
-        elif isinstance(tasks_chain, TaskChain):
-            self.nodes.extend(tasks_chain.nodes)
-            self.edges.update(tasks_chain.edges)
-            
+        self.nodes.extend(n for n in tasks_chain.nodes if n not in self.nodes)
+        for src, targets in tasks_chain.edges.items():
+            if src not in self.edges: self.edges[src] = []
+            self.edges[src].extend(t for t in targets if t not in self.edges[src])
         return self
     
     def _get_available_agent(self) -> Any:
@@ -595,16 +440,11 @@ class Graph(BaseModel):
         Returns:
             An agent that can be used for execution, or None if none is found
         """
-        # First check if we have a default agent
         if self.default_agent is not None:
             return self.default_agent
-        
-        # If no default agent, check all task nodes for an agent
         for node in self.nodes:
             if isinstance(node, TaskNode) and node.task.agent is not None:
                 return node.task.agent
-        
-        # No agent found
         return None
 
     async def _execute_task(self, node: TaskNode, state: State, verbose: bool = False) -> Any:
@@ -621,77 +461,43 @@ class Graph(BaseModel):
         """
         task = node.task
         
-        # Use the task's agent or try to find an available agent
         runner = task.agent or self.default_agent
         if runner is None:
-            # Try to find any agent from other task nodes
             runner = self._get_available_agent()
             if runner is None:
-                raise ValueError(f"No agent specified for task '{task.description}' and no default agent set")
+                raise ValueError(f"No agent specified for task '{escape_rich_markup(task.description)}' and no default agent set")
         
         try:
-            # Start timing
-            start_time = time.time()
-            task.start_time = start_time
-            
+
             if verbose:
-                # Create and print a task execution panel
                 table = Table(show_header=False, expand=True, box=None)
                 table.add_row("[bold]Task:[/bold]", f"[cyan]{escape_rich_markup(task.description)}[/cyan]")
-                # Display runner type safely
                 runner_type = runner.__class__.__name__ if hasattr(runner, '__class__') else type(runner).__name__
                 table.add_row("[bold]Agent:[/bold]", f"[yellow]{escape_rich_markup(runner_type)}[/yellow]")
                 if task.tools:
                     tool_names = [escape_rich_markup(t.__class__.__name__ if hasattr(t, '__class__') else str(t)) for t in task.tools]
                     table.add_row("[bold]Tools:[/bold]", f"[green]{escape_rich_markup(', '.join(tool_names))}[/green]")
-                panel = Panel(
-                    table,
-                    title="[bold blue]Upsonic - Executing Task[/bold blue]",
-                    border_style="blue",
-                    expand=True,
-                    width=70
-                )
+                panel = Panel(table, title="[bold blue]Upsonic - Executing Task[/bold blue]", border_style="blue", expand=True, width=70)
                 console.print(panel)
                 spacing()
             
-            # Get previous outputs if available
-            previous_outputs = [state.get_task_output(prev_node.id) for prev_node in self._get_predecessors(node)]
-            
-            # Add previous outputs as context if appropriate
-            if previous_outputs and not task.context:
-                task.context = previous_outputs
-            
-            # Execute the task - use do_async for async execution
+            # Delegate execution to the standardized agent pipeline, passing the state.
             if hasattr(runner, 'do_async'):
-                output = await runner.do_async(task)
+                output = await runner.do_async(task, state=state)
             else:
-                # Fallback to synchronous do method if do_async is not available
                 output = runner.do(task)
             
-            # End timing
-            end_time = time.time()
-            task.end_time = end_time
-            
+            # The task object is now mutated in place by the pipeline.
             if verbose:
-                # Create and print a task completion panel
-                time_taken = end_time - start_time
+                time_taken = task.duration or 0.0
                 table = Table(show_header=False, expand=True, box=None)
                 table.add_row("[bold]Task:[/bold]", f"[cyan]{escape_rich_markup(task.description)}[/cyan]")
-                
-                # Handle different output types for display
                 output_str = self._format_output_for_display(output)
-                
                 table.add_row("[bold]Output:[/bold]", f"[green]{output_str}[/green]")
                 table.add_row("[bold]Time Taken:[/bold]", f"{time_taken:.2f} seconds")
                 if task.total_cost:
                     table.add_row("[bold]Estimated Cost:[/bold]", f"${task.total_cost:.4f}")
-                panel = Panel(
-                    table,
-                    title="[bold green]✅ Task Completed[/bold green]",
-                    border_style="green",
-                    expand=True,
-                    width=70
-                )
+                panel = Panel(table, title="[bold green]✅ Task Completed[/bold green]", border_style="green", expand=True, width=70)
                 console.print(panel)
                 spacing()
             
@@ -702,6 +508,8 @@ class Graph(BaseModel):
                 console.print(f"[bold red]Task '{escape_rich_markup(task.description)}' failed: {escape_rich_markup(str(e))}[/bold red]")
             raise
     
+    # =======================================================
+
     async def _evaluate_decision(self, decision_node: Union[DecisionFunc, DecisionLLM], state: State, verbose: bool = False) -> Union[TaskNode, TaskChain, None]:
         """
         Evaluates a decision node to determine which branch to follow.
@@ -714,38 +522,24 @@ class Graph(BaseModel):
         Returns:
             The branch to follow (true or false)
         """
-        # Get the most recent output to evaluate
         latest_output = state.get_latest_output()
         
-        # Evaluate differently based on the decision node type
         if isinstance(decision_node, DecisionFunc):
-            # For function-based decisions, directly call the function
             result = decision_node.evaluate(latest_output)
         elif isinstance(decision_node, DecisionLLM):
-            # For LLM-based decisions, use the default agent or find an available one
-            agent = self.default_agent
+            agent = self.default_agent or self._get_available_agent()
             if agent is None:
-                # Try to find any agent from task nodes
-                agent = self._get_available_agent()
-                if agent is None:
-                    raise ValueError(f"No agent available for LLM-based decision: '{decision_node.description}'")
+                raise ValueError(f"No agent available for LLM-based decision: '{decision_node.description}'")
             
-            # Generate the prompt for the LLM
             prompt = decision_node._generate_prompt(latest_output)
+            decision_task = Task(prompt, response_format=DecisionResponse)
             
-            # Create a temporary task for the LLM to execute
-            decision_task = Task(prompt,
-                response_format=DecisionResponse
-            )
-            
-            # Execute the task using the agent
+            # Pass state here as well, in case the decision needs context
             if hasattr(agent, 'do_async'):
-                response = await agent.do_async(decision_task)
+                response = await agent.do_async(decision_task, state=state)
             else:
-                # Fallback to synchronous do method if do_async is not available
                 response = agent.do(decision_task)
             
-            # Get the boolean result from the structured response
             result = response.result if hasattr(response, 'result') else False
             
             if verbose:
@@ -755,25 +549,14 @@ class Graph(BaseModel):
             raise ValueError(f"Unknown decision node type: {type(decision_node)}")
         
         if verbose:
-            # Create and print a decision evaluation panel
             table = Table(show_header=False, expand=True, box=None)
             table.add_row("[bold]Decision:[/bold]", f"[cyan]{escape_rich_markup(decision_node.description)}[/cyan]")
-            table.add_row("[bold]Result:[/bold]", f"[green]{result}[/green]")
-            panel = Panel(
-                table,
-                title="[bold yellow]🔀 Evaluating Decision[/bold yellow]",
-                border_style="yellow",
-                expand=True,
-                width=70
-            )
+            table.add_row("[bold]Result:[/bold]", f"[green]{'Yes' if result else 'No'}[/green]")
+            panel = Panel(table, title="[bold yellow]🔀 Evaluating Decision[/bold yellow]", border_style="yellow", expand=True, width=70)
             console.print(panel)
             spacing()
         
-        # Return the appropriate branch
-        if result:
-            return decision_node.true_branch
-        else:
-            return decision_node.false_branch
+        return decision_node.true_branch if result else decision_node.false_branch
     
     def _format_output_for_display(self, output: Any) -> str:
         """
@@ -785,32 +568,18 @@ class Graph(BaseModel):
         Returns:
             A string representation of the output
         """
-        # If output is None, return empty string
-        if output is None:
-            return ""
-        
-        # If output is a Pydantic model
+        if output is None: return ""
         if hasattr(output, '__class__') and hasattr(output.__class__, 'model_dump'):
             try:
-                # Try to get a compact representation of the model
-                model_dict = output.model_dump()
-                # Format as compact JSON with max 200 chars
                 import json
-                output_str = json.dumps(model_dict, default=str)
-                if len(output_str) > 200:
-                    output_str = output_str[:197] + "..."
+                output_str = json.dumps(output.model_dump(), default=str)
+                if len(output_str) > 200: output_str = output_str[:197] + "..."
                 return escape_rich_markup(output_str)
             except Exception:
-                # Fallback to str if model_dump fails
                 output_str = str(output)
         else:
-            # Regular string representation
             output_str = str(output)
-        
-        # Truncate if too long
-        if len(output_str) > 200:
-            output_str = output_str[:197] + "..."
-            
+        if len(output_str) > 200: output_str = output_str[:197] + "..."
         return escape_rich_markup(output_str)
     
     def _get_predecessors(self, node: Union[TaskNode, DecisionFunc, DecisionLLM]) -> List[Union[TaskNode, DecisionFunc, DecisionLLM]]:
@@ -823,24 +592,8 @@ class Graph(BaseModel):
         Returns:
             List of predecessor nodes
         """
-        predecessors = []
-        # Check node connections in the edges dictionary
-        for n_id, next_ids in self.edges.items():
-            if node.id in next_ids:
-                # Find the node object
-                for n in self.nodes:
-                    if n.id == n_id:
-                        predecessors.append(n)
-                        break
-        
-        # Also check TaskNode's next_nodes connections
-        for n in self.nodes:
-            if isinstance(n, TaskNode):
-                for next_node in n.next_nodes:
-                    if next_node.id == node.id:
-                        predecessors.append(n)
-        
-        return predecessors
+        predecessor_ids = {n_id for n_id, next_ids in self.edges.items() if node.id in next_ids}
+        return [n for n in self.nodes if n.id in predecessor_ids]
     
     def _get_start_nodes(self) -> List[Union[TaskNode, DecisionFunc, DecisionLLM]]:
         """
@@ -849,16 +602,7 @@ class Graph(BaseModel):
         Returns:
             List of start nodes
         """
-        # Get all IDs that appear as targets in the edges dictionary
         all_target_ids = {target_id for targets in self.edges.values() for target_id in targets}
-        
-        # Also get all IDs that appear as targets in TaskNode.next_nodes
-        for n in self.nodes:
-            if isinstance(n, TaskNode):
-                for next_node in n.next_nodes:
-                    all_target_ids.add(next_node.id)
-        
-        # Return nodes that don't appear as targets
         return [node for node in self.nodes if node.id not in all_target_ids]
     
     def _get_next_nodes(self, node: Union[TaskNode, DecisionFunc, DecisionLLM]) -> List[Union[TaskNode, DecisionFunc, DecisionLLM]]:
@@ -871,256 +615,102 @@ class Graph(BaseModel):
         Returns:
             List of successor nodes
         """
-        next_nodes = []
-        
-        # Check edges dictionary
-        if node.id in self.edges:
-            next_ids = self.edges[node.id]
-            for next_id in next_ids:
-                for n in self.nodes:
-                    if n.id == next_id:
-                        next_nodes.append(n)
-        
-        # If it's a TaskNode, also check its next_nodes attribute
-        if isinstance(node, TaskNode):
-            for next_node in node.next_nodes:
-                if next_node not in next_nodes:  # Avoid duplicates
-                    next_nodes.append(next_node)
-        
-        return next_nodes
-    
+        if node.id not in self.edges: return []
+        next_ids = self.edges[node.id]
+        return [n for n in self.nodes if n.id in next_ids]
+
+    def _get_all_branch_node_ids(self, branch: Union[TaskNode, TaskChain, DecisionFunc, DecisionLLM, None]) -> Set[str]:
+        """Recursively collects all node IDs within a given branch."""
+        if not branch: return set()
+        ids, queue = set(), [branch]
+        while queue:
+            current = queue.pop(0)
+            if isinstance(current, TaskChain):
+                for node in current.nodes:
+                    if node.id not in ids:
+                        ids.add(node.id)
+                        queue.append(node)
+            else:
+                if current.id not in ids:
+                    ids.add(current.id)
+                    if isinstance(current, (DecisionFunc, DecisionLLM)):
+                        if current.true_branch: queue.append(current.true_branch)
+                        if current.false_branch: queue.append(current.false_branch)
+        return ids
+
     async def _run_sequential(self, verbose: bool = False, show_progress: bool = True) -> State:
         """
-        Runs tasks sequentially with support for decision nodes.
-        
-        Args:
-            verbose: Whether to print detailed information
-            show_progress: Whether to display a progress bar
-            
-        Returns:
-            The final state object
+        Runs tasks sequentially.
         """
         if verbose:
             console.print(f"[blue]Executing graph with decision support[/blue]")
             spacing()
+
+        start_nodes = self._get_start_nodes()
+        execution_queue = list(start_nodes)
+        queued_node_ids = {n.id for n in start_nodes}
+        executed_node_ids, pruned_node_ids = set(), set()
+        all_nodes_count = self._count_all_possible_nodes()
         
-        # We can't use topological sort with decisions, so we use a dynamic execution approach
-        execution_queue = self._get_start_nodes()
-        executed_nodes = set()
-        
-        # Count all possible nodes in the graph including all branches
-        all_nodes = self._count_all_possible_nodes()
-        
-        if show_progress:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                TimeElapsedColumn(),
-                console=console
-            ) as progress:
-                # Set total to all possible nodes
-                overall_task = progress.add_task("[bold blue]Graph Execution", total=all_nodes)
-                
-                # Process nodes until the queue is empty
-                completed_nodes = 0
-                while execution_queue:
-                    node = execution_queue.pop(0)
-                    
-                    # Update progress description
-                    if isinstance(node, TaskNode):
-                        desc = f"[bold blue]Graph Execution - Current: [cyan]{escape_rich_markup(node.task.description[:40])}{'...' if len(node.task.description) > 40 else ''}[/cyan]"
-                    else:
-                        desc = f"[bold blue]Graph Execution - Evaluating Decision: [yellow]{escape_rich_markup(node.description)}[/yellow]"
-                    
-                    # Update the progress bar
-                    progress.update(overall_task, description=desc)
-                    
-                    # Process the node
-                    if isinstance(node, TaskNode):
-                        # Get the latest output for debugging
-                        if verbose:
-                            latest_output = self.state.get_latest_output()
-                            if latest_output:
-                                console.print(f"[dim]********latest_output[/dim]")
-                                console.print(f"[dim]{escape_rich_markup(str(latest_output))}[/dim]")
-                                
-                        # If this task doesn't have context but there are previous outputs, add them as context
-                        if not node.task.context and self.state.task_outputs:
-                            # Get the latest output to use as context
-                            latest_output = self.state.get_latest_output()
-                            if latest_output:
-                                # Set the context for this task
-                                node.task.context = [latest_output]
-                                if verbose:
-                                    console.print(f"[dim]Setting context from previous output for task: {escape_rich_markup(node.task.description)}[/dim]")
-                        
-                        output = await self._execute_task(node, self.state, verbose)
-                        self.state.update(node.id, output)
-                        executed_nodes.add(node.id)
-                        
-                        # Add successor nodes to the queue
-                        for next_node in self._get_next_nodes(node):
-                            # Only add if all predecessors have been executed
-                            predecessors = self._get_predecessors(next_node)
-                            if all(pred.id in executed_nodes for pred in predecessors):
-                                execution_queue.append(next_node)
-                    
-                    elif isinstance(node, (DecisionFunc, DecisionLLM)):
-                        # Evaluate the decision
-                        branch = await self._evaluate_decision(node, self.state, verbose)
-                        executed_nodes.add(node.id)
-                        
-                        # Add the appropriate branch to the execution queue
-                        if branch:
-                            if isinstance(branch, TaskNode):
-                                # Make sure the task in the branch has context from previous outputs
-                                if not branch.task.context and self.state.task_outputs:
-                                    latest_output = self.state.get_latest_output()
-                                    if latest_output:
-                                        branch.task.context = [latest_output]
-                                        if verbose:
-                                            console.print(f"[dim]Setting context from previous output for branch task: {escape_rich_markup(branch.task.description)}[/dim]")
-                                
-                                execution_queue.insert(0, branch)
-                            elif isinstance(branch, TaskChain):
-                                # Add all nodes from the branch to the queue in reverse order
-                                branch_nodes = list(reversed(branch.nodes))
-                                
-                                # Set context for the first task in the branch if it doesn't have context
-                                if branch_nodes and isinstance(branch_nodes[-1], TaskNode):
-                                    first_task = branch_nodes[-1]
-                                    if not first_task.task.context and self.state.task_outputs:
-                                        latest_output = self.state.get_latest_output()
-                                        if latest_output:
-                                            first_task.task.context = [latest_output]
-                                            if verbose:
-                                                console.print(f"[dim]Setting context from previous output for first branch chain task: {escape_rich_markup(first_task.task.description)}[/dim]")
-                                
-                                for branch_node in branch_nodes:
-                                    execution_queue.insert(0, branch_node)
-                            elif isinstance(branch, (DecisionFunc, DecisionLLM)):
-                                # Handle the case where a decision returns another decision node
-                                # Insert at the front of the queue to be processed next
-                                if verbose:
-                                    console.print(f"[dim]Decision returned another decision node: {escape_rich_markup(branch.description)}[/dim]")
-                                execution_queue.insert(0, branch)
-                    
-                    # Increment completed nodes and update progress
-                    completed_nodes += 1
-                    progress.update(overall_task, completed=completed_nodes)
-                
-                # Make sure the progress bar reaches 100% at the end
-                progress.update(overall_task, completed=all_nodes)
-        else:
-            # Process nodes without progress bar
+        progress_context = Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TextColumn("[progress.percentage]{task.percentage:>3.0f}%"), TimeElapsedColumn(), console=console) if show_progress else None
+
+        if progress_context:
+            progress_context.start()
+            overall_task = progress_context.add_task("[bold blue]Graph Execution", total=all_nodes_count)
+
+        try:
             while execution_queue:
                 node = execution_queue.pop(0)
-                
-                # Process the node
+                node.task.context = []
                 if isinstance(node, TaskNode):
-                    # If this task doesn't have context but there are previous outputs, add them as context
-                    if not node.task.context and self.state.task_outputs:
-                        # Get the latest output to use as context
-                        latest_output = self.state.get_latest_output()
-                        if latest_output:
-                            # Set the context for this task
-                            node.task.context = [latest_output]
-                    
+                    predecessors = self._get_predecessors(node)
+                    if predecessors:
+                        existing_source_ids = {s.task_description_or_id for s in node.task.context if isinstance(s, TaskOutputSource)}
+                        for pred in predecessors:
+                            if pred.id in executed_node_ids and pred.id not in existing_source_ids:
+                                source = TaskOutputSource(task_description_or_id=pred.id)
+                                node.task.context.append(source)
+                                if verbose:
+                                    console.print(f"[dim]Auto-injecting source for node '{pred.id}' into task {escape_rich_markup(node.task.description)}[/dim]")
                     output = await self._execute_task(node, self.state, verbose)
                     self.state.update(node.id, output)
-                    executed_nodes.add(node.id)
-                    
-                    # Add successor nodes to the queue
-                    for next_node in self._get_next_nodes(node):
-                        # Only add if all predecessors have been executed
-                        predecessors = self._get_predecessors(next_node)
-                        if all(pred.id in executed_nodes for pred in predecessors):
-                            execution_queue.append(next_node)
-                
+                    executed_node_ids.add(node.id)
                 elif isinstance(node, (DecisionFunc, DecisionLLM)):
-                    # Evaluate the decision
-                    branch = await self._evaluate_decision(node, self.state, verbose)
-                    executed_nodes.add(node.id)
-                    
-                    # Add the appropriate branch to the execution queue
-                    if branch:
-                        if isinstance(branch, TaskNode):
-                            # Make sure the task in the branch has context from previous outputs
-                            if not branch.task.context and self.state.task_outputs:
-                                latest_output = self.state.get_latest_output()
-                                if latest_output:
-                                    branch.task.context = [latest_output]
-                                    
-                            execution_queue.insert(0, branch)
-                        elif isinstance(branch, TaskChain):
-                            # Add all nodes from the branch to the queue in reverse order
-                            branch_nodes = list(reversed(branch.nodes))
-                            
-                            # Set context for the first task in the branch if it doesn't have context
-                            if branch_nodes and isinstance(branch_nodes[-1], TaskNode):
-                                first_task = branch_nodes[-1]
-                                if not first_task.task.context and self.state.task_outputs:
-                                    latest_output = self.state.get_latest_output()
-                                    if latest_output:
-                                        first_task.task.context = [latest_output]
-                            
-                            for branch_node in branch_nodes:
-                                execution_queue.insert(0, branch_node)
-                        elif isinstance(branch, (DecisionFunc, DecisionLLM)):
-                            # Handle the case where a decision returns another decision node
-                            # Insert at the front of the queue to be processed next
-                            if verbose:
-                                console.print(f"[dim]Decision returned another decision node: {escape_rich_markup(branch.description)}[/dim]")
-                            execution_queue.insert(0, branch)
+                    # Pass the state to the evaluation method
+                    branch_to_follow = await self._evaluate_decision(node, self.state, verbose)
+                    executed_node_ids.add(node.id)
+                    pruned_branch = node.false_branch if branch_to_follow == node.true_branch else node.true_branch
+                    pruned_node_ids.update(self._get_all_branch_node_ids(pruned_branch))
+
+                successors = self._get_next_nodes(node)
+                for next_node in successors:
+                    if next_node.id in queued_node_ids or next_node.id in executed_node_ids or next_node.id in pruned_node_ids:
+                        continue
+                    if all((p.id in executed_node_ids or p.id in pruned_node_ids) for p in self._get_predecessors(next_node)):
+                        execution_queue.append(next_node)
+                        queued_node_ids.add(next_node.id)
+
+                if show_progress:
+                    completed_count = len(executed_node_ids) + len(pruned_node_ids)
+                    progress_context.update(overall_task, completed=completed_count)
+        finally:
+            if progress_context:
+                progress_context.update(overall_task, completed=all_nodes_count)
+                progress_context.stop()
         
         if verbose:
             console.print("[bold green]Graph Execution Completed[/bold green]")
             spacing()
-        
         return self.state
     
     def _count_all_possible_nodes(self) -> int:
         """
-        Counts all possible nodes in the graph, including all branches.
+        Counts all nodes in the graph, which are pre-flattened during construction.
         
         Returns:
-            The total number of nodes in the graph
+            The total number of nodes in the graph.
         """
-        # Start with the nodes directly in the graph
-        counted = set()
-        to_count = list(self.nodes)
-        
-        while to_count:
-            node = to_count.pop(0)
-            if node.id in counted:
-                continue
-                
-            counted.add(node.id)
-            
-            # If it's a decision node, add its branches to be counted
-            if isinstance(node, (DecisionFunc, DecisionLLM)):
-                if node.true_branch:
-                    if isinstance(node.true_branch, TaskNode):
-                        if node.true_branch.id not in counted:
-                            to_count.append(node.true_branch)
-                    elif isinstance(node.true_branch, TaskChain):
-                        for branch_node in node.true_branch.nodes:
-                            if branch_node.id not in counted:
-                                to_count.append(branch_node)
-                
-                if node.false_branch:
-                    if isinstance(node.false_branch, TaskNode):
-                        if node.false_branch.id not in counted:
-                            to_count.append(node.false_branch)
-                    elif isinstance(node.false_branch, TaskChain):
-                        for branch_node in node.false_branch.nodes:
-                            if branch_node.id not in counted:
-                                to_count.append(branch_node)
-        
-        # Return the count, minimum of 1 to avoid division by zero
-        return max(len(counted), 1)
+        return max(len(self.nodes), 1)
     
     async def run_async(self, verbose: bool = True, show_progress: bool = None) -> State:
         """
@@ -1133,18 +723,11 @@ class Graph(BaseModel):
         Returns:
             The final state object with all task outputs
         """
-        # Use class attribute if show_progress is not explicitly specified
-        if show_progress is None:
-            show_progress = self.show_progress
-            
+        if show_progress is None: show_progress = self.show_progress
         if verbose:
             console.print("[bold blue]Starting Graph Execution[/bold blue]")
             spacing()
-        
-        # Reset state
         self.state = State()
-        
-        # With decision support, we always use the sequential implementation for now
         return await self._run_sequential(verbose, show_progress)
 
     def run(self, verbose: bool = True, show_progress: bool = None) -> State:
@@ -1158,21 +741,12 @@ class Graph(BaseModel):
         Returns:
             The final state object with all task outputs
         """
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            # No event loop running, create a new one
-            return asyncio.run(self.run_async(verbose, show_progress))
-        
+        try: loop = asyncio.get_event_loop()
+        except RuntimeError: return asyncio.run(self.run_async(verbose, show_progress))
         if loop.is_running():
-            # Event loop is already running, we need to run in a new thread
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, self.run_async(verbose, show_progress))
-                return future.result()
-        else:
-            # Event loop exists but not running, we can use it
-            return loop.run_until_complete(self.run_async(verbose, show_progress))
+            with ThreadPoolExecutor() as executor:
+                return executor.submit(asyncio.run, self.run_async(verbose, show_progress)).result()
+        else: return loop.run_until_complete(self.run_async(verbose, show_progress))
 
     def get_output(self) -> Any:
         """
@@ -1196,34 +770,9 @@ class Graph(BaseModel):
         for node in self.nodes:
             if isinstance(node, TaskNode) and node.task.description == description:
                 output = self.state.get_task_output(node.id)
-                if output is not None:
-                    return output
-        
-        # If not found in direct nodes, check for nodes in decision branches
-        for node in self.nodes:
-            if isinstance(node, (DecisionFunc, DecisionLLM)):
-                # Check true branch
-                if node.true_branch:
-                    if isinstance(node.true_branch, TaskNode) and node.true_branch.task.description == description:
-                        return self.state.get_task_output(node.true_branch.id)
-                    elif isinstance(node.true_branch, TaskChain):
-                        for branch_node in node.true_branch.nodes:
-                            if isinstance(branch_node, TaskNode) and branch_node.task.description == description:
-                                return self.state.get_task_output(branch_node.id)
-                
-                # Check false branch
-                if node.false_branch:
-                    if isinstance(node.false_branch, TaskNode) and node.false_branch.task.description == description:
-                        return self.state.get_task_output(node.false_branch.id)
-                    elif isinstance(node.false_branch, TaskChain):
-                        for branch_node in node.false_branch.nodes:
-                            if isinstance(branch_node, TaskNode) and branch_node.task.description == description:
-                                return self.state.get_task_output(branch_node.id)
-        
+                if output is not None: return output
         return None
 
-
-# Helper functions to work with the existing Task class
 def task(description: str, **kwargs) -> Task:
     """
     Creates a new Task with the given description and parameters.
@@ -1235,9 +784,7 @@ def task(description: str, **kwargs) -> Task:
     Returns:
         A new Task instance
     """
-    # Ensure agent is explicitly set to None if not provided
-    if 'agent' not in kwargs:
-        kwargs['agent'] = None
+    if 'agent' not in kwargs: kwargs['agent'] = None
     return Task(description=description, **kwargs)
 
 def node(task_instance: Task) -> TaskNode:
@@ -1252,9 +799,7 @@ def node(task_instance: Task) -> TaskNode:
     """
     return TaskNode(task=task_instance)
 
-def create_graph(default_agent: Optional[Any] = None,
-                 parallel_execution: bool = False,
-                 show_progress: bool = True) -> Graph:
+def create_graph(default_agent: Optional[Any] = None, parallel_execution: bool = False, show_progress: bool = True) -> Graph:
     """
     Creates a new graph with the specified configuration.
     
@@ -1266,14 +811,8 @@ def create_graph(default_agent: Optional[Any] = None,
     Returns:
         A configured Graph instance
     """
-    return Graph(
-        default_agent=default_agent,
-        parallel_execution=parallel_execution,
-        show_progress=show_progress
-    )
+    return Graph(default_agent=default_agent, parallel_execution=parallel_execution, show_progress=show_progress)
 
-
-# Enable Task objects to use the >> operator directly
 def _task_rshift(self, other):
     """
     Implements the >> operator for Task objects to connect them in a chain.
@@ -1285,18 +824,8 @@ def _task_rshift(self, other):
         A TaskChain object containing both tasks as nodes
     """
     chain = TaskChain()
-    chain.add(TaskNode(task=self))
-    
-    if isinstance(other, Task):
-        chain.add(TaskNode(task=other))
-    elif isinstance(other, TaskNode):
-        chain.add(other)
-    elif isinstance(other, TaskChain):
-        chain = chain.add(other)
-    elif isinstance(other, (DecisionFunc, DecisionLLM)):
-        chain.add(other)
-    
+    chain.add(self)
+    chain.add(other)
     return chain
 
-# Apply the patch to the Task class
 Task.__rshift__ = _task_rshift

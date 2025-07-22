@@ -1,5 +1,9 @@
+from __future__ import annotations
 import json
-from upsonic.agent.agent import Direct as Agent
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from upsonic.agent.agent import Direct as Agent
 
 def turn_agent_to_string(agent: Agent):
     the_dict = {}
