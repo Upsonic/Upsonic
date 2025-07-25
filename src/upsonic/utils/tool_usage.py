@@ -31,4 +31,4 @@ def tool_usage(model_response, task, historical_message_count=0):
         for tool_call in tool_usage_value:
             task.add_tool_call(tool_call)
 
-        return tool_usage_value
+        return tool_calls_map

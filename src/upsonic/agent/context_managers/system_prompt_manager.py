@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Any, Optional
 
 from upsonic.context.agent import turn_agent_to_string
 from upsonic.context.default_prompt import default_prompt
@@ -20,7 +20,7 @@ class SystemPromptManager:
     task-specific context.
     """
 
-    def __init__(self, agent: Direct, task: Task):
+    def __init__(self, agent: Direct, task: Task, *, turn_data: Optional[Dict[str, Any]] = None):
         """
         Initializes the SystemPromptManager.
 
@@ -35,6 +35,7 @@ class SystemPromptManager:
         self.agent = agent
         self.task = task
         self.system_prompt: str = ""
+        self.turn_data = turn_data
 
     def _build_system_prompt(self) -> str:
         """
@@ -94,6 +95,9 @@ class SystemPromptManager:
         system prompt and makes it available via the `get_system_prompt` method.
         """
         self.system_prompt = self._build_system_prompt()
+        if self.turn_data is not None:
+            self.turn_data['final_prompt'] = self.system_prompt
+            
         try:
             yield self
         finally:

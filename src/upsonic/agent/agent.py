@@ -1,7 +1,11 @@
 import asyncio
 import os
 import uuid
-from typing import Any, List, Union
+from typing import Any, List, Union, Optional, Dict
+from upsonic.storage.base import Storage
+from upsonic.storage.session.llm import LLMConversation, LLMTurn
+import time
+from contextlib import asynccontextmanager
 
 from pydantic_ai import Agent as PydanticAgent
 from pydantic_ai import BinaryContent
@@ -44,7 +48,9 @@ class Direct(BaseAgent):
                  compress_context: bool = False,
                  reliability_layer = None,
                  agent_id_: str | None = None,
+                 storage: Optional[Storage] = None,
                  canvas: Canvas | None = None,
+                 conversation_id: Optional[str] = None,
                  ):
         self.canvas = canvas
 
@@ -60,6 +66,9 @@ class Direct(BaseAgent):
         self.memory = memory
 
         self.reliability_layer = reliability_layer
+
+        self.storage = storage
+        self.conversation_id = conversation_id
         
 
 
@@ -75,7 +84,53 @@ class Direct(BaseAgent):
         return f"Agent_{self.agent_id[:8]}"
 
 
+    async def _assemble_and_save_turn(self, turn_data: Dict[str, Any], processed_task: Optional[Task], exception: Optional[Exception] = None):
+        """
+        Assembles the final 'assistant' LLMTurn object and persists it.
+        """
+        if not self.storage or not self.conversation_id:
+            return
 
+        # --- Handle Failure Case ---
+        metadata = {"status": "failed" if exception else "success"}
+        if turn_data.get("graph_execution_id"):
+            metadata["graph_execution_id"] = turn_data["graph_execution_id"]
+
+        if exception:
+            assistant_turn = LLMTurn(
+                role="assistant",
+                timestamp_start=turn_data.get('timestamp_start', time.time()),
+                timestamp_end=turn_data.get('timestamp_end', time.time()),
+                llm_config=turn_data.get('llm_config'),
+                final_prompt=turn_data.get('final_prompt'),
+                error=f"{type(exception).__name__}: {str(exception)}",
+                metadata=metadata
+            )
+            self.storage.append_turn(self.conversation_id, assistant_turn)
+            print(f"[Storage] Persisted FAILED 'assistant' turn for conversation: {self.conversation_id}")
+            return
+
+        if not processed_task:
+            return
+
+        try:
+            assistant_turn = LLMTurn(
+                role="assistant",
+                timestamp_start=turn_data.get('timestamp_start', time.time()),
+                timestamp_end=turn_data.get('timestamp_end', time.time()),
+                content=turn_data.get('content'),
+                final_prompt=turn_data.get('final_prompt'),
+                llm_config=turn_data.get('llm_config'),
+                llm_response=processed_task.response,
+                usage_stats=turn_data.get('usage_stats'),
+                tool_calls=turn_data.get('tool_calls'),
+                cost=turn_data.get('cost'),
+                metadata=metadata
+            )
+            self.storage.append_turn(self.conversation_id, assistant_turn)
+            print(f"[Storage] Persisted SUCCEEDED 'assistant' turn for conversation: {self.conversation_id}")
+        except Exception as e:
+            print(f"[Storage] CRITICAL: Failed to assemble or save turn data. Error: {e}")
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
     async def print_do_async(self, task: Union[Task, List[Task]], model: ModelNames | None = None, debug: bool = False, retry: int = 3):
@@ -234,58 +289,116 @@ class Direct(BaseAgent):
 
 
 
+    @asynccontextmanager
+    async def _managed_storage_connection(self):
+        """
+        An internal async context manager to ensure the storage connection is
+        active during an operation.
+        """
+        if not self.storage:
+            yield
+            return
+
+        was_connected_before = self.storage.is_connected()
+
+        try:
+            if not was_connected_before:
+
+                self.storage.connect()
+            
+            yield
+
+        finally:
+            if not was_connected_before:
+                self.storage.disconnect()
+
 
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
-    async def do_async(self, task: Task, model: ModelNames | None = None, debug: bool = False, retry: int = 3, state: Any = None):
+    async def do_async(self, task: Task, model: ModelNames | None = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
         """
-        Execute a direct LLM call with the given task and model asynchronously.
-        
-        Args:
-            task: The task to execute or list of tasks
-            model: The LLM model to use
-
-            debug: Whether to enable debug mode
-            retry: Number of retries for failed calls (default: 3)
-            
-        Returns:
-            The response from the LLM
+        Execute a direct LLM call and orchestrate the persistence of the interaction.
         """
+        async with self._managed_storage_connection():
+            turn_data = {}
+            processed_task = None
+            exception_caught = None
 
-        llm_manager = LLMManager(self.default_llm_model, model)
-        
-        async with llm_manager.manage_llm() as llm_handler:
-            selected_model = llm_handler.get_model()
-            
+            if self.storage:
+                turn_data["timestamp_start"] = time.time()
+                if graph_execution_id:
+                    turn_data["graph_execution_id"] = graph_execution_id
 
-            system_prompt_manager = SystemPromptManager(self, task)
-            context_manager = ContextManager(self, task, state)
-            memory_manager = MemoryManager(self, task)
-            call_manager = CallManager(selected_model, task, debug)
-            task_manager = TaskManager(task, self)
-            reliability_manager = ReliabilityManager(task, self.reliability_layer, selected_model)
+                if not self.conversation_id:
+                    self.conversation_id = str(uuid.uuid4())
+                    new_conversation = LLMConversation(
+                        conversation_id=self.conversation_id,
+                        user_id=self.get_agent_id(),
+                        entity_id=self.agent_id,
+                        created_at=int(turn_data["timestamp_start"]),
+                        updated_at=int(turn_data["timestamp_start"]),
+                    )
+                    self.storage.start_conversation(new_conversation)
+                    print(f"[Storage] Started new conversation: {self.conversation_id}")
+
+            try:
+                llm_manager = LLMManager(self.default_llm_model, model, turn_data=turn_data)
+                
+                async with llm_manager.manage_llm() as llm_handler:
+                    selected_model = llm_handler.get_model()
+                    
+                    system_prompt_manager = SystemPromptManager(self, task, turn_data=turn_data)
+                    context_manager = ContextManager(self, task, state, turn_data=turn_data)
+
+                    memory_manager = MemoryManager(self, task)
+                    
+                    async with system_prompt_manager.manage_system_prompt() as sp_handler, \
+                                context_manager.manage_context() as ctx_handler:
+
+                        if self.storage and self.conversation_id:
+                            user_turn_metadata = {}
+                            if turn_data.get("graph_execution_id"):
+                                user_turn_metadata["graph_execution_id"] = turn_data["graph_execution_id"]
+
+                            user_turn = LLMTurn(
+                                role="user",
+                                timestamp_start=turn_data.get('timestamp_start', time.time()),
+                                content=task.description,
+                                final_prompt=turn_data.get('final_prompt', ''),
+                                metadata=user_turn_metadata,
+                            )
+                            self.storage.append_turn(self.conversation_id, user_turn)
+                            print(f"[Storage] Persisted 'user' turn for conversation: {self.conversation_id}")
 
 
-            async with system_prompt_manager.manage_system_prompt() as sp_handler:
-                system_prompt = sp_handler.get_system_prompt()
-                agent = await self.agent_create(selected_model, task, system_prompt)
+                        call_manager = CallManager(selected_model, task, debug, turn_data=turn_data)
+                        task_manager = TaskManager(task, self)
+                        reliability_manager = ReliabilityManager(task, self.reliability_layer, selected_model)
+                        
+                        agent = await self.agent_create(selected_model, task, sp_handler.get_system_prompt())
 
-                async with context_manager.manage_context() as ctx_handler:
-                    async with reliability_manager.manage_reliability() as reliability_handler:
-                        async with memory_manager.manage_memory() as memory_handler:
-                            async with call_manager.manage_call(memory_handler) as call_handler:
-                                async with task_manager.manage_task() as task_handler:
-                                    async with agent.run_mcp_servers():
-                                        model_response = await agent.run(task.build_agent_input(), message_history=memory_handler.historical_messages)
-                            
-                                    # Save the response to all contexts
-                                    model_response = memory_handler.process_response(model_response)
-                                    model_response = call_handler.process_response(model_response)
-                                    model_response = task_handler.process_response(model_response)
-                                    processed_task = await reliability_handler.process_task(task_handler.task)
-        
-        # Print the price ID summary if the task has a price ID
-        if not processed_task.not_main_task:
-            print_price_id_summary(processed_task.price_id, processed_task)
-            
-        return processed_task.response
+                        async with reliability_manager.manage_reliability() as reliability_handler:
+                            async with memory_manager.manage_memory() as memory_handler:
+                                async with call_manager.manage_call(memory_handler) as call_handler:
+                                    async with task_manager.manage_task() as task_handler:
+                                        async with agent.run_mcp_servers():
+                                            model_response = await agent.run(task.build_agent_input(), message_history=memory_handler.historical_messages)
+                                        
+                                        model_response = memory_handler.process_response(model_response)
+                                        model_response = call_handler.process_response(model_response)
+                                        model_response = task_handler.process_response(model_response)
+                                        processed_task = await reliability_handler.process_task(task_handler.task)
+
+            except Exception as e:
+                exception_caught = e
+                raise
+            finally:
+                print(self.storage)
+                if self.storage:
+                    turn_data["timestamp_end"] = time.time()
+                    await self._assemble_and_save_turn(turn_data, processed_task, exception=exception_caught)
+
+            if processed_task and not processed_task.not_main_task:
+                print_price_id_summary(processed_task.price_id, processed_task)
+                
+            return processed_task.response if processed_task else None
