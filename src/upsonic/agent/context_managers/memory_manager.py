@@ -1,7 +1,6 @@
 from contextlib import asynccontextmanager
 from upsonic.memory.memory import get_agent_memory, save_agent_memory
 
-
 class MemoryManager:
     def __init__(self, agent, task):
         self.agent = agent
@@ -25,6 +24,5 @@ class MemoryManager:
         try:
             yield self
         finally:
-            # Automatically save memory if a response was captured and memory is enabled
             if self.agent.memory and self.model_response is not None:
-                save_agent_memory(self.agent, self.model_response) 
+                save_agent_memory(self.agent, self.model_response)
