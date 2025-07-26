@@ -1,4 +1,3 @@
-import msvcrt
 import json
 import os
 import shutil
@@ -12,8 +11,8 @@ from upsonic.storage.base import Storage
 from upsonic.storage.settings import JSONSettings
 from upsonic.storage.session.llm import LLMConversation, LLMTurn, Artifact
 
-# Thread-local storage for file locks
-_thread_local = threading.local()
+# Global lock for thread-safe file operations
+_file_lock = threading.RLock()
 
 
 class JSONStorage(Storage):
@@ -32,31 +31,16 @@ class JSONStorage(Storage):
         self._json_indent = 4 if self._pretty_print else None
         
         self.conversations_path = self.base_path / self.mode
-        self._lock_path = self.conversations_path / "_storage.lock"
 
     def _acquire_lock(self):
-        if not hasattr(_thread_local, 'lock_file'):
-            self._lock_path.parent.mkdir(parents=True, exist_ok=True)
-            _thread_local.lock_file = self._lock_path.open('r+')
-        try:
-            msvcrt.locking(_thread_local.lock_file.fileno(), msvcrt.LK_LOCK, 1)
-        except OSError as e:
-            raise IOError(f"Could not acquire lock on {self._lock_path}: {e}")
+        _file_lock.acquire()
 
     def _release_lock(self):
-        if hasattr(_thread_local, 'lock_file'):
-            try:
-                msvcrt.locking(_thread_local.lock_file.fileno(), msvcrt.LK_UNLCK, 1)
-            except OSError as e:
-                raise IOError(f"Could not release lock on {self._lock_path}: {e}")
-
-            _thread_local.lock_file.close()
-            del _thread_local.lock_file
+        _file_lock.release()
 
     def connect(self) -> None:
         try:
             self.conversations_path.mkdir(parents=True, exist_ok=True)
-            self._lock_path.touch()
             self._connected = True
         except OSError as e:
             raise ConnectionError(f"Could not access storage directory {self.conversations_path}: {e}")
