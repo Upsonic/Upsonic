@@ -1,6 +1,7 @@
 import time
 from contextlib import asynccontextmanager
 from typing import Dict, Any, Optional
+import json
 
 from upsonic.storage.session.llm import LLMUsageStats, LLMToolCall
 from upsonic.utils.printing import call_end
@@ -54,7 +55,7 @@ class CallManager:
                         parsed_tool_calls = [
                             LLMToolCall(
                                 tool_name=tc.get("tool_name", "unknown_tool"),
-                                arguments=tc.get("params", {}),
+                                arguments=json.loads(tc.get("params", "{}")),
                                 tool_output=tc.get("tool_result")
                             ) 
                             for tc in tool_usage_result
@@ -73,7 +74,7 @@ class CallManager:
                     self.start_time,
                     self.end_time,
                     usage,
-                    list(tool_usage_result.values()),
+                    tool_usage_result,
                     self.debug,
                     self.task.price_id
                 ) 

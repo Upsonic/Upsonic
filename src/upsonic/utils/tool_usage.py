@@ -26,9 +26,9 @@ def tool_usage(model_response, task, historical_message_count=0):
 
         # Convert to list format
         tool_usage_value = list(tool_calls_map.values())
-        
+        print("TOOL CALL MAP: ", tool_calls_map)
         # Store tool calls in the task
         for tool_call in tool_usage_value:
             task.add_tool_call(tool_call)
 
-        return tool_calls_map
+        return tool_usage_value

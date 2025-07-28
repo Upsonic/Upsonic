@@ -2,6 +2,7 @@ import time
 from typing import List, Optional
 from pathlib import Path
 import uuid
+import os
 
 from sqlalchemy import create_engine, inspect as sqlalchemy_inspect, text, func
 from sqlalchemy.engine import Engine
