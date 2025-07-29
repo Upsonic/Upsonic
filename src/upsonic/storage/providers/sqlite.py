@@ -1,279 +1,184 @@
-import json
-import os
 import time
-from typing import Any, List, Optional
+import json
 from pathlib import Path
-import uuid
-
-from sqlalchemy import create_engine, inspect as sqlalchemy_inspect, text
-from sqlalchemy.engine import Engine
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlalchemy.event import listen
-from sqlalchemy.orm import sessionmaker, Session as DBSession
+from typing import List, Literal, Optional
 
 from upsonic.storage.base import Storage, SchemaMismatchError
+from upsonic.storage.sessions import (
+    BaseSession,
+    AgentSession
+)
 from upsonic.storage.settings import SQLiteSettings
-from upsonic.storage.session.llm import LLMConversation, LLMTurn, Artifact
 
-from .llm_archive_models import Base, LLMConversationModel, LLMTurnModel, LLMArtifactModel
+try:
+    from sqlalchemy import create_engine, inspect as sqlalchemy_inspect, text
+    from sqlalchemy import Text
+    from sqlalchemy.engine import Engine
+    from sqlalchemy.orm import sessionmaker, Session as SqlAlchemySession
+    from sqlalchemy.schema import Column, MetaData, Table
+    from sqlalchemy.types import String, Integer, JSON
+    from sqlalchemy.dialects import sqlite
+    from sqlalchemy.sql.expression import select
+except ImportError:
+    raise ImportError("`sqlalchemy` is required for SQLiteStorage. Please install it using `pip install sqlalchemy`.")
 
 
-def _enable_foreign_keys(dbapi_con, connection_record):
-    """Ensures a new SQLite connection has FK support enabled."""
-    cursor = dbapi_con.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
-
-
-class SQLiteStorage(Storage):
+class SqliteStorage(Storage):
     """
-    Lightweight, serverless storage for the LLM Interaction Archive using SQLite.
-    This version is self-sufficient, automatically creating and verifying the
-    three-table relational schema on connection.
+    A session-based storage provider that uses a SQLite database, configured
+    via a Pydantic settings object.
     """
+
     def __init__(self, settings: SQLiteSettings):
         """
         Initializes the SQLite storage provider from a settings object.
+
+        This constructor is designed to be called by the StorageFactory, which
+        passes a validated instance of SQLiteSettings. All necessary parameters
+        (db path, table name, mode) are extracted from this object.
+
+        Args:
+            settings: A validated SQLiteSettings object containing all configuration.
         """
-        super().__init__()
-        self._set_mode(settings.STORAGE_MODE)
+        super().__init__(mode=settings.STORAGE_MODE)
+
         self.db_path = str(settings.SQLITE_DB_PATH)
-        self.artifacts_base_path = settings.SQLITE_ARTIFACT_PATH.resolve()
+        self.table_name = settings.SQLITE_TABLE_NAME
 
         self.db_uri = f"sqlite:///{self.db_path}" if self.db_path != ":memory:" else "sqlite:///"
-        self._engine: Optional[Engine] = None
-        self._session_factory: Optional[sessionmaker[DBSession]] = None
+        self.db_engine: Engine = create_engine(self.db_uri)
+        self.metadata = MetaData()
+        self.inspector = sqlalchemy_inspect(self.db_engine)
+        self.SqlSession = sessionmaker(bind=self.db_engine)
+        
+        self.table: Table = self._get_table_schema()
 
-    def _verify_schema(self):
-        """
-        Verifies that the existing database schema contains the required tables.
-        """
-        if not self._engine:
-            raise ConnectionError("Cannot verify schema, storage is not connected.")
-        
-        inspector = sqlalchemy_inspect(self._engine)
-        required_tables = {"llm_conversations", "llm_turns", "llm_artifacts"}
-        
-        existing_tables = inspector.get_table_names()
-        
-        missing_tables = required_tables - set(existing_tables)
-        if missing_tables:
-            raise SchemaMismatchError(f"Missing required tables: {missing_tables}. A manual migration or database reset is required.")
+        self.create()
+        self.connect()
+
+    def _get_session_model_class(self) -> type[BaseSession]:
+        """Returns the appropriate Pydantic session model class based on the current mode."""
+        if self.mode == "agent":
+            return AgentSession
+        raise ValueError(f"Invalid mode '{self.mode}' specified for SqliteStorage.")
+
+    def _get_table_schema(self) -> Table:
+        """Dynamically defines the SQLAlchemy Table schema based on the current mode."""
+        common_columns = [
+            Column("session_id", String, primary_key=True),
+            Column("user_id", String, index=True),
+            Column("memory", JSON),
+            Column("session_data", sqlite.JSON),
+            Column("extra_data", sqlite.JSON),
+            Column("created_at", sqlite.REAL),
+            Column("updated_at", sqlite.REAL, index=True),
+        ]
+        specific_columns = []
+        if self.mode == "agent":
+            specific_columns = [Column("agent_id", String, index=True), Column("agent_data", sqlite.JSON), Column("team_session_id", String, index=True, nullable=True)]
+        elif self.mode == "team":
+            specific_columns = [Column("team_id", String, index=True), Column("team_data", sqlite.JSON), Column("team_session_id", String, index=True, nullable=True)]
+        elif self.mode == "workflow":
+            specific_columns = [Column("workflow_id", String, index=True), Column("workflow_data", sqlite.JSON)]
+        elif self.mode == "workflow_v2":
+            specific_columns = [Column("workflow_id", String, index=True), Column("workflow_name", String, index=True), Column("workflow_data", sqlite.JSON), Column("runs", sqlite.JSON)]
+        return Table(self.table_name, self.metadata, *common_columns, *specific_columns, extend_existing=True)
+
+
+    def is_connected(self) -> bool:
+        return self._connected
 
     def connect(self) -> None:
-        """
-        Establishes connection and handles schema creation/verification.
-        """
-        if self._engine:
-            self._connected = True
+        if self.is_connected():
             return
+
         try:
-            if self.db_path != ":memory:":
-                db_dir = os.path.dirname(os.path.abspath(self.db_path))
-                os.makedirs(db_dir, exist_ok=True)
-
-            self._engine = create_engine(self.db_uri)
-            
-            if self.db_path != ":memory:":
-                listen(self._engine, "connect", _enable_foreign_keys)
-
-            Base.metadata.create_all(self._engine, checkfirst=True)
-            self._verify_schema()
-
-            self._session_factory = sessionmaker(autocommit=False, autoflush=False, bind=self._engine)
-            with self._engine.connect() as connection:
+            with self.db_engine.connect() as connection:
                 connection.execute(text("SELECT 1"))
             self._connected = True
         except Exception as e:
-            raise ConnectionError(f"Failed to connect to SQLite at {self.db_path}: {e}") from e
+            self._connected = False
+            raise ConnectionError(f"Failed to connect to SQLite at {self.db_path}: {e}")
 
     def disconnect(self) -> None:
-        """Closes all connections in the connection pool."""
-        if self._engine:
-            self._engine.dispose()
+        if not self.is_connected():
+            return
+        
+        self.db_engine.dispose()
         self._connected = False
 
-    def is_connected(self) -> bool:
-        """Returns the current connection state."""
-        return self._connected
+    def create(self) -> None:
+        self.metadata.create_all(self.db_engine, checkfirst=True)
 
-    def _get_db_session(self) -> DBSession:
-        """Provides a new database session."""
-        if not self._session_factory:
-            raise ConnectionError("Storage is not connected.")
-        return self._session_factory()
-        
-    def start_conversation(self, conversation: LLMConversation) -> None:
-        db = self._get_db_session()
-        try:
-            new_convo = LLMConversationModel(
-                conversation_id=uuid.UUID(conversation.conversation_id),
-                user_id=conversation.user_id,
-                entity_id=uuid.UUID(conversation.entity_id) if conversation.entity_id else None,
-                created_at=conversation.created_at,
-                updated_at=conversation.updated_at,
-                summary=conversation.summary,
-                tags=conversation.tags,
-                meta_data=conversation.metadata
-            )
-            db.add(new_convo)
-            db.commit()
-        except Exception as e:
-            db.rollback()
-            raise IOError(f"Failed to start conversation {conversation.conversation_id}: {e}")
-        finally:
-            db.close()
-
-    def append_turn(self, conversation_id: str, turn: LLMTurn) -> None:
-        db = self._get_db_session()
-        try:
-            turn_data_json_str = turn.model_dump_json(
-                exclude={"turn_id", "role", "timestamp_start", "timestamp_end"}
-            )
-            
-            new_turn = LLMTurnModel(
-                turn_id=uuid.UUID(turn.turn_id),
-                conversation_id=uuid.UUID(conversation_id),
-                role=turn.role,
-                timestamp_start=turn.timestamp_start,
-                timestamp_end=turn.timestamp_end,
-                turn_data=turn_data_json_str
-            )
-            db.add(new_turn)
-            
-            db.query(LLMConversationModel).filter(
-                LLMConversationModel.conversation_id == conversation_id
-            ).update({"updated_at": int(time.time())})
-            
-            db.commit()
-        except Exception as e:
-            db.rollback()
-            raise IOError(f"Failed to append turn to conversation {conversation_id}: {e}")
-        finally:
-            db.close()
-
-    def get_conversation(self, conversation_id: str) -> Optional[LLMConversation]:
-        db = self._get_db_session()
-        try:
-            convo_model = db.query(LLMConversationModel).filter(
-                LLMConversationModel.conversation_id == conversation_id
-            ).first()
-
-            if not convo_model:
-                return None
-            
-            turns_models = db.query(LLMTurnModel).filter(
-                LLMTurnModel.conversation_id == conversation_id
-            ).order_by(LLMTurnModel.timestamp_start).all()
-            
-            turns = []
-            for turn_model in turns_models:
-                turn_data = json.loads(turn_model.turn_data)
-                turn_data.update({
-                    "turn_id": str(turn_model.turn_id),
-                    "role": turn_model.role,
-                    "timestamp_start": turn_model.timestamp_start,
-                    "timestamp_end": turn_model.timestamp_end
-                })
-                turns.append(LLMTurn.model_validate(turn_data))
-            
-            return LLMConversation(
-                conversation_id=str(convo_model.conversation_id),
-                user_id=convo_model.user_id,
-                entity_id=convo_model.entity_id,
-                created_at=convo_model.created_at,
-                updated_at=convo_model.updated_at,
-                summary=convo_model.summary,
-                tags=convo_model.tags,
-                metadata=convo_model.meta_data,
-                turns=turns
-            )
-        finally:
-            db.close()
-
-    def list_conversations(self, user_id: Optional[str] = None, entity_id: Optional[str] = None, limit: int = 20, offset: int = 0) -> List[LLMConversation]:
-        db = self._get_db_session()
-        try:
-            query = db.query(LLMConversationModel).order_by(LLMConversationModel.updated_at.desc())
+    def read(self, session_id: str, user_id: Optional[str] = None) -> Optional[BaseSession]:
+        with self.SqlSession() as sess:
+            stmt = select(self.table).where(self.table.c.session_id == session_id)
             if user_id:
-                query = query.filter(LLMConversationModel.user_id == user_id)
-            if entity_id:
-                query = query.filter(LLMConversationModel.entity_id == entity_id)
-            
-            results = query.limit(limit).offset(offset).all()
-            
-            return [
-                LLMConversation(
-                    conversation_id=str(r.conversation_id),
-                    user_id=r.user_id,
-                    entity_id=r.entity_id,
-                    created_at=r.created_at,
-                    updated_at=r.updated_at,
-                    summary=r.summary,
-                    tags=r.tags,
-                    metadata=r.meta_data,
-                    turns=[]
-                ) for r in results
-            ]
-        finally:
-            db.close()
-    
-    def log_artifact(self, artifact: Artifact) -> None:
-        db = self._get_db_session()
+                stmt = stmt.where(self.table.c.user_id == user_id)
+            result = sess.execute(stmt).first()
+            if result:
+                session_data = dict(result._mapping)
+                SessionModel = self._get_session_model_class()
+                return SessionModel.from_dict(session_data)
+        return None
+
+    def upsert(self, session: BaseSession) -> Optional[BaseSession]:
+        SessionModel = self._get_session_model_class()
+        if not isinstance(session, SessionModel):
+            raise TypeError(f"Session object must be of type {SessionModel.__name__} for mode '{self.mode}'")
+
+        session.updated_at = time.time()
+        session_dict = session.model_dump(mode="json")
+
+        insert_stmt = sqlite.insert(self.table).values(session_dict)
+        update_dict = {key: value for key, value in session_dict.items() if key != "session_id"}
+
+        upsert_stmt = insert_stmt.on_conflict_do_update(
+            index_elements=["session_id"],
+            set_=update_dict
+        )
         try:
-            new_artifact = LLMArtifactModel(
-                artifact_id=uuid.UUID(artifact.artifact_id),
-                conversation_id=uuid.UUID(artifact.conversation_id),
-                turn_id=uuid.UUID(artifact.turn_id) if artifact.turn_id else None,
-                mime_type=artifact.mime_type,
-                storage_uri=artifact.storage_uri,
-                meta_data=artifact.metadata
-            )
-            db.add(new_artifact)
-            db.commit()
+            with self.SqlSession() as sess, sess.begin():
+                sess.execute(upsert_stmt)
+            return self.read(session.session_id)
         except Exception as e:
-            db.rollback()
-            raise IOError(f"Failed to log artifact {artifact.artifact_id}: {e}")
-        finally:
-            db.close()
+            raise IOError(f"Failed to upsert session {session.session_id}: {e}") from e
+
+    def get_all_sessions(self, user_id: Optional[str] = None, entity_id: Optional[str] = None) -> List[BaseSession]:
+        return self._get_sessions_query(user_id, entity_id)
+
+    def get_recent_sessions(self, user_id: Optional[str] = None, entity_id: Optional[str] = None, limit: int = 10) -> List[BaseSession]:
+        return self._get_sessions_query(user_id, entity_id, limit)
+
+    def _get_sessions_query(self, user_id: Optional[str], entity_id: Optional[str], limit: Optional[int] = None) -> List[BaseSession]:
+        with self.SqlSession() as sess:
+            stmt = select(self.table).order_by(self.table.c.updated_at.desc())
+            if user_id:
+                stmt = stmt.where(self.table.c.user_id == user_id)
+            if entity_id:
+                entity_col_map = {"agent": "agent_id", "team": "team_id", "workflow": "workflow_id", "workflow_v2": "workflow_id"}
+                col_name = entity_col_map.get(self.mode)
+                if col_name:
+                    stmt = stmt.where(getattr(self.table.c, col_name) == entity_id)
+            if limit:
+                stmt = stmt.limit(limit)
+            results = sess.execute(stmt).fetchall()
+            SessionModel = self._get_session_model_class()
+            return [SessionModel.from_dict(row._mapping) for row in results]
+
+    def delete_session(self, session_id: str) -> None:
+        with self.SqlSession() as sess, sess.begin():
+            delete_stmt = self.table.delete().where(self.table.c.session_id == session_id)
+            sess.execute(delete_stmt)
 
     def drop(self) -> None:
-        """Drops all tables related to the LLM archive."""
-        if self._engine:
-            Base.metadata.drop_all(self._engine)
+        self.metadata.drop_all(self.db_engine, tables=[self.table], checkfirst=True)
 
-    def store_artifact_data(self, artifact_id: str, conversation_id: str, binary_data: bytes) -> str:
-        """Stores the artifact as a file on the application server's disk."""
-        try:
-            self.artifacts_base_path.mkdir(parents=True, exist_ok=True)
-            
-            conv_artifact_path = self.artifacts_base_path / conversation_id
-            conv_artifact_path.mkdir(exist_ok=True)
-            
-            file_path = conv_artifact_path / artifact_id
-            
-            with file_path.open("wb") as f:
-                f.write(binary_data)
-            
-            return file_path.as_uri()
-        except OSError as e:
-            raise IOError(f"Failed to write artifact file to {file_path}: {e}")
+    def log_artifact(self, artifact) -> None:
+        raise NotImplementedError("Artifact logging should be handled within the session data for this provider.")
+
+    def store_artifact_data(self, artifact_id: str, session_id: str, binary_data: bytes) -> str:
+        raise NotImplementedError("Binary artifact storage is not handled by the session provider.")
 
     def retrieve_artifact_data(self, storage_uri: str) -> bytes:
-        """Retrieves an artifact from a file URI stored in the database."""
-        if not storage_uri.startswith("file://"):
-            raise ValueError(f"This storage provider can only handle 'file://' URIs for artifacts.")
-        
-        file_path_str = storage_uri[len("file://"):]
-        if os.name == 'nt' and file_path_str.startswith('/'):
-            file_path_str = file_path_str[1:]
-        
-        file_path = Path(file_path_str)
-        
-        try:
-            with file_path.open("rb") as f:
-                return f.read()
-        except FileNotFoundError:
-            raise
-        except OSError as e:
-            raise IOError(f"Failed to read artifact file from {file_path}: {e}")
+        raise NotImplementedError("Binary artifact storage is not handled by the session provider.")

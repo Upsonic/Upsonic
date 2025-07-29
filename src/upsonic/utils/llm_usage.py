@@ -1,17 +1,14 @@
-def llm_usage(model_response, historical_message_count=0):
+def llm_usage(model_response):
 
         # Extract all messages from model_response
         all_messages = model_response.all_messages()
-        
-        # Only process messages from the current interaction (skip historical messages)
-        current_interaction_messages = all_messages[historical_message_count:]
         
         # Initialize token counters
         input_tokens = 0
         output_tokens = 0
         
         # Process messages to extract actual token usage from usage data
-        for message in current_interaction_messages:
+        for message in all_messages:
             # Extract actual token counts from usage data
             if hasattr(message, 'usage') and message.usage:
                 # Get actual request tokens (input tokens)

@@ -1,145 +1,131 @@
 import threading
 import time
 from collections import OrderedDict
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 
 from upsonic.storage.base import Storage
+from upsonic.storage.sessions import (
+    BaseSession,
+    AgentSession
+)
 from upsonic.storage.settings import InMemorySettings
-from upsonic.storage.session.llm import LLMConversation, LLMTurn, Artifact
-
 
 class InMemoryStorage(Storage):
     """
-    Ephemeral, thread-safe storage for the LLM Interaction Archive.
-    - Stores full LLMConversation objects in memory.
-    - Ideal for unit testing, rapid prototyping, and transient workflows.
+    An ephemeral, thread-safe, session-based storage provider that lives in memory.
+
+    This provider is ideal for unit testing, rapid prototyping, and any workflow
+    where data persistence across application restarts is not required. It can
+    optionally be configured as a fixed-size LRU (Least Recently Used) cache.
     """
+
     def __init__(self, settings: InMemorySettings):
-        super().__init__()
-        self._set_mode(settings.STORAGE_MODE)
-        self.max_conversations = settings.IN_MEMORY_MAX_SESSIONS
+        """
+        Initializes the in-memory storage provider from a settings object.
+
+        Args:
+            settings: A validated InMemorySettings object containing all configuration.
+        """
+        super().__init__(mode=settings.STORAGE_MODE)
+
+        self.max_sessions = settings.IN_MEMORY_MAX_SESSIONS
         
-        self._conversations: Dict[str, LLMConversation] = OrderedDict() if self.max_conversations else {}
-        self._artifacts: Dict[str, List[Artifact]] = {}
-        self._artifact_data: Dict[str, bytes] = {}
-        
-        self._user_index: Dict[str, Set[str]] = {}
-        self._entity_index: Dict[str, Set[str]] = {}
-        
+        self._sessions: Dict[str, BaseSession] = OrderedDict() if self.max_sessions else {}
+
         self._lock = threading.Lock()
 
-    def get_lock(self) -> threading.Lock:
-        return self._lock
+        self.connect()
+
+
+    def _get_session_model_class(self) -> type[BaseSession]:
+        """Returns the appropriate Pydantic session model class based on the current mode."""
+        if self.mode == "agent":
+            return AgentSession
+        raise ValueError(f"Invalid mode '{self.mode}' specified for InMemoryStorage.")
+
+
+    def is_connected(self) -> bool:
+        return self._connected
 
     def connect(self) -> None:
+        """For in-memory, this is a no-op that just marks the state as connected."""
         self._connected = True
 
     def disconnect(self) -> None:
+        """For in-memory, this is a no-op that just marks the state as disconnected."""
         self._connected = False
 
-    def is_connected(self) -> bool:
-        """Returns the current connection state."""
-        return self._connected
+    def create(self) -> None:
+        """For in-memory, there is no persistent schema to create. This is a no-op."""
+        pass
 
-    def _add_to_indexes(self, conversation: LLMConversation):
-        if conversation.user_id:
-            self._user_index.setdefault(conversation.user_id, set()).add(conversation.conversation_id)
-        if conversation.entity_id:
-            self._entity_index.setdefault(conversation.entity_id, set()).add(conversation.conversation_id)
-
-    def _remove_from_indexes(self, conversation: LLMConversation):
-        if conversation.user_id and conversation.user_id in self._user_index:
-            self._user_index[conversation.user_id].discard(conversation.conversation_id)
-            if not self._user_index[conversation.user_id]:
-                del self._user_index[conversation.user_id]
-        if conversation.entity_id and conversation.entity_id in self._entity_index:
-            self._entity_index[conversation.entity_id].discard(conversation.conversation_id)
-            if not self._entity_index[conversation.entity_id]:
-                del self._entity_index[conversation.entity_id]
-
-
-    def store_artifact_data(self, artifact_id: str, conversation_id: str, binary_data: bytes) -> str:
-        """Stores binary data in an in-memory dictionary."""
-        storage_uri = f"memory://{artifact_id}"
+    def read(self, session_id: str, user_id: Optional[str] = None) -> Optional[BaseSession]:
         with self._lock:
-            self._artifact_data[storage_uri] = binary_data
-        return storage_uri
+            session = self._sessions.get(session_id)
+            if session:
+                if user_id and session.user_id != user_id:
+                    return None
 
-    def retrieve_artifact_data(self, storage_uri: str) -> bytes:
-        """Retrieves binary data from the in-memory dictionary."""
+                if self.max_sessions:
+                    self._sessions.move_to_end(session_id)
+                
+                return session.model_copy(deep=True)
+        return None
+
+    def upsert(self, session: BaseSession) -> Optional[BaseSession]:
+        SessionModel = self._get_session_model_class()
+        if not isinstance(session, SessionModel):
+            raise TypeError(f"Session object must be of type {SessionModel.__name__} for mode '{self.mode}'")
+
         with self._lock:
-            data = self._artifact_data.get(storage_uri)
-            if data is None:
-                raise FileNotFoundError(f"Artifact not found in memory for URI: {storage_uri}")
-            return data
-    
-    def start_conversation(self, conversation: LLMConversation) -> None:
-        with self._lock:
-            convo_copy = conversation.model_copy(deep=True)
-            convo_copy.turns = []
+            session.updated_at = int(time.time())
+            session_copy = session.model_copy(deep=True)
+            self._sessions[session.session_id] = session_copy
+
+            if self.max_sessions:
+                self._sessions.move_to_end(session.session_id)
+                if len(self._sessions) > self.max_sessions:
+                    self._sessions.popitem(last=False)
             
-            if convo_copy.conversation_id in self._conversations:
-                return
+            return session_copy
 
-            self._conversations[convo_copy.conversation_id] = convo_copy
-            self._add_to_indexes(convo_copy)
+    def get_all_sessions(self, user_id: Optional[str] = None, entity_id: Optional[str] = None) -> List[BaseSession]:
+        with self._lock:
+            all_sessions = list(self._sessions.values())
+
+        filtered_sessions: List[BaseSession] = []
+        entity_key = f"{self.mode}_id" if self.mode else None
+
+        for session in all_sessions:
+            if user_id and session.user_id != user_id:
+                continue
+            if entity_id and entity_key and getattr(session, entity_key, None) != entity_id:
+                continue
+            filtered_sessions.append(session.model_copy(deep=True))
             
-            if self.max_conversations and len(self._conversations) > self.max_conversations:
-                evicted_cid, evicted_convo = self._conversations.popitem(last=False)
-                self._remove_from_indexes(evicted_convo)
-                if evicted_cid in self._artifacts:
-                    del self._artifacts[evicted_cid]
+        return filtered_sessions
 
-    def append_turn(self, conversation_id: str, turn: LLMTurn) -> None:
-        with self._lock:
-            conversation = self._conversations.get(conversation_id)
-            if conversation:
-                conversation.turns.append(turn.model_copy(deep=True))
-                conversation.updated_at = int(time.time())
-                if self.max_conversations:
-                    self._conversations.move_to_end(conversation_id)
+    def get_recent_sessions(self, user_id: Optional[str] = None, entity_id: Optional[str] = None, limit: int = 10) -> List[BaseSession]:
+        all_sessions = self.get_all_sessions(user_id=user_id, entity_id=entity_id)
+        all_sessions.sort(key=lambda s: s.updated_at, reverse=True)
+        return all_sessions[:limit]
 
-    def get_conversation(self, conversation_id: str) -> Optional[LLMConversation]:
+    def delete_session(self, session_id: str) -> None:
         with self._lock:
-            conversation = self._conversations.get(conversation_id)
-            if conversation:
-                if self.max_conversations:
-                    self._conversations.move_to_end(conversation_id)
-                return conversation.model_copy(deep=True)
-            return None
-
-    def list_conversations(self, user_id: Optional[str] = None, entity_id: Optional[str] = None, limit: int = 20, offset: int = 0) -> List[LLMConversation]:
-        with self._lock:
-            if user_id and entity_id:
-                user_cids = self._user_index.get(user_id, set())
-                entity_cids = self._entity_index.get(entity_id, set())
-                candidate_cids = user_cids.intersection(entity_cids)
-            elif user_id:
-                candidate_cids = self._user_index.get(user_id, set())
-            elif entity_id:
-                candidate_cids = self._entity_index.get(entity_id, set())
-            else:
-                candidate_cids = set(self._conversations.keys())
-            
-            filtered_convos = [self._conversations[cid] for cid in candidate_cids if cid in self._conversations]
-
-        filtered_convos.sort(key=lambda c: c.updated_at, reverse=True)
-        
-        paginated_convos = filtered_convos[offset : offset + limit]
-        
-        return [
-            convo.model_copy(update={'turns': []}, deep=True)
-            for convo in paginated_convos
-        ]
-        
-    def log_artifact(self, artifact: Artifact) -> None:
-        with self._lock:
-            self._artifacts.setdefault(artifact.conversation_id, []).append(artifact.model_copy(deep=True))
+            if session_id in self._sessions:
+                del self._sessions[session_id]
 
     def drop(self) -> None:
-        """Clears all in-memory data structures."""
+        """Clears all sessions from memory."""
         with self._lock:
-            self._conversations.clear()
-            self._artifacts.clear()
-            self._user_index.clear()
-            self._entity_index.clear()
+            self._sessions.clear()
+
+
+    def log_artifact(self, artifact) -> None:
+        raise NotImplementedError("Artifact logging should be handled within the session data for this provider.")
+
+    def store_artifact_data(self, artifact_id: str, session_id: str, binary_data: bytes) -> str:
+        raise NotImplementedError("Binary artifact storage is not handled by the session provider.")
+
+    def retrieve_artifact_data(self, storage_uri: str) -> bytes:
+        raise NotImplementedError("Binary artifact storage is not handled by the session provider.")

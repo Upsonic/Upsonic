@@ -4,24 +4,19 @@ import time
 import shutil
 from pathlib import Path
 
-# --- Core Upsonic Imports ---
-# Make sure your project's root directory is in the PYTHONPATH
-# or run this script from the root directory.
+
 from upsonic.agent.agent import Direct
 from upsonic.tasks.tasks import Task
 from upsonic.tools.tool import tool, ToolHooks
 from upsonic.tools.processor import ToolValidationError
 
-# --- Configuration ---
-# Set a mock model to avoid real API calls and speed up tests
+
 os.environ["LLM_MODEL_KEY"] = "openai/gpt-3.5-turbo"
-# Clean up cache directory before starting
 CACHE_DIR = Path.home() / '.upsonic' / 'cache'
 if CACHE_DIR.exists():
     shutil.rmtree(CACHE_DIR)
 
 
-# --- Test Tools and Helpers ---
 
 def get_current_time_as_string(timezone: str) -> str:
     """A simple, valid tool that can be used for multiple tests."""
@@ -36,7 +31,6 @@ class MyToolbox:
         """Greets the given name with a prefix."""
         return f"{self.prefix}, {name}!"
 
-# A global list to test tool hooks
 hook_events = []
 
 def before_hook_func(*args, **kwargs):
@@ -55,22 +49,13 @@ def print_result(description, result):
     print(f"  - Agent Output: \n\n    {result}\n")
     print("-" * 80)
 
-# --- Main Test Execution ---
 
 def run_tests():
-    agent = Direct(name="Test", debug=True, model="openai/gpt-4o") # Set debug to True to see more output
+    agent = Direct(name="Test", debug=True, model="openai/gpt-4o")
 
-    # =================================================================
-    # 1. VALIDATION TESTS
-    # =================================================================
-
-
-    # =================================================================
-    # 2. DEFINITION STYLE TESTS
-    # =================================================================
     print_header("Tool Definition Styles")
 
-    # Test undecorated function
+
     """
     task = Task("Use the tool to get the current time for the 'UTC' timezone", tools=[get_current_time_as_string])
     result = agent.do(task)
@@ -82,12 +67,9 @@ def run_tests():
     result = agent.do(task)
     print_result("Undecorated class instance methods as tools", result)
     """
-    # =================================================================
-    # 3. BEHAVIOR TESTS
-    # =================================================================
+
     print_header("Tool Behaviors")
 
-    # --- Test requires_confirmation ---
     @tool(requires_confirmation=True)
     def sensitive_action(action: str) -> str:
         """Performs a sensitive action that requires confirmation."""
@@ -103,7 +85,6 @@ def run_tests():
     result = agent.do(task)
     print_result("Tool with requires_confirmation (user says 'no')", result)
 
-    # --- Test requires_user_input ---
     @tool(requires_user_input=True, user_input_fields=['destination'])
     def book_flight(destination: str, passengers: int = 1) -> str:
         """Books a flight, getting the destination interactively."""
@@ -115,8 +96,6 @@ def run_tests():
     result = agent.do(task)
     print_result("Tool with requires_user_input", result)
     
-    # --- Test stop_after_tool_call & show_result ---
-    # These two often go together.
     @tool(stop_after_tool_call=True, show_result=True)
     def get_raw_data() -> dict:
         """Fetches raw data and the agent should stop immediately."""
@@ -127,7 +106,7 @@ def run_tests():
     result = agent.do(task)
     print_result("Tool with stop_after_tool_call and show_result", f"Type of result: {type(result)}\n    Value: {result}")
     
-    # --- Test caching ---
+
     @tool(cache_results=True)
     def get_cached_time(timezone: str) -> float:
         """Returns a precise time that should be cached."""
@@ -140,11 +119,10 @@ def run_tests():
     print_result("Cache Test - First Call", result1)
 
     print(">>> Second call (should hit the cache and return the exact same value)...")
-    time.sleep(0.1) # Small delay to ensure time would have changed
+    time.sleep(0.1) 
     result2 = agent.do(task_cache)
     print_result("Cache Test - Second Call (Cache Hit)", f"{result2} (Same as first call: {result1 == result2})")
     
-    # --- Test tool_hooks ---
     hook_events.clear()
     hooks = ToolHooks(before=before_hook_func, after=after_hook_func)
     @tool(tool_hooks=hooks)

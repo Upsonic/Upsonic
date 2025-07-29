@@ -10,9 +10,7 @@ import json
 from pydantic_ai import Agent as PydanticAgent
 from pydantic_ai import BinaryContent
 from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio
-from pydantic_ai import CallToolsNode
-from pydantic_graph import End
-from pydantic_ai.messages import TextPart, ToolCallPart
+from pydantic_ai.messages import ModelMessagesTypeAdapter
 
 
 from upsonic.canvas.canvas import Canvas
@@ -20,18 +18,17 @@ from upsonic.models.model import get_agent_model
 from upsonic.models.model_registry import ModelNames
 from upsonic.tasks.tasks import Task
 from upsonic.utils.error_wrapper import upsonic_error_handler
-from upsonic.utils.printing import call_end, print_price_id_summary
+from upsonic.utils.printing import print_price_id_summary
 from upsonic.agent.base import BaseAgent
 from upsonic.tools.processor import ToolProcessor
 from upsonic.utils.tool_usage import tool_usage
 from upsonic.storage.base import Storage
-from upsonic.storage.session.llm import LLMConversation, LLMTurn
+from upsonic.storage.sessions import AgentSession
 
 from upsonic.agent.context_managers import (
     CallManager,
     ContextManager,
     LLMManager,
-    MemoryManager,
     ReliabilityManager,
     SystemPromptManager,
     TaskManager,
@@ -58,7 +55,7 @@ class Direct(BaseAgent):
                  agent_id_: str | None = None,
                  storage: Optional[Storage] = None,
                  canvas: Canvas | None = None,
-                 conversation_id: Optional[str] = None,
+                 session_id: Optional[str] = None,
                  ):
         self.canvas = canvas
 
@@ -71,12 +68,14 @@ class Direct(BaseAgent):
         self.company_objective = company_objective
         self.company_description = company_description
         self.system_prompt = system_prompt
-        self.memory = memory
 
         self.reliability_layer = reliability_layer
 
         self.storage = storage
-        self.conversation_id = conversation_id
+        self.session_id_ = session_id
+        
+        if self.storage:
+            self.storage.create()
         
 
 
@@ -90,55 +89,19 @@ class Direct(BaseAgent):
         if self.name:
             return self.name
         return f"Agent_{self.agent_id[:8]}"
+    
 
-
-    async def _assemble_and_save_turn(self, turn_data: Dict[str, Any], processed_task: Optional[Task], exception: Optional[Exception] = None):
+    @property
+    def session_id(self):
         """
-        Assembles the final 'assistant' LLMTurn object and persists it.
+        Provides a unique session ID, generating one if not already set.
+        This will be the primary identifier for storing agent state/history.
         """
-        if not self.storage or not self.conversation_id:
-            return
+        if self.session_id_ is None:
+            self.session_id_ = str(uuid.uuid4())
+        return self.session_id_
 
-        # --- Handle Failure Case ---
-        metadata = {"status": "failed" if exception else "success"}
-        if turn_data.get("graph_execution_id"):
-            metadata["graph_execution_id"] = turn_data["graph_execution_id"]
 
-        if exception:
-            assistant_turn = LLMTurn(
-                role="assistant",
-                timestamp_start=turn_data.get('timestamp_start', time.time()),
-                timestamp_end=turn_data.get('timestamp_end', time.time()),
-                llm_config=turn_data.get('llm_config'),
-                final_prompt=turn_data.get('final_prompt'),
-                error=f"{type(exception).__name__}: {str(exception)}",
-                metadata=metadata
-            )
-            self.storage.append_turn(self.conversation_id, assistant_turn)
-            print(f"[Storage] Persisted FAILED 'assistant' turn for conversation: {self.conversation_id}")
-            return
-
-        if not processed_task:
-            return
-
-        try:
-            assistant_turn = LLMTurn(
-                role="assistant",
-                timestamp_start=turn_data.get('timestamp_start', time.time()),
-                timestamp_end=turn_data.get('timestamp_end', time.time()),
-                content=turn_data.get('content'),
-                final_prompt=turn_data.get('final_prompt'),
-                llm_config=turn_data.get('llm_config'),
-                llm_response=processed_task.response,
-                usage_stats=turn_data.get('usage_stats'),
-                tool_calls=turn_data.get('tool_calls'),
-                cost=turn_data.get('cost'),
-                metadata=metadata
-            )
-            self.storage.append_turn(self.conversation_id, assistant_turn)
-            print(f"[Storage] Persisted SUCCEEDED 'assistant' turn for conversation: {self.conversation_id}")
-        except Exception as e:
-            print(f"[Storage] CRITICAL: Failed to assemble or save turn data. Error: {e}")
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
     async def print_do_async(self, task: Union[Task, List[Task]], model: ModelNames | None = None, debug: bool = False, retry: int = 3):
@@ -216,29 +179,6 @@ class Direct(BaseAgent):
         result = self.do(task, model, debug, retry)
         print(result)
         return result
-
-    def agent_tool_register(self,agent, tasks):
-
-        # If tasks is not a list
-        if not isinstance(tasks, list):
-            tasks = [tasks]
-
-        # Keep track of already registered tools to prevent duplicates
-        if not hasattr(agent, '_registered_tools'):
-            agent._registered_tools = set()
-
-        for task in tasks:
-            for tool in task.tools:
-                # Create a unique identifier for the tool
-                # Using id() to get unique object identifier
-                tool_id = id(tool)
-                
-                # Only register if not already registered
-                if tool_id not in agent._registered_tools:
-                    agent.tool_plain(tool)
-                    agent._registered_tools.add(tool_id)
-
-        return agent
 
 
     @upsonic_error_handler(max_retries=2, show_error_details=True)
@@ -327,118 +267,127 @@ class Direct(BaseAgent):
 
     @asynccontextmanager
     async def _managed_storage_connection(self):
-        """
-        An internal async context manager to ensure the storage connection is
-        active during an operation.
-        """
         if not self.storage:
             yield
             return
-
-        was_connected_before = self.storage.is_connected()
-
-        try:
-            if not was_connected_before:
-
-                self.storage.connect()
-            
+        if hasattr(self.storage, 'connect') and callable(self.storage.connect):
+            self.storage.connect()
+            try:
+                yield
+            finally:
+                if hasattr(self.storage, 'disconnect') and callable(self.storage.disconnect):
+                    self.storage.disconnect()
+        else:
             yield
-
-        finally:
-            if not was_connected_before:
-                self.storage.disconnect()
 
 
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
     async def do_async(self, task: Task, model: ModelNames | None = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
-        """
-        Execute a direct LLM call and orchestrate the persistence of the interaction.
-        """
-        async with self._managed_storage_connection():
-            turn_data = {}
-            processed_task = None
-            exception_caught = None
+        message_history = []
+        current_session = None
+        turn_data = {}
 
-            if self.storage:
-                turn_data["timestamp_start"] = time.time()
-                if graph_execution_id:
-                    turn_data["graph_execution_id"] = graph_execution_id
+        if self.storage:
+            async with self._managed_storage_connection():
+                current_session = self.storage.read(session_id=self.session_id)
+                if current_session and current_session.memory:
+                    try:
+                        message_history = ModelMessagesTypeAdapter.validate_python(current_session.memory)
+                    except Exception as e:
+                        print(f"Warning: Could not validate stored history for session {self.session_id}. Starting fresh. Error: {e}")
+                        message_history = []
+                    print(f"[Storage] Loaded {len(message_history)} messages from session '{self.session_id}'.")
 
-                if not self.conversation_id:
-                    self.conversation_id = str(uuid.uuid4())
-                    new_conversation = LLMConversation(
-                        conversation_id=self.conversation_id,
-                        user_id=self.get_agent_id(),
-                        entity_id=self.agent_id,
-                        created_at=int(turn_data["timestamp_start"]),
-                        updated_at=int(turn_data["timestamp_start"]),
-                    )
-                    self.storage.start_conversation(new_conversation)
-                    print(f"[Storage] Started new conversation: {self.conversation_id}")
+        processed_task = None
+        exception_caught = None
+        model_response = None
 
-            try:
-                llm_manager = LLMManager(self.default_llm_model, model, turn_data=turn_data)
+        try:
+            llm_manager = LLMManager(self.default_llm_model, model, turn_data=turn_data)
+            async with llm_manager.manage_llm() as llm_handler:
+                selected_model = llm_handler.get_model()
+
+                system_prompt_manager = SystemPromptManager(self, task, turn_data=turn_data)
+                context_manager = ContextManager(self, task, state, turn_data=turn_data)
+                async with system_prompt_manager.manage_system_prompt() as sp_handler, \
+                            context_manager.manage_context() as ctx_handler:
+
+                    call_manager = CallManager(selected_model, task, debug=debug, turn_data=turn_data)
+                    task_manager = TaskManager(task, self, turn_data=turn_data)
+                    reliability_manager = ReliabilityManager(task, self.reliability_layer, selected_model)
+
+                    agent = await self.agent_create(selected_model, task, sp_handler.get_system_prompt())
+
+                    async with reliability_manager.manage_reliability() as reliability_handler:
+                        async with call_manager.manage_call() as call_handler:
+                            async with task_manager.manage_task() as task_handler:
+                                async with agent.run_mcp_servers():
+                                    print("MESSAGE HISTORY: ", message_history)
+                                    model_response = await agent.run(
+                                        task.build_agent_input(),
+                                        message_history=message_history
+                                    )
+
+                                model_response = call_handler.process_response(model_response)
+                                model_response = task_handler.process_response(model_response)
+                                processed_task = await reliability_handler.process_task(task_handler.task)
+
+        except Exception as e:
+            exception_caught = e
+            raise
+
+        finally:
+            if self.storage and (processed_task or exception_caught):
+                updated_session_data = {}
+                if current_session:
+                    updated_session_data = current_session.model_dump()
+                else:
+                    updated_session_data['memory'] = []
+                    updated_session_data['session_data'] = {}
+                    updated_session_data['extra_data'] = {}
                 
-                async with llm_manager.manage_llm() as llm_handler:
-                    selected_model = llm_handler.get_model()
-                    
-                    system_prompt_manager = SystemPromptManager(self, task, turn_data=turn_data)
-                    context_manager = ContextManager(self, task, state, turn_data=turn_data)
+                updated_session_data.setdefault('memory', [])
 
-                    memory_manager = MemoryManager(self, task)
-                    
-                    async with system_prompt_manager.manage_system_prompt() as sp_handler, \
-                                context_manager.manage_context() as ctx_handler:
+                updated_session_data.update({
+                    "session_id": self.session_id,
+                    "agent_id": self.agent_id,
+                    "user_id": self.get_agent_id(),
+                    "updated_at": int(time.time()),
+                })
 
-                        if self.storage and self.conversation_id:
-                            user_turn_metadata = {}
-                            if turn_data.get("graph_execution_id"):
-                                user_turn_metadata["graph_execution_id"] = turn_data["graph_execution_id"]
+                if exception_caught:
+                    error_info = { "error_type": type(exception_caught).__name__, "error_message": str(exception_caught) }
+                    updated_session_data.setdefault("extra_data", {}).update({"last_error": error_info})
 
-                            user_turn = LLMTurn(
-                                role="user",
-                                timestamp_start=turn_data.get('timestamp_start', time.time()),
-                                content=task.description,
-                                final_prompt=turn_data.get('final_prompt', ''),
-                                metadata=user_turn_metadata,
-                            )
-                            self.storage.append_turn(self.conversation_id, user_turn)
-                            print(f"[Storage] Persisted 'user' turn for conversation: {self.conversation_id}")
-
-
-                        call_manager = CallManager(selected_model, task, debug, turn_data=turn_data)
-                        task_manager = TaskManager(task, self)
-                        reliability_manager = ReliabilityManager(task, self.reliability_layer, selected_model)
+                elif model_response and processed_task:
+                    from pydantic_core import to_jsonable_python
+                    all_messages_as_dicts = to_jsonable_python(model_response.all_messages())
+                    updated_session_data['memory'] = all_messages_as_dicts
                         
-                        agent = await self.agent_create(selected_model, task, sp_handler.get_system_prompt())
+                    
+                    # Read the pre-calculated data from the turn_data dictionary
+                    session_data = updated_session_data.get("session_data", {})
+                    
+                    if turn_data.get('tool_calls'):
+                        existing_tool_calls = session_data.get('tool_calls', [])
+                        session_data['tool_calls'] = existing_tool_calls + turn_data['tool_calls']
 
-                        async with reliability_manager.manage_reliability() as reliability_handler:
-                            async with memory_manager.manage_memory() as memory_handler:
-                                async with call_manager.manage_call(memory_handler) as call_handler:
-                                    async with task_manager.manage_task() as task_handler:
-                                        should_stop_early = False
-                                        final_output = None
-                                        show_result = False
-                                        
-                                        async with agent.run_mcp_servers():
-                                            model_response = await agent.run(task.build_agent_input(), message_history=memory_handler.historical_messages)
+                    if turn_data.get('usage_stats'):
+                        turn_usage_history = session_data.get('turn_usage_history', [])
+                        turn_usage_history.append(turn_data['usage_stats'])
+                        session_data['turn_usage_history'] = turn_usage_history
 
-                                                    
-                                        model_response = memory_handler.process_response(model_response)
-                                        model_response = call_handler.process_response(model_response)
-                                        model_response = task_handler.process_response(model_response)
-                                        processed_task = await reliability_handler.process_task(task_handler.task)
+                    updated_session_data['session_data'] = session_data
+                print("UPDATED_SESSION_DATA MEMORY: ", updated_session_data['memory'])
+                print("TYPE OF UPDATED_SESSION_DATA MEMORY: ", type(updated_session_data['memory']))
+                final_session = AgentSession.model_validate(updated_session_data)
 
-            except Exception as e:
-                exception_caught = e
-                raise
-            finally:
-                if self.storage:
-                    turn_data["timestamp_end"] = time.time()
-                    await self._assemble_and_save_turn(turn_data, processed_task, exception=exception_caught)
+                async with self._managed_storage_connection():
+                    self.storage.upsert(final_session)
+                    print(f"[Storage] Session '{self.session_id}' has been successfully upserted.")
 
-            if processed_task and not processed_task.not_main_task:
-                print_price_id_summary(processed_task.price_id, processed_task)
-                
-            return processed_task.response if processed_task else None
+        if processed_task and not processed_task.not_main_task:
+            print_price_id_summary(processed_task.price_id, processed_task)
+
+        return processed_task.response if processed_task else None

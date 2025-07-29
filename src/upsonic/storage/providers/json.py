@@ -1,226 +1,163 @@
-import msvcrt
 import json
-import os
-import shutil
-import threading
 import time
-import zipfile
+import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List, Literal, Optional, Dict, Any
 
 from upsonic.storage.base import Storage
+from upsonic.storage.sessions import (
+    BaseSession,
+    AgentSession
+)
 from upsonic.storage.settings import JSONSettings
-from upsonic.storage.session.llm import LLMConversation, LLMTurn, Artifact
-
-# Thread-local storage for file locks
-_thread_local = threading.local()
-
 
 class JSONStorage(Storage):
     """
-    Human-readable, file-system storage for the LLM Interaction Archive.
-    - Each conversation is a directory.
-    - Conversation metadata is in a '_conversation.json' file.
-    - Each turn is a separate JSON file within the conversation's directory.
+    A simple, human-readable storage provider using one JSON file per session.
+
+    This provider implements the Storage contract by storing each session as a
+    single, self-contained JSON file on the local filesystem. It's ideal for
+    development, debugging, and simple, single-node applications.
     """
+
     def __init__(self, settings: JSONSettings):
-        super().__init__()
-        self._set_mode(settings.STORAGE_MODE)
+        """
+        Initializes the JSON storage provider from a settings object.
+
+        Args:
+            settings: A validated JSONSettings object containing all configuration.
+        """
+        super().__init__(mode=settings.STORAGE_MODE)
+
         self.base_path = settings.JSON_DIRECTORY_PATH.resolve()
-        self.artifacts_base_path = settings.JSON_ARTIFACT_PATH.resolve()
+        self.sessions_path = self.base_path / settings.STORAGE_MODE
+
         self._pretty_print = settings.JSON_PRETTY_PRINT
         self._json_indent = 4 if self._pretty_print else None
         
-        self.conversations_path = self.base_path / self.mode
-        self._lock_path = self.conversations_path / "_storage.lock"
+        self.create()
+        self.connect()
 
-    def _acquire_lock(self):
-        if not hasattr(_thread_local, 'lock_file'):
-            self._lock_path.parent.mkdir(parents=True, exist_ok=True)
-            _thread_local.lock_file = self._lock_path.open('r+')
-        try:
-            msvcrt.locking(_thread_local.lock_file.fileno(), msvcrt.LK_LOCK, 1)
-        except OSError as e:
-            raise IOError(f"Could not acquire lock on {self._lock_path}: {e}")
 
-    def _release_lock(self):
-        if hasattr(_thread_local, 'lock_file'):
-            try:
-                msvcrt.locking(_thread_local.lock_file.fileno(), msvcrt.LK_UNLCK, 1)
-            except OSError as e:
-                raise IOError(f"Could not release lock on {self._lock_path}: {e}")
+    def _get_session_path(self, session_id: str) -> Path:
+        """Generates the full, absolute path to a session file."""
+        return self.sessions_path / f"{session_id}.json"
 
-            _thread_local.lock_file.close()
-            del _thread_local.lock_file
+    def _serialize(self, data: Dict[str, Any]) -> str:
+        """Serializes a dictionary to a JSON string, respecting pretty-printing settings."""
+        return json.dumps(data, indent=self._json_indent)
 
-    def connect(self) -> None:
-        try:
-            self.conversations_path.mkdir(parents=True, exist_ok=True)
-            self._lock_path.touch()
-            self._connected = True
-        except OSError as e:
-            raise ConnectionError(f"Could not access storage directory {self.conversations_path}: {e}")
+    def _deserialize(self, data: str) -> Dict[str, Any]:
+        """Deserializes a JSON string to a dictionary."""
+        return json.loads(data)
 
-    def disconnect(self) -> None:
-        self._connected = False
-    
+    def _get_session_model_class(self) -> type[BaseSession]:
+        """Returns the appropriate Pydantic session model class based on the current mode."""
+        if self.mode == "agent":
+            return AgentSession
+        # ... add other modes as needed
+        raise ValueError(f"Invalid mode '{self.mode}' specified for JSONStorage.")
+
+
     def is_connected(self) -> bool:
-        """Returns the current connection state."""
         return self._connected
 
-    def _get_conv_dir(self, conversation_id: str) -> Path:
-        return self.conversations_path / conversation_id
+    def connect(self) -> None:
+        """For file-based storage, connecting just means ensuring the directory exists."""
+        self.create()
+        self._connected = True
 
-    def _get_conv_meta_path(self, conversation_id: str) -> Path:
-        return self._get_conv_dir(conversation_id) / "_conversation.json"
+    def disconnect(self) -> None:
+        """For file-based storage, there is no active connection to disconnect."""
+        self._connected = False
 
-    def _get_turn_path(self, conversation_id: str, turn: LLMTurn) -> Path:
-        filename = f"{turn.timestamp_start}_{turn.turn_id}.json"
-        return self._get_conv_dir(conversation_id) / filename
+    def create(self) -> None:
+        """Ensures the base and mode-specific directories exist."""
+        self.sessions_path.mkdir(parents=True, exist_ok=True)
 
-    def _get_artifacts_path(self, conversation_id: str) -> Path:
-        return self._get_conv_dir(conversation_id) / "_artifacts.json"
-
-
-    def store_artifact_data(self, artifact_id: str, conversation_id: str, binary_data: bytes) -> str:
-        """Stores the artifact as a file on disk."""
-        self._acquire_lock()
+    def read(self, session_id: str, user_id: Optional[str] = None) -> Optional[BaseSession]:
+        session_file = self._get_session_path(session_id)
         try:
-            conv_artifact_path = self.artifacts_base_path / conversation_id
-            conv_artifact_path.mkdir(parents=True, exist_ok=True)
-            
-            file_path = conv_artifact_path / artifact_id
-            
-            with file_path.open("wb") as f:
-                f.write(binary_data)
-            
-            return file_path.as_uri()
-        finally:
-            self._release_lock()
+            with open(session_file, "r", encoding="utf-8") as f:
+                session_data = self._deserialize(f.read())
 
-    def retrieve_artifact_data(self, storage_uri: str) -> bytes:
-        """Retrieves an artifact from a file URI."""
-        if not storage_uri.startswith("file://"):
-            raise ValueError("JSONStorage can only handle 'file://' URIs for artifacts.")
-        
-        file_path_str = storage_uri[len("file://"):]
-        if os.name == 'nt' and file_path_str.startswith('/'):
-            file_path_str = file_path_str[1:]
-        
-        file_path = Path(file_path_str)
-        
-        if not file_path.exists():
-            raise FileNotFoundError(f"Artifact file not found at: {file_path}")
-            
-        with file_path.open("rb") as f:
-            return f.read()
-    
+            if user_id and session_data.get("user_id") != user_id:
+                return None
 
-    def start_conversation(self, conversation: LLMConversation) -> None:
-        self._acquire_lock()
-        try:
-            conv_dir = self._get_conv_dir(conversation.conversation_id)
-            conv_dir.mkdir(exist_ok=True)
-            meta_path = self._get_conv_meta_path(conversation.conversation_id)
-            
-            meta_data = conversation.model_dump(exclude={"turns"})
-            
-            with meta_path.open('w', encoding='utf-8') as f:
-                json.dump(meta_data, f, indent=self._json_indent)
-        finally:
-            self._release_lock()
-
-    def append_turn(self, conversation_id: str, turn: LLMTurn) -> None:
-        self._acquire_lock()
-        try:
-            conv_dir = self._get_conv_dir(conversation_id)
-            if not conv_dir.exists():
-                raise FileNotFoundError(f"Cannot append turn, conversation directory not found for ID: {conversation_id}")
-
-            turn_path = self._get_turn_path(conversation_id, turn)
-            with turn_path.open('w', encoding='utf-8') as f:
-                f.write(turn.model_dump_json(indent=self._json_indent))
-            
-            meta_path = self._get_conv_meta_path(conversation_id)
-            if meta_path.exists():
-                with meta_path.open('r+', encoding='utf-8') as f:
-                    meta_data = json.load(f)
-                    meta_data['updated_at'] = int(time.time())
-                    f.seek(0)
-                    json.dump(meta_data, f, indent=self._json_indent)
-                    f.truncate()
-        finally:
-            self._release_lock()
-
-    def get_conversation(self, conversation_id: str) -> Optional[LLMConversation]:
-        conv_dir = self._get_conv_dir(conversation_id)
-        meta_path = self._get_conv_meta_path(conversation_id)
-
-        if not meta_path.exists():
+            SessionModel = self._get_session_model_class()
+            return SessionModel.from_dict(session_data)
+        except FileNotFoundError:
+            return None
+        except (json.JSONDecodeError, TypeError) as e:
+            print(f"Warning: Could not read or parse corrupt session file {session_file}. Error: {e}")
             return None
 
-        with meta_path.open('r', encoding='utf-8') as f:
-            meta_data = json.load(f)
+    def upsert(self, session: BaseSession) -> Optional[BaseSession]:
+        SessionModel = self._get_session_model_class()
+        if not isinstance(session, SessionModel):
+            raise TypeError(f"Session object must be of type {SessionModel.__name__} for mode '{self.mode}'")
 
-        turns = []
-        turn_files = sorted(conv_dir.glob("*.json"))
-        for turn_file in turn_files:
-            if turn_file.name.startswith("_"):
-                continue
-            with turn_file.open('r', encoding='utf-8') as f:
-                turns.append(LLMTurn.model_validate_json(f.read()))
+        session.updated_at = int(time.time())
+        session_dict = session.model_dump(mode="json")
+        json_string = self._serialize(session_dict)
+        session_file = self._get_session_path(session.session_id)
 
-        meta_data['turns'] = turns
-        return LLMConversation.model_validate(meta_data)
-
-    def list_conversations(self, user_id: Optional[str] = None, entity_id: Optional[str] = None, limit: int = 20, offset: int = 0) -> List[LLMConversation]:
-        self._acquire_lock()
         try:
-            all_conv_meta = []
-            for conv_dir in self.conversations_path.iterdir():
-                if not conv_dir.is_dir():
+            # 'w' mode will create the file or overwrite it if it exists, which is the 'upsert' behavior.
+            with open(session_file, "w", encoding="utf-8") as f:
+                f.write(json_string)
+            return session
+        except IOError as e:
+            raise IOError(f"Failed to write session file to {session_file}: {e}")
+
+    def get_all_sessions(self, user_id: Optional[str] = None, entity_id: Optional[str] = None) -> List[BaseSession]:
+        """Retrieves all sessions, with inefficient client-side filtering by reading every file."""
+        sessions: List[BaseSession] = []
+        SessionModel = self._get_session_model_class()
+        entity_key = f"{self.mode}_id" if self.mode else None
+
+        for session_file in self.sessions_path.glob("*.json"):
+            try:
+                with open(session_file, "r", encoding="utf-8") as f:
+                    session_data = self._deserialize(f.read())
+
+                if user_id and session_data.get("user_id") != user_id:
+                    continue
+                if entity_id and entity_key and session_data.get(entity_key) != entity_id:
                     continue
                 
-                meta_path = conv_dir / "_conversation.json"
-                if meta_path.exists():
-                    with meta_path.open('r', encoding='utf-8') as f:
-                        meta_data = json.load(f)
-                        user_match = (not user_id) or (meta_data.get('user_id') == user_id)
-                        entity_match = (not entity_id) or (meta_data.get('entity_id') == entity_id)
-                        if user_match and entity_match:
-                            all_conv_meta.append(meta_data)
-            
-            all_conv_meta.sort(key=lambda x: x.get('updated_at', 0), reverse=True)
-            
-            paginated_meta = all_conv_meta[offset : offset + limit]
+                sessions.append(SessionModel.from_dict(session_data))
+            except (IOError, json.JSONDecodeError):
+                continue
+        
+        return sessions
 
-            return [LLMConversation.model_validate(meta) for meta in paginated_meta]
-        finally:
-            self._release_lock()
+    def get_recent_sessions(self, user_id: Optional[str] = None, entity_id: Optional[str] = None, limit: int = 10) -> List[BaseSession]:
+        """Retrieves recent sessions by fetching all, then sorting in memory."""
+        all_sessions = self.get_all_sessions(user_id=user_id, entity_id=entity_id)
+        all_sessions.sort(key=lambda s: s.updated_at, reverse=True)
+        return all_sessions[:limit]
 
-    def log_artifact(self, artifact: Artifact) -> None:
-        self._acquire_lock()
+    def delete_session(self, session_id: str) -> None:
         try:
-            artifacts_path = self._get_artifacts_path(artifact.conversation_id)
+            session_file = self._get_session_path(session_id)
+            session_file.unlink(missing_ok=True)
+        except OSError as e:
+            print(f"Error: Could not delete session file for ID {session_id}. Reason: {e}")
             
-            if artifacts_path.exists():
-                with artifacts_path.open('r', encoding='utf-8') as f:
-                    artifacts_list = json.load(f)
-            else:
-                artifacts_list = []
-                
-            artifacts_list.append(artifact.model_dump(mode="json"))
-            
-            with artifacts_path.open('w', encoding='utf-8') as f:
-                json.dump(artifacts_list, f, indent=self._json_indent)
-        finally:
-            self._release_lock()
-
     def drop(self) -> None:
-        """Deletes the entire directory for the current mode."""
-        self._acquire_lock()
-        try:
-            if self.conversations_path.exists():
-                shutil.rmtree(self.conversations_path)
-        finally:
-            self._release_lock()
+        """Deletes the entire directory for the current mode and all its contents."""
+        if self.sessions_path.exists():
+            shutil.rmtree(self.sessions_path)
+        # Re-create the directory so the provider can still be used.
+        self.create()
+
+
+    def log_artifact(self, artifact) -> None:
+        raise NotImplementedError("Artifact logging should be handled within the session data for this provider.")
+
+    def store_artifact_data(self, artifact_id: str, session_id: str, binary_data: bytes) -> str:
+        raise NotImplementedError("Binary artifact storage is not handled by the session provider.")
+
+    def retrieve_artifact_data(self, storage_uri: str) -> bytes:
+        raise NotImplementedError("Binary artifact storage is not handled by the session provider.")

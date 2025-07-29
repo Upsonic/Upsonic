@@ -13,7 +13,6 @@ class ToolHooks(BaseModel):
     after: Optional[Callable] = None
 
     class Config:
-        # Allow Pydantic to handle non-serializable types like callables.
         arbitrary_types_allowed = True
 
 
@@ -76,8 +75,6 @@ class ToolConfig(BaseModel):
     )
 
 
-# Internal decorator class. Users of the framework will not interact with this directly.
-# Its sole purpose is to hold the configuration and apply it to the decorated function.
 class _ToolDecorator:
     """An internal helper class used by the `tool` factory."""
     def __init__(self, config: ToolConfig):
@@ -88,8 +85,6 @@ class _ToolDecorator:
         This method is called when the decorator instance is applied to a function.
         It attaches the configuration object to the function itself.
         """
-        # Attach the validated configuration object to a standardized attribute
-        # on the function. This "tags" the function for later processing.
         setattr(func, '_upsonic_tool_config', self.config)
         return func
 
@@ -130,23 +125,11 @@ def tool(*args: Any, **kwargs: Any) -> Callable:
         A callable that is either the decorated function (now tagged with a config)
         or a decorator instance ready to be applied to a function.
     """
-    # Case 1: Decorator used as `@tool` (without parentheses).
-    # In this scenario, the decorated function itself is the first and only argument.
     if len(args) == 1 and len(kwargs) == 0 and callable(args[0]):
         func = args[0]
-        # Create a default configuration.
         default_config = ToolConfig()
-        # Directly apply the default configuration by creating an instance
-        # of our internal decorator and calling it on the function.
         return _ToolDecorator(default_config)(func)
 
-    # Case 2: Decorator used as `@tool(...)` (with parentheses).
-    # In this scenario, `args` is empty and `kwargs` contains the configuration.
     else:
-        # Create a configuration from the provided keyword arguments.
-        # Pydantic handles validation and filling in defaults for any
-        # parameters that were not provided.
         config = ToolConfig(**kwargs)
-        # Return an instance of our internal decorator, which will then
-        # be called by Python on the function it is decorating.
         return _ToolDecorator(config)

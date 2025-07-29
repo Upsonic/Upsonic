@@ -8,7 +8,6 @@ from upsonic.tasks.tasks import Task
 from upsonic.knowledge_base.knowledge_base import KnowledgeBase
 from upsonic.context.task import turn_task_to_string
 from upsonic.context.sources import TaskOutputSource
-from upsonic.storage.session.llm import Artifact
 
 if TYPE_CHECKING:
     from upsonic.agent.agent import Direct

@@ -5,7 +5,7 @@ from upsonic.storage.providers.in_memory import InMemoryStorage
 from upsonic.storage.providers.json import JSONStorage
 from upsonic.storage.providers.postgres import PostgresStorage
 from upsonic.storage.providers.redis import RedisStorage
-from upsonic.storage.providers.sqlite import SQLiteStorage
+from upsonic.storage.providers.sqlite import SqliteStorage
 from upsonic.storage.settings import (
     StorageSettings,
     PostgresSettings,
@@ -17,7 +17,7 @@ from upsonic.storage.settings import (
 
 _PROVIDER_CLASS_MAP: Dict[str, Type[Storage]] = {
     "postgres": PostgresStorage,
-    "sqlite": SQLiteStorage,
+    "sqlite": SqliteStorage,
     "redis": RedisStorage,
     "json": JSONStorage,
     "in_memory": InMemoryStorage,
