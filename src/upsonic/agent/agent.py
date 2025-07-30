@@ -27,6 +27,7 @@ from upsonic.agent.context_managers import (
     ContextManager,
     LLMManager,
     ReliabilityManager,
+    StorageManager,
     SystemPromptManager,
     TaskManager,
 )
@@ -99,6 +100,54 @@ class Direct(BaseAgent):
         if self.session_id_ is None:
             self.session_id_ = str(uuid.uuid4())
         return self.session_id_
+
+    def _limit_message_history(self, message_history: list) -> list:
+        """
+        Limit conversation history based on num_history_runs parameter.
+        
+        Args:
+            message_history: List of messages from storage
+            
+        Returns:
+            Limited message history with system prompt + last N conversation runs
+        """
+        if not self.num_history_runs or self.num_history_runs <= 0 or len(message_history) <= 1:
+            return message_history
+        
+        # Separate system prompt (always first) from conversation messages
+        system_message = message_history[0] if len(message_history) > 0 else None
+        conversation_messages = message_history[1:] if len(message_history) > 1 else []
+        
+        # Group conversation messages into runs (request-response pairs)
+        conversation_runs = []
+        current_run = []
+        
+        for msg in conversation_messages:
+            current_run.append(msg)
+            if len(current_run) == 2:  # Complete run (request + response)
+                conversation_runs.append(current_run)
+                current_run = []
+        
+        # Handle incomplete run
+        if current_run:
+            conversation_runs.append(current_run)
+        
+        # Keep only the last num_history_runs
+        if len(conversation_runs) > self.num_history_runs:
+            kept_runs = conversation_runs[-self.num_history_runs:]
+        else:
+            kept_runs = conversation_runs
+        
+        # Flatten kept runs back to message list
+        limited_conversation = []
+        for run in kept_runs:
+            limited_conversation.extend(run)
+        
+        # Rebuild with system message + limited conversation
+        if system_message:
+            return [system_message] + limited_conversation
+        else:
+            return limited_conversation
 
 
 
@@ -301,39 +350,6 @@ class Direct(BaseAgent):
         and agent-level control over history management.
         """
         async with self._managed_storage_connection():
-            full_history = []
-            message_history = []
-            current_session = None
-
-            if self.storage:
-                current_session = self.storage.read(session_id=self.session_id)
-
-                if self.add_history_to_messages and current_session and current_session.memory:
-                    
-                    for history in current_session.memory:
-                        print(f"[Storage] EVERY HISTORY IN MEMORY KEYWORDDDDDD: {history}")
-
-                        full_history.append(history)
-                    history_to_process = []
-                    
-                    if self.num_history_runs is not None and self.num_history_runs > 0:
-                        history_to_process = full_history[-self.num_history_runs:]
-                        
-                        print(f"[Storage] Loading the last {self.num_history_runs} runs ({len(history_to_process)} messages) from session '{self.session_id}'.")
-                    else:
-                        history_to_process = full_history
-                        print(f"[Storage] Loading full history ({len(history_to_process)} messages) from session '{self.session_id}'.")
-
-                    try:
-                        for history in history_to_process:
-                            print("HISTORY IN PROCESSING: ", history)
-                            message_history = ModelMessagesTypeAdapter.validate_python(history)
-                        print("VALIDATED MESSAGE HISTORY: ", message_history)
-                        print("LENGTH OF MESSAGE HISTORY: ", len(message_history))
-                    except Exception as e:
-                        print(f"Warning: Could not validate stored history. Starting fresh. Error: {e}")
-                        message_history = []
-
             processed_task = None
             exception_caught = None
             model_response = None
@@ -345,8 +361,11 @@ class Direct(BaseAgent):
 
                     system_prompt_manager = SystemPromptManager(self, task)
                     context_manager = ContextManager(self, task, state)
+                    storage_manager = StorageManager(self, task)
+                    
                     async with system_prompt_manager.manage_system_prompt() as sp_handler, \
-                                context_manager.manage_context() as ctx_handler:
+                                context_manager.manage_context() as ctx_handler, \
+                                storage_manager.manage_storage() as storage_handler:
 
                         call_manager = CallManager(selected_model, task, debug=debug)
                         task_manager = TaskManager(task, self)
@@ -360,50 +379,16 @@ class Direct(BaseAgent):
                                     async with agent.run_mcp_servers():
                                         model_response = await agent.run(
                                             task.build_agent_input(),
-                                            message_history=message_history
+                                            message_history=storage_handler.get_message_history()
                                         )
 
                                     model_response = call_handler.process_response(model_response)
                                     model_response = task_handler.process_response(model_response)
+                                    model_response = storage_handler.process_response(model_response)
                                     processed_task = await reliability_handler.process_task(task_handler.task)
             except Exception as e:
                 exception_caught = e
                 raise
-
-            finally:
-                if self.storage and (processed_task or exception_caught or model_response):
-                    updated_session_data = {}
-                    if current_session:
-                        updated_session_data = current_session.model_dump()
-                    else:
-                        updated_session_data['memory'] = []
-                        updated_session_data['extra_data'] = {}
-
-                    updated_session_data.setdefault('memory', [])
-                    updated_session_data.update({
-                        "session_id": self.session_id,
-                        "agent_id": self.agent_id,
-                        "user_id": self.get_agent_id(),
-                        "updated_at": time.time(),
-                    })
-
-                    if exception_caught:
-                        error_info = { "error_type": type(exception_caught).__name__, "error_message": str(exception_caught) }
-                        updated_session_data.setdefault("extra_data", {}).update({"last_error": error_info})
-
-                    elif model_response and processed_task:
-                        from pydantic_core import to_jsonable_python
-                        # Always saves the FULL history to the database
-                        all_messages_as_dicts = to_jsonable_python(model_response.all_messages())
-                        print("ALL_MESAGES_AS_DICTS: ", [all_messages_as_dicts])
-                        print("TYPE OF ALL_MESAGES_AS_DICTS: ", type(all_messages_as_dicts))
-                        print("LENGTH OF ALL_MESAGES_AS_DICTS: ", len([all_messages_as_dicts]))
-                        updated_session_data['memory'] = [all_messages_as_dicts]
-
-                    final_session = AgentSession.model_validate(updated_session_data)
-                    
-                    self.storage.upsert(final_session)
-                    print(f"[Storage] Session '{self.session_id}' has been successfully upserted.")
 
         if processed_task and not processed_task.not_main_task:
             print_price_id_summary(processed_task.price_id, processed_task)

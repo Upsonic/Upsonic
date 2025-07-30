@@ -5,6 +5,7 @@ from upsonic.agent.context_managers.memory_manager import MemoryManager
 from upsonic.agent.context_managers.llm_manager import LLMManager
 from upsonic.agent.context_managers.system_prompt_manager import SystemPromptManager
 from upsonic.agent.context_managers.context_manager import ContextManager
+from upsonic.agent.context_managers.storage_manager import StorageManager
 
 __all__ = [
     'SystemPromptManager',
@@ -13,5 +14,6 @@ __all__ = [
     'TaskManager',
     'ReliabilityManager',
     'MemoryManager',
+    'StorageManager',
     'LLMManager'
 ] 
