@@ -1,5 +1,4 @@
 import pytest
-from unittest.mock import patch, Mock
 from upsonic import Task, Agent
 
 
@@ -46,32 +45,16 @@ class TestTaskStringContextHandling:
     def test_agent_can_access_single_string_context(self):
         """
         Test: Agent'ın tek string context'i kullanabilmesi
-        Simulasyon: Agent'ın context'e erişebildiğini mock ile test etme
+        Kontrol: Agent'ın context'e erişebildiğini test etme
         """
         city = "New York"
         task = Task("Find resources in the city", context=[city])
         agent = Agent(name="City Guide")
         
-        # Mock agent.print_do 
-        with patch.object(agent, 'print_do') as mock_print_do:
-            def side_effect(task_obj):
-                if task_obj.context and len(task_obj.context) > 0:
-                    used_city = task_obj.context[0]
-                    response = f"Found resources in {used_city}: Museums, Parks, Restaurants"
-                    task_obj._response = response
-                    return response
-                else:
-                    response = "No context provided"
-                    task_obj._response = response
-                    return response
-            
-            mock_print_do.side_effect = side_effect
-            
-            result = agent.print_do(task)
-            
-            assert "New York" in result  
-            assert task.response == result  
-            assert isinstance(result, str)  
+        result = agent.print_do(task)
+        
+        assert isinstance(result, str)  
+        assert task.response == result  
 
     def test_agent_can_access_multiple_string_contexts(self):
         """
@@ -82,28 +65,10 @@ class TestTaskStringContextHandling:
         task = Task("Create a comprehensive analysis", context=contexts)
         agent = Agent(name="Analyst")
         
-        # Mock agent.print_do 
-        with patch.object(agent, 'print_do') as mock_print_do:
-            def side_effect(task_obj):
-                if task_obj.context and len(task_obj.context) > 0:
-                    all_contexts = ", ".join(task_obj.context)
-                    response = f"Analysis completed using contexts: {all_contexts}"
-                    task_obj._response = response
-                    return response
-                else:
-                    response = "No contexts available"
-                    task_obj._response = response
-                    return response
-            
-            mock_print_do.side_effect = side_effect
-            
-            result = agent.print_do(task)
-            
-            assert "London" in result  
-            assert "Technology" in result  
-            assert "2024" in result  
-            assert "London, Technology, 2024" in result  
-            assert task.response == result  
+        result = agent.print_do(task)
+        
+        assert isinstance(result, str)
+        assert task.response == result
 
    
     def test_task_empty_string_context_handling(self):
@@ -122,44 +87,26 @@ class TestTaskStringContextHandling:
 	
     def test_agent_context_integration_simulation(self):
         """
-        Test: Agent'ın context'i task description ile nasıl entegre ettiğinin simülasyonu
+        Test: Agent'ın context'i task description ile nasıl entegre ettiğinin testi
         Kontrol: Context'in task description'a uygun şekilde kullanılması
         """
         city = "Tokyo"
         task = Task("Find the best restaurants", context=[city])
         agent = Agent(name="Food Guide")
         
-        # Mock 
-        with patch.object(agent, 'print_do') as mock_print_do:
-            def side_effect(task_obj):
-                description = task_obj.description
-                context_city = task_obj.context[0] if task_obj.context else "unknown location"
-                
-                integrated_response = f"Task: {description} | Location: {context_city} | Result: Top sushi restaurants in {context_city}"
-                task_obj._response = integrated_response
-                return integrated_response
-            
-            mock_print_do.side_effect = side_effect
-            
-            result = agent.print_do(task)
-            
-            assert "Find the best restaurants" in result  
-            assert "Tokyo" in result  
-            assert "Location: Tokyo" in result  
-            assert task.response == result  
+        result = agent.print_do(task)
+        
+        assert isinstance(result, str)
+        assert task.response == result
             
     def test_context_with_non_string_values(self):
         task = Task("Handle mixed context", context=["valid", 123, None])
         agent = Agent(name="Robust")
         
-        with patch.object(agent, 'print_do') as mock_print_do:
-            def side_effect(task_obj):
-                return f"Context Types: {[type(c).__name__ for c in task_obj.context]}"
-            mock_print_do.side_effect = side_effect
-            result = agent.print_do(task)
-            
-            assert "int" in result
-            assert "NoneType" in result
+        result = agent.print_do(task)
+        
+        assert isinstance(result, str)
+        assert task.response == result
 
     def test_task_with_empty_context_list(self):
         """
@@ -177,21 +124,7 @@ class TestTaskStringContextHandling:
         # Test agent behavior with empty context
         agent = Agent(name="Analyzer")
         
-        with patch.object(agent, 'print_do') as mock_print_do:
-            def side_effect(task_obj):
-                if not task_obj.context or len(task_obj.context) == 0:
-                    response = "No context provided - performing general analysis"
-                    task_obj._response = response
-                    return response
-                else:
-                    response = f"Analysis with context: {task_obj.context}"
-                    task_obj._response = response
-                    return response
-            
-            mock_print_do.side_effect = side_effect
-            
-            result = agent.print_do(task)
-            
-            assert "No context provided" in result
-            assert task.response == result
-            assert isinstance(result, str)
+        result = agent.print_do(task)
+        
+        assert isinstance(result, str)
+        assert task.response == result
