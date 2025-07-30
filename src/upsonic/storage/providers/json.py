@@ -9,7 +9,6 @@ from upsonic.storage.session.sessions import (
     BaseSession,
     AgentSession
 )
-from upsonic.storage.settings import JSONSettings
 
 class JSONStorage(Storage):
     """

@@ -1,37 +1,37 @@
 import threading
 import time
 from collections import OrderedDict
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Literal
 
 from upsonic.storage.base import Storage
 from upsonic.storage.session.sessions import (
     BaseSession,
     AgentSession
 )
-from upsonic.storage.settings import InMemorySettings
 
 class InMemoryStorage(Storage):
     """
-    An ephemeral, thread-safe, session-based storage provider that lives in memory.
-
-    This provider is ideal for unit testing, rapid prototyping, and any workflow
-    where data persistence across application restarts is not required. It can
-    optionally be configured as a fixed-size LRU (Least Recently Used) cache.
+    An ephemeral, thread-safe, session-based storage provider that lives in memory,
+    configured via direct arguments.
     """
 
-    def __init__(self, settings: InMemorySettings):
+    def __init__(
+        self,
+        max_sessions: Optional[int] = None,
+        mode: Literal["agent", "team", "workflow", "workflow_v2"] = "agent",
+    ):
         """
-        Initializes the in-memory storage provider from a settings object.
+        Initializes the in-memory storage provider.
 
         Args:
-            settings: A validated InMemorySettings object containing all configuration.
+            max_sessions: The maximum number of sessions to store. If set, the
+                          storage acts as a fixed-size LRU cache.
+            mode: The operational mode.
         """
-        super().__init__(mode=settings.STORAGE_MODE)
-
-        self.max_sessions = settings.IN_MEMORY_MAX_SESSIONS
+        super().__init__(mode=mode)
         
+        self.max_sessions = max_sessions
         self._sessions: Dict[str, BaseSession] = OrderedDict() if self.max_sessions else {}
-
         self._lock = threading.Lock()
 
         self.connect()

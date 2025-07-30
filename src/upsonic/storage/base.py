@@ -4,6 +4,8 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from upsonic.storage.session import BaseSession
+
 
 class Artifact(BaseModel):
     """
@@ -13,15 +15,6 @@ class Artifact(BaseModel):
     artifact_id: str = Field(..., description="A unique identifier for the artifact.")
     session_id: str = Field(..., description="Foreign key linking this artifact to a specific session.")
     storage_uri: str = Field(..., description="The URI pointing to the artifact's actual location in a blob store.")
-
-
-class Session(BaseModel):
-    """
-    A placeholder for the base Session model. All specific session types
-    (e.g., AgentSession, TeamSession) would inherit from this.
-    """
-    session_id: str = Field(..., description="The unique identifier for the session.")
-    user_id: Optional[str] = Field(None, description="The ID of the user associated with this session.")
 
 
 class SchemaMismatchError(Exception):
@@ -86,7 +79,7 @@ class Storage(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def read(self, session_id: str, user_id: Optional[str] = None) -> Optional[Session]:
+    def read(self, session_id: str, user_id: Optional[str] = None) -> Optional[BaseSession]:
         """
         Reads a single, complete Session from the storage.
 
@@ -100,7 +93,7 @@ class Storage(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def upsert(self, session: Session) -> Optional[Session]:
+    def upsert(self, session: BaseSession) -> Optional[BaseSession]:
         """
         Inserts a new Session or updates an existing one.
 
@@ -119,7 +112,7 @@ class Storage(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_all_sessions(self, user_id: Optional[str] = None, entity_id: Optional[str] = None) -> List[Session]:
+    def get_all_sessions(self, user_id: Optional[str] = None, entity_id: Optional[str] = None) -> List[BaseSession]:
         """
         Retrieves all sessions, optionally filtered.
 
@@ -134,7 +127,7 @@ class Storage(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_recent_sessions(self, user_id: Optional[str] = None, entity_id: Optional[str] = None, limit: int = 10) -> List[Session]:
+    def get_recent_sessions(self, user_id: Optional[str] = None, entity_id: Optional[str] = None, limit: int = 10) -> List[BaseSession]:
         """
         Retrieves the N most recently updated sessions.
 
