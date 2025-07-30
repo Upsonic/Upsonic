@@ -1,6 +1,5 @@
 import time
 from typing import Literal, Optional, List
-import uuid
 
 from upsonic.storage.base import Storage
 from upsonic.storage.session.sessions import (
@@ -93,7 +92,7 @@ class PostgresStorage(Storage):
     def _get_table_schema(self) -> Table:
         """Dynamically defines the SQLAlchemy Table schema for PostgreSQL."""
         common_columns = [
-            Column("session_id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+            Column("session_id", String(64), primary_key=True),
             Column("user_id", String, index=True),
             Column("memory", postgresql.JSONB),
             Column("session_data", postgresql.JSONB),
@@ -106,7 +105,7 @@ class PostgresStorage(Storage):
             specific_columns = [
                 Column("agent_id", String, index=True),
                 Column("agent_data", postgresql.JSONB),
-                Column("team_session_id", postgresql.UUID(as_uuid=True), index=True, nullable=True),
+                Column("team_session_id", String(64), index=True, nullable=True),
             ]
         return Table(self.table_name, self.metadata, *common_columns, *specific_columns, extend_existing=True)
 
@@ -148,7 +147,7 @@ class PostgresStorage(Storage):
 
     def read(self, session_id: str, user_id: Optional[str] = None) -> Optional[BaseSession]:
         with self.SqlSession() as sess:
-            stmt = select(self.table).where(self.table.c.session_id == uuid.UUID(session_id))
+            stmt = select(self.table).where(self.table.c.session_id == session_id)
             if user_id:
                 stmt = stmt.where(self.table.c.user_id == user_id)
             result = sess.execute(stmt).first()
@@ -198,7 +197,7 @@ class PostgresStorage(Storage):
 
     def delete_session(self, session_id: str) -> None:
         with self.SqlSession() as sess, sess.begin():
-            delete_stmt = self.table.delete().where(self.table.c.session_id == uuid.UUID(session_id))
+            delete_stmt = self.table.delete().where(self.table.c.session_id == session_id)
             sess.execute(delete_stmt)
 
     def drop(self) -> None:
