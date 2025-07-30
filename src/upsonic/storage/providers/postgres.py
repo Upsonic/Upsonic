@@ -1,14 +1,12 @@
 import time
-import json
-from typing import List, Literal, Optional, Dict, Any
+from typing import Literal, Optional, List
 import uuid
 
 from upsonic.storage.base import Storage
-from upsonic.storage.sessions import (
+from upsonic.storage.session.sessions import (
     BaseSession,
     AgentSession
 )
-from upsonic.storage.settings import PostgresSettings
 
 try:
     from sqlalchemy import create_engine, inspect as sqlalchemy_inspect, text
@@ -30,25 +28,58 @@ class PostgresStorage(Storage):
     UPSERT capabilities for high-performance, transactional session management.
     """
 
-    def __init__(self, settings: PostgresSettings):
+    def __init__(
+        self,
+        table_name: str,
+        db_url: Optional[str] = None,
+        db_engine: Optional[Engine] = None,
+        schema: str = "public",
+        auto_upgrade_schema: bool = False,
+        mode: Literal["agent", "team", "workflow", "workflow_v2"] = "agent",
+    ):
         """
-        Initializes the PostgreSQL storage provider from a settings object.
+        Initializes the PostgreSQL storage provider.
+
+        The connection is determined using the following precedence:
+        1. An existing `db_engine` object.
+        2. A full `db_url` connection string.
 
         Args:
-            settings: A validated PostgresSettings object containing all configuration.
+            table_name: The name of the table for session storage.
+            db_url: An optional SQLAlchemy database URL.
+            db_engine: An optional, pre-configured SQLAlchemy Engine.
+            schema: The PostgreSQL schema to use for the session table.
+            auto_upgrade_schema: If True, attempts to run schema migrations automatically.
+            mode: The operational mode, which determines the table schema.
+        
+        Raises:
+            ValueError: If neither `db_url` nor `db_engine` is provided.
         """
-        super().__init__(mode=settings.STORAGE_MODE)
+        super().__init__(mode=mode)
 
-        self.db_uri = str(settings.POSTGRES_DB_URI)
-        self.table_name = settings.POSTGRES_TABLE_NAME
-        self.schema = settings.POSTGRES_SCHEMA
+        # THE REFACTORED CONSTRUCTOR LOGIC
+        _engine: Optional[Engine] = db_engine
+        if _engine is None and db_url is not None:
+            _engine = create_engine(db_url)
 
-        self.db_engine: Engine = create_engine(self.db_uri)
-        self.metadata = MetaData(schema=self.schema)
+        if _engine is None:
+            raise ValueError("Must provide either a `db_url` string or a pre-configured SQLAlchemy `db_engine` object.")
+
+        self.db_engine: Engine = _engine
+
+        # Database attributes
+        self.table_name: str = table_name
+        self.schema: str = schema
+        self.metadata: MetaData = MetaData(schema=self.schema)
         self.inspector = sqlalchemy_inspect(self.db_engine)
+
+        # Schema management attributes
+        self.auto_upgrade_schema: bool = auto_upgrade_schema
+
+        # Database session and table definition
         self.SqlSession = sessionmaker(bind=self.db_engine)
         self.table: Table = self._get_table_schema()
-
+        
         self.create()
         self.connect()
 

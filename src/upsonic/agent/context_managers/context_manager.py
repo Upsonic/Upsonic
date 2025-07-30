@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Optional, Dict, Any
+from typing import TYPE_CHECKING, Optional
 
 from upsonic.tasks.tasks import Task
 from upsonic.knowledge_base.knowledge_base import KnowledgeBase
@@ -24,7 +24,7 @@ class ContextManager:
     from a graph execution.
     """
 
-    def __init__(self, agent: Direct, task: Task, state: Optional[State] = None, *, turn_data: Optional[Dict[str, Any]] = None):
+    def __init__(self, agent: Direct, task: Task, state: Optional[State] = None):
         """
         Initializes the ContextManager.
 
@@ -38,7 +38,6 @@ class ContextManager:
         self.task = task
         self.state = state
         self.context_prompt: str = ""
-        self.turn_data = turn_data
 
     async def _build_context_prompt(self) -> str:
         """
@@ -116,10 +115,6 @@ class ContextManager:
         """The asynchronous context manager for building the task-specific context."""
         self.context_prompt = await self._build_context_prompt()
         self.task.context_formatted = self.context_prompt
-
-        if self.turn_data is not None and self.context_prompt:
-            current_prompt = self.turn_data.get('final_prompt', '')
-            self.turn_data['final_prompt'] = f"{current_prompt}\n\n{self.context_prompt}"
             
         try:
             yield self

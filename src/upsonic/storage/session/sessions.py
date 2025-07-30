@@ -23,7 +23,7 @@ class BaseSession(BaseModel):
         index=True
     )
 
-    memory: List[Any] = Field(
+    memory: List[List[Any]] = Field(
         default_factory=list,
         description="A list of objects representing the message history for the session."
     )

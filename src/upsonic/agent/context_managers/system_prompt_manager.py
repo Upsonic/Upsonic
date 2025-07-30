@@ -20,7 +20,7 @@ class SystemPromptManager:
     task-specific context.
     """
 
-    def __init__(self, agent: Direct, task: Task, *, turn_data: Optional[Dict[str, Any]] = None):
+    def __init__(self, agent: Direct, task: Task):
         """
         Initializes the SystemPromptManager.
 
@@ -35,7 +35,6 @@ class SystemPromptManager:
         self.agent = agent
         self.task = task
         self.system_prompt: str = ""
-        self.turn_data = turn_data
 
     def _build_system_prompt(self) -> str:
         """
@@ -95,8 +94,6 @@ class SystemPromptManager:
         system prompt and makes it available via the `get_system_prompt` method.
         """
         self.system_prompt = self._build_system_prompt()
-        if self.turn_data is not None:
-            self.turn_data['final_prompt'] = self.system_prompt
             
         try:
             yield self

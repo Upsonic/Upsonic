@@ -26,26 +26,3 @@ class Artifact(BaseModel):
     storage_uri: str
 
     metadata: Dict[str, Any] = Field(default_factory=dict)
-
-
-
-class LLMUsageStats(BaseModel):
-    """
-    A structured model for capturing token usage statistics from an LLM call.
-    """
-    prompt_tokens: int = 0
-    completion_tokens: int = 0
-    total_tokens: int = 0
-
-
-class LLMToolCall(BaseModel):
-    """
-    A structured model representing a single tool/function call requested
-    by an LLM, and the subsequent result.
-    """
-    tool_name: str
-
-    arguments: Dict[str, Any]
-
-
-    tool_output: Optional[Any] = None

@@ -1,11 +1,9 @@
 import asyncio
 import os
 import uuid
-from typing import Any, List, Union, Optional, Dict
-from types import SimpleNamespace
+from typing import Any, List, Union, Optional
 import time
 from contextlib import asynccontextmanager
-import json
 
 from pydantic_ai import Agent as PydanticAgent
 from pydantic_ai import BinaryContent
@@ -21,9 +19,8 @@ from upsonic.utils.error_wrapper import upsonic_error_handler
 from upsonic.utils.printing import print_price_id_summary
 from upsonic.agent.base import BaseAgent
 from upsonic.tools.processor import ToolProcessor
-from upsonic.utils.tool_usage import tool_usage
 from upsonic.storage.base import Storage
-from upsonic.storage.sessions import AgentSession
+from upsonic.storage.session.sessions import AgentSession
 
 from upsonic.agent.context_managers import (
     CallManager,
@@ -56,6 +53,8 @@ class Direct(BaseAgent):
                  storage: Optional[Storage] = None,
                  canvas: Canvas | None = None,
                  session_id: Optional[str] = None,
+                 add_history_to_messages: bool = True,
+                 num_history_runs: Optional[int] = None,
                  ):
         self.canvas = canvas
 
@@ -73,9 +72,9 @@ class Direct(BaseAgent):
 
         self.storage = storage
         self.session_id_ = session_id
+        self.add_history_to_messages = add_history_to_messages
+        self.num_history_runs = num_history_runs
         
-        if self.storage:
-            self.storage.create()
         
 
 
@@ -267,123 +266,142 @@ class Direct(BaseAgent):
 
     @asynccontextmanager
     async def _managed_storage_connection(self):
+        """
+        A highly robust async context manager that ensures the storage connection
+        is active during an operation and cleans up after itself safely.
+
+        This version includes checks to ensure the `connect` and `disconnect`
+        methods exist before attempting to call them, making it compatible with
+        any storage provider, regardless of its specific implementation.
+        """
         if not self.storage:
             yield
             return
-        if hasattr(self.storage, 'connect') and callable(self.storage.connect):
-            self.storage.connect()
-            try:
-                yield
-            finally:
-                if hasattr(self.storage, 'disconnect') and callable(self.storage.disconnect):
-                    self.storage.disconnect()
-        else:
+
+        can_connect = hasattr(self.storage, 'connect') and callable(self.storage.connect)
+        can_disconnect = hasattr(self.storage, 'disconnect') and callable(self.storage.disconnect)
+
+        was_connected_before = self.storage.is_connected()
+
+        try:
+            if can_connect and not was_connected_before:
+                self.storage.connect()
             yield
+
+        finally:
+            if can_disconnect and not was_connected_before and self.storage.is_connected():
+                self.storage.disconnect()
 
 
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
     async def do_async(self, task: Task, model: ModelNames | None = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
-        message_history = []
-        current_session = None
-        turn_data = {}
+        """
+        Execute a direct LLM call with robust, context-managed storage connections
+        and agent-level control over history management.
+        """
+        async with self._managed_storage_connection():
+            full_history = []
+            message_history = []
+            current_session = None
 
-        if self.storage:
-            async with self._managed_storage_connection():
+            if self.storage:
                 current_session = self.storage.read(session_id=self.session_id)
-                if current_session and current_session.memory:
-                    try:
-                        message_history = ModelMessagesTypeAdapter.validate_python(current_session.memory)
-                    except Exception as e:
-                        print(f"Warning: Could not validate stored history for session {self.session_id}. Starting fresh. Error: {e}")
-                        message_history = []
-                    print(f"[Storage] Loaded {len(message_history)} messages from session '{self.session_id}'.")
 
-        processed_task = None
-        exception_caught = None
-        model_response = None
+                if self.add_history_to_messages and current_session and current_session.memory:
+                    
+                    for history in current_session.memory:
+                        print(f"[Storage] EVERY HISTORY IN MEMORY KEYWORDDDDDD: {history}")
 
-        try:
-            llm_manager = LLMManager(self.default_llm_model, model, turn_data=turn_data)
-            async with llm_manager.manage_llm() as llm_handler:
-                selected_model = llm_handler.get_model()
-
-                system_prompt_manager = SystemPromptManager(self, task, turn_data=turn_data)
-                context_manager = ContextManager(self, task, state, turn_data=turn_data)
-                async with system_prompt_manager.manage_system_prompt() as sp_handler, \
-                            context_manager.manage_context() as ctx_handler:
-
-                    call_manager = CallManager(selected_model, task, debug=debug, turn_data=turn_data)
-                    task_manager = TaskManager(task, self, turn_data=turn_data)
-                    reliability_manager = ReliabilityManager(task, self.reliability_layer, selected_model)
-
-                    agent = await self.agent_create(selected_model, task, sp_handler.get_system_prompt())
-
-                    async with reliability_manager.manage_reliability() as reliability_handler:
-                        async with call_manager.manage_call() as call_handler:
-                            async with task_manager.manage_task() as task_handler:
-                                async with agent.run_mcp_servers():
-                                    print("MESSAGE HISTORY: ", message_history)
-                                    model_response = await agent.run(
-                                        task.build_agent_input(),
-                                        message_history=message_history
-                                    )
-
-                                model_response = call_handler.process_response(model_response)
-                                model_response = task_handler.process_response(model_response)
-                                processed_task = await reliability_handler.process_task(task_handler.task)
-
-        except Exception as e:
-            exception_caught = e
-            raise
-
-        finally:
-            if self.storage and (processed_task or exception_caught):
-                updated_session_data = {}
-                if current_session:
-                    updated_session_data = current_session.model_dump()
-                else:
-                    updated_session_data['memory'] = []
-                    updated_session_data['session_data'] = {}
-                    updated_session_data['extra_data'] = {}
-                
-                updated_session_data.setdefault('memory', [])
-
-                updated_session_data.update({
-                    "session_id": self.session_id,
-                    "agent_id": self.agent_id,
-                    "user_id": self.get_agent_id(),
-                    "updated_at": int(time.time()),
-                })
-
-                if exception_caught:
-                    error_info = { "error_type": type(exception_caught).__name__, "error_message": str(exception_caught) }
-                    updated_session_data.setdefault("extra_data", {}).update({"last_error": error_info})
-
-                elif model_response and processed_task:
-                    from pydantic_core import to_jsonable_python
-                    all_messages_as_dicts = to_jsonable_python(model_response.all_messages())
-                    updated_session_data['memory'] = all_messages_as_dicts
+                        full_history.append(history)
+                    history_to_process = []
+                    
+                    if self.num_history_runs is not None and self.num_history_runs > 0:
+                        history_to_process = full_history[-self.num_history_runs:]
                         
+                        print(f"[Storage] Loading the last {self.num_history_runs} runs ({len(history_to_process)} messages) from session '{self.session_id}'.")
+                    else:
+                        history_to_process = full_history
+                        print(f"[Storage] Loading full history ({len(history_to_process)} messages) from session '{self.session_id}'.")
+
+                    try:
+                        for history in history_to_process:
+                            print("HISTORY IN PROCESSING: ", history)
+                            message_history = ModelMessagesTypeAdapter.validate_python(history)
+                        print("VALIDATED MESSAGE HISTORY: ", message_history)
+                        print("LENGTH OF MESSAGE HISTORY: ", len(message_history))
+                    except Exception as e:
+                        print(f"Warning: Could not validate stored history. Starting fresh. Error: {e}")
+                        message_history = []
+
+            processed_task = None
+            exception_caught = None
+            model_response = None
+
+            try:
+                llm_manager = LLMManager(self.default_llm_model, model)
+                async with llm_manager.manage_llm() as llm_handler:
+                    selected_model = llm_handler.get_model()
+
+                    system_prompt_manager = SystemPromptManager(self, task)
+                    context_manager = ContextManager(self, task, state)
+                    async with system_prompt_manager.manage_system_prompt() as sp_handler, \
+                                context_manager.manage_context() as ctx_handler:
+
+                        call_manager = CallManager(selected_model, task, debug=debug)
+                        task_manager = TaskManager(task, self)
+                        reliability_manager = ReliabilityManager(task, self.reliability_layer, selected_model)
+
+                        agent = await self.agent_create(selected_model, task, sp_handler.get_system_prompt())
+
+                        async with reliability_manager.manage_reliability() as reliability_handler:
+                            async with call_manager.manage_call() as call_handler:
+                                async with task_manager.manage_task() as task_handler:
+                                    async with agent.run_mcp_servers():
+                                        model_response = await agent.run(
+                                            task.build_agent_input(),
+                                            message_history=message_history
+                                        )
+
+                                    model_response = call_handler.process_response(model_response)
+                                    model_response = task_handler.process_response(model_response)
+                                    processed_task = await reliability_handler.process_task(task_handler.task)
+            except Exception as e:
+                exception_caught = e
+                raise
+
+            finally:
+                if self.storage and (processed_task or exception_caught or model_response):
+                    updated_session_data = {}
+                    if current_session:
+                        updated_session_data = current_session.model_dump()
+                    else:
+                        updated_session_data['memory'] = []
+                        updated_session_data['extra_data'] = {}
+
+                    updated_session_data.setdefault('memory', [])
+                    updated_session_data.update({
+                        "session_id": self.session_id,
+                        "agent_id": self.agent_id,
+                        "user_id": self.get_agent_id(),
+                        "updated_at": time.time(),
+                    })
+
+                    if exception_caught:
+                        error_info = { "error_type": type(exception_caught).__name__, "error_message": str(exception_caught) }
+                        updated_session_data.setdefault("extra_data", {}).update({"last_error": error_info})
+
+                    elif model_response and processed_task:
+                        from pydantic_core import to_jsonable_python
+                        # Always saves the FULL history to the database
+                        all_messages_as_dicts = to_jsonable_python(model_response.all_messages())
+                        print("ALL_MESAGES_AS_DICTS: ", [all_messages_as_dicts])
+                        print("TYPE OF ALL_MESAGES_AS_DICTS: ", type(all_messages_as_dicts))
+                        print("LENGTH OF ALL_MESAGES_AS_DICTS: ", len([all_messages_as_dicts]))
+                        updated_session_data['memory'] = [all_messages_as_dicts]
+
+                    final_session = AgentSession.model_validate(updated_session_data)
                     
-                    # Read the pre-calculated data from the turn_data dictionary
-                    session_data = updated_session_data.get("session_data", {})
-                    
-                    if turn_data.get('tool_calls'):
-                        existing_tool_calls = session_data.get('tool_calls', [])
-                        session_data['tool_calls'] = existing_tool_calls + turn_data['tool_calls']
-
-                    if turn_data.get('usage_stats'):
-                        turn_usage_history = session_data.get('turn_usage_history', [])
-                        turn_usage_history.append(turn_data['usage_stats'])
-                        session_data['turn_usage_history'] = turn_usage_history
-
-                    updated_session_data['session_data'] = session_data
-                print("UPDATED_SESSION_DATA MEMORY: ", updated_session_data['memory'])
-                print("TYPE OF UPDATED_SESSION_DATA MEMORY: ", type(updated_session_data['memory']))
-                final_session = AgentSession.model_validate(updated_session_data)
-
-                async with self._managed_storage_connection():
                     self.storage.upsert(final_session)
                     print(f"[Storage] Session '{self.session_id}' has been successfully upserted.")
 

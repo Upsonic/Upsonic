@@ -1,13 +1,12 @@
 import json
 import time
-from typing import List, Literal, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 
 from upsonic.storage.base import Storage
-from upsonic.storage.sessions import (
+from upsonic.storage.session.sessions import (
     BaseSession,
     AgentSession
 )
-from upsonic.storage.settings import RedisSettings
 
 try:
     from redis import Redis
@@ -25,19 +24,40 @@ class RedisStorage(Storage):
     reads and writes but performs filtering operations on the client side.
     """
 
-    def __init__(self, settings: RedisSettings):
+    def __init__(
+        self,
+        prefix: str,
+        host: str = "localhost",
+        port: int = 6379,
+        db: int = 0,
+        password: Optional[str] = None,
+        ssl: bool = False,
+        expire: Optional[int] = None,
+        mode: Literal["agent", "team", "workflow", "workflow_v2"] = "agent",
+    ):
         """
-        Initializes the Redis storage provider from a settings object.
+        Initializes the Redis storage provider.
 
         Args:
-            settings: A validated RedisSettings object containing all configuration.
+            prefix: A prefix to namespace all keys for this application instance.
+            host: The Redis server hostname.
+            port: The Redis server port.
+            db: The Redis database number to use.
+            password: Optional password for Redis authentication.
+            ssl: If True, uses an SSL connection.
+            expire: Optional TTL in seconds for all session keys.
+            mode: The operational mode.
         """
-        super().__init__(mode=settings.STORAGE_MODE)
+        super().__init__(mode=mode)
 
-        self.prefix = settings.REDIS_PREFIX
-        self.expire = settings.REDIS_EXPIRE
-        self.redis_client: Redis = Redis.from_url(
-            str(settings.REDIS_DSN),
+        self.prefix = prefix
+        self.expire = expire
+        self.redis_client: Redis = Redis(
+            host=host,
+            port=port,
+            db=db,
+            password=password,
+            ssl=ssl,
             decode_responses=True 
         )
 

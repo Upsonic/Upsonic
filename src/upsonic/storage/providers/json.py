@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Literal, Optional, Dict, Any
 
 from upsonic.storage.base import Storage
-from upsonic.storage.sessions import (
+from upsonic.storage.session.sessions import (
     BaseSession,
     AgentSession
 )
@@ -20,21 +20,28 @@ class JSONStorage(Storage):
     development, debugging, and simple, single-node applications.
     """
 
-    def __init__(self, settings: JSONSettings):
+    def __init__(
+        self,
+        directory_path: str,
+        pretty_print: bool = True,
+        mode: Literal["agent", "team", "workflow", "workflow_v2"] = "agent",
+    ):
         """
-        Initializes the JSON storage provider from a settings object.
+        Initializes the JSON storage provider.
 
         Args:
-            settings: A validated JSONSettings object containing all configuration.
+            directory_path: The root directory where session files will be stored.
+            pretty_print: If True, the output JSON will be indented for readability.
+            mode: The operational mode.
         """
-        super().__init__(mode=settings.STORAGE_MODE)
-
-        self.base_path = settings.JSON_DIRECTORY_PATH.resolve()
-        self.sessions_path = self.base_path / settings.STORAGE_MODE
-
-        self._pretty_print = settings.JSON_PRETTY_PRINT
-        self._json_indent = 4 if self._pretty_print else None
+        super().__init__(mode=mode)
         
+        # THE CHANGE: Parameters are now used directly.
+        self.base_path = Path(directory_path).resolve()
+        self.sessions_path = self.base_path / mode
+        self._pretty_print = pretty_print
+        self._json_indent = 4 if self._pretty_print else None
+
         self.create()
         self.connect()
 

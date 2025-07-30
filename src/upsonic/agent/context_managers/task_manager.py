@@ -1,20 +1,14 @@
 from contextlib import asynccontextmanager
-from typing import Dict, Any, Optional
 
 class TaskManager:
-    def __init__(self, task, agent, *, turn_data: Optional[Dict[str, Any]] = None):
+    def __init__(self, task, agent):
         self.task = task
         self.agent = agent
         self.model_response = None
-        self.turn_data = turn_data
 
         
     def process_response(self, model_response):
         self.model_response = model_response
-
-        if self.turn_data is not None and self.model_response is None:
-            if hasattr(self.task, 'error_message') and self.task.error_message:
-                self.turn_data['error'] = str(self.task.error_message)
 
         return self.model_response
 

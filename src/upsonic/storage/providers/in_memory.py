@@ -4,7 +4,7 @@ from collections import OrderedDict
 from typing import Dict, List, Optional
 
 from upsonic.storage.base import Storage
-from upsonic.storage.sessions import (
+from upsonic.storage.session.sessions import (
     BaseSession,
     AgentSession
 )

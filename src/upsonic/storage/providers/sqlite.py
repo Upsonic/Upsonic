@@ -1,14 +1,13 @@
-import time
 import json
 from pathlib import Path
 from typing import List, Literal, Optional
+import time
 
-from upsonic.storage.base import Storage, SchemaMismatchError
-from upsonic.storage.sessions import (
+from upsonic.storage.base import Storage
+from upsonic.storage.session.sessions import (
     BaseSession,
     AgentSession
 )
-from upsonic.storage.settings import SQLiteSettings
 
 try:
     from sqlalchemy import create_engine, inspect as sqlalchemy_inspect, text
@@ -29,30 +28,60 @@ class SqliteStorage(Storage):
     via a Pydantic settings object.
     """
 
-    def __init__(self, settings: SQLiteSettings):
+    def __init__(
+        self,
+        table_name: str,
+        db_url: Optional[str] = None,
+        db_file: Optional[str] = None,
+        db_engine: Optional[Engine] = None,
+        auto_upgrade_schema: bool = False,
+        mode: Literal["agent", "team", "workflow", "workflow_v2"] = "agent",
+    ):
         """
-        Initializes the SQLite storage provider from a settings object.
+        Initializes the SQLite storage provider.
 
-        This constructor is designed to be called by the StorageFactory, which
-        passes a validated instance of SQLiteSettings. All necessary parameters
-        (db path, table name, mode) are extracted from this object.
+        The connection is determined using the following precedence:
+        1. An existing `db_engine` object.
+        2. A full `db_url` connection string.
+        3. A local `db_file` path.
+        4. A new in-memory database if none of the above are provided.
 
         Args:
-            settings: A validated SQLiteSettings object containing all configuration.
+            table_name: The name of the table for storing sessions.
+            db_url: An optional SQLAlchemy database URL.
+            db_file: An optional path to a local database file.
+            db_engine: An optional, pre-configured SQLAlchemy Engine.
+            auto_upgrade_schema: If True, attempts to run schema migrations automatically.
+            mode: The operational mode, which determines the table schema.
         """
-        super().__init__(mode=settings.STORAGE_MODE)
+        super().__init__(mode=mode)
 
-        self.db_path = str(settings.SQLITE_DB_PATH)
-        self.table_name = settings.SQLITE_TABLE_NAME
+        # THE REFACTORED CONSTRUCTOR LOGIC
+        _engine: Optional[Engine] = db_engine
+        if _engine is None and db_url is not None:
+            _engine = create_engine(db_url)
+        elif _engine is None and db_file is not None:
+            db_path = Path(db_file).resolve()
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            _engine = create_engine(f"sqlite:///{db_path}")
+        elif _engine is None:
+            # Fallback to in-memory if no other option is provided
+            _engine = create_engine("sqlite://")
 
-        self.db_uri = f"sqlite:///{self.db_path}" if self.db_path != ":memory:" else "sqlite:///"
-        self.db_engine: Engine = create_engine(self.db_uri)
-        self.metadata = MetaData()
-        self.inspector = sqlalchemy_inspect(self.db_engine)
-        self.SqlSession = sessionmaker(bind=self.db_engine)
+        self.db_engine: Engine = _engine
         
-        self.table: Table = self._get_table_schema()
+        # Database attributes
+        self.table_name: str = table_name
+        self.metadata: MetaData = MetaData()
+        self.inspector = sqlalchemy_inspect(self.db_engine)
 
+        # Schema management attributes
+        self.auto_upgrade_schema: bool = auto_upgrade_schema
+
+        # Database session and table definition
+        self.SqlSession: sessionmaker[SqlAlchemySession] = sessionmaker(bind=self.db_engine)
+        self.table: Table = self._get_table_schema()
+        
         self.create()
         self.connect()
 
