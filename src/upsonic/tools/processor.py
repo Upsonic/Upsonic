@@ -4,13 +4,16 @@ import functools
 import hashlib
 import inspect
 import json
+import re
 import time
 from pathlib import Path
-from typing import Callable, Any, Generator, Tuple, Dict
+from typing import Callable, Any, Generator, Tuple, Dict, TYPE_CHECKING
+import asyncio
 
 from .tool import ToolConfig
-
+from upsonic.tasks.tasks import Task
 from upsonic.utils.printing import console, spacing
+
 
 
 class ToolValidationError(Exception):
@@ -29,7 +32,6 @@ class ToolProcessor:
         Inspects a function to ensure it meets the requirements for a valid tool.
         A valid tool must have type hints for all parameters, a return type hint,
         and a non-empty docstring.
-
         Raises:
             ToolValidationError: If the function fails validation.
         """
@@ -54,16 +56,13 @@ class ToolProcessor:
             )
 
     def normalize_and_process(self, task_tools: list) -> Generator[Tuple[Callable, ToolConfig], None, None]:
+        from upsonic.agent.agent import Direct
         """
         Processes a list of raw tools from a Task.
-
-        This method iterates through functions and object methods, validates them,
-        resolves their `ToolConfig` (either from a decorator or by applying a default),
-        and yields a standardized tuple of (callable, config).
-
+        This method iterates through functions, agent instances, and other object methods,
+        validates them, resolves their `ToolConfig`, and yields a standardized tuple of (callable, config).
         Args:
             task_tools: The raw list of tools from `task.tools`.
-
         Yields:
             A tuple containing the callable function/method and its resolved ToolConfig.
         """
@@ -71,11 +70,56 @@ class ToolProcessor:
             return
 
         for tool_item in task_tools:
+            # Case 1: The tool is a standalone function
             if inspect.isfunction(tool_item):
                 self._validate_function(tool_item)
                 config = getattr(tool_item, '_upsonic_tool_config', ToolConfig())
                 yield (tool_item, config)
 
+            # Case 2: The tool is a Direct Agent instance.
+            elif isinstance(tool_item, Direct):
+                class_name_base = tool_item.name or f"AgentTool{tool_item.agent_id[:8]}"
+                dynamic_class_name = "".join(word.capitalize() for word in re.sub(r"[^a-zA-Z0-9 ]", "", class_name_base).split())
+                method_name_base = tool_item.name or f"AgentTool{tool_item.agent_id[:8]}"
+                dynamic_method_name = "ask_" + re.sub(r"[^a-zA-Z0-9_]", "", method_name_base.lower().replace(" ", "_"))
+
+                agent_specialty = tool_item.system_prompt or tool_item.company_description or f"a general purpose assistant named '{tool_item.name}'"
+                dynamic_docstring = (
+                    f"Delegates a sub-task to a specialist agent named '{tool_item.name}'. "
+                    f"This agent's role is: {agent_specialty}. "
+                    f"Use this tool ONLY for tasks that fall squarely within this agent's described expertise. "
+                    f"The 'request' parameter must be a full, clear, and self-contained instruction for the specialist agent."
+                )
+
+                async def agent_method_logic(self, request: str) -> str:
+                    """This docstring will be replaced dynamically."""
+                    the_task = Task(description=request)
+                    response = await self.agent.do_async(the_task)
+                    return str(response) if response is not None else "The specialist agent returned no response."
+
+                agent_method_logic.__doc__ = dynamic_docstring
+                agent_method_logic.__name__ = dynamic_method_name
+
+                def agent_tool_init(self, agent: Direct):
+                    self.agent = agent
+
+                AgentToolWrapper = type(
+                    dynamic_class_name,
+                    (object,),
+                    {
+                        "__init__": agent_tool_init,
+                        dynamic_method_name: agent_method_logic,
+                    },
+                )
+                wrapper_instance = AgentToolWrapper(agent=tool_item)
+
+                for name, method in inspect.getmembers(wrapper_instance, inspect.ismethod):
+                    if not name.startswith('_'):
+                        self._validate_function(method)
+                        config = getattr(method, '_upsonic_tool_config', ToolConfig())
+                        yield (method, config)
+
+            # Case 3: The tool is any other custom class instance (an object)
             elif not inspect.isfunction(tool_item) and hasattr(tool_item, '__class__'):
                 for name, method in inspect.getmembers(tool_item, inspect.ismethod):
                     if not name.startswith('_'):
@@ -122,7 +166,7 @@ class ToolProcessor:
                         console.print("\n[bold red]Input cancelled by user.[/bold red]")
                         return "Tool execution was cancelled by the user during input."
                 spacing()
-            
+
             cache_file = None
             if config.cache_results:
                 cache_dir_path = Path(config.cache_dir) if config.cache_dir else Path.home() / '.upsonic' / 'cache'
@@ -149,7 +193,17 @@ class ToolProcessor:
                         pass
 
             try:
-                result = original_func(*args, **kwargs)
+                if inspect.iscoroutinefunction(original_func):
+                    try:
+                        loop = asyncio.get_running_loop()
+                    except RuntimeError:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                    
+                    result = loop.run_until_complete(original_func(*args, **kwargs))
+                else:
+                    result = original_func(*args, **kwargs)
+
                 func_dict["func"] = result if result else None
                 if result and config.show_result:
                     console.print(f"[bold green]✓ Tool Result[/bold green]: {result}")
@@ -176,6 +230,6 @@ class ToolProcessor:
             setattr(behavioral_wrapper, '_upsonic_stop_after_call', config.stop_after_tool_call)
             setattr(behavioral_wrapper, '_upsonic_show_result', config.show_result)
             print("FUNC DICT: ", func_dict)
-            
+
             return func_dict
         return behavioral_wrapper

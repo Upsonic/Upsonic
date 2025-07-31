@@ -1,7 +1,7 @@
 import asyncio
 import os
 import uuid
-from typing import Any, List, Union, Optional
+from typing import Any, List, Union, Optional, Literal
 import time
 from contextlib import asynccontextmanager
 
@@ -21,6 +21,7 @@ from upsonic.agent.base import BaseAgent
 from upsonic.tools.processor import ToolProcessor
 from upsonic.storage.base import Storage
 from upsonic.storage.session.sessions import AgentSession
+from upsonic.utils.retry import retryable
 
 from upsonic.agent.context_managers import (
     CallManager,
@@ -33,7 +34,7 @@ from upsonic.agent.context_managers import (
 )
 
 
-
+RetryMode = Literal["raise", "return_false"]
 
 class Direct(BaseAgent):
     """Static methods for making direct LLM calls using the Upsonic."""
@@ -56,6 +57,8 @@ class Direct(BaseAgent):
                  session_id: Optional[str] = None,
                  add_history_to_messages: bool = True,
                  num_history_runs: Optional[int] = None,
+                 retry: int = 3,
+                 mode: RetryMode = "raise"
                  ):
         self.canvas = canvas
 
@@ -76,7 +79,13 @@ class Direct(BaseAgent):
         self.add_history_to_messages = add_history_to_messages
         self.num_history_runs = num_history_runs
         
-        
+        if retry < 1:
+            raise ValueError("The 'retry' count must be at least 1.")
+        if mode not in ("raise", "return_false"):
+            raise ValueError(f"Invalid retry_mode '{retry_mode}'. Must be 'raise' or 'return_false'.")
+
+        self.retry = retry
+        self.mode = mode
 
 
     @property
@@ -237,27 +246,17 @@ class Direct(BaseAgent):
         """
         agent_model = get_agent_model(llm_model)
 
-        # --- NEW: Instantiate our ToolProcessor ---
         tool_processor = ToolProcessor()
         
-        # --- NEW: Lists to hold the processed tools ---
         final_tools_for_pydantic_ai = []
         mcp_servers = []
         
-        # --- NEW: Process tools using the new engine ---
-        # The normalize_and_process method handles validation and configuration resolution.
-        # It yields tuples of (original_function_or_method, resolved_config).
         processed_tools_generator = tool_processor.normalize_and_process(single_task.tools)
 
         for original_tool, config in processed_tools_generator:
-            # For each validated and configured tool, generate the final behavioral wrapper.
-            # This wrapper contains all the logic for caching, confirmation, etc.
             wrapped_tool = tool_processor.generate_behavioral_wrapper(original_tool, config)
             final_tools_for_pydantic_ai.append(wrapped_tool)
 
-        # --- MODIFIED: The MCP server logic is now separate and clearer ---
-        # Note: This assumes MCP server "tools" are class types, as in your original code.
-        # We process them separately from the standard callable tools.
         tools_to_remove_from_task = []
         for tool in single_task.tools:
             if isinstance(tool, type):
@@ -268,7 +267,6 @@ class Direct(BaseAgent):
                     mcp_servers.append(the_mcp_server)
                     tools_to_remove_from_task.append(tool)
                 
-                # Check if it's a normal MCP server (has command property)
                 elif hasattr(tool, 'command'):
                     env = getattr(tool, 'env', {}) if hasattr(tool, 'env') and isinstance(getattr(tool, 'env', None), dict) else {}
                     command = getattr(tool, 'command', None)
@@ -278,12 +276,9 @@ class Direct(BaseAgent):
                     mcp_servers.append(the_mcp_server)
                     tools_to_remove_from_task.append(tool)
 
-        # It's good practice to not modify the list while iterating.
         for tool in tools_to_remove_from_task:
             single_task.tools.remove(tool)
 
-
-        # --- MODIFIED: Instantiate the PydanticAgent with the *wrapped* tools ---
         the_agent = PydanticAgent(
             agent_model,
             output_type=single_task.response_format,
@@ -342,7 +337,7 @@ class Direct(BaseAgent):
                 self.storage.disconnect()
 
 
-
+    @retryable()
     @upsonic_error_handler(max_retries=3, show_error_details=True)
     async def do_async(self, task: Task, model: ModelNames | None = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
         """
