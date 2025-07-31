@@ -14,6 +14,8 @@ def retryable(
     backoff: float = 2.0
 ) -> Callable:
     """
+    Decorator that wraps sync and async functions and handles retrying logic.
+    
     When this decorates a method of a class instance, it dynamically resolves its
     retry configuration with the following priority:
     1. Arguments passed directly to the decorator (e.g., @retryable(retries=5)).
