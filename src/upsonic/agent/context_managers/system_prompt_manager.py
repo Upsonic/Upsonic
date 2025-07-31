@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Any, Optional
 
 from upsonic.context.agent import turn_agent_to_string
 from upsonic.context.default_prompt import default_prompt
@@ -94,6 +94,7 @@ class SystemPromptManager:
         system prompt and makes it available via the `get_system_prompt` method.
         """
         self.system_prompt = self._build_system_prompt()
+            
         try:
             yield self
         finally:

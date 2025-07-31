@@ -1,16 +1,13 @@
-def tool_usage(model_response, task, historical_message_count=0):
+def tool_usage(model_response, task):
 
         # Extract tool calls from model_response.all_messages()
         tool_usage_value = []
         all_messages = model_response.all_messages()
         
-        # Only process messages from the current interaction (skip historical messages)
-        current_interaction_messages = all_messages[historical_message_count:]
-        
         # Process messages to extract tool calls and their results
         tool_calls_map = {}  # Map tool_call_id to tool call info
         
-        for message in current_interaction_messages:
+        for message in all_messages:
             if hasattr(message, 'parts'):
                 for part in message.parts:
                     # Check if this is a tool call
@@ -26,7 +23,7 @@ def tool_usage(model_response, task, historical_message_count=0):
 
         # Convert to list format
         tool_usage_value = list(tool_calls_map.values())
-        
+        print("TOOL CALL MAP: ", tool_calls_map)
         # Store tool calls in the task
         for tool_call in tool_usage_value:
             task.add_tool_call(tool_call)

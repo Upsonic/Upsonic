@@ -1,16 +1,18 @@
 from contextlib import asynccontextmanager
 
-
 class TaskManager:
     def __init__(self, task, agent):
         self.task = task
         self.agent = agent
         self.model_response = None
+
         
     def process_response(self, model_response):
         self.model_response = model_response
+
         return self.model_response
-    
+
+
     @asynccontextmanager
     async def manage_task(self):
         # Start the task

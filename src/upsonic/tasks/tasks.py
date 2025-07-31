@@ -15,7 +15,7 @@ from upsonic.knowledge_base.knowledge_base import KnowledgeBase
 
 class Task(BaseModel):
     description: str
-    images: Optional[List[str]] = None
+    attachments: Optional[List[str]] = None
     tools: list[Any] = []
     response_format: Union[Type[BaseModel], type[str], None] = str
     response_lang: str = "en"
@@ -36,7 +36,7 @@ class Task(BaseModel):
     def __init__(
         self, 
         description: str, 
-        images: Optional[List[str]] = None,
+        attachments: Optional[List[str]] = None,
         tools: list[Any] = None,
         response_format: Union[Type[BaseModel], type[str], None] = str,
         response: Any = None,
@@ -58,7 +58,7 @@ class Task(BaseModel):
             tools = []
             
         data.update({
-            "images": images,
+            "attachments": attachments,
             "tools": tools,
             "response_format": response_format,
             "_response": response,
@@ -304,23 +304,25 @@ class Task(BaseModel):
 
         self.context_formatted = None
 
-        if not self.images:
+        if not self.attachments:
             return final_description
 
         input_list = [final_description]
         
-        for image_path in self.images:
+        for attachment_path in self.attachments:
             try:
-                with open(image_path, "rb") as image_file:
-                    image_data = image_file.read()
+                with open(attachment_path, "rb") as attachment_file:
+                    attachment_data  = attachment_file.read()
                 
-                # Determine media type based on file extension
-                file_extension = image_path.lower().split('.')[-1]
-                media_type = f'image/{file_extension.replace("jpg", "jpeg")}'
+                # Using mimetypes is more robust than just checking extensions
+                import mimetypes
+                media_type, _ = mimetypes.guess_type(attachment_path)
+                if media_type is None:
+                    media_type = "application/octet-stream" # Fallback
                     
-                input_list.append(BinaryContent(data=image_data, media_type=media_type))
+                input_list.append(BinaryContent(data=attachment_data, media_type=media_type))
                 
             except Exception as e:
-                print(f"Warning: Could not load image {image_path}: {e}")
+                print(f"Warning: Could not load image {attachment_path}: {e}")
 
         return input_list

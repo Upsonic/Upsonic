@@ -1,26 +1,33 @@
 import asyncio
 import os
 import uuid
-from typing import Any, List, Union
+from typing import Any, List, Union, Optional
+import time
+from contextlib import asynccontextmanager
 
 from pydantic_ai import Agent as PydanticAgent
 from pydantic_ai import BinaryContent
 from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio
+from pydantic_ai.messages import ModelMessagesTypeAdapter
+
 
 from upsonic.canvas.canvas import Canvas
 from upsonic.models.model import get_agent_model
 from upsonic.models.model_registry import ModelNames
 from upsonic.tasks.tasks import Task
 from upsonic.utils.error_wrapper import upsonic_error_handler
-from upsonic.utils.printing import call_end, print_price_id_summary
+from upsonic.utils.printing import print_price_id_summary
 from upsonic.agent.base import BaseAgent
+from upsonic.tools.processor import ToolProcessor
+from upsonic.storage.base import Storage
+from upsonic.storage.session.sessions import AgentSession
 
 from upsonic.agent.context_managers import (
     CallManager,
     ContextManager,
     LLMManager,
-    MemoryManager,
     ReliabilityManager,
+    StorageManager,
     SystemPromptManager,
     TaskManager,
 )
@@ -44,7 +51,11 @@ class Direct(BaseAgent):
                  compress_context: bool = False,
                  reliability_layer = None,
                  agent_id_: str | None = None,
+                 storage: Optional[Storage] = None,
                  canvas: Canvas | None = None,
+                 session_id: Optional[str] = None,
+                 add_history_to_messages: bool = True,
+                 num_history_runs: Optional[int] = None,
                  ):
         self.canvas = canvas
 
@@ -57,9 +68,14 @@ class Direct(BaseAgent):
         self.company_objective = company_objective
         self.company_description = company_description
         self.system_prompt = system_prompt
-        self.memory = memory
 
         self.reliability_layer = reliability_layer
+
+        self.storage = storage
+        self.session_id_ = session_id
+        self.add_history_to_messages = add_history_to_messages
+        self.num_history_runs = num_history_runs
+        
         
 
 
@@ -73,7 +89,65 @@ class Direct(BaseAgent):
         if self.name:
             return self.name
         return f"Agent_{self.agent_id[:8]}"
+    
 
+    @property
+    def session_id(self):
+        """
+        Provides a unique session ID, generating one if not already set.
+        This will be the primary identifier for storing agent state/history.
+        """
+        if self.session_id_ is None:
+            self.session_id_ = str(uuid.uuid4())
+        return self.session_id_
+
+    def _limit_message_history(self, message_history: list) -> list:
+        """
+        Limit conversation history based on num_history_runs parameter.
+        
+        Args:
+            message_history: List of messages from storage
+            
+        Returns:
+            Limited message history with system prompt + last N conversation runs
+        """
+        if not self.num_history_runs or self.num_history_runs <= 0 or len(message_history) <= 1:
+            return message_history
+        
+        # Separate system prompt (always first) from conversation messages
+        system_message = message_history[0] if len(message_history) > 0 else None
+        conversation_messages = message_history[1:] if len(message_history) > 1 else []
+        
+        # Group conversation messages into runs (request-response pairs)
+        conversation_runs = []
+        current_run = []
+        
+        for msg in conversation_messages:
+            current_run.append(msg)
+            if len(current_run) == 2:  # Complete run (request + response)
+                conversation_runs.append(current_run)
+                current_run = []
+        
+        # Handle incomplete run
+        if current_run:
+            conversation_runs.append(current_run)
+        
+        # Keep only the last num_history_runs
+        if len(conversation_runs) > self.num_history_runs:
+            kept_runs = conversation_runs[-self.num_history_runs:]
+        else:
+            kept_runs = conversation_runs
+        
+        # Flatten kept runs back to message list
+        limited_conversation = []
+        for run in kept_runs:
+            limited_conversation.extend(run)
+        
+        # Rebuild with system message + limited conversation
+        if system_message:
+            return [system_message] + limited_conversation
+        else:
+            return limited_conversation
 
 
 
@@ -154,138 +228,169 @@ class Direct(BaseAgent):
         print(result)
         return result
 
-    def agent_tool_register(self,agent, tasks):
-
-        # If tasks is not a list
-        if not isinstance(tasks, list):
-            tasks = [tasks]
-
-        # Keep track of already registered tools to prevent duplicates
-        if not hasattr(agent, '_registered_tools'):
-            agent._registered_tools = set()
-
-        for task in tasks:
-            for tool in task.tools:
-                # Create a unique identifier for the tool
-                # Using id() to get unique object identifier
-                tool_id = id(tool)
-                
-                # Only register if not already registered
-                if tool_id not in agent._registered_tools:
-                    agent.tool_plain(tool)
-                    agent._registered_tools.add(tool_id)
-
-        return agent
-
 
     @upsonic_error_handler(max_retries=2, show_error_details=True)
     async def agent_create(self, llm_model, single_task, system_prompt: str):
-
+        """
+        Creates and configures the underlying PydanticAgent, processing and wrapping
+        all tools with the advanced behavioral logic from ToolProcessor.
+        """
         agent_model = get_agent_model(llm_model)
 
+        # --- NEW: Instantiate our ToolProcessor ---
+        tool_processor = ToolProcessor()
+        
+        # --- NEW: Lists to hold the processed tools ---
+        final_tools_for_pydantic_ai = []
         mcp_servers = []
-        tools_to_remove = []
+        
+        # --- NEW: Process tools using the new engine ---
+        # The normalize_and_process method handles validation and configuration resolution.
+        # It yields tuples of (original_function_or_method, resolved_config).
+        processed_tools_generator = tool_processor.normalize_and_process(single_task.tools)
 
-        if len(single_task.tools) > 0:
-            # For loop through the tools
-            for tool in single_task.tools:
+        for original_tool, config in processed_tools_generator:
+            # For each validated and configured tool, generate the final behavioral wrapper.
+            # This wrapper contains all the logic for caching, confirmation, etc.
+            wrapped_tool = tool_processor.generate_behavioral_wrapper(original_tool, config)
+            final_tools_for_pydantic_ai.append(wrapped_tool)
 
-                if isinstance(tool, type):
-                    
-                    # Check if it's an MCP SSE server (has url property)
-                    if hasattr(tool, 'url'):
-                        url = getattr(tool, 'url')
-                        print(url)
-                        
-                        the_mcp_server = MCPServerSSE(url)
-                        mcp_servers.append(the_mcp_server)
-                        tools_to_remove.append(tool)
-                    
-                    # Check if it's a normal MCP server (has command property)
-                    elif hasattr(tool, 'command'):
-                        # Some times the env is not dict at that situations we need to handle that
-                        if hasattr(tool, 'env') and isinstance(tool.env, dict):
-                            env = tool.env
-                        else:
-                            env = {}
+        # --- MODIFIED: The MCP server logic is now separate and clearer ---
+        # Note: This assumes MCP server "tools" are class types, as in your original code.
+        # We process them separately from the standard callable tools.
+        tools_to_remove_from_task = []
+        for tool in single_task.tools:
+            if isinstance(tool, type):
+                # Check if it's an MCP SSE server (has url property)
+                if hasattr(tool, 'url'):
+                    url = getattr(tool, 'url')
+                    the_mcp_server = MCPServerSSE(url)
+                    mcp_servers.append(the_mcp_server)
+                    tools_to_remove_from_task.append(tool)
+                
+                # Check if it's a normal MCP server (has command property)
+                elif hasattr(tool, 'command'):
+                    env = getattr(tool, 'env', {}) if hasattr(tool, 'env') and isinstance(getattr(tool, 'env', None), dict) else {}
+                    command = getattr(tool, 'command', None)
+                    args = getattr(tool, 'args', [])
 
-                        command = getattr(tool, 'command', None)
-                        args = getattr(tool, 'args', [])
+                    the_mcp_server = MCPServerStdio(command, args=args, env=env)
+                    mcp_servers.append(the_mcp_server)
+                    tools_to_remove_from_task.append(tool)
 
-                        the_mcp_server = MCPServerStdio(
-                            command,
-                            args=args,
-                            env=env,
-                        )
-
-                        mcp_servers.append(the_mcp_server)
-                        tools_to_remove.append(tool)
-
-            # Remove MCP tools from the tools list
-            for tool in tools_to_remove:
-                single_task.tools.remove(tool)
-
-        the_agent = PydanticAgent(agent_model, output_type=single_task.response_format, system_prompt=system_prompt, end_strategy="exhaustive", retries=5, mcp_servers=mcp_servers)
+        # It's good practice to not modify the list while iterating.
+        for tool in tools_to_remove_from_task:
+            single_task.tools.remove(tool)
 
 
-        self.agent_tool_register(the_agent, single_task)
+        # --- MODIFIED: Instantiate the PydanticAgent with the *wrapped* tools ---
+        the_agent = PydanticAgent(
+            agent_model,
+            output_type=single_task.response_format,
+            system_prompt=system_prompt,
+            end_strategy="exhaustive",
+            retries=5,
+            mcp_servers=mcp_servers
+        )
+
+        if not hasattr(the_agent, '_registered_tools'):
+            the_agent._registered_tools = set()
+
+        for tool_func in final_tools_for_pydantic_ai:
+            tool_id = id(tool_func) # Get a unique ID for the function object
+            if tool_id not in the_agent._registered_tools:
+                the_agent.tool_plain(tool_func)
+                the_agent._registered_tools.add(tool_id)
+
+        if not hasattr(the_agent, '_upsonic_wrapped_tools'):
+            the_agent._upsonic_wrapped_tools = {}
+
+        the_agent._upsonic_wrapped_tools = {
+            tool_func.__name__: tool_func for tool_func in final_tools_for_pydantic_ai
+        }
 
         return the_agent
 
 
 
+    @asynccontextmanager
+    async def _managed_storage_connection(self):
+        """
+        A highly robust async context manager that ensures the storage connection
+        is active during an operation and cleans up after itself safely.
+
+        This version includes checks to ensure the `connect` and `disconnect`
+        methods exist before attempting to call them, making it compatible with
+        any storage provider, regardless of its specific implementation.
+        """
+        if not self.storage:
+            yield
+            return
+
+        can_connect = hasattr(self.storage, 'connect') and callable(self.storage.connect)
+        can_disconnect = hasattr(self.storage, 'disconnect') and callable(self.storage.disconnect)
+
+        was_connected_before = self.storage.is_connected()
+
+        try:
+            if can_connect and not was_connected_before:
+                self.storage.connect()
+            yield
+
+        finally:
+            if can_disconnect and not was_connected_before and self.storage.is_connected():
+                self.storage.disconnect()
+
 
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
-    async def do_async(self, task: Task, model: ModelNames | None = None, debug: bool = False, retry: int = 3, state: Any = None):
+    async def do_async(self, task: Task, model: ModelNames | None = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
         """
-        Execute a direct LLM call with the given task and model asynchronously.
-        
-        Args:
-            task: The task to execute or list of tasks
-            model: The LLM model to use
-
-            debug: Whether to enable debug mode
-            retry: Number of retries for failed calls (default: 3)
-            
-        Returns:
-            The response from the LLM
+        Execute a direct LLM call with robust, context-managed storage connections
+        and agent-level control over history management.
         """
+        async with self._managed_storage_connection():
+            processed_task = None
+            exception_caught = None
+            model_response = None
 
-        llm_manager = LLMManager(self.default_llm_model, model)
-        
-        async with llm_manager.manage_llm() as llm_handler:
-            selected_model = llm_handler.get_model()
-            
+            try:
+                llm_manager = LLMManager(self.default_llm_model, model)
+                async with llm_manager.manage_llm() as llm_handler:
+                    selected_model = llm_handler.get_model()
 
-            system_prompt_manager = SystemPromptManager(self, task)
-            context_manager = ContextManager(self, task, state)
-            memory_manager = MemoryManager(self, task)
-            call_manager = CallManager(selected_model, task, debug)
-            task_manager = TaskManager(task, self)
-            reliability_manager = ReliabilityManager(task, self.reliability_layer, selected_model)
+                    system_prompt_manager = SystemPromptManager(self, task)
+                    context_manager = ContextManager(self, task, state)
+                    storage_manager = StorageManager(self, task)
+                    
+                    async with system_prompt_manager.manage_system_prompt() as sp_handler, \
+                                context_manager.manage_context() as ctx_handler, \
+                                storage_manager.manage_storage() as storage_handler:
 
+                        call_manager = CallManager(selected_model, task, debug=debug)
+                        task_manager = TaskManager(task, self)
+                        reliability_manager = ReliabilityManager(task, self.reliability_layer, selected_model)
 
-            async with system_prompt_manager.manage_system_prompt() as sp_handler:
-                system_prompt = sp_handler.get_system_prompt()
-                agent = await self.agent_create(selected_model, task, system_prompt)
+                        agent = await self.agent_create(selected_model, task, sp_handler.get_system_prompt())
 
-                async with context_manager.manage_context() as ctx_handler:
-                    async with reliability_manager.manage_reliability() as reliability_handler:
-                        async with memory_manager.manage_memory() as memory_handler:
-                            async with call_manager.manage_call(memory_handler) as call_handler:
+                        async with reliability_manager.manage_reliability() as reliability_handler:
+                            async with call_manager.manage_call() as call_handler:
                                 async with task_manager.manage_task() as task_handler:
                                     async with agent.run_mcp_servers():
-                                        model_response = await agent.run(task.build_agent_input(), message_history=memory_handler.historical_messages)
-                            
-                                    # Save the response to all contexts
-                                    model_response = memory_handler.process_response(model_response)
+                                        model_response = await agent.run(
+                                            task.build_agent_input(),
+                                            message_history=storage_handler.get_message_history()
+                                        )
+
                                     model_response = call_handler.process_response(model_response)
                                     model_response = task_handler.process_response(model_response)
+                                    model_response = storage_handler.process_response(model_response)
                                     processed_task = await reliability_handler.process_task(task_handler.task)
-        
-        # Print the price ID summary if the task has a price ID
-        if not processed_task.not_main_task:
+            except Exception as e:
+                exception_caught = e
+                raise
+
+        if processed_task and not processed_task.not_main_task:
             print_price_id_summary(processed_task.price_id, processed_task)
-            
-        return processed_task.response
+
+        return processed_task.response if processed_task else None

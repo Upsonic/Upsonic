@@ -1,12 +1,13 @@
 import os
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
+from typing import Optional
 
 load_dotenv()
 
 
 class LLMManager:
-    def __init__(self, default_model, requested_model=None):
+    def __init__(self, default_model, requested_model: Optional[str] = None):
         self.default_model = default_model
         self.requested_model = requested_model
         self.selected_model = None
