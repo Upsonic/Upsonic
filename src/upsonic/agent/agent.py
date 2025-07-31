@@ -58,7 +58,12 @@ class Direct(BaseAgent):
                  add_history_to_messages: bool = True,
                  num_history_runs: Optional[int] = None,
                  retry: int = 3,
-                 mode: RetryMode = "raise"
+                 mode: RetryMode = "raise",
+                 role: str | None = None,
+                 goal: str | None = None,
+                 instructions: str | None = None,
+                 education: str | None = None,
+                 work_experience: str | None = None,
                  ):
         self.canvas = canvas
 
@@ -78,6 +83,12 @@ class Direct(BaseAgent):
         self.session_id_ = session_id
         self.add_history_to_messages = add_history_to_messages
         self.num_history_runs = num_history_runs
+
+        self.role = role
+        self.goal = goal
+        self.instructions = instructions
+        self.education = education
+        self.work_experience = work_experience
         
         if retry < 1:
             raise ValueError("The 'retry' count must be at least 1.")
@@ -86,7 +97,6 @@ class Direct(BaseAgent):
 
         self.retry = retry
         self.mode = mode
-
 
     @property
     def agent_id(self):

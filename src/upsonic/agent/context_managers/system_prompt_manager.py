@@ -50,11 +50,31 @@ class SystemPromptManager:
             The fully constructed system prompt string.
         """
         prompt_parts = []
+        base_prompt = ""
 
         if self.agent.system_prompt:
             base_prompt = self.agent.system_prompt
+        
         else:
-            base_prompt = default_prompt().prompt
+            has_any_info = False
+
+            if self.agent.role:
+                base_prompt += f"\nThis is your role: {self.agent.role}"
+                has_any_info = True
+            if self.agent.goal:
+                base_prompt += f"\nThis is your goal: {self.agent.goal}"
+                has_any_info = True
+            if self.agent.instructions:
+                base_prompt += f"\nThis is your instructions to follow: {self.agent.instructions}"
+                has_any_info = True
+            if self.agent.education:
+                base_prompt += f"\nThis is your education: {self.agent.education}"
+                has_any_info = True
+            if self.agent.work_experience:
+                base_prompt += f"\nThis is your work experiences: {self.agent.work_experience}"
+                has_any_info = True
+            if not has_any_info:
+                base_prompt = default_prompt().prompt
         
         prompt_parts.append(base_prompt.strip())
 
