@@ -142,7 +142,7 @@ class TestDynamicPricingIntegration:
         # Clear global pricing manager cache
         _pricing_manager.clear_cache()
 
-    @patch("upsonic.models.model_registry._pricing_manager.get_dynamic_pricing")
+    @patch("upsonic.models.model_registry.get_dynamic_pricing_for_model")
     def test_get_pricing_with_dynamic_openrouter(self, mock_dynamic_pricing):
         """Test get_pricing function with dynamic OpenRouter pricing."""
         # Mock dynamic pricing return
@@ -151,9 +151,9 @@ class TestDynamicPricingIntegration:
         result = get_pricing("openrouter/test/model")
 
         assert result == {"input": 1.5, "output": 3.0}
-        mock_dynamic_pricing.assert_called_once_with("test/model")
+        mock_dynamic_pricing.assert_called_once_with("openrouter/test/model")
 
-    @patch("upsonic.models.model_registry._pricing_manager.get_dynamic_pricing")
+    @patch("upsonic.models.model_registry.get_dynamic_pricing_for_model")
     def test_get_pricing_fallback_to_static(self, mock_dynamic_pricing):
         """Test get_pricing falls back to static pricing when dynamic fails."""
         # Mock dynamic pricing failure
@@ -173,7 +173,7 @@ class TestDynamicPricingIntegration:
         assert result is not None
         assert result == {"input": 2.50, "output": 10.00}
 
-    @patch("upsonic.models.model_registry._pricing_manager.get_dynamic_pricing")
+    @patch("upsonic.models.model_registry.get_dynamic_pricing_for_model")
     def test_get_estimated_cost_with_dynamic_pricing(self, mock_dynamic_pricing):
         """Test cost estimation with dynamic pricing."""
         mock_dynamic_pricing.return_value = {"input": 1.0, "output": 2.0}
@@ -190,7 +190,7 @@ class TestDynamicPricingIntegration:
         cost = get_estimated_cost(100000, 50000, "unknown/model")
         assert cost == "Unknown"
 
-    @patch("upsonic.models.model_registry._pricing_manager.get_all_openrouter_models")
+    @patch("upsonic.models.model_pricing._pricing_manager.get_all_openrouter_models")
     def test_get_all_available_openrouter_models(self, mock_get_all):
         """Test getting all available OpenRouter models."""
         mock_models = {
@@ -204,13 +204,13 @@ class TestDynamicPricingIntegration:
         assert result == mock_models
         mock_get_all.assert_called_once()
 
-    @patch("upsonic.models.model_registry._pricing_manager.clear_cache")
+    @patch("upsonic.models.model_pricing._pricing_manager.clear_cache")
     def test_refresh_dynamic_pricing(self, mock_clear_cache):
         """Test manual refresh of dynamic pricing."""
         refresh_dynamic_pricing()
         mock_clear_cache.assert_called_once()
 
-    @patch("upsonic.models.model_registry._pricing_manager.get_all_openrouter_models")
+    @patch("upsonic.models.model_pricing._pricing_manager.get_all_openrouter_models")
     def test_is_openrouter_model_available(self, mock_get_all):
         """Test checking if OpenRouter model is available."""
         mock_get_all.return_value = {
