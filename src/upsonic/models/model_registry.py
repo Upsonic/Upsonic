@@ -24,11 +24,9 @@ ModelNames = Literal[
     "gemini/gemini-2.0-flash",
     "gemini/gemini-1.5-pro",
     "gemini/gemini-1.5-flash",
-    "ollama/llama3.2",
+    "ollama/llama3.1:8b",
     "ollama/llama3.1:70b",
-    "ollama/llama3.1",
-    "ollama/llama3.3",
-    "ollama/qwen2.5",
+    "ollama/qwen3:30b",
     "deepseek/deepseek-chat",
     "openrouter/anthropic/claude-3-sonnet",
     "openrouter/meta-llama/llama-3.1-8b-instruct",
@@ -160,9 +158,12 @@ MODEL_REGISTRY = {
         "required_environment_variables": ["GOOGLE_GLA_API_KEY"]
     },
     
-    "ollama/llama3.2": {
+
+
+
+    "ollama/llama3.1:8b": {
         "provider": "ollama", 
-        "model_name": "llama3.2", 
+        "model_name": "llama3.1:8b", 
         "capabilities": [],
         "pricing": {"input": 0.0, "output": 0.0},
         "required_environment_variables": []
@@ -176,25 +177,9 @@ MODEL_REGISTRY = {
         "required_environment_variables": []
     },
 
-    "ollama/llama3.1": {
+    "ollama/qwen3:30b": {
         "provider": "ollama", 
-        "model_name": "llama3.1", 
-        "capabilities": [],
-        "pricing": {"input": 0.0, "output": 0.0},
-        "required_environment_variables": []
-    },
-
-    "ollama/llama3.3": {
-        "provider": "ollama", 
-        "model_name": "llama3.3", 
-        "capabilities": [],
-        "pricing": {"input": 0.0, "output": 0.0},
-        "required_environment_variables": []
-    },
-
-    "ollama/qwen2.5": {
-        "provider": "ollama", 
-        "model_name": "qwen2.5", 
+        "model_name": "qwen3:30b", 
         "capabilities": [],
         "pricing": {"input": 0.0, "output": 0.0},
         "required_environment_variables": []
