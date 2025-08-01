@@ -115,6 +115,7 @@ class ContextManager:
         """The asynchronous context manager for building the task-specific context."""
         self.context_prompt = await self._build_context_prompt()
         self.task.context_formatted = self.context_prompt
+            
         try:
             yield self
         finally:

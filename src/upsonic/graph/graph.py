@@ -16,6 +16,7 @@ from rich.progress import (BarColumn, Progress, SpinnerColumn, TextColumn,
 from rich.table import Table
 
 from ..agent.base import BaseAgent
+from ..storage.base import Storage
 from ..tasks.tasks import Task
 from ..utils.printing import console, escape_rich_markup, spacing
 
@@ -401,6 +402,8 @@ class Graph(BaseModel):
     nodes: List[Union[TaskNode, DecisionFunc, DecisionLLM]] = Field(default_factory=list)
     edges: Dict[str, List[str]] = Field(default_factory=dict)
     state: State = Field(default_factory=State)
+
+    storage: Optional[Storage] = None
     
     class Config:
         arbitrary_types_allowed = True
@@ -412,6 +415,10 @@ class Graph(BaseModel):
                  raise TypeError("default_agent must be an instance of a class that inherits from BaseAgent.")
             if not hasattr(agent, 'do_async') or not callable(getattr(agent, 'do_async')):
                 raise ValueError("default_agent must have a 'do_async' method.")
+        if 'storage' in data:
+            self.storage = data.pop('storage')
+            if self.storage and not isinstance(self.storage, Storage):
+                raise TypeError("storage must be an instance of a class that inherits from Storage.")
         super().__init__(**data)
 
     def add(self, tasks_chain: Union[Task, TaskNode, TaskChain, DecisionFunc, DecisionLLM]) -> 'Graph':
@@ -447,7 +454,7 @@ class Graph(BaseModel):
                 return node.task.agent
         return None
 
-    async def _execute_task(self, node: TaskNode, state: State, verbose: bool = False) -> Any:
+    async def _execute_task(self, node: TaskNode, state: State, verbose: bool = False, *, graph_execution_id: Optional[str] = None) -> Any:
         """
         Executes a single task.
         
@@ -483,7 +490,7 @@ class Graph(BaseModel):
             
             # Delegate execution to the standardized agent pipeline, passing the state.
             if hasattr(runner, 'do_async'):
-                output = await runner.do_async(task, state=state)
+                output = await runner.do_async(task, state=state, graph_execution_id=graph_execution_id)
             else:
                 output = runner.do(task)
             
@@ -638,7 +645,7 @@ class Graph(BaseModel):
                         if current.false_branch: queue.append(current.false_branch)
         return ids
 
-    async def _run_sequential(self, verbose: bool = False, show_progress: bool = True) -> State:
+    async def _run_sequential(self, verbose: bool = False, show_progress: bool = True, *, graph_execution_id: Optional[str] = None) -> State:
         """
         Runs tasks sequentially.
         """
@@ -672,7 +679,7 @@ class Graph(BaseModel):
                                 node.task.context.append(source)
                                 if verbose:
                                     console.print(f"[dim]Auto-injecting source for node '{pred.id}' into task {escape_rich_markup(node.task.description)}[/dim]")
-                    output = await self._execute_task(node, self.state, verbose)
+                    output = await self._execute_task(node, self.state, verbose, graph_execution_id=graph_execution_id)
                     self.state.update(node.id, output)
                     executed_node_ids.add(node.id)
                 elif isinstance(node, (DecisionFunc, DecisionLLM)):
@@ -727,8 +734,10 @@ class Graph(BaseModel):
         if verbose:
             console.print("[bold blue]Starting Graph Execution[/bold blue]")
             spacing()
+        graph_execution_id = str(uuid.uuid4())
+
         self.state = State()
-        return await self._run_sequential(verbose, show_progress)
+        return await self._run_sequential(verbose, show_progress, graph_execution_id=graph_execution_id)
 
     def run(self, verbose: bool = True, show_progress: bool = None) -> State:
         """
