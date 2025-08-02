@@ -16,7 +16,6 @@ class CallTracker:
         """
         self.called_with = (a, b)
         self.call_count += 1
-        print(f"[DEBUG] sum() called with: {a}, {b}")
         return a + b
 
 
@@ -35,10 +34,6 @@ class AgentToolTestCase(TestCase):
         agent = Agent(name="Sum Agent", model="openai/gpt-4o")
 
         result = agent.do(task)
-
-        print(f"[DEBUG] Agent result: {result}")
-        print(f"[DEBUG] Function call count: {tracker.call_count}")
-        print(f"[DEBUG] Called with: {tracker.called_with}")
 
         # Use unittest assertions instead of plain assert
         self.assertEqual(tracker.call_count, 1, "The tool function was not called exactly once.")
