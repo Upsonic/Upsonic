@@ -5,25 +5,56 @@ warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
-from .client.base import UpsonicClient
-from .client.tasks.task_response import ObjectResponse, StrResponse, IntResponse, FloatResponse, BoolResponse, StrInListResponse
-from .client.tasks.tasks import Task
-from .client.agent_configuration.agent_configuration import AgentConfiguration
-from .client.agent_configuration.agent_configuration import AgentConfiguration as Agent
-from .client.knowledge_base.knowledge_base import KnowledgeBase
-from .client.direct_llm_call.direct_llm_cal import Direct
-from .client.multi_agent.multi_agent import MultiAgent
+
+from upsonic.tasks.tasks import Task
+
+from upsonic.knowledge_base.knowledge_base import KnowledgeBase
+from upsonic.agent.agent import Direct
+from upsonic.agent.agent import Direct as Agent
+from upsonic.graph.graph import Graph, DecisionFunc, DecisionLLM, TaskNode, TaskChain, State
+from upsonic.canvas.canvas import Canvas
+from upsonic.team.team import Team
+
+# Export error handling components for advanced users
+from upsonic.utils.package.exception import (
+    UupsonicError, 
+    AgentExecutionError, 
+    ModelConnectionError, 
+    TaskProcessingError, 
+    ConfigurationError, 
+    RetryExhaustedError,
+    NoAPIKeyException
+)
+from upsonic.utils.error_wrapper import upsonic_error_handler
 
 
-from .client.storage.storage import ClientConfig
-
-from .client.graph import Graph, DecisionFunc, DecisionLLM
-
-from pydantic import Field
 
 
 def hello() -> str:
     return "Hello from upsonic!"
 
 
-__all__ = ["hello", "UpsonicClient", "ObjectResponse", "StrResponse", "IntResponse", "FloatResponse", "BoolResponse", "Task", "StrInListResponse", "AgentConfiguration", "Field", "KnowledgeBase", "ClientConfig", "Agent", "Direct", "MultiAgent", "Graph", "DecisionFunc", "DecisionLLM"]
+__all__ = [
+    "hello", 
+    "Task", 
+    "KnowledgeBase", 
+    "Direct", 
+    "Agent",
+    "Graph",
+    "DecisionFunc",
+    "DecisionLLM",
+    "TaskNode",
+    "TaskChain",
+    "State",
+    "Canvas",
+    "MultiAgent",
+    # Error handling exports
+    "UupsonicError",
+    "AgentExecutionError", 
+    "ModelConnectionError", 
+    "TaskProcessingError", 
+    "ConfigurationError", 
+    "RetryExhaustedError",
+    "NoAPIKeyException",
+    "upsonic_error_handler"
+]

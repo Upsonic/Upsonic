@@ -1,7 +1,8 @@
 agent_history.gif
 *.sqlite
-
+resume.pdf
 lightrag*
+paper.png
 
 KOT-*
 notes.txt
@@ -24,6 +25,9 @@ sample.pdf
 example.png
 
 .DS_Store
+
+# Agent memory files (SHA256 hashed JSON files)
+src/upsonic/memory/*.json
 
 *.mp3
 *.wav
