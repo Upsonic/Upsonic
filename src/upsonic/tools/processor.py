@@ -229,7 +229,6 @@ class ToolProcessor:
 
             setattr(behavioral_wrapper, '_upsonic_stop_after_call', config.stop_after_tool_call)
             setattr(behavioral_wrapper, '_upsonic_show_result', config.show_result)
-            print("FUNC DICT: ", func_dict)
 
             return func_dict
         return behavioral_wrapper
