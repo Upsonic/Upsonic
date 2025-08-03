@@ -13,7 +13,7 @@ from upsonic.team.result_combiner import ResultCombiner
 class Team:
     """A callable class for multi-agent operations using the Upsonic client."""
     
-    def __init__(self, agents: list[Any], tasks: list[Task] | None = None, llm_model: str | None = None, response_format: Any = str, model: ModelNames | None = None):
+    def __init__(self, agents: list[Any], tasks: list[Task] | None = None, llm_model: str | None = None, response_format: Any = str, model: ModelNames | None = None, ask_other_team_members: bool = False):
         """
         Initialize the Team with agents and optionally tasks.
         
@@ -28,6 +28,9 @@ class Team:
         self.llm_model = llm_model
         self.response_format = response_format
         self.model = model
+        self.ask_other_team_members = ask_other_team_members
+        if self.ask_other_team_members:
+            self.add_tool()
 
     def complete(self, tasks: list[Task] | Task | None = None):
         return self.do(tasks)
@@ -136,3 +139,15 @@ class Team:
         result = self.do(tasks)
         print(result)
         return result
+    
+    def add_tool(self):
+        """
+        Add agents as a tool to each Task object.
+        """
+        for task in self.tasks:
+            if not hasattr(task, 'tools'):
+                task.tools = []
+            if isinstance(task.tools, list):
+                task.tools.extend(self.agents)
+            else:
+                task.tools = self.agents
