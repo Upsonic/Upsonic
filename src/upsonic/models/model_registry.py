@@ -137,7 +137,9 @@ MODEL_REGISTRY = {
     "gemini/gemini-2.0-flash": {
         "provider": "gemini", 
         "model_name": "gemini-2.0-flash", 
-        "capabilities": [],
+        "capabilities": {"image": ["png", "jpeg", "jpg", "webp", "heic", "heif"],
+                        "audio": ["wav", "mp3", "aiff", "aac", "ogg", "flac"],
+                        "video": ["mp4", "mpeg", "mpg", "mov", "avi", "flv", "webm", "wmv", "3gpp", "3gp"]},
         "pricing": {"input": 0.10, "output": 0.40},
         "required_environment_variables": ["GOOGLE_GLA_API_KEY"]
     },
@@ -145,7 +147,9 @@ MODEL_REGISTRY = {
     "gemini/gemini-1.5-pro": {
         "provider": "gemini", 
         "model_name": "gemini-1.5-pro", 
-        "capabilities": [],
+        "capabilities": {"image": ["png", "jpeg", "jpg", "webp", "heic", "heif"],
+                        "audio": ["wav", "mp3", "aiff", "aac", "ogg", "flac"],
+                        "video": ["mp4", "mpeg", "mpg", "mov", "avi", "flv", "webm", "wmv", "3gpp", "3gp"]},
         "pricing": {"input": 1.25, "output": 5.00},
         "required_environment_variables": ["GOOGLE_GLA_API_KEY"]
     },
@@ -153,7 +157,9 @@ MODEL_REGISTRY = {
     "gemini/gemini-1.5-flash": {
         "provider": "gemini", 
         "model_name": "gemini-1.5-flash", 
-        "capabilities": [],
+        "capabilities": {"image": ["png", "jpeg", "jpg", "webp", "heic", "heif"],
+                        "audio": ["wav", "mp3", "aiff", "aac", "ogg", "flac"],
+                        "video": ["mp4", "mpeg", "mpg", "mov", "avi", "flv", "webm", "wmv", "3gpp", "3gp"]},
         "pricing": {"input": 0.075, "output": 0.30},
         "required_environment_variables": ["GOOGLE_GLA_API_KEY"]
     },

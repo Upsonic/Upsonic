@@ -22,6 +22,7 @@ from upsonic.tools.processor import ToolProcessor
 from upsonic.storage.base import Storage
 from upsonic.storage.session.sessions import AgentSession
 from upsonic.utils.retry import retryable
+from upsonic.utils.validators import validate_attachments_for_model
 
 from upsonic.agent.context_managers import (
     CallManager,
@@ -254,6 +255,8 @@ class Direct(BaseAgent):
         Creates and configures the underlying PydanticAgent, processing and wrapping
         all tools with the advanced behavioral logic from ToolProcessor.
         """
+        validate_attachments_for_model(llm_model, single_task)
+
         agent_model = get_agent_model(llm_model)
 
         tool_processor = ToolProcessor()
@@ -263,32 +266,14 @@ class Direct(BaseAgent):
         
         processed_tools_generator = tool_processor.normalize_and_process(single_task.tools)
 
-        for original_tool, config in processed_tools_generator:
-            wrapped_tool = tool_processor.generate_behavioral_wrapper(original_tool, config)
-            final_tools_for_pydantic_ai.append(wrapped_tool)
-
-        tools_to_remove_from_task = []
-        for tool in single_task.tools:
-            if isinstance(tool, type):
-                # Check if it's an MCP SSE server (has url property)
-                if hasattr(tool, 'url'):
-                    url = getattr(tool, 'url')
-                    the_mcp_server = MCPServerSSE(url)
-                    mcp_servers.append(the_mcp_server)
-                    tools_to_remove_from_task.append(tool)
-                
-                elif hasattr(tool, 'command'):
-                    env = getattr(tool, 'env', {}) if hasattr(tool, 'env') and isinstance(getattr(tool, 'env', None), dict) else {}
-                    command = getattr(tool, 'command', None)
-                    args = getattr(tool, 'args', [])
-
-                    the_mcp_server = MCPServerStdio(command, args=args, env=env)
-                    mcp_servers.append(the_mcp_server)
-                    tools_to_remove_from_task.append(tool)
-
-        for tool in tools_to_remove_from_task:
-            single_task.tools.remove(tool)
-
+        for item1, item2 in processed_tools_generator:
+            if callable(item1):
+                original_tool, config = item1, item2
+                wrapped_tool = tool_processor.generate_behavioral_wrapper(original_tool, config)
+                final_tools_for_pydantic_ai.append(wrapped_tool)
+            elif item1 is None and item2 is not None:
+                mcp_server = item2
+                mcp_servers.append(mcp_server)
         the_agent = PydanticAgent(
             agent_model,
             output_type=single_task.response_format,
@@ -297,23 +282,18 @@ class Direct(BaseAgent):
             retries=5,
             mcp_servers=mcp_servers
         )
-
         if not hasattr(the_agent, '_registered_tools'):
             the_agent._registered_tools = set()
-
         for tool_func in final_tools_for_pydantic_ai:
             tool_id = id(tool_func) # Get a unique ID for the function object
             if tool_id not in the_agent._registered_tools:
                 the_agent.tool_plain(tool_func)
                 the_agent._registered_tools.add(tool_id)
-
         if not hasattr(the_agent, '_upsonic_wrapped_tools'):
             the_agent._upsonic_wrapped_tools = {}
-
         the_agent._upsonic_wrapped_tools = {
             tool_func.__name__: tool_func for tool_func in final_tools_for_pydantic_ai
         }
-
         return the_agent
 
 

@@ -63,3 +63,33 @@ class ConfigurationError(UupsonicError):
 class RetryExhaustedError(UupsonicError):
     """Raised when all retry attempts are exhausted."""
     pass
+
+
+class ModelCapabilityError(UupsonicError):
+    """
+    Raised when a task requires a capability (e.g., video input)
+    that the selected model does not support based on its registry entry.
+    """
+    def __init__(
+        self,
+        model_name: str,
+        attachment_path: str,
+        attachment_extension: str,
+        required_capability: str,
+        supported_extensions: list[str]
+    ):
+        # Base message
+        message = (
+            f"Model '{model_name}' does not support files with the extension '.{attachment_extension}' "
+            f"(from attachment: '{attachment_path}').\n"
+        )
+        
+        if supported_extensions:
+            supported_str = ", ".join([f".{ext}" for ext in sorted(supported_extensions)])
+            suggestion = f"Supported extensions for '{required_capability}' are: {supported_str}."
+        else:
+            suggestion = f"The model does not support any files for the '{required_capability}' capability."
+            
+        full_message = message + suggestion
+        error_code = "MODEL_CAPABILITY_MISMATCH"
+        super().__init__(message=full_message, error_code=error_code)
