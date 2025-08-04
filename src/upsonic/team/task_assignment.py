@@ -80,12 +80,12 @@ class TaskAssignment:
         while attempts < max_attempts:
             selecting_task = Task(
                 description=f"Select the most appropriate agent from the available agents to handle the current task. Consider all tasks in the workflow and previous results to make the best choice. Return only the exact agent name from the list.",
-                images=current_task.images, 
+                attachments=current_task.attachments, 
                 response_format=SelectedAgent, 
                 context=context
             )
             
-            await Direct(model=agent_configurations[0].model).do_async(selecting_task)
+            await Direct(model=agent_configurations[0].default_llm_model).do_async(selecting_task)
             selected_name = selecting_task.response.selected_agent
             
             # Check for exact match first
