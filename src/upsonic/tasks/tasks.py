@@ -16,11 +16,11 @@ from upsonic.knowledge_base.knowledge_base import KnowledgeBase
 class Task(BaseModel):
     description: str
     attachments: Optional[List[str]] = None
-    tools: list[Any] = []
+    tools: list[Any] = None
     response_format: Union[Type[BaseModel], type[str], None] = str
     response_lang: str = "en"
     _response: Any = None
-    context: Any = []
+    context: Any = None
     _context_formatted: str | None = None
     price_id_: Optional[str] = None
     task_id_: Optional[str] = None
@@ -29,7 +29,7 @@ class Task(BaseModel):
     end_time: Optional[int] = None
     agent: Optional[Any] = None
     response_lang: Optional[str] = None
-    _tool_calls: List[Dict[str, Any]] = []
+    _tool_calls: List[Dict[str, Any]] = None
 
 
 
@@ -40,7 +40,7 @@ class Task(BaseModel):
         tools: list[Any] = None,
         response_format: Union[Type[BaseModel], type[str], None] = str,
         response: Any = None,
-        context: Any = [],
+        context: Any = None,
         _context_formatted: str | None = None,
         price_id_: Optional[str] = None,
         task_id_: Optional[str] = None,
@@ -56,6 +56,9 @@ class Task(BaseModel):
             
         if tools is None:
             tools = []
+            
+        if context is None:
+            context = []
             
         data.update({
             "attachments": attachments,
@@ -239,6 +242,8 @@ class Task(BaseModel):
             List[Dict[str, Any]]: A list of dictionaries containing information about tool calls,
             including tool name, parameters, and result.
         """
+        if self._tool_calls is None:
+            self._tool_calls = []
         return self._tool_calls
         
     def add_tool_call(self, tool_call: Dict[str, Any]) -> None:
@@ -249,6 +254,8 @@ class Task(BaseModel):
             tool_call (Dict[str, Any]): Dictionary containing information about the tool call.
                 Should include 'tool_name', 'params', and 'tool_result' keys.
         """
+        if self._tool_calls is None:
+            self._tool_calls = []
         self._tool_calls.append(tool_call)
 
 
