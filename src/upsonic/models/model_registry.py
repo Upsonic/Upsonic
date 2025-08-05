@@ -27,6 +27,7 @@ ModelNames = Literal[
     "ollama/llama3.1:8b",
     "ollama/llama3.1:70b",
     "ollama/qwen3:30b",
+    "ollama/gpt-oss:20b",
     "deepseek/deepseek-chat",
     "openrouter/anthropic/claude-3-sonnet",
     "openrouter/meta-llama/llama-3.1-8b-instruct",
@@ -190,7 +191,13 @@ MODEL_REGISTRY = {
         "pricing": {"input": 0.0, "output": 0.0},
         "required_environment_variables": []
     },
-
+    "ollama/gpt-oss:20b": {
+        "provider": "ollama", 
+        "model_name": "gpt-oss:20b", 
+        "capabilities": [],
+        "pricing": {"input": 0.0, "output": 0.0},
+        "required_environment_variables": []
+    },
     # Anthropic models
     "claude/claude-3-5-sonnet": {
         "provider": "anthropic", 
