@@ -40,8 +40,6 @@ class ContextSharing:
         # Add agent configurations to context
         current_task.context.extend(agent_configurations)
         
-        # Add previously completed results to context
-        current_task.context.extend(completed_results)
     
     @staticmethod
     def build_selection_context(
@@ -67,6 +65,5 @@ class ContextSharing:
         context = [current_task]  # Current task first
         context += [task for i, task in enumerate(all_tasks) if i != task_index]  # All other tasks
         context += agent_configurations  # Available agents
-        context += completed_results  # Previously completed tasks with results
         
         return context 

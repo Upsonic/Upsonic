@@ -7,8 +7,10 @@ import json
 import re
 import time
 from pathlib import Path
-from typing import Callable, Any, Generator, Tuple, Dict, TYPE_CHECKING
+from typing import Callable, Any, Generator, Tuple, Dict, TYPE_CHECKING, List
 import asyncio
+
+from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio
 
 from .tool import ToolConfig
 from upsonic.tasks.tasks import Task
@@ -55,34 +57,51 @@ class ToolProcessor:
                 f"Tool '{func.__name__}' is missing a docstring. The docstring is required to explain the tool's purpose to the LLM."
             )
 
-    def normalize_and_process(self, task_tools: list) -> Generator[Tuple[Callable, ToolConfig], None, None]:
-        from upsonic.agent.agent import Direct
+    def normalize_and_process(self, task_tools: List[Any]) -> Generator[Tuple[Callable, Any], None, None]:
         """
         Processes a list of raw tools from a Task.
         This method iterates through functions, agent instances, and other object methods,
-        validates them, resolves their `ToolConfig`, and yields a standardized tuple of (callable, config).
+        validates them, and yields a standardized tuple. It also identifies, processes,
+        and separates MCP server tools.
         Args:
-            task_tools: The raw list of tools from `task.tools`.
+            task_tools: The raw list of tools from `task.tools`. This list will be
+                        modified in place to remove the processed MCP tools.
         Yields:
-            A tuple containing the callable function/method and its resolved ToolConfig.
+            A tuple of two possible forms:
+            - For a regular tool: (callable_function, ToolConfig)
+            - For an MCP tool: (None, mcp_server_instance)
         """
+        from upsonic.agent.agent import Direct
         if not task_tools:
             return
-
+        mcp_tools_to_remove = []
         for tool_item in task_tools:
-            # Case 1: The tool is a standalone function
+            if inspect.isclass(tool_item):
+                is_mcp_tool = False
+                if hasattr(tool_item, 'url'):
+                    url = getattr(tool_item, 'url')
+                    the_mcp_server = MCPServerSSE(url)
+                    yield (None, the_mcp_server)
+                    is_mcp_tool = True
+                elif hasattr(tool_item, 'command'):
+                    env = getattr(tool_item, 'env', {}) if hasattr(tool_item, 'env') and isinstance(getattr(tool_item, 'env', None), dict) else {}
+                    command = getattr(tool_item, 'command', None)
+                    args = getattr(tool_item, 'args', [])
+                    the_mcp_server = MCPServerStdio(command, args=args, env=env)
+                    yield (None, the_mcp_server)
+                    is_mcp_tool = True
+                if is_mcp_tool:
+                    mcp_tools_to_remove.append(tool_item)
+                    continue
             if inspect.isfunction(tool_item):
                 self._validate_function(tool_item)
                 config = getattr(tool_item, '_upsonic_tool_config', ToolConfig())
                 yield (tool_item, config)
-
-            # Case 2: The tool is a Direct Agent instance.
             elif isinstance(tool_item, Direct):
                 class_name_base = tool_item.name or f"AgentTool{tool_item.agent_id[:8]}"
                 dynamic_class_name = "".join(word.capitalize() for word in re.sub(r"[^a-zA-Z0-9 ]", "", class_name_base).split())
                 method_name_base = tool_item.name or f"AgentTool{tool_item.agent_id[:8]}"
                 dynamic_method_name = "ask_" + re.sub(r"[^a-zA-Z0-9_]", "", method_name_base.lower().replace(" ", "_"))
-
                 agent_specialty = tool_item.system_prompt or tool_item.company_description or f"a general purpose assistant named '{tool_item.name}'"
                 dynamic_docstring = (
                     f"Delegates a sub-task to a specialist agent named '{tool_item.name}'. "
@@ -90,19 +109,15 @@ class ToolProcessor:
                     f"Use this tool ONLY for tasks that fall squarely within this agent's described expertise. "
                     f"The 'request' parameter must be a full, clear, and self-contained instruction for the specialist agent."
                 )
-
                 async def agent_method_logic(self, request: str) -> str:
                     """This docstring will be replaced dynamically."""
                     the_task = Task(description=request)
                     response = await self.agent.do_async(the_task)
                     return str(response) if response is not None else "The specialist agent returned no response."
-
                 agent_method_logic.__doc__ = dynamic_docstring
                 agent_method_logic.__name__ = dynamic_method_name
-
                 def agent_tool_init(self, agent: Direct):
                     self.agent = agent
-
                 AgentToolWrapper = type(
                     dynamic_class_name,
                     (object,),
@@ -112,20 +127,22 @@ class ToolProcessor:
                     },
                 )
                 wrapper_instance = AgentToolWrapper(agent=tool_item)
-
                 for name, method in inspect.getmembers(wrapper_instance, inspect.ismethod):
                     if not name.startswith('_'):
                         self._validate_function(method)
                         config = getattr(method, '_upsonic_tool_config', ToolConfig())
                         yield (method, config)
-
-            # Case 3: The tool is any other custom class instance (an object)
             elif not inspect.isfunction(tool_item) and hasattr(tool_item, '__class__'):
                 for name, method in inspect.getmembers(tool_item, inspect.ismethod):
                     if not name.startswith('_'):
                         self._validate_function(method)
                         config = getattr(method, '_upsonic_tool_config', ToolConfig())
                         yield (method, config)
+
+        if mcp_tools_to_remove:
+            for tool in mcp_tools_to_remove:
+                while tool in task_tools:
+                    task_tools.remove(tool)
 
     def generate_behavioral_wrapper(self, original_func: Callable, config: ToolConfig) -> Callable:
         """
@@ -135,7 +152,7 @@ class ToolProcessor:
         (This is the method provided in the previous step, included here for completeness.)
         """
         @functools.wraps(original_func)
-        def behavioral_wrapper(*args: Any, **kwargs: Any) -> Any:
+        async def behavioral_wrapper(*args: Any, **kwargs: Any) -> Any:
             func_dict: Dict[str, Any] = {}
             if config.tool_hooks and config.tool_hooks.before:
                 result_before = config.tool_hooks.before(*args, **kwargs)
@@ -194,16 +211,15 @@ class ToolProcessor:
 
             try:
                 if inspect.iscoroutinefunction(original_func):
-                    try:
-                        loop = asyncio.get_running_loop()
-                    except RuntimeError:
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                    
-                    result = loop.run_until_complete(original_func(*args, **kwargs))
+                    result = await original_func(*args, **kwargs)
                 else:
-                    result = original_func(*args, **kwargs)
-
+                    # To avoid blocking the event loop with a long-running sync function,
+                    # run it in a thread pool executor * _ *.
+                    loop = asyncio.get_running_loop()
+                    result = await loop.run_in_executor(
+                        None,
+                        functools.partial(original_func, *args, **kwargs)
+                    )
                 func_dict["func"] = result if result else None
                 if result and config.show_result:
                     console.print(f"[bold green]✓ Tool Result[/bold green]: {result}")
