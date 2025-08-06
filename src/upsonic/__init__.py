@@ -38,9 +38,9 @@ from .storage import (
     SessionId,
     UserId,
     InteractionSession,
-    UserProfile
+    UserProfile,
+    Memory
 )
-from .storage.memory import Memory
 
 
 
@@ -64,6 +64,7 @@ __all__ = [
     "Canvas",
     "MultiAgent",
     # Error handling exports
+    "Team",
     "UupsonicError",
     "AgentExecutionError", 
     "ModelConnectionError", 
