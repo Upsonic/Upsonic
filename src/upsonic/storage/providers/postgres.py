@@ -1,213 +1,179 @@
 import time
-from typing import Literal, Optional, List
+import json
+from typing import Optional, Type, Union, TypeVar
+
+import asyncpg
+from pydantic import BaseModel
 
 from upsonic.storage.base import Storage
-from upsonic.storage.session.sessions import (
-    BaseSession,
-    AgentSession
-)
+from upsonic.storage.session.sessions import InteractionSession, UserProfile
 
-try:
-    from sqlalchemy import create_engine, inspect as sqlalchemy_inspect, text
-    from sqlalchemy.engine import Engine
-    from sqlalchemy.orm import sessionmaker, Session as SqlAlchemySession
-    from sqlalchemy.schema import Column, MetaData, Table
-    from sqlalchemy.types import String, BigInteger
-    from sqlalchemy.dialects import postgresql
-    from sqlalchemy.sql.expression import select
-except ImportError:
-    raise ImportError("`sqlalchemy` and `psycopg2-binary` are required for PostgresStorage. Please install them.")
-
+T = TypeVar('T', bound=BaseModel)
 
 class PostgresStorage(Storage):
     """
-    Production-grade, session-based storage provider using PostgreSQL.
-
-    This provider uses SQLAlchemy Core and PostgreSQL's native JSONB and
-    UPSERT capabilities for high-performance, transactional session management.
+    A hybrid sync/async, production-grade storage provider using PostgreSQL
+    and the `asyncpg` driver with a connection pool.
     """
 
-    def __init__(
-        self,
-        table_name: str,
-        db_url: Optional[str] = None,
-        db_engine: Optional[Engine] = None,
-        schema: str = "public",
-        auto_upgrade_schema: bool = False,
-        mode: Literal["agent", "team", "workflow", "workflow_v2"] = "agent",
-    ):
+    def __init__(self, sessions_table_name: str, profiles_table_name: str, db_url: str, schema: str = "public"):
         """
-        Initializes the PostgreSQL storage provider.
-
-        The connection is determined using the following precedence:
-        1. An existing `db_engine` object.
-        2. A full `db_url` connection string.
+        Initializes the async PostgreSQL storage provider.
 
         Args:
-            table_name: The name of the table for session storage.
-            db_url: An optional SQLAlchemy database URL.
-            db_engine: An optional, pre-configured SQLAlchemy Engine.
-            schema: The PostgreSQL schema to use for the session table.
-            auto_upgrade_schema: If True, attempts to run schema migrations automatically.
-            mode: The operational mode, which determines the table schema.
-        
-        Raises:
-            ValueError: If neither `db_url` nor `db_engine` is provided.
+            sessions_table_name: The name of the table for InteractionSession storage.
+            profiles_table_name: The name of the table for UserProfile storage.
+            db_url: An asyncpg-compatible database URL (e.g., "postgresql://user:pass@host:port/db").
+            schema: The PostgreSQL schema to use for the tables.
         """
-        super().__init__(mode=mode)
+        super().__init__()
+        self.db_url = db_url
+        self.sessions_table_name = f'"{schema}"."{sessions_table_name}"'
+        self.profiles_table_name = f'"{schema}"."{profiles_table_name}"'
+        self.schema = schema
+        self._pool: Optional[asyncpg.Pool] = None
 
-        # THE REFACTORED CONSTRUCTOR LOGIC
-        _engine: Optional[Engine] = db_engine
-        if _engine is None and db_url is not None:
-            _engine = create_engine(db_url)
-
-        if _engine is None:
-            raise ValueError("Must provide either a `db_url` string or a pre-configured SQLAlchemy `db_engine` object.")
-
-        self.db_engine: Engine = _engine
-
-        # Database attributes
-        self.table_name: str = table_name
-        self.schema: str = schema
-        self.metadata: MetaData = MetaData(schema=self.schema)
-        self.inspector = sqlalchemy_inspect(self.db_engine)
-
-        # Schema management attributes
-        self.auto_upgrade_schema: bool = auto_upgrade_schema
-
-        # Database session and table definition
-        self.SqlSession = sessionmaker(bind=self.db_engine)
-        self.table: Table = self._get_table_schema()
-        
-        self.create()
-        self.connect()
-
-
-    def _get_session_model_class(self) -> type[BaseSession]:
-        """Returns the appropriate Pydantic session model class based on the current mode."""
-        if self.mode == "agent":
-            return AgentSession
-        raise ValueError(f"Invalid mode '{self.mode}' specified for PostgresStorage.")
-
-    def _get_table_schema(self) -> Table:
-        """Dynamically defines the SQLAlchemy Table schema for PostgreSQL."""
-        common_columns = [
-            Column("session_id", String(64), primary_key=True),
-            Column("user_id", String, index=True),
-            Column("memory", postgresql.JSONB),
-            Column("session_data", postgresql.JSONB),
-            Column("extra_data", postgresql.JSONB),
-            Column("created_at", postgresql.DOUBLE_PRECISION, nullable=False),
-            Column("updated_at", postgresql.DOUBLE_PRECISION, nullable=False, index=True),
-        ]
-        specific_columns = []
-        if self.mode == "agent":
-            specific_columns = [
-                Column("agent_id", String, index=True),
-                Column("agent_data", postgresql.JSONB),
-                Column("team_session_id", String(64), index=True, nullable=True),
-            ]
-        return Table(self.table_name, self.metadata, *common_columns, *specific_columns, extend_existing=True)
-
-    def _table_exists(self) -> bool:
-        """Checks if the storage table exists in the database."""
-        return self.inspector.has_table(self.table_name, schema=self.schema)
 
 
     def is_connected(self) -> bool:
-        return self._connected
-
+        return self._run_async_from_sync(self.is_connected_async())
     def connect(self) -> None:
-        if self.is_connected():
+        return self._run_async_from_sync(self.connect_async())
+    def disconnect(self) -> None:
+        return self._run_async_from_sync(self.disconnect_async())
+    def create(self) -> None:
+        return self._run_async_from_sync(self.create_async())
+    def read(self, object_id: str, model_type: Type[T]) -> Optional[T]:
+        return self._run_async_from_sync(self.read_async(object_id, model_type))
+    def upsert(self, data: Union[InteractionSession, UserProfile]) -> None:
+        return self._run_async_from_sync(self.upsert_async(data))
+    def delete(self, object_id: str, model_type: Type[BaseModel]) -> None:
+        return self._run_async_from_sync(self.delete_async(object_id, model_type))
+    def drop(self) -> None:
+        return self._run_async_from_sync(self.drop_async())
+    
+
+
+    async def is_connected_async(self) -> bool:
+        return self._pool is not None and not self._pool._closing
+    
+    async def connect_async(self) -> None:
+        if await self.is_connected_async():
             return
-        
         try:
-            with self.db_engine.connect() as connection:
-                connection.execute(text("SELECT 1"))
+            self._pool = await asyncpg.create_pool(self.db_url)
+            # Verify connection and ensure schema/tables exist
+            await self.create_async()
             self._connected = True
         except Exception as e:
             self._connected = False
             raise ConnectionError(f"Failed to connect to PostgreSQL: {e}") from e
 
-    def disconnect(self) -> None:
-        if not self.is_connected():
-            return
-
-        self.db_engine.dispose()
+    async def disconnect_async(self) -> None:
+        if self._pool:
+            await self._pool.close()
+            self._pool = None
         self._connected = False
 
-    def create(self) -> None:
-        """Creates the schema and table if they do not already exist."""
-        with self.db_engine.connect() as connection:
-            if self.schema and not self.inspector.has_schema(self.schema):
-                connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {self.schema}"))
-            self.metadata.create_all(connection, checkfirst=True)
-            if hasattr(connection, 'commit'):
-                connection.commit()
+    async def _get_pool(self) -> asyncpg.Pool:
+        """Helper to lazily initialize the connection pool."""
+        if not await self.is_connected_async():
+            await self.connect_async()
+        return self._pool
 
-    def read(self, session_id: str, user_id: Optional[str] = None) -> Optional[BaseSession]:
-        with self.SqlSession() as sess:
-            stmt = select(self.table).where(self.table.c.session_id == session_id)
-            if user_id:
-                stmt = stmt.where(self.table.c.user_id == user_id)
-            result = sess.execute(stmt).first()
-            if result:
-                session_data = dict(result._mapping)
-                SessionModel = self._get_session_model_class()
-                return SessionModel.from_dict(session_data)
-        return None
+    async def create_async(self) -> None:
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(f"CREATE SCHEMA IF NOT EXISTS {self.schema}")
+            await conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {self.sessions_table_name} (
+                    session_id TEXT PRIMARY KEY, user_id TEXT, agent_id TEXT,
+                    team_session_id TEXT, chat_history TEXT, summary TEXT,
+                    session_data TEXT, extra_data TEXT, created_at REAL, updated_at REAL
+                )
+            """)
+            await conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {self.profiles_table_name} (
+                    user_id TEXT PRIMARY KEY, profile_data TEXT,
+                    created_at REAL, updated_at REAL
+                )
+            """)
 
-    def upsert(self, session: BaseSession) -> Optional[BaseSession]:
-        session.updated_at = time.time()
-
-        session_dict = session.model_dump(mode="json")
+    async def read_async(self, object_id: str, model_type: Type[T]) -> Optional[T]:
+        if model_type is InteractionSession:
+            table, key_col = self.sessions_table_name, "session_id"
+        elif model_type is UserProfile:
+            table, key_col = self.profiles_table_name, "user_id"
+        else:
+            return None
         
-        insert_stmt = postgresql.insert(self.table).values(session_dict)
-        update_cols = {col.name: col for col in insert_stmt.excluded if col.name not in ["session_id", "created_at"]}
-        upsert_stmt = insert_stmt.on_conflict_do_update(index_elements=["session_id"], set_=update_cols)
+        pool = await self._get_pool()
+        sql = f"SELECT * FROM {table} WHERE {key_col} = $1"
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(sql, object_id)
+            if row:
+                data = dict(row)
+                for key in ['chat_history', 'session_data', 'extra_data', 'profile_data']:
+                    if key in data and isinstance(data[key], str):
+                        try:
+                            data[key] = json.loads(data[key])
+                        except Exception:
+                            pass
+                return model_type.from_dict(data)
+        return None
+    async def upsert_async(self, data: Union[InteractionSession, UserProfile]) -> None:
+        data.updated_at = time.time()
 
-        try:
-            with self.SqlSession() as sess, sess.begin():
-                sess.execute(upsert_stmt)
-            return self.read(session.session_id)
-        except Exception as e:
-            raise IOError(f"Failed to upsert session {session.session_id} to PostgreSQL: {e}") from e
+        if isinstance(data, InteractionSession):
+            table = self.sessions_table_name
+            sql = f"""
+                INSERT INTO {table} (session_id, user_id, agent_id, team_session_id, chat_history, summary, session_data, extra_data, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                ON CONFLICT(session_id) DO UPDATE SET
+                    user_id=EXCLUDED.user_id, agent_id=EXCLUDED.agent_id, team_session_id=EXCLUDED.team_session_id,
+                    chat_history=EXCLUDED.chat_history, summary=EXCLUDED.summary, session_data=EXCLUDED.session_data,
+                    extra_data=EXCLUDED.extra_data, updated_at=EXCLUDED.updated_at
+            """
+            params = (data.session_id, data.user_id, data.agent_id, data.team_session_id, json.dumps(data.chat_history), data.summary, json.dumps(data.session_data), json.dumps(data.extra_data), data.created_at, data.updated_at)
+        elif isinstance(data, UserProfile):
+            table = self.profiles_table_name
+            sql = f"""
+                INSERT INTO {table} (user_id, profile_data, created_at, updated_at)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    profile_data=EXCLUDED.profile_data, updated_at=EXCLUDED.updated_at
+            """
+            params = (data.user_id, json.dumps(data.profile_data), data.created_at, data.updated_at)
+        else:
+            raise TypeError(f"Unsupported data type for upsert: {type(data).__name__}")
+        
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(sql, *params)
 
-    def get_all_sessions(self, user_id: Optional[str] = None, entity_id: Optional[str] = None) -> List[BaseSession]:
-        return self._get_sessions_query(user_id, entity_id)
+    async def delete_async(self, object_id: str, model_type: Type[BaseModel]) -> None:
+        if model_type is InteractionSession:
+            table, key_col = self.sessions_table_name, "session_id"
+        elif model_type is UserProfile:
+            table, key_col = self.profiles_table_name, "user_id"
+        else:
+            return
+            
+        pool = await self._get_pool()
+        sql = f"DELETE FROM {table} WHERE {key_col} = $1"
+        async with pool.acquire() as conn:
+            await conn.execute(sql, object_id)
 
-    def get_recent_sessions(self, user_id: Optional[str] = None, entity_id: Optional[str] = None, limit: int = 10) -> List[BaseSession]:
-        return self._get_sessions_query(user_id, entity_id, limit)
+    async def drop_async(self) -> None:
+        pool = await self._get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(f"DROP TABLE IF EXISTS {self.sessions_table_name}")
+            await conn.execute(f"DROP TABLE IF EXISTS {self.profiles_table_name}")
+            
 
-    def _get_sessions_query(self, user_id: Optional[str], entity_id: Optional[str], limit: Optional[int] = None) -> List[BaseSession]:
-        with self.SqlSession() as sess:
-            stmt = postgresql.select(self.table).order_by(self.table.c.updated_at.desc())
-            if user_id:
-                stmt = stmt.where(self.table.c.user_id == user_id)
-            if entity_id:
-                entity_col_map = {"agent": "agent_id"}
-                col_name = entity_col_map.get(self.mode)
-                if col_name:
-                    stmt = stmt.where(getattr(self.table.c, col_name) == entity_id)
-            if limit:
-                stmt = stmt.limit(limit)
-            results = sess.execute(stmt).fetchall()
-            SessionModel = self._get_session_model_class()
-            return [SessionModel.from_dict(row._mapping) for row in results]
-
-    def delete_session(self, session_id: str) -> None:
-        with self.SqlSession() as sess, sess.begin():
-            delete_stmt = self.table.delete().where(self.table.c.session_id == session_id)
-            sess.execute(delete_stmt)
-
-    def drop(self) -> None:
-        self.metadata.drop_all(self.db_engine, tables=[self.table], checkfirst=True)
-
-    def log_artifact(self, artifact) -> None:
-        raise NotImplementedError("Artifact logging should be handled within the session data for this provider.")
-
-    def store_artifact_data(self, artifact_id: str, session_id: str, binary_data: bytes) -> str:
-        raise NotImplementedError("Binary artifact storage is not handled by the session provider.")
-
-    def retrieve_artifact_data(self, storage_uri: str) -> bytes:
-        raise NotImplementedError("Binary artifact storage is not handled by the session provider.")
+    def log_artifact(self, artifact) -> None: raise NotImplementedError
+    def store_artifact_data(self, artifact_id: str, session_id: str, binary_data: bytes) -> str: raise NotImplementedError
+    def retrieve_artifact_data(self, storage_uri: str) -> bytes: raise NotImplementedError
+    async def log_artifact_async(self, artifact) -> None: raise NotImplementedError
+    async def store_artifact_data_async(self, artifact_id: str, session_id: str, binary_data: bytes) -> str: raise NotImplementedError
+    async def retrieve_artifact_data_async(self, storage_uri: str) -> bytes: raise NotImplementedError

@@ -1,6 +1,7 @@
-from .base import Storage, SchemaMismatchError
+from .base import Storage
 
-# Expose all concrete provider implementations directly from the top level
+from .types import SessionId, UserId
+
 from .providers import (
     InMemoryStorage,
     JSONStorage,
@@ -9,26 +10,26 @@ from .providers import (
     SqliteStorage,
 )
 
-# Expose all session models directly from the top level
 from .session import (
-    AgentSession,
-    BaseSession
+    InteractionSession,
+    UserProfile
 )
 
-
+from .memory import Memory
 __all__ = [
-    # Core Contract
     "Storage",
-    "SchemaMismatchError",
 
-    # Session Models
-    "AgentSession",
-    "BaseSession",
+    "SessionId",
+    "UserId",
 
-    # Provider Implementations
+    "InteractionSession",
+    "UserProfile",
+
     "InMemoryStorage",
     "JSONStorage",
     "PostgresStorage",
     "RedisStorage",
     "SqliteStorage",
+
+    "Memory", 
 ]
