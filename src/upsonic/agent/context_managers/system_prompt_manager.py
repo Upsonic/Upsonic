@@ -9,6 +9,7 @@ from upsonic.context.default_prompt import default_prompt
 if TYPE_CHECKING:
     from upsonic.agent.agent import Direct
     from upsonic.tasks.tasks import Task
+    from upsonic.agent.context_managers.memory_manager import MemoryManager
 
 
 class SystemPromptManager:
@@ -36,7 +37,7 @@ class SystemPromptManager:
         self.task = task
         self.system_prompt: str = ""
 
-    def _build_system_prompt(self) -> str:
+    def _build_system_prompt(self, memory_handler: Optional[MemoryManager]) -> str:
         """
         Builds the complete system prompt string by assembling its components.
 
@@ -51,6 +52,11 @@ class SystemPromptManager:
         """
         prompt_parts = []
         base_prompt = ""
+
+        if memory_handler:
+            system_injection = memory_handler.get_system_prompt_injection()
+            if system_injection:
+                prompt_parts.append(system_injection)
 
         if self.agent.system_prompt:
             base_prompt = self.agent.system_prompt
@@ -106,14 +112,14 @@ class SystemPromptManager:
         return self.system_prompt
 
     @asynccontextmanager
-    async def manage_system_prompt(self):
+    async def manage_system_prompt(self, memory_handler: Optional[MemoryManager] = None):
         """
         The asynchronous context manager for building the system prompt.
 
         Upon entering the `async with` block, this manager builds the
         system prompt and makes it available via the `get_system_prompt` method.
         """
-        self.system_prompt = self._build_system_prompt()
+        self.system_prompt = self._build_system_prompt(memory_handler)
             
         try:
             yield self

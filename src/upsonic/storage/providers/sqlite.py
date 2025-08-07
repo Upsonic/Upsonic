@@ -1,213 +1,171 @@
+import time
 import json
 from pathlib import Path
-from typing import List, Literal, Optional
-import time
+from typing import Optional, Type, Union, TypeVar
+
+import aiosqlite
+from pydantic import BaseModel
 
 from upsonic.storage.base import Storage
-from upsonic.storage.session.sessions import (
-    BaseSession,
-    AgentSession
-)
+from upsonic.storage.session.sessions import InteractionSession, UserProfile
 
-try:
-    from sqlalchemy import create_engine, inspect as sqlalchemy_inspect, text
-    from sqlalchemy import Text
-    from sqlalchemy.engine import Engine
-    from sqlalchemy.orm import sessionmaker, Session as SqlAlchemySession
-    from sqlalchemy.schema import Column, MetaData, Table
-    from sqlalchemy.types import String, Integer, JSON
-    from sqlalchemy.dialects import sqlite
-    from sqlalchemy.sql.expression import select
-except ImportError:
-    raise ImportError("`sqlalchemy` is required for SQLiteStorage. Please install it using `pip install sqlalchemy`.")
-
+T = TypeVar('T', bound=BaseModel)
 
 class SqliteStorage(Storage):
     """
-    A session-based storage provider that uses a SQLite database, configured
-    via a Pydantic settings object.
+    A hybrid sync/async, file-based storage provider using a single SQLite
+    database and the `aiosqlite` driver with proper connection management.
     """
 
     def __init__(
         self,
-        table_name: str,
-        db_url: Optional[str] = None,
+        sessions_table_name: str,
+        profiles_table_name: str,
         db_file: Optional[str] = None,
-        db_engine: Optional[Engine] = None,
-        auto_upgrade_schema: bool = False,
-        mode: Literal["agent", "team", "workflow", "workflow_v2"] = "agent",
     ):
         """
-        Initializes the SQLite storage provider.
-
-        The connection is determined using the following precedence:
-        1. An existing `db_engine` object.
-        2. A full `db_url` connection string.
-        3. A local `db_file` path.
-        4. A new in-memory database if none of the above are provided.
+        Initializes the async SQLite storage provider.
 
         Args:
-            table_name: The name of the table for storing sessions.
-            db_url: An optional SQLAlchemy database URL.
-            db_file: An optional path to a local database file.
-            db_engine: An optional, pre-configured SQLAlchemy Engine.
-            auto_upgrade_schema: If True, attempts to run schema migrations automatically.
-            mode: The operational mode, which determines the table schema.
+            sessions_table_name: Name of the table for InteractionSession storage.
+            profiles_table_name: Name of the table for UserProfile storage.
+            db_file: Path to a local database file. If None, uses in-memory DB.
         """
-        super().__init__(mode=mode)
-
-        # THE REFACTORED CONSTRUCTOR LOGIC
-        _engine: Optional[Engine] = db_engine
-        if _engine is None and db_url is not None:
-            _engine = create_engine(db_url)
-        elif _engine is None and db_file is not None:
-            db_path = Path(db_file).resolve()
-            db_path.parent.mkdir(parents=True, exist_ok=True)
-            _engine = create_engine(f"sqlite:///{db_path}")
-        elif _engine is None:
-            # Fallback to in-memory if no other option is provided
-            _engine = create_engine("sqlite://")
-
-        self.db_engine: Engine = _engine
+        super().__init__()
+        self.db_path = ":memory:"
+        if db_file:
+            db_path_obj = Path(db_file).resolve()
+            db_path_obj.parent.mkdir(parents=True, exist_ok=True)
+            self.db_path = str(db_path_obj)
         
-        # Database attributes
-        self.table_name: str = table_name
-        self.metadata: MetaData = MetaData()
-        self.inspector = sqlalchemy_inspect(self.db_engine)
-
-        # Schema management attributes
-        self.auto_upgrade_schema: bool = auto_upgrade_schema
-
-        # Database session and table definition
-        self.SqlSession: sessionmaker[SqlAlchemySession] = sessionmaker(bind=self.db_engine)
-        self.table: Table = self._get_table_schema()
-        
-        self.create()
-        self.connect()
-
-    def _get_session_model_class(self) -> type[BaseSession]:
-        """Returns the appropriate Pydantic session model class based on the current mode."""
-        if self.mode == "agent":
-            return AgentSession
-        raise ValueError(f"Invalid mode '{self.mode}' specified for SqliteStorage.")
-
-    def _get_table_schema(self) -> Table:
-        """Dynamically defines the SQLAlchemy Table schema based on the current mode."""
-        common_columns = [
-            Column("session_id", String, primary_key=True),
-            Column("user_id", String, index=True),
-            Column("memory", JSON),
-            Column("session_data", sqlite.JSON),
-            Column("extra_data", sqlite.JSON),
-            Column("created_at", sqlite.REAL),
-            Column("updated_at", sqlite.REAL, index=True),
-        ]
-        specific_columns = []
-        if self.mode == "agent":
-            specific_columns = [Column("agent_id", String, index=True), Column("agent_data", sqlite.JSON), Column("team_session_id", String, index=True, nullable=True)]
-        elif self.mode == "team":
-            specific_columns = [Column("team_id", String, index=True), Column("team_data", sqlite.JSON), Column("team_session_id", String, index=True, nullable=True)]
-        elif self.mode == "workflow":
-            specific_columns = [Column("workflow_id", String, index=True), Column("workflow_data", sqlite.JSON)]
-        elif self.mode == "workflow_v2":
-            specific_columns = [Column("workflow_id", String, index=True), Column("workflow_name", String, index=True), Column("workflow_data", sqlite.JSON), Column("runs", sqlite.JSON)]
-        return Table(self.table_name, self.metadata, *common_columns, *specific_columns, extend_existing=True)
+        self.sessions_table_name = sessions_table_name
+        self.profiles_table_name = profiles_table_name
+        self._db: Optional[aiosqlite.Connection] = None
 
 
-    def is_connected(self) -> bool:
-        return self._connected
+    
+    def is_connected(self) -> bool: return self._run_async_from_sync(self.is_connected_async())
+    def connect(self) -> None: return self._run_async_from_sync(self.connect_async())
+    def disconnect(self) -> None: return self._run_async_from_sync(self.disconnect_async())
+    def create(self) -> None: return self._run_async_from_sync(self.create_async())
+    def read(self, object_id: str, model_type: Type[T]) -> Optional[T]: return self._run_async_from_sync(self.read_async(object_id, model_type))
+    def upsert(self, data: Union[InteractionSession, UserProfile]) -> None: return self._run_async_from_sync(self.upsert_async(data))
+    def delete(self, object_id: str, model_type: Type[BaseModel]) -> None: return self._run_async_from_sync(self.delete_async(object_id, model_type))
+    def drop(self) -> None: return self._run_async_from_sync(self.drop_async())
 
-    def connect(self) -> None:
-        if self.is_connected():
+
+
+    async def is_connected_async(self) -> bool:
+        return self._db is not None
+
+    async def connect_async(self) -> None:
+        if await self.is_connected_async():
             return
+        self._db = await aiosqlite.connect(self.db_path)
+        self._db.row_factory = aiosqlite.Row # Important for dict-like access
+        await self.create_async()
+        self._connected = True
 
-        try:
-            with self.db_engine.connect() as connection:
-                connection.execute(text("SELECT 1"))
-            self._connected = True
-        except Exception as e:
-            self._connected = False
-            raise ConnectionError(f"Failed to connect to SQLite at {self.db_path}: {e}")
-
-    def disconnect(self) -> None:
-        if not self.is_connected():
-            return
-        
-        self.db_engine.dispose()
+    async def disconnect_async(self) -> None:
+        if self._db:
+            await self._db.close()
+            self._db = None
         self._connected = False
 
-    def create(self) -> None:
-        self.metadata.create_all(self.db_engine, checkfirst=True)
+    async def _get_connection(self) -> aiosqlite.Connection:
+        """Helper to lazily initialize the database connection."""
+        if not await self.is_connected_async():
+            await self.connect_async()
+        return self._db
 
-    def read(self, session_id: str, user_id: Optional[str] = None) -> Optional[BaseSession]:
-        with self.SqlSession() as sess:
-            stmt = select(self.table).where(self.table.c.session_id == session_id)
-            if user_id:
-                stmt = stmt.where(self.table.c.user_id == user_id)
-            result = sess.execute(stmt).first()
-            if result:
-                session_data = dict(result._mapping)
-                SessionModel = self._get_session_model_class()
-                return SessionModel.from_dict(session_data)
+    async def create_async(self) -> None:
+        db = await self._get_connection()
+        await db.execute(f"""
+            CREATE TABLE IF NOT EXISTS {self.sessions_table_name} (
+                session_id TEXT PRIMARY KEY, user_id TEXT, agent_id TEXT,
+                team_session_id TEXT, chat_history TEXT, summary TEXT,
+                session_data TEXT, extra_data TEXT, created_at REAL, updated_at REAL
+            )
+        """)
+        await db.execute(f"""
+            CREATE TABLE IF NOT EXISTS {self.profiles_table_name} (
+                user_id TEXT PRIMARY KEY, profile_data TEXT,
+                created_at REAL, updated_at REAL
+            )
+        """)
+        await db.commit()
+
+    async def read_async(self, object_id: str, model_type: Type[T]) -> Optional[T]:
+        if model_type is InteractionSession: table, key_col = self.sessions_table_name, "session_id"
+        elif model_type is UserProfile: table, key_col = self.profiles_table_name, "user_id"
+        else: return None
+
+        db = await self._get_connection()
+        sql = f"SELECT * FROM {table} WHERE {key_col} = ?"
+        async with db.execute(sql, (object_id,)) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                data = dict(row)
+                for key, value in data.items():
+                    if key in ['chat_history', 'session_data', 'extra_data', 'profile_data'] and isinstance(value, str):
+                        data[key] = json.loads(value)
+                return model_type.from_dict(data)
         return None
 
-    def upsert(self, session: BaseSession) -> Optional[BaseSession]:
-        SessionModel = self._get_session_model_class()
-        if not isinstance(session, SessionModel):
-            raise TypeError(f"Session object must be of type {SessionModel.__name__} for mode '{self.mode}'")
+    async def upsert_async(self, data: Union[InteractionSession, UserProfile]) -> None:
+        data.updated_at = time.time()
+        
+        if isinstance(data, InteractionSession):
+            table = self.sessions_table_name
+            sql = f"""
+                INSERT INTO {table} (session_id, user_id, agent_id, team_session_id, chat_history, summary, session_data, extra_data, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(session_id) DO UPDATE SET
+                    user_id=excluded.user_id, agent_id=excluded.agent_id, team_session_id=excluded.team_session_id,
+                    chat_history=excluded.chat_history, summary=excluded.summary, session_data=excluded.session_data,
+                    extra_data=excluded.extra_data, updated_at=excluded.updated_at
+            """
+            params = (
+                data.session_id, data.user_id, data.agent_id, data.team_session_id,
+                json.dumps(data.chat_history), data.summary, json.dumps(data.session_data),
+                json.dumps(data.extra_data), data.created_at, data.updated_at
+            )
+        elif isinstance(data, UserProfile):
+            table = self.profiles_table_name
+            sql = f"""
+                INSERT INTO {table} (user_id, profile_data, created_at, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    profile_data=excluded.profile_data, updated_at=excluded.updated_at
+            """
+            params = (data.user_id, json.dumps(data.profile_data), data.created_at, data.updated_at)
+        else:
+            raise TypeError(f"Unsupported data type for upsert: {type(data).__name__}")
 
-        session.updated_at = time.time()
-        session_dict = session.model_dump(mode="json")
+        db = await self._get_connection()
+        await db.execute(sql, params)
+        await db.commit()
 
-        insert_stmt = sqlite.insert(self.table).values(session_dict)
-        update_dict = {key: value for key, value in session_dict.items() if key != "session_id"}
+    async def delete_async(self, object_id: str, model_type: Type[BaseModel]) -> None:
+        if model_type is InteractionSession: table, key_col = self.sessions_table_name, "session_id"
+        elif model_type is UserProfile: table, key_col = self.profiles_table_name, "user_id"
+        else: return
 
-        upsert_stmt = insert_stmt.on_conflict_do_update(
-            index_elements=["session_id"],
-            set_=update_dict
-        )
-        try:
-            with self.SqlSession() as sess, sess.begin():
-                sess.execute(upsert_stmt)
-            return self.read(session.session_id)
-        except Exception as e:
-            raise IOError(f"Failed to upsert session {session.session_id}: {e}") from e
+        db = await self._get_connection()
+        sql = f"DELETE FROM {table} WHERE {key_col} = ?"
+        await db.execute(sql, (object_id,))
+        await db.commit()
 
-    def get_all_sessions(self, user_id: Optional[str] = None, entity_id: Optional[str] = None) -> List[BaseSession]:
-        return self._get_sessions_query(user_id, entity_id)
+    async def drop_async(self) -> None:
+        db = await self._get_connection()
+        await db.execute(f"DROP TABLE IF EXISTS {self.sessions_table_name}")
+        await db.execute(f"DROP TABLE IF EXISTS {self.profiles_table_name}")
+        await db.commit()
 
-    def get_recent_sessions(self, user_id: Optional[str] = None, entity_id: Optional[str] = None, limit: int = 10) -> List[BaseSession]:
-        return self._get_sessions_query(user_id, entity_id, limit)
 
-    def _get_sessions_query(self, user_id: Optional[str], entity_id: Optional[str], limit: Optional[int] = None) -> List[BaseSession]:
-        with self.SqlSession() as sess:
-            stmt = select(self.table).order_by(self.table.c.updated_at.desc())
-            if user_id:
-                stmt = stmt.where(self.table.c.user_id == user_id)
-            if entity_id:
-                entity_col_map = {"agent": "agent_id", "team": "team_id", "workflow": "workflow_id", "workflow_v2": "workflow_id"}
-                col_name = entity_col_map.get(self.mode)
-                if col_name:
-                    stmt = stmt.where(getattr(self.table.c, col_name) == entity_id)
-            if limit:
-                stmt = stmt.limit(limit)
-            results = sess.execute(stmt).fetchall()
-            SessionModel = self._get_session_model_class()
-            return [SessionModel.from_dict(row._mapping) for row in results]
-
-    def delete_session(self, session_id: str) -> None:
-        with self.SqlSession() as sess, sess.begin():
-            delete_stmt = self.table.delete().where(self.table.c.session_id == session_id)
-            sess.execute(delete_stmt)
-
-    def drop(self) -> None:
-        self.metadata.drop_all(self.db_engine, tables=[self.table], checkfirst=True)
-
-    def log_artifact(self, artifact) -> None:
-        raise NotImplementedError("Artifact logging should be handled within the session data for this provider.")
-
-    def store_artifact_data(self, artifact_id: str, session_id: str, binary_data: bytes) -> str:
-        raise NotImplementedError("Binary artifact storage is not handled by the session provider.")
-
-    def retrieve_artifact_data(self, storage_uri: str) -> bytes:
-        raise NotImplementedError("Binary artifact storage is not handled by the session provider.")
+    def log_artifact(self, artifact) -> None: raise NotImplementedError
+    def store_artifact_data(self, artifact_id: str, session_id: str, binary_data: bytes) -> str: raise NotImplementedError
+    def retrieve_artifact_data(self, storage_uri: str) -> bytes: raise NotImplementedError
+    async def log_artifact_async(self, artifact) -> None: raise NotImplementedError
+    async def store_artifact_data_async(self, artifact_id: str, session_id: str, binary_data: bytes) -> str: raise NotImplementedError
+    async def retrieve_artifact_data_async(self, storage_uri: str) -> bytes: raise NotImplementedError

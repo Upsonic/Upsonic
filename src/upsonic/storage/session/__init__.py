@@ -1,9 +1,9 @@
 from .sessions import (
-    AgentSession,
-    BaseSession
+    UserProfile,
+    InteractionSession
 )
 
 __all__ = [
-    "AgentSession",
-    "BaseSession"
+    "UserProfile",
+    "InteractionSession"
 ]

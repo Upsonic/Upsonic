@@ -1,131 +1,158 @@
-import threading
+import asyncio
 import time
 from collections import OrderedDict
-from typing import Dict, List, Optional, Literal
+from typing import Dict, Optional, Type, TypeVar, Union
+
+from pydantic import BaseModel
 
 from upsonic.storage.base import Storage
 from upsonic.storage.session.sessions import (
-    BaseSession,
-    AgentSession
+    InteractionSession,
+    UserProfile
 )
+
+T = TypeVar('T', bound=BaseModel)
 
 class InMemoryStorage(Storage):
     """
-    An ephemeral, thread-safe, session-based storage provider that lives in memory,
-    configured via direct arguments.
+    A hybrid sync/async, ephemeral, thread-safe storage provider that lives in memory.
+
+    This provider implements both a synchronous and an asynchronous API. The
+    synchronous methods are convenient wrappers that intelligently manage the
+    event loop to run the core async logic.
     """
 
-    def __init__(
-        self,
-        max_sessions: Optional[int] = None,
-        mode: Literal["agent", "team", "workflow", "workflow_v2"] = "agent",
-    ):
+    def __init__(self, max_sessions: Optional[int] = None, max_profiles: Optional[int] = None):
         """
         Initializes the in-memory storage provider.
 
         Args:
-            max_sessions: The maximum number of sessions to store. If set, the
-                          storage acts as a fixed-size LRU cache.
-            mode: The operational mode.
+            max_sessions: Max InteractionSessions to store. Acts as a fixed-size LRU cache.
+            max_profiles: Max UserProfiles to store. Acts as a fixed-size LRU cache.
         """
-        super().__init__(mode=mode)
-        
+        super().__init__()
         self.max_sessions = max_sessions
-        self._sessions: Dict[str, BaseSession] = OrderedDict() if self.max_sessions else {}
-        self._lock = threading.Lock()
+        self._sessions: Dict[str, InteractionSession] = OrderedDict() if self.max_sessions else {}
+        self.max_profiles = max_profiles
+        self._user_profiles: Dict[str, UserProfile] = OrderedDict() if self.max_profiles else {}
+        self._lock: Optional[asyncio.Lock] = None
 
-        self.connect()
 
-
-    def _get_session_model_class(self) -> type[BaseSession]:
-        """Returns the appropriate Pydantic session model class based on the current mode."""
-        if self.mode == "agent":
-            return AgentSession
-        raise ValueError(f"Invalid mode '{self.mode}' specified for InMemoryStorage.")
+    @property
+    def lock(self) -> asyncio.Lock:
+        """
+        Lazily initializes and returns an asyncio.Lock, ensuring it is always
+        bound to the currently running event loop.
+        """
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(current_loop)
+        
+        if self._lock is None or self._lock._loop is not current_loop:
+            self._lock = asyncio.Lock()
+            
+        return self._lock
 
 
     def is_connected(self) -> bool:
-        return self._connected
+        return self._run_async_from_sync(self.is_connected_async())
 
     def connect(self) -> None:
-        """For in-memory, this is a no-op that just marks the state as connected."""
-        self._connected = True
+        return self._run_async_from_sync(self.connect_async())
 
     def disconnect(self) -> None:
-        """For in-memory, this is a no-op that just marks the state as disconnected."""
-        self._connected = False
+        return self._run_async_from_sync(self.disconnect_async())
 
     def create(self) -> None:
+        return self._run_async_from_sync(self.create_async())
+
+    def read(self, object_id: str, model_type: Type[T]) -> Optional[T]:
+        return self._run_async_from_sync(self.read_async(object_id, model_type))
+
+    def upsert(self, data: Union[InteractionSession, UserProfile]) -> None:
+        return self._run_async_from_sync(self.upsert_async(data))
+    
+    def delete(self, object_id: str, model_type: Type[BaseModel]) -> None:
+        return self._run_async_from_sync(self.delete_async(object_id, model_type))
+
+    def drop(self) -> None:
+        return self._run_async_from_sync(self.drop_async())
+
+
+
+    async def is_connected_async(self) -> bool:
+        """Checks the internal connected flag."""
+        return self._connected
+
+    async def connect_async(self) -> None:
+        """Marks the provider as connected. A no-op for in-memory."""
+        self._connected = True
+
+    async def disconnect_async(self) -> None:
+        """Marks the provider as disconnected. A no-op for in-memory."""
+        self._connected = False
+
+    async def create_async(self) -> None:
         """For in-memory, there is no persistent schema to create. This is a no-op."""
         pass
 
-    def read(self, session_id: str, user_id: Optional[str] = None) -> Optional[BaseSession]:
-        with self._lock:
-            session = self._sessions.get(session_id)
-            if session:
-                if user_id and session.user_id != user_id:
-                    return None
-
-                if self.max_sessions:
-                    self._sessions.move_to_end(session_id)
-                
-                return session.model_copy(deep=True)
+    async def read_async(self, object_id: str, model_type: Type[T]) -> Optional[T]:
+        """Asynchronously reads an object from the corresponding in-memory dictionary."""
+        async with self.lock:
+            if model_type is InteractionSession:
+                item = self._sessions.get(object_id)
+                if item:
+                    if self.max_sessions:
+                        self._sessions.move_to_end(object_id)
+                    return item.model_copy(deep=True)
+            elif model_type is UserProfile:
+                item = self._user_profiles.get(object_id)
+                if item:
+                    if self.max_profiles:
+                        self._user_profiles.move_to_end(object_id)
+                    return item.model_copy(deep=True)
         return None
 
-    def upsert(self, session: BaseSession) -> Optional[BaseSession]:
-        SessionModel = self._get_session_model_class()
-        if not isinstance(session, SessionModel):
-            raise TypeError(f"Session object must be of type {SessionModel.__name__} for mode '{self.mode}'")
+    async def upsert_async(self, data: Union[InteractionSession, UserProfile]) -> None:
+        """Asynchronously upserts an object into the corresponding in-memory dictionary."""
+        async with self.lock:
+            data.updated_at = time.time()
+            data_copy = data.model_copy(deep=True)
+            if isinstance(data, InteractionSession):
+                self._sessions[data.session_id] = data_copy
+                if self.max_sessions:
+                    self._sessions.move_to_end(data.session_id)
+                    if len(self._sessions) > self.max_sessions:
+                        self._sessions.popitem(last=False)
+            elif isinstance(data, UserProfile):
+                self._user_profiles[data.user_id] = data_copy
+                if self.max_profiles:
+                    self._user_profiles.move_to_end(data.user_id)
+                    if len(self._user_profiles) > self.max_profiles:
+                        self._user_profiles.popitem(last=False)
+            else:
+                raise TypeError(f"Unsupported data type for upsert: {type(data).__name__}")
+    
+    async def delete_async(self, object_id: str, model_type: Type[BaseModel]) -> None:
+        """Asynchronously deletes an object from the corresponding in-memory dictionary."""
+        async with self.lock:
+            if model_type is InteractionSession and object_id in self._sessions:
+                del self._sessions[object_id]
+            elif model_type is UserProfile and object_id in self._user_profiles:
+                del self._user_profiles[object_id]
 
-        with self._lock:
-            session.updated_at = int(time.time())
-            session_copy = session.model_copy(deep=True)
-            self._sessions[session.session_id] = session_copy
-
-            if self.max_sessions:
-                self._sessions.move_to_end(session.session_id)
-                if len(self._sessions) > self.max_sessions:
-                    self._sessions.popitem(last=False)
-            
-            return session_copy
-
-    def get_all_sessions(self, user_id: Optional[str] = None, entity_id: Optional[str] = None) -> List[BaseSession]:
-        with self._lock:
-            all_sessions = list(self._sessions.values())
-
-        filtered_sessions: List[BaseSession] = []
-        entity_key = f"{self.mode}_id" if self.mode else None
-
-        for session in all_sessions:
-            if user_id and session.user_id != user_id:
-                continue
-            if entity_id and entity_key and getattr(session, entity_key, None) != entity_id:
-                continue
-            filtered_sessions.append(session.model_copy(deep=True))
-            
-        return filtered_sessions
-
-    def get_recent_sessions(self, user_id: Optional[str] = None, entity_id: Optional[str] = None, limit: int = 10) -> List[BaseSession]:
-        all_sessions = self.get_all_sessions(user_id=user_id, entity_id=entity_id)
-        all_sessions.sort(key=lambda s: s.updated_at, reverse=True)
-        return all_sessions[:limit]
-
-    def delete_session(self, session_id: str) -> None:
-        with self._lock:
-            if session_id in self._sessions:
-                del self._sessions[session_id]
-
-    def drop(self) -> None:
-        """Clears all sessions from memory."""
-        with self._lock:
+    async def drop_async(self) -> None:
+        """Asynchronously clears all sessions and user profiles from memory."""
+        async with self.lock:
             self._sessions.clear()
+            self._user_profiles.clear()
 
 
-    def log_artifact(self, artifact) -> None:
-        raise NotImplementedError("Artifact logging should be handled within the session data for this provider.")
-
-    def store_artifact_data(self, artifact_id: str, session_id: str, binary_data: bytes) -> str:
-        raise NotImplementedError("Binary artifact storage is not handled by the session provider.")
-
-    def retrieve_artifact_data(self, storage_uri: str) -> bytes:
-        raise NotImplementedError("Binary artifact storage is not handled by the session provider.")
+    def log_artifact(self, artifact) -> None: raise NotImplementedError
+    def store_artifact_data(self, artifact_id: str, session_id: str, binary_data: bytes) -> str: raise NotImplementedError
+    def retrieve_artifact_data(self, storage_uri: str) -> bytes: raise NotImplementedError
+    async def log_artifact_async(self, artifact) -> None: raise NotImplementedError
+    async def store_artifact_data_async(self, artifact_id: str, session_id: str, binary_data: bytes) -> str: raise NotImplementedError
+    async def retrieve_artifact_data_async(self, storage_uri: str) -> bytes: raise NotImplementedError
