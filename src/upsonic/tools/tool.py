@@ -3,6 +3,28 @@ from __future__ import annotations
 from typing import Optional, List, Callable, Any
 from pydantic import BaseModel, Field
 
+class ToolKit:
+    """
+    A base class for creating organized collections of tools.
+
+    When a class inherits from ToolKit, the ToolProcessor will only
+    register methods that are explicitly decorated with @tool as available tools.
+    Methods without the decorator will be treated as internal helper methods
+    and will not be exposed to the AI agent.
+
+    Example:
+        class MyToolSet(ToolKit):
+            @tool
+            def public_tool_for_ai(self, query: str) -> str:
+                '''This tool is exposed to the AI.'''
+                return self._internal_helper(query)
+
+            def _internal_helper(self, text: str) -> str:
+                '''This method is NOT exposed to the AI.'''
+                return f"Processed: {text}"
+    """
+    pass
+
 class ToolHooks(BaseModel):
     """
     A model to hold optional 'before' and 'after' callables for tool execution.

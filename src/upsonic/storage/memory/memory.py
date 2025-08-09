@@ -1,9 +1,10 @@
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Type, Tuple, Literal
 import json
+import copy
 
-from pydantic_ai.messages import ModelMessagesTypeAdapter
-from pydantic import BaseModel, Field
+from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelRequest, ModelResponse, SystemPromptPart, UserPromptPart
+from pydantic import BaseModel, Field, create_model
 
 from upsonic.storage.base import Storage
 from upsonic.storage.session.sessions import InteractionSession, UserProfile
@@ -29,9 +30,13 @@ class Memory:
         full_session_memory: bool = False,
         summary_memory: bool = False,
         user_analysis_memory: bool = False,
+        user_profile_schema: Optional[Type[BaseModel]] = None,
+        dynamic_user_profile: bool = False,
         num_last_messages: Optional[int] = None,
         model: ModelNames | None = None,
-        debug: bool = False
+        debug: bool = False,
+        feed_tool_call_results: bool = False,
+        user_memory_mode: Literal['update', 'replace'] = 'update'
     ):
         self.storage = storage
         self.num_last_messages = num_last_messages
@@ -40,6 +45,17 @@ class Memory:
         self.user_analysis_memory_enabled = user_analysis_memory
         self.model = model
         self.debug = debug
+        self.feed_tool_call_results = feed_tool_call_results
+
+        self.profile_schema_model = user_profile_schema or UserTraits
+        self.is_profile_dynamic = dynamic_user_profile
+        self.user_memory_mode = user_memory_mode
+
+        if self.is_profile_dynamic and user_profile_schema:
+            print("Warning: `dynamic_user_profile` is True, so the provided `user_profile_schema` will be ignored.")
+            self.profile_schema_model = None
+        else:
+            self.profile_schema_model = user_profile_schema or UserTraits        
 
         if self.full_session_memory_enabled or self.summary_memory_enabled:
             if not session_id:
@@ -78,10 +94,20 @@ class Memory:
             if session:
                 if self.summary_memory_enabled and session.summary:
                     prepared_data["context_injection"] = f"<SessionSummary>\n{session.summary}\n</SessionSummary>"
-
                 if self.full_session_memory_enabled and session.chat_history:
                     try:
-                        raw_messages = session.chat_history[0] if session.chat_history else []
+                        raw_messages = session.chat_history
+                        if not self.feed_tool_call_results:
+                            TOOL_RELATED_TYPES = {'tool_call_request', 'tool_response'}
+                            filtered_messages = [
+                                element for element in raw_messages
+                                if not any(
+                                    part.get('part_kind') in ['tool-call', 'tool-return']
+                                    for part in element.get('parts', [])
+                                )
+                            ]
+                            raw_messages = filtered_messages
+
                         validated_history = ModelMessagesTypeAdapter.validate_python(raw_messages)
                         limited_history = self._limit_message_history(validated_history)
                         prepared_data["message_history"] = limited_history
@@ -112,9 +138,8 @@ class Memory:
         
         if self.full_session_memory_enabled:
             from pydantic_core import to_jsonable_python
-            all_messages = model_response.all_messages()
-            all_messages_as_dicts = to_jsonable_python(all_messages)
-            session.chat_history = [all_messages_as_dicts]
+            all_messages_as_dicts = to_jsonable_python(model_response.new_messages())
+            session.chat_history.extend(all_messages_as_dicts)  # Store as a list of messages
 
         if self.summary_memory_enabled:
             try:
@@ -137,6 +162,12 @@ class Memory:
         if self.user_analysis_memory_enabled:
             try:
                 updated_traits = await self._analyze_interaction_for_traits(profile.profile_data, model_response)
+                if self.user_memory_mode == 'replace':
+                    profile.profile_data = updated_traits
+                elif self.user_memory_mode == 'update':
+                    profile.profile_data.update(updated_traits)
+                else:
+                    raise ValueError(f"Unexpected update mode: {self.user_memory_mode}")
                 profile.profile_data.update(updated_traits)
             except Exception as e:
                 print(f"Warning: Failed to analyze user profile: {e}")
@@ -144,53 +175,76 @@ class Memory:
         await self.storage.upsert_async(profile)
 
 
-    def _limit_message_history(self, message_history: list) -> list:
+    def _limit_message_history(self, message_history: List) -> List:
         """
-        Limit conversation history based on num_last_messages parameter.
-        
+        Limits conversation history to the last N runs, creating a new synthetic
+        first request that combines the original system prompt with the user prompt
+        from the beginning of the limited window.
+
         Args:
-            message_history: List of messages from storage
-            
+            message_history: The full, flat list of ModelRequest and ModelResponse objects.
+
         Returns:
-            Limited message history with system prompt + last N conversation runs
+            A new, limited message history list.
         """
-        if not self.num_last_messages or self.num_last_messages <= 0 or len(message_history) <= 1:
+        if not self.num_last_messages or self.num_last_messages <= 0:
             return message_history
+
+        if not message_history:
+            return []
+
+        all_runs = []
+        for i in range(0, len(message_history) - 1, 2):
+            request = message_history[i]
+            response = message_history[i+1]
+            if isinstance(request, ModelRequest) and isinstance(response, ModelResponse):
+                all_runs.append((request, response))
+
+        if len(all_runs) <= self.num_last_messages:
+            return message_history
+
+        kept_runs = all_runs[-self.num_last_messages:]
         
-        # Separate system prompt (always first) from conversation messages
-        system_message = message_history[0] if len(message_history) > 0 else None
-        conversation_messages = message_history[1:] if len(message_history) > 1 else []
+        if not kept_runs:
+            return []
+
+        original_system_prompt = None
+        if message_history:
+            for part in message_history[0].parts:
+                if isinstance(part, SystemPromptPart):
+                    original_system_prompt = part
+                    break
         
-        # Group conversation messages into runs (request-response pairs)
-        conversation_runs = []
-        current_run = []
+        if not original_system_prompt:
+            print("Warning: Could not find original SystemPromptPart. History might be malformed.")
+            return [message for run in kept_runs for message in run]
+
+        first_request_in_window = kept_runs[0][0]
+
+        new_user_prompt = None
+        for part in first_request_in_window.parts:
+            if isinstance(part, UserPromptPart):
+                new_user_prompt = part
+                break
+                
+        if not new_user_prompt:
+            print("Warning: Could not find UserPromptPart in the first message of the limited window.")
+            return [message for run in kept_runs for message in run]
+
+        modified_first_request = copy.deepcopy(first_request_in_window)
+        modified_first_request.parts = [original_system_prompt, new_user_prompt]
         
-        for msg in conversation_messages:
-            current_run.append(msg)
-            if len(current_run) == 2:  # Complete run (request + response)
-                conversation_runs.append(current_run)
-                current_run = []
+        final_history = []
+        final_history.append(modified_first_request)
+        final_history.append(kept_runs[0][1])
         
-        # Handle incomplete run
-        if current_run:
-            conversation_runs.append(current_run)
-        
-        # Keep only the last num_last_messages
-        if len(conversation_runs) > self.num_last_messages:
-            kept_runs = conversation_runs[-self.num_last_messages:]
-        else:
-            kept_runs = conversation_runs
-        
-        # Flatten kept runs back to message list
-        limited_conversation = []
-        for run in kept_runs:
-            limited_conversation.extend(run)
-        
-        # Rebuild with system message + limited conversation
-        if system_message:
-            return [system_message] + limited_conversation
-        else:
-            return limited_conversation
+        for run in kept_runs[1:]:
+            final_history.extend(run)
+            
+        print(f"\nOriginal history had {len(all_runs)} runs. "
+            f"Limited to the last {self.num_last_messages}, resulting in {len(final_history)} messages.")
+
+        return final_history
         
 
     async def _generate_new_summary(self, previous_summary: str, model_response) -> str:
@@ -198,13 +252,15 @@ class Memory:
         from upsonic.tasks.tasks import Task
         from pydantic_core import to_jsonable_python
 
-        last_turn = to_jsonable_python(model_response.all_messages()) # or new_message()
+        last_turn = to_jsonable_python(model_response.new_messages())
+        session = await self.storage.read_async(self.session_id, InteractionSession)
         
         summarizer = Direct("Summarizer", model=self.model, debug=self.debug)
         
         prompt = f"""
         Previous Summary: "{previous_summary or 'None'}"
         New Conversation Turn: {json.dumps(last_turn, indent=2)}
+        Chat History: {json.dumps(session.chat_history, indent=2) if session and session.chat_history else 'None'}
         Update the summary concisely based on the new turn.
         """
         task = Task(description=prompt, response_format=str)
@@ -212,24 +268,121 @@ class Memory:
         summary_response = await summarizer.do_async(task)
         return str(summary_response)
 
-    async def _analyze_interaction_for_traits(self, current_profile: dict, model_response) -> dict:
+    def _extract_user_prompt_content(self, messages: list) -> list[str]:
+        """Extracts the content string from all UserPromptParts in a list of messages."""
+        user_prompts = []
+        if not messages:
+            return user_prompts
+            
+        for message in messages:
+            if isinstance(message, ModelRequest):
+                for part in message.parts:
+                    if isinstance(part, UserPromptPart):
+                        user_prompts.append(part.content)
+        return user_prompts
+
+
+    async def _analyze_interaction_for_traits(self, current_profile: dict, model_response) -> Tuple[dict, Literal['update', 'replace']]:
+        """
+        Analyzes user interaction to extract traits.
+
+        It gathers user prompt content from two independent sources:
+        1. The full session history from storage (if available).
+        2. The new messages from the latest model response (if available).
+
+        It then feeds this combined, clearly demarcated context to the analyzer LLM.
+        """
         from upsonic.agent.agent import Direct
         from upsonic.tasks.tasks import Task
 
-        last_user_message = model_response.all_messages()
+        historical_prompts_content = []
+        new_prompts_content = []
+
+        session = await self.storage.read_async(self.session_id, InteractionSession)
+        if session and session.chat_history:
+            try:
+                validated_history = ModelMessagesTypeAdapter.validate_python(session.chat_history)
+                historical_prompts_content = self._extract_user_prompt_content(validated_history)
+            except Exception as e:
+                print(f"Warning: Could not validate session history. It will be skipped for analysis. Error: {e}")
+
+        new_messages = model_response.new_messages()
+        if new_messages:
+            new_prompts_content = self._extract_user_prompt_content(new_messages)
+            print(f"Extracted {len(new_prompts_content)} new user prompts from the latest response.")
+
+        if not historical_prompts_content and not new_prompts_content:
+            print("Warning: No user prompts found in history or new messages. Cannot analyze traits.")
+            return {}
+
+        prompt_context_parts = []
+        source_log = []
+        if historical_prompts_content:
+            history_str = "\n".join(f"- {p}" for p in historical_prompts_content)
+            prompt_context_parts.append(f"### Historical User Prompts:\n{history_str}")
+            source_log.append("session history")
+            
+        if new_prompts_content:
+            new_str = "\n".join(f"- {p}" for p in new_prompts_content)
+            prompt_context_parts.append(f"### Latest User Prompts:\n{new_str}")
+            source_log.append("new messages")
+
+        conversation_context_str = "\n\n".join(prompt_context_parts)
+        print(f"Analyzing traits using context from: {', '.join(source_log)}.")
         
         analyzer = Direct("User Trait Analyzer", model=self.model, debug=self.debug)
-        
-        prompt = f"""
-        Analyze the user's last messages to update their profile.
-        Current Profile: {json.dumps(current_profile, indent=2)}
-        User's Message: "{last_user_message}"
-        Extract their expertise, preferred tone, and interests. Only provide new or updated information.
-        """
-        task = Task(description=prompt, response_format=UserTraits)
-        
-        trait_response = await analyzer.do_async(task)
-        if trait_response:
-            result_dict = trait_response.model_dump(exclude_unset=True)
-            return result_dict
-        return {}
+
+        if self.is_profile_dynamic:
+            class ProposedSchema(BaseModel):
+                fields: Dict[str, str] = Field(..., description="A dictionary of snake_case field names and descriptions.")
+
+            schema_generator_prompt = f"""
+            You are an expert data modeler. Analyze the user's profile and their complete conversation to design the best Pydantic schema for understanding them.
+
+            Current Profile:
+            {json.dumps(current_profile, indent=2)}
+
+            {conversation_context_str}
+
+            Propose a schema that would best capture the user's current goals and key traits based on all available information.
+            """
+            schema_task = Task(description=schema_generator_prompt, response_format=ProposedSchema)
+            proposed_schema_response = await analyzer.do_async(schema_task)
+
+            if not proposed_schema_response or not proposed_schema_response.fields:
+                return {}
+
+            dynamic_fields = {name: (Optional[Any], Field(None, description=desc)) for name, desc in proposed_schema_response.fields.items()}
+            DynamicUserTraitModel = create_model('DynamicUserTraitModel', **dynamic_fields)
+
+            trait_extractor_prompt = f"""
+            Based on the user's profile and their full conversation context, populate the fields of the following dynamically generated schema.
+
+            Current Profile:
+            {json.dumps(current_profile, indent=2)}
+
+            {conversation_context_str}
+            """
+            trait_task = Task(description=trait_extractor_prompt, response_format=DynamicUserTraitModel)
+            trait_response = await analyzer.do_async(trait_task)
+            
+            if trait_response:
+                return trait_response.model_dump()
+            return {}
+
+        else:
+            prompt = f"""
+            Analyze the user's profile and conversation to update their traits according to the provided schema.
+            Only extract new or updated information based on the full context.
+
+            Current Profile:
+            {json.dumps(current_profile, indent=2)}
+
+            {conversation_context_str}
+            """
+            task = Task(description=prompt, response_format=self.profile_schema_model)
+            
+            trait_response = await analyzer.do_async(task)
+            if trait_response:
+                return trait_response.model_dump()
+            return {}

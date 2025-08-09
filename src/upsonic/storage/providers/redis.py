@@ -132,11 +132,3 @@ class RedisStorage(Storage):
         keys_to_delete = [key async for key in self.redis_client.scan_iter(match=f"{self.prefix}:*")]
         if keys_to_delete:
             await self.redis_client.delete(*keys_to_delete)
-
-
-    def log_artifact(self, artifact) -> None: raise NotImplementedError
-    def store_artifact_data(self, artifact_id: str, session_id: str, binary_data: bytes) -> str: raise NotImplementedError
-    def retrieve_artifact_data(self, storage_uri: str) -> bytes: raise NotImplementedError
-    async def log_artifact_async(self, artifact) -> None: raise NotImplementedError
-    async def store_artifact_data_async(self, artifact_id: str, session_id: str, binary_data: bytes) -> str: raise NotImplementedError
-    async def retrieve_artifact_data_async(self, storage_uri: str) -> bytes: raise NotImplementedError
