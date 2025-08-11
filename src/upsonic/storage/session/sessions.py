@@ -84,8 +84,7 @@ class InteractionSession(BaseModel):
         index=True
     )
 
-    # --- Memory-specific Fields ---
-    chat_history: List[List[Any]] = Field(
+    chat_history: List[Any] = Field(
         default_factory=list,
         description="The complete, ordered list of messages for the session ('Full Session Memory')."
     )
@@ -94,7 +93,6 @@ class InteractionSession(BaseModel):
         description="An evolving, high-level summary of the session's content ('Summary Memory')."
     )
     
-    # --- Flexible Data Fields ---
     session_data: Dict[str, Any] = Field(
         default_factory=dict,
         description="A flexible key-value store for structured data relevant to the session's immediate state."
@@ -104,7 +102,6 @@ class InteractionSession(BaseModel):
         description="A flexible key-value store for any other custom metadata, tags, or IDs."
     )
 
-    # --- Timestamps ---
     created_at: float = Field(
         default_factory=time.time,
         description="The Unix timestamp when the session was created."

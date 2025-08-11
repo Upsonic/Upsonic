@@ -7,14 +7,17 @@ import json
 import re
 import time
 from pathlib import Path
-from typing import Callable, Any, Generator, Tuple, Dict, TYPE_CHECKING, List
+from typing import Callable, Any, Generator, Tuple, Dict, TYPE_CHECKING, List, Optional
 import asyncio
 
 from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio
 
-from .tool import ToolConfig
+from .tool import ToolConfig, ToolKit
 from upsonic.tasks.tasks import Task
 from upsonic.utils.printing import console, spacing
+
+if TYPE_CHECKING:
+    from upsonic.agent.agent import Direct
 
 
 
@@ -28,6 +31,14 @@ class ToolProcessor:
     The internal engine for inspecting, validating, normalizing, and wrapping
     user-provided tools into a format the agent can execute.
     """
+    def __init__(self, agent: Optional['Direct'] = None):
+        """
+        Initializes the ToolProcessor.
+        Args:
+            agent: An optional instance of the Direct agent to enable context-aware
+                   features like tool call limits.
+        """
+        self.agent_tool = agent
 
     def _validate_function(self, func: Callable):
         """
@@ -133,11 +144,19 @@ class ToolProcessor:
                         config = getattr(method, '_upsonic_tool_config', ToolConfig())
                         yield (method, config)
             elif not inspect.isfunction(tool_item) and hasattr(tool_item, '__class__'):
-                for name, method in inspect.getmembers(tool_item, inspect.ismethod):
-                    if not name.startswith('_'):
-                        self._validate_function(method)
-                        config = getattr(method, '_upsonic_tool_config', ToolConfig())
-                        yield (method, config)
+                is_toolkit = isinstance(tool_item, ToolKit)
+                if is_toolkit:
+                    for name, method in inspect.getmembers(tool_item, inspect.ismethod):
+                        if hasattr(method, '_upsonic_tool_config'):
+                            self._validate_function(method)
+                            config = getattr(method, '_upsonic_tool_config', ToolConfig())
+                            yield (method, config)
+                else:
+                    for name, method in inspect.getmembers(tool_item, inspect.ismethod):
+                        if not name.startswith('_'):
+                            self._validate_function(method)
+                            config = getattr(method, '_upsonic_tool_config', ToolConfig())
+                            yield (method, config)
 
         if mcp_tools_to_remove:
             for tool in mcp_tools_to_remove:
@@ -153,6 +172,13 @@ class ToolProcessor:
         """
         @functools.wraps(original_func)
         async def behavioral_wrapper(*args: Any, **kwargs: Any) -> Any:
+            if self.agent_tool and self.agent_tool.tool_call_limit is not None:
+                if self.agent_tool.tool_call_count >= self.agent_tool.tool_call_limit:
+                    message = f"Tool call limit of {self.agent_tool.tool_call_limit} has been reached. Cannot execute '{original_func.__name__}'."
+                    console.print(f"[bold red]LIMIT REACHED:[/bold red] {message}")
+                    spacing()
+                    return message
+                self.agent_tool.tool_call_count += 1
             func_dict: Dict[str, Any] = {}
             if config.tool_hooks and config.tool_hooks.before:
                 result_before = config.tool_hooks.before(*args, **kwargs)

@@ -14,11 +14,6 @@ from upsonic.storage.types import SessionId, UserId
 T = TypeVar('T', bound=BaseModel)
 
 
-class Artifact(BaseModel):
-    artifact_id: str = Field(..., description="A unique identifier for the artifact.")
-    session_id: str = Field(..., description="Foreign key linking this artifact to a specific session.")
-    storage_uri: str = Field(..., description="The URI pointing to the artifact's actual location in a blob store.")
-
 
 class Storage(AsyncExecutionMixin, ABC):
     """
@@ -86,17 +81,6 @@ class Storage(AsyncExecutionMixin, ABC):
     def drop(self) -> None:
         raise NotImplementedError
 
-    @abstractmethod
-    def log_artifact(self, artifact: Artifact) -> None:
-        raise NotImplementedError
-    @abstractmethod
-    def store_artifact_data(self, artifact_id: str, session_id: str, binary_data: bytes) -> str:
-        raise NotImplementedError
-    @abstractmethod
-    def retrieve_artifact_data(self, storage_uri: str) -> bytes:
-        raise NotImplementedError
-
-
 
 
     @abstractmethod
@@ -141,14 +125,4 @@ class Storage(AsyncExecutionMixin, ABC):
 
     @abstractmethod
     async def drop_async(self) -> None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def log_artifact_async(self, artifact: Artifact) -> None:
-        raise NotImplementedError
-    @abstractmethod
-    async def store_artifact_data_async(self, artifact_id: str, session_id: str, binary_data: bytes) -> str:
-        raise NotImplementedError
-    @abstractmethod
-    async def retrieve_artifact_data_async(self, storage_uri: str) -> bytes:
         raise NotImplementedError

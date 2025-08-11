@@ -61,9 +61,19 @@ class Direct(BaseAgent):
                  instructions: str | None = None,
                  education: str | None = None,
                  work_experience: str | None = None,
+                 feed_tool_call_results: bool = False,
+                 show_tool_calls: bool = True,
+                 tool_call_limit: int = 5,
                  ):
         self.canvas = canvas
         self.memory = memory
+        print("feed_tool_call_results:", feed_tool_call_results)
+
+        if self.memory:
+            print(f"Using existing Memory instance feed_tool_call_results: {self.memory.feed_tool_call_results}")
+            self.memory.feed_tool_call_results = feed_tool_call_results
+            print("Updated Memory feed_tool_call_results:", self.memory.feed_tool_call_results)
+
         
         self.debug = debug
         self.default_llm_model = model
@@ -90,6 +100,11 @@ class Direct(BaseAgent):
 
         self.retry = retry
         self.mode = mode
+        
+        self.show_tool_calls = show_tool_calls
+        self.tool_call_limit = tool_call_limit
+
+        self.tool_call_count = 0
 
     @property
     def agent_id(self):
@@ -193,7 +208,7 @@ class Direct(BaseAgent):
 
         agent_model = get_agent_model(llm_model)
 
-        tool_processor = ToolProcessor()
+        tool_processor = ToolProcessor(agent=self)
         
         final_tools_for_pydantic_ai = []
         mcp_servers = []
@@ -243,7 +258,6 @@ class Direct(BaseAgent):
             return
 
         storage = self.memory.storage
-        # --- MODIFIED: Use `_async` suffixed methods for all lifecycle management ---
         was_connected_before = await storage.is_connected_async()
         try:
             if not was_connected_before:
@@ -261,6 +275,7 @@ class Direct(BaseAgent):
         Execute a direct LLM call with robust, context-managed storage connections
         and agent-level control over history management.
         """
+        self.tool_call_count = 0
         async with self._managed_storage_connection():
             processed_task = None
             exception_caught = None
@@ -279,7 +294,7 @@ class Direct(BaseAgent):
                     async with system_prompt_manager.manage_system_prompt(memory_handler) as sp_handler, \
                                 context_manager.manage_context(memory_handler) as ctx_handler:
 
-                        call_manager = CallManager(selected_model, task, debug=debug)
+                        call_manager = CallManager(selected_model, task, debug=debug, show_tool_calls=self.show_tool_calls)
                         task_manager = TaskManager(task, self)
                         reliability_manager = ReliabilityManager(task, self.reliability_layer, selected_model)
 

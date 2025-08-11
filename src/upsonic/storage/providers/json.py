@@ -149,11 +149,3 @@ class JSONStorage(Storage):
             if await asyncio.to_thread(self.profiles_path.exists): 
                 await asyncio.to_thread(shutil.rmtree, self.profiles_path)
         await self.create_async()
-
-
-    def log_artifact(self, artifact) -> None: raise NotImplementedError
-    def store_artifact_data(self, artifact_id: str, session_id: str, binary_data: bytes) -> str: raise NotImplementedError
-    def retrieve_artifact_data(self, storage_uri: str) -> bytes: raise NotImplementedError
-    async def log_artifact_async(self, artifact) -> None: raise NotImplementedError
-    async def store_artifact_data_async(self, artifact_id: str, session_id: str, binary_data: bytes) -> str: raise NotImplementedError
-    async def retrieve_artifact_data_async(self, storage_uri: str) -> bytes: raise NotImplementedError

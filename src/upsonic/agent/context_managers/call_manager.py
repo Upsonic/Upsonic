@@ -7,9 +7,10 @@ from upsonic.utils.tool_usage import tool_usage
 
 
 class CallManager:
-    def __init__(self, model, task, debug=False):
+    def __init__(self, model, task, debug=False, show_tool_calls=True):
         self.model = model
         self.task = task
+        self.show_tool_calls = show_tool_calls
         self.debug = debug
         self.start_time = None
         self.end_time = None
@@ -32,9 +33,10 @@ class CallManager:
             if self.model_response is not None:
                 # Calculate usage and tool usage
                 usage = llm_usage(self.model_response)
-                tool_usage_result = tool_usage(self.model_response, self.task)
-
-                
+                if self.show_tool_calls:
+                    tool_usage_result = tool_usage(self.model_response, self.task)
+                else:
+                    tool_usage_result = None
                 # Call the end logging
                 call_end(
                     self.model_response.output,
