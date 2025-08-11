@@ -36,6 +36,15 @@ Upsonic is a reliability-focused framework designed for real-world applications.
 
 ## Installation
 
+### Installing via Smithery
+
+To install GPT Computer Assistant for Claude Desktop automatically via [Smithery](https://smithery.ai/server/gpt-computer-assistant):
+
+```bash
+npx -y @smithery/cli install gpt-computer-assistant --client claude
+```
+
+### Manual Installation
 ```bash
 pip install upsonic
 
