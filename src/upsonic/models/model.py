@@ -2,33 +2,25 @@ import os
 from abc import ABC, abstractmethod
 from typing import Tuple, Optional, Any
 from dotenv import load_dotenv
-from pydantic_ai.models.openai import OpenAIModel
+
+from pydantic_ai.models.openai import OpenAIModel, OpenAIResponsesModel
 from pydantic_ai.models.anthropic import AnthropicModel
-from pydantic_ai.models.gemini import GeminiModel
-from openai import AsyncOpenAI, NOT_GIVEN
-from openai import AsyncAzureOpenAI
+from pydantic_ai.models.gemini import GeminiModel, ThinkingConfig
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.google_gla import GoogleGLAProvider
-from upsonic.utils.error_wrapper import upsonic_error_handler
 
-
+from openai import AsyncOpenAI
+from openai import AsyncAzureOpenAI
 from anthropic import AsyncAnthropicBedrock
 
-# Load environment variables from .env file
-load_dotenv()
-
-# Import from the centralized model registry
+from upsonic.utils.error_wrapper import upsonic_error_handler
 from upsonic.models.model_registry import (
     MODEL_SETTINGS,
-    MODEL_REGISTRY,
-    OPENAI_MODELS,
-    ANTHROPIC_MODELS,
     get_model_registry_entry,
-    get_model_settings,
-    has_capability
 )
 
+load_dotenv()
 
 class ModelCreationStrategy(ABC):
     """Abstract base class for model creation strategies."""
@@ -41,7 +33,6 @@ class ModelCreationStrategy(ABC):
 
 class OpenAIStrategy(ModelCreationStrategy):
     """Strategy for creating OpenAI models."""
-    
     def create_model(self, model_name: str, **kwargs) -> Tuple[Optional[Any], Optional[dict]]:
         api_key_name = kwargs.get("api_key", "OPENAI_API_KEY")
         api_key = os.getenv(api_key_name)
@@ -49,12 +40,11 @@ class OpenAIStrategy(ModelCreationStrategy):
             return None, {"status_code": 401, "detail": f"No API key provided. Please set {api_key_name} in your configuration."}
         
         client = AsyncOpenAI(api_key=api_key)
-        return OpenAIModel(model_name, provider=OpenAIProvider(openai_client=client)), None
+        return OpenAIResponsesModel(model_name, provider=OpenAIProvider(openai_client=client)), None
 
 
 class AzureOpenAIStrategy(ModelCreationStrategy):
     """Strategy for creating Azure OpenAI models."""
-    
     def create_model(self, model_name: str, **kwargs) -> Tuple[Optional[Any], Optional[dict]]:
         azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
         azure_api_version = os.getenv("AZURE_OPENAI_API_VERSION")
@@ -79,18 +69,17 @@ class AzureOpenAIStrategy(ModelCreationStrategy):
             azure_endpoint=azure_endpoint, 
             api_key=azure_api_key
         )
-        return OpenAIModel(model_name, provider=OpenAIProvider(openai_client=client)), None
+        return OpenAIResponsesModel(model_name, provider=OpenAIProvider(openai_client=client)), None
 
 
 class DeepseekStrategy(ModelCreationStrategy):
     """Strategy for creating Deepseek models."""
-    
     def create_model(self, model_name: str, **kwargs) -> Tuple[Optional[Any], Optional[dict]]:
         deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
         if not deepseek_api_key:
             return None, {"status_code": 401, "detail": "No API key provided. Please set DEEPSEEK_API_KEY in your configuration."}
 
-        return OpenAIModel(
+        return OpenAIResponsesModel(
             'deepseek-chat',
             provider=OpenAIProvider(
                 base_url='https://api.deepseek.com',
@@ -101,11 +90,10 @@ class DeepseekStrategy(ModelCreationStrategy):
 
 class OllamaStrategy(ModelCreationStrategy):
     """Strategy for creating Ollama models."""
-    
     def create_model(self, model_name: str, **kwargs) -> Tuple[Optional[Any], Optional[dict]]:
         # Ollama runs locally, so we don't need API keys
         base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-        return OpenAIModel(
+        return OpenAIResponsesModel(
             model_name,
             provider=OpenAIProvider(base_url=base_url)
         ), None
@@ -113,13 +101,12 @@ class OllamaStrategy(ModelCreationStrategy):
 
 class OpenRouterStrategy(ModelCreationStrategy):
     """Strategy for creating OpenRouter models."""
-    
     def create_model(self, model_name: str, **kwargs) -> Tuple[Optional[Any], Optional[dict]]:
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
             return None, {"status_code": 401, "detail": "No API key provided. Please set OPENROUTER_API_KEY in your configuration."}
         
-        return OpenAIModel(
+        return OpenAIResponsesModel(
             model_name,
             provider=OpenAIProvider(
                 base_url="https://openrouter.ai/api/v1",
@@ -130,7 +117,6 @@ class OpenRouterStrategy(ModelCreationStrategy):
 
 class GeminiStrategy(ModelCreationStrategy):
     """Strategy for creating Gemini models."""
-    
     def create_model(self, model_name: str, **kwargs) -> Tuple[Optional[Any], Optional[dict]]:
         api_key = os.getenv("GOOGLE_GLA_API_KEY")
         if not api_key:
@@ -144,7 +130,6 @@ class GeminiStrategy(ModelCreationStrategy):
 
 class AnthropicStrategy(ModelCreationStrategy):
     """Strategy for creating Anthropic models."""
-    
     def create_model(self, model_name: str, **kwargs) -> Tuple[Optional[Any], Optional[dict]]:
         anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
         if not anthropic_api_key:
@@ -154,7 +139,6 @@ class AnthropicStrategy(ModelCreationStrategy):
 
 class BedrockAnthropicStrategy(ModelCreationStrategy):
     """Strategy for creating AWS Bedrock Anthropic models."""
-    
     def create_model(self, model_name: str, **kwargs) -> Tuple[Optional[Any], Optional[dict]]:
         aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
         aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
@@ -168,8 +152,8 @@ class BedrockAnthropicStrategy(ModelCreationStrategy):
             aws_secret_key=aws_secret_access_key,
             aws_region=aws_region
         )
-
         return AnthropicModel(model_name, provider=AnthropicProvider(anthropic_client=bedrock_client)), None
+
 
 
 class ModelCreationContext:
@@ -192,7 +176,6 @@ class ModelCreationContext:
         strategy = self._strategies.get(provider)
         if not strategy:
             return None, {"status_code": 400, "detail": f"Unsupported provider: {provider}"}
-        
         return strategy.create_model(model_name, **kwargs)
     
     def register_strategy(self, provider: str, strategy: ModelCreationStrategy):
@@ -209,10 +192,10 @@ _model_context = ModelCreationContext()
 
 
 @upsonic_error_handler(max_retries=1, show_error_details=True)
-def get_agent_model(llm_model: str):
-    """Create a model instance based on the registry entry."""
+def get_agent_model(llm_model: str, reasoning_effort: str, reasoning_summary: str, reasoning: bool):
+    """Create a model instance based on the registry entry with dynamic settings."""
     from upsonic.utils.package.exception import NoAPIKeyException, ModelConnectionError
-    
+
     registry_entry = get_model_registry_entry(llm_model)
     if not registry_entry:
         raise ModelConnectionError(
@@ -220,12 +203,46 @@ def get_agent_model(llm_model: str):
             error_code="UNSUPPORTED_MODEL",
             original_error=None
         )
-    
+
     provider = registry_entry["provider"]
     model_name = registry_entry["model_name"]
     
-    # Extract additional parameters from registry entry
-    additional_params = {k: v for k, v in registry_entry.items() if k not in ["provider", "model_name"]}
+    settings = None
+
+    if reasoning:
+        model_reasoning_config = registry_entry.get("reasoning", {})
+        if not model_reasoning_config:
+            print(f"Warning: Reasoning was requested for model '{llm_model}', but it is not configured for reasoning in MODEL_REGISTRY.")
+        else:
+            SettingsClass = MODEL_SETTINGS.get(provider)
+
+            if SettingsClass:
+                
+                if provider in ("openai", "azure_openai", "deepseek", "openrouter", "ollama"):
+                    settings = SettingsClass(
+                        openai_reasoning_effort=reasoning_effort,
+                        openai_reasoning_summary=reasoning_summary
+                    )
+                
+                elif provider in ("anthropic", "bedrock_anthropic"):
+                    budget = model_reasoning_config.get('budget_tokens')
+                    if budget is not None:
+                        settings = SettingsClass(
+                            anthropic_thinking={'type': 'enabled', 'budget_tokens': budget}
+                        )
+
+                elif provider == "gemini":
+                    thinking_config: ThinkingConfig = {
+                        'include_thoughts': model_reasoning_config.get('include_thoughts', False),
+                        'thinking_budget': model_reasoning_config.get('thinking_budget', 0)
+                    }
+                    settings = SettingsClass(
+                        gemini_thinking_config = thinking_config
+                    )
+            else:
+                print(f"Warning: Reasoning requested, but no settings class found for provider '{provider}'.")
+
+    additional_params = {k: v for k, v in registry_entry.items() if k not in ["provider", "model_name", "reasoning", "capabilities", "pricing", "required_environment_variables"]}
     
     model, error = _model_context.create_model(provider, model_name, **additional_params)
     
@@ -239,7 +256,7 @@ def get_agent_model(llm_model: str):
                 original_error=None
             )
     
-    return model
+    return model, settings
 
 
 def register_model_strategy(provider: str, strategy: ModelCreationStrategy):
@@ -250,4 +267,3 @@ def register_model_strategy(provider: str, strategy: ModelCreationStrategy):
 def get_supported_providers() -> list:
     """Get list of supported providers."""
     return _model_context.get_supported_providers()
-

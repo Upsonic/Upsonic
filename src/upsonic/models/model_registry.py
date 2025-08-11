@@ -1,8 +1,9 @@
 import os
 from pydantic_ai.settings import ModelSettings
 from decimal import Decimal
-from pydantic_ai.models.openai import OpenAIModelSettings
+from pydantic_ai.models.openai import OpenAIResponsesModelSettings
 from pydantic_ai.models.anthropic import AnthropicModelSettings
+from pydantic_ai.models.gemini import GeminiModelSettings
 
 
 from typing import Literal
@@ -39,11 +40,14 @@ ModelNames = Literal[
 
 # Define model settings in a centralized dictionary for easier maintenance
 MODEL_SETTINGS = {
-    "openai": OpenAIModelSettings(parallel_tool_calls=False),
-    "anthropic": AnthropicModelSettings(parallel_tool_calls=False),
-    "openrouter": OpenAIModelSettings(parallel_tool_calls=False),
-    # Add other provider settings as needed
+    "openai": OpenAIResponsesModelSettings,
+    "anthropic": AnthropicModelSettings,
+    "openrouter": OpenAIResponsesModelSettings,
+    "gemini": GeminiModelSettings,
 }
+
+
+print(f"[DEBUG] MODEL_REGISTRY.PY: MODEL_SETTINGS defined as: {MODEL_SETTINGS}")
 
 # OpenAI models that don't support parallel tool calls
 OPENAI_NON_PARALLEL_MODELS = {
@@ -58,56 +62,66 @@ MODEL_REGISTRY = {
         "model_name": "gpt-4o", 
         "capabilities": [],
         "pricing": {"input": 2.50, "output": 10.00},
-        "required_environment_variables": ["OPENAI_API_KEY"]
+        "required_environment_variables": ["OPENAI_API_KEY"],
+        "reasoning": {},
     },
     "openai/gpt-4.5-preview": {
         "provider": "openai", 
         "model_name": "gpt-4.5-preview", 
         "capabilities": [],
         "pricing": {"input": 75.00, "output": 150.00},
-        "required_environment_variables": ["OPENAI_API_KEY"]
+        "required_environment_variables": ["OPENAI_API_KEY"],
+        "reasoning": {},
     },
     "openai/gpt-4.1-nano": {
         "provider": "openai", 
         "model_name": "gpt-4.1-nano", 
         "capabilities": [],
         "pricing": {"input": 0.10, "output": 0.40},
-        "required_environment_variables": ["OPENAI_API_KEY"]
+        "required_environment_variables": ["OPENAI_API_KEY"],
+        "reasoning": {},
     },
     "openai/gpt-4.1-mini": {
         "provider": "openai", 
         "model_name": "gpt-4.1-mini", 
         "capabilities": [],
         "pricing": {"input": 0.40, "output": 1.60},
-        "required_environment_variables": ["OPENAI_API_KEY"]
+        "required_environment_variables": ["OPENAI_API_KEY"],
+        "reasoning": {},
     },
     "openai/o3-mini": {
         "provider": "openai", 
         "model_name": "o3-mini", 
         "capabilities": [],
         "pricing": {"input": 1.1, "output": 4.4},
-        "required_environment_variables": ["OPENAI_API_KEY"]
+        "required_environment_variables": ["OPENAI_API_KEY"],
+        "reasoning": {"reasoning_effort": ["low", "medium", "high"],
+                      "reasoning_summary": "detailed"}
     },
     "openai/gpt-4o-mini": {
         "provider": "openai", 
         "model_name": "gpt-4o-mini", 
         "capabilities": [],
         "pricing": {"input": 0.15, "output": 0.60},
-        "required_environment_variables": ["OPENAI_API_KEY"]
+        "required_environment_variables": ["OPENAI_API_KEY"],
+        "reasoning": {},
     },
     "openai/gpt-4.1": {
         "provider": "openai", 
         "model_name": "gpt-4.1", 
         "capabilities": [],
         "pricing": {"input": 2.0, "output": 8.0},
-        "required_environment_variables": ["OPENAI_API_KEY"]
+        "required_environment_variables": ["OPENAI_API_KEY"],
+        "reasoning": {},
     },
     "openai/o4-mini": {
         "provider": "openai", 
         "model_name": "o4-mini", 
         "capabilities": [],
         "pricing": {"input": 1.10, "output": 4.40},
-        "required_environment_variables": ["OPENAI_API_KEY"]
+        "required_environment_variables": ["OPENAI_API_KEY"],
+        "reasoning": {"reasoning_effort": ["low", "medium", "high"],
+                      "reasoning_summary": "detailed"}
     },
     # Azure OpenAI models
     "azure/gpt-4o": {
@@ -115,7 +129,8 @@ MODEL_REGISTRY = {
         "model_name": "gpt-4o", 
         "capabilities": [],
         "pricing": {"input": 2.50, "output": 10.00},
-        "required_environment_variables": ["AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_VERSION", "AZURE_OPENAI_API_KEY"]
+        "required_environment_variables": ["AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_VERSION", "AZURE_OPENAI_API_KEY"],
+        "reasoning": {},
     },
 
     "azure/gpt-4o-mini": {
@@ -123,7 +138,8 @@ MODEL_REGISTRY = {
         "model_name": "gpt-4o-mini", 
         "capabilities": [],
         "pricing":{"input": 0.15, "output": 0.60},
-        "required_environment_variables": ["AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_VERSION", "AZURE_OPENAI_API_KEY"]
+        "required_environment_variables": ["AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_VERSION", "AZURE_OPENAI_API_KEY"],
+        "reasoning": {},
     },
     
     # Deepseek model
@@ -132,7 +148,9 @@ MODEL_REGISTRY = {
         "model_name": "deepseek-chat", 
         "capabilities": [],
         "pricing": {"input": 0.27, "output": 1.10},
-        "required_environment_variables": ["DEEPSEEK_API_KEY"]
+        "required_environment_variables": ["DEEPSEEK_API_KEY"],
+        "reasoning": {"reasoning_effort": ["low", "medium", "high"],
+                      "reasoning_summary": "detailed"}
     },
 
     "gemini/gemini-2.0-flash": {
@@ -142,7 +160,8 @@ MODEL_REGISTRY = {
                         "audio": ["wav", "mp3", "aiff", "aac", "ogg", "flac"],
                         "video": ["mp4", "mpeg", "mpg", "mov", "avi", "flv", "webm", "wmv", "3gpp", "3gp"]},
         "pricing": {"input": 0.10, "output": 0.40},
-        "required_environment_variables": ["GOOGLE_GLA_API_KEY"]
+        "required_environment_variables": ["GOOGLE_GLA_API_KEY"],
+        "reasoning": {},
     },
 
     "gemini/gemini-1.5-pro": {
@@ -152,7 +171,8 @@ MODEL_REGISTRY = {
                         "audio": ["wav", "mp3", "aiff", "aac", "ogg", "flac"],
                         "video": ["mp4", "mpeg", "mpg", "mov", "avi", "flv", "webm", "wmv", "3gpp", "3gp"]},
         "pricing": {"input": 1.25, "output": 5.00},
-        "required_environment_variables": ["GOOGLE_GLA_API_KEY"]
+        "required_environment_variables": ["GOOGLE_GLA_API_KEY"],
+        "reasoning": {},
     },
 
     "gemini/gemini-1.5-flash": {
@@ -162,7 +182,8 @@ MODEL_REGISTRY = {
                         "audio": ["wav", "mp3", "aiff", "aac", "ogg", "flac"],
                         "video": ["mp4", "mpeg", "mpg", "mov", "avi", "flv", "webm", "wmv", "3gpp", "3gp"]},
         "pricing": {"input": 0.075, "output": 0.30},
-        "required_environment_variables": ["GOOGLE_GLA_API_KEY"]
+        "required_environment_variables": ["GOOGLE_GLA_API_KEY"],
+        "reasoning": {},
     },
     
 
@@ -173,7 +194,8 @@ MODEL_REGISTRY = {
         "model_name": "llama3.1:8b", 
         "capabilities": [],
         "pricing": {"input": 0.0, "output": 0.0},
-        "required_environment_variables": []
+        "required_environment_variables": [],
+        "reasoning": {},
     },
 
     "ollama/llama3.1:70b": {
@@ -181,7 +203,8 @@ MODEL_REGISTRY = {
         "model_name": "llama3.1:70b", 
         "capabilities": [],
         "pricing": {"input": 0.0, "output": 0.0},
-        "required_environment_variables": []
+        "required_environment_variables": [],
+        "reasoning": {},
     },
 
     "ollama/qwen3:30b": {
@@ -189,14 +212,16 @@ MODEL_REGISTRY = {
         "model_name": "qwen3:30b", 
         "capabilities": [],
         "pricing": {"input": 0.0, "output": 0.0},
-        "required_environment_variables": []
+        "required_environment_variables": [],
+        "reasoning": {},
     },
     "ollama/gpt-oss:20b": {
         "provider": "ollama", 
         "model_name": "gpt-oss:20b", 
         "capabilities": [],
         "pricing": {"input": 0.0, "output": 0.0},
-        "required_environment_variables": []
+        "required_environment_variables": [],
+        "reasoning": {},
     },
     # Anthropic models
     "claude/claude-3-5-sonnet": {
@@ -204,14 +229,18 @@ MODEL_REGISTRY = {
         "model_name": "claude-3-5-sonnet-latest", 
         "capabilities": ["computer_use"],
         "pricing": {"input": 3.00, "output": 15.00},
-        "required_environment_variables": ["ANTHROPIC_API_KEY"]
+        "required_environment_variables": ["ANTHROPIC_API_KEY"],
+        "reasoning": {},
     },
     "claude/claude-3-7-sonnet": {
         "provider": "anthropic", 
         "model_name": "claude-3-7-sonnet-latest", 
         "capabilities": ["computer_use"],
         "pricing": {"input": 3.00, "output": 15.00},
-        "required_environment_variables": ["ANTHROPIC_API_KEY"]
+        "required_environment_variables": ["ANTHROPIC_API_KEY"],
+        "reasoning": {
+            "budget_tokens": 1024
+        },
     },
 
     
@@ -221,7 +250,8 @@ MODEL_REGISTRY = {
         "model_name": "us.anthropic.claude-3-5-sonnet-20240620-v1:0", 
         "capabilities": ["computer_use"],
         "pricing": {"input": 3.00, "output": 15.00},
-        "required_environment_variables": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"]
+        "required_environment_variables": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"],
+        "reasoning": {},
     },
 
     # OpenRouter models
@@ -230,21 +260,24 @@ MODEL_REGISTRY = {
         "model_name": "anthropic/claude-3-sonnet",
         "capabilities": [],
         "pricing": {"input": 0.0, "output": 0.0},
-        "required_environment_variables": ["OPENROUTER_API_KEY"]
+        "required_environment_variables": ["OPENROUTER_API_KEY"],
+        "reasoning": {},
     },
     "openrouter/meta-llama/llama-3.1-8b-instruct": {
         "provider": "openrouter",
         "model_name": "meta-llama/llama-3.1-8b-instruct",
         "capabilities": [],
         "pricing": {"input": 0.0, "output": 0.0},
-        "required_environment_variables": ["OPENROUTER_API_KEY"]
+        "required_environment_variables": ["OPENROUTER_API_KEY"],
+        "reasoning": {},
     },
     "openrouter/google/gemini-pro": {
         "provider": "openrouter",
         "model_name": "google/gemini-pro",
         "capabilities": [],
         "pricing": {"input": 0.0, "output": 0.0},
-        "required_environment_variables": ["OPENROUTER_API_KEY"]
+        "required_environment_variables": ["OPENROUTER_API_KEY"],
+        "reasoning": {},
     },
 }
 
@@ -311,7 +344,7 @@ def get_model_settings(llm_model: str, tools=None):
 
     # Special handling for OpenAI models that don't support parallel tool calls
     if model_info["provider"] == "openai" and model_info["model_name"] in OPENAI_NON_PARALLEL_MODELS:
-        return OpenAIModelSettings()
+        return OpenAIResponsesModelSettings()
     
     # For all other models, return provider settings
     provider = model_info["provider"]
