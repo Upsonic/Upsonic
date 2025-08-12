@@ -9,16 +9,19 @@ import time
 from pathlib import Path
 from typing import Callable, Any, Generator, Tuple, Dict, TYPE_CHECKING, List, Optional
 import asyncio
+import copy
 
 from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio
 
 from .tool import ToolConfig, ToolKit
 from upsonic.tasks.tasks import Task
 from upsonic.utils.printing import console, spacing
+from upsonic.tools.pseudo_tools import plan_and_execute
+from upsonic.tools.thought import Thought
+
 
 if TYPE_CHECKING:
     from upsonic.agent.agent import Direct
-
 
 
 class ToolValidationError(Exception):
@@ -68,6 +71,75 @@ class ToolProcessor:
                 f"Tool '{func.__name__}' is missing a docstring. The docstring is required to explain the tool's purpose to the LLM."
             )
 
+    def generate_orchestrator_wrapper(self) -> Callable:
+        """
+        Generates a highly specialized wrapper for the 'plan_and_execute' tool.
+
+        This wrapper acts as the main orchestration engine for multi-step tasks.
+        It iterates through the LLM's plan, executes each tool sequentially,
+        gathers the results, and then calls the agent recursively for final
+        synthesis.
+        """
+        async def orchestrator_wrapper(thought: Thought) -> Any:
+            console.print("[bold magenta]Orchestrator Activated:[/bold magenta] Received plan, beginning sequential execution.")
+            spacing()
+            agent = self.agent_tool
+            if not agent:
+                return "Error: Orchestrator wrapper was not properly initialized with an agent instance."
+
+            execution_history = f"Orchestrator's execution history for the user's request:\n"
+            execution_history += f"Initial Thought & Plan: {thought.plan}\nand Reasoning: {thought.reasoning}\n\n"
+            
+            all_tools = {
+                tool_func.__name__: tool_func 
+                for tool_func in agent._upsonic_wrapped_tools.values()
+                if tool_func.__name__ != 'plan_and_execute'
+            }
+
+            for i, step in enumerate(thought.plan):
+                tool_name = step.tool_name
+                params = step.parameters
+                tool_name = tool_name.split('.')[-1]
+                
+                console.print(f"[bold blue]Executing Plan Step {i+1}/{len(thought.plan)}:[/bold blue] Calling tool [cyan]{tool_name}[/cyan] with params {params}")
+
+                if tool_name not in all_tools:
+                    result = f"Error: Tool '{tool_name}' is not an available tool."
+                    console.print(f"[bold red]{result}[/bold red]")
+                else:
+                    try:
+                        tool_to_call = all_tools[tool_name]
+                        result = await tool_to_call(**params)
+                    except Exception as e:
+                        error_message = f"An error occurred while executing tool '{tool_name}': {e}"
+                        console.print(f"[bold red]{error_message}[/bold red]")
+                        result = error_message
+                
+                execution_history += f"\nStep {i+1}: Called tool '{tool_name}'.\nResult: {result}\n"
+
+            console.print("[bold magenta]Orchestrator:[/bold magenta] All plan steps executed. Preparing for final synthesis.")
+            spacing()
+
+            synthesis_prompt = (
+                "You are in the final step of a multi-step task. "
+                "You have already executed a plan and gathered all necessary information. "
+                "Based *only* on the execution history provided below, synthesize a complete "
+                "and final answer for the user's original request.\n\n"
+                "<ExecutionHistory>\n"
+                f"{execution_history}"
+                "</ExecutionHistory>"
+            )
+            
+            synthesis_task = Task(description=synthesis_prompt, not_main_task=True)
+
+            synthesis_agent = copy.copy(agent)
+            synthesis_agent.use_reflective_execution = False
+            
+            final_response = await synthesis_agent.do_async(synthesis_task)
+            return final_response
+
+        return orchestrator_wrapper
+
     def normalize_and_process(self, task_tools: List[Any]) -> Generator[Tuple[Callable, Any], None, None]:
         """
         Processes a list of raw tools from a Task.
@@ -82,6 +154,11 @@ class ToolProcessor:
             - For a regular tool: (callable_function, ToolConfig)
             - For an MCP tool: (None, mcp_server_instance)
         """
+        if self.agent_tool and getattr(self.agent_tool, 'use_reflective_execution', False):
+            setattr(plan_and_execute, '_is_orchestrator', True)
+            self._validate_function(plan_and_execute)
+            yield (plan_and_execute, ToolConfig())
+
         from upsonic.agent.agent import Direct
         if not task_tools:
             return
@@ -168,7 +245,6 @@ class ToolProcessor:
         Dynamically generates and returns a new function that wraps the original tool.
         This new function contains all the behavioral logic (caching, confirmation, etc.)
         defined in the ToolConfig.
-        (This is the method provided in the previous step, included here for completeness.)
         """
         @functools.wraps(original_func)
         async def behavioral_wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -240,7 +316,7 @@ class ToolProcessor:
                     result = await original_func(*args, **kwargs)
                 else:
                     # To avoid blocking the event loop with a long-running sync function,
-                    # run it in a thread pool executor * _ *.
+                    # run it in a thread pool executor * _ *
                     loop = asyncio.get_running_loop()
                     result = await loop.run_in_executor(
                         None,

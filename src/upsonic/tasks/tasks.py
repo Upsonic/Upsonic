@@ -29,6 +29,7 @@ class Task(BaseModel):
     end_time: Optional[int] = None
     agent: Optional[Any] = None
     response_lang: Optional[str] = None
+    enable_thinking: Optional[bool] = None
     _tool_calls: List[Dict[str, Any]] = None
 
 
@@ -49,6 +50,7 @@ class Task(BaseModel):
         end_time: Optional[int] = None,
         agent: Optional[Any] = None,
         response_lang: Optional[str] = None,
+        enable_thinking: Optional[bool] = None,
         **data
     ):
         if description is not None:
@@ -74,6 +76,7 @@ class Task(BaseModel):
             "end_time": end_time,
             "agent": agent,
             "response_lang": response_lang,
+            "enable_thinking": enable_thinking,
             "_tool_calls": []
         })
         

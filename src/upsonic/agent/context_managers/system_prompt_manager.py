@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Dict, Any, Optional
+import json
 
 from upsonic.context.agent import turn_agent_to_string
 from upsonic.context.default_prompt import default_prompt
+from upsonic.tools.thought import Thought, PlanStep
 
 if TYPE_CHECKING:
     from upsonic.agent.agent import Direct
@@ -51,6 +53,38 @@ class SystemPromptManager:
             The fully constructed system prompt string.
         """
         prompt_parts = []
+    
+        is_reflective_mode = self.agent.use_reflective_execution
+        if self.task.enable_thinking is not None:
+            is_reflective_mode = self.task.enable_thinking
+        
+        if is_reflective_mode:
+            thought_schema_str = json.dumps(Thought.model_json_schema(), indent=2)
+
+            reflective_instructions = f"""### ADVANCED REFLECTIVE EXECUTION MODE ENABLED ###
+
+            You are operating in a special mode for complex tasks. Your primary goal is to use the `plan_and_execute` master tool to solve the user's request.
+            Your response for this tool MUST conform to the JSON schema for the 'Thought' object provided below.
+            **Your workflow MUST be as follows:**
+
+            1.  **Analyze and Deconstruct:** First, deeply analyze the user's request. Break it down into a logical sequence of smaller, concrete steps that can be accomplished by the available tools.
+
+            2.  **Formulate a `Thought`:** Formulate a `Thought` object that strictly follows the JSON schema below!!! THAT IS YOUR OUTPUT FORMAT!!!
+
+            3.  **Call the Master Tool:** Call the `plan_and_execute` tool, passing your completed `Thought` object as the sole argument.
+
+            4.  **DO NOT** call any other tool directly. The `plan_and_execute` orchestrator will execute your plan for you. Your job is to create the plan; the framework will handle the execution.
+
+            5.  **Synthesize:** After the orchestrator has executed all the steps in your plan, you will be re-awakened with a complete history of the execution. Your final task is to use this history to synthesize a single, comprehensive answer for the user.
+            
+            <JSONSchemas>
+            <Schema name="Thought">
+            {thought_schema_str}
+            </Schema>
+            </JSONSchemas>
+            """
+            prompt_parts.insert(0, reflective_instructions)
+
         base_prompt = ""
 
         if memory_handler:
@@ -79,7 +113,7 @@ class SystemPromptManager:
             if self.agent.work_experience:
                 base_prompt += f"\nThis is your work experiences: {self.agent.work_experience}"
                 has_any_info = True
-            if not has_any_info:
+            if not has_any_info and not is_reflective_mode:
                 base_prompt = default_prompt().prompt
         
         prompt_parts.append(base_prompt.strip())
@@ -96,7 +130,6 @@ class SystemPromptManager:
         if found_agent_context:
             agent_context_str += "\n</YourCharacter>"
             prompt_parts.append(agent_context_str)
-            
         return "\n\n".join(prompt_parts)
     
     def get_system_prompt(self) -> str:

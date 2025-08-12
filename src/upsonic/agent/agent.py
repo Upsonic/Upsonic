@@ -4,11 +4,9 @@ import uuid
 from typing import Any, List, Union, Optional, Literal
 import time
 from contextlib import asynccontextmanager
+import copy
 
 from pydantic_ai import Agent as PydanticAgent
-from pydantic_ai import BinaryContent
-from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio
-from pydantic_ai.messages import ModelMessagesTypeAdapter
 
 
 from upsonic.canvas.canvas import Canvas
@@ -64,6 +62,7 @@ class Direct(BaseAgent):
                  feed_tool_call_results: bool = False,
                  show_tool_calls: bool = True,
                  tool_call_limit: int = 5,
+                 use_reflective_execution: bool = False,
                  ):
         self.canvas = canvas
         self.memory = memory
@@ -96,13 +95,15 @@ class Direct(BaseAgent):
         if retry < 1:
             raise ValueError("The 'retry' count must be at least 1.")
         if mode not in ("raise", "return_false"):
-            raise ValueError(f"Invalid retry_mode '{retry_mode}'. Must be 'raise' or 'return_false'.")
+            raise ValueError(f"Invalid retry_mode '{mode}'. Must be 'raise' or 'return_false'.")
 
         self.retry = retry
         self.mode = mode
         
         self.show_tool_calls = show_tool_calls
         self.tool_call_limit = tool_call_limit
+        
+        self.use_reflective_execution = use_reflective_execution
 
         self.tool_call_count = 0
 
@@ -208,7 +209,14 @@ class Direct(BaseAgent):
 
         agent_model = get_agent_model(llm_model)
 
-        tool_processor = ToolProcessor(agent=self)
+        is_reflective_mode = self.use_reflective_execution
+        if single_task.enable_thinking is not None:
+            is_reflective_mode = single_task.enable_thinking
+        
+        agent_for_this_run = copy.copy(self)
+        agent_for_this_run.use_reflective_execution = is_reflective_mode
+
+        tool_processor = ToolProcessor(agent=agent_for_this_run)
         
         final_tools_for_pydantic_ai = []
         mcp_servers = []
@@ -218,11 +226,17 @@ class Direct(BaseAgent):
         for item1, item2 in processed_tools_generator:
             if callable(item1):
                 original_tool, config = item1, item2
-                wrapped_tool = tool_processor.generate_behavioral_wrapper(original_tool, config)
+                
+                if hasattr(original_tool, '_is_orchestrator'):
+                    wrapped_tool = tool_processor.generate_orchestrator_wrapper()
+                else:
+                    wrapped_tool = tool_processor.generate_behavioral_wrapper(original_tool, config)
+                
                 final_tools_for_pydantic_ai.append(wrapped_tool)
             elif item1 is None and item2 is not None:
                 mcp_server = item2
                 mcp_servers.append(mcp_server)
+
         the_agent = PydanticAgent(
             agent_model,
             output_type=single_task.response_format,
@@ -231,18 +245,27 @@ class Direct(BaseAgent):
             retries=5,
             mcp_servers=mcp_servers
         )
+
         if not hasattr(the_agent, '_registered_tools'):
             the_agent._registered_tools = set()
+        
         for tool_func in final_tools_for_pydantic_ai:
-            tool_id = id(tool_func) # Get a unique ID for the function object
+            tool_id = id(tool_func)
             if tool_id not in the_agent._registered_tools:
                 the_agent.tool_plain(tool_func)
                 the_agent._registered_tools.add(tool_id)
-        if not hasattr(the_agent, '_upsonic_wrapped_tools'):
-            the_agent._upsonic_wrapped_tools = {}
-        the_agent._upsonic_wrapped_tools = {
+        
+        if not hasattr(self, '_upsonic_wrapped_tools'):
+            self._upsonic_wrapped_tools = {}
+        if not hasattr(agent_for_this_run, '_upsonic_wrapped_tools'):
+            agent_for_this_run._upsonic_wrapped_tools = {}
+        
+        # Store a reference to the final wrapped tools for the orchestrator to access.
+        self._upsonic_wrapped_tools = {
             tool_func.__name__: tool_func for tool_func in final_tools_for_pydantic_ai
         }
+        agent_for_this_run._upsonic_wrapped_tools = self._upsonic_wrapped_tools
+
         return the_agent
 
 
@@ -308,7 +331,6 @@ class Direct(BaseAgent):
                                             task.build_agent_input(),
                                             message_history=memory_handler.get_message_history()
                                         )
-
                                     model_response = call_handler.process_response(model_response)
                                     model_response = task_handler.process_response(model_response)
                                     model_response = memory_handler.process_response(model_response)
