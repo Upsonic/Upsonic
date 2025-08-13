@@ -62,11 +62,11 @@ class Direct(BaseAgent):
                  feed_tool_call_results: bool = False,
                  show_tool_calls: bool = True,
                  tool_call_limit: int = 5,
-                 use_reflective_execution: bool = False,
+                 enable_thinking_tool: bool = False,
+                 enable_reasoning_tool: bool = False,
                  ):
         self.canvas = canvas
         self.memory = memory
-        print("feed_tool_call_results:", feed_tool_call_results)
 
         if self.memory:
             print(f"Using existing Memory instance feed_tool_call_results: {self.memory.feed_tool_call_results}")
@@ -102,10 +102,11 @@ class Direct(BaseAgent):
         
         self.show_tool_calls = show_tool_calls
         self.tool_call_limit = tool_call_limit
-        
-        self.use_reflective_execution = use_reflective_execution
 
         self.tool_call_count = 0
+
+        self.enable_thinking_tool = enable_thinking_tool
+        self.enable_reasoning_tool = enable_reasoning_tool
 
     @property
     def agent_id(self):
@@ -209,12 +210,21 @@ class Direct(BaseAgent):
 
         agent_model = get_agent_model(llm_model)
 
-        is_reflective_mode = self.use_reflective_execution
-        if single_task.enable_thinking is not None:
-            is_reflective_mode = single_task.enable_thinking
+        is_thinking_enabled = self.enable_thinking_tool
+        if single_task.enable_thinking_tool is not None:
+            is_thinking_enabled = single_task.enable_thinking_tool
+
+        is_reasoning_enabled = self.enable_reasoning_tool
+        if single_task.enable_reasoning_tool is not None:
+            is_reasoning_enabled = single_task.enable_reasoning_tool
+
+        # Sanity Check: Reasoning requires Thinking.
+        if is_reasoning_enabled and not is_thinking_enabled:
+            raise ValueError("Configuration error: 'enable_reasoning_tool' cannot be True if 'enable_thinking_tool' is False.")
         
         agent_for_this_run = copy.copy(self)
-        agent_for_this_run.use_reflective_execution = is_reflective_mode
+        agent_for_this_run.enable_thinking_tool = is_thinking_enabled
+        agent_for_this_run.enable_reasoning_tool = is_reasoning_enabled
 
         tool_processor = ToolProcessor(agent=agent_for_this_run)
         
@@ -223,18 +233,16 @@ class Direct(BaseAgent):
         
         processed_tools_generator = tool_processor.normalize_and_process(single_task.tools)
 
-        for item1, item2 in processed_tools_generator:
-            if callable(item1):
-                original_tool, config = item1, item2
-                
+        for original_tool, config in processed_tools_generator:
+            if callable(original_tool):
                 if hasattr(original_tool, '_is_orchestrator'):
-                    wrapped_tool = tool_processor.generate_orchestrator_wrapper()
+                    wrapped_tool = tool_processor.generate_orchestrator_wrapper(self, single_task)
                 else:
                     wrapped_tool = tool_processor.generate_behavioral_wrapper(original_tool, config)
                 
                 final_tools_for_pydantic_ai.append(wrapped_tool)
-            elif item1 is None and item2 is not None:
-                mcp_server = item2
+            elif original_tool is None and config is not None:
+                mcp_server = config
                 mcp_servers.append(mcp_server)
 
         the_agent = PydanticAgent(

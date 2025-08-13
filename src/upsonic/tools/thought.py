@@ -5,11 +5,10 @@ from pydantic import BaseModel, Field
 
 class PlanStep(BaseModel):
     """
-    Represents a single, concrete step in an execution plan.
+    Represents a single, concrete tool call in a high-level plan.
 
-    This model provides a rigid structure for the LLM to follow, ensuring
-    that every step in its plan includes the exact tool name and the
-    necessary parameters.
+    The LLM provides a sequence of these steps, and the orchestrator
+    executes them.
     """
     tool_name: str = Field(
         ..., 
@@ -21,31 +20,47 @@ class PlanStep(BaseModel):
     )
 
 
+class AnalysisResult(BaseModel):
+    """
+    Represents the structured output of an automated 'analysis' step.
+
+    After a tool is executed, the agent is prompted for this object to decide
+    what to do next based on the outcome.
+    """
+    evaluation: str = Field(
+        ...,
+        description="The detailed reasoning and evaluation of the last tool's result in the context of the overall goal."
+    )
+    next_action: Literal['continue_plan', 'revise_plan', 'final_answer'] = Field(
+        ...,
+        description="The explicit directive for the orchestrator. 'continue_plan' proceeds to the next tool, 'revise_plan' triggers a new planning phase, and 'final_answer' moves to synthesis."
+    )
+
+
 class Thought(BaseModel):
     """
-    Represents a structured thinking process for the AI agent.
+    Represents the initial structured thinking process for the AI agent.
 
-    This model serves as a cognitive blueprint, forcing the LLM to deconstruct
-    its reasoning, formulate a concrete plan, and critique its own approach
-    before taking action.
+    This model serves as the blueprint for the 'plan_and_execute' tool,
+    containing the high-level sequence of tool calls to be attempted.
     """
 
     reasoning: str = Field(
         ...,
-        description="The 'inner monologue' of the agent. A detailed explanation of its understanding of the user's request, the current context, and the rationale behind the chosen plan."
+        description="The 'inner monologue' of the agent. A detailed explanation of its understanding of the user's request and its high-level strategy."
     )
 
     plan: List[PlanStep] = Field(
         ...,
-        description="A machine-readable, step-by-step execution plan. Each item in the list must be a PlanStep object, containing a 'tool_name' and 'parameters'."
+        description="A machine-readable, step-by-step execution plan containing only the sequence of tool calls to attempt."
     )
 
     criticism: str = Field(
         ...,
-        description="A mandatory self-critique of the formulated plan. The agent must identify potential flaws, ambiguities, or missing information before proceeding. If clarification is needed, this field should explain why."
+        description="A mandatory self-critique of the formulated plan. The agent must identify potential flaws or ambiguities in the user's request."
     )
 
     action: Literal['execute_plan', 'request_clarification'] = Field(
         ...,
-        description="The explicit next action to take. Use 'execute_plan' to begin running the tools in the plan, or 'request_clarification' if user input is required."
+        description="The explicit next action to take. Always 'execute_plan' unless user clarification is required before any tools can be called."
     )

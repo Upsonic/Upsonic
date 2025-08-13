@@ -581,3 +581,45 @@ def tool_operation(operation: str, result=None):
     
     console.print(panel)
     spacing()
+
+def print_orchestrator_tool_step(tool_name: str, params: dict, result: Any):
+    """
+    Prints a formatted panel for a single tool step executed by the orchestrator.
+    This creates the "Tool Usage Summary"-style block for intermediate steps.
+    """
+    tool_table = Table(show_header=True, expand=True, box=None)
+    tool_table.width = 70
+
+    # Add columns for the tool usage table
+    tool_table.add_column("[bold]Tool Name[/bold]", justify="left")
+    tool_table.add_column("[bold]Parameters[/bold]", justify="left")
+    tool_table.add_column("[bold]Result[/bold]", justify="left")
+
+    # Escape and format the data for display
+    tool_name_str = escape_rich_markup(str(tool_name))
+    params_str = escape_rich_markup(str(params))
+    result_str = escape_rich_markup(str(result))
+    
+    # Truncate long strings for clean display
+    if len(params_str) > 50:
+        params_str = params_str[:47] + "..."
+    if len(result_str) > 50:
+        result_str = result_str[:47] + "..."
+            
+    tool_table.add_row(
+        f"[cyan]{tool_name_str}[/cyan]",
+        f"[yellow]{params_str}[/yellow]",
+        f"[green]{result_str}[/green]"
+    )
+
+    # Use a more descriptive title for clarity
+    tool_panel = Panel(
+        tool_table,
+        title=f"[bold cyan]Orchestrator - Tool Call Result[/bold cyan]",
+        border_style="cyan",
+        expand=True,
+        width=70
+    )
+
+    console.print(tool_panel)
+    spacing()

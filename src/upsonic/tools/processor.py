@@ -15,9 +15,9 @@ from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio
 
 from .tool import ToolConfig, ToolKit
 from upsonic.tasks.tasks import Task
-from upsonic.utils.printing import console, spacing
+from upsonic.utils.printing import console, spacing, print_orchestrator_tool_step
 from upsonic.tools.pseudo_tools import plan_and_execute
-from upsonic.tools.thought import Thought
+from upsonic.tools.thought import Thought, AnalysisResult
 
 
 if TYPE_CHECKING:
@@ -71,38 +71,45 @@ class ToolProcessor:
                 f"Tool '{func.__name__}' is missing a docstring. The docstring is required to explain the tool's purpose to the LLM."
             )
 
-    def generate_orchestrator_wrapper(self) -> Callable:
+    def generate_orchestrator_wrapper(self, original_agent_instance: 'Direct', task: 'Task') -> Callable:
         """
         Generates a highly specialized wrapper for the 'plan_and_execute' tool.
 
-        This wrapper acts as the main orchestration engine for multi-step tasks.
-        It iterates through the LLM's plan, executes each tool sequentially,
-        gathers the results, and then calls the agent recursively for final
-        synthesis.
+        This wrapper acts as the main orchestration engine. It takes a high-level plan
+        of tool calls from the LLM. If reasoning is enabled, it automatically injects
+        a mandatory analysis step after each tool call, creating an 'Act-then-Analyze' loop.
         """
         async def orchestrator_wrapper(thought: Thought) -> Any:
-            console.print("[bold magenta]Orchestrator Activated:[/bold magenta] Received plan, beginning sequential execution.")
+            console.print("[bold magenta]Orchestrator Activated:[/bold magenta] Received initial plan.")
             spacing()
+            
             agent = self.agent_tool
             if not agent:
                 return "Error: Orchestrator wrapper was not properly initialized with an agent instance."
 
+            is_reasoning_enabled = agent.enable_reasoning_tool
+
+            original_user_request = task.description
             execution_history = f"Orchestrator's execution history for the user's request:\n"
-            execution_history += f"Initial Thought & Plan: {thought.plan}\nand Reasoning: {thought.reasoning}\n\n"
-            
+            execution_history += f"Initial Thought & Plan: {thought.plan}\n and Reasoning: {thought.reasoning}\n\n"
+            pending_plan = thought.plan
+            program_counter = 0
+
             all_tools = {
                 tool_func.__name__: tool_func 
-                for tool_func in agent._upsonic_wrapped_tools.values()
+                for tool_func in original_agent_instance._upsonic_wrapped_tools.values()
                 if tool_func.__name__ != 'plan_and_execute'
             }
 
-            for i, step in enumerate(thought.plan):
+            while program_counter < len(pending_plan):
+                step = pending_plan[program_counter]
+                
                 tool_name = step.tool_name
                 params = step.parameters
                 tool_name = tool_name.split('.')[-1]
-                
-                console.print(f"[bold blue]Executing Plan Step {i+1}/{len(thought.plan)}:[/bold blue] Calling tool [cyan]{tool_name}[/cyan] with params {params}")
 
+                console.print(f"[bold blue]Executing Tool Step {program_counter + 1}/{len(pending_plan)}:[/bold blue] Calling tool [cyan]{tool_name}[/cyan] with params {params}")
+                
                 if tool_name not in all_tools:
                     result = f"Error: Tool '{tool_name}' is not an available tool."
                     console.print(f"[bold red]{result}[/bold red]")
@@ -114,13 +121,74 @@ class ToolProcessor:
                         error_message = f"An error occurred while executing tool '{tool_name}': {e}"
                         console.print(f"[bold red]{error_message}[/bold red]")
                         result = error_message
-                
-                execution_history += f"\nStep {i+1}: Called tool '{tool_name}'.\nResult: {result}\n"
 
-            console.print("[bold magenta]Orchestrator:[/bold magenta] All plan steps executed. Preparing for final synthesis.")
+                print_orchestrator_tool_step(tool_name, params, result)
+                execution_history += f"\nStep {program_counter + 1} (Tool: {tool_name}):\nResult: {result}\n"
+
+                if is_reasoning_enabled:
+                    console.print(f"[bold yellow]Injecting Mandatory Analysis Step after Tool '{tool_name}'...[/bold yellow]")
+                    
+                    analysis_prompt = (
+                        f"Original user request(This is just for remembrance. You have to follow instructions below based on this. But this is not the main focus you will try to fulfill right now): '{original_user_request}'\n\n"
+                        "You are in the middle of a multi-step plan. An action has just been completed. You must now analyze the outcome before proceeding. "
+                        "Based on the execution history, evaluate the result of the last tool call and decide the "
+                        "most logical next action.\n\n"
+                        "<ExecutionHistory>\n"
+                        f"{execution_history}"
+                        "</ExecutionHistory>"
+                    )
+
+                    analysis_task = Task(description=analysis_prompt, not_main_task=True, response_format=AnalysisResult)
+                    analysis_agent = copy.copy(agent)
+                    analysis_agent.enable_thinking_tool = False
+                    analysis_agent.enable_reasoning_tool = False
+
+                    analysis_result: AnalysisResult = await analysis_agent.do_async(analysis_task)
+                    execution_history += f"\n--- Injected Analysis ---\nEvaluation: {analysis_result.evaluation}\n"
+
+                    if analysis_result.next_action == 'continue_plan':
+                        console.print("[bold green]Analysis complete. Continuing with the original plan.[/bold green]")
+                        program_counter += 1
+                        continue
+                    
+                    elif analysis_result.next_action == 'final_answer':
+                        console.print("[bold green]Analysis concluded that the task is complete. Proceeding to final synthesis.[/bold green]")
+                        break
+                    
+                    elif analysis_result.next_action == 'revise_plan':
+                        console.print("[bold red]Analysis concluded that the plan is flawed. Requesting a new plan.[/bold red]")
+                        
+                        revision_prompt = (
+                            f"Original user request(This is just for remembrance. You have to follow instructions below based on this. But this is not the main focus you will try to fulfill right now): '{original_user_request}'\n\n"
+                            "You are in the middle of a multi-step plan. Your own analysis has determined that the "
+                            "original plan is flawed or insufficient. Based on the *entire* execution history so far, "
+                            "formulate a new, complete `Thought` object with a better plan to achieve the user's "
+                            "original goal.\n\n"
+                            "<ExecutionHistory>\n"
+                            f"{execution_history}"
+                            "</ExecutionHistory>"
+                        )
+
+                        revision_task = Task(description=revision_prompt, not_main_task=True, response_format=Thought)
+                        revision_agent = copy.copy(agent)
+                        revision_agent.enable_thinking_tool = False
+                        revision_agent.enable_reasoning_tool = False
+
+                        new_thought: Thought = await revision_agent.do_async(revision_task)
+                        
+                        console.print("[bold magenta]Orchestrator:[/bold magenta] Received revised plan. Restarting execution.")
+                        pending_plan = new_thought.plan
+                        program_counter = 0
+                        execution_history += f"\n--- PLAN REVISED ---\nNew Reasoning: {new_thought.reasoning}\n"
+                        continue
+                
+                program_counter += 1
+
+            console.print("[bold magenta]Orchestrator:[/bold magenta] Plan complete. Preparing for final synthesis.")
             spacing()
 
             synthesis_prompt = (
+                f"Original user request(This is just for remembrance. You have to follow instructions below based on this. But this is not the main focus you will try to fulfill right now): '{original_user_request}'\n\n"
                 "You are in the final step of a multi-step task. "
                 "You have already executed a plan and gathered all necessary information. "
                 "Based *only* on the execution history provided below, synthesize a complete "
@@ -131,10 +199,9 @@ class ToolProcessor:
             )
             
             synthesis_task = Task(description=synthesis_prompt, not_main_task=True)
-
             synthesis_agent = copy.copy(agent)
-            synthesis_agent.use_reflective_execution = False
-            
+            synthesis_agent.enable_thinking_tool = False
+            synthesis_agent.enable_reasoning_tool = False
             final_response = await synthesis_agent.do_async(synthesis_task)
             return final_response
 
@@ -154,7 +221,7 @@ class ToolProcessor:
             - For a regular tool: (callable_function, ToolConfig)
             - For an MCP tool: (None, mcp_server_instance)
         """
-        if self.agent_tool and getattr(self.agent_tool, 'use_reflective_execution', False):
+        if self.agent_tool and getattr(self.agent_tool, 'enable_thinking_tool', False):
             setattr(plan_and_execute, '_is_orchestrator', True)
             self._validate_function(plan_and_execute)
             yield (plan_and_execute, ToolConfig())
