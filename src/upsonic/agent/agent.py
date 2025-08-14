@@ -4,11 +4,9 @@ import uuid
 from typing import Any, List, Union, Optional, Literal
 import time
 from contextlib import asynccontextmanager
+import copy
 
 from pydantic_ai import Agent as PydanticAgent
-from pydantic_ai import BinaryContent
-from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio
-from pydantic_ai.messages import ModelMessagesTypeAdapter
 
 
 from upsonic.canvas.canvas import Canvas
@@ -64,9 +62,14 @@ class Direct(BaseAgent):
                  feed_tool_call_results: bool = False,
                  show_tool_calls: bool = True,
                  tool_call_limit: int = 5,
+
+                 enable_thinking_tool: bool = False,
+                 enable_reasoning_tool: bool = False,
+
                  openai_reasoning_effort: Literal["low", "medium", "high"] = "low",
                  openai_reasoning_summary: str = "detailed",
                  reasoning: bool = False,
+
                  ):
 
         self.canvas = canvas
@@ -100,7 +103,7 @@ class Direct(BaseAgent):
         if retry < 1:
             raise ValueError("The 'retry' count must be at least 1.")
         if mode not in ("raise", "return_false"):
-            raise ValueError(f"Invalid retry_mode '{retry_mode}'. Must be 'raise' or 'return_false'.")
+            raise ValueError(f"Invalid retry_mode '{mode}'. Must be 'raise' or 'return_false'.")
 
         self.retry = retry
         self.mode = mode
@@ -110,9 +113,14 @@ class Direct(BaseAgent):
 
         self.tool_call_count = 0
 
+
+        self.enable_thinking_tool = enable_thinking_tool
+        self.enable_reasoning_tool = enable_reasoning_tool
+
         self.openai_reasoning_effort = openai_reasoning_effort
         self.openai_reasoning_summary = openai_reasoning_summary
         self.reasoning = reasoning
+
 
 
     @property
@@ -217,21 +225,41 @@ class Direct(BaseAgent):
 
         agent_model, agent_settings = get_agent_model(llm_model, self.openai_reasoning_effort, self.openai_reasoning_summary, self.reasoning)
 
-        tool_processor = ToolProcessor(agent=self)
+        is_thinking_enabled = self.enable_thinking_tool
+        if single_task.enable_thinking_tool is not None:
+            is_thinking_enabled = single_task.enable_thinking_tool
+
+        is_reasoning_enabled = self.enable_reasoning_tool
+        if single_task.enable_reasoning_tool is not None:
+            is_reasoning_enabled = single_task.enable_reasoning_tool
+
+        # Sanity Check: Reasoning requires Thinking.
+        if is_reasoning_enabled and not is_thinking_enabled:
+            raise ValueError("Configuration error: 'enable_reasoning_tool' cannot be True if 'enable_thinking_tool' is False.")
+        
+        agent_for_this_run = copy.copy(self)
+        agent_for_this_run.enable_thinking_tool = is_thinking_enabled
+        agent_for_this_run.enable_reasoning_tool = is_reasoning_enabled
+
+        tool_processor = ToolProcessor(agent=agent_for_this_run)
         
         final_tools_for_pydantic_ai = []
         mcp_servers = []
         
         processed_tools_generator = tool_processor.normalize_and_process(single_task.tools)
 
-        for item1, item2 in processed_tools_generator:
-            if callable(item1):
-                original_tool, config = item1, item2
-                wrapped_tool = tool_processor.generate_behavioral_wrapper(original_tool, config)
+        for original_tool, config in processed_tools_generator:
+            if callable(original_tool):
+                if hasattr(original_tool, '_is_orchestrator'):
+                    wrapped_tool = tool_processor.generate_orchestrator_wrapper(self, single_task)
+                else:
+                    wrapped_tool = tool_processor.generate_behavioral_wrapper(original_tool, config)
+                
                 final_tools_for_pydantic_ai.append(wrapped_tool)
-            elif item1 is None and item2 is not None:
-                mcp_server = item2
+            elif original_tool is None and config is not None:
+                mcp_server = config
                 mcp_servers.append(mcp_server)
+
         the_agent = PydanticAgent(
             agent_model,
             output_type=single_task.response_format,
@@ -241,18 +269,27 @@ class Direct(BaseAgent):
             mcp_servers=mcp_servers,
             model_settings=agent_settings if agent_settings else None
         )
+
         if not hasattr(the_agent, '_registered_tools'):
             the_agent._registered_tools = set()
+        
         for tool_func in final_tools_for_pydantic_ai:
-            tool_id = id(tool_func) # Get a unique ID for the function object
+            tool_id = id(tool_func)
             if tool_id not in the_agent._registered_tools:
                 the_agent.tool_plain(tool_func)
                 the_agent._registered_tools.add(tool_id)
-        if not hasattr(the_agent, '_upsonic_wrapped_tools'):
-            the_agent._upsonic_wrapped_tools = {}
-        the_agent._upsonic_wrapped_tools = {
+        
+        if not hasattr(self, '_upsonic_wrapped_tools'):
+            self._upsonic_wrapped_tools = {}
+        if not hasattr(agent_for_this_run, '_upsonic_wrapped_tools'):
+            agent_for_this_run._upsonic_wrapped_tools = {}
+        
+        # Store a reference to the final wrapped tools for the orchestrator to access.
+        self._upsonic_wrapped_tools = {
             tool_func.__name__: tool_func for tool_func in final_tools_for_pydantic_ai
         }
+        agent_for_this_run._upsonic_wrapped_tools = self._upsonic_wrapped_tools
+
         return the_agent
 
 
