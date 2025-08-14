@@ -134,7 +134,7 @@ class Team:
                         if callable(tool):
                             tool_mapping[tool.__name__] = tool
 
-            setup_manager = CoordinatorSetup(self.agents, tasks)
+            setup_manager = CoordinatorSetup(self.agents, tasks, mode="coordinate")
             delegation_manager = DelegationManager(self.agents, tool_mapping)
 
             storage = InMemoryStorage()
