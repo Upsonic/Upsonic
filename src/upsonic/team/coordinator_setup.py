@@ -1,6 +1,6 @@
 from __future__ import annotations
 import inspect
-from typing import TYPE_CHECKING, List, Any, Callable
+from typing import TYPE_CHECKING, List, Any, Callable, Literal
 
 if TYPE_CHECKING:
     from upsonic.agent.agent import Direct as Agent
@@ -11,12 +11,21 @@ class CoordinatorSetup:
     """
     Manages the setup and configuration of the Team Leader agent.
     
-    This class is responsible for creating the leader's identity, including its
-    system prompt and a manifest of available team members and initial tasks.
+    This class is now mode-aware and can generate different system prompts
+    for different team operational modes ('coordinate' or 'route').
     """
-    def __init__(self, members: List[Agent], tasks: List[Task]):
+    def __init__(self, members: List[Agent], tasks: List[Task], mode: Literal["coordinate", "route"]):
+        """
+        Initializes the CoordinatorSetup manager.
+
+        Args:
+            members (List[Agent]): The list of member agents available to the team.
+            tasks (List[Task]): The initial list of tasks for the team to accomplish.
+            mode (Literal["coordinate", "route"]): The operational mode for the team.
+        """
         self.members = members
         self.tasks = tasks
+        self.mode = mode
 
     def _summarize_tool(self, tool: Callable) -> str:
         """
@@ -30,7 +39,7 @@ class CoordinatorSetup:
             description = "No description available."
         return f"{tool_name}: {description}"
 
-    def _format_manifest(self) -> str:
+    def _format_agent_manifest(self) -> str:
         if not self.members:
             return "No team members are available."
         manifest_parts = []
@@ -92,13 +101,25 @@ class CoordinatorSetup:
         manifest_parts.append("</Tasks>")
         return "\n".join(manifest_parts)
     
-
     def create_leader_prompt(self) -> str:
+        """
+        Constructs the complete system prompt for the Team Leader agent
+        based on the team's operational mode.
+        """
+        if self.mode == "coordinate":
+            return self._create_coordinate_prompt()
+        elif self.mode == "route":
+            return self._create_route_prompt()
+        else:
+            # Fallback for safety
+            return "You are a helpful assistant."    
+
+    def _create_coordinate_prompt(self) -> str:
         """
         Constructs the complete system prompt for the Team Leader agent,
         including manifests for both team members and initial tasks with full tool schemas.
         """
-        members_manifest = self._format_manifest()
+        members_manifest = self._format_agent_manifest()
         tasks_manifest = self._format_tasks_manifest()
 
         leader_system_prompt = (
@@ -139,3 +160,36 @@ class CoordinatorSetup:
             "**3. Synthesize:** After a member returns a result, use it as `context` for the next step if necessary. Once all objectives are met, combine all results into a single, comprehensive final answer. Do not mention your internal processes in the final report."
         )
         return leader_system_prompt
+    
+    def _create_route_prompt(self) -> str:
+        """Generates the new, specialized system prompt for the 'route' mode."""
+        members_manifest = self._format_agent_manifest()
+        tasks_manifest = self._format_tasks_manifest()
+
+        return (
+            "### IDENTITY AND MISSION ###\n"
+            "You are an intelligent AI Router. Your SOLE purpose is to analyze the user's full request and determine which single specialist agent on your team is best suited to handle the entire set of objectives. You do not answer the query yourself; you only decide who should.\n\n"
+            
+            "--- INTEL-PACKAGE ---\n"
+            "**1. TEAM ROSTER:** This is the list of available specialists.\n"
+            f"{members_manifest}\n\n"
+            
+            "**2. MISSION OBJECTIVES (INITIAL TASKS):** This is the complete user request you must route.\n"
+            f"{tasks_manifest}\n\n"
+
+            "--- OPERATIONAL PROTOCOL ---\n"
+            "Your process is a strict two-step sequence:\n\n"
+            
+            "**1. Analyze and Decide:**\n"
+            "   - Read all `<Task>` blocks in the MISSION OBJECTIVES. Pay close attention to the `<Description>` and the required capabilities listed in the `<Tools>` tag for each task.\n"
+            "   - Compare the overall requirements of the mission against the `role` and `goal` of each agent in your TEAM ROSTER.\n"
+            "   - Select the **single best agent** whose skills most closely match the entire set of tasks.\n\n"
+
+            "**2. Execute Handoff:**\n"
+            "   - Once you have made your final decision, you MUST call your one and only tool, `route_request_to_member`.\n"
+            "   - Provide the `member_id` of your chosen agent as the sole argument.\n"
+            "   - This is your final action. Your job is complete after making this tool call.\n\n"
+
+            "### FINAL DIRECTIVE ###\n"
+            "Do not attempt to answer the user's query or break it down. Your only task is to analyze the full mission objective and route it to the single most qualified specialist. Make one tool call and then stop."
+        )

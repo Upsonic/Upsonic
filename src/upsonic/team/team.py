@@ -7,10 +7,8 @@ from upsonic.agent.agent import Direct as Agent
 from upsonic.context.task import turn_task_to_string
 from upsonic.storage import Memory, InMemoryStorage
 
-# --- New Imports for Modular Architecture ---
 from .coordinator_setup import CoordinatorSetup
 from .delegation_manager import DelegationManager
-# --- Existing Sequential Mode Imports ---
 from .context_sharing import ContextSharing
 from .task_assignment import TaskAssignment
 from .result_combiner import ResultCombiner
@@ -26,7 +24,7 @@ class Team:
                  response_format: Any = str, 
                  model: ModelNames | None = None, 
                  ask_other_team_members: bool = False,
-                 mode: Literal["sequential", "coordinate"] = "sequential"
+                 mode: Literal["sequential", "coordinate", "route"] = "sequential"
                  ):
         """
         Initialize the Team with agents and optionally tasks.
@@ -38,7 +36,7 @@ class Team:
             response_format: The response format for the end task (optional).
             model: The default model for the agents in the team and the leader.
             ask_other_team_members: A flag to automatically add other agents as tools.
-            mode: The operational mode for the team ('sequential' or 'coordinate').
+            mode: The operational mode for the team ('sequential', 'coordinate', or 'route').
         """
         self.agents = agents # These are now considered the "member" agents
         self.tasks = tasks if isinstance(tasks, list) else [tasks] if tasks is not None else []
@@ -175,6 +173,40 @@ class Team:
             final_response = await self.leader_agent.do_async(master_task, model=llm_model)
             
             return final_response
+        elif self.mode == "route":
+
+            setup_manager = CoordinatorSetup(self.agents, tasks, mode="route")
+            delegation_manager = DelegationManager(self.agents, {})
+
+            self.leader_agent = Direct(model=self.model or llm_model)
+            
+            leader_system_prompt = setup_manager.create_leader_prompt()
+            self.leader_agent.system_prompt = leader_system_prompt
+            routing_tool = delegation_manager.get_routing_tool()
+
+            router_task_description = "Analyze the MISSION OBJECTIVES in your system prompt and route the request to the best specialist."
+            router_task = Task(description=router_task_description, tools=[routing_tool])
+
+            await self.leader_agent.do_async(router_task, model=llm_model)
+
+            chosen_agent = delegation_manager.routed_agent
+
+            if not chosen_agent:
+                raise ValueError("Routing failed: The router agent did not select a team member.")
+            
+            consolidated_description = " ".join([task.description for task in tasks])
+            all_attachments = [attachment for task in tasks if task.attachments for attachment in task.attachments]
+            all_tools = [tool for task in tasks if task.tools for tool in task.tools]
+
+            final_task = Task(
+                description=consolidated_description,
+                attachments=all_attachments or None,
+                tools=list(set(all_tools)),
+                response_format=self.response_format
+            )
+
+            await chosen_agent.do_async(final_task, model=llm_model)
+            return final_task.response
 
     def print_do(self, tasks: list[Task] | Task | None = None):
         """

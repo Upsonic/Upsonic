@@ -25,6 +25,7 @@ class DelegationManager:
         """
         self.members = members
         self.tool_mapping = tool_mapping
+        self.routed_agent: Optional[Agent] = None
 
     def get_delegation_tool(self, session_memory: Memory) -> Callable:
         """
@@ -96,3 +97,30 @@ class DelegationManager:
                 member_agent.memory = original_memory
 
         return delegate_task
+    
+    def get_routing_tool(self) -> Callable:
+        """
+        Generates the 'route_request_to_member' tool for the 'route' mode.
+        This tool is simpler; its only job is to select an agent.
+        """
+        async def route_request_to_member(member_id: str) -> str:
+            """
+            Selects the single best agent to handle the user's entire request and ends the routing process.
+
+            Args:
+                member_id (str): The unique ID of the team member you have chosen to handle the request.
+
+            Returns:
+                str: A confirmation message indicating the request has been routed.
+            """
+            chosen_agent = None
+            for agent in self.members:
+                if agent.get_agent_id() == member_id:
+                    chosen_agent = agent
+                    break
+            
+            if not chosen_agent:
+                return f"Error: Could not route to member with ID '{member_id}'. The ID is invalid. Please choose a valid ID from your team roster."
+            self.routed_agent = chosen_agent
+            return f"Request successfully routed to member '{member_id}'. Handoff complete."
+        return route_request_to_member
