@@ -44,6 +44,7 @@ storage = [
     "aiosqlite>=0.21.0",
     "asyncpg>=0.30.0",
     "greenlet>=3.2.3",
+    "motor>=3.7.1",
     "psycopg2-binary>=2.9.10",
     "psycopg[binary]>=3.2.9",
     "redis>=5.2.1",
