@@ -64,10 +64,14 @@ class Direct(BaseAgent):
                  feed_tool_call_results: bool = False,
                  show_tool_calls: bool = True,
                  tool_call_limit: int = 5,
+                 openai_reasoning_effort: Literal["low", "medium", "high"] = "low",
+                 openai_reasoning_summary: str = "detailed",
+                 reasoning: bool = False,
                  ):
+
         self.canvas = canvas
         self.memory = memory
-        print("feed_tool_call_results:", feed_tool_call_results)
+
 
         if self.memory:
             print(f"Using existing Memory instance feed_tool_call_results: {self.memory.feed_tool_call_results}")
@@ -105,6 +109,11 @@ class Direct(BaseAgent):
         self.tool_call_limit = tool_call_limit
 
         self.tool_call_count = 0
+
+        self.openai_reasoning_effort = openai_reasoning_effort
+        self.openai_reasoning_summary = openai_reasoning_summary
+        self.reasoning = reasoning
+
 
     @property
     def agent_id(self):
@@ -206,7 +215,7 @@ class Direct(BaseAgent):
         """
         validate_attachments_for_model(llm_model, single_task)
 
-        agent_model = get_agent_model(llm_model)
+        agent_model, agent_settings = get_agent_model(llm_model, self.openai_reasoning_effort, self.openai_reasoning_summary, self.reasoning)
 
         tool_processor = ToolProcessor(agent=self)
         
@@ -229,7 +238,8 @@ class Direct(BaseAgent):
             system_prompt=system_prompt,
             end_strategy="exhaustive",
             retries=5,
-            mcp_servers=mcp_servers
+            mcp_servers=mcp_servers,
+            model_settings=agent_settings if agent_settings else None
         )
         if not hasattr(the_agent, '_registered_tools'):
             the_agent._registered_tools = set()
@@ -308,7 +318,6 @@ class Direct(BaseAgent):
                                             task.build_agent_input(),
                                             message_history=memory_handler.get_message_history()
                                         )
-
                                     model_response = call_handler.process_response(model_response)
                                     model_response = task_handler.process_response(model_response)
                                     model_response = memory_handler.process_response(model_response)
