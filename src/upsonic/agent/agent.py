@@ -68,8 +68,10 @@ class Direct(BaseAgent):
                  openai_reasoning_summary: str = "detailed",
                  reasoning: bool = False,
                  ):
+
         self.canvas = canvas
         self.memory = memory
+
 
         if self.memory:
             print(f"Using existing Memory instance feed_tool_call_results: {self.memory.feed_tool_call_results}")
@@ -105,11 +107,13 @@ class Direct(BaseAgent):
         
         self.show_tool_calls = show_tool_calls
         self.tool_call_limit = tool_call_limit
+
         self.tool_call_count = 0
 
         self.openai_reasoning_effort = openai_reasoning_effort
         self.openai_reasoning_summary = openai_reasoning_summary
         self.reasoning = reasoning
+
 
     @property
     def agent_id(self):
