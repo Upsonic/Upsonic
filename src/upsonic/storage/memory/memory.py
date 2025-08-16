@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, create_model
 from upsonic.storage.base import Storage
 from upsonic.storage.session.sessions import InteractionSession, UserProfile
 from upsonic.storage.types import SessionId, UserId
-from upsonic.models.model_registry import ModelNames
+from upsonic.models.base import BaseModelProvider
 from upsonic.schemas import UserTraits
 
 
@@ -33,17 +33,21 @@ class Memory:
         user_profile_schema: Optional[Type[BaseModel]] = None,
         dynamic_user_profile: bool = False,
         num_last_messages: Optional[int] = None,
-        model: ModelNames | None = None,
+        model_provider: Optional[BaseModelProvider] = None,
         debug: bool = False,
         feed_tool_call_results: bool = False,
         user_memory_mode: Literal['update', 'replace'] = 'update'
     ):
+        
+        if model_provider is not None and not isinstance(model_provider, BaseModelProvider):
+            raise TypeError("The `model_provider` parameter must be an instance of a BaseModelProvider subclass.")
+        
         self.storage = storage
         self.num_last_messages = num_last_messages
         self.full_session_memory_enabled = full_session_memory
         self.summary_memory_enabled = summary_memory
         self.user_analysis_memory_enabled = user_analysis_memory
-        self.model = model
+        self.model_provider = model_provider
         self.debug = debug
         self.feed_tool_call_results = feed_tool_call_results
 
@@ -255,7 +259,7 @@ class Memory:
         last_turn = to_jsonable_python(model_response.new_messages())
         session = await self.storage.read_async(self.session_id, InteractionSession)
         
-        summarizer = Direct("Summarizer", model=self.model, debug=self.debug)
+        summarizer = Direct("Summarizer", model=self.model_provider, debug=self.debug)
         
         prompt = f"""
         Previous Summary: "{previous_summary or 'None'}"
@@ -295,6 +299,9 @@ class Memory:
         from upsonic.agent.agent import Direct
         from upsonic.tasks.tasks import Task
 
+        if not self.model_provider:
+            raise ValueError("A model_provider must be configured on the Memory object to analyze user traits.")
+
         historical_prompts_content = []
         new_prompts_content = []
 
@@ -330,7 +337,7 @@ class Memory:
         conversation_context_str = "\n\n".join(prompt_context_parts)
         print(f"Analyzing traits using context from: {', '.join(source_log)}.")
         
-        analyzer = Direct("User Trait Analyzer", model=self.model, debug=self.debug)
+        analyzer = Direct("User Trait Analyzer", model=self.model_provider, debug=self.debug)
 
         if self.is_profile_dynamic:
             class ProposedSchema(BaseModel):

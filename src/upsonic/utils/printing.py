@@ -5,9 +5,11 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.align import Align
 from rich.text import Text
-from rich.markup import escape
-from upsonic.models.model_registry import get_estimated_cost
 import platform
+from rich.markup import escape
+
+from upsonic.models.utils import get_estimated_cost
+from upsonic.models.base import BaseModelProvider
 
 
 console = Console()
@@ -82,7 +84,7 @@ def connected_to_server(server_type: str, status: str, total_time: float = None)
 
     spacing()
 
-def call_end(result: Any, llm_model: str, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, debug: bool = False, price_id: str = None):
+def call_end(result: Any, model_provider: BaseModelProvider, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, debug: bool = False, price_id: str = None):
     # First panel for tool usage if there are any tools used
     if tool_usage and len(tool_usage) > 0:
         tool_table = Table(show_header=True, expand=True, box=None)
@@ -127,13 +129,13 @@ def call_end(result: Any, llm_model: str, response_format: str, start_time: floa
     table.width = 60
 
     # Escape input values
-    llm_model = escape_rich_markup(llm_model)
+    display_model_name = escape_rich_markup(model_provider.model_name)
     response_format = escape_rich_markup(response_format)
     price_id_display = escape_rich_markup(price_id) if price_id else None
 
     # Track values if price_id is provided
     if price_id:
-        estimated_cost = get_estimated_cost(usage['input_tokens'], usage['output_tokens'], llm_model)
+        estimated_cost = get_estimated_cost(usage['input_tokens'], usage['output_tokens'], model_provider)
         if price_id not in price_id_summary:
             price_id_summary[price_id] = {
                 'input_tokens': 0,
@@ -159,7 +161,7 @@ def call_end(result: Any, llm_model: str, response_format: str, start_time: floa
             if debug:
                 print(f"Error calculating cost: {e}")
 
-    table.add_row("[bold]LLM Model:[/bold]", f"{llm_model}")
+    table.add_row("[bold]LLM Model:[/bold]", f"{display_model_name}")
     # Add spacing
     table.add_row("")
 
@@ -178,7 +180,7 @@ def call_end(result: Any, llm_model: str, response_format: str, start_time: floa
     table.add_row("")
     table.add_row("[bold]Response Format:[/bold]", f"{response_format}")
 
-    table.add_row("[bold]Estimated Cost:[/bold]", f"{get_estimated_cost(usage['input_tokens'], usage['output_tokens'], llm_model)}$")
+    table.add_row("[bold]Estimated Cost:[/bold]", f"{get_estimated_cost(usage['input_tokens'], usage['output_tokens'], model_provider)}$")
     time_taken = end_time - start_time
     time_taken_str = f"{time_taken:.2f} seconds"
     table.add_row("[bold]Time Taken:[/bold]", f"{time_taken_str}")
@@ -195,7 +197,7 @@ def call_end(result: Any, llm_model: str, response_format: str, start_time: floa
 
 
 
-def agent_end(result: Any, llm_model: str, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, tool_count: int, context_count: int, debug: bool = False, price_id:str = None):
+def agent_end(result: Any, model_provider: BaseModelProvider, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, tool_count: int, context_count: int, debug: bool = False, price_id:str = None):
     # First panel for tool usage if there are any tools used
     if tool_usage and len(tool_usage) > 0:
         tool_table = Table(show_header=True, expand=True, box=None)
@@ -240,13 +242,13 @@ def agent_end(result: Any, llm_model: str, response_format: str, start_time: flo
     table.width = 60
 
     # Escape input values
-    llm_model = escape_rich_markup(llm_model)
+    display_model_name = escape_rich_markup(model_provider.model_name)
     response_format = escape_rich_markup(response_format)
     price_id = escape_rich_markup(price_id) if price_id else None
 
     # Track values if price_id is provided
     if price_id:
-        estimated_cost = get_estimated_cost(usage['input_tokens'], usage['output_tokens'], llm_model)
+        estimated_cost = get_estimated_cost(usage['input_tokens'], usage['output_tokens'], model_provider)
         if price_id not in price_id_summary:
             price_id_summary[price_id] = {
                 'input_tokens': 0,
@@ -270,7 +272,7 @@ def agent_end(result: Any, llm_model: str, response_format: str, start_time: flo
             # Fallback in case of conversion errors
             console.print(f"[bold red]Warning: Could not parse cost value: {estimated_cost}. Error: {e}[/bold red]")
 
-    table.add_row("[bold]LLM Model:[/bold]", f"{llm_model}")
+    table.add_row("[bold]LLM Model:[/bold]", f"{display_model_name}")
     # Add spacing
     table.add_row("")
     result_str = str(result)
@@ -287,7 +289,7 @@ def agent_end(result: Any, llm_model: str, response_format: str, start_time: flo
     table.add_row("[bold]Response Format:[/bold]", f"{response_format}")
     
     table.add_row("[bold]Tools:[/bold]", f"{tool_count} [bold]Context Used:[/bold]", f"{context_count}")
-    table.add_row("[bold]Estimated Cost:[/bold]", f"{get_estimated_cost(usage['input_tokens'], usage['output_tokens'], llm_model)}$")
+    table.add_row("[bold]Estimated Cost:[/bold]", f"{get_estimated_cost(usage['input_tokens'], usage['output_tokens'], model_provider)}$")
     time_taken = end_time - start_time
     time_taken_str = f"{time_taken:.2f} seconds"
     table.add_row("[bold]Time Taken:[/bold]", f"{time_taken_str}")
@@ -303,14 +305,14 @@ def agent_end(result: Any, llm_model: str, response_format: str, start_time: flo
     spacing()
 
 
-def agent_total_cost(total_input_tokens: int, total_output_tokens: int, total_time: float, llm_model: str):
+def agent_total_cost(total_input_tokens: int, total_output_tokens: int, total_time: float, model_provider: BaseModelProvider):
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
     
     # Escape input values
-    llm_model = escape_rich_markup(llm_model)
+    llm_model = escape_rich_markup(model_provider.model_name)
 
-    table.add_row("[bold]Estimated Cost:[/bold]", f"{get_estimated_cost(total_input_tokens, total_output_tokens, llm_model)}$")
+    table.add_row("[bold]Estimated Cost:[/bold]", f"{get_estimated_cost(total_input_tokens, total_output_tokens, model_provider)}$")
     table.add_row("[bold]Time Taken:[/bold]", f"{total_time:.2f} seconds")
     panel = Panel(
         table,

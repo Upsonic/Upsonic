@@ -1,11 +1,28 @@
 import re
+from typing import Optional
+
+from upsonic.models.base import BaseModelProvider
+from upsonic.models.providers import OpenAI
+
 
 class Canvas:
-    def __init__(self, canvas_name: str, llm_model: str = "openai/gpt-4o"):
-        self.canvas_name = canvas_name
-        self.llm_model = llm_model
+    def __init__(self, canvas_name: str, model_provider: Optional[BaseModelProvider] = None):
+        """
+        Initializes the Canvas.
 
-        # clean the canvas
+        Args:
+            canvas_name: The name of the canvas, used for the filename.
+            model_provider: An instantiated model provider object (e.g., OpenAI)
+                              to be used for modifying the canvas. If None, a
+                              default OpenAI GPT-4o Mini model is used.
+        """
+        self.canvas_name = canvas_name
+        
+        if model_provider is None:
+            self.model_provider = OpenAI(model_name="gpt-4o-mini")
+        else:
+            self.model_provider = model_provider
+
         self._clean_canvas()
     
     def _clean_canvas(self):
@@ -40,17 +57,14 @@ class Canvas:
         """Change the text of a part of the canvas"""
         from upsonic import Task, Direct
         
-        direct = Direct(model=self.llm_model)
+        direct = Direct(model=self.model_provider)
         
         current_canvas = self.get_current_state_of_canvas()
         
-        # For empty canvas, just save the new content directly
         if current_canvas == "Empty Canvas" or current_canvas == "":
-
             self._save_canvas(new_text_of_part)
             return new_text_of_part
 
-        # For existing canvas, use LLM to modify or append content
         prompt = (
             f"I have a text document with the following content:\n\n{current_canvas}\n\n"
             f"If there is a line or section that contains '{part_definition}', replace it with exactly:\n"
@@ -60,9 +74,10 @@ class Canvas:
             f"Return only the complete updated text document without any explanations, code blocks, or additional formatting."
         )
         
-        task = Task(prompt)
-        result = await direct.do_async(task)
-
+        task = Task(description=prompt)
+        await direct.do_async(task)
+        result = task.response
+        
         self._save_canvas(result)
         return result
 

@@ -2,24 +2,24 @@
 Result combiner module for combining results from multiple tasks into final answers.
 """
 
-from typing import List, Any
+from typing import List, Any, Optional
 from upsonic.tasks.tasks import Task
 from upsonic.agent.agent import Direct
-from upsonic.models.model_registry import ModelNames
+from upsonic.models.base import BaseModelProvider
 
 
 class ResultCombiner:
     """Handles combining results from multiple tasks into coherent final answers."""
     
-    def __init__(self, model: ModelNames = None, debug: bool = False):
+    def __init__(self, model_provider: Optional[BaseModelProvider] = None, debug: bool = False):
         """
         Initialize the result combiner.
         
         Args:
-            model: The model to use for combining results
+            model_provider: The model provider to use for combining results
             debug: Whether to enable debug mode
         """
-        self.model = model
+        self.model_provider = model_provider
         self.debug = debug
     
     def should_combine_results(self, results: List[Task]) -> bool:
@@ -65,7 +65,7 @@ class ResultCombiner:
         Returns:
             Combined final response
         """
-        # Create the final combination task
+
         end_task = Task(
             description=(
                 "Combined results from all previous tasks that in your context. "
@@ -81,13 +81,14 @@ class ResultCombiner:
             response_format=response_format
         )
         
-        # Determine debug setting
         debug_setting = self.debug
         if not debug_setting and agents and len(agents) > 0:
             debug_setting = agents[-1].debug
         
-        # Create the combining agent and execute
-        end_agent = Direct(model=self.model, debug=debug_setting)
-        final_response = await end_agent.do_async(end_task)
+        if not self.model_provider:
+             raise ValueError("ResultCombiner requires a model_provider to be initialized.")
+
+        end_agent = Direct(model=self.model_provider, debug=debug_setting)
+        await end_agent.do_async(end_task)
         
-        return final_response 
+        return end_task.response

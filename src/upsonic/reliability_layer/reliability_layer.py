@@ -6,6 +6,8 @@ import re
 from urllib.parse import urlparse
 import requests
 import asyncio
+
+from upsonic.models.base import BaseModelProvider
 from upsonic.tasks.tasks import Task
 
 
@@ -208,7 +210,7 @@ class ReliabilityProcessor:
     async def process_task(
         task: Task,
         reliability_layer: Optional[Any] = None,
-        llm_model: Optional[str] = None
+        model_provider: Optional[BaseModelProvider] = None,
     ) -> Task:
         if reliability_layer is None:
             return task
@@ -322,7 +324,7 @@ class ReliabilityProcessor:
                     agent_name = f"{validation_type.replace('_', ' ').title()} Agent"
                     validator_agents[validation_type] = AgentConfiguration(
                         agent_name,
-                        model=llm_model
+                        model=model_provider,
                     )
                     
                     # For URL validation, skip if no URLs are present
@@ -407,7 +409,7 @@ class ReliabilityProcessor:
                 if validation_result.any_suspicion:
                     editor_agent = AgentConfiguration(
                         "Information Editor Agent",
-                        model=llm_model
+                        model=model_provider
                     )
                     
                     formatted_prompt = editor_task_prompt.format(
