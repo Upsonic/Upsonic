@@ -44,7 +44,7 @@ class Team:
         self.response_format = response_format
         self.ask_other_team_members = ask_other_team_members
         self.mode = mode
-        self.memory 
+        self.memory = memory
         
         # The leader_agent is an internal construct, not passed by the user.
         self.leader_agent: Optional[Agent] = None
@@ -143,15 +143,15 @@ class Team:
             setup_manager = CoordinatorSetup(self.agents, tasks, mode="coordinate")
             delegation_manager = DelegationManager(self.agents, tool_mapping)
 
-            storage = InMemoryStorage()
-            session_memory = Memory(storage=storage,
-                                    full_session_memory=True,
-                                    session_id="team_coordinator_session",
-                                    )
+            if self.memory is None:
+                self.memory = Memory(storage=InMemoryStorage(),
+                                        full_session_memory=True,
+                                        session_id="team_coordinator_session",
+                                        )
             
             self.leader_agent = Direct(
                 model=self.model_provider, 
-                memory=session_memory
+                memory=self.memory
             )
             
             leader_system_prompt = setup_manager.create_leader_prompt()
@@ -167,7 +167,7 @@ class Team:
                 if task.attachments:
                     all_attachments.extend(task.attachments)
 
-            delegation_tool = delegation_manager.get_delegation_tool(session_memory)
+            delegation_tool = delegation_manager.get_delegation_tool(self.memory)
 
             master_task = Task(
                 description=master_description,
