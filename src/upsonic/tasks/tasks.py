@@ -56,7 +56,7 @@ class Task(BaseModel):
         enable_thinking_tool: Optional[bool] = None,
         enable_reasoning_tool: Optional[bool] = None,
         guardrail: Optional[Callable] = None,
-        guardrail_retries: int = 3,
+        guardrail_retries: Optional[int] = None,
         **data
     ):
         if guardrail is not None and not callable(guardrail):

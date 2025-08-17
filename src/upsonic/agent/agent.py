@@ -325,7 +325,7 @@ class Direct(BaseAgent):
         temporary_message_history = copy.deepcopy(memory_handler.get_message_history())
         current_input = task.build_agent_input()
 
-        if task.guardrail_retries and task.guardrail_retries > 0:
+        if task.guardrail_retries is not None and task.guardrail_retries > 0:
             max_retries = task.guardrail_retries + 1
         else:
             max_retries = 1
@@ -379,7 +379,7 @@ class Direct(BaseAgent):
                 current_input = correction_prompt
 
         if not validation_passed:
-            raise GuardrailValidationError(f"Task failed after {task.guardrail_retries} retry(s). Last error: {last_error_message}")
+            raise GuardrailValidationError(f"Task failed after {max_retries-1} retry(s). Last error: {last_error_message}")
         return final_model_response
 
 
