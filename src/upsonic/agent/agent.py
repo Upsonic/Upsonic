@@ -22,23 +22,18 @@ from upsonic.utils.retry import retryable
 from upsonic.utils.validators import validate_attachments_for_model
 from upsonic.storage.memory.memory import Memory
 from upsonic.models.base import BaseModelProvider
+from upsonic.utils.package.exception import GuardrailValidationError
 
 from upsonic.agent.context_managers import (
     CallManager,
     ContextManager,
-    LLMManager,
     ReliabilityManager,
     MemoryManager,
     SystemPromptManager,
     TaskManager,
 )
 
-
 RetryMode = Literal["raise", "return_false"]
-
-class GuardrailValidationError(Exception):
-    """Custom exception raised when a task fails validation after all retries."""
-    pass
 
 class Direct(BaseAgent):
     """Static methods for making direct LLM calls using the Upsonic."""
@@ -383,8 +378,8 @@ class Direct(BaseAgent):
         return final_model_response
 
 
-    @retryable()
     @upsonic_error_handler(max_retries=3, show_error_details=True)
+    @retryable()
     async def do_async(self, task: Task, model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
         """
         Execute a direct LLM call with robust, context-managed storage connections
