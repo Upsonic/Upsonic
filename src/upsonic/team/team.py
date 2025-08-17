@@ -24,7 +24,8 @@ class Team:
                  model_provider: Optional[BaseModelProvider] = None,
                  response_format: Any = str,  
                  ask_other_team_members: bool = False,
-                 mode: Literal["sequential", "coordinate", "route"] = "sequential"
+                 mode: Literal["sequential", "coordinate", "route"] = "sequential",
+                 memory: Optional[Memory] = None
                  ):
         """
         Initialize the Team with agents and optionally tasks.
@@ -43,6 +44,7 @@ class Team:
         self.response_format = response_format
         self.ask_other_team_members = ask_other_team_members
         self.mode = mode
+        self.memory 
         
         # The leader_agent is an internal construct, not passed by the user.
         self.leader_agent: Optional[Agent] = None

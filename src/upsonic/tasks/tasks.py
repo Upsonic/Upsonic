@@ -33,7 +33,7 @@ class Task(BaseModel):
     enable_reasoning_tool: Optional[bool] = None
     _tool_calls: List[Dict[str, Any]] = None
     guardrail: Optional[Callable] = None
-    guardrail_retries: int = 3
+    guardrail_retries: Optional[int] = None
 
 
 
