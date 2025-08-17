@@ -29,7 +29,6 @@ class TaskAssignment:
         """
         agents_registry = {}
         
-        # Use agent names as keys instead of complex composite keys
         for agent in agent_configurations:
             agent_name = agent.get_agent_id()
             agents_registry[agent_name] = agent
@@ -58,25 +57,25 @@ class TaskAssignment:
         Returns:
             Selected agent name or None if selection fails
         """
-        # Check if task has a predefined agent (manual assignment)
         if current_task.agent is not None:
-            # Find the agent name in the registry that matches the predefined agent
             for agent_name, agent_instance in agents_registry.items():
                 if agent_instance == current_task.agent:
                     return agent_name
             
-            # If exact match not found, try to match by agent_id or name
             predefined_agent_id = getattr(current_task.agent, 'get_agent_id', lambda: None)()
             if predefined_agent_id and predefined_agent_id in agents_registry:
                 return predefined_agent_id
         
-        # Use automatic assignment process if no predefined agent
         class SelectedAgent(BaseModel):
             selected_agent: str
         
-        max_attempts = 3  # Prevent infinite loops
+        max_attempts = 3
         attempts = 0
+        if not agent_configurations or not hasattr(agent_configurations[0], 'model_provider'):
+            raise ValueError("Cannot perform agent selection: The first agent in the team must have a valid model_provider.")
         
+        selection_model_provider = agent_configurations[0].model_provider
+
         while attempts < max_attempts:
             selecting_task = Task(
                 description=f"Select the most appropriate agent from the available agents to handle the current task. Consider all tasks in the workflow and previous results to make the best choice. Return only the exact agent name from the list.",
@@ -85,14 +84,17 @@ class TaskAssignment:
                 context=context
             )
             
-            await Direct(model=agent_configurations[0].default_llm_model).do_async(selecting_task)
+            await Direct(model=selection_model_provider).do_async(selecting_task)
+
+            if not isinstance(selecting_task.response, SelectedAgent):
+                attempts += 1
+                continue
+
             selected_name = selecting_task.response.selected_agent
             
-            # Check for exact match first
             if selected_name in agents_registry:
                 return selected_name
             
-            # Try to find partial matches if exact match fails
             for agent_name in agent_names:
                 if (agent_name.lower() in selected_name.lower() or 
                     selected_name.lower() in agent_name.lower()):
@@ -100,5 +102,4 @@ class TaskAssignment:
             
             attempts += 1
         
-        # If no agent selected after attempts, use the first agent as fallback
         return agent_names[0] if agent_names else None 

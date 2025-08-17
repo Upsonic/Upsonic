@@ -4,6 +4,8 @@ import inspect
 import time
 from typing import Callable, Any, Literal
 
+from upsonic.utils.package.exception import GuardrailValidationError
+
 # A type hint for our specific retry modes, can be imported by other modules.
 RetryMode = Literal["raise", "return_false"]
 
@@ -50,6 +52,8 @@ def retryable(
                 try:
                     return func(self, *args, **kwargs)
                 except Exception as e:
+                    if isinstance(e, GuardrailValidationError):
+                        raise e
                     last_known_exception = e
                     if attempt < final_retries:
                         print(f"Warning: Call to '{self.__class__.__name__}.{func.__name__}' failed (Attempt {attempt}/{final_retries}). Retrying in {current_delay:.2f}s... Error: {e}")
@@ -77,6 +81,8 @@ def retryable(
                 try:
                     return await func(self, *args, **kwargs)
                 except Exception as e:
+                    if isinstance(e, GuardrailValidationError):
+                        raise e
                     last_known_exception = e
                     if attempt < final_retries:
                         print(f"Warning: Call to '{self.__class__.__name__}.{func.__name__}' failed (Attempt {attempt}/{final_retries}). Retrying in {current_delay:.2f}s... Error: {e}")

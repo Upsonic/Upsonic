@@ -3,7 +3,7 @@ import time
 from pydantic import BaseModel
 
 
-from typing import Any, List, Dict, Optional, Type, Union
+from typing import Any, List, Dict, Optional, Type, Union, Callable
 
 
 
@@ -32,6 +32,8 @@ class Task(BaseModel):
     enable_thinking_tool: Optional[bool] = None
     enable_reasoning_tool: Optional[bool] = None
     _tool_calls: List[Dict[str, Any]] = None
+    guardrail: Optional[Callable] = None
+    guardrail_retries: Optional[int] = None
 
 
 
@@ -53,8 +55,13 @@ class Task(BaseModel):
         response_lang: Optional[str] = None,
         enable_thinking_tool: Optional[bool] = None,
         enable_reasoning_tool: Optional[bool] = None,
+        guardrail: Optional[Callable] = None,
+        guardrail_retries: Optional[int] = None,
         **data
     ):
+        if guardrail is not None and not callable(guardrail):
+            raise TypeError("The 'guardrail' parameter must be a callable function.")
+        
         if description is not None:
             data["description"] = description
             
@@ -80,6 +87,8 @@ class Task(BaseModel):
             "response_lang": response_lang,
             "enable_thinking_tool": enable_thinking_tool,
             "enable_reasoning_tool": enable_reasoning_tool,
+            "guardrail": guardrail,
+            "guardrail_retries": guardrail_retries,
             "_tool_calls": []
         })
         

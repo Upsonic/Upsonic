@@ -7,11 +7,11 @@ from contextlib import asynccontextmanager
 import copy
 
 from pydantic_ai import Agent as PydanticAgent
+from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.agent import AgentRunResult
 
 
 from upsonic.canvas.canvas import Canvas
-from upsonic.models.model import get_agent_model
-from upsonic.models.model_registry import ModelNames
 from upsonic.tasks.tasks import Task
 from upsonic.utils.error_wrapper import upsonic_error_handler
 from upsonic.utils.printing import print_price_id_summary
@@ -21,17 +21,17 @@ from upsonic.storage.base import Storage
 from upsonic.utils.retry import retryable
 from upsonic.utils.validators import validate_attachments_for_model
 from upsonic.storage.memory.memory import Memory
+from upsonic.models.base import BaseModelProvider
+from upsonic.utils.package.exception import GuardrailValidationError
 
 from upsonic.agent.context_managers import (
     CallManager,
     ContextManager,
-    LLMManager,
     ReliabilityManager,
     MemoryManager,
     SystemPromptManager,
     TaskManager,
 )
-
 
 RetryMode = Literal["raise", "return_false"]
 
@@ -40,7 +40,7 @@ class Direct(BaseAgent):
 
     def __init__(self, 
                  name: str | None = None, 
-                 model: ModelNames | None = None,
+                 model: BaseModelProvider | None = None,
                  memory: Optional[Memory] = None,
                  debug: bool = False, 
                  company_url: str | None = None, 
@@ -62,14 +62,8 @@ class Direct(BaseAgent):
                  feed_tool_call_results: bool = False,
                  show_tool_calls: bool = True,
                  tool_call_limit: int = 5,
-
                  enable_thinking_tool: bool = False,
                  enable_reasoning_tool: bool = False,
-
-                 openai_reasoning_effort: Literal["low", "medium", "high"] = "low",
-                 openai_reasoning_summary: str = "detailed",
-                 reasoning: bool = False,
-
                  ):
 
         self.canvas = canvas
@@ -83,7 +77,10 @@ class Direct(BaseAgent):
 
         
         self.debug = debug
-        self.default_llm_model = model
+        if model is not None and not isinstance(model, BaseModelProvider):
+            raise TypeError("The `model` parameter must be an instance of a BaseModelProvider subclass (e.g., OpenAI, Anthropic).")
+
+        self.model_provider = model
         self.agent_id_ = agent_id_
         self.name = name
         self.company_url = company_url
@@ -117,11 +114,6 @@ class Direct(BaseAgent):
         self.enable_thinking_tool = enable_thinking_tool
         self.enable_reasoning_tool = enable_reasoning_tool
 
-        self.openai_reasoning_effort = openai_reasoning_effort
-        self.openai_reasoning_summary = openai_reasoning_summary
-        self.reasoning = reasoning
-
-
 
     @property
     def agent_id(self):
@@ -138,7 +130,7 @@ class Direct(BaseAgent):
 
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
-    async def print_do_async(self, task: Union[Task, List[Task]], model: ModelNames | None = None, debug: bool = False, retry: int = 3):
+    async def print_do_async(self, task: Union[Task, List[Task]], model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3):
         """
         Execute a direct LLM call and print the result asynchronously.
         
@@ -156,7 +148,7 @@ class Direct(BaseAgent):
         return result
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
-    def do(self, task: Union[Task, List[Task]], model: ModelNames | None = None, debug: bool = False, retry: int = 3):
+    def do(self, task: Union[Task, List[Task]], model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3):
         """
         Execute a direct LLM call with the given task and model synchronously.
         
@@ -197,7 +189,7 @@ class Direct(BaseAgent):
             return loop.run_until_complete(self.do_async(task, model, debug, retry))
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
-    def print_do(self, task: Union[Task, List[Task]], model: ModelNames | None = None, debug: bool = False, retry: int = 3):
+    def print_do(self, task: Union[Task, List[Task]], model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3):
         """
         Execute a direct LLM call and print the result synchronously.
         
@@ -216,14 +208,14 @@ class Direct(BaseAgent):
 
 
     @upsonic_error_handler(max_retries=2, show_error_details=True)
-    async def agent_create(self, llm_model, single_task, system_prompt: str):
+    async def agent_create(self, provider: BaseModelProvider, single_task: Task, system_prompt: str):
         """
         Creates and configures the underlying PydanticAgent, processing and wrapping
         all tools with the advanced behavioral logic from ToolProcessor.
         """
-        validate_attachments_for_model(llm_model, single_task)
+        validate_attachments_for_model(provider, single_task)
 
-        agent_model, agent_settings = get_agent_model(llm_model, self.openai_reasoning_effort, self.openai_reasoning_summary, self.reasoning)
+        agent_model, agent_settings = await provider._provision()
 
         is_thinking_enabled = self.enable_thinking_tool
         if single_task.enable_thinking_tool is not None:
@@ -267,7 +259,7 @@ class Direct(BaseAgent):
             end_strategy="exhaustive",
             retries=5,
             mcp_servers=mcp_servers,
-            model_settings=agent_settings if agent_settings else None
+            model_settings=agent_settings,
         )
 
         if not hasattr(the_agent, '_registered_tools'):
@@ -314,10 +306,81 @@ class Direct(BaseAgent):
             if not was_connected_before and await storage.is_connected_async():
                 await storage.disconnect_async()
 
+    async def _execute_with_guardrail(self, agent: PydanticAgent, task: Task, memory_handler: MemoryManager) -> AgentRunResult:
+        """
+        Executes the agent's run method with a validation and retry loop based on a task guardrail.
+        This method encapsulates the retry logic, hiding it from the main `do_async` pipeline.
+        It returns a single, "clean" ModelResponse that represents the final, successful interaction.
+        """
+        retry_counter = 0
+        validation_passed = False
+        final_model_response = None
+        last_error_message = ""
+        
+        temporary_message_history = copy.deepcopy(memory_handler.get_message_history())
+        current_input = task.build_agent_input()
 
-    @retryable()
+        if task.guardrail_retries is not None and task.guardrail_retries > 0:
+            max_retries = task.guardrail_retries + 1
+        else:
+            max_retries = 1
+
+        while not validation_passed and retry_counter < max_retries:
+            current_model_response = await agent.run(
+                current_input,
+                message_history=temporary_message_history
+            )
+            
+            if task.guardrail is None:
+                validation_passed = True
+                final_model_response = current_model_response
+                break
+
+            final_text_output = ""
+            new_messages = current_model_response.new_messages()
+            if new_messages and isinstance(new_messages[-1], ModelResponse):
+                final_response_message = new_messages[-1]
+                text_parts = [part.content for part in final_response_message.parts if isinstance(part, TextPart)]
+                final_text_output = "".join(text_parts)
+
+            if not final_text_output:
+                validation_passed = True
+                final_model_response = current_model_response
+                break
+
+            is_valid, result = task.guardrail(final_text_output)
+
+            if is_valid:
+                validation_passed = True
+                
+                if new_messages and isinstance(new_messages[-1], ModelResponse):
+                    final_response_message = new_messages[-1]
+                    found_and_updated = False
+                    for part in final_response_message.parts:
+                        if isinstance(part, TextPart):
+                            if not found_and_updated:
+                                part.content = result
+                                found_and_updated = True
+                            else:
+                                part.content = ""
+                
+                final_model_response = current_model_response
+                break
+            else:
+                retry_counter += 1
+                last_error_message = str(result)
+                temporary_message_history.extend(current_model_response.new_messages())
+                correction_prompt = f"Your previous response failed a validation check. Please review the reason and provide a corrected response. Failure Reason: {last_error_message}"
+                current_input = correction_prompt
+
+        if not validation_passed:
+            raise GuardrailValidationError(f"Task failed after {max_retries-1} retry(s). Last error: {last_error_message}")
+        return final_model_response
+
+
     @upsonic_error_handler(max_retries=3, show_error_details=True)
-    async def do_async(self, task: Task, model: ModelNames | None = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
+    @retryable()
+    async def do_async(self, task: Task, model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
         """
         Execute a direct LLM call with robust, context-managed storage connections
         and agent-level control over history management.
@@ -329,11 +392,12 @@ class Direct(BaseAgent):
             model_response = None
 
             try:
-                llm_manager = LLMManager(self.default_llm_model, model)
+                provider_for_this_run = model or self.model_provider
+                if not provider_for_this_run:
+                    raise ValueError("No model provider configured. Please pass a model object to the Direct agent constructor or to the do/do_async method.")
+                
                 memory_manager = MemoryManager(self.memory)
-                async with llm_manager.manage_llm() as llm_handler, \
-                        memory_manager.manage_memory() as memory_handler:
-                    selected_model = llm_handler.get_model()
+                async with memory_manager.manage_memory() as memory_handler:
 
                     system_prompt_manager = SystemPromptManager(self, task)
                     context_manager = ContextManager(self, task, state)
@@ -341,20 +405,18 @@ class Direct(BaseAgent):
                     async with system_prompt_manager.manage_system_prompt(memory_handler) as sp_handler, \
                                 context_manager.manage_context(memory_handler) as ctx_handler:
 
-                        call_manager = CallManager(selected_model, task, debug=debug, show_tool_calls=self.show_tool_calls)
+                        call_manager = CallManager(provider_for_this_run, task, debug=debug, show_tool_calls=self.show_tool_calls)
                         task_manager = TaskManager(task, self)
-                        reliability_manager = ReliabilityManager(task, self.reliability_layer, selected_model)
+                        reliability_manager = ReliabilityManager(task, self.reliability_layer, provider_for_this_run)
 
-                        agent = await self.agent_create(selected_model, task, sp_handler.get_system_prompt())
+                        agent = await self.agent_create(provider_for_this_run, task, sp_handler.get_system_prompt())
 
                         async with reliability_manager.manage_reliability() as reliability_handler:
                             async with call_manager.manage_call() as call_handler:
                                 async with task_manager.manage_task() as task_handler:
                                     async with agent.run_mcp_servers():
-                                        model_response = await agent.run(
-                                            task.build_agent_input(),
-                                            message_history=memory_handler.get_message_history()
-                                        )
+                                        model_response = await self._execute_with_guardrail(agent, task, memory_handler)
+
                                     model_response = call_handler.process_response(model_response)
                                     model_response = task_handler.process_response(model_response)
                                     model_response = memory_handler.process_response(model_response)
