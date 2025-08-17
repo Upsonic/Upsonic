@@ -1,3 +1,7 @@
+class GuardrailValidationError(Exception):
+    """Custom exception raised when a task fails validation after all retries."""
+    pass
+
 class NoAPIKeyException(Exception):
     """Raised when no API key is provided."""
     pass

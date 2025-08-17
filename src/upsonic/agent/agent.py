@@ -7,6 +7,8 @@ from contextlib import asynccontextmanager
 import copy
 
 from pydantic_ai import Agent as PydanticAgent
+from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.agent import AgentRunResult
 
 
 from upsonic.canvas.canvas import Canvas
@@ -33,6 +35,10 @@ from upsonic.agent.context_managers import (
 
 
 RetryMode = Literal["raise", "return_false"]
+
+class GuardrailValidationError(Exception):
+    """Custom exception raised when a task fails validation after all retries."""
+    pass
 
 class Direct(BaseAgent):
     """Static methods for making direct LLM calls using the Upsonic."""
@@ -305,6 +311,72 @@ class Direct(BaseAgent):
             if not was_connected_before and await storage.is_connected_async():
                 await storage.disconnect_async()
 
+    async def _execute_with_guardrail(self, agent: PydanticAgent, task: Task, memory_handler: MemoryManager) -> AgentRunResult:
+        """
+        Executes the agent's run method with a validation and retry loop based on a task guardrail.
+        This method encapsulates the retry logic, hiding it from the main `do_async` pipeline.
+        It returns a single, "clean" ModelResponse that represents the final, successful interaction.
+        """
+        retry_counter = 0
+        validation_passed = False
+        final_model_response = None
+        last_error_message = ""
+        
+        temporary_message_history = copy.deepcopy(memory_handler.get_message_history())
+        current_input = task.build_agent_input()
+
+        while not validation_passed and retry_counter < task.guardrail_retries:
+            current_model_response = await agent.run(
+                current_input,
+                message_history=temporary_message_history
+            )
+            
+            if task.guardrail is None:
+                validation_passed = True
+                final_model_response = current_model_response
+                break
+
+            final_text_output = ""
+            new_messages = current_model_response.new_messages()
+            if new_messages and isinstance(new_messages[-1], ModelResponse):
+                final_response_message = new_messages[-1]
+                text_parts = [part.content for part in final_response_message.parts if isinstance(part, TextPart)]
+                final_text_output = "".join(text_parts)
+
+            if not final_text_output:
+                validation_passed = True
+                final_model_response = current_model_response
+                break
+
+            is_valid, result = task.guardrail(final_text_output)
+
+            if is_valid:
+                validation_passed = True
+                
+                if new_messages and isinstance(new_messages[-1], ModelResponse):
+                    final_response_message = new_messages[-1]
+                    found_and_updated = False
+                    for part in final_response_message.parts:
+                        if isinstance(part, TextPart):
+                            if not found_and_updated:
+                                part.content = result
+                                found_and_updated = True
+                            else:
+                                part.content = ""
+                
+                final_model_response = current_model_response
+                break
+            else:
+                retry_counter += 1
+                last_error_message = str(result)
+                temporary_message_history.extend(current_model_response.new_messages())
+                correction_prompt = f"Your previous response failed a validation check. Please review the reason and provide a corrected response. Failure Reason: {last_error_message}"
+                current_input = correction_prompt
+
+        if not validation_passed:
+            raise GuardrailValidationError(f"Task failed after {task.guardrail_retries} retries. Last error: {last_error_message}")
+        return final_model_response
+
 
     @retryable()
     @upsonic_error_handler(max_retries=3, show_error_details=True)
@@ -343,10 +415,8 @@ class Direct(BaseAgent):
                             async with call_manager.manage_call() as call_handler:
                                 async with task_manager.manage_task() as task_handler:
                                     async with agent.run_mcp_servers():
-                                        model_response = await agent.run(
-                                            task.build_agent_input(),
-                                            message_history=memory_handler.get_message_history()
-                                        )
+                                        model_response = await self._execute_with_guardrail(agent, task, memory_handler)
+
                                     model_response = call_handler.process_response(model_response)
                                     model_response = task_handler.process_response(model_response)
                                     model_response = memory_handler.process_response(model_response)
