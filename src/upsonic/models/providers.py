@@ -95,7 +95,7 @@ class OpenAI(BaseOpenAICompatible):
         "gpt-4o-mini-audio-preview": {"pricing": {"input": 10.00, "output": 20.00}, "capabilities": {"audio": ["mp3", "wav", "webm"]}, "required_environment_variables": ["OPENAI_API_KEY"]},
         "gpt-5": {"pricing": {"input": 1.25, "output": 10.00}, "capabilities": {}, "required_environment_variables": ["OPENAI_API_KEY"]},
         "gpt-5-mini": {"pricing": {"input": 0.25, "output": 2.00}, "capabilities": {}, "required_environment_variables": ["OPENAI_API_KEY"]},
-        "gpt-5-nano": {"pricing": {"input": 0.005, "output": 0.40}, "capabilities": {}, "required_environment_variables": ["OPENAI_API_KEY"]},
+        "gpt-5-nano": {"pricing": {"input": 0.05, "output": 0.40}, "capabilities": {}, "required_environment_variables": ["OPENAI_API_KEY"]},
         "gpt-5-chat-latest": {"pricing": {"input": 1.25, "output": 10.00}, "capabilities": {}, "required_environment_variables": ["OPENAI_API_KEY"]},
     }
 
