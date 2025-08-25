@@ -235,7 +235,11 @@ class ToolProcessor:
                 is_mcp_tool = False
                 if hasattr(tool_item, 'url'):
                     url = getattr(tool_item, 'url')
-                    the_mcp_server = MCPServerSSE(url)
+                    token = getattr(tool_item, 'token', None)
+                    headers = {}
+                    if token:
+                        headers['Authorization'] = f'Bearer {token}'
+                    the_mcp_server = MCPServerSSE(url, headers=headers)
                     yield (None, the_mcp_server)
                     is_mcp_tool = True
                 elif hasattr(tool_item, 'command'):
