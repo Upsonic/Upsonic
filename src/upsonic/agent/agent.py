@@ -21,6 +21,7 @@ from upsonic.utils.retry import retryable
 from upsonic.utils.validators import validate_attachments_for_model
 from upsonic.storage.memory.memory import Memory
 from upsonic.models.base import BaseModelProvider
+from upsonic.models.factory import ModelFactory
 from upsonic.utils.package.exception import GuardrailValidationError
 
 from upsonic.agent.context_managers import (
@@ -42,7 +43,7 @@ class Direct(BaseAgent):
 
     def __init__(self, 
                  name: str | None = None, 
-                 model: BaseModelProvider | None = None,
+                 model: Union[str, BaseModelProvider] | None = None,
                  memory: Optional[Memory] = None,
                  debug: bool = False, 
                  company_url: str | None = None, 
@@ -79,10 +80,11 @@ class Direct(BaseAgent):
 
         
         self.debug = debug
-        if model is not None and not isinstance(model, BaseModelProvider):
-            raise TypeError("The `model` parameter must be an instance of a BaseModelProvider subclass (e.g., OpenAI, Anthropic).")
-
-        self.model_provider = model
+        if model is not None:
+            # Use ModelFactory to handle both string and provider instances
+            self.model_provider = ModelFactory.create(model)
+        else:
+            self.model_provider = None
         self.agent_id_ = agent_id_
         self.name = name
         self.company_url = company_url
@@ -133,7 +135,7 @@ class Direct(BaseAgent):
 
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
-    async def print_do_async(self, task: Union["Task", List["Task"]], model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3):
+    async def print_do_async(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3):
         """
         Execute a direct LLM call and print the result asynchronously.
         
@@ -151,7 +153,7 @@ class Direct(BaseAgent):
         return result
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
-    def do(self, task: Union["Task", List["Task"]], model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3):
+    def do(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3):
         """
         Execute a direct LLM call with the given task and model synchronously.
         
@@ -192,7 +194,7 @@ class Direct(BaseAgent):
             return loop.run_until_complete(self.do_async(task, model, debug, retry))
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
-    def print_do(self, task: Union["Task", List["Task"]], model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3):
+    def print_do(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3):
         """
         Execute a direct LLM call and print the result synchronously.
         
@@ -383,7 +385,7 @@ class Direct(BaseAgent):
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
     @retryable()
-    async def do_async(self, task: "Task", model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
+    async def do_async(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
         """
         Execute a direct LLM call with robust, context-managed storage connections
         and agent-level control over history management.
@@ -395,7 +397,12 @@ class Direct(BaseAgent):
             model_response = None
 
             try:
-                provider_for_this_run = model or self.model_provider
+                # Handle model parameter - could be string, provider instance, or None
+                if model is not None:
+                    provider_for_this_run = ModelFactory.create(model)
+                else:
+                    provider_for_this_run = self.model_provider
+                    
                 if not provider_for_this_run:
                     raise ValueError("No model provider configured. Please pass a model object to the Direct agent constructor or to the do/do_async method.")
                 

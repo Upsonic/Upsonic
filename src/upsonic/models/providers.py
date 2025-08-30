@@ -46,6 +46,13 @@ class BaseOpenAICompatible(BaseModelProvider):
     @property
     def required_environment_variables(self) -> List[str]: return self._model_meta.get(self.model_name, {}).get("required_environment_variables", [self._env_key_map])
 
+    @classmethod
+    def list_available_models(cls) -> List[str]:
+        """Return a list of available model names for this provider."""
+        if hasattr(cls, '_model_meta') and cls._model_meta:
+            return sorted(list(cls._model_meta.keys()))
+        return []
+
     async def _provision(self) -> Tuple[Model, Optional[ModelSettings]]:
         final_api_key = self.api_key.get_secret_value() if self.api_key else os.getenv(self._env_key_map)
         if self._env_key_map and not final_api_key:
@@ -167,6 +174,13 @@ class BaseAnthropic(BaseModelProvider):
     @property
     def required_environment_variables(self) -> List[str]: return self._model_meta[self.model_name]['required_environment_variables']
 
+    @classmethod
+    def list_available_models(cls) -> List[str]:
+        """Return a list of available model names for this provider."""
+        if hasattr(cls, '_model_meta') and cls._model_meta:
+            return sorted(list(cls._model_meta.keys()))
+        return []
+
 class Anthropic(BaseAnthropic):
     """Configuration factory for official Anthropic Claude models."""
     _model_meta: Dict[str, Dict[str, Any]] = {
@@ -231,6 +245,13 @@ class Gemini(BaseModelProvider):
     def capabilities(self) -> Dict[str, List[str]]: return self._model_meta[self.model_name]['capabilities']
     @property
     def required_environment_variables(self) -> List[str]: return self._model_meta[self.model_name]['required_environment_variables']
+
+    @classmethod
+    def list_available_models(cls) -> List[str]:
+        """Return a list of available model names for this provider."""
+        if hasattr(cls, '_model_meta') and cls._model_meta:
+            return sorted(list(cls._model_meta.keys()))
+        return []
 
     async def _provision(self) -> Tuple[Model, Optional[ModelSettings]]:
         final_api_key = self.api_key.get_secret_value() if self.api_key else os.getenv("GOOGLE_GLA_API_KEY")

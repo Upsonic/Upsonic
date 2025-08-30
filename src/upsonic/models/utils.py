@@ -23,9 +23,10 @@ def list_available_models(provider_class: Type[BaseModelProvider]) -> List[str]:
     Returns:
         A sorted list of supported model name strings.
     """
-    if not hasattr(provider_class, '_model_meta'):
+    model_meta = getattr(provider_class, '_model_meta', None)
+    if not model_meta or not hasattr(model_meta, 'default'):
         return []
-    return sorted(list(provider_class._model_meta.keys()))
+    return sorted(list(model_meta.default.keys()))
 
 
 def get_all_supported_models() -> Dict[str, List[str]]:

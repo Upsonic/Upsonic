@@ -11,6 +11,7 @@ from upsonic.tasks.tasks import Task
 from upsonic.knowledge_base.knowledge_base import KnowledgeBase
 from upsonic.agent.agent import Direct
 from upsonic.agent.agent import Direct as Agent
+from upsonic.models.factory import ModelFactory
 from upsonic.graph.graph import Graph, DecisionFunc, DecisionLLM, TaskNode, TaskChain, State
 from upsonic.canvas.canvas import Canvas
 from upsonic.team.team import Team
@@ -55,6 +56,7 @@ __all__ = [
     "KnowledgeBase", 
     "Direct", 
     "Agent",
+    "ModelFactory",
     "Graph",
     "DecisionFunc",
     "DecisionLLM",
