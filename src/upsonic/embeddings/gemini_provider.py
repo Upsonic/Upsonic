@@ -5,8 +5,8 @@ from typing import List, Dict, Any, Optional
 import time
 
 try:
-    import google.generativeai as genai
-    from google.generativeai.types import HarmCategory, HarmBlockThreshold
+    from google import genai
+    from google.genai import types
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
@@ -29,7 +29,7 @@ class GeminiEmbeddingConfig(EmbeddingConfig):
     
     api_key: Optional[str] = Field(None, description="Google AI API key")
     
-    model_name: str = Field("text-embedding-004", description="Gemini embedding model")
+    model_name: str = Field("gemini-embedding-001", description="Gemini embedding model")
     
     enable_safety_filtering: bool = Field(True, description="Enable Google's safety filtering")
     safety_settings: Dict[str, str] = Field(
@@ -42,7 +42,7 @@ class GeminiEmbeddingConfig(EmbeddingConfig):
         description="Safety filtering settings"
     )
     
-    task_type: str = Field("RETRIEVAL_DOCUMENT", description="Embedding task type")
+    task_type: str = Field("SEMANTIC_SIMILARITY", description="Embedding task type")
     title: Optional[str] = Field(None, description="Optional title for context")
     
     enable_batch_processing: bool = Field(True, description="Enable batch processing optimization")
@@ -53,12 +53,21 @@ class GeminiEmbeddingConfig(EmbeddingConfig):
     
     requests_per_minute: int = Field(60, description="Requests per minute limit")
     
+    use_vertex_ai: bool = Field(False, description="Use Vertex AI API instead of Gemini Developer API")
+    api_version: str = Field("v1beta", description="API version to use (v1beta, v1, v1alpha)")
+    enable_caching: bool = Field(False, description="Enable response caching")
+    cache_ttl_seconds: int = Field(3600, description="Cache TTL in seconds")
+    
+    output_dimensionality: Optional[int] = Field(None, description="Output embedding dimension (128-3072)")
+    embedding_config: Optional[Dict[str, Any]] = Field(None, description="Additional embedding configuration")
+    
     @validator('model_name')
     def validate_model_name(cls, v):
         """Validate Gemini model names."""
         valid_models = [
-            "text-embedding-004",
-            "text-embedding-preview-0409",
+            "gemini-embedding-001",
+            "text-embedding-005",
+            "text-multilingual-embedding-002",
             "embedding-001"
         ]
         
@@ -75,12 +84,31 @@ class GeminiEmbeddingConfig(EmbeddingConfig):
             "RETRIEVAL_DOCUMENT", 
             "SEMANTIC_SIMILARITY",
             "CLASSIFICATION",
-            "CLUSTERING"
+            "CLUSTERING",
+            "QUESTION_ANSWERING",
+            "FACT_VERIFICATION",
+            "CODE_RETRIEVAL_QUERY"
         ]
         
         if v not in valid_tasks:
             raise ValueError(f"Invalid task_type: {v}. Valid options: {valid_tasks}")
         
+        return v
+    
+    @validator('api_version')
+    def validate_api_version(cls, v):
+        """Validate API version."""
+        valid_versions = ["v1beta", "v1", "v1alpha"]
+        if v not in valid_versions:
+            raise ValueError(f"Invalid api_version: {v}. Valid options: {valid_versions}")
+        return v
+    
+    @validator('output_dimensionality')
+    def validate_output_dimensionality(cls, v):
+        """Validate output dimensionality."""
+        if v is not None:
+            if not (128 <= v <= 3072):
+                raise ValueError(f"output_dimensionality must be between 128 and 3072, got {v}")
         return v
 
 
@@ -91,7 +119,7 @@ class GeminiEmbedding(EmbeddingProvider):
     def __init__(self, config: Optional[GeminiEmbeddingConfig] = None, **kwargs):
         if not GEMINI_AVAILABLE:
             raise ConfigurationError(
-                "Google GenerativeAI package not found. Install with: pip install google-generativeai",
+                "Google GenAI package not found. Install with: pip install google-genai",
                 error_code="DEPENDENCY_MISSING"
             )
         
@@ -101,19 +129,16 @@ class GeminiEmbedding(EmbeddingProvider):
         super().__init__(config=config)
         
         self._setup_authentication()
-        
         self._setup_client()
         
         self._request_times: List[float] = []
-        
         self._model_info: Optional[Dict[str, Any]] = None
-        
         self._request_count = 0
         self._character_count = 0
     
     def _setup_authentication(self):
         """Setup Google authentication."""
-        if self.config.use_google_cloud_auth:
+        if self.config.use_google_cloud_auth or self.config.use_vertex_ai:
             if not GOOGLE_AUTH_AVAILABLE:
                 raise ConfigurationError(
                     "Google Auth package not found. Install with: pip install google-auth",
@@ -140,39 +165,38 @@ class GeminiEmbedding(EmbeddingProvider):
                     original_error=e
                 )
         else:
-            api_key = self.config.api_key or os.getenv("GOOGLE_AI_API_KEY") or os.getenv("GEMINI_API_KEY")
+            api_key = self.config.api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_AI_API_KEY") or os.getenv("GEMINI_API_KEY")
             if not api_key:
                 raise ConfigurationError(
-                    "Google AI API key not found. Set GOOGLE_AI_API_KEY environment variable or pass api_key in config.",
+                    "Google AI API key not found. Set GOOGLE_API_KEY environment variable or pass api_key in config.",
                     error_code="API_KEY_MISSING"
                 )
             
-            genai.configure(api_key=api_key)
             print("Using Google AI API key authentication")
     
     def _setup_client(self):
-        """Setup Gemini client."""
+        """Setup Gemini client with new google-genai library."""
         try:
-            safety_settings = []
-            if self.config.enable_safety_filtering:
-                for category, threshold in self.config.safety_settings.items():
-                    try:
-                        harm_category = getattr(HarmCategory, category)
-                        harm_threshold = getattr(HarmBlockThreshold, threshold)
-                        safety_settings.append({
-                            "category": harm_category,
-                            "threshold": harm_threshold
-                        })
-                    except AttributeError:
-                        print(f"Warning: Unknown safety setting: {category}={threshold}")
+            http_options = types.HttpOptions(api_version=self.config.api_version)
             
-            self.safety_settings = safety_settings
+            if self.config.use_google_cloud_auth or self.config.use_vertex_ai:
+                self.client = genai.Client(
+                    vertexai=True,
+                    project=self.project_id,
+                    location=self.config.location,
+                    http_options=http_options
+                )
+                print(f"Gemini client configured for Vertex AI with model: {self.config.model_name}")
+            else:
+                api_key = self.config.api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_AI_API_KEY") or os.getenv("GEMINI_API_KEY")
+                self.client = genai.Client(
+                    api_key=api_key,
+                    http_options=http_options
+                )
+                print(f"Gemini client configured for Gemini Developer API with model: {self.config.model_name}")
             
-            self.generation_config = {
-                "temperature": 0.0,
-            }
-            
-            print(f"Gemini client configured for model: {self.config.model_name}")
+            if self.config.enable_caching:
+                self._setup_caching()
             
         except Exception as e:
             raise ConfigurationError(
@@ -180,6 +204,18 @@ class GeminiEmbedding(EmbeddingProvider):
                 error_code="GEMINI_CLIENT_ERROR",
                 original_error=e
             )
+    
+    def _setup_caching(self):
+        """Setup response caching."""
+        try:
+            cache_config = types.CacheConfig(
+                ttl_seconds=self.config.cache_ttl_seconds
+            )
+            self.cache = self.client.caches.create(config=cache_config)
+            print(f"Response caching enabled with TTL: {self.config.cache_ttl_seconds}s")
+        except Exception as e:
+            print(f"Warning: Could not setup caching: {e}")
+            self.cache = None
     
     @property
     def supported_modes(self) -> List[EmbeddingMode]:
@@ -190,9 +226,9 @@ class GeminiEmbedding(EmbeddingProvider):
     def pricing_info(self) -> Dict[str, float]:
         """Get Google Gemini embedding pricing."""
         pricing_map = {
-            "text-embedding-004": 0.00001,
-            "text-embedding-preview-0409": 0.00001,
-            "embedding-001": 0.0000125
+            "gemini-embedding-001": 0.00015, 
+            "text-embedding-005": None,      
+            "text-multilingual-embedding-002": None
         }
         
         price_per_1k_chars = pricing_map.get(self.config.model_name, 0.00001)
@@ -205,30 +241,54 @@ class GeminiEmbedding(EmbeddingProvider):
             "currency": "USD",
             "billing_unit": "characters",
             "note": "Gemini pricing is based on characters, not tokens",
-            "updated": "2024-01-01"
+            "updated": "2024-12-01",
+            "api_type": "Vertex AI" if self.config.use_vertex_ai else "Gemini Developer API"
         }
     
     def get_model_info(self) -> Dict[str, Any]:
         """Get information about the current Gemini model."""
         if self._model_info is None:
             model_info_map = {
-                "text-embedding-004": {
-                    "dimensions": 768,
-                    "max_input_chars": 2048,
-                    "description": "Latest Gemini text embedding model",
-                    "languages": "100+ languages"
+                "gemini-embedding-001": {
+                    "dimensions": [3072, 1536, 768],   # via MRL (Matryoshka Representation Learning)
+                    "max_input_tokens": 2048,
+                    "description": "GA unified Gemini embedding model (multilingual + code + text)",
+                    "languages": "100+ languages",
+                    "supported_tasks": [
+                        "retrieval",
+                        "semantic_similarity",
+                        "classification",
+                        "clustering",
+                        "multilingual",
+                        "code",
+                        "question_answering",
+                        "fact_verification"
+                    ]
                 },
-                "text-embedding-preview-0409": {
+                "text-embedding-005": {
                     "dimensions": 768,
-                    "max_input_chars": 2048,
-                    "description": "Preview Gemini embedding model",
-                    "languages": "100+ languages"
+                    "max_input_tokens": 2048,
+                    "description": "Legacy English/code embedding model",
+                    "languages": "English",
+                    "supported_tasks": [
+                        "retrieval",
+                        "semantic_similarity",
+                        "classification",
+                        "clustering",
+                        "code"
+                    ]
                 },
-                "embedding-001": {
+                "text-multilingual-embedding-002": {
                     "dimensions": 768,
-                    "max_input_chars": 1024,
-                    "description": "Gemini embedding model v1",
-                    "languages": "100+ languages"
+                    "max_input_tokens": 2048,
+                    "description": "Legacy multilingual embedding model",
+                    "languages": "100+ languages",
+                    "supported_tasks": [
+                        "retrieval",
+                        "semantic_similarity",
+                        "classification",
+                        "clustering"
+                    ]
                 }
             }
             
@@ -236,7 +296,8 @@ class GeminiEmbedding(EmbeddingProvider):
                 "dimensions": 768,
                 "max_input_chars": 2048,
                 "description": "Unknown Gemini embedding model",
-                "languages": "Multiple"
+                "languages": "Multiple",
+                "supported_tasks": ["retrieval", "semantic_similarity"]
             })
             
             self._model_info.update({
@@ -245,7 +306,11 @@ class GeminiEmbedding(EmbeddingProvider):
                 "type": "embedding",
                 "task_type": self.config.task_type,
                 "safety_filtering": self.config.enable_safety_filtering,
-                "authentication": "Google Cloud" if self.config.use_google_cloud_auth else "API Key"
+                "authentication": "Google Cloud" if self.config.use_google_cloud_auth else "API Key",
+                "api_type": "Vertex AI" if self.config.use_vertex_ai else "Gemini Developer API",
+                "api_version": self.config.api_version,
+                "caching_enabled": self.config.enable_caching,
+                "output_dimensionality": self.config.output_dimensionality
             })
         
         return self._model_info
@@ -278,7 +343,7 @@ class GeminiEmbedding(EmbeddingProvider):
     @upsonic_error_handler(max_retries=3, show_error_details=True)
     async def _embed_batch(self, texts: List[str], mode: EmbeddingMode = EmbeddingMode.DOCUMENT) -> List[List[float]]:
         """
-        Embed a batch of texts using Google Gemini.
+        Embed a batch of texts using Google Gemini with new API.
         
         Args:
             texts: List of text strings to embed
@@ -299,16 +364,16 @@ class GeminiEmbedding(EmbeddingProvider):
             
             if self.config.enable_batch_processing and len(texts) > 1:
                 try:
-                    embeddings = self._embed_texts_batch(texts, task_type)
+                    embeddings = await self._embed_texts_batch(texts, task_type)
                     all_embeddings.extend(embeddings)
                 except Exception as batch_error:
                     print(f"Batch processing failed, falling back to individual requests: {batch_error}")
                     for text in texts:
-                        embedding = self._embed_single_text(text, task_type)
+                        embedding = await self._embed_single_text(text, task_type)
                         all_embeddings.append(embedding)
             else:
                 for text in texts:
-                    embedding = self._embed_single_text(text, task_type)
+                    embedding = await self._embed_single_text(text, task_type)
                     all_embeddings.append(embedding)
             
             self._request_count += len(texts)
@@ -336,17 +401,39 @@ class GeminiEmbedding(EmbeddingProvider):
                     original_error=e
                 )
     
-    def _embed_single_text(self, text: str, task_type: str) -> List[float]:
-        """Embed a single text using Gemini."""
+    async def _embed_single_text(self, text: str, task_type: str) -> List[float]:
+        """Embed a single text using Gemini with new API."""
         try:
-            result = genai.embed_content(
-                model=f"models/{self.config.model_name}",
-                content=text,
-                task_type=task_type,
-                title=self.config.title
+            if not text or not text.strip():
+                default_dim = 768  # Default dimension
+                if self.config.output_dimensionality:
+                    default_dim = self.config.output_dimensionality
+                elif self.config.model_name == "gemini-embedding-001":
+                    default_dim = 3072
+                return [0.0] * default_dim
+            
+            config = None
+            if self.config.output_dimensionality or self.config.embedding_config:
+                config = types.EmbedContentConfig()
+                if self.config.output_dimensionality:
+                    config.output_dimensionality = self.config.output_dimensionality
+                if self.config.embedding_config:
+                    for key, value in self.config.embedding_config.items():
+                        setattr(config, key, value)
+            
+            response = self.client.models.embed_content(
+                model=self.config.model_name,
+                contents=text,
+                config=config
             )
             
-            return result['embedding']
+            if response.embeddings and len(response.embeddings) > 0:
+                return response.embeddings[0].values
+            else:
+                raise ModelConnectionError(
+                    "No embeddings returned from Gemini API",
+                    error_code="GEMINI_NO_EMBEDDINGS"
+                )
             
         except Exception as e:
             raise ModelConnectionError(
@@ -355,27 +442,42 @@ class GeminiEmbedding(EmbeddingProvider):
                 original_error=e
             )
     
-    def _embed_texts_batch(self, texts: List[str], task_type: str) -> List[List[float]]:
-        """Embed multiple texts in batch (if supported)."""
+    async def _embed_texts_batch(self, texts: List[str], task_type: str) -> List[List[float]]:
+        """Embed multiple texts in batch using new API."""
         try:
+            config = None
+            if self.config.output_dimensionality or self.config.embedding_config:
+                config = types.EmbedContentConfig()
+                if self.config.output_dimensionality:
+                    config.output_dimensionality = self.config.output_dimensionality
+                if self.config.embedding_config:
+                    for key, value in self.config.embedding_config.items():
+                        setattr(config, key, value)
+            
             results = []
             for text in texts:
-                result = genai.embed_content(
-                    model=f"models/{self.config.model_name}",
-                    content=text,
-                    task_type=task_type,
-                    title=self.config.title
+                response = self.client.models.embed_content(
+                    model=self.config.model_name,
+                    contents=text,
+                    config=config
                 )
-                results.append(result['embedding'])
+                if response.embeddings and len(response.embeddings) > 0:
+                    results.append(response.embeddings[0].values)
+                else:
+                    raise ModelConnectionError(
+                        "No embeddings returned from Gemini API",
+                        error_code="GEMINI_NO_EMBEDDINGS"
+                    )
             
             return results
             
         except Exception as e:
-            raise ModelConnectionError(
-                f"Batch text embedding failed: {str(e)}",
-                error_code="GEMINI_BATCH_EMBED_ERROR",
-                original_error=e
-            )
+            print(f"Batch embedding failed, using individual requests: {e}")
+            results = []
+            for text in texts:
+                embedding = await self._embed_single_text(text, task_type)
+                results.append(embedding)
+            return results
     
     async def validate_connection(self) -> bool:
         """Validate Gemini connection and model access."""
@@ -399,7 +501,10 @@ class GeminiEmbedding(EmbeddingProvider):
             "average_chars_per_request": self._character_count / max(self._request_count, 1),
             "model_name": self.config.model_name,
             "task_type": self.config.task_type,
-            "safety_filtering": self.config.enable_safety_filtering
+            "safety_filtering": self.config.enable_safety_filtering,
+            "api_type": "Vertex AI" if self.config.use_vertex_ai else "Gemini Developer API",
+            "caching_enabled": self.config.enable_caching,
+            "output_dimensionality": self.config.output_dimensionality
         }
     
     def get_safety_info(self) -> Dict[str, Any]:
@@ -424,7 +529,7 @@ class GeminiEmbedding(EmbeddingProvider):
         """List available Gemini embedding models."""
         try:
             models = []
-            for model in genai.list_models():
+            for model in self.client.models.list():
                 if 'embedding' in model.name.lower():
                     models.append({
                         "name": model.name,
@@ -446,7 +551,7 @@ def create_gemini_document_embedding(api_key: Optional[str] = None, **kwargs) ->
     """Create Gemini embedding optimized for documents."""
     config = GeminiEmbeddingConfig(
         api_key=api_key,
-        model_name="text-embedding-004",
+        model_name="gemini-embedding-001",
         task_type="RETRIEVAL_DOCUMENT",
         **kwargs
     )
@@ -457,7 +562,7 @@ def create_gemini_query_embedding(api_key: Optional[str] = None, **kwargs) -> Ge
     """Create Gemini embedding optimized for queries."""
     config = GeminiEmbeddingConfig(
         api_key=api_key,
-        model_name="text-embedding-004",
+        model_name="gemini-embedding-001",
         task_type="RETRIEVAL_QUERY",
         **kwargs
     )
@@ -468,7 +573,7 @@ def create_gemini_semantic_embedding(api_key: Optional[str] = None, **kwargs) ->
     """Create Gemini embedding for semantic similarity."""
     config = GeminiEmbeddingConfig(
         api_key=api_key,
-        model_name="text-embedding-004",
+        model_name="gemini-embedding-001",
         task_type="SEMANTIC_SIMILARITY",
         **kwargs
     )
@@ -483,9 +588,26 @@ def create_gemini_cloud_embedding(
     """Create Gemini embedding with Google Cloud authentication."""
     config = GeminiEmbeddingConfig(
         use_google_cloud_auth=True,
+        use_vertex_ai=True,
         project_id=project_id,
         location=location,
-        model_name="text-embedding-004",
+        model_name="gemini-embedding-001",
+        **kwargs
+    )
+    return GeminiEmbedding(config=config)
+
+
+def create_gemini_vertex_embedding(
+    project_id: str,
+    location: str = "us-central1",
+    **kwargs
+) -> GeminiEmbedding:
+    """Create Gemini embedding with Vertex AI."""
+    config = GeminiEmbeddingConfig(
+        use_vertex_ai=True,
+        project_id=project_id,
+        location=location,
+        model_name="gemini-embedding-001",
         **kwargs
     )
     return GeminiEmbedding(config=config)

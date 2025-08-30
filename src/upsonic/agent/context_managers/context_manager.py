@@ -178,9 +178,10 @@ class ContextManager:
             metadata_str = ""
             if result.metadata:
                 source = result.metadata.get('source', 'Unknown')
-                page_number = result.metadata.get('page_number')
-                chunk_id = result.chunk_id or result.metadata.get('chunk_id')
-                
+                page_number = result.metadata.get('page_number', 'Unknown')
+                chunk_id = result.chunk_id or result.metadata.get('chunk_id', 'Unknown')
+
+                retrieved_keys = {'source', 'page_number', 'chunk_id'}
                 metadata_parts = [f"source: {source}"]
                 if page_number is not None:
                     metadata_parts.append(f"page: {page_number}")
@@ -188,11 +189,15 @@ class ContextManager:
                     metadata_parts.append(f"chunk_id: {chunk_id}")
                 if result.score is not None:
                     metadata_parts.append(f"score: {result.score:.3f}")
-                
+
+                for k, v in result.metadata.items():
+                    if k not in retrieved_keys:
+                        metadata_parts.append(f"{k}: {v}")
+
                 metadata_str = f" [metadata: {', '.join(metadata_parts)}]"
-            
+
             formatted_chunks.append(f"[{i}]{metadata_str} {cleaned_text}")
-        
+
         return f"<rag source='{kb_info}'>{' '.join(formatted_chunks)}</rag>"
 
     async def _process_task_output_source(

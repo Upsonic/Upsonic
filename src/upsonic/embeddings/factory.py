@@ -131,9 +131,9 @@ def get_provider_info() -> Dict[str, Dict[str, Any]]:
         },
         "gemini": {
             "description": "Google Gemini embedding models",
-            "dependencies": ["google-generativeai"],
-            "features": ["Content safety", "Multi-modal", "Enterprise features"],
-            "models": ["text-embedding-004", "embedding-001"]
+            "dependencies": ["google-genai"],
+            "features": ["Content safety", "Multi-modal", "Enterprise features", "Caching", "Batch processing", "Task-specific optimization"],
+            "models": ["gemini-embedding-001", "text-embedding-005", "text-multilingual-embedding-002"]
         },
     }
     
@@ -250,6 +250,11 @@ def create_ollama_embedding(**kwargs) -> EmbeddingProvider:
 def create_gemini_embedding(**kwargs) -> EmbeddingProvider:
     """Create Gemini embedding provider with defaults."""
     return create_embedding_provider("gemini", **kwargs)
+
+
+def create_gemini_vertex_embedding(**kwargs) -> EmbeddingProvider:
+    """Create Gemini embedding provider with Vertex AI."""
+    return create_embedding_provider("gemini", use_vertex_ai=True, **kwargs)
 
 
 

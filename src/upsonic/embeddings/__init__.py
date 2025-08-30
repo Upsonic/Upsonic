@@ -11,7 +11,15 @@ from .bedrock_provider import BedrockEmbedding
 from .huggingface_provider import HuggingFaceEmbedding
 from .fastembed_provider import FastEmbedProvider
 from .ollama_provider import OllamaEmbedding
-from .gemini_provider import GeminiEmbedding
+from .gemini_provider import (
+    GeminiEmbedding, 
+    GeminiEmbeddingConfig,
+    create_gemini_vertex_embedding,
+    create_gemini_document_embedding,
+    create_gemini_query_embedding,
+    create_gemini_semantic_embedding,
+    create_gemini_cloud_embedding
+)
 
 from .factory import (
     create_embedding_provider, 
@@ -27,6 +35,7 @@ from .factory import (
     create_fastembed_provider,
     create_ollama_embedding,
     create_gemini_embedding,
+    create_gemini_vertex_embedding,
 )
 
 __all__ = [
@@ -42,7 +51,7 @@ __all__ = [
     "FastEmbedProvider",
     "OllamaEmbedding",
     "GeminiEmbedding",
-    "MilvusEmbedding",
+    "GeminiEmbeddingConfig",
     
     "create_embedding_provider",
     "list_available_providers",
@@ -58,6 +67,11 @@ __all__ = [
     "create_fastembed_provider",
     "create_ollama_embedding",
     "create_gemini_embedding",
+    "create_gemini_vertex_embedding",
+    "create_gemini_document_embedding",
+    "create_gemini_query_embedding",
+    "create_gemini_semantic_embedding",
+    "create_gemini_cloud_embedding",
 ]
 
 PROVIDER_REGISTRY = {
