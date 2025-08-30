@@ -14,7 +14,6 @@ import copy
 from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio
 
 from .tool import ToolConfig, ToolKit
-from upsonic.tasks.tasks import Task
 from upsonic.utils.printing import console, spacing, print_orchestrator_tool_step
 from upsonic.tools.pseudo_tools import plan_and_execute
 from upsonic.tools.thought import Thought, AnalysisResult
@@ -22,6 +21,7 @@ from upsonic.tools.thought import Thought, AnalysisResult
 
 if TYPE_CHECKING:
     from upsonic.agent.agent import Direct
+    from upsonic.tasks.tasks import Task
 
 
 class ToolValidationError(Exception):

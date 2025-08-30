@@ -12,6 +12,7 @@ from upsonic.utils.error_wrapper import upsonic_error_handler
 from pydantic_ai import Agent as PydanticAgent, BinaryContent
 
 from upsonic.knowledge_base.knowledge_base import KnowledgeBase
+from upsonic.schemas.data_models import RAGSearchResult
 
 class Task(BaseModel):
     description: str
@@ -155,7 +156,31 @@ class Task(BaseModel):
             
             if isinstance(context, KnowledgeBase) and context.rag == True:
                 await context.setup_rag(client)
-                rag_results.append(await context.query(self.description))
+                rag_result_objects = await context.query_async(self.description)
+                # Convert RAGSearchResult objects to formatted strings
+                if rag_result_objects:
+                    formatted_results = []
+                    for i, result in enumerate(rag_result_objects, 1):
+                        cleaned_text = result.text.strip()
+                        metadata_str = ""
+                        if result.metadata:
+                            source = result.metadata.get('source', 'Unknown')
+                            page_number = result.metadata.get('page_number')
+                            chunk_id = result.chunk_id or result.metadata.get('chunk_id')
+                            
+                            metadata_parts = [f"source: {source}"]
+                            if page_number is not None:
+                                metadata_parts.append(f"page: {page_number}")
+                            if chunk_id:
+                                metadata_parts.append(f"chunk_id: {chunk_id}")
+                            if result.score is not None:
+                                metadata_parts.append(f"score: {result.score:.3f}")
+                            
+                            metadata_str = f" [metadata: {', '.join(metadata_parts)}]"
+                        
+                        formatted_results.append(f"[{i}]{metadata_str} {cleaned_text}")
+                    
+                    rag_results.extend(formatted_results)
                 
         if rag_results:
             return f"The following is the RAG data: <rag>{' '.join(rag_results)}</rag>"

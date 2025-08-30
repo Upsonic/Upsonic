@@ -1,7 +1,7 @@
 import asyncio
 import os
 import uuid
-from typing import Any, List, Union, Optional, Literal
+from typing import Any, List, Union, Optional, Literal, TYPE_CHECKING
 import time
 from contextlib import asynccontextmanager
 import copy
@@ -12,7 +12,6 @@ from pydantic_ai.agent import AgentRunResult
 
 
 from upsonic.canvas.canvas import Canvas
-from upsonic.tasks.tasks import Task
 from upsonic.utils.error_wrapper import upsonic_error_handler
 from upsonic.utils.printing import print_price_id_summary
 from upsonic.agent.base import BaseAgent
@@ -32,6 +31,9 @@ from upsonic.agent.context_managers import (
     SystemPromptManager,
     TaskManager,
 )
+
+if TYPE_CHECKING:
+    from upsonic.tasks.tasks import Task
 
 RetryMode = Literal["raise", "return_false"]
 
@@ -115,6 +117,7 @@ class Direct(BaseAgent):
         self.enable_reasoning_tool = enable_reasoning_tool
 
 
+
     @property
     def agent_id(self):
         if self.agent_id_ is None:
@@ -130,7 +133,7 @@ class Direct(BaseAgent):
 
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
-    async def print_do_async(self, task: Union[Task, List[Task]], model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3):
+    async def print_do_async(self, task: Union["Task", List["Task"]], model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3):
         """
         Execute a direct LLM call and print the result asynchronously.
         
@@ -148,7 +151,7 @@ class Direct(BaseAgent):
         return result
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
-    def do(self, task: Union[Task, List[Task]], model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3):
+    def do(self, task: Union["Task", List["Task"]], model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3):
         """
         Execute a direct LLM call with the given task and model synchronously.
         
@@ -189,7 +192,7 @@ class Direct(BaseAgent):
             return loop.run_until_complete(self.do_async(task, model, debug, retry))
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
-    def print_do(self, task: Union[Task, List[Task]], model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3):
+    def print_do(self, task: Union["Task", List["Task"]], model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3):
         """
         Execute a direct LLM call and print the result synchronously.
         
@@ -208,7 +211,7 @@ class Direct(BaseAgent):
 
 
     @upsonic_error_handler(max_retries=2, show_error_details=True)
-    async def agent_create(self, provider: BaseModelProvider, single_task: Task, system_prompt: str):
+    async def agent_create(self, provider: BaseModelProvider, single_task: "Task", system_prompt: str):
         """
         Creates and configures the underlying PydanticAgent, processing and wrapping
         all tools with the advanced behavioral logic from ToolProcessor.
@@ -306,7 +309,7 @@ class Direct(BaseAgent):
             if not was_connected_before and await storage.is_connected_async():
                 await storage.disconnect_async()
 
-    async def _execute_with_guardrail(self, agent: PydanticAgent, task: Task, memory_handler: MemoryManager) -> AgentRunResult:
+    async def _execute_with_guardrail(self, agent: PydanticAgent, task: "Task", memory_handler: MemoryManager) -> AgentRunResult:
         """
         Executes the agent's run method with a validation and retry loop based on a task guardrail.
         This method encapsulates the retry logic, hiding it from the main `do_async` pipeline.
@@ -380,7 +383,7 @@ class Direct(BaseAgent):
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
     @retryable()
-    async def do_async(self, task: Task, model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
+    async def do_async(self, task: "Task", model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
         """
         Execute a direct LLM call with robust, context-managed storage connections
         and agent-level control over history management.

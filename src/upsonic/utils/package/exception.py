@@ -1,3 +1,24 @@
+class VectorDBError(Exception):
+    """Base exception for all vector database provider errors."""
+    pass
+
+class VectorDBConnectionError(VectorDBError):
+    """Raised when a connection to the database cannot be established or is lost."""
+    pass
+
+class CollectionDoesNotExistError(VectorDBError):
+    """Raised when an operation is attempted on a collection that does not exist."""
+    pass
+
+class SearchError(VectorDBError):
+    """Raised when a search or query operation fails."""
+    pass
+
+class UpsertError(VectorDBError):
+    """Raised when a data ingestion (upsert) operation fails."""
+    pass
+
+
 class GuardrailValidationError(Exception):
     """Custom exception raised when a task fails validation after all retries."""
     pass

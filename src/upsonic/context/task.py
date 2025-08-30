@@ -1,10 +1,11 @@
 import json
 from pydantic import BaseModel
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-from upsonic.tasks.tasks import Task
+if TYPE_CHECKING:
+    from upsonic.tasks.tasks import Task
 
-def turn_task_to_string(task: Task):
+def turn_task_to_string(task: "Task"):
     the_dict = {}
     the_dict["id"] = task.task_id
     the_dict["description"] = task.description
