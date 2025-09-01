@@ -102,6 +102,11 @@ class OpenAI(BaseOpenAICompatible):
         "gpt-4o-mini-audio-preview": {"pricing": {"input": 10.00, "output": 20.00}, "capabilities": {"audio": ["mp3", "wav", "webm"]}, "required_environment_variables": ["OPENAI_API_KEY"]},
     }
 
+    def __init__(self, **data: Any):
+        super().__init__(**data)
+        if self.model_name not in self._model_meta:
+            raise ValueError(f"Unknown model_name '{self.model_name}' for OpenAI provider.")
+
 class AzureOpenAI(BaseOpenAICompatible):
     """Configuration factory for Azure OpenAI models."""
     _model_meta: Dict[str, Dict[str, Any]] = {
