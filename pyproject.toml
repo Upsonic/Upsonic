@@ -48,23 +48,17 @@ dependencies = [
     "pdf2image>=1.17.0",
     "lxml>=5.4.0",
     "pyyaml>=6.0.2",
-    "chromadb>=1.0.20",
-    "pymilvus>=2.6.1",
-    "faiss-cpu>=1.12.0",
-    "psycopg>=3.2.9",
-    "pinecone>=7.3.0",
-    "qdrant-client>=1.12.1",
-    "weaviate-client>=4.16.9",
 ]
 
 [project.optional-dependencies]
 rag = [
-    "future>=1.0.0",
-    "graspologic>=3.4.1",
-    "lightrag-hku==1.2.6",
-    "pipmaster>=0.5.1",
-    "tenacity>=9.0.0",
-    "tiktoken>=0.9.0",
+    "chromadb>=1.0.20",
+    "faiss-cpu>=1.12.0",
+    "pinecone>=7.3.0",
+    "psycopg>=3.2.9",
+    "pymilvus>=2.6.1",
+    "qdrant-client>=1.12.1",
+    "weaviate-client>=4.16.9",
 ]
 storage = [
     "aiosqlite>=0.21.0",
