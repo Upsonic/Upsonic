@@ -44,8 +44,8 @@ class BedrockEmbeddingConfig(EmbeddingConfig):
         """Validate and map Bedrock model names."""
         model_mapping = {
             "titan-embed-text-v1": "amazon.titan-embed-text-v1",
-            "titan-embed-text-v2": "amazon.titan-embed-text-v2",
-            "titan-embed-g1-text-02": "amazon.titan-embed-g1-text-02",
+            "titan-embed-text-v2": "amazon.titan-embed-text-v2:0",
+            "marengo-embed-2-7-v1:0": "twelvelabs.marengo-embed-2-7-v1:0",
             "cohere-embed-english": "cohere.embed-english-v3",
             "cohere-embed-multilingual": "cohere.embed-multilingual-v3",
             "titan": "amazon.titan-embed-text-v1",
@@ -162,8 +162,8 @@ class BedrockEmbedding(EmbeddingProvider):
         """Get AWS Bedrock embedding pricing."""
         pricing_map = {
             "amazon.titan-embed-text-v1": 0.0001,
-            "amazon.titan-embed-text-v2": 0.00002,
-            "amazon.titan-embed-g1-text-02": 0.00002,
+            "amazon.titan-embed-text-v2:0": 0.00002,
+            "twelvelabs.marengo-embed-2-7-v1:0": 0.0007,
             "cohere.embed-english-v3": 0.0001,
             "cohere.embed-multilingual-v3": 0.0001
         }
@@ -193,17 +193,17 @@ class BedrockEmbedding(EmbeddingProvider):
                     "languages": ["English"],
                     "provider": "Amazon"
                 },
-                "amazon.titan-embed-text-v2": {
+                "amazon.titan-embed-text-v2:0": {
                     "dimensions": 1024,
                     "max_tokens": 8192,
                     "description": "Amazon Titan Text Embeddings v2 - Optimized",
                     "languages": ["English"],
                     "provider": "Amazon"
                 },
-                "amazon.titan-embed-g1-text-02": {
-                    "dimensions": 1536,
-                    "max_tokens": 8192,
-                    "description": "Amazon Titan Text Embeddings G1",
+                "twelvelabs.marengo-embed-2-7-v1:0": {
+                    "dimensions": 1024,
+                    "max_tokens": 2048,
+                    "description": "Marengo Embed 2.7",
                     "languages": ["English"],
                     "provider": "Amazon"
                 },
@@ -461,8 +461,7 @@ def create_titan_embedding(
     """Create AWS Titan embedding provider."""
     model_map = {
         "v1": "amazon.titan-embed-text-v1",
-        "v2": "amazon.titan-embed-text-v2",
-        "g1": "amazon.titan-embed-g1-text-02"
+        "v2": "amazon.titan-embed-text-v2:0",
     }
     
     config = BedrockEmbeddingConfig(

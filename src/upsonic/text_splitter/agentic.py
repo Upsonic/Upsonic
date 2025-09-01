@@ -75,7 +75,8 @@ class AgenticChunkingStrategy(ChunkingStrategy):
             agent: Pre-configured Direct agent for cognitive processing
             config: Configuration object with all settings
         """
-        if not isinstance(agent, "Direct"):
+        from upsonic.agent.agent import Direct
+        if not isinstance(agent, Direct):
             raise TypeError("An instance of the `Direct` agent is required.")
         
         if config is None:
@@ -174,6 +175,8 @@ class AgenticChunkingStrategy(ChunkingStrategy):
     
     async def _generate_propositions(self, text: str) -> List[str]:
         """Proposition extraction with better prompting."""
+        from upsonic.tasks.tasks import Task
+        
         prompt = f"""
         Your task is to act as a meticulous knowledge extraction engine.
         Read the following document and deconstruct it into a list of simple, granular, and self-contained factual statements (propositions).
@@ -248,6 +251,8 @@ class AgenticChunkingStrategy(ChunkingStrategy):
     
     async def _assign_propositions_to_topics(self, propositions: List[str]) -> List[Topic]:
         """Topic assignment with better clustering guidance."""
+        from upsonic.tasks.tasks import Task
+        
         formatted_propositions = "\n".join(f"- {p}" for p in propositions)
         
         prompt = f"""
@@ -426,6 +431,8 @@ class AgenticChunkingStrategy(ChunkingStrategy):
     
     async def _refine_topic_metadata(self, chunk_text: str) -> RefinedTopic:
         """Metadata refinement with better prompting."""
+        from upsonic.tasks.tasks import Task
+        
         prompt = f"""
         You are a skilled technical writer. The following text is a collection of related facts.
         Your task is to create a high-quality title and summary for this content.
@@ -493,11 +500,12 @@ class AgenticChunkingStrategy(ChunkingStrategy):
         print(f"Falling back to recursive chunking for document {document.document_id}")
         
         try:
-            from .recursive import RecursiveCharacterChunkingStrategy
-            fallback_strategy = RecursiveCharacterChunkingStrategy(
+            from .recursive import RecursiveCharacterChunkingStrategy, RecursiveChunkingConfig
+            fallback_config = RecursiveChunkingConfig(
                 chunk_size=self.config.chunk_size,
                 chunk_overlap=self.config.chunk_overlap
             )
+            fallback_strategy = RecursiveCharacterChunkingStrategy(fallback_config)
             
             fallback_chunks = fallback_strategy.chunk(document)
             

@@ -57,7 +57,7 @@ class OllamaEmbeddingConfig(EmbeddingConfig):
             "snowflake-arctic-embed",
             "all-minilm",
             "bge-large",
-            "bge-base"
+            "bge-m3"
         ]
         
         if v in known_models:

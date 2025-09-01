@@ -278,7 +278,8 @@ class ContextManager:
         
         if self.task.context:
             for item in self.task.context:
-                if isinstance(item, "KnowledgeBase"):
+                from upsonic.knowledge_base.knowledge_base import KnowledgeBase
+                if isinstance(item, KnowledgeBase):
                     try:
                         health_status[item.name] = await item.health_check_async()
                     except Exception as e:
@@ -342,7 +343,9 @@ class ContextManager:
         
         if self.task.context:
             for item in self.task.context:
-                if isinstance(item, "KnowledgeBase"):
+                from upsonic.knowledge_base.knowledge_base import KnowledgeBase
+                from upsonic.tasks.tasks import Task
+                if isinstance(item, KnowledgeBase):
                     kb_info = {
                         "name": item.name,
                         "type": "rag" if item.rag else "static",
@@ -366,7 +369,7 @@ class ContextManager:
                     
                     summary["context"]["knowledge_bases"].append(kb_info)
                     
-                elif isinstance(item, "Task"):
+                elif isinstance(item, Task):
                     summary["context"]["tasks"].append({
                         "id": item.get_task_id() if hasattr(item, 'get_task_id') else "unknown",
                         "description": item.description,
