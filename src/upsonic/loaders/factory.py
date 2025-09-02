@@ -1,317 +1,284 @@
 from __future__ import annotations
-from typing import Dict, Type, List, Optional, Any
+from typing import Dict, Type, Optional, List, Union, Any
+import os
 from pathlib import Path
+import logging
+from functools import lru_cache
 
 from .base import DocumentLoader
 from .config import LoaderConfig, LoaderConfigFactory
-from upsonic.schemas.data_models import Document
-
-
-class LoaderRegistry:
-    """Registry for managing document loader classes."""
-    
-    def __init__(self):
-        self._loaders: Dict[str, Type[DocumentLoader]] = {}
-        self._extensions: Dict[str, str] = {}
-        self._aliases: Dict[str, str] = {}
-        
-    def register(
-        self, 
-        name: str, 
-        loader_class: Type[DocumentLoader], 
-        extensions: Optional[List[str]] = None,
-        aliases: Optional[List[str]] = None
-    ):
-        """
-        Register a loader class.
-        
-        Args:
-            name: Unique name for the loader
-            loader_class: The loader class to register
-            extensions: File extensions this loader handles
-            aliases: Alternative names for this loader
-        """
-        self._loaders[name] = loader_class
-        
-        if extensions:
-            for ext in extensions:
-                ext = ext.lower()
-                if not ext.startswith('.'):
-                    ext = f'.{ext}'
-                self._extensions[ext] = name
-        
-        if aliases:
-            for alias in aliases:
-                self._aliases[alias] = name
-    
-    def get_loader_class(self, name: str) -> Optional[Type[DocumentLoader]]:
-        """Get a loader class by name."""
-        if name in self._loaders:
-            return self._loaders[name]
-        
-        if name in self._aliases:
-            real_name = self._aliases[name]
-            return self._loaders.get(real_name)
-        
-        return None
-    
-    def get_loader_for_extension(self, extension: str) -> Optional[Type[DocumentLoader]]:
-        """Get a loader class for a file extension."""
-        ext = extension.lower()
-        if not ext.startswith('.'):
-            ext = f'.{ext}'
-        
-        loader_name = self._extensions.get(ext)
-        if loader_name:
-            return self._loaders.get(loader_name)
-        
-        return None
-    
-    def get_loader_for_file(self, file_path: str) -> Optional[Type[DocumentLoader]]:
-        """Get a loader class for a file path."""
-        extension = Path(file_path).suffix
-        return self.get_loader_for_extension(extension)
-    
-    def list_loaders(self) -> List[str]:
-        """List all registered loader names."""
-        return list(self._loaders.keys())
-    
-    def list_extensions(self) -> List[str]:
-        """List all supported file extensions."""
-        return list(self._extensions.keys())
-
-
-_registry = LoaderRegistry()
+from .text import TextLoader
+from .csv import CSVLoader
+from .pdf import PDFLoader
+from .docx import DOCXLoader
+from .json import JSONLoader
+from .xml import XMLLoader
+from .yaml import YAMLLoader
+from .markdown import MarkdownLoader
+from .html import HTMLLoader
 
 
 class LoaderFactory:
-    """
-    Factory for creating and managing document loaders.
-    
-    This factory provides multiple ways to create loaders:
-    1. High-level: Auto-detect loader type from file extension
-    2. Medium-level: Specify loader type with optional configuration
-    3. Low-level: Full control with custom loader classes and configs
-    """
-    
-    @staticmethod
-    def create_loader(
-        loader_type: Optional[str] = None,
-        config: Optional[LoaderConfig] = None
-    ) -> DocumentLoader:
-        """
-        Create a loader instance.
+    def __init__(self):
+        self._loaders: Dict[str, Type[DocumentLoader]] = {}
+        self._extensions: Dict[str, str] = {}
+        self._configs: Dict[str, Type[LoaderConfig]] = {}
+        self._logger = logging.getLogger(__name__)
         
-        Args:
-            loader_type: Type of loader (auto-detected if None)
-            config: Loader configuration object (must inherit from LoaderConfig)
+        self._register_default_loaders()
+    
+    def _register_default_loaders(self):
+        default_loaders = [
+            (TextLoader, ['.txt']),
+            (CSVLoader, ['.csv']),
+            (PDFLoader, ['.pdf']),
+            (DOCXLoader, ['.docx']),
+            (JSONLoader, ['.json', '.jsonl', '.js']),
+            (XMLLoader, ['.xml', '.xhtml', '.rss', '.atom']),
+            (YAMLLoader, ['.yaml', '.yml']),
+            (MarkdownLoader, ['.md', '.markdown']),
+            (HTMLLoader, ['.html', '.htm', '.xhtml'])
+        ]
+        
+        for loader_class, extensions in default_loaders:
+            self.register_loader(loader_class, extensions)
+    
+    def register_loader(self, loader_class: Type[DocumentLoader], extensions: List[str]):
+        loader_name = loader_class.__name__.lower().replace('loader', '')
+        
+        self._loaders[loader_name] = loader_class
+        
+        for ext in extensions:
+            self._extensions[ext.lower()] = loader_name
+        
+        try:
+            config_name = f"{loader_name.title()}Config"
+            config_class = getattr(loader_class, 'config_class', None)
+            if config_class:
+                self._configs[loader_name] = config_class
+        except AttributeError:
+            pass
+        
+        self._logger.debug(f"Registered loader '{loader_name}' with extensions: {extensions}")
+    
+    def get_loader(self, source: str, loader_type: Optional[str] = None, **config_kwargs) -> DocumentLoader:
+        try:
+            if loader_type:
+                loader_name = loader_type.lower()
+            else:
+                loader_name = self._detect_loader_type(source)
             
-        Returns:
-            Configured DocumentLoader instance
-        """
-        if loader_type is None:
-            raise ValueError("loader_type must be specified when not auto-detecting")
+            if loader_name not in self._loaders:
+                raise ValueError(f"No loader found for type '{loader_type}'")
+            
+            loader_class = self._loaders[loader_name]
+            
+            config = self._create_config(loader_name, **config_kwargs)
+            
+            return loader_class(config)
+            
+        except Exception as e:
+            self._logger.error(f"Failed to create loader for '{source}': {e}")
+            raise
+    
+    def _detect_loader_type(self, source: str) -> str:
+        if source.startswith(('http://', 'https://', 'ftp://')):
+            return 'html'
         
-        loader_class = _registry.get_loader_class(loader_type)
-        if not loader_class:
+        if os.path.exists(source) and os.path.isfile(source):
+            file_path = Path(source)
+            extension = file_path.suffix.lower()
+            
+            if extension in self._extensions:
+                return self._extensions[extension]
+            
+            if len(file_path.suffixes) >= 2:
+                double_ext = ''.join(file_path.suffixes[-2:]).lower()
+                if double_ext in self._extensions:
+                    return self._extensions[double_ext]
+        
+        if isinstance(source, str):
+            source_stripped = source.strip()
+            
+            if source_stripped.startswith('{') or source_stripped.startswith('['):
+                return 'json'
+            
+            if source_stripped.startswith('<'):
+                return 'xml'
+            
+            if source_stripped.startswith('---') or source_stripped.startswith('- '):
+                return 'yaml'
+            
+            if any(source_stripped.startswith(prefix) for prefix in ['# ', '## ', '### ']):
+                return 'markdown'
+        
+        return 'text'
+    
+    def _create_config(self, loader_name: str, **config_kwargs) -> LoaderConfig:
+        try:
+            if config_kwargs:
+                return LoaderConfigFactory.create_config(loader_name, **config_kwargs)
+            else:
+                return LoaderConfigFactory.create_config(loader_name)
+        except Exception as e:
+            self._logger.warning(f"Failed to create config for '{loader_name}': {e}")
+            return LoaderConfig(**config_kwargs)
+    
+    def get_loader_for_file(self, file_path: str, **config_kwargs) -> DocumentLoader:
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File not found: {file_path}")
+        
+        if not os.path.isfile(file_path):
+            raise ValueError(f"Path is not a file: {file_path}")
+        
+        return self.get_loader(file_path, **config_kwargs)
+    
+    def get_loader_for_content(self, content: str, content_type: str, **config_kwargs) -> DocumentLoader:
+        return self.get_loader(content, content_type, **config_kwargs)
+    
+    def get_loaders_for_directory(
+        self, 
+        directory_path: str, 
+        recursive: bool = False,
+        file_patterns: Optional[List[str]] = None,
+        exclude_patterns: Optional[List[str]] = None,
+        **config_kwargs
+    ) -> Dict[str, DocumentLoader]:
+        if not os.path.isdir(directory_path):
+            raise ValueError(f"Directory does not exist: {directory_path}")
+        
+        loaders = {}
+        directory = Path(directory_path)
+        
+        if recursive:
+            search_pattern = "**/*"
+        else:
+            search_pattern = "*"
+        
+        all_files = list(directory.glob(search_pattern))
+        
+        for file_path in all_files:
+            if not file_path.is_file():
+                continue
+            
+            file_path_str = str(file_path)
+            
+            if file_patterns:
+                matches_pattern = False
+                for pattern in file_patterns:
+                    if file_path.match(pattern):
+                        matches_pattern = True
+                        break
+                if not matches_pattern:
+                    continue
+            
+            if exclude_patterns:
+                should_exclude = False
+                for pattern in exclude_patterns:
+                    if file_path.match(pattern):
+                        should_exclude = True
+                        break
+                if should_exclude:
+                    continue
+            
+            try:
+                loader = self.get_loader_for_file(file_path_str, **config_kwargs)
+                loaders[file_path_str] = loader
+            except Exception as e:
+                self._logger.warning(f"Could not create loader for {file_path_str}: {e}")
+                continue
+        
+        return loaders
+    
+    def get_supported_extensions(self) -> List[str]:
+        return list(self._extensions.keys())
+    
+    def get_supported_loaders(self) -> List[str]:
+        return list(self._loaders.keys())
+    
+    def can_handle(self, source: str) -> bool:
+        try:
+            loader_type = self._detect_loader_type(source)
+            return loader_type in self._loaders
+        except Exception:
+            return False
+    
+    def get_loader_info(self, loader_type: str) -> Dict[str, Any]:
+        if loader_type not in self._loaders:
             raise ValueError(f"Unknown loader type: {loader_type}")
         
-        return loader_class(config)
-    
-    @staticmethod
-    def create_loader_for_file(
-        file_path: str,
-        config: Optional[LoaderConfig] = None
-    ) -> DocumentLoader:
-        """
-        Create a loader for a specific file by auto-detecting the type.
+        loader_class = self._loaders[loader_type]
         
-        Args:
-            file_path: Path to the file
-            config: Optional configuration object (must inherit from LoaderConfig)
-            
-        Returns:
-            Configured DocumentLoader instance
-        """
-        loader_class = _registry.get_loader_for_file(file_path)
-        if not loader_class:
-            loader_class = _registry.get_loader_class('text')
-            if not loader_class:
-                raise ValueError(f"No loader available for file: {file_path}")
+        info = {
+            'name': loader_type,
+            'class': loader_class.__name__,
+            'extensions': [ext for ext, name in self._extensions.items() if name == loader_type],
+            'description': getattr(loader_class, '__doc__', 'No description available'),
+            'has_config': loader_type in self._configs
+        }
         
-        loader_type = None
-        for name, cls in _registry._loaders.items():
-            if cls == loader_class:
-                loader_type = name
-                break
-        
-        if not loader_type:
-            loader_type = 'text'
-        
-        return LoaderFactory.create_loader(loader_type, config)
+        return info
     
-    @staticmethod
-    def create_auto_loader(
-        sources: List[str],
-        default_config: Optional[LoaderConfig] = None,
-        loader_configs: Optional[Dict[str, LoaderConfig]] = None
-    ) -> 'AutoLoader':
-        """
-        Create an automatic loader that handles multiple file types.
-        
-        Args:
-            sources: List of source files
-            default_config: Default configuration for all loaders
-            loader_configs: Specific configurations for each loader type
-            
-        Returns:
-            AutoLoader instance
-        """
-        return AutoLoader(sources, default_config, loader_configs)
+    def list_loaders(self) -> List[Dict[str, Any]]:
+        return [self.get_loader_info(loader_type) for loader_type in self._loaders.keys()]
     
-    @staticmethod
-    def register_loader(
-        name: str,
-        loader_class: Type[DocumentLoader],
-        extensions: Optional[List[str]] = None,
-        aliases: Optional[List[str]] = None
-    ):
-        """Register a new loader class."""
-        _registry.register(name, loader_class, extensions, aliases)
-    
-    @staticmethod
-    def list_loaders() -> List[str]:
-        """List all available loader types."""
-        return _registry.list_loaders()
-    
-    @staticmethod
-    def list_extensions() -> List[str]:
-        """List all supported file extensions."""
-        return _registry.list_extensions()
+    def clear_cache(self):
+        pass
 
 
-class AutoLoader(DocumentLoader):
-    """
-    Automatic loader that handles multiple file types intelligently.
+_global_factory: Optional[LoaderFactory] = None
+
+
+def get_factory() -> LoaderFactory:
+    global _global_factory
+    if _global_factory is None:
+        _global_factory = LoaderFactory()
+    return _global_factory
+
+
+def create_loader(source: str, loader_type: Optional[str] = None, **config_kwargs) -> DocumentLoader:
+    return get_factory().get_loader(source, loader_type, **config_kwargs)
+
+
+def create_loader_for_file(file_path: str, **config_kwargs) -> DocumentLoader:
+    return get_factory().get_loader_for_file(file_path, **config_kwargs)
+
+
+def create_loader_for_content(content: str, content_type: str, **config_kwargs) -> DocumentLoader:
+    return get_factory().get_loader_for_content(content, content_type, **config_kwargs)
+
+
+def can_handle_file(file_path: str) -> bool:
+    return get_factory().can_handle(file_path)
+
+
+def get_supported_extensions() -> List[str]:
+    return get_factory().get_supported_extensions()
+
+
+def get_supported_loaders() -> List[str]:
+    return get_factory().get_supported_loaders()
+
+
+def load_document(source: str, **config_kwargs) -> List[Any]:
+    loader = create_loader(source, **config_kwargs)
+    return loader.load(source)
+
+
+def load_documents_batch(
+    sources: List[str], 
+    **config_kwargs
+) -> Dict[str, List[Any]]:
+    results = {}
+    factory = get_factory()
     
-    This loader analyzes each source file and automatically selects
-    the appropriate specialized loader for each file type.
-    """
+    for source in sources:
+        try:
+            loader = factory.get_loader(source, **config_kwargs)
+            documents = loader.load(source)
+            results[source] = documents
+        except Exception as e:
+            factory._logger.error(f"Failed to load {source}: {e}")
+            results[source] = []
     
-    def __init__(
-        self,
-        sources: List[str],
-        default_config: Optional[LoaderConfig] = None,
-        loader_configs: Optional[Dict[str, LoaderConfig]] = None
-    ):
-        """
-        Initialize AutoLoader.
-        
-        Args:
-            sources: List of source files to handle
-            default_config: Default configuration for all loaders
-            loader_configs: Specific configurations per loader type
-        """
-        super().__init__()
-        self.sources = sources
-        self.default_config = default_config
-        self.loader_configs = loader_configs or {}
-        self._loaders: Dict[str, DocumentLoader] = {}
-        
-        self._initialize_loaders()
-    
-    def _initialize_loaders(self):
-        """Pre-create loaders for all detected file types."""
-        file_types = set()
-        
-        for source in self.sources:
-            ext = Path(source).suffix.lower()
-            loader_class = _registry.get_loader_for_extension(ext)
-            if loader_class:
-                for name, cls in _registry._loaders.items():
-                    if cls == loader_class:
-                        file_types.add(name)
-                        break
-            else:
-                file_types.add('text')
-        
-        for loader_type in file_types:
-            config = self.loader_configs.get(loader_type, self.default_config)
-            self._loaders[loader_type] = LoaderFactory.create_loader(loader_type, config)
-    
-    def load(self, source: str) -> List[Document]:
-        """Load a single source using the appropriate loader."""
-        loader_class = _registry.get_loader_for_file(source)
-        loader_type = 'text'
-        
-        if loader_class:
-            for name, cls in _registry._loaders.items():
-                if cls == loader_class:
-                    loader_type = name
-                    break
-        
-        if loader_type in self._loaders:
-            return self._loaders[loader_type].load(source)
-        else:
-            config = self.loader_configs.get(loader_type, self.default_config)
-            loader = LoaderFactory.create_loader(loader_type, config)
-            self._loaders[loader_type] = loader
-            return loader.load(source)
-    
-    def load_all(self) -> List[Document]:
-        """Load all sources."""
-        all_documents = []
-        for source in self.sources:
-            documents = self.load(source)
-            all_documents.extend(documents)
-        return all_documents
-    
-    async def load_all_async(self) -> List[Document]:
-        """Load all sources asynchronously."""
-        import asyncio
-        
-        async def load_source(source: str):
-            return await self.load_async(source)
-        
-        tasks = [load_source(source) for source in self.sources]
-        results = await asyncio.gather(*tasks)
-        
-        all_documents = []
-        for documents in results:
-            all_documents.extend(documents)
-        return all_documents
-    
-    def get_loader_stats(self) -> Dict[str, Dict[str, Any]]:
-        """Get statistics for all used loaders."""
-        stats = {}
-        for loader_type, loader in self._loaders.items():
-            stats[loader_type] = loader.get_stats()
-        return stats
-
-
-def create_simple_loader(loader_type: str) -> DocumentLoader:
-    """Create a simple loader with default configuration."""
-    return LoaderFactory.create_loader(loader_type)
-
-
-def create_configured_loader(loader_type: str, config: Optional[LoaderConfig] = None) -> DocumentLoader:
-    """Create a loader with custom configuration."""
-    return LoaderFactory.create_loader(loader_type, config)
-
-
-def load_file(file_path: str, config: Optional[LoaderConfig] = None) -> List[Document]:
-    """Load a single file using auto-detected loader."""
-    loader = LoaderFactory.create_loader_for_file(file_path, config)
-    return loader.load(file_path)
-
-
-def load_files(file_paths: List[str], config: Optional[LoaderConfig] = None) -> List[Document]:
-    """Load multiple files using auto-detected loaders."""
-    auto_loader = LoaderFactory.create_auto_loader(file_paths, config)
-    return auto_loader.load_all()
-
-
-async def load_files_async(file_paths: List[str], config: Optional[LoaderConfig] = None) -> List[Document]:
-    """Load multiple files asynchronously using auto-detected loaders."""
-    auto_loader = LoaderFactory.create_auto_loader(file_paths, config)
-    return await auto_loader.load_all_async()
+    return results

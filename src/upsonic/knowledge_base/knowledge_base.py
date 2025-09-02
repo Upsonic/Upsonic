@@ -9,7 +9,6 @@ from ..text_splitter.base import ChunkingStrategy
 from ..embeddings.base import EmbeddingProvider
 from ..vectordb.base import BaseVectorDBProvider
 from ..loaders.base import DocumentLoader
-from ..loaders.factory import LoaderFactory, AutoLoader
 from ..loaders.config import LoaderConfig
 from ..schemas.data_models import Document, Chunk, RAGSearchResult
 
@@ -24,20 +23,21 @@ class KnowledgeBase:
     and embedding data is performed only once for a given set of sources and
     configurations.
     
-    Enhanced with intelligent loader auto-detection and configuration:
+    Enhanced with intelligent loader and splitter auto-detection and configuration:
     - Automatically detects file types and uses appropriate loaders
     - Supports both simple and advanced loader configuration
     - Provides framework-level loading capabilities
     - Backward compatible with existing loader parameter
+    - Supports indexed processing where each source uses corresponding loader/splitter
     """
     
     def __init__(
         self,
         sources: Union[str, List[str]],
         embedding_provider: EmbeddingProvider,
-        splitter: ChunkingStrategy,
+        splitters: Union[ChunkingStrategy, List[ChunkingStrategy]],
         vectordb: BaseVectorDBProvider,
-        loaders: Optional[List[DocumentLoader]] = None,
+        loaders: Optional[Union[DocumentLoader, List[DocumentLoader]]] = None,
         name: Optional[str] = None,
         loader_config: Optional[Union[Dict[str, Any], LoaderConfig]] = None,
         loader_configs: Optional[Dict[str, Union[Dict[str, Any], LoaderConfig]]] = None,
@@ -53,9 +53,9 @@ class KnowledgeBase:
         Args:
             sources: Source identifiers (file path, list of files, or directory path).
             embedding_provider: An instance of a concrete EmbeddingProvider.
-            splitter: An instance of a concrete ChunkingStrategy.
+            splitters: A single ChunkingStrategy or list of ChunkingStrategy instances.
             vectordb: An instance of a concrete BaseVectorDBProvider.
-            loaders: A list of DocumentLoader instances for different file types.
+            loaders: A single DocumentLoader or list of DocumentLoader instances for different file types.
             name: An optional human-readable name for this knowledge base.
             loader_config: Default configuration for all loaders (when auto-detecting).
             loader_configs: Specific configurations for each loader type.
@@ -68,19 +68,59 @@ class KnowledgeBase:
         self.sources = self._process_sources(sources)
         
         self.embedding_provider = embedding_provider
-        self.splitter = splitter
+        self.splitters = self._normalize_splitters(splitters)
         self.vectordb = vectordb
-        self.name = name or self._generate_knowledge_id()
         self.auto_detect_loaders = auto_detect_loaders
         
-        self.loaders = self._create_intelligent_loaders(
-            loaders, loader_config, loader_configs, auto_detect_loaders
-        )
+        self.loaders = self._normalize_loaders(loaders)
 
+        self._validate_component_counts()
+
+        self.name = name or self._generate_knowledge_id()
         self.knowledge_id: str = self._generate_knowledge_id()
         self.rag = True  
         self._is_ready = False
         self._setup_lock = asyncio.Lock()
+
+    def _normalize_splitters(self, splitters: Union[ChunkingStrategy, List[ChunkingStrategy]]) -> List[ChunkingStrategy]:
+        """Normalize splitters to always be a list."""
+        if isinstance(splitters, list):
+            return splitters
+        elif isinstance(splitters, ChunkingStrategy):
+            return [splitters]
+        else:
+            raise ValueError("Splitters must be a ChunkingStrategy or list of ChunkingStrategy instances")
+
+    def _normalize_loaders(self, loaders: Optional[Union[DocumentLoader, List[DocumentLoader]]]) -> List[DocumentLoader]:
+        """Normalize loaders to always be a list."""
+        if loaders is None:
+            return []
+        elif isinstance(loaders, list):
+            return loaders
+        elif isinstance(loaders, DocumentLoader):
+            return [loaders]
+        else:
+            raise ValueError("Loaders must be a DocumentLoader or list of DocumentLoader instances")
+
+    def _validate_component_counts(self):
+        """Validate that component counts are compatible for indexed processing."""
+        source_count = len(self.sources)
+        splitter_count = len(self.splitters)
+        loader_count = len(self.loaders) if self.loaders else 0
+        
+        
+        if source_count > 1:
+            if splitter_count > 1 and splitter_count != source_count:
+                raise ValueError(
+                    f"Number of splitters ({splitter_count}) must match number of sources ({source_count}) "
+                    "for indexed processing"
+                )
+            
+            if loader_count > 1 and loader_count != source_count:
+                raise ValueError(
+                    f"Number of loaders ({loader_count}) must match number of sources ({source_count}) "
+                    "for indexed processing"
+                )
 
     def _process_sources(self, sources: Union[str, List[str]]) -> List[str]:
         """
@@ -106,91 +146,28 @@ class KnowledgeBase:
         else:
             raise ValueError("Sources must be a string (file path or directory) or list of strings (file paths)")
 
-    def _create_intelligent_loaders(
-        self,
-        loaders: Optional[List[DocumentLoader]],
-        loader_config: Optional[Union[Dict[str, Any], LoaderConfig]],
-        loader_configs: Optional[Dict[str, Union[Dict[str, Any], LoaderConfig]]],
-        auto_detect_loaders: bool
-    ) -> List[DocumentLoader]:
+    def _get_component_for_source(self, source_index: int, component_list: List, component_name: str):
         """
-        Create intelligent loaders based on the provided configuration.
+        Get the component for a specific source index.
         
-        This method provides backward compatibility while enabling enhanced functionality.
+        Args:
+            source_index: Index of the source
+            component_list: List of components (loaders or splitters)
+            component_name: Name of the component type for error messages
+            
+        Returns:
+            Component at the specified index, or the first component if list is shorter
         """
-        if loaders is not None:
-            return loaders
+        if not component_list:
+            raise ValueError(f"No {component_name}s provided")
         
-        if not auto_detect_loaders:
-            from ..loaders import TextLoader
-            return [TextLoader()]
-        
-        kb_optimized_configs = {
-            "pdf": {
-                "load_strategy": "one_document_per_page",
-                "use_ocr": False,  
-                "error_handling": "warn"
-            },
-            "csv": {
-                "content_synthesis_mode": "concatenated",
-                "row_as_document": True,
-                "error_handling": "warn"
-            },
-            "text": {
-                "error_handling": "warn"
-            },
-            "docx": {
-                "include_tables": True,
-                "error_handling": "warn"
-            },
-            "json": {
-                "jq_schema": ".",
-                "flatten_metadata": True,
-                "error_handling": "warn"
-            },
-            "markdown": {
-                "parse_front_matter": True,
-                "include_code_blocks": True,
-                "error_handling": "warn"
-            },
-            "xml": {
-                "content_synthesis_mode": "smart_text",
-                "strip_namespaces": True,
-                "error_handling": "warn"
-            },
-            "yaml": {
-                "content_synthesis_mode": "canonical_yaml",
-                "flatten_metadata": True,
-                "error_handling": "warn"
-            },
-            "html": {
-                "extract_text": True,
-                "preserve_structure": True,
-                "error_handling": "warn"
-            }
-        }
-        
-        if loader_configs:
-            for loader_type, config in loader_configs.items():
-                if loader_type in kb_optimized_configs:
-                    if isinstance(config, dict):
-                        kb_optimized_configs[loader_type].update(config)
-                    else:
-                        kb_optimized_configs[loader_type] = config
-                else:
-                    kb_optimized_configs[loader_type] = config
-        
-        try:
-            auto_loader = AutoLoader(
-                sources=self.sources,
-                default_config=loader_config,
-                loader_configs=kb_optimized_configs
-            )
-            return [auto_loader]
-        except Exception as e:
-            print(f"Warning: Failed to create AutoLoader: {e}. Falling back to basic text loader.")
-            from ..loaders import TextLoader
-            return [TextLoader()]
+        if len(component_list) == 1:
+            return component_list[0]
+        elif source_index < len(component_list):
+            return component_list[source_index]
+        else:
+            print(f"Warning: {component_name} index {source_index} out of range, using first {component_name}")
+            return component_list[0]
 
     def _generate_knowledge_id(self) -> str:
         """
@@ -206,8 +183,8 @@ class KnowledgeBase:
         """
         config_representation = {
             "sources": sorted(self.sources),
-            "loaders": [loader.__class__.__name__ for loader in self.loaders],
-            "splitter": self.splitter.__class__.__name__,
+            "loaders": [loader.__class__.__name__ for loader in self.loaders] if self.loaders else [],
+            "splitters": [splitter.__class__.__name__ for splitter in self.splitters],
             "embedding_provider": self.embedding_provider.__class__.__name__,
         }
         
@@ -223,6 +200,9 @@ class KnowledgeBase:
         processed and indexed. If so, it does nothing. If not, it executes the
         full data pipeline: Load -> Chunk -> Embed -> Store. A lock is used to
         prevent race conditions in concurrent environments.
+        
+        Now supports indexed processing where each source uses its corresponding
+        loader and splitter.
         """
         async with self._setup_lock:
             if self._is_ready:
@@ -235,38 +215,85 @@ class KnowledgeBase:
                 self._is_ready = True
                 return
 
-            print(f"KnowledgeBase '{self.name}' not found in vector store. Starting indexing process...")
+            print(f"KnowledgeBase '{self.name}' not found in vector store. Starting indexed indexing process...")
 
-            print(f"  [Step 1/4] Loading {len(self.sources)} source(s)...")
             all_documents = []
+            source_to_documents = {}
+            source_to_loader = {}
+            source_to_splitter = {}
             
-            for source in self.sources:
-                source_documents = []
-                for loader in self.loaders:
-                    if loader.can_load(source):
+            for source_index, source in enumerate(self.sources):
+                print(f"    Processing source {source_index}: {source}")
+                
+                if self.loaders:
+                    loader = self._get_component_for_source(source_index, self.loaders, "loader")
+                    print(f"      Using loader: {loader.__class__.__name__}")
+                    
+                    print(f"      Checking if {loader.__class__.__name__} can load {source}...")
+                    can_load_result = loader.can_load(source)
+                    print(f"      can_load result: {can_load_result}")
+                    
+                    if can_load_result:
                         try:
                             source_documents = loader.load(source)
-                            break
+                            print(f"      ✓ Loaded {len(source_documents)} documents from {source}")
+                            all_documents.extend(source_documents)
+                            source_to_documents[source_index] = source_documents
+                            source_to_loader[source_index] = loader
                         except Exception as e:
-                            print(f"Warning: Failed to load {source} with {loader.__class__.__name__}: {e}")
+                            print(f"      ✗ Error loading {source}: {e}")
                             continue
-                
-                if not source_documents:
-                    print(f"Warning: No documents loaded from {source}")
+                    else:
+                        print(f"      ✗ Loader {loader.__class__.__name__} cannot handle {source}")
+                        continue
                 else:
-                    all_documents.extend(source_documents)
+                    print(f"      ✗ No loaders provided for {source}")
+                    continue
             
             if not all_documents:
                 self._is_ready = True
                 return
 
+            print(f"  [Step 2/4] Chunking {len(all_documents)} documents with indexed splitters...")
             all_chunks = []
-            for doc in all_documents:
-                doc_chunks = self.splitter.chunk(doc)
-                all_chunks.extend(doc_chunks)
-
-            vectors = await self.embedding_provider.embed_documents(all_chunks)
+            chunks_per_source = {}
             
+            for source_index in sorted(source_to_documents.keys()):
+                documents = source_to_documents[source_index]
+                
+                splitter = self._get_component_for_source(source_index, self.splitters, "splitter")
+                source_to_splitter[source_index] = splitter
+                
+                source_chunks = []
+                for doc in documents:
+                    doc_chunks = splitter.chunk(doc)
+                    
+                    for chunk in doc_chunks:
+                        chunk.metadata.update({
+                            'source_index': source_index,
+                            'source_path': self.sources[source_index],
+                            'source_file': os.path.basename(self.sources[source_index]),
+                            'loader_type': source_to_loader[source_index].__class__.__name__,
+                            'chunking_strategy': splitter.__class__.__name__,
+                            'original_document_id': doc.document_id
+                        })
+                    
+                    source_chunks.extend(doc_chunks)
+                    print(f"      Document '{doc.document_id}' split into {len(doc_chunks)} chunks")
+                
+                chunks_per_source[source_index] = source_chunks
+                all_chunks.extend(source_chunks)
+                print(f"    ✓ Source {source_index} total chunks: {len(source_chunks)}")
+            
+            print(f"  Summary: Total chunks created: {len(all_chunks)}")
+            for source_index, chunks in chunks_per_source.items():
+                print(f"    - Source {source_index}: {len(chunks)} chunks")
+
+            print(f"  [Step 3/4] Creating embeddings for {len(all_chunks)} chunks...")
+            vectors = await self.embedding_provider.embed_documents(all_chunks)
+            print(f"  ✓ Created embeddings for {len(vectors)} chunks")
+            
+            print(f"  [Step 4/4] Storing {len(all_chunks)} chunks in vector database...")
             self.vectordb.create_collection()
             
             chunk_texts = [chunk.text_content for chunk in all_chunks]
@@ -281,6 +308,9 @@ class KnowledgeBase:
             )
             
             self._is_ready = True
+            print(f"KnowledgeBase '{self.name}' indexing completed successfully!")
+
+
 
     async def query_async(self, query: str) -> List[RAGSearchResult]:
         """
@@ -315,9 +345,10 @@ class KnowledgeBase:
         for result in search_results:
             text_content = result.text or result.payload.get('text_content', str(result.payload))
             
+            metadata = result.payload or {}         
             rag_result = RAGSearchResult(
                 text=text_content,
-                metadata=result.payload or {},
+                metadata=metadata,
                 score=result.score,
                 chunk_id=result.id
             )
@@ -354,11 +385,13 @@ class KnowledgeBase:
                 "is_ready": self._is_ready
             },
             "loaders": {
-                "classes": [loader.__class__.__name__ for loader in self.loaders],
-                "auto_detect_enabled": self.auto_detect_loaders
+                "classes": [loader.__class__.__name__ for loader in self.loaders] if self.loaders else [],
+                "auto_detect_enabled": self.auto_detect_loaders,
+                "indexed_processing": len(self.loaders) > 1 if self.loaders else False
             },
-            "splitter": {
-                "class": self.splitter.__class__.__name__
+            "splitters": {
+                "classes": [splitter.__class__.__name__ for splitter in self.splitters],
+                "indexed_processing": len(self.splitters) > 1
             },
             "embedding_provider": {
                 "class": self.embedding_provider.__class__.__name__
@@ -386,7 +419,7 @@ class KnowledgeBase:
             "sources_count": len(self.sources) if hasattr(self, 'sources') else 0,
             "components": {
                 "embedding_provider": {"healthy": False, "error": "Not checked"},
-                "splitter": {"healthy": False, "error": "Not checked"},
+                "splitters": {"healthy": False, "error": "Not checked"},
                 "vectordb": {"healthy": False, "error": "Not checked"},
                 "loaders": {"healthy": False, "error": "Not checked"}
             },
@@ -413,12 +446,21 @@ class KnowledgeBase:
                 }
             
             try:
-                health_status["components"]["splitter"] = {
+                splitter_health = []
+                for i, splitter in enumerate(self.splitters):
+                    splitter_health.append({
+                        "index": i,
+                        "healthy": True,
+                        "strategy": splitter.__class__.__name__
+                    })
+                
+                health_status["components"]["splitters"] = {
                     "healthy": True,
-                    "strategy": self.splitter.__class__.__name__
+                    "count": len(self.splitters),
+                    "splitters": splitter_health
                 }
             except Exception as e:
-                health_status["components"]["splitter"] = {
+                health_status["components"]["splitters"] = {
                     "healthy": False,
                     "error": str(e)
                 }
@@ -450,9 +492,18 @@ class KnowledgeBase:
             
             try:
                 if self.loaders:
+                    loader_health = []
+                    for i, loader in enumerate(self.loaders):
+                        loader_health.append({
+                            "index": i,
+                            "healthy": True,
+                            "loader": loader.__class__.__name__
+                        })
+                    
                     health_status["components"]["loaders"] = {
                         "healthy": True,
-                        "loaders": [loader.__class__.__name__ for loader in self.loaders]
+                        "count": len(self.loaders),
+                        "loaders": loader_health
                     }
                 else:
                     health_status["components"]["loaders"] = {
@@ -479,6 +530,7 @@ class KnowledgeBase:
             health_status["error"] = str(e)
             return health_status
     
+
     async def get_collection_info_async(self) -> Dict[str, Any]:
         """
         Get detailed information about the vector database collection.

@@ -175,3 +175,13 @@ class CSVLoader(DocumentLoader):
     def get_supported_extensions(cls) -> List[str]:
         """Get list of file extensions supported by this loader."""
         return ['.csv']
+
+    @classmethod
+    def can_load(cls, source: str) -> bool:
+        """Check if this loader can handle the given source."""
+        if not source:
+            return False
+        
+        from pathlib import Path
+        source_path = Path(source)
+        return source_path.suffix.lower() in cls.get_supported_extensions()

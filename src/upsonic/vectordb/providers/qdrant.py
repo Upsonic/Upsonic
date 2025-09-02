@@ -458,7 +458,6 @@ class QdrantProvider(BaseVectorDBProvider):
         else:
             raise ConfigurationError(f"Unsupported fusion method: '{effective_fusion}'")
 
-        print(fused_results)
         fused_results.sort(key=lambda x: x.score, reverse=True)
         return fused_results[:top_k]
 
