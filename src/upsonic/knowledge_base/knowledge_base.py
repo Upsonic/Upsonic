@@ -39,8 +39,6 @@ class KnowledgeBase:
         vectordb: BaseVectorDBProvider,
         loaders: Optional[Union[DocumentLoader, List[DocumentLoader]]] = None,
         name: Optional[str] = None,
-        loader_config: Optional[Union[Dict[str, Any], LoaderConfig]] = None,
-        loader_configs: Optional[Dict[str, Union[Dict[str, Any], LoaderConfig]]] = None,
         auto_detect_loaders: bool = True,
     ):
         """
@@ -57,8 +55,6 @@ class KnowledgeBase:
             vectordb: An instance of a concrete BaseVectorDBProvider.
             loaders: A single DocumentLoader or list of DocumentLoader instances for different file types.
             name: An optional human-readable name for this knowledge base.
-            loader_config: Default configuration for all loaders (when auto-detecting).
-            loader_configs: Specific configurations for each loader type.
             auto_detect_loaders: If True, automatically detect file types and create appropriate loaders.
         """
 

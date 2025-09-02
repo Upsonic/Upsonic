@@ -105,13 +105,7 @@ def _lazy_import_strategies():
     except ImportError:
         pass
     
-    try:
-        from .rule import RuleBasedChunkingStrategy, RuleBasedChunkingConfig
-        register_chunking_strategy("rule_based", RuleBasedChunkingStrategy, RuleBasedChunkingConfig)
-        register_chunking_strategy("rule", RuleBasedChunkingStrategy, RuleBasedChunkingConfig)
-        globals()["RuleBasedChunkingConfig"] = RuleBasedChunkingConfig
-    except ImportError:
-        pass
+
 
 
 def list_available_strategies() -> List[str]:
@@ -359,28 +353,7 @@ def create_chunking_strategy(
     strategy_class = _STRATEGY_REGISTRY[strategy]
     config_class = _CONFIG_REGISTRY.get(strategy)
     
-    if strategy in ["rule_based", "rule"]:
-        if config is None:
-            config = {}
-        
-        if isinstance(config, dict):
-            if "rules" not in config and "rules" in kwargs:
-                config["rules"] = kwargs.pop("rules")
-            if "default_strategy" not in config and "default_strategy" in kwargs:
-                config["default_strategy"] = kwargs.pop("default_strategy")
-            
-            if "rules" not in config:
-                config["rules"] = []
-            if "default_strategy" not in config:
-                config["default_strategy"] = "recursive"
-            
-            merged_config = {**config, **kwargs}
-            config = config_class(**merged_config) if config_class else RuleBasedChunkingConfig(**merged_config)
-        elif kwargs:
-            print(f"Warning: Both config object and kwargs provided. Using config object, ignoring kwargs: {list(kwargs.keys())}")
-        
-        return strategy_class(config=config)
-    
+
     if strategy == "semantic":
         embedding_provider = kwargs.pop("embedding_provider", None)
         if embedding_provider is None:

@@ -8,7 +8,6 @@ from .base import (
 )
 from .character import CharacterChunkingStrategy, CharacterChunkingConfig
 from .recursive import RecursiveCharacterChunkingStrategy, RecursiveChunkingConfig
-from .rule import RuleBasedChunkingStrategy, RoutingRule, RuleBasedChunkingConfig
 from .semantic import SemanticSimilarityChunkingStrategy, SemanticChunkingConfig
 from .agentic import AgenticChunkingStrategy, AgenticChunkingConfig
 from .python import PythonCodeChunkingStrategy, PythonCodeChunkingConfig
@@ -44,9 +43,6 @@ __all__ = [
     "CharacterChunkingConfig",
     "RecursiveCharacterChunkingStrategy",
     "RecursiveChunkingConfig",
-    "RuleBasedChunkingStrategy",
-    "RoutingRule",
-    "RuleBasedChunkingConfig",
     "SemanticSimilarityChunkingStrategy",
     "SemanticChunkingConfig",
     "AgenticChunkingStrategy",
