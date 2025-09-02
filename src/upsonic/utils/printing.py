@@ -625,3 +625,54 @@ def print_orchestrator_tool_step(tool_name: str, params: dict, result: Any):
 
     console.print(tool_panel)
     spacing()
+
+
+def policy_triggered(policy_name: str, check_type: str, action_taken: str, rule_output: Any):
+    """
+    Prints a formatted panel when a Safety Engine policy is triggered.
+    """
+    
+    if "BLOCK" in action_taken.upper() or "DISALLOWED" in action_taken.upper():
+        border_style = "bold red"
+        title = f"[bold red]🛡️ Safety Policy Triggered: ACCESS DENIED[/bold red]"
+    elif "REPLACE" in action_taken.upper() or "ANONYMIZE" in action_taken.upper():
+        border_style = "bold yellow"
+        title = f"[bold yellow]🛡️ Safety Policy Triggered: CONTENT MODIFIED[/bold yellow]"
+    else:
+        border_style = "bold green"
+        title = f"[bold green]🛡️ Safety Policy Check: PASSED[/bold green]"
+
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    policy_name_esc = escape_rich_markup(policy_name)
+    check_type_esc = escape_rich_markup(check_type)
+    action_taken_esc = escape_rich_markup(action_taken)
+    details_esc = escape_rich_markup(rule_output.details)
+    content_type_esc = escape_rich_markup(rule_output.content_type)
+    
+    table.add_row("[bold]Policy Name:[/bold]", f"[cyan]{policy_name_esc}[/cyan]")
+    table.add_row("[bold]Check Point:[/bold]", f"[cyan]{check_type_esc}[/cyan]")
+    table.add_row("")
+    table.add_row("[bold]Action Taken:[/bold]", f"[{border_style.split(' ')[1]}]{action_taken_esc}[/]")
+    table.add_row("[bold]Confidence:[/bold]", f"{rule_output.confidence:.2f}")
+    table.add_row("[bold]Content Type:[/bold]", f"{content_type_esc}")
+    table.add_row("[bold]Details:[/bold]", f"{details_esc}")
+
+    if hasattr(rule_output, 'triggered_keywords') and rule_output.triggered_keywords:
+        keywords_str = ", ".join(map(str, rule_output.triggered_keywords))
+        if len(keywords_str) > 100:
+            keywords_str = keywords_str[:97] + "..."
+        keywords_esc = escape_rich_markup(keywords_str)
+        table.add_row("[bold]Triggers:[/bold]", f"[yellow]{keywords_esc}[/yellow]")
+
+    panel = Panel(
+        table,
+        title=title,
+        border_style=border_style,
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()

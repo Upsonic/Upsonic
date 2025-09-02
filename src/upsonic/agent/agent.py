@@ -23,6 +23,10 @@ from upsonic.storage.memory.memory import Memory
 from upsonic.models.base import BaseModelProvider
 from upsonic.models.factory import ModelFactory
 from upsonic.utils.package.exception import GuardrailValidationError
+from upsonic.safety_engine.base import Policy
+from upsonic.safety_engine.models import PolicyInput
+from upsonic.safety_engine.exceptions import DisallowedOperation
+from upsonic.utils.printing import policy_triggered
 
 from upsonic.agent.context_managers import (
     CallManager,
@@ -67,6 +71,8 @@ class Direct(BaseAgent):
                  tool_call_limit: int = 5,
                  enable_thinking_tool: bool = False,
                  enable_reasoning_tool: bool = False,
+                 user_policy: Optional[Policy] = None,
+                 agent_policy: Optional[Policy] = None,
                  ):
 
         self.canvas = canvas
@@ -117,6 +123,9 @@ class Direct(BaseAgent):
 
         self.enable_thinking_tool = enable_thinking_tool
         self.enable_reasoning_tool = enable_reasoning_tool
+
+        self.user_policy = user_policy
+        self.agent_policy = agent_policy
 
 
 
@@ -383,6 +392,104 @@ class Direct(BaseAgent):
         return final_model_response
 
 
+
+    async def _apply_user_policy_async(self, task: "Task") -> (Optional["Task"], bool):
+        """Applies the user policy to the task description, returning the modified task and a flag to continue."""
+        if not (self.user_policy and task.description):
+            return task, True
+
+        policy_input = PolicyInput(input_texts=[task.description])
+        try:
+            rule_output, _action_output, policy_output = await self.user_policy.execute_async(policy_input)
+            action_taken = policy_output.action_output.get("action_taken", "UNKNOWN")
+
+            if self.debug and rule_output.confidence > 0.0:
+                policy_triggered(
+                    policy_name=self.user_policy.name,
+                    check_type="User Input Check",
+                    action_taken=action_taken,
+                    rule_output=rule_output
+                )
+
+            if action_taken == "BLOCK":
+                task.task_end()
+                task._response = policy_output.output_texts[0] if policy_output.output_texts else "Content blocked by user policy."
+                return task, False
+
+            elif action_taken in ["REPLACE", "ANONYMIZE"]:
+                task.description = policy_output.output_texts[0] if policy_output.output_texts else ""
+                return task, True
+
+        except DisallowedOperation as e:
+            from upsonic.safety_engine.models import RuleOutput
+            mock_rule_output = RuleOutput(
+                confidence=1.0, 
+                content_type="DISALLOWED_OPERATION", 
+                details=str(e)
+            )
+            if self.debug:
+                 policy_triggered(
+                    policy_name=self.user_policy.name,
+                    check_type="User Input Check",
+                    action_taken="DISALLOWED_EXCEPTION",
+                    rule_output=mock_rule_output
+                )
+
+            task.task_end()
+            task._response = f"Operation disallowed by user policy: {e}"
+            return task, False
+
+        return task, True
+
+    async def _apply_agent_policy_async(self, processed_task: "Task") -> "Task":
+        """Applies the agent policy to the final response, returning the modified task."""
+        if not (self.agent_policy and processed_task and processed_task.response):
+            return processed_task
+
+        response_text = ""
+        if isinstance(processed_task.response, str):
+            response_text = processed_task.response
+        elif hasattr(processed_task.response, 'model_dump_json'):
+            response_text = processed_task.response.model_dump_json()
+        else:
+            response_text = str(processed_task.response)
+
+        if response_text:
+            agent_policy_input = PolicyInput(input_texts=[response_text])
+            try:
+                rule_output, _action_output, policy_output = await self.agent_policy.execute_async(agent_policy_input)
+                action_taken = policy_output.action_output.get("action_taken", "UNKNOWN")
+
+                if self.debug and rule_output.confidence > 0.0:
+                    policy_triggered(
+                        policy_name=self.agent_policy.name,
+                        check_type="Agent Output Check",
+                        action_taken=action_taken,
+                        rule_output=rule_output
+                    )
+
+                final_output = policy_output.output_texts[0] if policy_output.output_texts else "Response modified by agent policy."
+                processed_task._response = final_output
+            
+            except DisallowedOperation as e:
+                from upsonic.safety_engine.models import RuleOutput
+                mock_rule_output = RuleOutput(
+                    confidence=1.0, 
+                    content_type="DISALLOWED_OPERATION", 
+                    details=str(e)
+                )
+                if self.debug:
+                    policy_triggered(
+                        policy_name=self.agent_policy.name,
+                        check_type="Agent Output Check",
+                        action_taken="DISALLOWED_EXCEPTION",
+                        rule_output=mock_rule_output
+                    )
+                processed_task._response = f"Agent response disallowed by policy: {e}"
+        
+        return processed_task
+
+
     @upsonic_error_handler(max_retries=3, show_error_details=True)
     @retryable()
     async def do_async(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
@@ -397,7 +504,11 @@ class Direct(BaseAgent):
             model_response = None
 
             try:
-                # Handle model parameter - could be string, provider instance, or None
+                task, should_continue = await self._apply_user_policy_async(task)
+                if not should_continue:
+                    processed_task = task
+                    return processed_task.response 
+
                 if model is not None:
                     provider_for_this_run = ModelFactory.create(model)
                 else:
@@ -431,6 +542,15 @@ class Direct(BaseAgent):
                                     model_response = task_handler.process_response(model_response)
                                     model_response = memory_handler.process_response(model_response)
                                     processed_task = await reliability_handler.process_task(task_handler.task)
+
+                processed_task = await self._apply_agent_policy_async(processed_task)
+
+            except StopIteration as e:
+                if self.debug: print(f"Execution stopped gracefully by policy: {e}")
+            except DisallowedOperation as e:
+
+                if self.debug: print(f"Caught DisallowedOperation at do_async level. Finalizing response.")
+
             except Exception as e:
                 exception_caught = e
                 raise
