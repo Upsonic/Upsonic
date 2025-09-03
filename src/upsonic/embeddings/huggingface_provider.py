@@ -428,6 +428,30 @@ class HuggingFaceEmbedding(EmbeddingProvider):
         
         await super().close()
 
+    async def remove_local_cache(self) -> bool:
+        """
+        Remove HuggingFace model/tokenizer cache files from local storage.
+        """
+        from huggingface_hub import try_to_load_from_cache
+        import shutil, os
+
+        try:
+            model_path = try_to_load_from_cache(
+                repo_id=self.config.model_name,
+                cache_dir=self.config.cache_dir
+            )
+            if model_path and os.path.exists(model_path):
+                root = os.path.dirname(model_path)
+                shutil.rmtree(root, ignore_errors=True)
+                print(f"Local cache removed for {self.config.model_name} at {root}")
+                return True
+            else:
+                print(f"No local cache found for {self.config.model_name}")
+                return False
+        except Exception as e:
+            print(f"Error removing local cache for {self.config.model_name}: {e}")
+            return False
+
 
 def create_sentence_transformer_embedding(
     model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
