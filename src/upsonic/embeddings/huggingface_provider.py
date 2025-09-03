@@ -389,14 +389,6 @@ class HuggingFaceEmbedding(EmbeddingProvider):
         """
         if hasattr(self, 'model') and self.model:
             try:
-                if hasattr(self.model, 'aclose'):
-                    await self.model.aclose()
-                elif hasattr(self.model, 'close'):
-                    if asyncio.iscoroutinefunction(self.model.close):
-                        await self.model.close()
-                    else:
-                        self.model.close()
-                
                 del self.model
                 self.model = None
             except Exception as e:
@@ -404,14 +396,6 @@ class HuggingFaceEmbedding(EmbeddingProvider):
         
         if hasattr(self, 'tokenizer') and self.tokenizer:
             try:
-                if hasattr(self.tokenizer, 'aclose'):
-                    await self.tokenizer.aclose()
-                elif hasattr(self.tokenizer, 'close'):
-                    if asyncio.iscoroutinefunction(self.tokenizer.close):
-                        await self.tokenizer.close()
-                    else:
-                        self.tokenizer.close()
-                
                 del self.tokenizer
                 self.tokenizer = None
             except Exception as e:
