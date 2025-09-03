@@ -12,6 +12,7 @@ except ImportError:
     ApiException = None
     NotFoundException = None
 
+from Upsonic.notebooks.stock_report import f
 from upsonic.vectordb.base import BaseVectorDBProvider
 
 from upsonic.vectordb.config import (
@@ -833,6 +834,8 @@ class PineconeProvider(BaseVectorDBProvider):
         is_dense_intent = query_vector is not None
         is_sparse_intent = query_text is not None
         
+        fusion_method = fusion_method if fusion_method is not None else self._config.search.default_fusion_method or 'weighted'
+
         final_top_k = top_k if top_k is not None else self._config.search.default_top_k
         if final_top_k is None:
             raise ConfigurationError("A 'top_k' value must be provided either in the search call or as 'default_top_k' in the configuration.")

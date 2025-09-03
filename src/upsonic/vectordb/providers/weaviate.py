@@ -448,6 +448,7 @@ class WeaviateProvider(BaseVectorDBProvider):
         filter = filter if filter is not None else self._config.search.filter
         final_top_k = top_k if top_k is not None else self._config.search.default_top_k or 10
 
+        fusion_method = fusion_method if fusion_method is not None else self._config.search.default_fusion_method or 'weighted'
 
         is_hybrid = query_vector is not None and query_text is not None
         is_dense = query_vector is not None and query_text is None

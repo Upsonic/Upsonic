@@ -20,7 +20,8 @@ from .html import HTMLLoader
 from .factory import (
     LoaderFactory, get_factory, create_loader, create_loader_for_file,
     create_loader_for_content, can_handle_file, get_supported_extensions,
-    get_supported_loaders, load_document, load_documents_batch
+    get_supported_loaders, load_document, load_documents_batch,
+    create_intelligent_loaders
 )
 
 
@@ -37,4 +38,5 @@ __all__ = [
     'LoaderFactory', 'get_factory', 'create_loader', 'create_loader_for_file',
     'create_loader_for_content', 'can_handle_file', 'get_supported_extensions',
     'get_supported_loaders', 'load_document', 'load_documents_batch',
+    'create_intelligent_loaders',
 ]

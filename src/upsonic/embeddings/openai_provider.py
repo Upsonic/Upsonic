@@ -338,6 +338,27 @@ class OpenAIEmbedding(EmbeddingProvider):
             "difference": difference,
             "percentage": percentage
         }
+    
+    async def close(self):
+        """
+        Clean up OpenAI client connections and resources.
+        """
+        if hasattr(self, 'client') and self.client:
+            try:
+                if hasattr(self.client, 'aclose'):
+                    await self.client.aclose()
+                elif hasattr(self.client, 'close'):
+                    if asyncio.iscoroutinefunction(self.client.close):
+                        await self.client.close()
+                    else:
+                        self.client.close()
+                
+                del self.client
+                self.client = None
+            except Exception as e:
+                print(f"Warning: Error closing OpenAI client: {e}")
+        
+        await super().close()
 
 
 def create_openai_embedding(

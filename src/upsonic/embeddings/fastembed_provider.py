@@ -2,6 +2,7 @@ from __future__ import annotations
 import os
 from typing import List, Dict, Any, Optional, Iterator
 import numpy as np
+import asyncio
 
 try:
     from fastembed import TextEmbedding, SparseTextEmbedding
@@ -368,6 +369,48 @@ class FastEmbedProvider(EmbeddingProvider):
             base_info["cache_error"] = str(e)
         
         return base_info
+
+    async def close(self):
+        """
+        Clean up FastEmbed models and clear memory.
+        """
+        if hasattr(self, 'embedding_model') and self.embedding_model:
+            try:
+                if hasattr(self.embedding_model, 'aclose'):
+                    await self.embedding_model.aclose()
+                elif hasattr(self.embedding_model, 'close'):
+                    if asyncio.iscoroutinefunction(self.embedding_model.close):
+                        await self.embedding_model.close()
+                    else:
+                        self.embedding_model.close()
+                
+                del self.embedding_model
+                self.embedding_model = None
+            except Exception as e:
+                print(f"Warning: Error closing FastEmbed model: {e}")
+        
+        if hasattr(self, 'sparse_model') and self.sparse_model:
+            try:
+                if hasattr(self.sparse_model, 'aclose'):
+                    await self.sparse_model.aclose()
+                elif hasattr(self.sparse_model, 'close'):
+                    if asyncio.iscoroutinefunction(self.sparse_model.close):
+                        await self.sparse_model.close()
+                    else:
+                        self.sparse_model.close()
+                
+                del self.sparse_model
+                self.sparse_model = None
+            except Exception as e:
+                print(f"Warning: Error closing FastEmbed sparse model: {e}")
+        
+        try:
+            import onnxruntime as ort
+            ort.get_session().close() if hasattr(ort, 'get_session') else None
+        except Exception as e:
+            print(f"Warning: Could not clear ONNX runtime cache: {e}")
+        
+        await super().close()
 
 
 def create_bge_small_embedding(**kwargs) -> FastEmbedProvider:

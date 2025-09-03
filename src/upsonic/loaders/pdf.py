@@ -93,12 +93,18 @@ class PDFLoader(DocumentLoader):
 
             with open(file_path, "rb") as f:
                 reader = pypdf.PdfReader(f)
+                print(f"📄 [PDF] Loading PDF: {os.path.basename(file_path)}")
+                print(f"📄 [PDF] Total pages: {len(reader.pages)}")
                 
                 doc_info = reader.metadata
                 if doc_info:
+                    print(f"📄 [PDF] Document metadata found: {list(doc_info.keys())}")
                     for key, value in doc_info.items():
                         clean_key = key[1:].lower() if key.startswith('/') else key.lower()
                         base_metadata[clean_key] = value
+                        print(f"📄 [PDF] Metadata: {clean_key} = {value}")
+                else:
+                    print(f"📄 [PDF] No document metadata found")
 
                 documents: List[Document] = []
                 all_page_texts: List[str] = []
@@ -108,7 +114,9 @@ class PDFLoader(DocumentLoader):
                     page_metadata = base_metadata.copy()
                     page_metadata["page_number"] = page_number
                     
+                    print(f"📄 [PDF] Processing page {page_number}")
                     text = page.extract_text()
+                    print(f"📄 [PDF] Page {page_number} - Direct extraction length: {len(text)} characters")
                     extraction_method = "direct"
 
                     should_use_ocr = (
@@ -116,6 +124,7 @@ class PDFLoader(DocumentLoader):
                         (self.config.force_ocr or not text or len(text.strip()) < self.config.ocr_text_threshold)
                     )
                     
+                    print(f"📄 [PDF] Page {page_number} - Should use OCR: {should_use_ocr}")
                     if should_use_ocr:
                         try:
                             page_images = convert_from_path(
@@ -135,13 +144,16 @@ class PDFLoader(DocumentLoader):
                                 if ocr_text.strip():
                                     text = ocr_text
                                     extraction_method = "ocr"
+                                    print(f"📄 [PDF] Page {page_number} - OCR successful, extracted {len(ocr_text)} characters")
                                     
                         except Exception as ocr_error:
                             print(f"Warning: OCR failed on page {page_number} of '{source}': {ocr_error}")
                     
                     page_metadata["extraction_method"] = extraction_method
+                    print(f"📄 [PDF] Page {page_number} - Final extraction method: {extraction_method}")
                     
                     cleaned_text = self._clean_text(text)
+                    print(f"📄 [PDF] Page {page_number} - After cleaning: {len(cleaned_text)} characters")
 
                     if self.config.load_strategy == "one_document_per_page":
                         documents.append(Document(content=cleaned_text, metadata=page_metadata))
@@ -151,7 +163,11 @@ class PDFLoader(DocumentLoader):
                 if self.config.load_strategy == "one_document_for_the_whole_file":
                     full_content = "\n\n".join(all_page_texts)
                     documents.append(Document(content=full_content, metadata=base_metadata))
+                    print(f"📄 [PDF] Created single document with {len(full_content)} total characters")
+                else:
+                    print(f"📄 [PDF] Created {len(documents)} separate page documents")
                 
+                print(f"📄 [PDF] Total documents created: {len(documents)}")
                 return documents
 
         except FileNotFoundError as e:

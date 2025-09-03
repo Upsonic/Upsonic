@@ -20,7 +20,6 @@ MARKDOWN_SEPARATORS = [
     r"\n\n",
     r"\n",
     r" ",
-    r"",
 ]
 
 class MarkdownChunkingConfig(RecursiveChunkingConfig):
@@ -52,6 +51,11 @@ class MarkdownRecursiveChunkingStrategy(RecursiveCharacterChunkingStrategy):
         """Initialize Markdown chunking strategy."""
         if config is None:
             config = MarkdownChunkingConfig()
+        
+        # Filter out empty separators to prevent chunking errors
+        if hasattr(config, 'separators') and config.separators:
+            config.separators = [sep for sep in config.separators if sep.strip()]
+        
         super().__init__(config)
 
 

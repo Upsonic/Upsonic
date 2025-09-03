@@ -116,7 +116,37 @@ class QdrantProvider(BaseVectorDBProvider):
         """
         if self._client:
             try:
-                self._client.close()
+                if hasattr(self._client, 'aclose'):
+                    import asyncio
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            loop.create_task(self._client.aclose())
+                        else:
+                            loop.run_until_complete(self._client.aclose())
+                    except:
+                        pass
+                elif hasattr(self._client, 'close'):
+                    self._client.close()
+                
+                print("Successfully disconnected from Qdrant.")
+            except Exception as e:
+                print(f"Error during Qdrant disconnection: {e}")
+            finally:
+                self._client = None
+                self._is_connected = False
+    
+    async def disconnect_async(self) -> None:
+        """
+        Async version of disconnect for proper async cleanup.
+        """
+        if self._client:
+            try:
+                if hasattr(self._client, 'aclose'):
+                    await self._client.aclose()
+                elif hasattr(self._client, 'close'):
+                    self._client.close()
+                
                 print("Successfully disconnected from Qdrant.")
             except Exception as e:
                 print(f"Error during Qdrant disconnection: {e}")

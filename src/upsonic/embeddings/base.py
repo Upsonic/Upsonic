@@ -366,3 +366,14 @@ class EmbeddingProvider(BaseModel, ABC):
             "estimated_tokens": total_tokens,
             "price_per_million_tokens": cost_per_million
         }
+    
+    async def close(self):
+        """
+        Clean up resources and close connections.
+        
+        This method should be called when the provider is no longer needed
+        to prevent resource leaks.
+        """
+        if hasattr(self, '_executor') and self._executor:
+            self._executor.shutdown(wait=True)
+            self._executor = None

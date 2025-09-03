@@ -498,6 +498,27 @@ class OllamaEmbedding(EmbeddingProvider):
         except Exception as e:
             return {"error": f"Failed to get model details: {e}"}
 
+    async def close(self):
+        """
+        Clean up Ollama HTTP sessions and connections.
+        """
+        if hasattr(self, 'session') and self.session:
+            try:
+                if hasattr(self.session, 'aclose'):
+                    await self.session.aclose()
+                elif hasattr(self.session, 'close'):
+                    self.session.close()
+                
+                del self.session
+                self.session = None
+            except Exception as e:
+                print(f"Warning: Error closing Ollama HTTP session: {e}")
+        
+        if hasattr(self, '_model_info'):
+            self._model_info = None
+        
+        await super().close()
+
 
 def create_nomic_embedding(**kwargs) -> OllamaEmbedding:
     """Create Nomic Embed Text embedding provider."""

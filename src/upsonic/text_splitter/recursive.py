@@ -70,7 +70,9 @@ class RecursiveCharacterChunkingStrategy(TextSplitter):
         else:
             optimized_separators = self.config.separators
         
-        return self._recursive_split_enhanced(text, optimized_separators)
+        result = self._recursive_split_enhanced(text, optimized_separators)
+        print(f"📝 [RECURSIVE] ALL SPLITS: {result}")
+        return result
     
     def _analyze_and_adapt_separators(self, text: str) -> List[str]:
         """Analyze text content and adapt separator priorities."""
@@ -128,6 +130,7 @@ class RecursiveCharacterChunkingStrategy(TextSplitter):
             return result
         
         splits = self._split_with_separator(text, current_separator)
+        print(f"📝 [RECURSIVE] ALL SPLITS FROM SEPARATOR: {splits}")
         
         for split in splits:
             if not split.strip():
@@ -154,9 +157,11 @@ class RecursiveCharacterChunkingStrategy(TextSplitter):
         if not separator:
             return False
         if self.config.is_separator_regex:
-            return bool(re.search(separator, text))
+            exists = bool(re.search(separator, text))
+            return exists
         else:
-            return separator in text
+            exists = separator in text
+            return exists
     
     def _split_with_separator(self, text: str, separator: str) -> List[str]:
         """Split text with the given separator, handling both regex and literal."""
@@ -177,14 +182,18 @@ class RecursiveCharacterChunkingStrategy(TextSplitter):
                     part += splits[i + 1]
                 if part:
                     rejoined_splits.append(part)
+            print(f"📝 [RECURSIVE] _split_with_separator: ALL REJOINED SPLITS: {rejoined_splits}")
             return rejoined_splits
         else:
-            return [s for s in re.split(pattern, text) if s]
+            result = [s for s in re.split(pattern, text) if s]
+            print(f"📝 [RECURSIVE] _split_with_separator: ALL RESULT SPLITS: {result}")
+            return result
     
     def _handle_base_case(self, text: str) -> List[str]:
         """Handle the base case when no separators are found."""
         if len(text) <= self.config.chunk_size:
-            return [text] if text.strip() else []
+            result = [text] if text.strip() else []
+            return result
         else:
             return self._character_split_fallback(text)
     
@@ -199,16 +208,18 @@ class RecursiveCharacterChunkingStrategy(TextSplitter):
     
     def get_separator_stats(self) -> Dict[str, Any]:
         """Get statistics about separator usage and performance."""
-        return {
+        stats = {
             "separator_cache_size": len(self._separator_stats),
             "separator_analysis": self._separator_stats,
             "current_separators": self.config.separators,
             "is_regex_mode": self.config.is_separator_regex,
             "adaptive_splitting_enabled": self.config.enable_adaptive_splitting
         }
+        return stats
     
     def clear_separator_cache(self):
         """Clear the separator analysis cache."""
+        cache_size = len(self._separator_stats)
         self._separator_stats.clear()
 
     # Legacy method for backward compatibility

@@ -11,6 +11,8 @@ from ..vectordb.base import BaseVectorDBProvider
 from ..loaders.base import DocumentLoader
 from ..loaders.config import LoaderConfig
 from ..schemas.data_models import Document, Chunk, RAGSearchResult
+from ..text_splitter.factory import create_intelligent_splitters, ChunkingUseCase
+from ..loaders.factory import create_intelligent_loaders
 
 
 class KnowledgeBase:
@@ -35,11 +37,15 @@ class KnowledgeBase:
         self,
         sources: Union[str, List[str]],
         embedding_provider: EmbeddingProvider,
-        splitters: Union[ChunkingStrategy, List[ChunkingStrategy]],
         vectordb: BaseVectorDBProvider,
+        splitters: Optional[Union[ChunkingStrategy, List[ChunkingStrategy]]] = None,
         loaders: Optional[Union[DocumentLoader, List[DocumentLoader]]] = None,
         name: Optional[str] = None,
-        auto_detect_loaders: bool = True,
+        use_case: ChunkingUseCase = ChunkingUseCase.RAG_RETRIEVAL,
+        quality_preference: str = "balanced",
+        loader_config: Optional[Dict[str, Any]] = None,
+        splitter_config: Optional[Dict[str, Any]] = None,
+        **config_kwargs
     ):
         """
         Initializes the KnowledgeBase configuration.
@@ -55,7 +61,11 @@ class KnowledgeBase:
             vectordb: An instance of a concrete BaseVectorDBProvider.
             loaders: A single DocumentLoader or list of DocumentLoader instances for different file types.
             name: An optional human-readable name for this knowledge base.
-            auto_detect_loaders: If True, automatically detect file types and create appropriate loaders.
+            use_case: The intended use case for chunking optimization.
+            quality_preference: Speed vs quality preference ("fast", "balanced", "quality").
+            loader_config: Configuration options specifically for loaders.
+            splitter_config: Configuration options specifically for splitters.
+            **config_kwargs: Additional global configuration options (deprecated, use specific configs instead).
         """
 
         if not sources:
@@ -64,11 +74,37 @@ class KnowledgeBase:
         self.sources = self._process_sources(sources)
         
         self.embedding_provider = embedding_provider
-        self.splitters = self._normalize_splitters(splitters)
         self.vectordb = vectordb
-        self.auto_detect_loaders = auto_detect_loaders
         
-        self.loaders = self._normalize_loaders(loaders)
+        if loaders is None:
+            print(f"🔄 Auto-detecting loaders for {len(self.sources)} sources...")
+            try:
+                config_to_use = loader_config or config_kwargs
+                self.loaders = create_intelligent_loaders(self.sources, **config_to_use)
+                print(f"✅ Created {len(self.loaders)} intelligent loaders")
+            except Exception as e:
+                print(f"⚠️ Auto-detection failed: {e}, proceeding without loaders")
+                self.loaders = []
+        else:
+            self.loaders = self._normalize_loaders(loaders)
+        
+        if splitters is None:
+            print(f"🔄 Auto-detecting splitters for {len(self.sources)} sources...")
+            try:
+                config_to_use = splitter_config or config_kwargs
+                self.splitters = create_intelligent_splitters(
+                    self.sources,
+                    use_case=use_case,
+                    quality_preference=quality_preference,
+                    **config_to_use
+                )
+                print(f"✅ Created {len(self.splitters)} intelligent splitters")
+            except Exception as e:
+                print(f"⚠️ Auto-detection failed: {e}, using default recursive strategy")
+                from ..text_splitter.factory import create_chunking_strategy
+                self.splitters = [create_chunking_strategy("recursive")]
+        else:
+            self.splitters = self._normalize_splitters(splitters)
 
         self._validate_component_counts()
 
@@ -136,8 +172,13 @@ class KnowledgeBase:
                         file_paths.append(os.path.join(root, file))
                 return file_paths
             else:
+                if not os.path.exists(sources):
+                    raise ValueError(f"Source file does not exist: {sources}")
                 return [sources]
         elif isinstance(sources, list):
+            for source in sources:
+                if not os.path.exists(source):
+                    raise ValueError(f"Source file does not exist: {source}")
             return sources
         else:
             raise ValueError("Sources must be a string (file path or directory) or list of strings (file paths)")
@@ -382,7 +423,6 @@ class KnowledgeBase:
             },
             "loaders": {
                 "classes": [loader.__class__.__name__ for loader in self.loaders] if self.loaders else [],
-                "auto_detect_enabled": self.auto_detect_loaders,
                 "indexed_processing": len(self.loaders) > 1 if self.loaders else False
             },
             "splitters": {
@@ -544,3 +584,35 @@ class KnowledgeBase:
                 "exists": self.vectordb.collection_exists(),
                 "provider": self.vectordb.__class__.__name__
             }
+    
+    async def close(self):
+        """
+        Clean up resources and close connections.
+        
+        This method should be called when the KnowledgeBase is no longer needed
+        to prevent resource leaks.
+        """
+        try:
+            if hasattr(self.embedding_provider, 'close'):
+                await self.embedding_provider.close()
+            
+            if hasattr(self.vectordb, 'close'):
+                await self.vectordb.close()
+            elif hasattr(self.vectordb, 'disconnect_async'):
+                await self.vectordb.disconnect_async()
+            elif hasattr(self.vectordb, 'disconnect'):
+                self.vectordb.disconnect()
+            
+            print(f"✅ KnowledgeBase '{self.name}' resources cleaned up successfully")
+        except Exception as e:
+            print(f"⚠️ Warning: Error during KnowledgeBase cleanup: {e}")
+    
+    def __del__(self):
+        """
+        Destructor to ensure cleanup when object is garbage collected.
+        """
+        try:
+            if hasattr(self, '_is_ready') and self._is_ready:
+                print(f"⚠️ Warning: KnowledgeBase '{getattr(self, 'name', 'Unknown')}' was not explicitly closed")
+        except:
+            pass

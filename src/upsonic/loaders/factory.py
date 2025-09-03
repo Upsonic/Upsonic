@@ -81,6 +81,115 @@ class LoaderFactory:
             self._logger.error(f"Failed to create loader for '{source}': {e}")
             raise
     
+    def create_intelligent_loaders(self, sources: List[str], **global_config_kwargs) -> List[DocumentLoader]:
+        """
+        Intelligently create appropriate loaders for a list of sources.
+        
+        This method analyzes each source and creates the most appropriate loader
+        with optimized configuration based on the source type and content.
+        
+        Args:
+            sources: List of source paths or content strings
+            **global_config_kwargs: Global configuration options to apply to all loaders
+            
+        Returns:
+            List of configured DocumentLoader instances
+        """
+        loaders = []
+        
+        for source in sources:
+            try:
+                # Detect the best loader for this source
+                loader_type = self._detect_loader_type(source)
+                
+                # Create source-specific configuration
+                source_config = self._create_optimized_config(source, loader_type, **global_config_kwargs)
+                
+                # Create and configure the loader
+                loader = self.get_loader(source, loader_type, **source_config)
+                loaders.append(loader)
+                
+                self._logger.debug(f"Created {loader_type} loader for {source}")
+                
+            except Exception as e:
+                self._logger.warning(f"Failed to create loader for {source}: {e}")
+                # Fallback to text loader
+                try:
+                    fallback_config = self._create_optimized_config(source, 'text', **global_config_kwargs)
+                    fallback_loader = self.get_loader(source, 'text', **fallback_config)
+                    loaders.append(fallback_loader)
+                    self._logger.info(f"Using text loader fallback for {source}")
+                except Exception as fallback_error:
+                    self._logger.error(f"Fallback loader also failed for {source}: {fallback_error}")
+                    raise
+        
+        return loaders
+    
+    def _create_optimized_config(self, source: str, loader_type: str, **global_config_kwargs) -> Dict[str, Any]:
+        """
+        Create optimized configuration for a specific source and loader type.
+        
+        Args:
+            source: Source path or content
+            loader_type: Type of loader to configure
+            **global_config_kwargs: Global configuration options
+            
+        Returns:
+            Optimized configuration dictionary
+        """
+        config = global_config_kwargs.copy()
+        
+        # Source-specific optimizations
+        if os.path.exists(source) and os.path.isfile(source):
+            file_size = os.path.getsize(source)
+            file_path = Path(source)
+            
+            # File size optimizations
+            if file_size > 100 * 1024 * 1024:  # > 100MB
+                config.setdefault('enable_streaming', True)
+                config.setdefault('batch_processing', True)
+            
+            # File type specific optimizations
+            if loader_type == 'pdf':
+                if file_size > 50 * 1024 * 1024:  # > 50MB
+                    config.setdefault('use_ocr', False)  # Disable OCR for large files
+                    config.setdefault('ocr_dpi', 150)  # Lower DPI for performance
+                else:
+                    config.setdefault('use_ocr', True)
+                    config.setdefault('ocr_dpi', 200)
+            
+            elif loader_type == 'json':
+                if file_size > 10 * 1024 * 1024:  # > 10MB
+                    config.setdefault('lazy_parsing', True)
+                    config.setdefault('batch_processing', True)
+                    config.setdefault('chunk_size', 2000)
+                else:
+                    config.setdefault('lazy_parsing', False)
+                    config.setdefault('chunk_size', 4000)
+            
+            elif loader_type == 'csv':
+                if file_size > 5 * 1024 * 1024:  # > 5MB
+                    config.setdefault('batch_processing', True)
+                    config.setdefault('chunk_size', 1000)
+                else:
+                    config.setdefault('chunk_size', 2000)
+            
+            elif loader_type == 'html':
+                if source.startswith(('http://', 'https://')):
+                    config.setdefault('extract_metadata', True)
+                    config.setdefault('preserve_links', True)
+                    config.setdefault('user_agent', 'Upsonic HTML Loader 1.0')
+        
+        # Content-based optimizations for string sources
+        elif isinstance(source, str) and len(source) > 10000:
+            if loader_type == 'json':
+                config.setdefault('lazy_parsing', True)
+                config.setdefault('batch_processing', True)
+            elif loader_type == 'xml':
+                config.setdefault('enable_streaming', True)
+        
+        return config
+    
     def _detect_loader_type(self, source: str) -> str:
         if source.startswith(('http://', 'https://', 'ftp://')):
             return 'html'
@@ -246,6 +355,11 @@ def create_loader_for_file(file_path: str, **config_kwargs) -> DocumentLoader:
 
 def create_loader_for_content(content: str, content_type: str, **config_kwargs) -> DocumentLoader:
     return get_factory().get_loader_for_content(content, content_type, **config_kwargs)
+
+
+def create_intelligent_loaders(sources: List[str], **config_kwargs) -> List[DocumentLoader]:
+    """Create intelligent loaders for multiple sources."""
+    return get_factory().create_intelligent_loaders(sources, **config_kwargs)
 
 
 def can_handle_file(file_path: str) -> bool:

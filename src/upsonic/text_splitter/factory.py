@@ -2,6 +2,8 @@ from __future__ import annotations
 from typing import Dict, Type, List, Any, Optional, Union
 import re
 from enum import Enum
+import os
+from pathlib import Path
 
 from .base import ChunkingStrategy, ChunkingConfig, ChunkingMode
 from ..schemas.data_models import Document
@@ -495,6 +497,196 @@ def _create_optimized_config(
             config.setdefault('separators', ["\n# ", "\n## ", "\n### ", "\n\n", "\n", ". ", " ", ""])
         elif content_type in [ContentType.CODE, ContentType.PYTHON]:
             config.setdefault('separators', ["\nclass ", "\ndef ", "\n    def ", "\n\n", "\n", " ", ""])
+    
+    return config
+
+
+def create_intelligent_splitters(
+    sources: List[str],
+    content_samples: Optional[List[str]] = None,
+    use_case: ChunkingUseCase = ChunkingUseCase.RAG_RETRIEVAL,
+    quality_preference: str = "balanced",
+    **global_config_kwargs
+) -> List[ChunkingStrategy]:
+    """
+    Intelligently create appropriate chunking strategies for multiple sources.
+    
+    This method analyzes each source and creates the most appropriate chunking strategy
+    with optimized configuration based on the source type, content, and use case.
+    
+    Args:
+        sources: List of source paths or content strings
+        content_samples: Optional list of content samples for analysis (if sources are file paths)
+        use_case: Intended use case for chunking optimization
+        quality_preference: Speed vs quality preference
+        **global_config_kwargs: Global configuration options to apply to all strategies
+        
+    Returns:
+        List of configured ChunkingStrategy instances
+    """
+    _lazy_import_strategies()
+    
+    if not sources:
+        raise ValueError("At least one source must be provided")
+    
+    splitters = []
+    
+    for i, source in enumerate(sources):
+        try:
+            content_sample = ""
+            if content_samples and i < len(content_samples):
+                content_sample = content_samples[i]
+            elif os.path.exists(source) and os.path.isfile(source):
+                try:
+                    with open(source, 'r', encoding='utf-8', errors='ignore') as f:
+                        content_sample = f.read(5000)
+                except Exception:
+                    content_sample = Path(source).name
+            
+            source_config = _create_source_optimized_config(
+                source, content_sample, use_case, quality_preference, **global_config_kwargs
+            )
+            
+            splitter = create_adaptive_strategy(
+                content=content_sample,
+                metadata={'source': source},
+                use_case=use_case,
+                quality_preference=quality_preference,
+                **source_config
+            )
+            
+            splitters.append(splitter)
+            print(f"Created {splitter.__class__.__name__} for {source}")
+            
+        except Exception as e:
+            print(f"Warning: Failed to create intelligent splitter for {source}: {e}")
+            try:
+                fallback_config = _create_source_optimized_config(
+                    source, "", use_case, "fast", **global_config_kwargs
+                )
+                fallback_splitter = create_chunking_strategy("recursive", **fallback_config)
+                splitters.append(fallback_splitter)
+                print(f"Using recursive strategy fallback for {source}")
+            except Exception as fallback_error:
+                print(f"Fallback splitter also failed for {source}: {fallback_error}")
+                raise
+    
+    return splitters
+
+
+def _create_source_optimized_config(
+    source: str,
+    content_sample: str,
+    use_case: ChunkingUseCase,
+    quality_preference: str,
+    **global_config_kwargs
+) -> Dict[str, Any]:
+    """
+    Create optimized configuration for a specific source and content.
+    
+    Args:
+        source: Source path or content string
+        content_sample: Sample of content for analysis
+        use_case: Intended use case
+        quality_preference: Speed vs quality preference
+        **global_config_kwargs: Global configuration options
+        
+    Returns:
+        Optimized configuration dictionary
+    """
+    config = global_config_kwargs.copy()
+    
+    if os.path.exists(source) and os.path.isfile(source):
+        file_size = os.path.getsize(source)
+        file_path = Path(source)
+        extension = file_path.suffix.lower()
+        
+        if file_size > 100 * 1024 * 1024:  # > 100MB
+            config.setdefault('chunk_size', 2000)
+            config.setdefault('enable_async', True)
+            config.setdefault('batch_size', 20)
+        elif file_size > 10 * 1024 * 1024:  # > 10MB
+            config.setdefault('chunk_size', 1500)
+            config.setdefault('enable_async', True)
+            config.setdefault('batch_size', 15)
+        else:
+            config.setdefault('chunk_size', 1000)
+            config.setdefault('enable_async', False)
+            config.setdefault('batch_size', 10)
+        
+        if extension in ['.md', '.markdown']:
+            config.setdefault('preserve_sentences', True)
+            config.setdefault('preserve_paragraphs', True)
+            config.setdefault('chunk_overlap', int(config.get('chunk_size', 1000) * 0.2))
+        
+        elif extension in ['.py', '.js', '.ts', '.java', '.cpp', '.c']:
+            config.setdefault('preserve_sentences', False)
+            config.setdefault('preserve_paragraphs', True)
+            config.setdefault('chunk_overlap', int(config.get('chunk_size', 1000) * 0.15))
+        
+        elif extension in ['.json', '.xml', '.yaml', '.yml']:
+            config.setdefault('preserve_sentences', False)
+            config.setdefault('preserve_paragraphs', False)
+            config.setdefault('chunk_overlap', int(config.get('chunk_size', 1000) * 0.1))
+        
+        elif extension in ['.html', '.htm']:
+            config.setdefault('preserve_sentences', True)
+            config.setdefault('preserve_paragraphs', True)
+            config.setdefault('chunk_overlap', int(config.get('chunk_size', 1000) * 0.25))
+        
+        elif extension in ['.pdf', '.docx']:
+            config.setdefault('preserve_sentences', True)
+            config.setdefault('preserve_paragraphs', True)
+            config.setdefault('chunk_overlap', int(config.get('chunk_size', 1000) * 0.3))
+        
+        else:  # .txt, .csv, etc.
+            config.setdefault('preserve_sentences', True)
+            config.setdefault('preserve_paragraphs', True)
+            config.setdefault('chunk_overlap', int(config.get('chunk_size', 1000) * 0.2))
+    
+    if content_sample:
+        content_length = len(content_sample)
+        line_count = content_sample.count('\n')
+        avg_line_length = content_length / max(line_count, 1)
+        
+        if line_count > 0 and avg_line_length < 50:
+            config.setdefault('chunk_size', min(config.get('chunk_size', 1000), 800))
+        elif line_count > 0 and avg_line_length > 200:
+            config.setdefault('chunk_size', max(config.get('chunk_size', 1000), 1200))
+        
+        # Detect if content has headers
+        if re.search(r'^#{1,6}\s+', content_sample, re.MULTILINE):
+            config.setdefault('preserve_paragraphs', True)
+            config.setdefault('chunk_overlap', int(config.get('chunk_size', 1000) * 0.25))
+        
+        if re.search(r'```[\s\S]*?```', content_sample):
+            config.setdefault('preserve_paragraphs', True)
+    
+    if use_case == ChunkingUseCase.RAG_RETRIEVAL:
+        config.setdefault('add_chunk_index', True)
+        config.setdefault('add_position_info', True)
+        config.setdefault('preserve_sentences', True)
+    
+    elif use_case == ChunkingUseCase.SEMANTIC_SEARCH:
+        config.setdefault('add_chunk_index', True)
+        config.setdefault('add_position_info', True)
+        config.setdefault('preserve_sentences', True)
+        config.setdefault('chunk_overlap', int(config.get('chunk_size', 1000) * 0.3))
+    
+    elif use_case == ChunkingUseCase.SUMMARIZATION:
+        config.setdefault('preserve_paragraphs', True)
+        config.setdefault('chunk_overlap', int(config.get('chunk_size', 1000) * 0.1))
+    
+    if quality_preference == "fast":
+        config.setdefault('enable_async', False)
+        config.setdefault('batch_size', 5)
+        config.setdefault('show_progress', False)
+    elif quality_preference == "quality":
+        config.setdefault('enable_async', True)
+        config.setdefault('batch_size', 20)
+        config.setdefault('show_progress', True)
+        config.setdefault('preserve_sentences', True)
+        config.setdefault('preserve_paragraphs', True)
     
     return config
 

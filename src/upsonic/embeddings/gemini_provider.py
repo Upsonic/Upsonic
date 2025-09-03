@@ -546,6 +546,60 @@ class GeminiEmbedding(EmbeddingProvider):
             print(f"Could not list Gemini models: {e}")
             return []
 
+    async def close(self):
+        """
+        Clean up Gemini client and clear resources.
+        """
+        if hasattr(self, 'client') and self.client:
+            try:
+                if hasattr(self.client, 'aclose'):
+                    await self.client.aclose()
+                elif hasattr(self.client, 'close'):
+                    if asyncio.iscoroutinefunction(self.client.close):
+                        await self.client.close()
+                    else:
+                        self.client.close()
+                
+                del self.client
+                self.client = None
+            except Exception as e:
+                print(f"Warning: Error closing Gemini client: {e}")
+        
+        if hasattr(self, 'cache') and self.cache:
+            try:
+                if hasattr(self.cache, 'aclose'):
+                    await self.cache.aclose()
+                elif hasattr(self.cache, 'close'):
+                    if asyncio.iscoroutinefunction(self.cache.close):
+                        await self.cache.close()
+                    else:
+                        self.cache.close()
+                
+                del self.cache
+                self.cache = None
+            except Exception as e:
+                print(f"Warning: Error closing Gemini cache: {e}")
+        
+        if hasattr(self, '_credential') and self._credential:
+            try:
+                if hasattr(self._credential, 'aclose'):
+                    await self._credential.aclose()
+                elif hasattr(self._credential, 'close'):
+                    if asyncio.iscoroutinefunction(self._credential.close):
+                        await self._credential.close()
+                    else:
+                        self._credential.close()
+                
+                del self._credential
+                self._credential = None
+            except Exception as e:
+                print(f"Warning: Error closing Google credential: {e}")
+        
+        if hasattr(self, '_model_info'):
+            self._model_info = None
+        
+        await super().close()
+
 
 def create_gemini_document_embedding(api_key: Optional[str] = None, **kwargs) -> GeminiEmbedding:
     """Create Gemini embedding optimized for documents."""

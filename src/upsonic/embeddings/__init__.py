@@ -5,7 +5,7 @@ from .base import (
     EmbeddingMetrics
 )
 
-from .openai_provider import OpenAIEmbedding
+from .openai_provider import OpenAIEmbedding, OpenAIEmbeddingConfig
 from .azure_openai_provider import AzureOpenAIEmbedding
 from .bedrock_provider import BedrockEmbedding
 from .huggingface_provider import HuggingFaceEmbedding
@@ -45,6 +45,7 @@ __all__ = [
     "EmbeddingMetrics",
     
     "OpenAIEmbedding",
+    "OpenAIEmbeddingConfig",
     "AzureOpenAIEmbedding", 
     "BedrockEmbedding",
     "HuggingFaceEmbedding",

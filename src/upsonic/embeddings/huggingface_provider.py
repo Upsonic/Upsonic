@@ -383,6 +383,67 @@ class HuggingFaceEmbedding(EmbeddingProvider):
         except Exception as e:
             return {"memory_usage": f"Error getting memory info: {e}", "device": self.device}
 
+    async def close(self):
+        """
+        Clean up HuggingFace models, tokenizer, and API client.
+        """
+        if hasattr(self, 'model') and self.model:
+            try:
+                if hasattr(self.model, 'aclose'):
+                    await self.model.aclose()
+                elif hasattr(self.model, 'close'):
+                    if asyncio.iscoroutinefunction(self.model.close):
+                        await self.model.close()
+                    else:
+                        self.model.close()
+                
+                del self.model
+                self.model = None
+            except Exception as e:
+                print(f"Warning: Error closing HuggingFace model: {e}")
+        
+        if hasattr(self, 'tokenizer') and self.tokenizer:
+            try:
+                if hasattr(self.tokenizer, 'aclose'):
+                    await self.tokenizer.aclose()
+                elif hasattr(self.tokenizer, 'close'):
+                    if asyncio.iscoroutinefunction(self.tokenizer.close):
+                        await self.tokenizer.close()
+                    else:
+                        self.tokenizer.close()
+                
+                del self.tokenizer
+                self.tokenizer = None
+            except Exception as e:
+                print(f"Warning: Error closing HuggingFace tokenizer: {e}")
+        
+        if hasattr(self, '_inference_client') and self._inference_client:
+            try:
+                if hasattr(self._inference_client, 'aclose'):
+                    await self._inference_client.aclose()
+                elif hasattr(self._inference_client, 'close'):
+                    if asyncio.iscoroutinefunction(self._inference_client.close):
+                        await self._inference_client.close()
+                    else:
+                        self._inference_client.close()
+                
+                del self._inference_client
+                self._inference_client = None
+            except Exception as e:
+                print(f"Warning: Error closing HuggingFace InferenceClient: {e}")
+        
+        # Clear CUDA cache if using GPU
+        if hasattr(self, 'device') and self.device.startswith('cuda'):
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    print("CUDA cache cleared")
+            except Exception as e:
+                print(f"Warning: Could not clear CUDA cache: {e}")
+        
+        await super().close()
+
 
 def create_sentence_transformer_embedding(
     model_name: str = "sentence-transformers/all-MiniLM-L6-v2",

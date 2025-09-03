@@ -96,7 +96,8 @@ class ChunkingStrategy(ABC):
         
         import asyncio
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self.chunk, document)
+        result = await loop.run_in_executor(None, self.chunk, document)
+        return result
     
     def chunk_batch(self, documents: List[Document]) -> List[List[Chunk]]:
         """
@@ -119,7 +120,6 @@ class ChunkingStrategy(ABC):
             results.append(chunks)
         
         processing_time = (time.time() - start_time) * 1000
-        print(f"Batch processing completed in {processing_time:.2f}ms")
         
         return results
     
@@ -135,7 +135,8 @@ class ChunkingStrategy(ABC):
                 return await self.chunk_async(document)
         
         tasks = [chunk_with_semaphore(doc) for doc in documents]
-        return await asyncio.gather(*tasks)
+        result = await asyncio.gather(*tasks)
+        return result
     
     def _create_chunk(
         self, 
@@ -179,15 +180,17 @@ class ChunkingStrategy(ABC):
         
         metadata.update(self.config.custom_metadata)
         
-        return Chunk(
+        chunk = Chunk(
             text_content=text_content,
             metadata=metadata,
             document_id=document.document_id
         )
+        return chunk
     
     def _should_cache_result(self, document: Document) -> bool:
         """Determine if result should be cached."""
-        return self.config.enable_caching
+        result = self.config.enable_caching
+        return result
     
     def _get_cache_key(self, document: Document) -> str:
         """Generate cache key for document."""
@@ -205,7 +208,8 @@ class ChunkingStrategy(ABC):
         config_hash = hash(str(self.config.model_dump()))
         key_parts.append(f"config:{config_hash}")
         
-        return "|".join(key_parts)
+        cache_key = "|".join(key_parts)
+        return cache_key
     
     def _handle_empty_chunk(self, chunk_text: str) -> bool:
         """Handle empty chunks according to configuration."""
@@ -243,6 +247,7 @@ class ChunkingStrategy(ABC):
     def _update_metrics(self, chunks: List[Chunk], processing_time_ms: float, document: Document):
         """Update performance metrics."""
         if not chunks:
+            print(f"⚠️ [BASE] _update_metrics: no chunks to update")
             return
             
         chunk_sizes = [len(chunk.text_content) for chunk in chunks]
@@ -254,10 +259,13 @@ class ChunkingStrategy(ABC):
         self._metrics.max_chunk_size = max(chunk_sizes)
         self._metrics.processing_time_ms = processing_time_ms
         self._metrics.document_id = document.document_id
+        
+
     
     def get_metrics(self) -> ChunkingMetrics:
         """Get current metrics for this chunking strategy."""
-        return self._metrics.model_copy()
+        metrics = self._metrics.model_copy()
+        return metrics
     
     def reset_metrics(self):
         """Reset performance metrics."""
@@ -265,17 +273,19 @@ class ChunkingStrategy(ABC):
     
     def clear_cache(self):
         """Clear the chunk cache."""
+        cache_size = len(self._cache)
         self._cache.clear()
     
     def get_cache_info(self) -> Dict[str, Any]:
         """Get information about the cache."""
-        return {
+        cache_info = {
             "enabled": self.config.enable_caching,
             "size": len(self._cache),
             "memory_estimate_mb": sum(
                 len(str(chunks)) for chunks in self._cache.values()
             ) / (1024 * 1024)
         }
+        return cache_info
 
 class TextSplitterConfig(ChunkingConfig):
     """Enhanced configuration for text-based splitting strategies."""
@@ -321,6 +331,7 @@ class TextSplitter(ChunkingStrategy, ABC):
         self._chunk_size = self.config.chunk_size
         self._chunk_overlap = self.config.chunk_overlap
 
+
     @upsonic_error_handler(max_retries=1, show_error_details=True)
     def chunk(self, document: Document) -> List[Chunk]:
         """
@@ -341,11 +352,17 @@ class TextSplitter(ChunkingStrategy, ABC):
         
         try:
             text_splits = self.split_text(document.content)
+            print(f"📝 [TEXT] split_text returned {len(text_splits)} splits")
+            print(f"📝 [TEXT] ALL SPLITS: {text_splits}")
             
             if self.config.preserve_sentences or self.config.preserve_paragraphs:
                 text_splits = self._enhance_splits_with_boundaries(text_splits, document.content)
+                print(f"📝 [TEXT] Enhanced splits with boundaries: {len(text_splits)} splits")
+                print(f"📝 [TEXT] ALL ENHANCED SPLITS: {text_splits}")
             
             final_texts = self._merge_splits_enhanced(text_splits, document.content)
+            print(f"📝 [TEXT] _merge_splits_enhanced returned {len(final_texts)} final texts")
+            print(f"📝 [TEXT] ALL FINAL TEXTS: {final_texts}")
 
             final_chunks: List[Chunk] = []
             current_pos = 0
@@ -377,6 +394,8 @@ class TextSplitter(ChunkingStrategy, ABC):
                     final_chunks.append(chunk)
                     current_pos = end_pos
             
+    
+
             for chunk in final_chunks:
                 chunk.metadata['total_chunks'] = len(final_chunks)
             
@@ -403,6 +422,7 @@ class TextSplitter(ChunkingStrategy, ABC):
     def _enhance_splits_with_boundaries(self, splits: List[str], original_text: str) -> List[str]:
         """Enhance splits by respecting sentence and paragraph boundaries."""
         if not splits:
+            print(f"⚠️ [TEXT] _enhance_splits_with_boundaries: no splits to enhance")
             return splits
         
         enhanced_splits = []
@@ -417,6 +437,8 @@ class TextSplitter(ChunkingStrategy, ABC):
             else:
                 enhanced_splits.append(split)
         
+        print(f"📝 [TEXT] _enhance_splits_with_boundaries: enhanced {len(splits)} splits into {len(enhanced_splits)} enhanced splits")
+        print(f"📝 [TEXT] ALL ENHANCED SPLITS: {enhanced_splits}")
         return enhanced_splits
     
     def _merge_splits_enhanced(self, splits: List[str], original_text: str) -> List[str]:
@@ -463,6 +485,8 @@ class TextSplitter(ChunkingStrategy, ABC):
                 if chunk_text:
                     final_chunks.append(chunk_text)
 
+            print(f"📝 [TEXT] _merge_splits_enhanced: merged {len(splits)} splits into {len(final_chunks)} chunks")
+            print(f"📝 [TEXT] ALL OUTPUT CHUNKS: {final_chunks}")
             return final_chunks
     
     def _choose_separator(self, splits: List[str]) -> str:
@@ -470,15 +494,18 @@ class TextSplitter(ChunkingStrategy, ABC):
         total_text = " ".join(splits[:10])
         
         if "\n\n" in total_text:
-            return "\n\n"
+            separator = "\n\n"
         elif "\n" in total_text:
-            return "\n"
+            separator = "\n"
         else:
-            return " "
+            separator = " "
+        
+        return separator
     
     def _finalize_chunk(self, chunk_parts: List[str], separator: str) -> str:
         """Finalize a chunk with proper formatting."""
         if not chunk_parts:
+            print(f"⚠️ [TEXT] _finalize_chunk: no chunk parts to finalize")
             return ""
         
         chunk_text = separator.join(chunk_parts).strip()

@@ -452,6 +452,39 @@ class BedrockEmbedding(EmbeddingProvider):
             print(f"Could not list models: {e}")
             return []
 
+    async def close(self):
+        """
+        Clean up AWS Bedrock connections and resources.
+        """
+        if hasattr(self, 'bedrock_client') and self.bedrock_client:
+            try:
+                if hasattr(self.bedrock_client, 'aclose'):
+                    await self.bedrock_client.aclose()
+                elif hasattr(self.bedrock_client, 'close'):
+                    self.bedrock_client.close()
+            except Exception as e:
+                print(f"Warning: Error closing Bedrock client: {e}")
+        
+        if hasattr(self, 'bedrock_info_client') and self.bedrock_info_client:
+            try:
+                if hasattr(self.bedrock_info_client, 'aclose'):
+                    await self.bedrock_info_client.aclose()
+                elif hasattr(self.bedrock_info_client, 'close'):
+                    self.bedrock_info_client.close()
+            except Exception as e:
+                print(f"Warning: Error closing Bedrock info client: {e}")
+        
+        if hasattr(self, 'session') and self.session:
+            try:
+                if hasattr(self.session, 'aclose'):
+                    await self.session.aclose()
+                elif hasattr(self.session, 'close'):
+                    self.session.close()
+            except Exception as e:
+                print(f"Warning: Error closing AWS session: {e}")
+        
+        await super().close()
+
 
 def create_titan_embedding(
     region_name: str = "us-east-1",

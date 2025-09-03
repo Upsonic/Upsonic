@@ -368,6 +368,43 @@ class AzureOpenAIEmbedding(EmbeddingProvider):
         }
 
 
+    async def close(self):
+        """
+        Clean up Azure OpenAI client connections and resources.
+        """
+        if hasattr(self, 'client') and self.client:
+            try:
+                if hasattr(self.client, 'aclose'):
+                    await self.client.aclose()
+                elif hasattr(self.client, 'close'):
+                    if asyncio.iscoroutinefunction(self.client.close):
+                        await self.client.close()
+                    else:
+                        self.client.close()
+                
+                del self.client
+                self.client = None
+            except Exception as e:
+                print(f"Warning: Error closing Azure OpenAI client: {e}")
+        
+        if hasattr(self, '_credential') and self._credential:
+            try:
+                if hasattr(self._credential, 'aclose'):
+                    await self._credential.aclose()
+                elif hasattr(self._credential, 'close'):
+                    if asyncio.iscoroutinefunction(self._credential.close):
+                        await self._credential.close()
+                    else:
+                        self._credential.close()
+                
+                del self._credential
+                self._credential = None
+            except Exception as e:
+                print(f"Warning: Error closing Azure credential: {e}")
+        
+        await super().close()
+
+
 def create_azure_openai_embedding(
     azure_endpoint: str,
     deployment_name: str,
