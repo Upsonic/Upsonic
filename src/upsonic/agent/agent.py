@@ -536,15 +536,15 @@ class Direct(BaseAgent):
                         async with reliability_manager.manage_reliability() as reliability_handler:
                             async with call_manager.manage_call() as call_handler:
                                 async with task_manager.manage_task() as task_handler:
-                                    try: # +++ Wrap the execution in a try block for the pause signal +++
+                                    try:
                                         async with agent.run_mcp_servers():
                                             model_response = await self._execute_with_guardrail(agent, task, memory_handler)
-                                    except ExternalExecutionPause as e: # +++ Catch the pause signal +++
+                                    except ExternalExecutionPause as e:
                                         print(f"Agent paused for external execution of '{e.tool_call.tool_name}'")
                                         task_handler.task.is_paused = True
                                         task_handler.task._tools_awaiting_external_execution.append(e.tool_call)
                                         processed_task = task_handler.task
-                                        # Stop further processing and return the paused task
+
                                         return processed_task.response
                                     async with agent.run_mcp_servers():
                                         model_response = await self._execute_with_guardrail(agent, task, memory_handler)
