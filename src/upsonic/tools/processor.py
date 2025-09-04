@@ -17,6 +17,7 @@ from .tool import ToolConfig, ToolKit
 from upsonic.utils.printing import console, spacing, print_orchestrator_tool_step
 from upsonic.tools.pseudo_tools import plan_and_execute
 from upsonic.tools.thought import Thought, AnalysisResult
+from upsonic.tools.external_tool import ExternalToolCall
 
 
 if TYPE_CHECKING:
@@ -27,6 +28,15 @@ if TYPE_CHECKING:
 class ToolValidationError(Exception):
     """Custom exception raised for invalid tool definitions."""
     pass
+
+class ExternalExecutionPause(Exception):
+    """
+    Custom exception used to signal a pause in the agent's execution flow,
+    allowing for external tool execution (human-in-the-loop).
+    """
+    def __init__(self, tool_call: ExternalToolCall):
+        self.tool_call = tool_call
+        super().__init__(f"Agent paused for external execution of tool: {tool_call.tool_name}")
 
 
 class ToolProcessor:
@@ -315,6 +325,13 @@ class ToolProcessor:
         """
         @functools.wraps(original_func)
         async def behavioral_wrapper(*args: Any, **kwargs: Any) -> Any:
+            if config.external_execution:
+                tool_call = ExternalToolCall(
+                    tool_name=original_func.__name__,
+                    tool_args=kwargs
+                )
+                raise ExternalExecutionPause(tool_call)
+
             if self.agent_tool and self.agent_tool.tool_call_limit is not None:
                 if self.agent_tool.tool_call_count >= self.agent_tool.tool_call_limit:
                     message = f"Tool call limit of {self.agent_tool.tool_call_limit} has been reached. Cannot execute '{original_func.__name__}'."
@@ -323,6 +340,7 @@ class ToolProcessor:
                     return message
                 self.agent_tool.tool_call_count += 1
             func_dict: Dict[str, Any] = {}
+            
             if config.tool_hooks and config.tool_hooks.before:
                 result_before = config.tool_hooks.before(*args, **kwargs)
                 func_dict["func_before"] = result_before if result_before else None

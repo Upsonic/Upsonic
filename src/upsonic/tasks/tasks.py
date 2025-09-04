@@ -14,6 +14,8 @@ from pydantic_ai import Agent as PydanticAgent, BinaryContent
 from upsonic.knowledge_base.knowledge_base import KnowledgeBase
 from upsonic.schemas.data_models import RAGSearchResult
 
+from upsonic.tools.external_tool import ExternalToolCall
+
 class Task(BaseModel):
     description: str
     attachments: Optional[List[str]] = None
@@ -35,6 +37,8 @@ class Task(BaseModel):
     _tool_calls: List[Dict[str, Any]] = None
     guardrail: Optional[Callable] = None
     guardrail_retries: Optional[int] = None
+    is_paused: bool = False
+    _tools_awaiting_external_execution: List[ExternalToolCall] = []
 
 
 
@@ -58,6 +62,8 @@ class Task(BaseModel):
         enable_reasoning_tool: Optional[bool] = None,
         guardrail: Optional[Callable] = None,
         guardrail_retries: Optional[int] = None,
+        is_paused: bool = False,
+        _tools_awaiting_external_execution: List[ExternalToolCall] = None,
         **data
     ):
         if guardrail is not None and not callable(guardrail):
@@ -71,6 +77,9 @@ class Task(BaseModel):
             
         if context is None:
             context = []
+
+        if _tools_awaiting_external_execution is None:
+            _tools_awaiting_external_execution = []
             
         data.update({
             "attachments": attachments,
@@ -90,7 +99,9 @@ class Task(BaseModel):
             "enable_reasoning_tool": enable_reasoning_tool,
             "guardrail": guardrail,
             "guardrail_retries": guardrail_retries,
-            "_tool_calls": []
+            "_tool_calls": [],
+            "is_paused": is_paused,
+            "_tools_awaiting_external_execution": _tools_awaiting_external_execution
         })
         
         super().__init__(**data)
@@ -130,6 +141,15 @@ class Task(BaseModel):
         process before task execution.
         """
         return self._context_formatted
+
+    @property
+    def tools_awaiting_external_execution(self) -> List[ExternalToolCall]:
+        """
+        Get the list of tool calls awaiting external execution.
+        When the task is paused, this list should be iterated over,
+        the tools executed, and the 'result' attribute of each item set.
+        """
+        return self._tools_awaiting_external_execution
     
     @context_formatted.setter
     def context_formatted(self, value: str | None):

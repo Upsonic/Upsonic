@@ -15,6 +15,7 @@ from upsonic.models.factory import ModelFactory
 from upsonic.graph.graph import Graph, DecisionFunc, DecisionLLM, TaskNode, TaskChain, State
 from upsonic.canvas.canvas import Canvas
 from upsonic.team.team import Team
+from upsonic.tools.tool import tool
 
 # Export error handling components for advanced users
 from upsonic.utils.package.exception import (
@@ -109,4 +110,5 @@ __all__ = [
     "SensitiveSocialBlockPolicy_LLM_Finder",
     "SensitiveSocialRaiseExceptionPolicy_LLM",
     "AnonymizePhoneNumbersPolicy_LLM_Finder",
+    "tool",
 ]

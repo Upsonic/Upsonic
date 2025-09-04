@@ -15,7 +15,7 @@ from upsonic.canvas.canvas import Canvas
 from upsonic.utils.error_wrapper import upsonic_error_handler
 from upsonic.utils.printing import print_price_id_summary
 from upsonic.agent.base import BaseAgent
-from upsonic.tools.processor import ToolProcessor
+from upsonic.tools.processor import ToolProcessor, ExternalExecutionPause
 from upsonic.storage.base import Storage
 from upsonic.utils.retry import retryable
 from upsonic.utils.validators import validate_attachments_for_model
@@ -504,10 +504,11 @@ class Direct(BaseAgent):
             model_response = None
 
             try:
-                task, should_continue = await self._apply_user_policy_async(task)
-                if not should_continue:
-                    processed_task = task
-                    return processed_task.response 
+                if not task.is_paused:
+                    task, should_continue = await self._apply_user_policy_async(task)
+                    if not should_continue:
+                        processed_task = task
+                        return processed_task.response 
 
                 if model is not None:
                     provider_for_this_run = ModelFactory.create(model)
@@ -535,6 +536,16 @@ class Direct(BaseAgent):
                         async with reliability_manager.manage_reliability() as reliability_handler:
                             async with call_manager.manage_call() as call_handler:
                                 async with task_manager.manage_task() as task_handler:
+                                    try: # +++ Wrap the execution in a try block for the pause signal +++
+                                        async with agent.run_mcp_servers():
+                                            model_response = await self._execute_with_guardrail(agent, task, memory_handler)
+                                    except ExternalExecutionPause as e: # +++ Catch the pause signal +++
+                                        print(f"Agent paused for external execution of '{e.tool_call.tool_name}'")
+                                        task_handler.task.is_paused = True
+                                        task_handler.task._tools_awaiting_external_execution.append(e.tool_call)
+                                        processed_task = task_handler.task
+                                        # Stop further processing and return the paused task
+                                        return processed_task.response
                                     async with agent.run_mcp_servers():
                                         model_response = await self._execute_with_guardrail(agent, task, memory_handler)
 
@@ -559,3 +570,51 @@ class Direct(BaseAgent):
             print_price_id_summary(processed_task.price_id, processed_task)
 
         return processed_task.response if processed_task else None
+
+
+    @upsonic_error_handler(max_retries=3, show_error_details=True)
+    def continue_run(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3):
+        """
+        Continues the execution of a paused task after external tool results have been provided.
+        
+        Args:
+            task: The Task object, which was previously paused and now has the results for the
+                  tools that were awaiting external execution.
+            model: The LLM model to use for continuation.
+            debug: Whether to enable debug mode.
+            retry: Number of retries for failed calls.
+            
+        Returns:
+            The final response from the LLM after continuation.
+        """
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            return asyncio.run(self.continue_async(task, model, debug, retry))
+        
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, self.continue_async(task, model, debug, retry))
+                return future.result()
+        else:
+            return loop.run_until_complete(self.continue_async(task, model, debug, retry))
+
+    @upsonic_error_handler(max_retries=3, show_error_details=True)
+    async def continue_async(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
+        """
+        Asynchronously continues the execution of a paused task.
+        """
+        if not task.is_paused or not task.tools_awaiting_external_execution:
+            raise ValueError("The 'continue_async' method can only be called on a task that is currently paused for external execution.")
+
+        tool_results_prompt = "\nThe following external tools were executed. Use their results to continue the task:\n"
+        for tool_call in task.tools_awaiting_external_execution:
+            tool_results_prompt += f"\n- Tool '{tool_call.tool_name}' was executed with arguments {tool_call.tool_args}.\n"
+            tool_results_prompt += f"  Result: {tool_call.result}\n"
+        
+        task.is_paused = False
+        task.description += tool_results_prompt
+        task._tools_awaiting_external_execution = []
+
+        return await self.do_async(task, model, debug, retry, state, graph_execution_id=graph_execution_id)
