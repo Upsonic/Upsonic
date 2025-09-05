@@ -1,7 +1,7 @@
 import asyncio
 import os
 import uuid
-from typing import Any, List, Union, Optional, Literal, TYPE_CHECKING
+from typing import Any, List, Union, Optional, Literal, TYPE_CHECKING, Dict
 import time
 from contextlib import asynccontextmanager
 import copy
@@ -13,7 +13,8 @@ from pydantic_ai.agent import AgentRunResult
 
 from upsonic.canvas.canvas import Canvas
 from upsonic.utils.error_wrapper import upsonic_error_handler
-from upsonic.utils.printing import print_price_id_summary
+from upsonic.utils.printing import print_price_id_summary, cache_hit, cache_miss, cache_stored, cache_configuration
+from upsonic.cache import CacheManager
 from upsonic.agent.base import BaseAgent
 from upsonic.tools.processor import ToolProcessor, ExternalExecutionPause
 from upsonic.storage.base import Storage
@@ -126,6 +127,8 @@ class Direct(BaseAgent):
 
         self.user_policy = user_policy
         self.agent_policy = agent_policy
+        
+        self._cache_manager = CacheManager(session_id=f"agent_{self.agent_id}")
 
 
 
@@ -139,6 +142,14 @@ class Direct(BaseAgent):
         if self.name:
             return self.name
         return f"Agent_{self.agent_id[:8]}"
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get cache statistics for this agent's session."""
+        return self._cache_manager.get_cache_stats()
+    
+    def clear_cache(self):
+        """Clear the agent's session cache."""
+        self._cache_manager.clear_cache()
     
 
 
@@ -391,6 +402,61 @@ class Direct(BaseAgent):
             raise GuardrailValidationError(f"Task failed after {max_retries-1} retry(s). Last error: {last_error_message}")
         return final_model_response
 
+    async def _handle_task_cache(self, task: "Task") -> Optional[Any]:
+        """
+        Handle cache operations for the task.
+        
+        Args:
+            task: The task to check cache for
+            
+        Returns:
+            Cached response if found, None otherwise
+        """
+        if not task.enable_cache:
+            return None
+        
+        # Show cache configuration
+        if self.debug:
+            embedding_provider_name = None
+            if task.cache_embedding_provider:
+                embedding_provider_name = getattr(task.cache_embedding_provider, 'model_name', 'Unknown')
+            
+            cache_configuration(
+                enable_cache=task.enable_cache,
+                cache_method=task.cache_method,
+                cache_threshold=task.cache_threshold if task.cache_method == "vector_search" else None,
+                cache_duration_minutes=task.cache_duration_minutes,
+                embedding_provider=embedding_provider_name
+            )
+        
+        # Get cached response using original input
+        input_text = task._original_input or task.description
+        cached_response = await task.get_cached_response(input_text, self.model_provider)
+        
+        if cached_response is not None:
+            # Cache hit
+            similarity = None
+            if hasattr(task, '_last_cache_entry') and 'similarity' in task._last_cache_entry:
+                similarity = task._last_cache_entry['similarity']
+            
+            cache_hit(
+                cache_method=task.cache_method,
+                similarity=similarity,
+                input_preview=(task._original_input or task.description)[:100] if (task._original_input or task.description) else None
+            )
+            
+            # Set the response and mark task as completed
+            task._response = cached_response
+            task.task_end()
+            return cached_response
+        else:
+            # Cache miss
+            cache_miss(
+                cache_method=task.cache_method,
+                input_preview=(task._original_input or task.description)[:100] if (task._original_input or task.description) else None
+            )
+            return None
+
 
 
     async def _apply_user_policy_async(self, task: "Task") -> (Optional["Task"], bool):
@@ -505,6 +571,15 @@ class Direct(BaseAgent):
 
             try:
                 if not task.is_paused:
+                    # Set the cache manager for the task
+                    if task.enable_cache:
+                        task.set_cache_manager(self._cache_manager)
+                    
+                    cached_response = await self._handle_task_cache(task)
+                    if cached_response is not None:
+                        processed_task = task
+                        return cached_response
+                    
                     task, should_continue = await self._apply_user_policy_async(task)
                     if not should_continue:
                         processed_task = task
@@ -546,15 +621,23 @@ class Direct(BaseAgent):
                                         processed_task = task_handler.task
 
                                         return processed_task.response
-                                    async with agent.run_mcp_servers():
-                                        model_response = await self._execute_with_guardrail(agent, task, memory_handler)
-
+                                        
                                     model_response = call_handler.process_response(model_response)
                                     model_response = task_handler.process_response(model_response)
                                     model_response = memory_handler.process_response(model_response)
                                     processed_task = await reliability_handler.process_task(task_handler.task)
 
                 processed_task = await self._apply_agent_policy_async(processed_task)
+                
+                if processed_task and processed_task.enable_cache and processed_task.response:
+                    input_text = processed_task._original_input or processed_task.description
+                    await processed_task.store_cache_entry(input_text, processed_task.response)
+                    if self.debug:
+                        cache_stored(
+                            cache_method=processed_task.cache_method,
+                            input_preview=(processed_task._original_input or processed_task.description)[:100] if (processed_task._original_input or processed_task.description) else None,
+                            duration_minutes=processed_task.cache_duration_minutes
+                        )
 
             except StopIteration as e:
                 if self.debug: print(f"Execution stopped gracefully by policy: {e}")
@@ -616,5 +699,8 @@ class Direct(BaseAgent):
         task.is_paused = False
         task.description += tool_results_prompt
         task._tools_awaiting_external_execution = []
+        
+        if task.enable_cache:
+            task.set_cache_manager(self._cache_manager)
 
         return await self.do_async(task, model, debug, retry, state, graph_execution_id=graph_execution_id)

@@ -3,7 +3,7 @@ import time
 from pydantic import BaseModel
 
 
-from typing import Any, List, Dict, Optional, Type, Union, Callable
+from typing import Any, List, Dict, Optional, Type, Union, Callable, Literal
 
 
 
@@ -15,6 +15,10 @@ from upsonic.knowledge_base.knowledge_base import KnowledgeBase
 from upsonic.schemas.data_models import RAGSearchResult
 
 from upsonic.tools.external_tool import ExternalToolCall
+
+# Type aliases for better type safety
+CacheMethod = Literal["vector_search", "llm_call"]
+CacheEntry = Dict[str, Any]
 
 class Task(BaseModel):
     description: str
@@ -39,6 +43,16 @@ class Task(BaseModel):
     guardrail_retries: Optional[int] = None
     is_paused: bool = False
     _tools_awaiting_external_execution: List[ExternalToolCall] = []
+    
+    enable_cache: bool = False
+    cache_method: Literal["vector_search", "llm_call"] = "vector_search"
+    cache_threshold: float = 0.7
+    cache_embedding_provider: Optional[Any] = None
+    cache_duration_minutes: int = 60
+    _cache_manager: Optional[Any] = None  # Will be set by Agent
+    _cache_hit: bool = False
+    _original_input: Optional[str] = None
+    _last_cache_entry: Optional[Dict[str, Any]] = None
 
 
 
@@ -64,10 +78,28 @@ class Task(BaseModel):
         guardrail_retries: Optional[int] = None,
         is_paused: bool = False,
         _tools_awaiting_external_execution: List[ExternalToolCall] = None,
+        enable_cache: bool = False,
+        cache_method: Literal["vector_search", "llm_call"] = "vector_search",
+        cache_threshold: float = 0.7,
+        cache_embedding_provider: Optional[Any] = None,
+        cache_duration_minutes: int = 60,
         **data
     ):
         if guardrail is not None and not callable(guardrail):
             raise TypeError("The 'guardrail' parameter must be a callable function.")
+        
+        if cache_method not in ("vector_search", "llm_call"):
+            raise ValueError("cache_method must be either 'vector_search' or 'llm_call'")
+        
+        if not (0.0 <= cache_threshold <= 1.0):
+            raise ValueError("cache_threshold must be between 0.0 and 1.0")
+        
+        if cache_method == "vector_search" and cache_embedding_provider is None:
+            try:
+                from upsonic.embeddings.factory import auto_detect_best_embedding
+                cache_embedding_provider = auto_detect_best_embedding()
+            except Exception:
+                raise ValueError("cache_embedding_provider is required when cache_method is 'vector_search'")
         
         if description is not None:
             data["description"] = description
@@ -101,7 +133,16 @@ class Task(BaseModel):
             "guardrail_retries": guardrail_retries,
             "_tool_calls": [],
             "is_paused": is_paused,
-            "_tools_awaiting_external_execution": _tools_awaiting_external_execution
+            "_tools_awaiting_external_execution": _tools_awaiting_external_execution,
+            "enable_cache": enable_cache,
+            "cache_method": cache_method,
+            "cache_threshold": cache_threshold,
+            "cache_embedding_provider": cache_embedding_provider,
+            "cache_duration_minutes": cache_duration_minutes,
+            "_cache_manager": None,  # Will be set by Agent
+            "_cache_hit": False,
+            "_original_input": description,
+            "_last_cache_entry": None
         })
         
         super().__init__(**data)
@@ -393,3 +434,85 @@ class Task(BaseModel):
                 print(f"Warning: Could not load image {attachment_path}: {e}")
 
         return input_list
+
+    
+    def set_cache_manager(self, cache_manager: Any):
+        """Set the cache manager for this task."""
+        self._cache_manager = cache_manager
+    
+    async def get_cached_response(self, input_text: str, llm_provider: Optional[Any] = None) -> Optional[Any]:
+        """
+        Get cached response for the given input text.
+        
+        Args:
+            input_text: The input text to search for in cache
+            llm_provider: LLM provider for semantic comparison (for llm_call method)
+            
+        Returns:
+            Cached response if found, None otherwise
+        """
+        if not self.enable_cache or not self._cache_manager:
+            return None
+        
+        cached_response = await self._cache_manager.get_cached_response(
+            input_text=input_text,
+            cache_method=self.cache_method,
+            cache_threshold=self.cache_threshold,
+            duration_minutes=self.cache_duration_minutes,
+            embedding_provider=self.cache_embedding_provider,
+            llm_provider=llm_provider
+        )
+        
+        if cached_response is not None:
+            self._cache_hit = True
+            self._last_cache_entry = {"output": cached_response}
+        
+        return cached_response
+    
+    async def store_cache_entry(self, input_text: str, output: Any):
+        """
+        Store a new cache entry.
+        
+        Args:
+            input_text: The input text
+            output: The corresponding output
+        """
+        if not self.enable_cache or not self._cache_manager:
+            return
+        
+        await self._cache_manager.store_cache_entry(
+            input_text=input_text,
+            output=output,
+            cache_method=self.cache_method,
+            embedding_provider=self.cache_embedding_provider
+        )
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get cache statistics."""
+        if not self._cache_manager:
+            return {
+                "total_entries": 0,
+                "cache_hits": 0,
+                "cache_misses": 0,
+                "hit_rate": 0.0,
+                "cache_method": self.cache_method,
+                "cache_threshold": self.cache_threshold,
+                "cache_duration_minutes": self.cache_duration_minutes,
+                "session_id": None
+            }
+        
+        stats = self._cache_manager.get_cache_stats()
+        stats.update({
+            "cache_method": self.cache_method,
+            "cache_threshold": self.cache_threshold,
+            "cache_duration_minutes": self.cache_duration_minutes,
+            "cache_hit": self._cache_hit
+        })
+        
+        return stats
+    
+    def clear_cache(self):
+        """Clear all cache entries."""
+        if self._cache_manager:
+            self._cache_manager.clear_cache()
+        self._cache_hit = False
