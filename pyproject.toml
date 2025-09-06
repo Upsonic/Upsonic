@@ -59,7 +59,11 @@ rag = [
     "pymilvus>=2.6.1",
     "qdrant-client>=1.12.1",
     "weaviate-client>=4.16.9",
+    "scipy>=1.13.0",
+    "scikit-learn>=1.4.0",
+    "reportlab>=4.1.0",
 ]
+
 storage = [
     "aiosqlite>=0.21.0",
     "asyncpg>=0.30.0",

@@ -31,7 +31,7 @@ class PostgresStorage(Storage):
         self.sessions_table_name = f'"{schema}"."{sessions_table_name}"'
         self.profiles_table_name = f'"{schema}"."{profiles_table_name}"'
         self.schema = schema
-        self._pool: Optional[asyncpg.Pool] = None
+        self._pool = None
 
 
 
@@ -75,7 +75,7 @@ class PostgresStorage(Storage):
             self._pool = None
         self._connected = False
 
-    async def _get_pool(self) -> asyncpg.Pool:
+    async def _get_pool(self):
         """Helper to lazily initialize the connection pool."""
         if not await self.is_connected_async():
             await self.connect_async()
