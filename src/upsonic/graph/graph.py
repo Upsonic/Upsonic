@@ -699,7 +699,8 @@ class Graph(BaseModel):
 
                 if show_progress:
                     completed_count = len(executed_node_ids) + len(pruned_node_ids)
-                    progress_context.update(overall_task, completed=completed_count)
+                    if progress_context:
+                        progress_context.update(overall_task, completed=completed_count)
         finally:
             if progress_context:
                 progress_context.update(overall_task, completed=all_nodes_count)

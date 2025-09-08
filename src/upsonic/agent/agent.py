@@ -1,7 +1,7 @@
 import asyncio
 import os
 import uuid
-from typing import Any, List, Union, Optional, Literal
+from typing import Any, List, Union, Optional, Literal, TYPE_CHECKING, Dict
 import time
 from contextlib import asynccontextmanager
 import copy
@@ -12,17 +12,22 @@ from pydantic_ai.agent import AgentRunResult
 
 
 from upsonic.canvas.canvas import Canvas
-from upsonic.tasks.tasks import Task
 from upsonic.utils.error_wrapper import upsonic_error_handler
-from upsonic.utils.printing import print_price_id_summary
+from upsonic.utils.printing import print_price_id_summary, cache_hit, cache_miss, cache_stored, cache_configuration
+from upsonic.cache import CacheManager
 from upsonic.agent.base import BaseAgent
-from upsonic.tools.processor import ToolProcessor
+from upsonic.tools.processor import ToolProcessor, ExternalExecutionPause
 from upsonic.storage.base import Storage
 from upsonic.utils.retry import retryable
 from upsonic.utils.validators import validate_attachments_for_model
 from upsonic.storage.memory.memory import Memory
 from upsonic.models.base import BaseModelProvider
+from upsonic.models.factory import ModelFactory
 from upsonic.utils.package.exception import GuardrailValidationError
+from upsonic.safety_engine.base import Policy
+from upsonic.safety_engine.models import PolicyInput
+from upsonic.safety_engine.exceptions import DisallowedOperation
+from upsonic.utils.printing import policy_triggered
 
 from upsonic.agent.context_managers import (
     CallManager,
@@ -33,6 +38,9 @@ from upsonic.agent.context_managers import (
     TaskManager,
 )
 
+if TYPE_CHECKING:
+    from upsonic.tasks.tasks import Task
+
 RetryMode = Literal["raise", "return_false"]
 
 class Direct(BaseAgent):
@@ -40,7 +48,7 @@ class Direct(BaseAgent):
 
     def __init__(self, 
                  name: str | None = None, 
-                 model: BaseModelProvider | None = None,
+                 model: Union[str, BaseModelProvider] | None = None,
                  memory: Optional[Memory] = None,
                  debug: bool = False, 
                  company_url: str | None = None, 
@@ -64,6 +72,8 @@ class Direct(BaseAgent):
                  tool_call_limit: int = 5,
                  enable_thinking_tool: bool = False,
                  enable_reasoning_tool: bool = False,
+                 user_policy: Optional[Policy] = None,
+                 agent_policy: Optional[Policy] = None,
                  ):
 
         self.canvas = canvas
@@ -77,10 +87,11 @@ class Direct(BaseAgent):
 
         
         self.debug = debug
-        if model is not None and not isinstance(model, BaseModelProvider):
-            raise TypeError("The `model` parameter must be an instance of a BaseModelProvider subclass (e.g., OpenAI, Anthropic).")
-
-        self.model_provider = model
+        if model is not None:
+            # Use ModelFactory to handle both string and provider instances
+            self.model_provider = ModelFactory.create(model)
+        else:
+            self.model_provider = None
         self.agent_id_ = agent_id_
         self.name = name
         self.company_url = company_url
@@ -114,6 +125,12 @@ class Direct(BaseAgent):
         self.enable_thinking_tool = enable_thinking_tool
         self.enable_reasoning_tool = enable_reasoning_tool
 
+        self.user_policy = user_policy
+        self.agent_policy = agent_policy
+        
+        self._cache_manager = CacheManager(session_id=f"agent_{self.agent_id}")
+
+
 
     @property
     def agent_id(self):
@@ -126,11 +143,19 @@ class Direct(BaseAgent):
             return self.name
         return f"Agent_{self.agent_id[:8]}"
     
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get cache statistics for this agent's session."""
+        return self._cache_manager.get_cache_stats()
+    
+    def clear_cache(self):
+        """Clear the agent's session cache."""
+        self._cache_manager.clear_cache()
+    
 
 
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
-    async def print_do_async(self, task: Union[Task, List[Task]], model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3):
+    async def print_do_async(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3):
         """
         Execute a direct LLM call and print the result asynchronously.
         
@@ -148,7 +173,7 @@ class Direct(BaseAgent):
         return result
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
-    def do(self, task: Union[Task, List[Task]], model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3):
+    def do(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3):
         """
         Execute a direct LLM call with the given task and model synchronously.
         
@@ -189,7 +214,7 @@ class Direct(BaseAgent):
             return loop.run_until_complete(self.do_async(task, model, debug, retry))
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
-    def print_do(self, task: Union[Task, List[Task]], model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3):
+    def print_do(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3):
         """
         Execute a direct LLM call and print the result synchronously.
         
@@ -208,7 +233,7 @@ class Direct(BaseAgent):
 
 
     @upsonic_error_handler(max_retries=2, show_error_details=True)
-    async def agent_create(self, provider: BaseModelProvider, single_task: Task, system_prompt: str):
+    async def agent_create(self, provider: BaseModelProvider, single_task: "Task", system_prompt: str):
         """
         Creates and configures the underlying PydanticAgent, processing and wrapping
         all tools with the advanced behavioral logic from ToolProcessor.
@@ -306,7 +331,7 @@ class Direct(BaseAgent):
             if not was_connected_before and await storage.is_connected_async():
                 await storage.disconnect_async()
 
-    async def _execute_with_guardrail(self, agent: PydanticAgent, task: Task, memory_handler: MemoryManager) -> AgentRunResult:
+    async def _execute_with_guardrail(self, agent: PydanticAgent, task: "Task", memory_handler: MemoryManager) -> AgentRunResult:
         """
         Executes the agent's run method with a validation and retry loop based on a task guardrail.
         This method encapsulates the retry logic, hiding it from the main `do_async` pipeline.
@@ -377,10 +402,163 @@ class Direct(BaseAgent):
             raise GuardrailValidationError(f"Task failed after {max_retries-1} retry(s). Last error: {last_error_message}")
         return final_model_response
 
+    async def _handle_task_cache(self, task: "Task") -> Optional[Any]:
+        """
+        Handle cache operations for the task.
+        
+        Args:
+            task: The task to check cache for
+            
+        Returns:
+            Cached response if found, None otherwise
+        """
+        if not task.enable_cache:
+            return None
+        
+        # Show cache configuration
+        if self.debug:
+            embedding_provider_name = None
+            if task.cache_embedding_provider:
+                embedding_provider_name = getattr(task.cache_embedding_provider, 'model_name', 'Unknown')
+            
+            cache_configuration(
+                enable_cache=task.enable_cache,
+                cache_method=task.cache_method,
+                cache_threshold=task.cache_threshold if task.cache_method == "vector_search" else None,
+                cache_duration_minutes=task.cache_duration_minutes,
+                embedding_provider=embedding_provider_name
+            )
+        
+        # Get cached response using original input
+        input_text = task._original_input or task.description
+        cached_response = await task.get_cached_response(input_text, self.model_provider)
+        
+        if cached_response is not None:
+            # Cache hit
+            similarity = None
+            if hasattr(task, '_last_cache_entry') and 'similarity' in task._last_cache_entry:
+                similarity = task._last_cache_entry['similarity']
+            
+            cache_hit(
+                cache_method=task.cache_method,
+                similarity=similarity,
+                input_preview=(task._original_input or task.description)[:100] if (task._original_input or task.description) else None
+            )
+            
+            # Set the response and mark task as completed
+            task._response = cached_response
+            task.task_end()
+            return cached_response
+        else:
+            # Cache miss
+            cache_miss(
+                cache_method=task.cache_method,
+                input_preview=(task._original_input or task.description)[:100] if (task._original_input or task.description) else None
+            )
+            return None
+
+
+
+    async def _apply_user_policy_async(self, task: "Task") -> (Optional["Task"], bool):
+        """Applies the user policy to the task description, returning the modified task and a flag to continue."""
+        if not (self.user_policy and task.description):
+            return task, True
+
+        policy_input = PolicyInput(input_texts=[task.description])
+        try:
+            rule_output, _action_output, policy_output = await self.user_policy.execute_async(policy_input)
+            action_taken = policy_output.action_output.get("action_taken", "UNKNOWN")
+
+            if self.debug and rule_output.confidence > 0.0:
+                policy_triggered(
+                    policy_name=self.user_policy.name,
+                    check_type="User Input Check",
+                    action_taken=action_taken,
+                    rule_output=rule_output
+                )
+
+            if action_taken == "BLOCK":
+                task.task_end()
+                task._response = policy_output.output_texts[0] if policy_output.output_texts else "Content blocked by user policy."
+                return task, False
+
+            elif action_taken in ["REPLACE", "ANONYMIZE"]:
+                task.description = policy_output.output_texts[0] if policy_output.output_texts else ""
+                return task, True
+
+        except DisallowedOperation as e:
+            from upsonic.safety_engine.models import RuleOutput
+            mock_rule_output = RuleOutput(
+                confidence=1.0, 
+                content_type="DISALLOWED_OPERATION", 
+                details=str(e)
+            )
+            if self.debug:
+                 policy_triggered(
+                    policy_name=self.user_policy.name,
+                    check_type="User Input Check",
+                    action_taken="DISALLOWED_EXCEPTION",
+                    rule_output=mock_rule_output
+                )
+
+            task.task_end()
+            task._response = f"Operation disallowed by user policy: {e}"
+            return task, False
+
+        return task, True
+
+    async def _apply_agent_policy_async(self, processed_task: "Task") -> "Task":
+        """Applies the agent policy to the final response, returning the modified task."""
+        if not (self.agent_policy and processed_task and processed_task.response):
+            return processed_task
+
+        response_text = ""
+        if isinstance(processed_task.response, str):
+            response_text = processed_task.response
+        elif hasattr(processed_task.response, 'model_dump_json'):
+            response_text = processed_task.response.model_dump_json()
+        else:
+            response_text = str(processed_task.response)
+
+        if response_text:
+            agent_policy_input = PolicyInput(input_texts=[response_text])
+            try:
+                rule_output, _action_output, policy_output = await self.agent_policy.execute_async(agent_policy_input)
+                action_taken = policy_output.action_output.get("action_taken", "UNKNOWN")
+
+                if self.debug and rule_output.confidence > 0.0:
+                    policy_triggered(
+                        policy_name=self.agent_policy.name,
+                        check_type="Agent Output Check",
+                        action_taken=action_taken,
+                        rule_output=rule_output
+                    )
+
+                final_output = policy_output.output_texts[0] if policy_output.output_texts else "Response modified by agent policy."
+                processed_task._response = final_output
+            
+            except DisallowedOperation as e:
+                from upsonic.safety_engine.models import RuleOutput
+                mock_rule_output = RuleOutput(
+                    confidence=1.0, 
+                    content_type="DISALLOWED_OPERATION", 
+                    details=str(e)
+                )
+                if self.debug:
+                    policy_triggered(
+                        policy_name=self.agent_policy.name,
+                        check_type="Agent Output Check",
+                        action_taken="DISALLOWED_EXCEPTION",
+                        rule_output=mock_rule_output
+                    )
+                processed_task._response = f"Agent response disallowed by policy: {e}"
+        
+        return processed_task
+
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
     @retryable()
-    async def do_async(self, task: Task, model: Optional[BaseModelProvider] = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
+    async def do_async(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
         """
         Execute a direct LLM call with robust, context-managed storage connections
         and agent-level control over history management.
@@ -392,7 +570,26 @@ class Direct(BaseAgent):
             model_response = None
 
             try:
-                provider_for_this_run = model or self.model_provider
+                if not task.is_paused:
+                    # Set the cache manager for the task
+                    if task.enable_cache:
+                        task.set_cache_manager(self._cache_manager)
+                    
+                    cached_response = await self._handle_task_cache(task)
+                    if cached_response is not None:
+                        processed_task = task
+                        return cached_response
+                    
+                    task, should_continue = await self._apply_user_policy_async(task)
+                    if not should_continue:
+                        processed_task = task
+                        return processed_task.response 
+
+                if model is not None:
+                    provider_for_this_run = ModelFactory.create(model)
+                else:
+                    provider_for_this_run = self.model_provider
+                    
                 if not provider_for_this_run:
                     raise ValueError("No model provider configured. Please pass a model object to the Direct agent constructor or to the do/do_async method.")
                 
@@ -414,13 +611,40 @@ class Direct(BaseAgent):
                         async with reliability_manager.manage_reliability() as reliability_handler:
                             async with call_manager.manage_call() as call_handler:
                                 async with task_manager.manage_task() as task_handler:
-                                    async with agent.run_mcp_servers():
-                                        model_response = await self._execute_with_guardrail(agent, task, memory_handler)
+                                    try:
+                                        async with agent.run_mcp_servers():
+                                            model_response = await self._execute_with_guardrail(agent, task, memory_handler)
+                                    except ExternalExecutionPause as e:
+                                        print(f"Agent paused for external execution of '{e.tool_call.tool_name}'")
+                                        task_handler.task.is_paused = True
+                                        task_handler.task._tools_awaiting_external_execution.append(e.tool_call)
+                                        processed_task = task_handler.task
 
+                                        return processed_task.response
+                                        
                                     model_response = call_handler.process_response(model_response)
                                     model_response = task_handler.process_response(model_response)
                                     model_response = memory_handler.process_response(model_response)
                                     processed_task = await reliability_handler.process_task(task_handler.task)
+
+                processed_task = await self._apply_agent_policy_async(processed_task)
+                
+                if processed_task and processed_task.enable_cache and processed_task.response:
+                    input_text = processed_task._original_input or processed_task.description
+                    await processed_task.store_cache_entry(input_text, processed_task.response)
+                    if self.debug:
+                        cache_stored(
+                            cache_method=processed_task.cache_method,
+                            input_preview=(processed_task._original_input or processed_task.description)[:100] if (processed_task._original_input or processed_task.description) else None,
+                            duration_minutes=processed_task.cache_duration_minutes
+                        )
+
+            except StopIteration as e:
+                if self.debug: print(f"Execution stopped gracefully by policy: {e}")
+            except DisallowedOperation as e:
+
+                if self.debug: print(f"Caught DisallowedOperation at do_async level. Finalizing response.")
+
             except Exception as e:
                 exception_caught = e
                 raise
@@ -429,3 +653,54 @@ class Direct(BaseAgent):
             print_price_id_summary(processed_task.price_id, processed_task)
 
         return processed_task.response if processed_task else None
+
+
+    @upsonic_error_handler(max_retries=3, show_error_details=True)
+    def continue_run(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3):
+        """
+        Continues the execution of a paused task after external tool results have been provided.
+        
+        Args:
+            task: The Task object, which was previously paused and now has the results for the
+                  tools that were awaiting external execution.
+            model: The LLM model to use for continuation.
+            debug: Whether to enable debug mode.
+            retry: Number of retries for failed calls.
+            
+        Returns:
+            The final response from the LLM after continuation.
+        """
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            return asyncio.run(self.continue_async(task, model, debug, retry))
+        
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, self.continue_async(task, model, debug, retry))
+                return future.result()
+        else:
+            return loop.run_until_complete(self.continue_async(task, model, debug, retry))
+
+    @upsonic_error_handler(max_retries=3, show_error_details=True)
+    async def continue_async(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
+        """
+        Asynchronously continues the execution of a paused task.
+        """
+        if not task.is_paused or not task.tools_awaiting_external_execution:
+            raise ValueError("The 'continue_async' method can only be called on a task that is currently paused for external execution.")
+
+        tool_results_prompt = "\nThe following external tools were executed. Use their results to continue the task:\n"
+        for tool_call in task.tools_awaiting_external_execution:
+            tool_results_prompt += f"\n- Tool '{tool_call.tool_name}' was executed with arguments {tool_call.tool_args}.\n"
+            tool_results_prompt += f"  Result: {tool_call.result}\n"
+        
+        task.is_paused = False
+        task.description += tool_results_prompt
+        task._tools_awaiting_external_execution = []
+        
+        if task.enable_cache:
+            task.set_cache_manager(self._cache_manager)
+
+        return await self.do_async(task, model, debug, retry, state, graph_execution_id=graph_execution_id)

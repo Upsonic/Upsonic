@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Any, Optional, Union, Type, List
+from typing import Any, Optional, Union, Type, List, TYPE_CHECKING
 from pydantic import BaseModel, Field
 from enum import Enum
 import re
@@ -8,7 +8,8 @@ import requests
 import asyncio
 
 from upsonic.models.base import BaseModelProvider
-from upsonic.tasks.tasks import Task
+if TYPE_CHECKING:
+    from upsonic.tasks.tasks import Task
 
 
 def strip_context_tags(text: str) -> str:
@@ -208,10 +209,10 @@ class ReliabilityProcessor:
 
     @staticmethod
     async def process_task(
-        task: Task,
+        task: "Task",
         reliability_layer: Optional[Any] = None,
         model_provider: Optional[BaseModelProvider] = None,
-    ) -> Task:
+    ) -> "Task":
         if reliability_layer is None:
             return task
         
