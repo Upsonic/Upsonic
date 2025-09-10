@@ -64,10 +64,14 @@ uv lock
 ### Running Examples
 ```bash
 # Run basic agent example
-uv run example_model_usage.py
+uv run test.py
+```
 
-# Test individual components
-uv run test_agent_started.py
+
+If you get an error about the upsonic is module is not found just try
+
+```python
+uv pip uninstall upsonic && uv run 
 ```
 
 ## Model Providers and Configuration
