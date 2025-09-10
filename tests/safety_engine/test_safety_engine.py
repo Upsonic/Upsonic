@@ -1,5 +1,8 @@
 import asyncio
 import os
+import pytest
+from unittest.mock import patch, AsyncMock
+from contextlib import asynccontextmanager
 
 from upsonic.agent.agent import Direct
 from upsonic.tasks.tasks import Task
@@ -19,7 +22,7 @@ from upsonic.safety_engine.policies import (
     CryptoRaiseExceptionPolicy
 )
 
-os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
+
 
 class CodenameRule(RuleBase):
     """A custom rule to detect internal project codenames."""
@@ -65,6 +68,7 @@ CustomCodenamePolicy = Policy(
 
 
 
+@pytest.mark.asyncio
 async def test_user_policy_block():
     """
     TEST 1: User Policy Blocks Malicious Input
@@ -90,7 +94,10 @@ async def test_user_policy_block():
     # Test passed - user input blocked
 
 
-async def test_user_policy_modify():
+@pytest.mark.asyncio
+@patch('upsonic.models.factory.ModelFactory.create')
+@patch('upsonic.agent.agent.PydanticAgent')
+async def test_user_policy_modify(mock_pydantic_agent, mock_factory_create):
     """
     TEST 2: User Policy Modifies User Input
     - USES: Pre-built AnonymizePhoneNumbersPolicy
@@ -100,6 +107,29 @@ async def test_user_policy_modify():
       LLM's final response refers to the redacted number.
     """
     print_header("TEST 2: User Policy MODIFIES Input")
+
+    # Mock the factory to return a mock provider that doesn't need API keys
+    mock_provider = AsyncMock()
+    mock_model = AsyncMock()
+    mock_provider._provision.return_value = (mock_model, None)
+    mock_factory_create.return_value = mock_provider
+
+    
+    mock_agent_instance = AsyncMock()
+    
+    # Create a mock response object with the expected attributes
+    mock_response = AsyncMock()
+    mock_response.output = "Area code 555 is typically used for fictional phone numbers in media. The redacted number you mentioned follows this pattern."
+    mock_response.all_messages = lambda: []
+    mock_agent_instance.run.return_value = mock_response
+    
+    # Create a proper async context manager for run_mcp_servers
+    @asynccontextmanager
+    async def mock_run_mcp_servers():
+        yield
+    
+    mock_agent_instance.run_mcp_servers = mock_run_mcp_servers
+    mock_pydantic_agent.return_value = mock_agent_instance
 
     agent_with_sanitizer = Direct(
         model="openai/gpt-4o",
@@ -116,7 +146,10 @@ async def test_user_policy_modify():
     # Test passed - phone number anonymized
 
 
-async def test_agent_policy_modify():
+@pytest.mark.asyncio
+@patch('upsonic.models.factory.ModelFactory.create')
+@patch('upsonic.agent.agent.PydanticAgent')
+async def test_agent_policy_modify(mock_pydantic_agent, mock_factory_create):
     """
     TEST 3: Agent Policy Modifies Agent Output
     - USES: Our new CustomCodenamePolicy
@@ -126,6 +159,29 @@ async def test_agent_policy_modify():
       The final output should contain "[REDACTED PROJECT]".
     """
     print_header("TEST 3: Agent Policy MODIFIES Output")
+    
+    # Mock the factory to return a mock provider that doesn't need API keys
+    mock_provider = AsyncMock()
+    mock_model = AsyncMock()
+    mock_provider._provision.return_value = (mock_model, None)
+    mock_factory_create.return_value = mock_provider
+
+    
+    mock_agent_instance = AsyncMock()
+    
+    # Create a mock response object with the expected attributes
+    mock_response = AsyncMock()
+    mock_response.output = "The status of Project Hermes is green."
+    mock_response.all_messages = lambda: []
+    mock_agent_instance.run.return_value = mock_response
+    
+    # Create a proper async context manager for run_mcp_servers
+    @asynccontextmanager
+    async def mock_run_mcp_servers():
+        yield
+    
+    mock_agent_instance.run_mcp_servers = mock_run_mcp_servers
+    mock_pydantic_agent.return_value = mock_agent_instance
     
     agent_with_agent_policy = Direct(
         model="openai/gpt-4o",
@@ -143,7 +199,10 @@ async def test_agent_policy_modify():
     # Test passed - response redacted
 
 
-async def test_agent_policy_exception():
+@pytest.mark.asyncio
+@patch('upsonic.models.factory.ModelFactory.create')
+@patch('upsonic.agent.agent.PydanticAgent')
+async def test_agent_policy_exception(mock_pydantic_agent, mock_factory_create):
     """
     TEST 4: Agent Policy Blocks Agent Output via Exception
     - USES: Pre-built CryptoRaiseExceptionPolicy
@@ -155,6 +214,29 @@ async def test_agent_policy_exception():
     """
     print_header("TEST 4: Agent Policy RAISES EXCEPTION on Output")
 
+    # Mock the factory to return a mock provider that doesn't need API keys
+    mock_provider = AsyncMock()
+    mock_model = AsyncMock()
+    mock_provider._provision.return_value = (mock_model, None)
+    mock_factory_create.return_value = mock_provider
+
+    
+    mock_agent_instance = AsyncMock()
+    
+    # Create a mock response object with the expected attributes
+    mock_response = AsyncMock()
+    mock_response.output = "Bitcoin is a decentralized digital currency that was invented in 2008 by an unknown person or group using the name Satoshi Nakamoto."
+    mock_response.all_messages = lambda: []
+    mock_agent_instance.run.return_value = mock_response
+    
+    # Create a proper async context manager for run_mcp_servers
+    @asynccontextmanager
+    async def mock_run_mcp_servers():
+        yield
+    
+    mock_agent_instance.run_mcp_servers = mock_run_mcp_servers
+    mock_pydantic_agent.return_value = mock_agent_instance
+    
     agent_with_crypto_block = Direct(
         model="openai/gpt-4o",
         agent_policy=CryptoRaiseExceptionPolicy,
@@ -170,7 +252,10 @@ async def test_agent_policy_exception():
     # Test passed - response blocked
 
 
-async def test_all_clear():
+@pytest.mark.asyncio
+@patch('upsonic.models.factory.ModelFactory.create')
+@patch('upsonic.agent.agent.PydanticAgent')
+async def test_all_clear(mock_pydantic_agent, mock_factory_create):
     """
     TEST 5: Happy Path - No Policies Triggered
     - USES: No policies
@@ -178,6 +263,29 @@ async def test_all_clear():
     - LOOK FOR: No safety policy panels should be printed.
     """
     print_header("TEST 5: All Clear - No Policies Triggered")
+    
+    # Mock the factory to return a mock provider that doesn't need API keys
+    mock_provider = AsyncMock()
+    mock_model = AsyncMock()
+    mock_provider._provision.return_value = (mock_model, None)
+    mock_factory_create.return_value = mock_provider
+
+    
+    mock_agent_instance = AsyncMock()
+    
+    # Create a mock response object with the expected attributes
+    mock_response = AsyncMock()
+    mock_response.output = "The capital of France is Paris."
+    mock_response.all_messages = lambda: []
+    mock_agent_instance.run.return_value = mock_response
+    
+    # Create a proper async context manager for run_mcp_servers
+    @asynccontextmanager
+    async def mock_run_mcp_servers():
+        yield
+    
+    mock_agent_instance.run_mcp_servers = mock_run_mcp_servers
+    mock_pydantic_agent.return_value = mock_agent_instance
     
     plain_agent = Direct(model="openai/gpt-4o", debug=True)
     
