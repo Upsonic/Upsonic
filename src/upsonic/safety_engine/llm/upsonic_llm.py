@@ -48,7 +48,7 @@ class UpsonicLLMProvider:
     """Upsonic-based LLM provider for AI Safety Engine"""
     
     def __init__(self, agent_name: str = "AI Safety Agent", model: str = None):
-        from upsonic.agent.agent import Agent
+        from upsonic import Agent
         if model:
             self.agent = Agent(agent_name, model=model)
         else:

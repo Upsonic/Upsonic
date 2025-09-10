@@ -92,6 +92,9 @@ class Direct(BaseAgent):
             self.model_provider = ModelFactory.create(model)
         else:
             self.model_provider = None
+
+        # Setup LLM models for UpsonicLLMProvider agents if policies use them
+        self._setup_policy_llm_models(user_policy, agent_policy) 
         self.agent_id_ = agent_id_
         self.name = name
         self.company_url = company_url
@@ -129,6 +132,51 @@ class Direct(BaseAgent):
         self.agent_policy = agent_policy
         
         self._cache_manager = CacheManager(session_id=f"agent_{self.agent_id}")
+    
+    def _setup_policy_llm_models(self, user_policy, agent_policy):
+        """Setup LLM models for agents in UpsonicLLMProvider objects used by policies"""
+        from upsonic.safety_engine.llm.upsonic_llm import UpsonicLLMProvider
+        
+        policies = [user_policy, agent_policy]
+        
+        for policy in policies:
+            if policy is None:
+                continue
+                
+            # If the policy doesn't have a base_llm and we have a model_provider, create one
+            if policy.base_llm is None and self.model_provider is not None:
+                policy.base_llm = UpsonicLLMProvider(
+                    agent_name="Policy Base Agent",
+                    model=None  # Will be set below
+                )
+                policy.base_llm.agent.model_provider = self.model_provider
+            
+            # Check if policy.base_llm is an UpsonicLLMProvider
+            elif isinstance(policy.base_llm, UpsonicLLMProvider):
+                # Set the model for the UpsonicLLMProvider's agent if we have a model_provider
+                if self.model_provider is not None:
+                    policy.base_llm.agent.model_provider = self.model_provider
+            
+            # Also check other LLM providers in the policy
+            if policy.language_identify_llm is None and self.model_provider is not None:
+                policy.language_identify_llm = UpsonicLLMProvider(
+                    agent_name="Policy Language Detection Agent",
+                    model=None
+                )
+                policy.language_identify_llm.agent.model_provider = self.model_provider
+            elif isinstance(policy.language_identify_llm, UpsonicLLMProvider):
+                if self.model_provider is not None:
+                    policy.language_identify_llm.agent.model_provider = self.model_provider
+                    
+            if policy.text_finder_llm is None and self.model_provider is not None:
+                policy.text_finder_llm = UpsonicLLMProvider(
+                    agent_name="Policy Text Finder Agent", 
+                    model=None
+                )
+                policy.text_finder_llm.agent.model_provider = self.model_provider
+            elif isinstance(policy.text_finder_llm, UpsonicLLMProvider):
+                if self.model_provider is not None:
+                    policy.text_finder_llm.agent.model_provider = self.model_provider
 
 
 

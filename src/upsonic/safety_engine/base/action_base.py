@@ -86,7 +86,10 @@ class ActionBase(ABC):
             return "en"
         
         # Use specified LLM for language detection if provided, otherwise use default
-        llm = UpsonicLLMProvider(agent_name="Language Detection Agent", model=self.language_identify_llm)
+        if isinstance(self.language_identify_llm, UpsonicLLMProvider):
+            llm = self.language_identify_llm
+        else:
+            llm = UpsonicLLMProvider(agent_name="Language Detection Agent", model=self.language_identify_llm)
         try:
             detected_lang = llm.detect_language(combined_text)
             return detected_lang
@@ -99,7 +102,11 @@ class ActionBase(ABC):
         combined_text = " ".join(content[:3])
         if len(combined_text.strip()) == 0:
             return "en"
-        llm = UpsonicLLMProvider(agent_name="Language Detection Agent", model=self.language_identify_llm)
+        # Use existing UpsonicLLMProvider if language_identify_llm is already one, otherwise create new
+        if isinstance(self.language_identify_llm, UpsonicLLMProvider):
+            llm = self.language_identify_llm
+        else:
+            llm = UpsonicLLMProvider(agent_name="Language Detection Agent", model=self.language_identify_llm)
         try:
             return await llm.detect_language_async(combined_text)
         except Exception as e:
@@ -111,14 +118,22 @@ class ActionBase(ABC):
     def _translate(self, text: str, target_language: str) -> str:
         """Translate text using specified LLM"""
         if self.__class__.language != target_language:
-            llm = UpsonicLLMProvider(agent_name="Translation Agent", model=self.base_llm)
+            # Use existing UpsonicLLMProvider if base_llm is already one, otherwise create new
+            if isinstance(self.base_llm, UpsonicLLMProvider):
+                llm = self.base_llm
+            else:
+                llm = UpsonicLLMProvider(agent_name="Translation Agent", model=self.base_llm)
             return llm.translate_text(text, target_language)
         else:
             return text
 
     async def _translate_async(self, text: str, target_language: str) -> str:
         if self.__class__.language != target_language:
-            llm = UpsonicLLMProvider(agent_name="Translation Agent", model=self.base_llm)
+            # Use existing UpsonicLLMProvider if base_llm is already one, otherwise create new
+            if isinstance(self.base_llm, UpsonicLLMProvider):
+                llm = self.base_llm
+            else:
+                llm = UpsonicLLMProvider(agent_name="Translation Agent", model=self.base_llm)
             return await llm.translate_text_async(text, target_language)
         return text
 
@@ -321,7 +336,11 @@ class ActionBase(ABC):
 
     def llm_raise_block_error(self, reason: str) -> PolicyOutput:
         """Use LLM to generate block error message"""
-        llm = UpsonicLLMProvider(agent_name="Block Error Message Agent", model=self.base_llm)
+        # Use existing UpsonicLLMProvider if base_llm is already one, otherwise create new
+        if isinstance(self.base_llm, UpsonicLLMProvider):
+            llm = self.base_llm
+        else:
+            llm = UpsonicLLMProvider(agent_name="Block Error Message Agent", model=self.base_llm)
         llm_message = llm.generate_block_message(reason, language=self.detected_language)
         return PolicyOutput(
             output_texts=[llm_message],
@@ -333,7 +352,11 @@ class ActionBase(ABC):
         )
 
     async def llm_raise_block_error_async(self, reason: str) -> PolicyOutput:
-        llm = UpsonicLLMProvider(agent_name="Block Error Message Agent", model=self.base_llm)
+        # Use existing UpsonicLLMProvider if base_llm is already one, otherwise create new
+        if isinstance(self.base_llm, UpsonicLLMProvider):
+            llm = self.base_llm
+        else:
+            llm = UpsonicLLMProvider(agent_name="Block Error Message Agent", model=self.base_llm)
         llm_message = await llm.generate_block_message_async(reason, language=self.detected_language)
         return PolicyOutput(
             output_texts=[llm_message],
@@ -350,11 +373,19 @@ class ActionBase(ABC):
     
     def llm_raise_exception(self, reason: str) -> PolicyOutput:
         """Use LLM to generate exception message and raise DisallowedOperation"""
-        llm = UpsonicLLMProvider(agent_name="Exception Message Agent", model=self.base_llm)
+        # Use existing UpsonicLLMProvider if base_llm is already one, otherwise create new
+        if isinstance(self.base_llm, UpsonicLLMProvider):
+            llm = self.base_llm
+        else:
+            llm = UpsonicLLMProvider(agent_name="Exception Message Agent", model=self.base_llm)
         llm_message = llm.generate_block_message(reason)
         raise DisallowedOperation(llm_message)
 
     async def llm_raise_exception_async(self, reason: str) -> PolicyOutput:
-        llm = UpsonicLLMProvider(agent_name="Exception Message Agent", model=self.base_llm)
+        # Use existing UpsonicLLMProvider if base_llm is already one, otherwise create new
+        if isinstance(self.base_llm, UpsonicLLMProvider):
+            llm = self.base_llm
+        else:
+            llm = UpsonicLLMProvider(agent_name="Exception Message Agent", model=self.base_llm)
         llm_message = await llm.generate_block_message_async(reason)
         raise DisallowedOperation(llm_message)
