@@ -7,7 +7,6 @@ from pydantic import Field
 from .base import ChunkingStrategy, ChunkingConfig, ChunkingMode
 from .recursive import RecursiveCharacterChunkingStrategy, RecursiveChunkingConfig
 from ..schemas.data_models import Document, Chunk
-from ..utils.error_wrapper import upsonic_error_handler
 
 
 class ContextualChunkingConfig(ChunkingConfig):
@@ -81,7 +80,6 @@ class ContextualOverlapChunkingStrategy(ChunkingStrategy):
             r'\b\w+-\w+\b',
         ]
     
-    @upsonic_error_handler(max_retries=1, show_error_details=True)
     def chunk(self, document: Document) -> List[Chunk]:
         """
         Create chunks with contextual overlaps.

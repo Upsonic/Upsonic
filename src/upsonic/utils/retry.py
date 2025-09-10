@@ -39,7 +39,7 @@ def retryable(
 
         @functools.wraps(func)
         def wrapper(self, *args: Any, **kwargs: Any) -> Any:
-            final_retries = retries if retries is not None else getattr(self, 'retry', 3)
+            final_retries = retries if retries is not None else getattr(self, 'retry', 0)
             final_mode = mode if mode is not None else getattr(self, 'mode', 'raise')
 
             if final_retries < 1:

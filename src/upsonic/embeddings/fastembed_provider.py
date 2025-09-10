@@ -14,7 +14,6 @@ except ImportError:
 
 from pydantic import Field, validator
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
-from ..utils.error_wrapper import upsonic_error_handler
 from ..utils.package.exception import ConfigurationError, ModelConnectionError
 
 
@@ -232,7 +231,6 @@ class FastEmbedProvider(EmbeddingProvider):
                 embeddings.append(list(embedding))
         return embeddings
     
-    @upsonic_error_handler(max_retries=3, show_error_details=True)
     async def _embed_batch(self, texts: List[str], mode: EmbeddingMode = EmbeddingMode.DOCUMENT) -> List[List[float]]:
         """
         Embed a batch of texts using FastEmbed.

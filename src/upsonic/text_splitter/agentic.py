@@ -6,7 +6,6 @@ from pydantic import Field
 from upsonic.text_splitter.base import ChunkingStrategy, ChunkingConfig
 from upsonic.schemas.data_models import Document, Chunk
 from upsonic.schemas.agentic import PropositionList, TopicAssignmentList, Topic, RefinedTopic
-from ..utils.error_wrapper import upsonic_error_handler
 
 if TYPE_CHECKING:
     from upsonic.agent.agent import Direct
@@ -95,7 +94,6 @@ class AgenticChunkingStrategy(ChunkingStrategy):
         self._cache_hits = 0
         self._fallback_count = 0
 
-    @upsonic_error_handler(max_retries=1, show_error_details=True)
     async def chunk(self, document: Document) -> List[Chunk]:
         """
         Agentic chunking pipeline with framework features.

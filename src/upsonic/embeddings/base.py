@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from pydantic import BaseModel, Field, ConfigDict
 from ..schemas.data_models import Chunk
-from ..utils.error_wrapper import upsonic_error_handler
+
 from ..utils.package.exception import ConfigurationError, ModelConnectionError
 from ..utils.printing import console, Panel, Table
 
@@ -153,7 +153,7 @@ class EmbeddingProvider(BaseModel, ABC):
         embeddings = await self.embed_texts([query], mode=EmbeddingMode.QUERY)
         return embeddings[0] if embeddings else []
     
-    @upsonic_error_handler(max_retries=3, show_error_details=True)
+
     async def embed_texts(
         self, 
         texts: List[str], 

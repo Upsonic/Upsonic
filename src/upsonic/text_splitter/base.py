@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field
 import asyncio
 
 from upsonic.schemas.data_models import Document, Chunk
-from ..utils.error_wrapper import upsonic_error_handler
 
 class ChunkingMode(str, Enum):
     """Different modes for chunking operations."""
@@ -332,7 +331,6 @@ class TextSplitter(ChunkingStrategy, ABC):
         self._chunk_overlap = self.config.chunk_overlap
 
 
-    @upsonic_error_handler(max_retries=1, show_error_details=True)
     def chunk(self, document: Document) -> List[Chunk]:
         """
         Enhanced public-facing method that executes the full chunking process.
