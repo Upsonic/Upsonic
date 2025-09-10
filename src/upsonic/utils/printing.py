@@ -159,7 +159,7 @@ def call_end(result: Any, model_provider: BaseModelProvider, response_format: st
         except Exception as e:
             # If there's any error in cost calculation, log it but continue
             if debug:
-                print(f"Error calculating cost: {e}")
+                pass  # Error calculating cost
 
     table.add_row("[bold]LLM Model:[/bold]", f"{display_model_name}")
     # Add spacing

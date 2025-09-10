@@ -81,9 +81,7 @@ class Direct(BaseAgent):
 
 
         if self.memory:
-            print(f"Using existing Memory instance feed_tool_call_results: {self.memory.feed_tool_call_results}")
             self.memory.feed_tool_call_results = feed_tool_call_results
-            print("Updated Memory feed_tool_call_results:", self.memory.feed_tool_call_results)
 
         
         self.debug = debug
@@ -217,7 +215,6 @@ class Direct(BaseAgent):
             The response from the LLM
         """
         result = await self.do_async(task, model, debug, retry)
-        print(result)
         return result
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
@@ -276,7 +273,6 @@ class Direct(BaseAgent):
             The response from the LLM
         """
         result = self.do(task, model, debug, retry)
-        print(result)
         return result
 
 
@@ -663,7 +659,7 @@ class Direct(BaseAgent):
                                         async with agent.run_mcp_servers():
                                             model_response = await self._execute_with_guardrail(agent, task, memory_handler)
                                     except ExternalExecutionPause as e:
-                                        print(f"Agent paused for external execution of '{e.tool_call.tool_name}'")
+                                        # Agent paused for external execution
                                         task_handler.task.is_paused = True
                                         task_handler.task._tools_awaiting_external_execution.append(e.tool_call)
                                         processed_task = task_handler.task

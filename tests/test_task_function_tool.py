@@ -40,7 +40,7 @@ class AgentToolTestCase(TestCase):
         self.assertEqual(tracker.called_with, (num_a, num_b), f"Function was called with wrong arguments: {tracker.called_with}")
         self.assertIn(str(expected_result), str(result), f"Expected result '{expected_result}' not found in agent output: {result}")
         
-        print("✅ Test passed successfully! Agent correctly called the tool function with proper arguments.")
+        # Test passed successfully
 
 
 # If you want to run the test directly

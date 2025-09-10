@@ -42,7 +42,7 @@ def urls_to_base64(image_urls: List[str]) -> List[str]:
             b64_string = base64.b64encode(image_bytes).decode('utf-8')
             base64_images.append(b64_string)
         except requests.exceptions.RequestException as e:
-            print(f"Warning: Failed to download image from {url}. Error: {e}")
+            pass  # Failed to download image
             continue
             
     return base64_images
@@ -65,6 +65,6 @@ def save_base64_image(b64_string: str, file_name: str, ext: str) -> None:
         image_data = base64.b64decode(b64_string)
         with open(full_filename, 'wb') as f:
             f.write(image_data)
-        print(f"Successfully saved image to {full_filename}")
+        pass  # Image saved successfully
     except (base64.binascii.Error, TypeError) as e:
-        print(f"Error: Failed to decode base64 string for '{full_filename}'. Invalid data. Error: {e}")
+        pass  # Failed to decode base64 string

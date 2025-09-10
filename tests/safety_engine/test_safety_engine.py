@@ -85,9 +85,9 @@ async def test_user_policy_block():
     
     result = agent_with_user_policy.do(malicious_task)
     
-    print(f"\nFinal Result:\n---\n{result}\n---\n")
+    # Final result check
     assert "blocked" in result.lower()
-    print("✅ PASSED: The user input was successfully blocked before calling the LLM.")
+    # Test passed - user input blocked
 
 
 async def test_user_policy_modify():
@@ -111,9 +111,9 @@ async def test_user_policy_modify():
     
     result = agent_with_sanitizer.do(pii_task)
     
-    print(f"\nFinal Result:\n---\n{result}\n---\n")
+    # Final result check
     assert "555-867-5309" not in result
-    print("✅ PASSED: The phone number was successfully anonymized before calling the LLM.")
+    # Test passed - phone number anonymized
 
 
 async def test_agent_policy_modify():
@@ -137,10 +137,10 @@ async def test_agent_policy_modify():
     
     result = agent_with_agent_policy.do(leaky_task)
     
-    print(f"\nFinal Result:\n---\n{result}\n---\n")
+    # Final result check
     assert "[REDACTED PROJECT]" in result
     assert "Project Hermes" not in result
-    print("✅ PASSED: The agent's leaky response was successfully redacted.")
+    # Test passed - response redacted
 
 
 async def test_agent_policy_exception():
@@ -165,9 +165,9 @@ async def test_agent_policy_exception():
     
     result = agent_with_crypto_block.do(crypto_task)
     
-    print(f"\nFinal Result:\n---\n{result}\n---\n")
+    # Final result check
     assert "response disallowed by policy" in result.lower()
-    print("✅ PASSED: The agent's non-compliant response was blocked by an exception.")
+    # Test passed - response blocked
 
 
 async def test_all_clear():
@@ -185,16 +185,14 @@ async def test_all_clear():
     
     result = plain_agent.do(safe_task)
 
-    print(f"\nFinal Result:\n---\n{result}\n---\n")
+    # Final result check
     assert "paris" in result.lower()
-    print("✅ PASSED: The agent operated normally with a safe prompt.")
+    # Test passed - normal operation
 
 
 def print_header(title):
     """Helper function to print a nice header for each test."""
-    print("\n" + "="*80)
-    print(f"RUNNING: {title}")
-    print("="*80 + "\n")
+    pass
 
 
 async def main():
@@ -204,9 +202,7 @@ async def main():
     await test_agent_policy_modify()
     await test_agent_policy_exception()
     await test_all_clear()
-    print("\n" + "="*80)
-    print("🎉 ALL COMPREHENSIVE TESTS COMPLETED! 🎉")
-    print("="*80 + "\n")
+    # All tests completed
 
 
 if __name__ == "__main__":
