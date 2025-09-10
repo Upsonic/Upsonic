@@ -48,7 +48,7 @@ class Direct(BaseAgent):
 
     def __init__(self, 
                  name: str | None = None, 
-                 model: Union[str, BaseModelProvider] | None = None,
+                 model: Union[str, BaseModelProvider] | None = "openai/gpt-4o",
                  memory: Optional[Memory] = None,
                  debug: bool = False, 
                  company_url: str | None = None, 
