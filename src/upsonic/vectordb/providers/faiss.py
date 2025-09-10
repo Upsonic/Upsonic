@@ -312,25 +312,27 @@ class FaissProvider(BaseVectorDBProvider):
         checkers = [build_checker(k, v) for k, v in filter_dict.items()]
         return lambda payload: all(checker(payload) for checker in checkers)
 
-    def search(self, top_k: Optional[int] = None, query_vector: Optional[List[float]] = None, query_text: Optional[str] = None, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, **kwargs) -> List[VectorSearchResult]:
+    def search(self, top_k: Optional[int] = None, query_vector: Optional[List[float]] = None, query_text: Optional[str] = None, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         final_top_k = top_k if top_k is not None else self._config.search.default_top_k or 10
         has_vector = query_vector is not None and len(query_vector) > 0
         has_text = query_text is not None and query_text.strip()
 
         if has_vector and has_text:
-            return self.hybrid_search(query_vector, query_text, final_top_k, filter, alpha, fusion_method, **kwargs)
+            return self.hybrid_search(query_vector, query_text, final_top_k, filter, alpha, fusion_method, similarity_threshold, **kwargs)
         elif has_vector:
-            return self.dense_search(query_vector, final_top_k, filter, **kwargs)
+            return self.dense_search(query_vector, final_top_k, filter, similarity_threshold, **kwargs)
         elif has_text:
-            return self.full_text_search(query_text, final_top_k, filter, **kwargs)
+            return self.full_text_search(query_text, final_top_k, filter, similarity_threshold, **kwargs)
         else:
             raise ConfigurationError("Search requires at least one of 'query_vector' or 'query_text'.")
 
-    def dense_search(self, query_vector: List[float], top_k: int, filter: Optional[Dict[str, Any]] = None, **kwargs) -> List[VectorSearchResult]:
+    def dense_search(self, query_vector: List[float], top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         if not self.is_ready(): raise SearchError("FAISS index is not ready for search.")
         if self._index.ntotal == 0: return []
 
         filter_func = self._translate_filter(filter) if filter else None
+        
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
         
         candidate_multiplier = 10
         candidate_k = top_k * candidate_multiplier if filter_func else top_k
@@ -362,16 +364,17 @@ class FaissProvider(BaseVectorDBProvider):
             else:
                 score = float(dist)
 
-            results.append(VectorSearchResult(id=user_id, score=score, payload=payload))
+            if score >= final_similarity_threshold:
+                results.append(VectorSearchResult(id=user_id, score=score, payload=payload))
         
         return results
 
-    def full_text_search(self, query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, **kwargs) -> List[VectorSearchResult]:
+    def full_text_search(self, query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         raise NotImplementedError("FAISS is a dense-vector-only library and does not support full-text search.")
 
-    def hybrid_search(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, **kwargs) -> List[VectorSearchResult]:
+    def hybrid_search(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         print("[WARNING] FAISS provider received a hybrid search request. It will ignore the text query and alpha, performing a dense search instead.")
-        return self.dense_search(query_vector=query_vector, top_k=top_k, filter=filter, **kwargs)
+        return self.dense_search(query_vector=query_vector, top_k=top_k, filter=filter, similarity_threshold=similarity_threshold, **kwargs)
     
 
     @property

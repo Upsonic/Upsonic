@@ -12,7 +12,6 @@ except ImportError:
     ApiException = None
     NotFoundException = None
 
-from Upsonic.notebooks.stock_report import f
 from upsonic.vectordb.base import BaseVectorDBProvider
 
 from upsonic.vectordb.config import (
@@ -238,7 +237,6 @@ class PineconeProvider(BaseVectorDBProvider):
             dense_exists = f"{self._config.core.collection_name}-dense" in existing_indexes
             sparse_exists = f"{self._config.core.collection_name}-sparse" in existing_indexes
             
-            # Return true if required indexes exist
             if self._config.indexing.create_dense_index and self._config.indexing.create_sparse_index:
                 return dense_exists and sparse_exists
             elif self._config.indexing.create_dense_index:
@@ -622,9 +620,12 @@ class PineconeProvider(BaseVectorDBProvider):
             )
         return results
 
-    def dense_search(self, query_vector: List[float], top_k: int, filter: Optional[Dict[str, Any]] = None, **kwargs) -> List[VectorSearchResult]:
+    def dense_search(self, query_vector: List[float], top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         """Performs a pure vector similarity search."""
         if not self._dense_index: raise VectorDBConnectionError("Not connected to a Pinecone index.")
+        
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
+        
         namespace = self._config.advanced.namespace or ""
         try:
             response = self._dense_index.query(
@@ -636,13 +637,18 @@ class PineconeProvider(BaseVectorDBProvider):
                 include_values=True,
                 **kwargs
             )
-            return self._parse_query_response(response)
+            results = self._parse_query_response(response)
+            
+            filtered_results = [result for result in results if result.score >= final_similarity_threshold]
+            return filtered_results
         except ApiException as e:
             raise SearchError(f"Dense search operation failed in Pinecone: {e}") from e
 
-    def full_text_search(self, query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, **kwargs) -> List[VectorSearchResult]:
+    def full_text_search(self, query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         """Performs a sparse-vector-only lexical search."""
         if not self._sparse_index: raise VectorDBConnectionError("Not connected to a Pinecone index.")
+        
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
         
         sparse_vector = kwargs.pop("sparse_vector", None)
         if not sparse_vector:
@@ -664,11 +670,14 @@ class PineconeProvider(BaseVectorDBProvider):
                 include_values=True,
                 **kwargs
             )
-            return self._parse_query_response(response)
+            results = self._parse_query_response(response)
+            
+            filtered_results = [result for result in results if result.score >= final_similarity_threshold]
+            return filtered_results
         except ApiException as e:
             raise SearchError(f"Full-text (sparse) search operation failed in Pinecone: {e}") from e
 
-    def hybrid_search(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, **kwargs) -> List[VectorSearchResult]:
+    def hybrid_search(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         """
         Performs advanced hybrid search combining dense and sparse vectors with multiple fusion strategies.
         
@@ -718,11 +727,15 @@ class PineconeProvider(BaseVectorDBProvider):
             )
             sparse_results = self._parse_query_response(sparse_response)
             
+            final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
+            
             combined_results = self._merge_hybrid_results(
                 dense_results, sparse_results, alpha, fusion_method, top_k
             )
             
-            return combined_results[:top_k]
+            filtered_results = [result for result in combined_results if result.score >= final_similarity_threshold]
+            
+            return filtered_results[:top_k]
             
         except ApiException as e:
             raise SearchError(f"Hybrid search operation failed in Pinecone: {e}") from e
@@ -825,7 +838,7 @@ class PineconeProvider(BaseVectorDBProvider):
         
         return score
 
-    def search(self, top_k: Optional[int] = None, query_vector: Optional[List[float]] = None, query_text: Optional[str] = None, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, **kwargs) -> List[VectorSearchResult]:
+    def search(self, top_k: Optional[int] = None, query_vector: Optional[List[float]] = None, query_text: Optional[str] = None, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         """
         A master search method that validates the user's intent against the
         collection's configuration and dispatches to the appropriate specialized
@@ -848,7 +861,7 @@ class PineconeProvider(BaseVectorDBProvider):
                 raise ConfigurationError("Hybrid search was requested, but it is disabled in the provider's SearchConfig.")
             if not (self._dense_index and self._sparse_index):
                 raise VectorDBConnectionError("Hybrid search requires both dense and sparse indexes to be available.")
-            return self.hybrid_search(query_vector, query_text, final_top_k, final_filter, alpha, fusion_method, **kwargs)
+            return self.hybrid_search(query_vector, query_text, final_top_k, final_filter, alpha, fusion_method, similarity_threshold, **kwargs)
         
 
         elif is_dense_intent:
@@ -857,7 +870,7 @@ class PineconeProvider(BaseVectorDBProvider):
                 raise ConfigurationError("Dense search was requested, but it is disabled in the provider's SearchConfig.")
             if not self._dense_index:
                 raise VectorDBConnectionError("Dense search requires a dense index to be available.")
-            return self.dense_search(query_vector, final_top_k, final_filter, **kwargs)
+            return self.dense_search(query_vector, final_top_k, final_filter, similarity_threshold, **kwargs)
             
 
         elif is_sparse_intent:
@@ -866,7 +879,7 @@ class PineconeProvider(BaseVectorDBProvider):
                 raise ConfigurationError("Full-text search was requested, but it is disabled in the provider's SearchConfig.")
             if not self._sparse_index:
                 raise VectorDBConnectionError("Full-text search requires a sparse index to be available.")
-            return self.full_text_search(query_text, final_top_k, final_filter, **kwargs)
+            return self.full_text_search(query_text, final_top_k, final_filter, similarity_threshold, **kwargs)
             
         else:
             raise SearchError("Search requires at least one of 'query_vector' or 'query_text' to be provided.")

@@ -6,141 +6,303 @@ from abc import ABC, abstractmethod
 
 class LoaderConfig(BaseModel, ABC):
     """Base configuration class for all document loaders."""
-    
-    encoding: Optional[str] = Field(default=None, description="File encoding (auto-detected if None)")
-    error_handling: Literal["ignore", "warn", "raise"] = Field(default="warn", description="How to handle errors")
-    include_metadata: bool = Field(default=True, description="Whether to include file metadata")
-    custom_metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata to include")
-    
-    max_file_size: Optional[int] = Field(default=None, description="Maximum file size in bytes")
-    skip_empty_content: bool = Field(default=True, description="Skip documents with empty content")
-    
+
+    encoding: Optional[str] = Field(
+        default=None, description="File encoding (auto-detected if None)"
+    )
+    error_handling: Literal["ignore", "warn", "raise"] = Field(
+        default="warn", description="How to handle loading errors"
+    )
+    include_metadata: bool = Field(
+        default=True, description="Whether to include file metadata"
+    )
+    custom_metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Additional metadata to include"
+    )
+    max_file_size: Optional[int] = Field(
+        default=None, description="Maximum file size in bytes"
+    )
+    skip_empty_content: bool = Field(
+        default=True, description="Skip documents with empty content"
+    )
+
     class Config:
+        """Pydantic configuration."""
         arbitrary_types_allowed = True
 
 
 class TextLoaderConfig(LoaderConfig):
-    """Configuration for text file loading."""
-    pass
+    """
+    An enhanced configuration for loading and processing plain text files.
+
+    Provides options to structure the content by file, paragraph, or line,
+    and to perform basic cleaning operations.
+    """
+
+
+    strip_whitespace: bool = Field(
+        default=True,
+        description="If True, removes leading/trailing whitespace from each chunk.",
+    )
+    min_chunk_length: int = Field(
+        default=1,
+        description="The minimum character length for a chunk to be kept after cleaning.",
+        ge=0
+    )
+    
+    class Config(LoaderConfig.Config):
+        """Pydantic configuration."""
+        pass
 
 
 class CSVLoaderConfig(LoaderConfig):
     """Configuration for CSV file loading."""
-    
+
     content_synthesis_mode: Literal["concatenated", "json"] = Field(
-        default="concatenated", 
-        description="How to create document content from rows"
+        default="concatenated",
+        description="How to create document content from rows",
     )
     include_columns: Optional[List[str]] = Field(
-        default=None, 
-        description="Only include these columns"
+        default=None, description="Only include these columns"
     )
     exclude_columns: Optional[List[str]] = Field(
-        default=None, 
-        description="Exclude these columns"
+        default=None, description="Exclude these columns"
     )
     delimiter: str = Field(default=",", description="CSV delimiter")
     quotechar: str = Field(default='"', description="CSV quote character")
-    has_header: bool = Field(default=True, description="Whether CSV has header row")
-    row_as_document: bool = Field(default=True, description="Each row becomes a document")
+    has_header: bool = Field(default=True, description="Whether CSV has a header row")
 
 
-class PDFLoaderConfig(LoaderConfig):
-    """Configuration for PDF file loading."""
-    
-    load_strategy: Literal["one_document_per_page", "one_document_for_the_whole_file"] = Field(
-        default="one_document_per_page",
-        description="How to split PDF into documents"
+class PdfLoaderConfig(LoaderConfig):
+    """
+    An advanced configuration model for loading and processing PDF documents.
+
+    This configuration provides granular control over text extraction, OCR,
+    content structuring, and preprocessing to handle a wide variety of
+    PDF formats and quality levels.
+    """
+
+    extraction_mode: Literal["hybrid", "text_only", "ocr_only"] = Field(
+        default="hybrid",
+        description=(
+            "The core strategy for content extraction. "
+            "'hybrid': Extracts digital text and runs OCR on embedded images. "
+            "'text_only': Fastest mode, extracts only digital text. "
+            "'ocr_only': For scanned documents, runs OCR on the entire page."
+        ),
     )
-    use_ocr: bool = Field(default=False, description="Enable OCR for scanned PDFs")
-    ocr_text_threshold: int = Field(default=50, description="Minimum text chars before triggering OCR")
-    force_ocr: bool = Field(default=False, description="Force OCR even when text is available")
-    ocr_dpi: int = Field(default=200, description="DPI for OCR image conversion (higher = better quality, slower)")
-    ocr_language: str = Field(default="eng", description="OCR language code")
-    extract_images: bool = Field(default=False, description="Extract and process images")
-    preserve_formatting: bool = Field(default=False, description="Attempt to preserve text formatting")
+
+    start_page: Optional[int] = Field(
+        default=None,
+        description="The first page number to process (1-indexed). If None, starts from the beginning.",
+        ge=1
+    )
+    end_page: Optional[int] = Field(
+        default=None,
+        description="The last page number to process (inclusive). If None, processes to the end.",
+        ge=1
+    )
+
+    clean_page_numbers: bool = Field(
+        default=True,
+        description="If True, intelligently identifies and removes page numbers from page headers/footers.",
+    )
+    page_num_start_format: Optional[str] = Field(
+        default=None,
+        description="A Python f-string to prepend to each page's content if page numbers are cleaned. "
+                    "Example: '<start page {page_nr}>'. If None, nothing is prepended."
+    )
+    page_num_end_format: Optional[str] = Field(
+        default=None,
+        description="A Python f-string to append to each page's content if page numbers are cleaned. "
+                    "Example: '<end page {page_nr}>'. If None, nothing is appended."
+    )
+    extra_whitespace_removal: bool = Field(
+        default=True,
+        description="If True, normalizes whitespace by collapsing multiple newlines and spaces, cleaning up layout artifacts.",
+    )
+
+    pdf_password: Optional[str] = Field(
+        default=None,
+        description="Password to use for decrypting protected PDF files.",
+        min_length=1
+    )
+
+    class Config(LoaderConfig.Config):
+        """Pydantic configuration."""
+        pass
+
 
 
 class DOCXLoaderConfig(LoaderConfig):
     """Configuration for DOCX file loading."""
-    
+
     include_tables: bool = Field(default=True, description="Include table content")
     include_headers: bool = Field(default=True, description="Include header content")
     include_footers: bool = Field(default=True, description="Include footer content")
     table_format: Literal["text", "markdown", "html"] = Field(
-        default="text", 
+        default="text",
         description="How to format tables"
     )
 
 
 class JSONLoaderConfig(LoaderConfig):
-    """Configuration for JSON file loading."""
-    
-    jq_schema: str = Field(default=".", description="JQ-style query for content extraction")
-    is_jsonl: bool = Field(default=False, description="Treat as JSON Lines format")
-    content_key: Optional[str] = Field(default=None, description="Key to use as content")
-    flatten_metadata: bool = Field(default=False, description="Flatten nested metadata")
-    json_indent: int = Field(default=2, description="JSON formatting indent")
-    array_handling: Literal["separate_documents", "single_document", "flatten"] = Field(
-        default="separate_documents",
-        description="How to handle JSON arrays"
+    """
+    Advanced configuration for loading and mapping structured JSON and JSONL files.
+    """
+    mode: Literal["single", "multi"] = Field(
+        default="single",
+        description="Processing mode: 'single' for one document per file, 'multi' to extract multiple documents from records within a file."
     )
-    
-    validation_level: Literal["none", "basic", "strict", "schema"] = Field(
-        default="basic", 
-        description="Level of JSON validation to perform"
+    record_selector: Optional[str] = Field(
+        default=None,
+        description="A JQ query to select a list of records from the JSON object (e.g., '.articles[]'). Required for 'multi' mode."
     )
-    schema_path: Optional[str] = Field(default=None, description="Path to JSON schema file for validation")
-    custom_validators: Optional[List[Any]] = Field(default=None, description="List of custom validation functions")
-    transformers: Optional[List[Any]] = Field(default=None, description="List of transformation functions to apply")
-    filters: Optional[List[Any]] = Field(default=None, description="List of filter functions to apply")
-    max_memory_mb: int = Field(default=1024, description="Maximum memory usage in MB")
-    enable_streaming: bool = Field(default=True, description="Enable streaming processing for large files")
-    enable_compression_detection: bool = Field(default=True, description="Auto-detect compression")
-    enable_url_support: bool = Field(default=True, description="Enable loading from URLs")
-    chunk_size: int = Field(default=1000, description="Number of objects to process in each chunk")
+    content_mapper: str = Field(
+        default=".",
+        description="A JQ query to extract the content from a single record. The default '.' uses the entire record."
+    )
+    metadata_mapper: Optional[Dict[str, str]] = Field(
+        default=None,
+        description="A dictionary mapping metadata keys to JQ queries for extracting metadata from each record."
+    )
+    content_synthesis_mode: Literal["json", "text"] = Field(
+        default="json",
+        description="How to format the extracted content: 'json' for a compact JSON string, 'text' for the raw text value."
+    )
+    json_lines: bool = Field(
+        default=False,
+        description="Set to True if the file is in JSON Lines format (.jsonl), where each line is a separate JSON object."
+    )
 
 
 class XMLLoaderConfig(LoaderConfig):
-    """Configuration for XML file loading."""
-    
-    split_by_xpath: Optional[str] = Field(default=None, description="XPath to split documents")
+    """
+    An advanced configuration for parsing and structuring XML files.
+
+    Provides powerful XPath-based controls for splitting a single XML file
+    into multiple documents and for extracting specific content and metadata.
+    """
+
+    split_by_xpath: str = Field(
+        default="//*[not(*)] | //item | //product | //book",
+        description=(
+            "An XPath expression that identifies the elements to be treated as individual documents. "
+            "Defaults to a flexible pattern that matches common element types. If you want the whole file, use '/'."
+        ),
+    )
+    content_xpath: Optional[str] = Field(
+        default=None,
+        description=(
+            "An optional, relative XPath from a split element to select the specific content. "
+            "Example: './description'. If None, the content of the entire split element is used."
+        ),
+    )
+
     content_synthesis_mode: Literal["smart_text", "xml_snippet"] = Field(
         default="smart_text",
-        description="How to extract content"
+        description=(
+            "Defines the content for the Document. 'smart_text' extracts and concatenates all text. "
+            "'xml_snippet' preserves the original XML structure as a string."
+        ),
     )
-    strip_namespaces: bool = Field(default=True, description="Remove XML namespaces")
-    include_attributes: bool = Field(default=True, description="Include XML attributes in metadata")
+    include_attributes: bool = Field(
+        default=True,
+        description="If True, automatically includes the attributes of the split element in the metadata.",
+    )
+    metadata_xpaths: Optional[Dict[str, str]] = Field(
+        default=None,
+        description=(
+            "A dictionary mapping metadata keys to XPath expressions to extract targeted metadata. "
+            "Example: {'author': './/authorName', 'date': './@published'}."
+        ),
+    )
+    strip_namespaces: bool = Field(
+        default=True,
+        description="If True, removes all XML namespaces from the document, which can simplify XPath expressions.",
+    )
+    recover_mode: bool = Field(
+        default=False,
+        description="If True, attempts to parse malformed or broken XML files instead of raising an error.",
+    )
+
+    class Config(LoaderConfig.Config):
+        """Pydantic configuration."""
+        pass
 
 
 class YAMLLoaderConfig(LoaderConfig):
-    """Configuration for YAML file loading."""
-    
-    content_synthesis_mode: Literal["canonical_yaml", "json"] = Field(
-        default="canonical_yaml",
-        description="How to serialize content"
+    """
+    An advanced configuration for parsing and structuring YAML files.
+
+    Provides a powerful jq-based query system for splitting a single YAML file
+    into multiple documents and for extracting specific content and metadata.
+    """
+
+    split_by_jq_query: str = Field(
+        default=".",
+        description=(
+            "A jq-style query to select objects to be treated as individual documents. "
+            "Example: '.articles[]' to create a document for each item in the 'articles' list. "
+            "Defaults to '.' to treat the whole YAML document as one."
+        ),
     )
-    flatten_metadata: bool = Field(default=True, description="Flatten nested metadata")
-    yaml_indent: int = Field(default=2, description="YAML formatting indent")
-    handle_multiple_docs: bool = Field(default=True, description="Handle multi-document YAML")
+    handle_multiple_docs: bool = Field(
+        default=True,
+        description="If True, processes YAML files containing multiple documents separated by '---'.",
+    )
+
+    content_synthesis_mode: Literal["canonical_yaml", "json", "smart_text"] = Field(
+        default="canonical_yaml",
+        description=(
+            "Defines the content for the Document. 'canonical_yaml' or 'json' serializes the data. "
+            "'smart_text' recursively extracts and joins all string values into a single text block."
+        ),
+    )
+    yaml_indent: int = Field(
+        default=2, 
+        description="The indentation level to use when `content_synthesis_mode` is 'canonical_yaml'.",
+        ge=1
+    )
+    json_indent: Optional[int] = Field(
+        default=2,
+        description="The indentation level for JSON output. Set to None for compact JSON.",
+    )
+
+    flatten_metadata: bool = Field(
+        default=True,
+        description=(
+            "If True, flattens the nested structure of the selected YAML object into the metadata. "
+            "E.g., {'user': {'name': 'John'}} becomes {'user.name': 'John'}."
+        ),
+    )
+    metadata_jq_queries: Optional[Dict[str, str]] = Field(
+        default=None,
+        description=(
+            "A dictionary mapping metadata keys to jq queries to extract targeted metadata. "
+            "Example: {'author': '.info.authorName', 'title': '.title'}."
+        ),
+    )
+
+    class Config(LoaderConfig.Config):
+        """Pydantic configuration."""
+        pass
 
 
 class MarkdownLoaderConfig(LoaderConfig):
     """Configuration for Markdown file loading."""
-    
-    parse_front_matter: bool = Field(default=True, description="Parse YAML front matter")
-    include_code_blocks: bool = Field(default=True, description="Include code block content")
-    code_block_language_metadata: bool = Field(default=True, description="Add code languages to metadata")
-    table_format: Literal["text", "preserve_markdown", "html"] = Field(
-        default="text",
-        description="How to format tables"
+    parse_front_matter: bool = Field(default=True, description="Parse YAML front matter from the top of the file.")
+    include_code_blocks: bool = Field(default=True, description="Include code block content in the document.")
+    code_block_language_metadata: bool = Field(default=True, description="Add code block language as metadata.")
+    heading_metadata: bool = Field(default=True, description="Extract headings and add them to the metadata.")
+    split_by_heading: Optional[Literal["h1", "h2", "h3"]] = Field(
+        default=None, description="If set, splits the file into multiple documents based on the specified heading level."
     )
-    heading_metadata: bool = Field(default=True, description="Extract headings as metadata")
 
 
 class HTMLLoaderConfig(LoaderConfig):
-    """Configuration for HTML file loading."""
-    
+    """Configuration for HTML file and URL loading."""
+
     extract_text: bool = Field(default=True, description="Extract text content from HTML")
     preserve_structure: bool = Field(default=True, description="Preserve document structure in output")
     include_links: bool = Field(default=True, description="Include links in extracted content")
@@ -149,17 +311,17 @@ class HTMLLoaderConfig(LoaderConfig):
     remove_styles: bool = Field(default=True, description="Remove style tags")
     extract_metadata: bool = Field(default=True, description="Extract metadata from HTML head")
     clean_whitespace: bool = Field(default=True, description="Clean up whitespace in output")
-    
+
     extract_headers: bool = Field(default=True, description="Extract heading elements")
     extract_paragraphs: bool = Field(default=True, description="Extract paragraph content")
     extract_lists: bool = Field(default=True, description="Extract list content")
     extract_tables: bool = Field(default=True, description="Extract table content")
-    
+
     table_format: Literal["text", "markdown", "html"] = Field(
         default="text",
         description="How to format extracted tables"
     )
-    
+
     user_agent: str = Field(default="Upsonic HTML Loader 1.0", description="User agent for web requests")
 
 
@@ -169,7 +331,7 @@ class LoaderConfigFactory:
     _config_map: Dict[str, type] = {
         'text': TextLoaderConfig,
         'csv': CSVLoaderConfig,
-        'pdf': PDFLoaderConfig,
+        'pdf': PdfLoaderConfig,
         'docx': DOCXLoaderConfig,
         'json': JSONLoaderConfig,
         'jsonl': JSONLoaderConfig,
@@ -184,12 +346,12 @@ class LoaderConfigFactory:
     
     @classmethod
     def create_config(
-        self, 
+        cls, 
         loader_type: str, 
         **kwargs
     ) -> LoaderConfig:
         """Create a configuration for the specified loader type."""
-        config_class = self._config_map.get(loader_type.lower())
+        config_class = cls._config_map.get(loader_type.lower())
         if not config_class:
             raise ValueError(f"Unknown loader type: {loader_type}")
         

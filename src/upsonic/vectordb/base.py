@@ -5,7 +5,6 @@ from upsonic.vectordb.config import Config
 from upsonic.schemas.vector_schemas import VectorSearchResult
 
 
-
 class BaseVectorDBProvider(ABC):
     """
     An abstract base class that defines the operational contract for any
@@ -34,9 +33,6 @@ class BaseVectorDBProvider(ABC):
         self._is_connected: bool = False
         print(f"Initializing {self.__class__.__name__} with provider '{self._config.core.provider_name.value}'.")
 
-
-
-    
     @abstractmethod
     def connect(self) -> None:
         """
@@ -66,8 +62,6 @@ class BaseVectorDBProvider(ABC):
             True if the database is connected and responsive, False otherwise.
         """
         pass
-
-
 
     @abstractmethod
     def create_collection(self) -> None:
@@ -105,8 +99,6 @@ class BaseVectorDBProvider(ABC):
             True if the collection exists, False otherwise.
         """
         pass
-
-   
 
     @abstractmethod
     def upsert(self, 
@@ -168,9 +160,8 @@ class BaseVectorDBProvider(ABC):
         """
         pass
 
-
     @abstractmethod
-    def search(self, top_k: Optional[int] = None, query_vector: Optional[List[float]] = None, query_text: Optional[str] = None, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, **kwargs) -> List[VectorSearchResult]:
+    def search(self, top_k: Optional[int] = None, query_vector: Optional[List[float]] = None, query_text: Optional[str] = None, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         """
         A master search method that dispatches to the appropriate specialized
         search function based on the provided arguments and the provider's
@@ -183,6 +174,7 @@ class BaseVectorDBProvider(ABC):
             filter: An optional metadata filter.
             alpha: The weighting factor for hybrid search. If None, falls back to the default in the Config.
             fusion_method: The algorithm to use for hybrid search ('rrf' or 'weighted').
+            similarity_threshold: The minimum similarity score for results. If None, falls back to the default in the Config.
 
         Returns:
             A list of VectorSearchResult objects.
@@ -195,7 +187,7 @@ class BaseVectorDBProvider(ABC):
         pass
 
     @abstractmethod
-    def dense_search(self, query_vector: List[float], top_k: int, filter: Optional[Dict[str, Any]] = None, **kwargs) -> List[VectorSearchResult]:
+    def dense_search(self, query_vector: List[float], top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         """ 
         Performs a pure vector similarity search.
 
@@ -203,14 +195,15 @@ class BaseVectorDBProvider(ABC):
             query_vector (List[float]): The vector embedding to search for.
             top_k (int): The number of top results to return.
             filter (Optional[Dict[str, Any]], optional): A metadata filter to apply. Defaults to None.
+            similarity_threshold (Optional[float], optional): The minimum similarity score for results. Defaults to None.
 
         Returns:
             List[VectorSearchResult]: A list of the most similar results.
         """
         pass
 
-    @abstractmethod    
-    def full_text_search(self, query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, **kwargs) -> List[VectorSearchResult]:
+    @abstractmethod
+    def full_text_search(self, query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         """
         Performs a full-text search if the provider supports it.
 
@@ -218,6 +211,7 @@ class BaseVectorDBProvider(ABC):
             query_text (str): The text string to search for.
             top_k (int): The number of top results to return.
             filter (Optional[Dict[str, Any]], optional): A metadata filter to apply. Defaults to None.
+            similarity_threshold (Optional[float], optional): The minimum similarity score for results. Defaults to None.
 
         Returns:
             List[VectorSearchResult]: A list of matching results.
@@ -225,7 +219,7 @@ class BaseVectorDBProvider(ABC):
         pass
 
     @abstractmethod
-    def hybrid_search(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, **kwargs) -> List[VectorSearchResult]:
+    def hybrid_search(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         """
         Combines dense and sparse/keyword search results.
 
@@ -240,6 +234,7 @@ class BaseVectorDBProvider(ABC):
             filter: An optional metadata filter.
             alpha: The weight for combining scores. If None, falls back to the default in the Config.
             fusion_method: The algorithm to use for fusing results ('rrf' or 'weighted').
+            similarity_threshold: The minimum similarity score for results. If None, falls back to the default in the Config.
 
         Returns:
             A list of VectorSearchResult objects, ordered by the combined hybrid score.

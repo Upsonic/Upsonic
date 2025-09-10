@@ -199,19 +199,18 @@ class Direct(BaseAgent):
         
         try:
             loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Event loop is already running, we need to run in a new thread
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, self.do_async(task, model, debug, retry))
+                    return future.result()
+            else:
+                # Event loop exists but not running, we can use it
+                return loop.run_until_complete(self.do_async(task, model, debug, retry))
         except RuntimeError:
             # No event loop running, create a new one
             return asyncio.run(self.do_async(task, model, debug, retry))
-        
-        if loop.is_running():
-            # Event loop is already running, we need to run in a new thread
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, self.do_async(task, model, debug, retry))
-                return future.result()
-        else:
-            # Event loop exists but not running, we can use it
-            return loop.run_until_complete(self.do_async(task, model, debug, retry))
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
     def print_do(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3):
@@ -672,16 +671,15 @@ class Direct(BaseAgent):
         """
         try:
             loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, self.continue_async(task, model, debug, retry))
+                    return future.result()
+            else:
+                return loop.run_until_complete(self.continue_async(task, model, debug, retry))
         except RuntimeError:
             return asyncio.run(self.continue_async(task, model, debug, retry))
-        
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, self.continue_async(task, model, debug, retry))
-                return future.result()
-        else:
-            return loop.run_until_complete(self.continue_async(task, model, debug, retry))
 
     @upsonic_error_handler(max_retries=3, show_error_details=True)
     async def continue_async(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):

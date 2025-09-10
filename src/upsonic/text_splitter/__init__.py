@@ -1,21 +1,17 @@
 from .base import (
-    ChunkingStrategy, 
-    ChunkingConfig, 
-    ChunkingMetrics, 
-    ChunkingMode,
-    TextSplitter,
-    TextSplitterConfig
+    BaseChunker,
+    BaseChunkingConfig
 )
-from .character import CharacterChunkingStrategy, CharacterChunkingConfig
-from .recursive import RecursiveCharacterChunkingStrategy, RecursiveChunkingConfig
-from .semantic import SemanticSimilarityChunkingStrategy, SemanticChunkingConfig
-from .agentic import AgenticChunkingStrategy, AgenticChunkingConfig
-from .python import PythonCodeChunkingStrategy, PythonCodeChunkingConfig
-from .markdown import MarkdownRecursiveChunkingStrategy, MarkdownHeaderChunkingStrategy, MarkdownChunkingConfig, MarkdownHeaderChunkingConfig
-from .html import HTMLChunkingStrategy, HTMLChunkingConfig
-from .json import JSONChunkingStrategy, JSONChunkingConfig
-from .contextual import ContextualOverlapChunkingStrategy, ContextualChunkingConfig
-from .structure_aware import DocumentStructureAwareChunkingStrategy, StructureAwareConfig
+from .character import CharacterChunker, CharacterChunkingConfig
+from .recursive import RecursiveChunker, RecursiveChunkingConfig
+from .html import HTMLChunker, HTMLChunkingConfig
+from .json import JSONChunker, JSONChunkingConfig
+from .markdown import MarkdownChunker, MarkdownChunkingConfig
+from .python import PythonChunker, PythonChunkingConfig
+from .semantic import SemanticChunker, SemanticChunkingConfig
+from .agentic import AgenticChunker, AgenticChunkingConfig
+
+# Factory functions and utilities
 from .factory import (
     create_chunking_strategy,
     create_adaptive_strategy,
@@ -33,38 +29,29 @@ from .factory import (
 )
 
 __all__ = [
-    "ChunkingStrategy",
-    "ChunkingConfig", 
-    "ChunkingMetrics", 
-    "ChunkingMode",
-    "TextSplitter",
-    "TextSplitterConfig",
+    # Base classes
+    "BaseChunker",
+    "BaseChunkingConfig",
     
-    "CharacterChunkingStrategy",
+    # Chunker implementations
+    "CharacterChunker",
     "CharacterChunkingConfig",
-    "RecursiveCharacterChunkingStrategy",
+    "RecursiveChunker",
     "RecursiveChunkingConfig",
-    "SemanticSimilarityChunkingStrategy",
+    "HTMLChunker",
+    "HTMLChunkingConfig",
+    "JSONChunker",
+    "JSONChunkingConfig",
+    "MarkdownChunker",
+    "MarkdownChunkingConfig",
+    "PythonChunker",
+    "PythonChunkingConfig",
+    "SemanticChunker",
     "SemanticChunkingConfig",
-    "AgenticChunkingStrategy",
+    "AgenticChunker",
     "AgenticChunkingConfig",
     
-    "PythonCodeChunkingStrategy",
-    "PythonCodeChunkingConfig",
-    "MarkdownRecursiveChunkingStrategy",
-    "MarkdownHeaderChunkingStrategy",
-    "MarkdownChunkingConfig",
-    "MarkdownHeaderChunkingConfig",
-    "HTMLChunkingStrategy",
-    "HTMLChunkingConfig",
-    "JSONChunkingStrategy",
-    "JSONChunkingConfig",
-    
-    "ContextualOverlapChunkingStrategy",
-    "ContextualChunkingConfig",
-    "DocumentStructureAwareChunkingStrategy",
-    "StructureAwareConfig",
-    
+    # Factory functions
     "create_chunking_strategy",
     "create_adaptive_strategy",
     "create_rag_strategy",
@@ -72,10 +59,14 @@ __all__ = [
     "create_fast_strategy",
     "create_quality_strategy",
     "create_intelligent_splitters",
+    
+    # Utility functions
     "list_available_strategies",
     "get_strategy_info",
     "detect_content_type",
     "recommend_strategy_for_content",
+    
+    # Enums
     "ContentType",
     "ChunkingUseCase",
 ]

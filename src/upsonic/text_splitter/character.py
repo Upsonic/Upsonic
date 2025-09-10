@@ -1,214 +1,166 @@
 from __future__ import annotations
-from typing import Any, List, Optional
+
+import logging
+import re
+from typing import List, Optional, Tuple
+
 from pydantic import Field
 
-from upsonic.text_splitter.base import TextSplitter, TextSplitterConfig
-from ..utils.error_wrapper import upsonic_error_handler
+from upsonic.schemas.data_models import Chunk, Document
+from upsonic.text_splitter.base import BaseChunkingConfig, BaseChunker
 
+logger = logging.getLogger(__name__)
 
-class CharacterChunkingConfig(TextSplitterConfig):
-    """Enhanced configuration for character-based chunking."""
-    separator: str = Field("\n\n", description="Character separator to split text by")
-    strip_whitespace: bool = Field(True, description="Strip whitespace from splits")
-    skip_empty_splits: bool = Field(True, description="Skip empty splits after separation")
-    
-    multiple_separators: Optional[List[str]] = Field(None, description="Try multiple separators in order")
-    fallback_to_length: bool = Field(True, description="Fallback to length-based splitting if no separators found")
-    
-    enable_separator_optimization: bool = Field(True, description="Optimize separator choice based on content")
-
-
-class CharacterChunkingStrategy(TextSplitter):
+class CharacterChunkingConfig(BaseChunkingConfig):
     """
-    Character-based chunking strategy with framework-level features.
+    A specialized configuration model for the Character Chunker strategy.
 
-    This is the most straightforward and often the fastest chunking method. It is
-    highly effective for documents that have a clear, consistent structure, such as
-    text separated by double newlines.
-    
-    Features:
-    - Multiple separator support with automatic optimization
-    - Advanced whitespace handling and cleanup
-    - Fallback mechanisms for edge cases
-    - Performance monitoring and statistics
-    - Content-aware separator selection
-    
+    This configuration extends the base settings with parameters that control
+    the splitting behavior based on a single, user-defined separator.
+    """
+    separator: str = Field(
+        default="\n\n",
+        description=(
+            "The single, definitive string or regex pattern that will be used to "
+            "split the document text. This acts as the primary boundary marker."
+        )
+    )
+    is_separator_regex: bool = Field(
+        default=False,
+        description=(
+            "If True, the separator is treated as a regular expression, enabling "
+            "more complex and powerful splitting rules. If False, it is treated "
+            "as a simple string literal."
+        )
+    )
+    keep_separator: bool = Field(
+        default=True,
+        description=(
+            "Determines whether the separator itself is kept as part of the chunks. "
+            "Keeping the separator is often useful for preserving the original "
+            "structure and context of the document."
+        )
+    )
+
+
+class CharacterChunker(BaseChunker[CharacterChunkingConfig]):
+    """
+    A foundational chunker that splits text based on a single, specified character separator.
+
+    This chunker is a workhorse for documents with a clear and consistent delimiter.
+    It operates with a direct, "Split and Merge" process to ensure both
+    efficiency and perfect positional integrity of the final chunks.
     """
 
     def __init__(self, config: Optional[CharacterChunkingConfig] = None):
+        """Initializes the chunker with a specific or default configuration."""
+        super().__init__(config or CharacterChunkingConfig())
+
+    def _chunk_document(self, document: Document) -> List[Chunk]:
         """
-        Initialize character chunking strategy.
+        The core implementation for splitting a single document by a character separator.
+
 
         Args:
-            config: Configuration object with all settings
-        """
-        if config is None:
-            config = CharacterChunkingConfig()
-        
-        super().__init__(config)
-        
-        self._separator = self.config.separator
-        
-        self._separator_stats = {}
-
-    @upsonic_error_handler(max_retries=1, show_error_details=True)
-    def split_text(self, text: str) -> List[str]:
-        """
-        Text splitting with multiple separator support and optimization.
-
-        Args:
-            text: The full text content of a Document.
+            document: The document to be chunked.
 
         Returns:
-            A list of smaller text strings (splits).
+            A list of `Chunk` objects with accurate content and positional data.
         """
-        if not text.strip():
+        content = document.content
+        if not content or content.isspace():
             return []
-        
-        separators_to_try = self._get_separators_to_try(text)
-        
-        for separator in separators_to_try:
-            splits = self._split_with_separator(text, separator)
+
+        atomic_splits: List[Tuple[str, int, int]] = []
+        separator = self.config.separator
+
+        if not separator:
+            for i, char in enumerate(content):
+                atomic_splits.append((char, i, i + 1))
+        else:
+            pattern = re.escape(separator) if not self.config.is_separator_regex else separator
+            cursor = 0
+            for match in re.finditer(pattern, content):
+                if match.start() > cursor:
+                    atomic_splits.append((content[cursor:match.start()], cursor, match.start()))
+                if self.config.keep_separator:
+                    atomic_splits.append((match.group(0), match.start(), match.end()))
+                cursor = match.end()
+            if cursor < len(content):
+                atomic_splits.append((content[cursor:], cursor, len(content)))
+
+        if not atomic_splits:
+            atomic_splits.append((content, 0, len(content)))
+        chunks: List[Chunk] = []
+        current_chunk_parts: List[Tuple[str, int, int]] = []
+        current_length = 0
+        length_func = self.config.length_function
+
+        for text, start_idx, end_idx in atomic_splits:
+            part_length = length_func(text)
             
-            if self._is_good_split(splits, text):
-                self._track_separator_usage(separator, len(splits), len(text))
-                return splits
-        
-        if self.config.fallback_to_length:
-            return self._fallback_length_split(text)
-        
-        return [text] if text.strip() else []
-    
-    def _get_separators_to_try(self, text: str) -> List[str]:
-        """Determine which separators to try based on configuration and content analysis."""
-        separators = []
-        
-        separators.append(self.config.separator)
-        
-        if self.config.multiple_separators:
-            for sep in self.config.multiple_separators:
-                if sep not in separators:
-                    separators.append(sep)
-        
-        if self.config.enable_separator_optimization:
-            separators = self._optimize_separator_order(separators, text)
-        
-        return separators
-    
-    def _split_with_separator(self, text: str, separator: str) -> List[str]:
-        """Split text with a specific separator and apply post-processing."""
-        splits = text.split(separator)
-        
-        processed_splits = []
-        for split in splits:
-            if self.config.strip_whitespace:
-                split = split.strip()
-            
-            if self.config.skip_empty_splits and not split:
+            if part_length > self.config.chunk_size:
+                if current_chunk_parts:
+                    chunk_start_idx = current_chunk_parts[0][1]
+                    chunk_end_idx = current_chunk_parts[-1][2]
+                    final_text = content[chunk_start_idx:chunk_end_idx]
+                    chunks.append(
+                        self._create_chunk(document, final_text, chunk_start_idx, chunk_end_idx)
+                    )
+                    current_chunk_parts = []
+                    current_length = 0
+
+                logger.warning(
+                    f"A single text segment of length {part_length} from document ID "
+                    f"'{document.document_id}' exceeds the chunk size of {self.config.chunk_size}. "
+                    f"Creating an oversized chunk."
+                )
+                chunks.append(self._create_chunk(document, text, start_idx, end_idx))
                 continue
-            
-            processed_splits.append(split)
-        
-        return processed_splits
-    
-    def _is_good_split(self, splits: List[str], original_text: str) -> bool:
-        """Evaluate if a split result is good enough to use."""
-        if not splits:
-            return False
-        
-        if len(splits) == 1 and splits[0].strip() == original_text.strip():
-            return False
-        
-        if len(splits) < 2:
-            return False
-        
-        avg_split_size = sum(len(s) for s in splits) / len(splits)
-        if avg_split_size < 10:
-            return False
-        
-        return True
-    
-    def _optimize_separator_order(self, separators: List[str], text: str) -> List[str]:
-        """Reorder separators based on their effectiveness for this content."""
-        separator_scores = []
-        
-        for separator in separators:
-            score = self._score_separator(separator, text)
-            separator_scores.append((score, separator))
-        
-        separator_scores.sort(reverse=True)
-        
-        return [sep for _, sep in separator_scores]
-    
-    def _score_separator(self, separator: str, text: str) -> float:
-        """Score a separator based on how well it would split the text."""
-        if separator not in text:
-            return 0.0
-        
-        count = text.count(separator)
-        
-        segments = text.split(separator)
-        if not segments:
-            return 0.0
-        
-        avg_length = len(text) / len(segments)
-        
-        count_score = min(count / 10, 1.0)
-        length_score = 1.0 - abs(avg_length - 500) / 1000
-        length_score = max(0.0, length_score)
-        
-        history_score = 0.5
-        if separator in self._separator_stats:
-            stats = self._separator_stats[separator]
-            history_score = min(stats.get('success_rate', 0.5), 1.0)
-        
-        return (count_score * 0.4 + length_score * 0.4 + history_score * 0.2)
-    
-    def _track_separator_usage(self, separator: str, num_splits: int, text_length: int):
-        """Track separator usage for future optimization."""
-        if separator not in self._separator_stats:
-            self._separator_stats[separator] = {
-                'usage_count': 0,
-                'total_splits': 0,
-                'total_text_length': 0,
-                'success_rate': 0.5
-            }
-        
-        stats = self._separator_stats[separator]
-        stats['usage_count'] += 1
-        stats['total_splits'] += num_splits
-        stats['total_text_length'] += text_length
-        
-        avg_split_size = text_length / max(num_splits, 1)
-        success = 1.0 if 50 <= avg_split_size <= 2000 else 0.5
-        
-        current_rate = stats['success_rate']
-        stats['success_rate'] = current_rate * 0.8 + success * 0.2
-    
-    def _fallback_length_split(self, text: str) -> List[str]:
-        """Fallback to simple length-based splitting."""
-        splits = []
-        chunk_size = self.config.chunk_size
-        
-        for i in range(0, len(text), chunk_size):
-            chunk = text[i:i + chunk_size]
-            if self.config.strip_whitespace:
-                chunk = chunk.strip()
-            if chunk or not self.config.skip_empty_splits:
-                splits.append(chunk)
-        
-        return splits
-    
-    def get_separator_stats(self) -> dict:
-        """Get statistics about separator usage and performance."""
-        return {
-            "separator_stats": self._separator_stats.copy(),
-            "primary_separator": self.config.separator,
-            "multiple_separators": self.config.multiple_separators,
-            "optimization_enabled": self.config.enable_separator_optimization,
-            "fallback_enabled": self.config.fallback_to_length
-        }
-    
-    def reset_separator_stats(self):
-        """Reset separator statistics."""
-        self._separator_stats.clear()
+
+            if current_length + part_length > self.config.chunk_size and current_chunk_parts:
+                chunk_start_idx = current_chunk_parts[0][1]
+                chunk_end_idx = current_chunk_parts[-1][2]
+                final_text = content[chunk_start_idx:chunk_end_idx]
+                chunks.append(
+                    self._create_chunk(document, final_text, chunk_start_idx, chunk_end_idx)
+                )
+
+                overlap_len = 0
+                overlap_start_index = len(current_chunk_parts)
+                for j in range(len(current_chunk_parts) - 1, -1, -1):
+                    part_text, _, _ = current_chunk_parts[j]
+                    if overlap_len + length_func(part_text) > self.config.chunk_overlap:
+                        break
+                    overlap_len += length_func(part_text)
+                    overlap_start_index = j
+                
+                current_chunk_parts = current_chunk_parts[overlap_start_index:]
+                current_length = sum(length_func(part[0]) for part in current_chunk_parts)
+
+            current_chunk_parts.append((text, start_idx, end_idx))
+            current_length += part_length
+
+        if current_chunk_parts:
+            chunk_start_idx = current_chunk_parts[0][1]
+            chunk_end_idx = current_chunk_parts[-1][2]
+            final_text = content[chunk_start_idx:chunk_end_idx]
+
+            min_chunk_size = self._get_effective_min_chunk_size()
+
+            if chunks and length_func(final_text) < min_chunk_size:
+                last_chunk = chunks.pop()
+                merged_text = content[last_chunk.start_index:chunk_end_idx]
+                merged_chunk = self._create_chunk(
+                    document,
+                    merged_text,
+                    last_chunk.start_index,
+                    chunk_end_idx
+                )
+                chunks.append(merged_chunk)
+            else:
+                chunks.append(
+                    self._create_chunk(document, final_text, chunk_start_idx, chunk_end_idx)
+                )
+
+        return chunks

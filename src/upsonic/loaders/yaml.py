@@ -1,195 +1,173 @@
-from __future__ import annotations
-from typing import List, Any, Dict, Union, Literal, Optional
-import os
-import io
-from datetime import datetime
-import time
-
-from .base import DocumentLoader
-from .config import YAMLLoaderConfig
-from ..schemas.data_models import Document
+import asyncio
+import json
+from pathlib import Path
+from typing import Any, Dict, List, Union, Generator
 
 try:
     import yaml
-    import json
 except ImportError:
-    raise ImportError(
-        "PyYAML is not installed. Please install it to use the YAMLLoader by running: "
-        "'pip install PyYAML'"
-    )
+    raise ImportError("`PyYAML` is not installed. Please install it with `pip install PyYAML`.")
 
-class YAMLLoader(DocumentLoader):
+try:
+    import jq
+except ImportError:
+    raise ImportError("`pyjq` is not installed. Please install it with `pip install pyjq`.")
+
+from upsonic.schemas.data_models import Document
+from upsonic.loaders.base import BaseLoader
+from upsonic.loaders.config import YAMLLoaderConfig
+
+
+class YAMLLoader(BaseLoader):
     """
-    A master-class, intelligent ingestion engine for YAML data.
+    An advanced loader for YAML files with powerful data extraction capabilities.
 
-    This loader is a comprehensive toolkit for handling structured YAML data from
-    multiple sources and formats. It is built on four pillars of functionality:
-
-    1.  **Multi-Modal Input:** Can load from a file path, a raw YAML string, or an
-        in-memory Python object.
-    2.  **Multi-Document Mastery:** Correctly handles YAML files containing multiple
-        documents (separated by '---'), treating each as a distinct Document.
-    3.  **Intelligent Content Synthesis:** Offers multiple strategies for serializing
-        the parsed data into a textual representation for the LLM.
-    4.  **Sophisticated Metadata Flattening:** Can automatically flatten the entire
-        YAML structure into a single-level metadata dictionary for easy filtering.
+    This loader uses jq-style queries to split YAML files into multiple Documents
+    and to extract specific content and metadata. It can handle multi-document
+    YAML files and offers multiple ways to serialize the output content.
     """
-    def __init__(
-        self,
-        config: Optional[YAMLLoaderConfig] = None,
-    ):
+
+    def __init__(self, config: YAMLLoaderConfig):
         """
-        Initializes the YAMLLoader.
+        Initializes the YAMLLoader with its specific configuration.
 
         Args:
-            config: Configuration object for the loader. If None, a default
-                    YAMLLoaderConfig will be created.
+            config: A YAMLLoaderConfig object with settings for YAML processing.
         """
-        if config is None:
-            config = YAMLLoaderConfig()
         super().__init__(config)
-        
-        self.mode = config.content_synthesis_mode
-        self.flatten_metadata = config.flatten_metadata
-        self.yaml_indent = config.yaml_indent
+        self.config: YAMLLoaderConfig = config
 
-    def load(self, source: str) -> List[Document]:
-        """
-        Loads YAML data from a file path or raw string.
-        
-        Args:
-            source: File path or raw YAML string
-            
-        Returns:
-            List of Document objects
-        """
-        return self._load_with_error_handling(source)
 
-    def _load_with_error_handling(self, source: str) -> List[Document]:
-        """Load with error handling based on configuration."""
-        start_time = time.time()
-        
+    @classmethod
+    def get_supported_extensions(cls) -> List[str]:
+        """Gets a list of file extensions supported by this loader."""
+        return [".yaml", ".yml"]
+
+    def load(self, source: Union[str, Path, List[Union[str, Path]]]) -> List[Document]:
+        """Loads all YAML documents from the given source synchronously."""
         try:
-            if not self._validate_source(source):
-                raise ValueError(f"Invalid source: {source}")
-            
-            if self.config and self.config.max_file_size:
-                if os.path.exists(source):
-                    file_size = os.path.getsize(source)
-                    if file_size > self.config.max_file_size:
-                        raise ValueError(f"File size {file_size} exceeds limit {self.config.max_file_size}")
-            
-            if os.path.isfile(source):
-                documents = self._load_from_file(source)
-            else:
-                documents = self._process_yaml_content(source, base_metadata={})
-            
-            documents = self._post_process_documents(documents, source)
-            
-            processing_time = time.time() - start_time
-            self._update_stats(len(documents), processing_time, success=True)
-            
-            return documents
-            
+            loop = asyncio.get_running_loop()
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, self.aload(source))
+                return future.result()
+        except RuntimeError:
+            return asyncio.run(self.aload(source))
+
+    async def aload(self, source: Union[str, Path, List[Union[str, Path]]]) -> List[Document]:
+        """Loads all YAML documents from the given source asynchronously and concurrently."""
+        file_paths = self._resolve_sources(source)
+        if not file_paths:
+            return []
+
+        tasks = [self._process_single_yaml_file(path) for path in file_paths]
+        results = await asyncio.gather(*tasks)
+
+        return [doc for doc_list in results for doc in doc_list]
+
+    def batch(self, sources: List[Union[str, Path]]) -> List[Document]:
+        """Loads documents from a list of sources, leveraging the core `load` method."""
+        return self.load(sources)
+
+    async def abatch(self, sources: List[Union[str, Path]]) -> List[Document]:
+        """Loads documents from a list of sources asynchronously, leveraging `aload`."""
+        return await self.aload(sources)
+
+
+    async def _process_single_yaml_file(self, path: Path) -> List[Document]:
+        """
+        Processes a single YAML file. Wraps the synchronous parsing logic in a
+        separate thread to avoid blocking the asyncio event loop.
+        """
+        try:
+            document_id = self._generate_document_id(path)
+            if document_id in self._processed_document_ids:
+                raise FileExistsError(
+                    f"Source file '{path.resolve()}' has already been processed by this loader instance."
+                )
+            self._processed_document_ids.add(document_id)
+
+            content = await self._read_file_content(path)
+            return await asyncio.to_thread(self._parse_and_extract, content, path, document_id)
         except Exception as e:
-            processing_time = time.time() - start_time
-            self._update_stats(0, processing_time, success=False)
+            return self._handle_loading_error(str(path), e)
             
-            if self.config:
-                if self.config.error_handling == "ignore":
-                    return []
-                elif self.config.error_handling == "warn":
-                    print(f"Warning: [YAMLLoader] Failed to load {source}: {e}")
-                    return []
-                else:
-                    raise
-            else:
-                raise
+    async def _read_file_content(self, path: Path) -> str:
+        return await asyncio.to_thread(path.read_text, self.config.encoding or 'utf-8')
 
-    def _load_from_file(self, file_path: str) -> List[Document]:
-        """Loads and processes a YAML file from the given path."""
-        file_path = os.path.abspath(file_path)
-        stats = os.stat(file_path)
-        base_metadata: Dict[str, Any] = {
-            "source": file_path, "file_name": os.path.basename(file_path),
-            "file_path": file_path, "file_size": stats.st_size,
-            "creation_time": datetime.fromtimestamp(stats.st_ctime).isoformat(),
-            "last_modified_time": datetime.fromtimestamp(stats.st_mtime).isoformat(),
-        }
-        
-        if self.config and self.config.custom_metadata:
-            base_metadata.update(self.config.custom_metadata)
-            
-        with open(file_path, "r", encoding="utf-8") as f:
-            content_string = f.read()
-        return self._process_yaml_content(content_string, base_metadata)
-
-    def _process_yaml_content(self, content_string: str, base_metadata: Dict[str, Any]) -> List[Document]:
-        """The core processing engine for a raw YAML string."""
+    def _parse_and_extract(self, content: str, path: Path, document_id: str) -> List[Document]:
+        """
+        Synchronous helper that performs the actual parsing and document creation.
+        """
         documents = []
-        try:
-            doc_iterator = yaml.safe_load_all(content_string)
-            for i, yaml_doc in enumerate(doc_iterator):
-                if yaml_doc is None: continue
-
-                doc_metadata = base_metadata.copy()
-                doc_metadata["document_index"] = i
-                
-                docs = self._process_yaml_object(yaml_doc, base_metadata=doc_metadata)
-                documents.extend(docs)
-            return documents
-        except yaml.YAMLError as e:
-            source_info = base_metadata.get("source", "raw content")
-            if self.config and self.config.error_handling == "ignore":
-                return []
-            elif self.config and self.config.error_handling == "warn":
-                print(f"Warning: [YAMLLoader] Failed to parse malformed YAML from '{source_info}': {e}")
-                return []
-            else:
-                raise
-
-    def _process_yaml_object(self, yaml_data: Any, base_metadata: Dict[str, Any]) -> List[Document]:
-        """Processes a single, parsed YAML document object."""
         
-        content = ""
-        if self.mode == "canonical_yaml":
-            content = yaml.dump(
-                yaml_data,
-                indent=self.yaml_indent,
-                sort_keys=False,
-                default_flow_style=False
-            )
-        elif self.mode == "json":
-            content = json.dumps(yaml_data, indent=self.yaml_indent)
+        parsed_docs = yaml.safe_load_all(content) if self.config.handle_multiple_docs else [yaml.safe_load(content)]
+        
+        for doc_data in parsed_docs:
+            if doc_data is None:
+                continue
 
-        metadata = base_metadata.copy()
-        if self.flatten_metadata and isinstance(yaml_data, dict):
-            flattened_data = self._flatten_dict(yaml_data)
-            metadata.update(flattened_data)
-        else:
-            metadata["raw_data"] = yaml_data
+            try:
+                data_chunks = jq.all(self.config.split_by_jq_query, doc_data)
+            except Exception as e:
+                raise ValueError(f"Invalid jq query '{self.config.split_by_jq_query}': {e}") from e
 
-        return [Document(content=content, metadata=metadata)]
+            for chunk in data_chunks:
+                if self.config.content_synthesis_mode == "canonical_yaml":
+                    doc_content = yaml.dump(chunk, indent=self.config.yaml_indent, sort_keys=False)
+                elif self.config.content_synthesis_mode == "json":
+                    doc_content = json.dumps(chunk, indent=self.config.json_indent)
+                else: # "smart_text"
+                    doc_content = " ".join(self._extract_smart_text(chunk))
+                
+                if self.config.skip_empty_content and not doc_content.strip():
+                    continue
 
-    def _flatten_dict(self, d: Dict[str, Any], parent_key: str = '', sep: str = '.') -> Dict[str, Any]:
-        """Recursively flattens a nested dictionary."""
+                metadata = self._create_metadata(path)
+                
+                if self.config.flatten_metadata and isinstance(chunk, dict):
+                    metadata.update(self._flatten_dict(chunk))
+
+                if self.config.metadata_jq_queries and isinstance(chunk, (dict, list)):
+                    for key, query in self.config.metadata_jq_queries.items():
+                        try:
+                            result = jq.first(query, chunk)
+                            if result is not None:
+                                metadata[key] = result
+                        except Exception:
+                            pass
+                if self.config.include_metadata:
+                    documents.append(Document(document_id=document_id, content=doc_content, metadata=metadata))
+                else:
+                    documents.append(Document(document_id=document_id, content=doc_content))
+
+        return documents
+
+
+    def _flatten_dict(self, data: Dict[str, Any], parent_key: str = '', sep: str = '.') -> Dict[str, Any]:
+        """
+        Flattens a nested dictionary.
+        """
         items = []
-        for k, v in d.items():
+        for k, v in data.items():
             new_key = parent_key + sep + k if parent_key else k
             if isinstance(v, dict):
                 items.extend(self._flatten_dict(v, new_key, sep=sep).items())
-            elif isinstance(v, list):
-                for i, item in enumerate(v):
-                    list_key = f"{new_key}[{i}]"
-                    if isinstance(item, dict):
-                         items.extend(self._flatten_dict(item, list_key, sep=sep).items())
-                    else:
-                        items.append((list_key, item))
             else:
                 items.append((new_key, v))
         return dict(items)
 
-    @classmethod
-    def get_supported_extensions(cls) -> List[str]:
-        """Get list of file extensions supported by this loader."""
-        return [".yaml", ".yml"]
+    def _extract_smart_text(self, data: Any) -> Generator[str, None, None]:
+        """
+        Recursively extracts all string values from a nested data structure.
+        """
+        if isinstance(data, dict):
+            for key, value in data.items():
+                if isinstance(key, str):
+                    yield key
+                yield from self._extract_smart_text(value)
+        elif isinstance(data, list):
+            for item in data:
+                yield from self._extract_smart_text(item)
+        elif isinstance(data, str):
+            yield data

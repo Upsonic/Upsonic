@@ -4,15 +4,16 @@ import hashlib
 import json
 import os
 from typing import List, Optional, Dict, Any, Union
+from pathlib import Path
 
-from ..text_splitter.base import ChunkingStrategy
+from ..text_splitter.base import BaseChunker
 from ..embeddings.base import EmbeddingProvider
 from ..vectordb.base import BaseVectorDBProvider
-from ..loaders.base import DocumentLoader
+from ..loaders.base import BaseLoader
 from ..loaders.config import LoaderConfig
 from ..schemas.data_models import Document, Chunk, RAGSearchResult
-from ..text_splitter.factory import create_intelligent_splitters, ChunkingUseCase
 from ..loaders.factory import create_intelligent_loaders
+from ..text_splitter.factory import create_intelligent_splitters
 
 
 class KnowledgeBase:
@@ -24,24 +25,17 @@ class KnowledgeBase:
     to be idempotent and efficient, ensuring that the expensive work of processing
     and embedding data is performed only once for a given set of sources and
     configurations.
-    
-    Enhanced with intelligent loader and splitter auto-detection and configuration:
-    - Automatically detects file types and uses appropriate loaders
-    - Supports both simple and advanced loader configuration
-    - Provides framework-level loading capabilities
-    - Backward compatible with existing loader parameter
-    - Supports indexed processing where each source uses corresponding loader/splitter
     """
     
     def __init__(
         self,
-        sources: Union[str, List[str]],
+        sources: Union[str, Path, List[Union[str, Path]]],
         embedding_provider: EmbeddingProvider,
         vectordb: BaseVectorDBProvider,
-        splitters: Optional[Union[ChunkingStrategy, List[ChunkingStrategy]]] = None,
-        loaders: Optional[Union[DocumentLoader, List[DocumentLoader]]] = None,
+        splitters: Optional[Union[BaseChunker, List[BaseChunker]]] = None,
+        loaders: Optional[Union[BaseLoader, List[BaseLoader]]] = None,
         name: Optional[str] = None,
-        use_case: ChunkingUseCase = ChunkingUseCase.RAG_RETRIEVAL,
+        use_case: str = "rag_retrieval",
         quality_preference: str = "balanced",
         loader_config: Optional[Dict[str, Any]] = None,
         splitter_config: Optional[Dict[str, Any]] = None,
@@ -55,11 +49,11 @@ class KnowledgeBase:
         data processing or I/O occurs at this stage.
 
         Args:
-            sources: Source identifiers (file path, list of files, or directory path).
+            sources: Source identifiers (file path, list of files, directory path, or string content).
             embedding_provider: An instance of a concrete EmbeddingProvider.
-            splitters: A single ChunkingStrategy or list of ChunkingStrategy instances.
+            splitters: A single BaseChunker or list of BaseChunker instances.
             vectordb: An instance of a concrete BaseVectorDBProvider.
-            loaders: A single DocumentLoader or list of DocumentLoader instances for different file types.
+            loaders: A single BaseLoader or list of BaseLoader instances for different file types.
             name: An optional human-readable name for this knowledge base.
             use_case: The intended use case for chunking optimization.
             quality_preference: Speed vs quality preference ("fast", "balanced", "quality").
@@ -71,7 +65,7 @@ class KnowledgeBase:
         if not sources:
             raise ValueError("KnowledgeBase must be initialized with at least one source.")
 
-        self.sources = self._process_sources(sources)
+        self.sources = self._resolve_sources(sources)
         
         self.embedding_provider = embedding_provider
         self.vectordb = vectordb
@@ -112,27 +106,90 @@ class KnowledgeBase:
         self.knowledge_id: str = self._generate_knowledge_id()
         self.rag = True  
         self._is_ready = False
+        self._is_closed = False
         self._setup_lock = asyncio.Lock()
 
-    def _normalize_splitters(self, splitters: Union[ChunkingStrategy, List[ChunkingStrategy]]) -> List[ChunkingStrategy]:
+    def _resolve_sources(self, sources: Union[str, Path, List[Union[str, Path]]]) -> List[Union[str, Path]]:
+        """
+        Resolves a flexible source input into a definitive list of sources.
+        Handles mixed types: file paths, directory paths, and string content.
+        
+        Args:
+            sources: Single source or list of sources (can be paths or string content)
+            
+        Returns:
+            List of resolved sources (Path objects for files/directories, strings for content)
+        """
+        if not isinstance(sources, list):
+            source_list = [sources]
+        else:
+            source_list = sources
+
+        resolved_sources: List[Union[str, Path]] = []
+        added_paths: set[Path] = set()
+        
+        for item in source_list:
+            if isinstance(item, str) and self._is_direct_content(item):
+                resolved_sources.append(item)
+                continue
+            
+            try:
+                path_item = Path(item)
+                
+                if not path_item.exists():
+                    resolved_sources.append(str(item))
+                    continue
+
+                if path_item.is_file():
+                    if path_item not in added_paths:
+                        resolved_sources.append(path_item)
+                        added_paths.add(path_item)
+                elif path_item.is_dir():
+                    supported_files = self._get_supported_files_from_directory(path_item)
+                    for file_path in supported_files:
+                        if file_path not in added_paths:
+                            resolved_sources.append(file_path)
+                            added_paths.add(file_path)
+                            
+            except (OSError, ValueError):
+                resolved_sources.append(str(item))
+
+        return resolved_sources
+
+    def _get_supported_files_from_directory(self, directory: Path) -> List[Path]:
+        """Recursively finds all supported files within a directory."""
+        supported_extensions = {
+            '.txt', '.md', '.rst', '.log', '.py', '.js', '.ts', '.java', '.c', '.cpp', 
+            '.h', '.cs', '.go', '.rs', '.php', '.rb', '.html', '.css', '.xml', '.json', 
+            '.yaml', '.yml', '.ini', '.csv', '.pdf', '.docx', '.jsonl', '.markdown', 
+            '.htm', '.xhtml'
+        }
+        
+        supported_files = []
+        for file_path in directory.rglob("*"):
+            if file_path.is_file() and file_path.suffix.lower() in supported_extensions:
+                supported_files.append(file_path)
+        return supported_files
+
+    def _normalize_splitters(self, splitters: Union[BaseChunker, List[BaseChunker]]) -> List[BaseChunker]:
         """Normalize splitters to always be a list."""
         if isinstance(splitters, list):
             return splitters
-        elif isinstance(splitters, ChunkingStrategy):
+        elif isinstance(splitters, BaseChunker):
             return [splitters]
         else:
-            raise ValueError("Splitters must be a ChunkingStrategy or list of ChunkingStrategy instances")
+            raise ValueError("Splitters must be a BaseChunker or list of BaseChunker instances")
 
-    def _normalize_loaders(self, loaders: Optional[Union[DocumentLoader, List[DocumentLoader]]]) -> List[DocumentLoader]:
+    def _normalize_loaders(self, loaders: Optional[Union[BaseLoader, List[BaseLoader]]]) -> List[BaseLoader]:
         """Normalize loaders to always be a list."""
         if loaders is None:
             return []
         elif isinstance(loaders, list):
             return loaders
-        elif isinstance(loaders, DocumentLoader):
+        elif isinstance(loaders, BaseLoader):
             return [loaders]
         else:
-            raise ValueError("Loaders must be a DocumentLoader or list of DocumentLoader instances")
+            raise ValueError("Loaders must be a BaseLoader or list of BaseLoader instances")
 
     def _validate_component_counts(self):
         """Validate that component counts are compatible for indexed processing."""
@@ -140,6 +197,7 @@ class KnowledgeBase:
         splitter_count = len(self.splitters)
         loader_count = len(self.loaders) if self.loaders else 0
         
+        file_source_count = sum(1 for source in self.sources if isinstance(source, Path))
         
         if source_count > 1:
             if splitter_count > 1 and splitter_count != source_count:
@@ -148,40 +206,84 @@ class KnowledgeBase:
                     "for indexed processing"
                 )
             
-            if loader_count > 1 and loader_count != source_count:
+            if loader_count > 1 and loader_count != file_source_count:
                 raise ValueError(
-                    f"Number of loaders ({loader_count}) must match number of sources ({source_count}) "
-                    "for indexed processing"
+                    f"Number of loaders ({loader_count}) must match number of file sources ({file_source_count}) "
+                    "for indexed processing. String content sources don't need loaders."
                 )
 
-    def _process_sources(self, sources: Union[str, List[str]]) -> List[str]:
+
+    def _is_direct_content(self, source: str) -> bool:
         """
-        Process sources to handle different input formats.
+        Check if a source is direct content (not a file path).
         
         Args:
-            sources: Can be a single file path, list of file paths, or directory path
+            source: The source string to check
             
         Returns:
-            List of file paths
+            True if the source appears to be direct content, False if it's a file path
         """
-        if isinstance(sources, str):
-            if os.path.isdir(sources):
-                file_paths = []
-                for root, dirs, files in os.walk(sources):
-                    for file in files:
-                        file_paths.append(os.path.join(root, file))
-                return file_paths
-            else:
-                if not os.path.exists(sources):
-                    raise ValueError(f"Source file does not exist: {sources}")
-                return [sources]
-        elif isinstance(sources, list):
-            for source in sources:
-                if not os.path.exists(source):
-                    raise ValueError(f"Source file does not exist: {source}")
-            return sources
-        else:
-            raise ValueError("Sources must be a string (file path or directory) or list of strings (file paths)")
+        if len(source) > 200:
+            return True
+            
+        if '\n' in source:
+            return True
+            
+        if source.count('.') > 2:
+            return True
+            
+        if len(source) > 100 and not any(ext in source.lower() for ext in ['.txt', '.pdf', '.docx', '.csv', '.json', '.xml', '.yaml', '.md', '.html']):
+            return True
+            
+        words = source.split()
+        if len(words) > 5 and not any(word.startswith('/') or word.startswith('.') for word in words):
+            return True
+        
+        try:
+            source_path = Path(source)
+            
+            if source_path.exists():
+                return False
+                
+            if source_path.suffix and not source_path.exists():
+                return True
+                
+        except (OSError, ValueError):
+            return True
+            
+        return False
+
+    def _create_document_from_content(self, content: str, source_index: int) -> Document:
+        """
+        Create a Document object from direct content string.
+        
+        Args:
+            content: The direct content string
+            source_index: Index of the source for metadata
+            
+        Returns:
+            Document object created from the content
+        """
+        import hashlib
+        import time
+        
+        content_hash = hashlib.md5(content.encode("utf-8")).hexdigest()
+        
+        current_time = time.time()
+        metadata = {
+            "source": f"direct_content_{source_index}",
+            "file_name": f"direct_content_{source_index}.txt",
+            "file_path": f"direct_content_{source_index}",
+            "file_size": len(content.encode("utf-8")),
+            "creation_datetime_utc": current_time,
+            "last_modified_datetime_utc": current_time,
+        }
+        
+        return Document(
+            content=content,
+            metadata=metadata,
+            document_id=content_hash
+        )
 
     def _get_component_for_source(self, source_index: int, component_list: List, component_name: str):
         """
@@ -218,8 +320,10 @@ class KnowledgeBase:
         Returns:
             A SHA256 hash string representing this unique knowledge configuration.
         """
+        sources_serializable = [str(source) for source in self.sources]
+        
         config_representation = {
-            "sources": sorted(self.sources),
+            "sources": sorted(sources_serializable),
             "loaders": [loader.__class__.__name__ for loader in self.loaders] if self.loaders else [],
             "splitters": [splitter.__class__.__name__ for splitter in self.splitters],
             "embedding_provider": self.embedding_provider.__class__.__name__,
@@ -260,32 +364,46 @@ class KnowledgeBase:
             source_to_splitter = {}
             
             for source_index, source in enumerate(self.sources):
-                print(f"    Processing source {source_index}: {source}")
+                source_str = str(source)
+                print(f"    Processing source {source_index}: {source_str[:100]}{'...' if len(source_str) > 100 else ''}")
                 
-                if self.loaders:
-                    loader = self._get_component_for_source(source_index, self.loaders, "loader")
-                    print(f"      Using loader: {loader.__class__.__name__}")
-                    
-                    print(f"      Checking if {loader.__class__.__name__} can load {source}...")
-                    can_load_result = loader.can_load(source)
-                    print(f"      can_load result: {can_load_result}")
-                    
-                    if can_load_result:
-                        try:
-                            source_documents = loader.load(source)
-                            print(f"      ✓ Loaded {len(source_documents)} documents from {source}")
-                            all_documents.extend(source_documents)
-                            source_to_documents[source_index] = source_documents
-                            source_to_loader[source_index] = loader
-                        except Exception as e:
-                            print(f"      ✗ Error loading {source}: {e}")
-                            continue
-                    else:
-                        print(f"      ✗ Loader {loader.__class__.__name__} cannot handle {source}")
+                if isinstance(source, str):
+                    print(f"      Detected direct content, creating document directly...")
+                    try:
+                        document = self._create_document_from_content(source, source_index)
+                        source_documents = [document]
+                        print(f"      ✓ Created document from direct content (length: {len(source)})")
+                        all_documents.extend(source_documents)
+                        source_to_documents[source_index] = source_documents
+                        source_to_loader[source_index] = None
+                    except Exception as e:
+                        print(f"      ✗ Error creating document from direct content: {e}")
                         continue
                 else:
-                    print(f"      ✗ No loaders provided for {source}")
-                    continue
+                    if self.loaders:
+                        loader = self._get_component_for_source(source_index, self.loaders, "loader")
+                        print(f"      Using loader: {loader.__class__.__name__}")
+                        
+                        print(f"      Checking if {loader.__class__.__name__} can load {source}...")
+                        can_load_result = loader.can_load(source)
+                        print(f"      can_load result: {can_load_result}")
+                        
+                        if can_load_result:
+                            try:
+                                source_documents = loader.load(source)
+                                print(f"      ✓ Loaded {len(source_documents)} documents from {source}")
+                                all_documents.extend(source_documents)
+                                source_to_documents[source_index] = source_documents
+                                source_to_loader[source_index] = loader
+                            except Exception as e:
+                                print(f"      ✗ Error loading {source}: {e}")
+                                continue
+                        else:
+                            print(f"      ✗ Loader {loader.__class__.__name__} cannot handle {source}")
+                            continue
+                    else:
+                        print(f"      ✗ No loaders provided for {source}")
+                        continue
             
             if not all_documents:
                 self._is_ready = True
@@ -303,18 +421,7 @@ class KnowledgeBase:
                 
                 source_chunks = []
                 for doc in documents:
-                    doc_chunks = splitter.chunk(doc)
-                    
-                    for chunk in doc_chunks:
-                        chunk.metadata.update({
-                            'source_index': source_index,
-                            'source_path': self.sources[source_index],
-                            'source_file': os.path.basename(self.sources[source_index]),
-                            'loader_type': source_to_loader[source_index].__class__.__name__,
-                            'chunking_strategy': splitter.__class__.__name__,
-                            'original_document_id': doc.document_id
-                        })
-                    
+                    doc_chunks = splitter.chunk([doc])
                     source_chunks.extend(doc_chunks)
                     print(f"      Document '{doc.document_id}' split into {len(doc_chunks)} chunks")
                 
@@ -380,8 +487,12 @@ class KnowledgeBase:
 
         rag_results = []
         for result in search_results:
-            text_content = result.text or result.payload.get('text_content', str(result.payload))
+            if not result.text:
+                error_msg = f"ERROR: Vector search result {result.id} has no text content. Payload: {result.payload}"
+                print(f"❌ {error_msg}")
+                raise ValueError(error_msg)
             
+            text_content = result.text
             metadata = result.payload or {}         
             rag_result = RAGSearchResult(
                 text=text_content,
@@ -391,6 +502,7 @@ class KnowledgeBase:
             )
             rag_results.append(rag_result)
 
+        print(f"✅ Successfully processed {len(rag_results)} results for RAG")
         return rag_results
 
     async def setup_rag(self, agent) -> None:
@@ -592,6 +704,9 @@ class KnowledgeBase:
         This method should be called when the KnowledgeBase is no longer needed
         to prevent resource leaks.
         """
+        if self._is_closed:
+            return
+            
         try:
             if hasattr(self.embedding_provider, 'close'):
                 await self.embedding_provider.close()
@@ -603,16 +718,34 @@ class KnowledgeBase:
             elif hasattr(self.vectordb, 'disconnect'):
                 self.vectordb.disconnect()
             
+            self._is_closed = True
             print(f"✅ KnowledgeBase '{self.name}' resources cleaned up successfully")
         except Exception as e:
             print(f"⚠️ Warning: Error during KnowledgeBase cleanup: {e}")
+            self._is_closed = True
     
     def __del__(self):
         """
         Destructor to ensure cleanup when object is garbage collected.
         """
         try:
-            if hasattr(self, '_is_ready') and self._is_ready:
+            if hasattr(self, '_is_ready') and self._is_ready and not getattr(self, '_is_closed', False):
+                try:
+                    if hasattr(self, 'vectordb') and self.vectordb:
+                        if hasattr(self.vectordb, 'disconnect'):
+                            self.vectordb.disconnect()
+                        elif hasattr(self.vectordb, 'disconnect_async'):
+                            import asyncio
+                            try:
+                                loop = asyncio.get_event_loop()
+                                if loop.is_running():
+                                    pass
+                                else:
+                                    loop.run_until_complete(self.vectordb.disconnect_async())
+                            except RuntimeError:
+                                asyncio.run(self.vectordb.disconnect_async())
+                except Exception:
+                    pass
                 print(f"⚠️ Warning: KnowledgeBase '{getattr(self, 'name', 'Unknown')}' was not explicitly closed")
         except:
             pass

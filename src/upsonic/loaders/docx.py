@@ -1,167 +1,154 @@
-from __future__ import annotations
-from typing import List, Any, Dict, Optional
-import os
-import time
-from datetime import datetime
+import asyncio
+from pathlib import Path
+from typing import List, Union
 
-from .base import DocumentLoader
-from .config import DOCXLoaderConfig
-from ..schemas.data_models import Document
+import docx
+from docx.document import Document as DocxDocument
+from docx.table import Table as DocxTable
+from docx.text.paragraph import Paragraph as DocxParagraph
 
-try:
-    import docx
-    from docx.table import Table as DocxTable
-except ImportError:
-    raise ImportError(
-        "python-docx is not installed. It is required for the DOCXLoader. "
-        "Please run: 'pip install upsonic[docx]'"
-    )
+from upsonic.schemas.data_models import Document
+from upsonic.loaders.base import BaseLoader
+from upsonic.loaders.config import DOCXLoaderConfig
 
 
-class DOCXLoader(DocumentLoader):
+class DOCXLoader(BaseLoader):
     """
-    A master-class, structure-aware ingestion engine for Microsoft Word (`.docx`) files.
+    A loader for Microsoft Word (.docx) files.
 
-    This loader intelligently traverses the document's structure, going beyond
-    simple text extraction. It is built on three pillars:
-    1.  **Full Document Traversal:** Iterates through all block-level items,
-        identifying both paragraphs and tables.
-    2.  **Intelligent Table-to-Text Conversion:** Parses `docx` tables and
-        serializes them into a clean, LLM-friendly textual format.
-    3.  **Deep Metadata Archaeology:** Extracts both filesystem metadata and the
-        document's core properties (e.g., author, title).
+    This loader extracts text from paragraphs, tables, headers, and footers.
+    Each .docx file is loaded as a single Document object.
     """
 
-    def __init__(self, config: Optional[DOCXLoaderConfig] = None):
-        """
-        Initialize the DOCXLoader with configuration.
-        
-        Args:
-            config: DOCXLoaderConfig object with all configuration options
-        """
-        if config is None:
-            config = DOCXLoaderConfig()
-        
-        
+    def __init__(self, config: DOCXLoaderConfig):
+        """Initializes the DOCXLoader with its specific configuration."""
         super().__init__(config)
-        self.config = config
+        self.config: DOCXLoaderConfig = config
 
-    def load(self, source: str) -> List[Document]:
-        """
-        Loads a .docx file, parsing its structure into a single, rich Document object.
-        """
-        return self._load_with_error_handling(source)
+    @classmethod
+    def get_supported_extensions(cls) -> List[str]:
+        """Gets the list of supported file extensions."""
+        return [".docx"]
 
-    def _load_with_error_handling(self, source: str) -> List[Document]:
-        """Override to call internal method instead of public load method."""
-        start_time = time.time()
+    def _format_table(self, table: DocxTable) -> str:
+        """Formats a table object into a string based on the config."""
+        if self.config.table_format == "html":
+            html = ["<table>"]
+            for row in table.rows:
+                html.append("  <tr>")
+                for cell in row.cells:
+                    html.append(f"    <td>{cell.text}</td>")
+                html.append("  </tr>")
+            html.append("</table>")
+            return "\n".join(html)
+
+        elif self.config.table_format == "markdown":
+            markdown = []
+            header = [cell.text for cell in table.rows[0].cells]
+            markdown.append("| " + " | ".join(header) + " |")
+            markdown.append("| " + " | ".join(["---"] * len(header)) + " |")
+            for row in table.rows[1:]:
+                row_text = [cell.text.replace("\n", " ") for cell in row.cells]
+                markdown.append("| " + " | ".join(row_text) + " |")
+            return "\n".join(markdown)
         
+        text = []
+        for row in table.rows:
+            row_text = [cell.text for cell in row.cells]
+            text.append("\t".join(row_text))
+        return "\n".join(text)
+
+    def _load_single_file(self, file_path: Path) -> List[Document]:
+        """Helper method to load a single .docx file into one or zero Documents."""
         try:
-            if not self._validate_source(source):
-                raise ValueError(f"Invalid source: {source}")
-            
-            if self.config and self.config.max_file_size:
-                if os.path.exists(source):
-                    file_size = os.path.getsize(source)
-                    if file_size > self.config.max_file_size:
-                        raise ValueError(f"File size {file_size} exceeds limit {self.config.max_file_size}")
-            
-            documents = self._load_document_internal(source)
-            
-            documents = self._post_process_documents(documents, source)
-            
-            processing_time = time.time() - start_time
-            self._update_stats(len(documents), processing_time, success=True)
-            
-            return documents
-            
-        except Exception as e:
-            processing_time = time.time() - start_time
-            self._update_stats(0, processing_time, success=False)
-            
-            if self.config:
-                if self.config.error_handling == "ignore":
-                    return []
-                elif self.config.error_handling == "warn":
-                    print(f"Warning: Failed to load {source}: {e}")
-                    return []
-                else:
-                    raise
-            else:
-                raise
+            document_id = self._generate_document_id(file_path)
+            if document_id in self._processed_document_ids:
+                raise FileExistsError(
+                    f"Source file '{file_path.resolve()}' has already been processed by this loader instance."
+                )
+            self._processed_document_ids.add(document_id)
 
-    def _load_document_internal(self, source: str) -> List[Document]:
-        """
-        Internal method to load a .docx file, parsing its structure into a single, rich Document object.
-        """
-        try:
-            file_path = os.path.abspath(source)
-            if not os.path.isfile(file_path):
-                raise FileNotFoundError(f"Source path '{source}' is not a valid file.")
+            doc: DocxDocument = docx.Document(file_path)
+            content_parts = []
 
-            stats = os.stat(file_path)
-            base_metadata: Dict[str, Any] = {
-                "source": source,
-                "file_name": os.path.basename(file_path),
-                "file_path": file_path,
-                "file_size": stats.st_size,
-                "creation_time": datetime.fromtimestamp(stats.st_ctime).isoformat(),
-                "last_modified_time": datetime.fromtimestamp(stats.st_mtime).isoformat(),
-            }
+            if self.config.include_headers:
+                for section in doc.sections:
+                    for header in [section.header, section.first_page_header, section.even_page_header]:
+                        if header:
+                            for paragraph in header.paragraphs:
+                                content_parts.append(paragraph.text)
 
-            doc = docx.Document(file_path)
-
-            cp = doc.core_properties
-            core_meta = {
-                "author": cp.author, "category": cp.category,
-                "comments": cp.comments, "title": cp.title,
-                "subject": cp.subject, "keywords": cp.keywords,
-                "last_modified_by": cp.last_modified_by,
-            }
-            base_metadata.update({k: v for k, v in core_meta.items() if v})
-
-            content_parts: List[str] = []
-            
             for paragraph in doc.paragraphs:
                 if paragraph.text.strip():
                     content_parts.append(paragraph.text)
             
-            for table in doc.tables:
-                table_text = self._parse_table_to_text(table)
-                if table_text:
-                    content_parts.append(table_text)
+            if self.config.include_tables:
+                for table in doc.tables:
+                    content_parts.append(self._format_table(table))
+            
+            if self.config.include_footers:
+                for section in doc.sections:
+                    for footer in [section.footer, section.first_page_footer, section.even_page_footer]:
+                        if footer:
+                            for paragraph in footer.paragraphs:
+                                content_parts.append(paragraph.text)
             
             full_content = "\n\n".join(part for part in content_parts if part and part.strip())
 
-            return [Document(content=full_content, metadata=base_metadata)]
+            if self.config.skip_empty_content and not full_content.strip():
+                return []
 
-        except FileNotFoundError as e:
-            print(f"Error: [DOCXLoader] File not found at path: {e}")
-            return []
+            metadata = self._create_metadata(file_path)
+            core_props = doc.core_properties
+            if self.config.include_metadata:
+                metadata.update({
+                    "author": core_props.author,
+                    "category": core_props.category,
+                    "comments": core_props.comments,
+                    "title": core_props.title,
+                    "subject": core_props.subject,
+                    "created": core_props.created,
+                    "modified": core_props.modified,
+                })
+            
+            doc_obj = Document(document_id=document_id, content=full_content, metadata=metadata)
+            return [doc_obj]
+
         except Exception as e:
-            print(f"Error: [DOCXLoader] An unexpected error occurred while loading '{source}': {e}")
-            return []
+            return self._handle_loading_error(str(file_path), e)
 
-    def _parse_table_to_text(self, table: DocxTable) -> str:
-        """Converts a docx.table.Table object into a human-readable text block."""
-        try:
-            headers = [cell.text.strip() for cell in table.rows[0].cells]
-            
-            text_rows = []
-            for row in table.rows[1:]:
-                row_cells = [cell.text.strip() for cell in row.cells]
-                if len(row_cells) == len(headers):
-                    row_text = ", ".join([f"{headers[i]}: {cell}" for i, cell in enumerate(row_cells)])
-                    text_rows.append(f"- {row_text}")
-            
-            if not text_rows:
-                return ""
+    def load(self, source: Union[str, Path, List[Union[str, Path]]]) -> List[Document]:
+        """Loads documents from the given .docx source(s) synchronously."""
+        files_to_process = self._resolve_sources(source)
+        all_documents = []
+        for file_path in files_to_process:
+            if self.config.max_file_size is not None and file_path.stat().st_size > self.config.max_file_size:
+                print(f"Warning: Skipping file {file_path} because its size ({file_path.stat().st_size} bytes) exceeds the max_file_size of {self.config.max_file_size} bytes.")
+                continue
+            all_documents.extend(self._load_single_file(file_path))
+        return all_documents
 
-            return f"[Structured Table Data]:\n" + "\n".join(text_rows)
-        except Exception:
-            return "[Unable to parse table content]"
+    async def aload(self, source: Union[str, Path, List[Union[str, Path]]]) -> List[Document]:
+        """
+        Loads documents from the given .docx source(s) asynchronously.
+        """
+        files_to_process = self._resolve_sources(source)
+        
+        valid_files = []
+        for file_path in files_to_process:
+            if self.config.max_file_size is not None and file_path.stat().st_size > self.config.max_file_size:
+                print(f"Warning: Skipping file {file_path} because its size ({file_path.stat().st_size} bytes) exceeds the max_file_size of {self.config.max_file_size} bytes.")
+                continue
+            valid_files.append(file_path)
 
-    @classmethod
-    def get_supported_extensions(cls) -> List[str]:
-        """Get list of file extensions supported by this loader."""
-        return ['.docx']
+        tasks = [asyncio.to_thread(self._load_single_file, file) for file in valid_files]
+        results = await asyncio.gather(*tasks)
+        return [doc for sublist in results for doc in sublist]
+
+    def batch(self, sources: List[Union[str, Path]]) -> List[Document]:
+        """A synchronous batch load implementation."""
+        return self.load(sources)
+
+    async def abatch(self, sources: List[Union[str, Path]]) -> List[Document]:
+        """An efficient asynchronous batch load implementation using asyncio.gather."""
+        return await self.aload(sources)

@@ -1,76 +1,111 @@
 from __future__ import annotations
-from typing import List, Optional, Dict, Any, TYPE_CHECKING
+
+import asyncio
+import hashlib
+import logging
 import time
+from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
+
 from pydantic import Field
 
-from upsonic.text_splitter.base import ChunkingStrategy, ChunkingConfig
+from upsonic.text_splitter.base import BaseChunker, BaseChunkingConfig
 from upsonic.schemas.data_models import Document, Chunk
 from upsonic.schemas.agentic import PropositionList, TopicAssignmentList, Topic, RefinedTopic
-from ..utils.error_wrapper import upsonic_error_handler
+from upsonic.utils.error_wrapper import upsonic_error_handler
 
 if TYPE_CHECKING:
     from upsonic.agent.agent import Direct
-    from upsonic.tasks.tasks import Task
+
+logger = logging.getLogger(__name__)
 
 
-class AgenticChunkingConfig(ChunkingConfig):
-    """Enhanced configuration for agentic chunking strategy."""
-    enable_proposition_caching: bool = Field(True, description="Cache proposition extraction results")
-    enable_topic_caching: bool = Field(True, description="Cache topic assignment results")
-    enable_refinement_caching: bool = Field(True, description="Cache topic refinement results")
+class AgenticChunkingConfig(BaseChunkingConfig):
+    """Configuration for agentic chunking strategy."""
     
-    min_propositions_per_chunk: int = Field(3, description="Minimum propositions to form a chunk")
-    max_propositions_per_chunk: int = Field(15, description="Maximum propositions in a single chunk")
-    min_proposition_length: int = Field(20, description="Minimum length for valid propositions")
+    max_agent_retries: int = Field(
+        default=3,
+        description="Maximum retries for agent calls"
+    )
     
-    enable_proposition_validation: bool = Field(True, description="Validate proposition quality")
-    enable_topic_optimization: bool = Field(True, description="Optimize topic assignments")
-    enable_coherence_scoring: bool = Field(True, description="Score chunk coherence")
-    parallel_processing: bool = Field(False, description="Enable parallel agent calls")
+    min_proposition_length: int = Field(
+        default=20,
+        description="Minimum length for valid propositions"
+    )
+    max_propositions_per_chunk: int = Field(
+        default=15,
+        description="Maximum propositions in a single chunk"
+    )
+    min_propositions_per_chunk: int = Field(
+        default=3,
+        description="Minimum propositions to form a chunk"
+    )
     
-    fallback_to_recursive: bool = Field(True, description="Fallback to recursive chunking on agent failure")
-    max_agent_retries: int = Field(3, description="Maximum retries for agent calls")
-    agent_timeout_seconds: int = Field(60, description="Timeout for agent operations")
+    enable_proposition_caching: bool = Field(
+        default=True,
+        description="Cache proposition extraction results"
+    )
+    enable_topic_caching: bool = Field(
+        default=True,
+        description="Cache topic assignment results"
+    )
+    enable_refinement_caching: bool = Field(
+        default=True,
+        description="Cache topic refinement results"
+    )
     
-    batch_proposition_size: int = Field(100, description="Batch size for proposition processing")
-    enable_incremental_processing: bool = Field(True, description="Process documents incrementally")
+    enable_proposition_validation: bool = Field(
+        default=True,
+        description="Validate proposition quality"
+    )
+    enable_topic_optimization: bool = Field(
+        default=True,
+        description="Optimize topic assignments"
+    )
+    enable_coherence_scoring: bool = Field(
+        default=True,
+        description="Score chunk coherence"
+    )
     
-    include_proposition_metadata: bool = Field(True, description="Include proposition-level metadata")
-    include_topic_scores: bool = Field(True, description="Include topic coherence scores")
-    include_agent_metadata: bool = Field(True, description="Include agent processing metadata")
+    fallback_to_recursive: bool = Field(
+        default=True,
+        description="Fallback to recursive chunking on agent failure"
+    )
+    
+    include_proposition_metadata: bool = Field(
+        default=True,
+        description="Include proposition-level metadata"
+    )
+    include_topic_scores: bool = Field(
+        default=True,
+        description="Include topic coherence scores"
+    )
+    include_agent_metadata: bool = Field(
+        default=True,
+        description="Include agent processing metadata"
+    )
 
 
-class AgenticChunkingStrategy(ChunkingStrategy):
+class AgenticChunker(BaseChunker[AgenticChunkingConfig]):
     """
-    Agentic chunking strategy with framework-level features.
-
-    This advanced strategy uses AI agents to cognitively deconstruct and
-    reorganize documents into thematically coherent chunks with
-    capabilities:
+    Agentic chunking strategy using AI agents for cognitive document processing.
+    
+    This strategy uses AI agents to:
+    1. Extract atomic propositions from documents
+    2. Group propositions into coherent topics
+    3. Create semantically meaningful chunks
+    4. Enrich chunks with AI-generated metadata
     
     Features:
-    - Comprehensive caching system for all agent operations
-    - Quality validation and coherence scoring
-    - Parallel processing and performance optimization
-    - Robust error handling with intelligent fallbacks
-    - Rich metadata enrichment with agent insights
-    - Incremental processing for large documents
-    - Advanced proposition and topic management
-    
-    This strategy executes an cognitive pipeline:
-    1. **Proposition Extraction** - Agent breaks document into atomic statements
-    2. **Quality Validation** - Validates and filters propositions
-    3. **Batch Topic Clustering** - Groups propositions into thematic clusters
-    4. **Topic Optimization** - Refines and optimizes topic assignments  
-    5. **Coherence Scoring** - Evaluates chunk semantic coherence
-    6. **Metadata Enrichment** - Adds comprehensive agent-generated metadata
-
+    - Comprehensive caching system
+    - Quality validation and scoring
+    - Robust error handling with fallbacks
+    - Rich metadata enrichment
     """
     
     def __init__(self, agent: "Direct", config: Optional[AgenticChunkingConfig] = None):
         """
-        Initialize agentic chunking strategy.
-
+        Initialize agentic chunker.
+        
         Args:
             agent: Pre-configured Direct agent for cognitive processing
             config: Configuration object with all settings
@@ -79,26 +114,39 @@ class AgenticChunkingStrategy(ChunkingStrategy):
         if not isinstance(agent, Direct):
             raise TypeError("An instance of the `Direct` agent is required.")
         
-        if config is None:
-            config = AgenticChunkingConfig()
-        
         super().__init__(config)
-        
         self.agent = agent
         
         self._proposition_cache: Dict[str, List[str]] = {}
         self._topic_cache: Dict[str, List[Topic]] = {}
         self._refinement_cache: Dict[str, RefinedTopic] = {}
-        self._coherence_scores: Dict[str, float] = {}
         
         self._agent_call_count = 0
         self._cache_hits = 0
         self._fallback_count = 0
 
-    @upsonic_error_handler(max_retries=1, show_error_details=True)
-    async def chunk(self, document: Document) -> List[Chunk]:
+    def _chunk_document(self, document: Document) -> List[Chunk]:
         """
-        Agentic chunking pipeline with framework features.
+        Synchronous chunking - delegates to async implementation.
+        
+        Args:
+            document: Document to chunk
+            
+        Returns:
+            List of chunks
+        """
+        try:
+            loop = asyncio.get_running_loop()
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, self._achunk_document(document))
+                return future.result()
+        except RuntimeError:
+            return asyncio.run(self._achunk_document(document))
+
+    async def _achunk_document(self, document: Document) -> List[Chunk]:
+        """
+        Core agentic chunking pipeline.
         
         Args:
             document: Document to process with AI agents
@@ -112,41 +160,41 @@ class AgenticChunkingStrategy(ChunkingStrategy):
             return []
         
         try:
-            propositions = await self._generate_propositions_enhanced(document)
+            propositions = await self._extract_propositions(document)
             if not propositions:
                 return await self._fallback_chunking(document)
 
             if self.config.enable_proposition_validation:
                 propositions = self._validate_propositions(propositions)
+                if not propositions:
+                    return await self._fallback_chunking(document)
 
-            topic_clusters = await self._assign_propositions_to_topics_enhanced(propositions, document)
-            if not topic_clusters:
+            topics = await self._group_propositions_into_topics(propositions, document)
+            if not topics:
                 return await self._fallback_chunking(document)
 
             if self.config.enable_topic_optimization:
-                topic_clusters = await self._optimize_topic_assignments(topic_clusters, propositions)
+                topics = self._optimize_topics(topics)
 
-            chunks = await self._create_enhanced_chunks(topic_clusters, document)
+            chunks = await self._create_chunks_from_topics(topics, document)
 
             if self.config.enable_coherence_scoring:
-                chunks = await self._score_chunk_coherence(chunks)
+                chunks = self._score_chunk_coherence(chunks)
 
             processing_time = (time.time() - start_time) * 1000
-            self._update_metrics(chunks, processing_time, document)
+            self._add_processing_metadata(chunks, processing_time)
             
             return chunks
             
         except Exception as e:
-            print(f"Agentic chunking failed for document {document.document_id}: {e}")
+            logger.error(f"Agentic chunking failed for document {document.document_id}: {e}")
             return await self._fallback_chunking(document)
 
     def _get_cache_key(self, text: str) -> str:
-        """Generate cache key for content."""
-        import hashlib
         return hashlib.md5(text.encode()).hexdigest()[:16]
-    
-    async def _generate_propositions_enhanced(self, document: Document) -> List[str]:
-        """Proposition generation with caching and validation."""
+
+    @upsonic_error_handler(max_retries=1, show_error_details=True)
+    async def _extract_propositions(self, document: Document) -> List[str]:
         cache_key = self._get_cache_key(document.content) if self.config.enable_proposition_caching else None
         
         if cache_key and cache_key in self._proposition_cache:
@@ -155,10 +203,28 @@ class AgenticChunkingStrategy(ChunkingStrategy):
         
         for attempt in range(self.config.max_agent_retries):
             try:
-                propositions = await self._generate_propositions(document.content)
+                from upsonic.tasks.tasks import Task
                 
-                if self.config.enable_proposition_validation:
-                    propositions = [p for p in propositions if len(p.strip()) >= self.config.min_proposition_length]
+                prompt = f"""
+                Extract atomic, self-contained factual statements from this document.
+                
+                Guidelines:
+                - Each proposition should be a single piece of information
+                - Propositions should be atomic and independent
+                - Focus on factual content, not opinions
+                - Each proposition should be at least {self.config.min_proposition_length} characters
+                - Maximum {self.config.max_propositions_per_chunk * 3} propositions total
+                
+                Return as JSON conforming to PropositionList schema.
+
+                <DOCUMENT_CONTENT>
+                {document.content}
+                </DOCUMENT_CONTENT>
+                """
+                
+                task = Task(description=prompt, response_format=PropositionList)
+                result = await self.agent.do_async(task)
+                propositions = result.propositions if result else []
                 
                 if cache_key and self.config.enable_proposition_caching:
                     self._proposition_cache[cache_key] = propositions
@@ -167,74 +233,61 @@ class AgenticChunkingStrategy(ChunkingStrategy):
                 return propositions
                 
             except Exception as e:
-                print(f"Proposition generation attempt {attempt + 1} failed: {e}")
+                logger.warning(f"Proposition extraction attempt {attempt + 1} failed: {e}")
                 if attempt == self.config.max_agent_retries - 1:
                     raise
         
         return []
-    
-    async def _generate_propositions(self, text: str) -> List[str]:
-        """Proposition extraction with better prompting."""
-        from upsonic.tasks.tasks import Task
-        
-        prompt = f"""
-        Your task is to act as a meticulous knowledge extraction engine.
-        Read the following document and deconstruct it into a list of simple, granular, and self-contained factual statements (propositions).
-        
-        Guidelines:
-        - Each proposition should represent a single piece of information
-        - Propositions should be atomic and independent
-        - Focus on factual content, not opinions or interpretations
-        - Each proposition should be at least {self.config.min_proposition_length} characters
-        - Maximum {self.config.max_propositions_per_chunk * 3} propositions total
-        
-        Return the result as a JSON object conforming to the `PropositionList` schema.
 
-        <DOCUMENT_CONTENT>
-        {text}
-        </DOCUMENT_CONTENT>
-        """
-        task = Task(description=prompt, response_format=PropositionList)
-        result = await self.agent.do_async(task)
-        return result.propositions if result else []
-    
     def _validate_propositions(self, propositions: List[str]) -> List[str]:
-        """Validate and filter propositions based on quality criteria."""
         validated = []
         
         for prop in propositions:
             prop = prop.strip()
             
-            if len(prop) < self.config.min_proposition_length:
-                continue
-            
-            if not prop or prop.isspace():
-                continue
-            
-            if prop not in validated:
+            if (len(prop) >= self.config.min_proposition_length and 
+                prop and not prop.isspace() and 
+                prop not in validated):
                 validated.append(prop)
         
         return validated
 
-    async def _assign_propositions_to_topics_enhanced(self, propositions: List[str], document: Document) -> List[Topic]:
-        """Topic assignment with caching and optimization."""
-        if not propositions:
-            return []
-        
+    @upsonic_error_handler(max_retries=1, show_error_details=True)
+    async def _group_propositions_into_topics(self, propositions: List[str], document: Document) -> List[Topic]:
         cache_key = self._get_cache_key(str(propositions)) if self.config.enable_topic_caching else None
         
         if cache_key and cache_key in self._topic_cache:
             self._cache_hits += 1
             return self._topic_cache[cache_key]
         
-        if len(propositions) > self.config.batch_proposition_size:
-            return await self._batch_process_topics(propositions, document)
-        
         for attempt in range(self.config.max_agent_retries):
             try:
-                topics = await self._assign_propositions_to_topics(propositions)
+                from upsonic.tasks.tasks import Task
                 
-                topics = self._validate_topic_assignments(topics, propositions)
+                formatted_propositions = "\n".join(f"- {p}" for p in propositions)
+                
+                prompt = f"""
+                Group these propositions into coherent thematic topics.
+                
+                Guidelines:
+                - Group by shared topics, themes, or subjects
+                - Each topic should have {self.config.min_propositions_per_chunk}-{self.config.max_propositions_per_chunk} propositions
+                - Create new topics for propositions that don't fit existing ones
+                - Ensure topics are thematically coherent
+                - Avoid single-proposition topics when possible
+                
+                Return as JSON conforming to TopicAssignmentList schema.
+
+                <PROPOSITIONS>
+                {formatted_propositions}
+                </PROPOSITIONS>
+                """
+                
+                task = Task(description=prompt, response_format=TopicAssignmentList)
+                result = await self.agent.do_async(task)
+                topics = result.topics if result else []
+                
+                topics = self._validate_topic_sizes(topics)
                 
                 if cache_key and self.config.enable_topic_caching:
                     self._topic_cache[cache_key] = topics
@@ -243,41 +296,13 @@ class AgenticChunkingStrategy(ChunkingStrategy):
                 return topics
                 
             except Exception as e:
-                print(f"Topic assignment attempt {attempt + 1} failed: {e}")
+                logger.warning(f"Topic assignment attempt {attempt + 1} failed: {e}")
                 if attempt == self.config.max_agent_retries - 1:
                     raise
         
         return []
-    
-    async def _assign_propositions_to_topics(self, propositions: List[str]) -> List[Topic]:
-        """Topic assignment with better clustering guidance."""
-        from upsonic.tasks.tasks import Task
-        
-        formatted_propositions = "\n".join(f"- {p}" for p in propositions)
-        
-        prompt = f"""
-        You are an expert librarian and data analyst. Your task is to organize propositions into coherent thematic groups.
-        
-        Guidelines:
-        - Group propositions by shared topics, themes, or subjects
-        - Each topic should have {self.config.min_propositions_per_chunk}-{self.config.max_propositions_per_chunk} propositions
-        - Create new topics for propositions that don't fit existing ones
-        - Ensure topics are thematically coherent and meaningful
-        - Avoid creating too many single-proposition topics
-        
-        Analyze the propositions below and group them intelligently.
-        Return a JSON object conforming to the `TopicAssignmentList` schema.
 
-        <PROPOSITIONS_TO_ASSIGN>
-        {formatted_propositions}
-        </PROPOSITIONS_TO_ASSIGN>
-        """
-        task = Task(description=prompt, response_format=TopicAssignmentList)
-        result = await self.agent.do_async(task)
-        return result.topics if result else []
-    
-    def _validate_topic_assignments(self, topics: List[Topic], propositions: List[str]) -> List[Topic]:
-        """Validate and optimize topic assignments."""
+    def _validate_topic_sizes(self, topics: List[Topic]) -> List[Topic]:
         validated_topics = []
         
         for topic in topics:
@@ -285,124 +310,132 @@ class AgenticChunkingStrategy(ChunkingStrategy):
                 self.config.max_propositions_per_chunk):
                 validated_topics.append(topic)
             elif len(topic.propositions) > self.config.max_propositions_per_chunk:
-                split_topics = self._split_large_topic(topic)
-                validated_topics.extend(split_topics)
+                for i in range(0, len(topic.propositions), self.config.max_propositions_per_chunk):
+                    chunk_props = topic.propositions[i:i + self.config.max_propositions_per_chunk]
+                    if len(chunk_props) >= self.config.min_propositions_per_chunk:
+                        split_topic = Topic(
+                            topic_id=len(validated_topics) + 1,
+                            propositions=chunk_props
+                        )
+                        validated_topics.append(split_topic)
         
         return validated_topics
-    
-    def _split_large_topic(self, topic: Topic) -> List[Topic]:
-        """Split a topic that has too many propositions."""
-        max_props = self.config.max_propositions_per_chunk
-        split_topics = []
-        
-        for i in range(0, len(topic.propositions), max_props):
-            chunk_props = topic.propositions[i:i + max_props]
-            split_topic = Topic(
-                topic_id=len(split_topics) + 1,
-                propositions=chunk_props
-            )
-            split_topics.append(split_topic)
-        
-        return split_topics
-    
-    async def _batch_process_topics(self, propositions: List[str], document: Document) -> List[Topic]:
-        """Process large proposition lists in batches."""
-        batch_size = self.config.batch_proposition_size
-        all_topics = []
-        
-        for i in range(0, len(propositions), batch_size):
-            batch = propositions[i:i + batch_size]
-            batch_topics = await self._assign_propositions_to_topics(batch)
-            all_topics.extend(batch_topics)
-        
-        return all_topics
-    
-    async def _optimize_topic_assignments(self, topics: List[Topic], propositions: List[str]) -> List[Topic]:
-        """Optimize topic assignments for better coherence."""
+
+    def _optimize_topics(self, topics: List[Topic]) -> List[Topic]:
         if not self.config.enable_topic_optimization:
             return topics
         
-        optimized_topics = self._merge_small_topics(topics)
-        
-        balanced_topics = self._balance_topic_sizes(optimized_topics)
-        
-        return balanced_topics
-    
-    def _merge_small_topics(self, topics: List[Topic]) -> List[Topic]:
-        """Merge topics that are too small."""
-        merged_topics = []
-        small_topics = []
+        optimized_topics = []
+        small_propositions = []
         
         for topic in topics:
             if len(topic.propositions) >= self.config.min_propositions_per_chunk:
-                merged_topics.append(topic)
+                optimized_topics.append(topic)
             else:
-                small_topics.append(topic)
+                small_propositions.extend(topic.propositions)
         
-        if small_topics:
-            all_small_props = []
-            for small_topic in small_topics:
-                all_small_props.extend(small_topic.propositions)
-            
-            for i in range(0, len(all_small_props), self.config.max_propositions_per_chunk):
-                chunk_props = all_small_props[i:i + self.config.max_propositions_per_chunk]
+        if small_propositions:
+            for i in range(0, len(small_propositions), self.config.max_propositions_per_chunk):
+                chunk_props = small_propositions[i:i + self.config.max_propositions_per_chunk]
                 if len(chunk_props) >= self.config.min_propositions_per_chunk:
                     merged_topic = Topic(
-                        topic_id=len(merged_topics) + 1,
+                        topic_id=len(optimized_topics) + 1,
                         propositions=chunk_props
                     )
-                    merged_topics.append(merged_topic)
+                    optimized_topics.append(merged_topic)
         
-        return merged_topics
-    
-    def _balance_topic_sizes(self, topics: List[Topic]) -> List[Topic]:
-        """Balance topic sizes for optimal chunks."""
-        return topics
+        return optimized_topics
 
-    async def _create_enhanced_chunks(self, topics: List[Topic], document: Document) -> List[Chunk]:
-        """Create enhanced chunks with rich metadata."""
+    def _find_chunk_indices_in_document(self, chunk_text: str, document_content: str) -> Tuple[int, int]:
+        chunk_clean = chunk_text.strip()
+        doc_clean = document_content.strip()
+        
+        if chunk_clean in doc_clean:
+            start_index = doc_clean.find(chunk_clean)
+            end_index = start_index + len(chunk_clean)
+            return start_index, end_index
+        
+        chunk_words = chunk_clean.split()
+        if len(chunk_words) < 2:
+            return 0, min(len(chunk_clean), len(doc_clean))
+        
+        for word_count in range(min(5, len(chunk_words)), 1, -1):
+            first_words = " ".join(chunk_words[:word_count])
+            if first_words in doc_clean:
+                start_index = doc_clean.find(first_words)
+                end_index = min(start_index + len(chunk_clean), len(doc_clean))
+                return start_index, end_index
+        
+        for word in chunk_words:
+            if len(word) > 3 and word in doc_clean:
+                start_index = doc_clean.find(word)
+                end_index = min(start_index + len(chunk_clean), len(doc_clean))
+                return start_index, end_index
+        
+        return 0, min(len(chunk_clean), len(doc_clean))
+
+    async def _create_chunks_from_topics(self, topics: List[Topic], document: Document) -> List[Chunk]:
         chunks = []
+        current_chunk_topics: List[Topic] = []
+        current_length = 0
+        min_chunk_size = self._get_effective_min_chunk_size()
         
         for i, topic in enumerate(topics):
             chunk_text = " ".join(topic.propositions)
+            topic_length = self.config.length_function(chunk_text)
             
-            refined_metadata = await self._refine_topic_metadata_enhanced(chunk_text, topic)
-            
-            chunk = self._create_chunk(
-                text_content=chunk_text,
-                document=document,
-                chunk_index=i,
-                total_chunks=len(topics),
-                start_pos=0,
-                end_pos=len(chunk_text)
-            )
-            
-            chunk.metadata.update({
-                "agentic_title": refined_metadata.title,
-                "agentic_summary": refined_metadata.summary,
-                "topic_id": topic.topic_id,
-                "proposition_count": len(topic.propositions),
-                "chunking_method": "agentic_cognitive",
-                "agent_processed": True
-            })
-            
-            if self.config.include_proposition_metadata:
-                chunk.metadata["propositions"] = topic.propositions[:5]
-                chunk.metadata["total_propositions"] = len(topic.propositions)
-            
-            if self.config.include_agent_metadata:
-                chunk.metadata.update({
-                    "agent_calls": self._agent_call_count,
-                    "cache_hits": self._cache_hits,
-                    "processing_stage": "refined"
-                })
-            
-            chunks.append(chunk)
+            if current_length + topic_length > self.config.chunk_size and current_chunk_topics:
+                if current_length >= min_chunk_size:
+                    final_chunk = await self._finalize_topic_chunk(current_chunk_topics, document)
+                    chunks.append(final_chunk)
+                    current_chunk_topics = []
+                    current_length = 0
+            current_chunk_topics.append(topic)
+            current_length += topic_length
+        
+        if current_chunk_topics:
+            final_chunk = await self._finalize_topic_chunk(current_chunk_topics, document)
+            chunks.append(final_chunk)
         
         return chunks
-    
-    async def _refine_topic_metadata_enhanced(self, chunk_text: str, topic: Topic) -> RefinedTopic:
-        """Metadata refinement with caching."""
+
+    async def _finalize_topic_chunk(self, topics: List[Topic], document: Document) -> Chunk:
+        all_propositions = []
+        for topic in topics:
+            all_propositions.extend(topic.propositions)
+        
+        chunk_text = " ".join(all_propositions)
+        
+        base_topic = topics[0]
+        topic_ids = [str(topic.topic_id) for topic in topics]
+        
+        refined_metadata = await self._refine_topic_metadata(chunk_text, base_topic)
+        
+        start_index, end_index = self._find_chunk_indices_in_document(chunk_text, document.content)
+        chunk = self._create_chunk(
+            parent_document=document,
+            text_content=chunk_text,
+            start_index=start_index,
+            end_index=end_index,
+            extra_metadata={
+                "agentic_title": refined_metadata.title,
+                "agentic_summary": refined_metadata.summary,
+                "topic_ids": "+".join(topic_ids) if len(topic_ids) > 1 else topic_ids[0],
+                "proposition_count": len(all_propositions),
+                "chunking_method": "agentic_cognitive",
+                "agent_processed": True,
+                "merged_topics": len(topics) > 1
+            }
+        )
+        
+        if self.config.include_proposition_metadata:
+            chunk.metadata["propositions"] = all_propositions[:5]
+            chunk.metadata["total_propositions"] = len(all_propositions)
+        
+        return chunk
+
+    @upsonic_error_handler(max_retries=1, show_error_details=True)
+    async def _refine_topic_metadata(self, chunk_text: str, topic: Topic) -> RefinedTopic:
         cache_key = self._get_cache_key(chunk_text) if self.config.enable_refinement_caching else None
         
         if cache_key and cache_key in self._refinement_cache:
@@ -411,7 +444,30 @@ class AgenticChunkingStrategy(ChunkingStrategy):
         
         for attempt in range(self.config.max_agent_retries):
             try:
-                refined = await self._refine_topic_metadata(chunk_text)
+                from upsonic.tasks.tasks import Task
+                
+                prompt = f"""
+                Create a title and summary for this content.
+                
+                Guidelines:
+                - Title: concise (3-8 words) and descriptive
+                - Summary: comprehensive but concise (1-2 sentences)
+                - Focus on main theme and key information
+                - Use clear, professional language
+                
+                Return as JSON conforming to RefinedTopic schema.
+
+                <CHUNK_TEXT>
+                {chunk_text}
+                </CHUNK_TEXT>
+                """
+                
+                task = Task(description=prompt, response_format=RefinedTopic)
+                result = await self.agent.do_async(task)
+                refined = result if result else RefinedTopic(
+                    title=f"Topic {topic.topic_id}", 
+                    summary="Auto-generated summary."
+                )
                 
                 if cache_key and self.config.enable_refinement_caching:
                     self._refinement_cache[cache_key] = refined
@@ -420,7 +476,7 @@ class AgenticChunkingStrategy(ChunkingStrategy):
                 return refined
                 
             except Exception as e:
-                print(f"Metadata refinement attempt {attempt + 1} failed: {e}")
+                logger.warning(f"Metadata refinement attempt {attempt + 1} failed: {e}")
                 if attempt == self.config.max_agent_retries - 1:
                     return RefinedTopic(
                         title=f"Topic {topic.topic_id}", 
@@ -428,34 +484,8 @@ class AgenticChunkingStrategy(ChunkingStrategy):
                     )
         
         return RefinedTopic(title="Untitled Topic", summary="No summary available.")
-    
-    async def _refine_topic_metadata(self, chunk_text: str) -> RefinedTopic:
-        """Metadata refinement with better prompting."""
-        from upsonic.tasks.tasks import Task
-        
-        prompt = f"""
-        You are a skilled technical writer. The following text is a collection of related facts.
-        Your task is to create a high-quality title and summary for this content.
-        
-        Guidelines:
-        - Title should be concise (3-8 words) and descriptive
-        - Summary should be comprehensive but concise (1-2 sentences)
-        - Focus on the main theme and key information
-        - Use clear, professional language
-        
-        Your output MUST be a single JSON object conforming to the `RefinedTopic` schema.
 
-        <CHUNK_TEXT>
-        {chunk_text}
-        </CHUNK_TEXT>
-        """
-        task = Task(description=prompt, response_format=RefinedTopic)
-        result = await self.agent.do_async(task)
-        
-        return result if result else RefinedTopic(title="Untitled Topic", summary="No summary available.")
-    
-    async def _score_chunk_coherence(self, chunks: List[Chunk]) -> List[Chunk]:
-        """Score chunk coherence and add to metadata."""
+    def _score_chunk_coherence(self, chunks: List[Chunk]) -> List[Chunk]:
         if not self.config.enable_coherence_scoring:
             return chunks
         
@@ -467,9 +497,8 @@ class AgenticChunkingStrategy(ChunkingStrategy):
                 chunk.metadata["quality_assessment"] = self._assess_chunk_quality(coherence_score)
         
         return chunks
-    
+
     def _calculate_coherence_score(self, chunk: Chunk) -> float:
-        """Calculate a coherence score for the chunk."""
         text_length = len(chunk.text_content)
         proposition_count = chunk.metadata.get("proposition_count", 1)
         
@@ -477,11 +506,9 @@ class AgenticChunkingStrategy(ChunkingStrategy):
         proposition_score = min(proposition_count / 10, 1.0)
         
         coherence_score = (length_score * 0.4 + proposition_score * 0.6)
-        
         return round(coherence_score, 3)
-    
+
     def _assess_chunk_quality(self, coherence_score: float) -> str:
-        """Assess chunk quality based on coherence score."""
         if coherence_score >= 0.8:
             return "excellent"
         elif coherence_score >= 0.6:
@@ -490,24 +517,23 @@ class AgenticChunkingStrategy(ChunkingStrategy):
             return "fair"
         else:
             return "poor"
-    
+
     async def _fallback_chunking(self, document: Document) -> List[Chunk]:
-        """Fallback to recursive chunking when agentic processing fails."""
         if not self.config.fallback_to_recursive:
             return []
         
         self._fallback_count += 1
-        print(f"Falling back to recursive chunking for document {document.document_id}")
+        logger.warning(f"Falling back to recursive chunking for document {document.document_id}")
         
         try:
-            from .recursive import RecursiveCharacterChunkingStrategy, RecursiveChunkingConfig
+            from .recursive import RecursiveChunker, RecursiveChunkingConfig
             fallback_config = RecursiveChunkingConfig(
                 chunk_size=self.config.chunk_size,
                 chunk_overlap=self.config.chunk_overlap
             )
-            fallback_strategy = RecursiveCharacterChunkingStrategy(fallback_config)
+            fallback_chunker = RecursiveChunker(fallback_config)
             
-            fallback_chunks = fallback_strategy.chunk(document)
+            fallback_chunks = fallback_chunker._chunk_document(document)
             
             for chunk in fallback_chunks:
                 chunk.metadata["agentic_fallback"] = True
@@ -516,11 +542,22 @@ class AgenticChunkingStrategy(ChunkingStrategy):
             return fallback_chunks
             
         except Exception as e:
-            print(f"Fallback chunking also failed: {e}")
+            logger.error(f"Fallback chunking also failed: {e}")
             return []
-    
-    def get_agentic_stats(self) -> Dict[str, Any]:
-        """Get statistics about agentic processing."""
+
+    def _add_processing_metadata(self, chunks: List[Chunk], processing_time: float):
+        if not self.config.include_agent_metadata:
+            return
+        
+        for chunk in chunks:
+            chunk.metadata.update({
+                "agent_calls": self._agent_call_count,
+                "cache_hits": self._cache_hits,
+                "processing_time_ms": processing_time,
+                "processing_stage": "completed"
+            })
+
+    def get_agentic_stats(self) -> Dict[str, any]:
         return {
             "agent_calls": self._agent_call_count,
             "cache_hits": self._cache_hits,
@@ -539,11 +576,9 @@ class AgenticChunkingStrategy(ChunkingStrategy):
                 "coherence_scoring": self.config.enable_coherence_scoring
             }
         }
-    
+
     def clear_agentic_caches(self):
-        """Clear all agentic processing caches."""
         self._proposition_cache.clear()
         self._topic_cache.clear()
         self._refinement_cache.clear()
-        self._coherence_scores.clear()
         self._cache_hits = 0

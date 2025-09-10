@@ -1,228 +1,263 @@
 from __future__ import annotations
-from typing import List, Any, Optional, Dict
+
+import logging
+from enum import Enum
 import re
+
+from typing import List, Optional, Tuple
+
 from pydantic import Field
 
-from upsonic.text_splitter.base import TextSplitter, TextSplitterConfig
-from ..utils.error_wrapper import upsonic_error_handler
+from upsonic.text_splitter.base import BaseChunkingConfig
+from upsonic.schemas.data_models import Chunk, Document
+from upsonic.text_splitter.base import BaseChunker
 
-class RecursiveChunkingConfig(TextSplitterConfig):
-    """Enhanced configuration for recursive character chunking."""
+logger = logging.getLogger(__name__)
+
+class Language(str, Enum):
+    """
+    An enumeration of supported programming and markup languages for specialized,
+    semantically-aware chunking.
+    """
+    PYTHON = "python"
+    MARKDOWN = "markdown"
+    HTML = "html"
+    LATEX = "latex"
+    JAVA = "java"
+    JS = "js"
+
+
+RECURSIVE_SEPARATORS = {
+    Language.PYTHON: [
+        r"\nclass [a-zA-Z_][a-zA-Z0-9_]*:",
+        r"\ndef [a-zA-Z_][a-zA-Z0-9_]*\([^)]*\):",
+        r"\n\tdef [a-zA-Z_][a-zA-Z0-9_]*\([^)]*\):",
+        "\n\n", "\n", " ", "",
+    ],
+    Language.MARKDOWN: [
+        "\n## ", "\n### ", "\n#### ", "\n##### ", "\n###### ",
+        "```\n", "\n\n***\n\n", "\n\n---\n\n", "\n\n___\n\n",
+        "\n\n", "\n", " ", "",
+    ],
+    Language.HTML: [
+        r"(?i)(?=</body>)", r"(?i)(?=</div>)", r"(?i)(?=</p>)", r"(?i)(?=</table>)",
+        r"(?i)(?=</header>)", r"(?i)(?=</footer>)", r"(?i)(?=</main>)", r"(?i)(?=</section>)",
+        r"(?i)(?=</h1>)", r"(?i)(?=</h2>)", r"(?i)(?=</h3>)", r"(?i)(?=</h4>)", r"(?i)(?=</h5>)", r"(?i)(?=</h6>)",
+        "\n\n", "\n", " ", "",
+    ],
+    Language.LATEX: [
+        r"\n\\chapter{", r"\n\\section{", r"\n\\subsection{", r"\n\\subsubsection{",
+        r"\n\n\\begin{enumerate}", r"\n\n\\begin{itemize}", r"\n\n\\begin{verbatim}",
+        "\n\n", "\n", " ", "",
+    ],
+    Language.JAVA: [
+        r"\nclass ", r"\npublic class ", r"\ninterface ",
+        r"\npublic void ", r"\nprotected void ", r"\nprivate void ", r"\nstatic void ",
+        "\n\n", "\n", " ", ""
+    ],
+    Language.JS: [
+        r"\nfunction ", r"\nconst ", r"\nlet ", r"\nvar ", r"\nclass ",
+        "\n\n", "\n", " ", ""
+    ],
+}
+
+
+
+class RecursiveChunkingConfig(BaseChunkingConfig):
+    """
+    A specialized configuration model for the Recursive Chunker strategy.
+
+    This configuration extends the base settings with parameters that control
+    the recursive splitting behavior, such as the prioritized list of separators
+    to use.
+    """
     separators: List[str] = Field(
-        default_factory=lambda: ["\n\n", "\n", ". "],
-        description="Ordered list of separators from highest to lowest priority"
+        default=["\n\n", "\n", ". ", "? ", "! ", " ", ""],
+        description=(
+            "A prioritized list of separators or regex patterns. The chunker "
+            "tries to split the text by the first separator in the list. If any "
+            "resulting segment is still too large, it moves to the next separator "
+            "to split that specific segment."
+        )
     )
-    is_separator_regex: bool = Field(False, description="Whether separators are regex patterns")
-    
-    enable_adaptive_splitting: bool = Field(True, description="Adapt separator priority based on content")
-    content_type_detection: bool = Field(True, description="Detect content type and adjust separators")
-    
-    min_separator_frequency: float = Field(0.01, description="Minimum frequency for separator to be used")
-    prefer_balanced_chunks: bool = Field(True, description="Try to create chunks of similar sizes")
-    
-    max_recursion_depth: int = Field(10, description="Maximum recursion depth to prevent infinite loops")
-    enable_separator_caching: bool = Field(True, description="Cache separator analysis results")
+    keep_separator: bool = Field(
+        default=True,
+        description=(
+            "Determines whether the separator is kept as part of the chunks. "
+            "When True, the separator is attached to the end of the text segment "
+            "that precedes it, preserving context. When False, separators are discarded."
+        )
+    )
+    is_separator_regex: bool = Field(
+        default=False,
+        description=(
+            "If True, the separators are treated as regular expressions, enabling "
+            "more complex and powerful splitting rules. If False, they are treated "
+            "as simple string literals."
+        )
+    )
 
 
-class RecursiveCharacterChunkingStrategy(TextSplitter):
+
+
+class RecursiveChunker(BaseChunker[RecursiveChunkingConfig]):
     """
-    Recursive chunking strategy with intelligent separator selection.
+    A sophisticated chunker that recursively splits text to preserve semantic boundaries.
 
-    This advanced method recursively tries to split text using a prioritized
-    list of separators, with new features like:
-    - Adaptive separator prioritization based on content analysis
-    - Content type detection and separator optimization
-    - Balanced chunk creation
-    - Performance monitoring and optimization
-    - Intelligent fallback mechanisms
+    This chunker works by trying to split text using a prioritized list of separators.
+    If a resulting segment is still too large, it moves to the next separator in the
+    list and tries to split that segment again. This is highly effective for structured
+    text like code and markdown, ensuring logical units of information are kept together.
     """
-    
+
     def __init__(self, config: Optional[RecursiveChunkingConfig] = None):
-        """
-        Initialize recursive chunking strategy.
+        """Initializes the chunker with a specific or default configuration."""
+        super().__init__(config or RecursiveChunkingConfig())
 
-        Args:
-            config: Configuration object with all settings
+    def _chunk_document(self, document: Document) -> List[Chunk]:
         """
-        if config is None:
-            config = RecursiveChunkingConfig()
-        
-        super().__init__(config)
-        
-        self._separators = self.config.separators
-        self._is_separator_regex = self.config.is_separator_regex
-        
-        self._separator_stats: Dict[str, Dict[str, Any]] = {}
-        self._recursion_depth = 0
-
-    @upsonic_error_handler(max_retries=1, show_error_details=True)
-    def split_text(self, text: str) -> List[str]:
+        The core implementation for recursively chunking a single document.
         """
-        Entry point with adaptive separator selection and content analysis.
-        """
-        if not text.strip():
+        content = document.content
+        if not content or content.isspace():
             return []
-        
-        self._recursion_depth = 0
-        
-        if self.config.enable_adaptive_splitting:
-            optimized_separators = self._analyze_and_adapt_separators(text)
-        else:
-            optimized_separators = self.config.separators
-        
-        result = self._recursive_split_enhanced(text, optimized_separators)
-        print(f"📝 [RECURSIVE] ALL SPLITS: {result}")
-        return result
-    
-    def _analyze_and_adapt_separators(self, text: str) -> List[str]:
-        """Analyze text content and adapt separator priorities."""
-        if self.config.enable_separator_caching and text in self._separator_stats:
-            cached_result = self._separator_stats[text]
-            return cached_result.get('optimized_separators', self.config.separators)
-        
-        separator_analysis = {}
-        
-        for separator in self.config.separators:
-            if self.config.is_separator_regex:
-                matches = re.findall(separator, text)
-            else:
-                matches = text.split(separator)
-            
-            frequency = len(matches) / len(text) if text else 0
-            separator_analysis[separator] = {
-                'frequency': frequency,
-                'count': len(matches),
-                'avg_segment_length': len(text) / max(len(matches), 1)
-            }
-        
-        useful_separators = []
-        for separator in self.config.separators:
-            analysis = separator_analysis[separator]
-            if analysis['frequency'] >= self.config.min_separator_frequency:
-                useful_separators.append(separator)
-        
-        if not useful_separators:
-            useful_separators = self.config.separators
-        
-        if self.config.enable_separator_caching:
-            self._separator_stats[text] = {
-                'analysis': separator_analysis,
-                'optimized_separators': useful_separators
-            }
-        
-        return useful_separators
-    
-    def _recursive_split_enhanced(self, text: str, separators: List[str]) -> List[str]:
-        """
-        Recursive logic with depth limiting and performance optimization.
-        """
-        self._recursion_depth += 1
-        if self._recursion_depth > self.config.max_recursion_depth:
-            return self._character_split_fallback(text)
-        
-        final_chunks: List[str] = []
-        
-        current_separator, remaining_separators = self._find_best_separator(text, separators)
-        
-        if current_separator is None:
-            result = self._handle_base_case(text)
-            self._recursion_depth -= 1
-            return result
-        
-        splits = self._split_with_separator(text, current_separator)
-        print(f"📝 [RECURSIVE] ALL SPLITS FROM SEPARATOR: {splits}")
-        
-        for split in splits:
-            if not split.strip():
-                continue
-                
-            if len(split) <= self.config.chunk_size:
-                final_chunks.append(split)
-            else:
-                recursive_result = self._recursive_split_enhanced(split, remaining_separators)
-                final_chunks.extend(recursive_result)
-        
-        self._recursion_depth -= 1
-        return final_chunks
-    
-    def _find_best_separator(self, text: str, separators: List[str]) -> tuple:
-        """Find the best separator for the given text."""
-        for i, separator in enumerate(separators):
-            if self._separator_exists_in_text(text, separator):
-                return separator, separators[i + 1:]
-        return None, []
-    
-    def _separator_exists_in_text(self, text: str, separator: str) -> bool:
-        """Check if separator exists in text."""
-        if not separator:
-            return False
-        if self.config.is_separator_regex:
-            exists = bool(re.search(separator, text))
-            return exists
-        else:
-            exists = separator in text
-            return exists
-    
-    def _split_with_separator(self, text: str, separator: str) -> List[str]:
-        """Split text with the given separator, handling both regex and literal."""
-        if not separator:
-            return [text] if text.strip() else []
-        
-        if self.config.is_separator_regex:
-            pattern = separator
-        else:
-            pattern = re.escape(separator)
-        
-        if self.config.keep_separator:
-            splits = re.split(f"({pattern})", text)
-            rejoined_splits = []
-            for i in range(0, len(splits), 2):
-                part = splits[i]
-                if i + 1 < len(splits):
-                    part += splits[i + 1]
-                if part:
-                    rejoined_splits.append(part)
-            print(f"📝 [RECURSIVE] _split_with_separator: ALL REJOINED SPLITS: {rejoined_splits}")
-            return rejoined_splits
-        else:
-            result = [s for s in re.split(pattern, text) if s]
-            print(f"📝 [RECURSIVE] _split_with_separator: ALL RESULT SPLITS: {result}")
-            return result
-    
-    def _handle_base_case(self, text: str) -> List[str]:
-        """Handle the base case when no separators are found."""
-        if len(text) <= self.config.chunk_size:
-            result = [text] if text.strip() else []
-            return result
-        else:
-            return self._character_split_fallback(text)
-    
-    def _character_split_fallback(self, text: str) -> List[str]:
-        """Fallback to character-level splitting."""
-        chunks = []
-        for i in range(0, len(text), self.config.chunk_size):
-            chunk = text[i:i + self.config.chunk_size]
-            if chunk.strip():
-                chunks.append(chunk)
-        return chunks
-    
-    def get_separator_stats(self) -> Dict[str, Any]:
-        """Get statistics about separator usage and performance."""
-        stats = {
-            "separator_cache_size": len(self._separator_stats),
-            "separator_analysis": self._separator_stats,
-            "current_separators": self.config.separators,
-            "is_regex_mode": self.config.is_separator_regex,
-            "adaptive_splitting_enabled": self.config.enable_adaptive_splitting
-        }
-        return stats
-    
-    def clear_separator_cache(self):
-        """Clear the separator analysis cache."""
-        cache_size = len(self._separator_stats)
-        self._separator_stats.clear()
 
-    # Legacy method for backward compatibility
-    def _recursive_split(self, text: str, separators: List[str]) -> List[str]:
-        """Legacy recursive split method for backward compatibility."""
-        return self._recursive_split_enhanced(text, separators)
+        atomic_splits = self._recursive_split(
+            text=content,
+            separators=self.config.separators,
+            offset=0
+        )
+
+        if not atomic_splits:
+            return []
+        chunks: List[Chunk] = []
+        current_chunk_parts: List[Tuple[str, int, int]] = []
+        current_length = 0
+        length_func = self.config.length_function
+
+        for i, (text, start_idx, end_idx) in enumerate(atomic_splits):
+            part_length = length_func(text)
+
+            if current_length + part_length > self.config.chunk_size and current_chunk_parts:
+                chunk_start_idx = current_chunk_parts[0][1]
+                chunk_end_idx = current_chunk_parts[-1][2]
+                final_text = content[chunk_start_idx:chunk_end_idx]
+                chunks.append(
+                    self._create_chunk(document, final_text, chunk_start_idx, chunk_end_idx)
+                )
+
+                overlap_len = 0
+                overlap_start_index = len(current_chunk_parts)
+                for j in range(len(current_chunk_parts) - 1, -1, -1):
+                    part_text, _, _ = current_chunk_parts[j]
+                    if overlap_len + length_func(part_text) > self.config.chunk_overlap:
+                        break
+                    overlap_len += length_func(part_text)
+                    overlap_start_index = j
+
+                current_chunk_parts = current_chunk_parts[overlap_start_index:]
+                current_length = sum(length_func(part[0]) for part in current_chunk_parts)
+
+            current_chunk_parts.append((text, start_idx, end_idx))
+            current_length += part_length
+
+        if current_chunk_parts:
+            chunk_start_idx = current_chunk_parts[0][1]
+            chunk_end_idx = current_chunk_parts[-1][2]
+            final_text = content[chunk_start_idx:chunk_end_idx]
+            min_chunk_size = self._get_effective_min_chunk_size()
+            
+            if chunks and length_func(final_text) < min_chunk_size:
+                last_chunk = chunks.pop()
+                merged_text = content[last_chunk.start_index:chunk_end_idx]
+                merged_chunk = self._create_chunk(
+                    document, merged_text, last_chunk.start_index, chunk_end_idx
+                )
+                chunks.append(merged_chunk)
+            else:
+                chunks.append(
+                    self._create_chunk(document, final_text, chunk_start_idx, chunk_end_idx)
+                )
+
+        return chunks
+
+    def _recursive_split(
+        self,
+        text: str,
+        separators: List[str],
+        offset: int
+    ) -> List[Tuple[str, int, int]]:
+        if not text:
+            return []
+
+        current_separator = ""
+        next_separators = []
+        for i, sep in enumerate(separators):
+            if sep == "" and i < len(separators) - 1:
+                continue
+            
+            pattern = sep if self.config.is_separator_regex else re.escape(sep)
+            if pattern and re.search(pattern, text):
+                current_separator = sep
+                next_separators = separators[i + 1:]
+                break
+        
+        if not current_separator and separators:
+            current_separator = separators[-1]
+
+        if not current_separator:
+            return [(text, offset, offset + len(text))]
+        final_splits: List[Tuple[str, int, int]] = []
+        pattern = current_separator if self.config.is_separator_regex else re.escape(current_separator)
+        
+        cursor = 0
+        for match in re.finditer(pattern, text):
+            if self.config.keep_separator:
+                segment_text = text[cursor:match.end()]
+                start_idx, end_idx = offset + cursor, offset + match.end()
+            else:
+                segment_text = text[cursor:match.start()]
+                start_idx, end_idx = offset + cursor, offset + match.start()
+
+            if self.config.length_function(segment_text) > self.config.chunk_size:
+                if next_separators:
+                    final_splits.extend(self._recursive_split(segment_text, next_separators, start_idx))
+                else:
+                    final_splits.append((segment_text, start_idx, end_idx))
+            elif segment_text:
+                final_splits.append((segment_text, start_idx, end_idx))
+
+            cursor = match.end()
+        if cursor < len(text):
+            remaining_text = text[cursor:]
+            start_idx, end_idx = offset + cursor, offset + len(text)
+
+            if self.config.length_function(remaining_text) > self.config.chunk_size:
+                if next_separators:
+                    final_splits.extend(self._recursive_split(remaining_text, next_separators, start_idx))
+                else:
+                    final_splits.append((remaining_text, start_idx, end_idx))
+            elif remaining_text:
+                final_splits.append((remaining_text, start_idx, end_idx))
+                
+        return final_splits
+
+    @classmethod
+    def from_language(
+        cls,
+        language: Language,
+        config: Optional[RecursiveChunkingConfig] = None
+    ) -> "RecursiveChunker":
+        if language not in RECURSIVE_SEPARATORS:
+            raise ValueError(
+                f"Language '{language.value}' is not supported for specialized chunking. "
+                f"Please choose from {[lang.value for lang in RECURSIVE_SEPARATORS.keys()]}"
+            )
+
+        active_config = config or RecursiveChunkingConfig()
+        active_config.separators = RECURSIVE_SEPARATORS[language]
+        active_config.is_separator_regex = True
+        active_config.keep_separator = True
+
+        logger.info(f"Created a RecursiveChunker instance configured for '{language.value}'.")
+        return cls(active_config)

@@ -2,10 +2,9 @@ from __future__ import annotations
 from typing import Dict, Type, List, Any, Optional, Union
 import re
 from enum import Enum
-import os
 from pathlib import Path
 
-from .base import ChunkingStrategy, ChunkingConfig, ChunkingMode
+from .base import BaseChunker, BaseChunkingConfig
 from ..schemas.data_models import Document
 from ..utils.package.exception import ConfigurationError
 
@@ -36,11 +35,11 @@ class ChunkingUseCase(Enum):
     GENERAL = "general"
 
 
-_STRATEGY_REGISTRY: Dict[str, Type[ChunkingStrategy]] = {}
-_CONFIG_REGISTRY: Dict[str, Type[ChunkingConfig]] = {}
+_STRATEGY_REGISTRY: Dict[str, Type[BaseChunker]] = {}
+_CONFIG_REGISTRY: Dict[str, Type[BaseChunkingConfig]] = {}
 
 
-def register_chunking_strategy(name: str, strategy_class: Type[ChunkingStrategy], config_class: Type[ChunkingConfig] = None):
+def register_chunking_strategy(name: str, strategy_class: Type[BaseChunker], config_class: Type[BaseChunkingConfig] = None):
     """Register a chunking strategy for use with the factory."""
     _STRATEGY_REGISTRY[name] = strategy_class
     if config_class:
@@ -55,55 +54,55 @@ def _lazy_import_strategies():
         return
     
     try:
-        from .character import CharacterChunkingStrategy, CharacterChunkingConfig
-        register_chunking_strategy("character", CharacterChunkingStrategy, CharacterChunkingConfig)
+        from .character import CharacterChunker, CharacterChunkingConfig
+        register_chunking_strategy("character", CharacterChunker, CharacterChunkingConfig)
     except ImportError:
         pass
     
     try:
-        from .recursive import RecursiveCharacterChunkingStrategy, RecursiveChunkingConfig
-        register_chunking_strategy("recursive", RecursiveCharacterChunkingStrategy, RecursiveChunkingConfig)
-        register_chunking_strategy("recursive_character", RecursiveCharacterChunkingStrategy, RecursiveChunkingConfig)
+        from .recursive import RecursiveChunker, RecursiveChunkingConfig
+        register_chunking_strategy("recursive", RecursiveChunker, RecursiveChunkingConfig)
+        register_chunking_strategy("recursive_character", RecursiveChunker, RecursiveChunkingConfig)
     except ImportError:
         pass
     
     try:
-        from .semantic import SemanticSimilarityChunkingStrategy, SemanticChunkingConfig
-        register_chunking_strategy("semantic", SemanticSimilarityChunkingStrategy, SemanticChunkingConfig)
+        from .semantic import SemanticChunker, SemanticChunkingConfig
+        register_chunking_strategy("semantic", SemanticChunker, SemanticChunkingConfig)
     except ImportError:
         pass
     
     try:
-        from .markdown import MarkdownHeaderChunkingStrategy, MarkdownRecursiveChunkingStrategy, MarkdownHeaderChunkingConfig, MarkdownChunkingConfig
-        register_chunking_strategy("markdown_header", MarkdownHeaderChunkingStrategy, MarkdownHeaderChunkingConfig)
-        register_chunking_strategy("markdown_recursive", MarkdownRecursiveChunkingStrategy, MarkdownChunkingConfig)
-        register_chunking_strategy("markdown", MarkdownRecursiveChunkingStrategy, MarkdownChunkingConfig)
+        from .markdown import MarkdownChunker, MarkdownChunkingConfig
+        register_chunking_strategy("markdown_header", MarkdownChunker, MarkdownChunkingConfig)
+        register_chunking_strategy("markdown_recursive", MarkdownChunker, MarkdownChunkingConfig)
+        register_chunking_strategy("markdown", MarkdownChunker, MarkdownChunkingConfig)
     except ImportError:
         pass
     
     try:
-        from .html import HTMLChunkingStrategy, HTMLChunkingConfig
-        register_chunking_strategy("html", HTMLChunkingStrategy, HTMLChunkingConfig)
+        from .html import HTMLChunker, HTMLChunkingConfig
+        register_chunking_strategy("html", HTMLChunker, HTMLChunkingConfig)
     except ImportError:
         pass
     
     try:
-        from .json import JSONChunkingStrategy, JSONChunkingConfig
-        register_chunking_strategy("json", JSONChunkingStrategy, JSONChunkingConfig)
+        from .json import JSONChunker, JSONChunkingConfig
+        register_chunking_strategy("json", JSONChunker, JSONChunkingConfig)
     except ImportError:
         pass
     
     try:
-        from .python import PythonCodeChunkingStrategy, PythonCodeChunkingConfig
-        register_chunking_strategy("python", PythonCodeChunkingStrategy, PythonCodeChunkingConfig)
-        register_chunking_strategy("code", PythonCodeChunkingStrategy, PythonCodeChunkingConfig)
+        from .python import PythonChunker, PythonChunkingConfig
+        register_chunking_strategy("python", PythonChunker, PythonChunkingConfig)
+        register_chunking_strategy("code", PythonChunker, PythonChunkingConfig)
     except ImportError:
         pass
     
     try:
-        from .agentic import AgenticChunkingStrategy, AgenticChunkingConfig
-        register_chunking_strategy("agentic", AgenticChunkingStrategy, AgenticChunkingConfig)
-        register_chunking_strategy("ai", AgenticChunkingStrategy, AgenticChunkingConfig)
+        from .agentic import AgenticChunker, AgenticChunkingConfig
+        register_chunking_strategy("agentic", AgenticChunker, AgenticChunkingConfig)
+        register_chunking_strategy("ai", AgenticChunker, AgenticChunkingConfig)
     except ImportError:
         pass
     
@@ -327,9 +326,9 @@ def recommend_strategy_for_content(
 
 def create_chunking_strategy(
     strategy: str,
-    config: Optional[Union[ChunkingConfig, Dict[str, Any]]] = None,
+    config: Optional[Union[BaseChunkingConfig, Dict[str, Any]]] = None,
     **kwargs
-) -> ChunkingStrategy:
+) -> BaseChunker:
     """
     Create a chunking strategy using the factory pattern.
     
@@ -369,21 +368,23 @@ def create_chunking_strategy(
                     error_code=error_code
                 )
         
+        kwargs["embedding_provider"] = embedding_provider
+        
         if config is None:
             if config_class:
                 config = config_class(**kwargs)
             else:
-                config = ChunkingConfig(**kwargs)
+                config = BaseChunkingConfig(**kwargs)
         elif isinstance(config, dict):
             merged_config = {**config, **kwargs}
             if config_class:
                 config = config_class(**merged_config)
             else:
-                config = ChunkingConfig(**merged_config)
+                config = BaseChunkingConfig(**merged_config)
         elif kwargs:
             print(f"Warning: Both config object and kwargs provided. Using config object, ignoring kwargs: {list(kwargs.keys())}")
         
-        return strategy_class(embedding_provider, config=config)
+        return strategy_class(config=config)
     
     if strategy in ["agentic", "ai"]:
         agent = kwargs.pop("agent", None)
@@ -397,13 +398,13 @@ def create_chunking_strategy(
             if config_class:
                 config = config_class(**kwargs)
             else:
-                config = ChunkingConfig(**kwargs)
+                config = BaseChunkingConfig(**kwargs)
         elif isinstance(config, dict):
             merged_config = {**config, **kwargs}
             if config_class:
                 config = config_class(**merged_config)
             else:
-                config = ChunkingConfig(**merged_config)
+                config = BaseChunkingConfig(**merged_config)
         elif kwargs:
             print(f"Warning: Both config object and kwargs provided. Using config object, ignoring kwargs: {list(kwargs.keys())}")
         
@@ -413,13 +414,13 @@ def create_chunking_strategy(
         if config_class:
             config = config_class(**kwargs)
         else:
-            config = ChunkingConfig(**kwargs)
+            config = BaseChunkingConfig(**kwargs)
     elif isinstance(config, dict):
         merged_config = {**config, **kwargs}
         if config_class:
             config = config_class(**merged_config)
         else:
-            config = ChunkingConfig(**merged_config)
+            config = BaseChunkingConfig(**merged_config)
     elif kwargs:
         print(f"Warning: Both config object and kwargs provided. Using config object, ignoring kwargs: {list(kwargs.keys())}")
     
@@ -432,7 +433,7 @@ def create_adaptive_strategy(
     use_case: ChunkingUseCase = ChunkingUseCase.GENERAL,
     quality_preference: str = "balanced",
     **kwargs
-) -> ChunkingStrategy:
+) -> BaseChunker:
     """
     Create an adaptive chunking strategy based on content analysis.
     
@@ -502,20 +503,21 @@ def _create_optimized_config(
 
 
 def create_intelligent_splitters(
-    sources: List[str],
+    sources: List[Union[str, Path]],
     content_samples: Optional[List[str]] = None,
     use_case: ChunkingUseCase = ChunkingUseCase.RAG_RETRIEVAL,
     quality_preference: str = "balanced",
     **global_config_kwargs
-) -> List[ChunkingStrategy]:
+) -> List[BaseChunker]:
     """
     Intelligently create appropriate chunking strategies for multiple sources.
     
     This method analyzes each source and creates the most appropriate chunking strategy
     with optimized configuration based on the source type, content, and use case.
+    Handles both file paths (Path objects) and string content.
     
     Args:
-        sources: List of source paths or content strings
+        sources: List of source paths (Path objects) or content strings
         content_samples: Optional list of content samples for analysis (if sources are file paths)
         use_case: Intended use case for chunking optimization
         quality_preference: Speed vs quality preference
@@ -534,22 +536,28 @@ def create_intelligent_splitters(
     for i, source in enumerate(sources):
         try:
             content_sample = ""
+            source_str = str(source)
+            
             if content_samples and i < len(content_samples):
                 content_sample = content_samples[i]
-            elif os.path.exists(source) and os.path.isfile(source):
+            elif isinstance(source, str):
+                content_sample = source_str
+            elif isinstance(source, Path) and source.exists() and source.is_file():
                 try:
                     with open(source, 'r', encoding='utf-8', errors='ignore') as f:
                         content_sample = f.read(5000)
                 except Exception:
-                    content_sample = Path(source).name
+                    content_sample = source.name
+            else:
+                content_sample = source_str
             
             source_config = _create_source_optimized_config(
-                source, content_sample, use_case, quality_preference, **global_config_kwargs
+                source_str, content_sample, use_case, quality_preference, **global_config_kwargs
             )
             
             splitter = create_adaptive_strategy(
                 content=content_sample,
-                metadata={'source': source},
+                metadata={'source': source_str},
                 use_case=use_case,
                 quality_preference=quality_preference,
                 **source_config
@@ -562,7 +570,7 @@ def create_intelligent_splitters(
             print(f"Warning: Failed to create intelligent splitter for {source}: {e}")
             try:
                 fallback_config = _create_source_optimized_config(
-                    source, "", use_case, "fast", **global_config_kwargs
+                    source_str, "", use_case, "fast", **global_config_kwargs
                 )
                 fallback_splitter = create_chunking_strategy("recursive", **fallback_config)
                 splitters.append(fallback_splitter)
@@ -575,7 +583,7 @@ def create_intelligent_splitters(
 
 
 def _create_source_optimized_config(
-    source: str,
+    source: Union[str, Path],
     content_sample: str,
     use_case: ChunkingUseCase,
     quality_preference: str,
@@ -585,7 +593,7 @@ def _create_source_optimized_config(
     Create optimized configuration for a specific source and content.
     
     Args:
-        source: Source path or content string
+        source: Source path (Path object or string) or content string
         content_sample: Sample of content for analysis
         use_case: Intended use case
         quality_preference: Speed vs quality preference
@@ -596,10 +604,12 @@ def _create_source_optimized_config(
     """
     config = global_config_kwargs.copy()
     
-    if os.path.exists(source) and os.path.isfile(source):
-        file_size = os.path.getsize(source)
-        file_path = Path(source)
-        extension = file_path.suffix.lower()
+    source_path = Path(source) if not isinstance(source, Path) else source
+    source_str = str(source)
+    
+    if source_path.exists() and source_path.is_file():
+        file_size = source_path.stat().st_size
+        extension = source_path.suffix.lower()
         
         if file_size > 100 * 1024 * 1024:  # > 100MB
             config.setdefault('chunk_size', 2000)
@@ -691,7 +701,7 @@ def _create_source_optimized_config(
     return config
 
 
-def create_rag_strategy(content: str = "", **kwargs) -> ChunkingStrategy:
+def create_rag_strategy(content: str = "", **kwargs) -> BaseChunker:
     """Create optimal strategy for RAG use case."""
     if content:
         return create_adaptive_strategy(
@@ -704,7 +714,7 @@ def create_rag_strategy(content: str = "", **kwargs) -> ChunkingStrategy:
         return create_chunking_strategy("recursive", **kwargs)
 
 
-def create_semantic_search_strategy(content: str = "", **kwargs) -> ChunkingStrategy:
+def create_semantic_search_strategy(content: str = "", **kwargs) -> BaseChunker:
     """Create optimal strategy for semantic search."""
     if content:
         return create_adaptive_strategy(
@@ -726,12 +736,12 @@ def create_semantic_search_strategy(content: str = "", **kwargs) -> ChunkingStra
                 raise
 
 
-def create_fast_strategy(**kwargs) -> ChunkingStrategy:
+def create_fast_strategy(**kwargs) -> BaseChunker:
     """Create fast chunking strategy for large documents."""
     return create_chunking_strategy("character", **kwargs)
 
 
-def create_quality_strategy(content: str = "", **kwargs) -> ChunkingStrategy:
+def create_quality_strategy(content: str = "", **kwargs) -> BaseChunker:
     """Create highest quality strategy available."""
     if content:
         return create_adaptive_strategy(
