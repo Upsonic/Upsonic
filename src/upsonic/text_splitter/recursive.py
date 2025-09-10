@@ -71,7 +71,7 @@ class RecursiveCharacterChunkingStrategy(TextSplitter):
             optimized_separators = self.config.separators
         
         result = self._recursive_split_enhanced(text, optimized_separators)
-        print(f"📝 [RECURSIVE] ALL SPLITS: {result}")
+        # Debug: All splits completed
         return result
     
     def _analyze_and_adapt_separators(self, text: str) -> List[str]:
@@ -130,7 +130,7 @@ class RecursiveCharacterChunkingStrategy(TextSplitter):
             return result
         
         splits = self._split_with_separator(text, current_separator)
-        print(f"📝 [RECURSIVE] ALL SPLITS FROM SEPARATOR: {splits}")
+        # Debug: Splits from separator
         
         for split in splits:
             if not split.strip():
@@ -182,11 +182,11 @@ class RecursiveCharacterChunkingStrategy(TextSplitter):
                     part += splits[i + 1]
                 if part:
                     rejoined_splits.append(part)
-            print(f"📝 [RECURSIVE] _split_with_separator: ALL REJOINED SPLITS: {rejoined_splits}")
+            # Debug: Rejoined splits
             return rejoined_splits
         else:
             result = [s for s in re.split(pattern, text) if s]
-            print(f"📝 [RECURSIVE] _split_with_separator: ALL RESULT SPLITS: {result}")
+            # Debug: Result splits
             return result
     
     def _handle_base_case(self, text: str) -> List[str]:

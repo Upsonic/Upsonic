@@ -34,7 +34,7 @@ class TestTextLoaderComprehensive(unittest.TestCase):
         self.assertIsInstance(loader.config, TextLoaderConfig)
         self.assertIsNone(loader.config.encoding)
         self.assertEqual(loader.config.error_handling, "warn")
-        print("✓ TextLoader initialization with default config works")
+        # TextLoader initialization with default config works
     
     def test_text_loader_initialization_custom_config(self):
         """Test TextLoader initialization with custom configuration."""
@@ -47,14 +47,14 @@ class TestTextLoaderComprehensive(unittest.TestCase):
         self.assertEqual(loader.config.encoding, "utf-8")
         self.assertEqual(loader.config.error_handling, "ignore")
         self.assertEqual(loader.config.custom_metadata["version"], "1.0")
-        print("✓ TextLoader initialization with custom config works")
+        # TextLoader initialization with custom config works
     
     def test_load_nonexistent_file(self):
         """Test loading a non-existent file."""
         loader = TextLoader()
         result = loader.load("nonexistent_file.txt")
         self.assertEqual(result, [])
-        print("✓ Loading non-existent file returns empty list")
+        # Loading non-existent file returns empty list
     
     def test_load_valid_text_file_utf8(self):
         """Test loading a valid UTF-8 text file."""
@@ -85,7 +85,7 @@ class TestTextLoaderComprehensive(unittest.TestCase):
         self.assertIn('last_modified_time', doc.metadata)
         self.assertIn('detected_encoding', doc.metadata)
         
-        print("✓ Loading valid UTF-8 text file works")
+        # Loading valid UTF-8 text file works
     
     def test_load_valid_text_file_with_custom_encoding(self):
         """Test loading a text file with custom encoding."""
@@ -106,7 +106,7 @@ class TestTextLoaderComprehensive(unittest.TestCase):
         self.assertEqual(doc.metadata['detected_encoding'], "utf-8")
         self.assertIn("Test content", doc.content)
         
-        print("✓ Loading text file with custom encoding works")
+        # Loading text file with custom encoding works
     
     def test_load_empty_file(self):
         """Test loading an empty file."""
@@ -121,7 +121,7 @@ class TestTextLoaderComprehensive(unittest.TestCase):
         # Should return empty list due to skip_empty_content default
         self.assertEqual(result, [])
         
-        print("✓ Loading empty file returns empty list")
+        # Loading empty file returns empty list
     
     def test_load_whitespace_only_file(self):
         """Test loading a file with only whitespace."""
@@ -137,7 +137,7 @@ class TestTextLoaderComprehensive(unittest.TestCase):
         # Should return empty list due to skip_empty_content default
         self.assertEqual(result, [])
         
-        print("✓ Loading whitespace-only file returns empty list")
+        # Loading whitespace-only file returns empty list
     
     def test_load_file_with_skip_empty_content_disabled(self):
         """Test loading empty file with skip_empty_content disabled."""
@@ -154,7 +154,7 @@ class TestTextLoaderComprehensive(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].content, "")
         
-        print("✓ Loading empty file with skip_empty_content disabled works")
+        # Loading empty file with skip_empty_content disabled works
     
     def test_encoding_detection_with_chardet(self):
         """Test encoding detection using chardet library."""
@@ -192,7 +192,7 @@ class TestTextLoaderComprehensive(unittest.TestCase):
                         self.assertEqual(len(result), 1)
                         self.assertEqual(result[0].metadata['detected_encoding'], "utf-8")
         
-        print("✓ Encoding detection with chardet works")
+        # Encoding detection with chardet works
     
     def test_encoding_detection_without_chardet(self):
         """Test encoding detection when chardet is not available."""
@@ -226,7 +226,7 @@ class TestTextLoaderComprehensive(unittest.TestCase):
                         # Should return empty list due to chardet not being available
                         self.assertEqual(result, [])
         
-        print("✓ Encoding detection without chardet works")
+        # Encoding detection without chardet works
     
     def test_custom_metadata_injection(self):
         """Test custom metadata injection."""
@@ -247,7 +247,7 @@ class TestTextLoaderComprehensive(unittest.TestCase):
         self.assertEqual(doc.metadata['test_key'], 'test_value')
         self.assertEqual(doc.metadata['version'], '1.0')
         
-        print("✓ Custom metadata injection works")
+        # Custom metadata injection works
     
     def test_error_handling_strategies(self):
         """Test different error handling strategies."""
@@ -275,7 +275,7 @@ class TestTextLoaderComprehensive(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             loader.load("nonexistent.txt")
         
-        print("✓ Error handling strategies work")
+        # Error handling strategies work
     
     def test_get_supported_extensions(self):
         """Test getting supported file extensions."""
@@ -284,7 +284,7 @@ class TestTextLoaderComprehensive(unittest.TestCase):
         self.assertIn('.txt', extensions)
         # TextLoader only supports .txt extension
         self.assertEqual(len(extensions), 1)
-        print("✓ Supported extensions method works")
+        # Supported extensions method works
     
     def test_can_load_method(self):
         """Test the can_load method from base class."""
@@ -294,7 +294,7 @@ class TestTextLoaderComprehensive(unittest.TestCase):
         self.assertTrue(TextLoader.can_load("test.TXT"))
         self.assertFalse(TextLoader.can_load("test.pdf"))
         self.assertFalse(TextLoader.can_load("test"))
-        print("✓ Can load method works")
+        # Can load method works
     
     def test_file_size_validation(self):
         """Test file size validation."""
@@ -318,16 +318,16 @@ class TestTextLoaderComprehensive(unittest.TestCase):
             # If it returns a result, the file size validation might not be working as expected
             # or the base class handles it differently
             if result:
-                print("⚠ File size validation may not be enforced by base class")
+                pass  # File size validation may not be enforced by base class
             else:
-                print("✓ File size validation works (returns empty list)")
+                pass  # File size validation works (returns empty list)
         except ValueError as e:
             if "exceeds limit" in str(e):
-                print("✓ File size validation works (raises error)")
+                pass  # File size validation works (raises error)
             else:
                 raise
         
-        print("✓ File size validation test completed")
+        # File size validation test completed
     
     def test_async_loading_interface(self):
         """Test asynchronous loading interface."""
@@ -336,7 +336,7 @@ class TestTextLoaderComprehensive(unittest.TestCase):
         # Test that the async method exists and is callable
         self.assertTrue(hasattr(loader, 'load_async'))
         self.assertTrue(callable(loader.load_async))
-        print("✓ Async loading interface exists")
+        # Async loading interface exists
     
     def test_batch_loading_interface(self):
         """Test batch loading interface."""
@@ -347,7 +347,7 @@ class TestTextLoaderComprehensive(unittest.TestCase):
         self.assertTrue(callable(loader.load_batch))
         self.assertTrue(hasattr(loader, 'load_batch_async'))
         self.assertTrue(callable(loader.load_batch_async))
-        print("✓ Batch loading interfaces exist")
+        # Batch loading interfaces exist
     
     def test_directory_loading_interface(self):
         """Test directory loading interface."""
@@ -358,7 +358,7 @@ class TestTextLoaderComprehensive(unittest.TestCase):
         self.assertTrue(callable(loader.load_directory))
         self.assertTrue(hasattr(loader, 'load_directory_async'))
         self.assertTrue(callable(loader.load_directory_async))
-        print("✓ Directory loading interfaces exist")
+        # Directory loading interfaces exist
     
     def test_stream_loading_interface(self):
         """Test stream loading interface."""
@@ -369,7 +369,7 @@ class TestTextLoaderComprehensive(unittest.TestCase):
         self.assertTrue(callable(loader.stream_load))
         self.assertTrue(hasattr(loader, 'stream_load_async'))
         self.assertTrue(callable(loader.stream_load_async))
-        print("✓ Stream loading interfaces exist")
+        # Stream loading interfaces exist
     
     def test_performance_stats_interface(self):
         """Test performance statistics interface."""
@@ -387,7 +387,7 @@ class TestTextLoaderComprehensive(unittest.TestCase):
         self.assertIn('total_files_processed', stats)
         self.assertIn('total_documents_created', stats)
         self.assertIn('avg_processing_time', stats)
-        print("✓ Performance stats interface works")
+        # Performance stats interface works
     
     def test_real_text_file_loading(self):
         """Test loading a real text file with various content."""
@@ -432,7 +432,7 @@ and extract it properly into Document objects with appropriate metadata.
         self.assertIn("Special characters", doc.content)
         self.assertIn("1234567890", doc.content)
         
-        print("✓ Real text file loading works")
+        # Real text file loading works
     
     def test_multiple_text_files_batch_loading(self):
         """Test loading multiple text files in batch."""
@@ -459,7 +459,7 @@ and extract it properly into Document objects with appropriate metadata.
             self.assertIn(f"Content of file {i+1}", result.documents[0].content)
             self.assertTrue(result.success)
         
-        print("✓ Multiple text files batch loading works")
+        # Multiple text files batch loading works
     
     def test_directory_loading(self):
         """Test loading text files from a directory."""
@@ -486,7 +486,7 @@ and extract it properly into Document objects with appropriate metadata.
             self.assertEqual(len(result.documents), 1)
             self.assertTrue(result.success)
         
-        print("✓ Directory loading works")
+        # Directory loading works
     
     def test_unicode_content_handling(self):
         """Test handling of Unicode content."""
@@ -521,7 +521,7 @@ and extract it properly into Document objects with appropriate metadata.
         self.assertIn("你好，世界！", doc.content)
         self.assertIn("🚀 📚 💻 🌟", doc.content)
         
-        print("✓ Unicode content handling works")
+        # Unicode content handling works
     
     def test_large_file_handling(self):
         """Test handling of large text files."""
@@ -546,13 +546,12 @@ and extract it properly into Document objects with appropriate metadata.
         self.assertIn("Line 1:", doc.content)
         self.assertIn("Line 1000:", doc.content)
         
-        print("✓ Large file handling works")
+        # Large file handling works
 
 
 def run_comprehensive_tests():
     """Run all comprehensive tests."""
-    print("Starting comprehensive TextLoader tests...")
-    print("=" * 60)
+    pass
     
     # Create test suite
     suite = unittest.TestLoader().loadTestsFromTestCase(TestTextLoaderComprehensive)
@@ -561,21 +560,13 @@ def run_comprehensive_tests():
     runner = unittest.TextTestRunner(verbosity=2, stream=sys.stdout)
     result = runner.run(suite)
     
-    print("\n" + "=" * 60)
-    print(f"Tests run: {result.testsRun}")
-    print(f"Failures: {len(result.failures)}")
-    print(f"Errors: {len(result.errors)}")
-    print(f"Success rate: {((result.testsRun - len(result.failures) - len(result.errors)) / result.testsRun * 100):.1f}%")
+    # Test results summary
     
     if result.failures:
-        print("\nFAILURES:")
-        for test, traceback in result.failures:
-            print(f"- {test}: {traceback}")
+        pass  # Failures logged internally
     
     if result.errors:
-        print("\nERRORS:")
-        for test, traceback in result.errors:
-            print(f"- {test}: {traceback}")
+        pass  # Errors logged internally
     
     return result.wasSuccessful()
 

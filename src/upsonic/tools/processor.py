@@ -353,7 +353,6 @@ class ToolProcessor:
                     confirm = input("Do you want to proceed? (y/n): ").lower().strip()
                 except KeyboardInterrupt:
                     confirm = 'n'
-                    print()
                 if confirm not in ['y', 'yes']:
                     console.print("[bold red]Tool execution cancelled by user.[/bold red]")
                     spacing()

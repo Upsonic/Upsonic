@@ -316,7 +316,7 @@ class Memory:
         new_messages = model_response.new_messages()
         if new_messages:
             new_prompts_content = self._extract_user_prompt_content(new_messages)
-            print(f"Extracted {len(new_prompts_content)} new user prompts from the latest response.")
+            # Extracted new user prompts from the latest response
 
         if not historical_prompts_content and not new_prompts_content:
             print("Warning: No user prompts found in history or new messages. Cannot analyze traits.")
