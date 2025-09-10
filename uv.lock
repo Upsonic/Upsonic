@@ -847,6 +847,27 @@ wheels = [
 ]
 
 [[package]]
+name = "curl-cffi"
+version = "0.13.0"
+source = { registry = "https://pypi.org/simple/" }
+dependencies = [
+    { name = "certifi" },
+    { name = "cffi" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4e/3d/f39ca1f8fdf14408888e7c25e15eed63eac5f47926e206fb93300d28378c/curl_cffi-0.13.0.tar.gz", hash = "sha256:62ecd90a382bd5023750e3606e0aa7cb1a3a8ba41c14270b8e5e149ebf72c5ca", size = 151303 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/19/d1/acabfd460f1de26cad882e5ef344d9adde1507034528cb6f5698a2e6a2f1/curl_cffi-0.13.0-cp39-abi3-macosx_10_9_x86_64.whl", hash = "sha256:434cadbe8df2f08b2fc2c16dff2779fb40b984af99c06aa700af898e185bb9db", size = 5686337 },
+    { url = "https://files.pythonhosted.org/packages/2c/1c/cdb4fb2d16a0e9de068e0e5bc02094e105ce58a687ff30b4c6f88e25a057/curl_cffi-0.13.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:59afa877a9ae09efa04646a7d068eeea48915a95d9add0a29854e7781679fcd7", size = 2994613 },
+    { url = "https://files.pythonhosted.org/packages/04/3e/fdf617c1ec18c3038b77065d484d7517bb30f8fb8847224eb1f601a4e8bc/curl_cffi-0.13.0-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:d06ed389e45a7ca97b17c275dbedd3d6524560270e675c720e93a2018a766076", size = 7931353 },
+    { url = "https://files.pythonhosted.org/packages/3d/10/6f30c05d251cf03ddc2b9fd19880f3cab8c193255e733444a2df03b18944/curl_cffi-0.13.0-cp39-abi3-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:b4e0de45ab3b7a835c72bd53640c2347415111b43421b5c7a1a0b18deae2e541", size = 7486378 },
+    { url = "https://files.pythonhosted.org/packages/77/81/5bdb7dd0d669a817397b2e92193559bf66c3807f5848a48ad10cf02bf6c7/curl_cffi-0.13.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8eb4083371bbb94e9470d782de235fb5268bf43520de020c9e5e6be8f395443f", size = 8328585 },
+    { url = "https://files.pythonhosted.org/packages/ce/c1/df5c6b4cfad41c08442e0f727e449f4fb5a05f8aa564d1acac29062e9e8e/curl_cffi-0.13.0-cp39-abi3-musllinux_1_1_aarch64.whl", hash = "sha256:28911b526e8cd4aa0e5e38401bfe6887e8093907272f1f67ca22e6beb2933a51", size = 8739831 },
+    { url = "https://files.pythonhosted.org/packages/1a/91/6dd1910a212f2e8eafe57877bcf97748eb24849e1511a266687546066b8a/curl_cffi-0.13.0-cp39-abi3-musllinux_1_1_x86_64.whl", hash = "sha256:6d433ffcb455ab01dd0d7bde47109083aa38b59863aa183d29c668ae4c96bf8e", size = 8711908 },
+    { url = "https://files.pythonhosted.org/packages/6d/e4/15a253f9b4bf8d008c31e176c162d2704a7e0c5e24d35942f759df107b68/curl_cffi-0.13.0-cp39-abi3-win_amd64.whl", hash = "sha256:66a6b75ce971de9af64f1b6812e275f60b88880577bac47ef1fa19694fa21cd3", size = 1614510 },
+    { url = "https://files.pythonhosted.org/packages/f9/0f/9c5275f17ad6ff5be70edb8e0120fdc184a658c9577ca426d4230f654beb/curl_cffi-0.13.0-cp39-abi3-win_arm64.whl", hash = "sha256:d438a3b45244e874794bc4081dc1e356d2bb926dcc7021e5a8fef2e2105ef1d8", size = 1365753 },
+]
+
+[[package]]
 name = "defusedxml"
 version = "0.7.1"
 source = { registry = "https://pypi.org/simple/" }
@@ -1095,6 +1116,25 @@ source = { registry = "https://pypi.org/simple/" }
 sdist = { url = "https://files.pythonhosted.org/packages/e4/30/eb5dce7994fc71a2f685d98ec33cc660c0a5887db5610137e60d8cbc4489/flatbuffers-25.2.10.tar.gz", hash = "sha256:97e451377a41262f8d9bd4295cc836133415cc03d8cb966410a4af92eb00d26e", size = 22170 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b8/25/155f9f080d5e4bc0082edfda032ea2bc2b8fab3f4d25d46c1e9dd22a1a89/flatbuffers-25.2.10-py2.py3-none-any.whl", hash = "sha256:ebba5f4d5ea615af3f7fd70fc310636fbb2bbd1f566ac0a23d98dd412de50051", size = 30953 },
+]
+
+[[package]]
+name = "frozendict"
+version = "2.4.6"
+source = { registry = "https://pypi.org/simple/" }
+sdist = { url = "https://files.pythonhosted.org/packages/bb/59/19eb300ba28e7547538bdf603f1c6c34793240a90e1a7b61b65d8517e35e/frozendict-2.4.6.tar.gz", hash = "sha256:df7cd16470fbd26fc4969a208efadc46319334eb97def1ddf48919b351192b8e", size = 316416 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a6/7f/e80cdbe0db930b2ba9d46ca35a41b0150156da16dfb79edcc05642690c3b/frozendict-2.4.6-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:c3a05c0a50cab96b4bb0ea25aa752efbfceed5ccb24c007612bc63e51299336f", size = 37927 },
+    { url = "https://files.pythonhosted.org/packages/29/98/27e145ff7e8e63caa95fb8ee4fc56c68acb208bef01a89c3678a66f9a34d/frozendict-2.4.6-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:f5b94d5b07c00986f9e37a38dd83c13f5fe3bf3f1ccc8e88edea8fe15d6cd88c", size = 37945 },
+    { url = "https://files.pythonhosted.org/packages/ac/f1/a10be024a9d53441c997b3661ea80ecba6e3130adc53812a4b95b607cdd1/frozendict-2.4.6-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:f4c789fd70879ccb6289a603cdebdc4953e7e5dea047d30c1b180529b28257b5", size = 117656 },
+    { url = "https://files.pythonhosted.org/packages/46/a6/34c760975e6f1cb4db59a990d58dcf22287e10241c851804670c74c6a27a/frozendict-2.4.6-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:da6a10164c8a50b34b9ab508a9420df38f4edf286b9ca7b7df8a91767baecb34", size = 117444 },
+    { url = "https://files.pythonhosted.org/packages/62/dd/64bddd1ffa9617f50e7e63656b2a7ad7f0a46c86b5f4a3d2c714d0006277/frozendict-2.4.6-cp310-cp310-musllinux_1_2_aarch64.whl", hash = "sha256:9a8a43036754a941601635ea9c788ebd7a7efbed2becba01b54a887b41b175b9", size = 116801 },
+    { url = "https://files.pythonhosted.org/packages/45/ae/af06a8bde1947277aad895c2f26c3b8b8b6ee9c0c2ad988fb58a9d1dde3f/frozendict-2.4.6-cp310-cp310-musllinux_1_2_x86_64.whl", hash = "sha256:c9905dcf7aa659e6a11b8051114c9fa76dfde3a6e50e6dc129d5aece75b449a2", size = 117329 },
+    { url = "https://files.pythonhosted.org/packages/d2/df/be3fa0457ff661301228f4c59c630699568c8ed9b5480f113b3eea7d0cb3/frozendict-2.4.6-cp310-cp310-win_amd64.whl", hash = "sha256:323f1b674a2cc18f86ab81698e22aba8145d7a755e0ac2cccf142ee2db58620d", size = 37522 },
+    { url = "https://files.pythonhosted.org/packages/4a/6f/c22e0266b4c85f58b4613fec024e040e93753880527bf92b0c1bc228c27c/frozendict-2.4.6-cp310-cp310-win_arm64.whl", hash = "sha256:eabd21d8e5db0c58b60d26b4bb9839cac13132e88277e1376970172a85ee04b3", size = 34056 },
+    { url = "https://files.pythonhosted.org/packages/04/13/d9839089b900fa7b479cce495d62110cddc4bd5630a04d8469916c0e79c5/frozendict-2.4.6-py311-none-any.whl", hash = "sha256:d065db6a44db2e2375c23eac816f1a022feb2fa98cbb50df44a9e83700accbea", size = 16148 },
+    { url = "https://files.pythonhosted.org/packages/ba/d0/d482c39cee2ab2978a892558cf130681d4574ea208e162da8958b31e9250/frozendict-2.4.6-py312-none-any.whl", hash = "sha256:49344abe90fb75f0f9fdefe6d4ef6d4894e640fadab71f11009d52ad97f370b9", size = 16146 },
+    { url = "https://files.pythonhosted.org/packages/a5/8e/b6bf6a0de482d7d7d7a2aaac8fdc4a4d0bb24a809f5ddd422aa7060eb3d2/frozendict-2.4.6-py313-none-any.whl", hash = "sha256:7134a2bb95d4a16556bb5f2b9736dceb6ea848fa5b6f3f6c2d6dba93b44b4757", size = 16146 },
 ]
 
 [[package]]
@@ -2521,6 +2561,12 @@ wheels = [
 ]
 
 [[package]]
+name = "multitasking"
+version = "0.0.12"
+source = { registry = "https://pypi.org/simple/" }
+sdist = { url = "https://files.pythonhosted.org/packages/17/0d/74f0293dfd7dcc3837746d0138cbedd60b31701ecc75caec7d3f281feba0/multitasking-0.0.12.tar.gz", hash = "sha256:2fba2fa8ed8c4b85e227c5dd7dc41c7d658de3b6f247927316175a57349b84d1", size = 19984 }
+
+[[package]]
 name = "mypy"
 version = "1.16.0"
 source = { registry = "https://pypi.org/simple/" }
@@ -3204,6 +3250,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/78/46/5223d613ac4963e1f
 wheels = [
     { url = "https://files.pythonhosted.org/packages/73/16/7a432c0101fa87457e75cb12c879e1749c5870a786525e2e0f42871d6462/pdfminer_six-20250506-py3-none-any.whl", hash = "sha256:d81ad173f62e5f841b53a8ba63af1a4a355933cfc0ffabd608e568b9193909e3", size = 5620187 },
 ]
+
+[[package]]
+name = "peewee"
+version = "3.18.2"
+source = { registry = "https://pypi.org/simple/" }
+sdist = { url = "https://files.pythonhosted.org/packages/04/89/76f6f1b744c8608e0d416b588b9d63c2a500ff800065ae610f7c80f532d6/peewee-3.18.2.tar.gz", hash = "sha256:77a54263eb61aff2ea72f63d2eeb91b140c25c1884148e28e4c0f7c4f64996a0", size = 949220 }
 
 [[package]]
 name = "pillow"
@@ -5510,6 +5562,7 @@ dependencies = [
     { name = "transformers" },
     { name = "uv" },
     { name = "uvicorn" },
+    { name = "yfinance" },
 ]
 
 [package.optional-dependencies]
@@ -5605,6 +5658,7 @@ requires-dist = [
     { name = "uv", specifier = ">=0.5.20" },
     { name = "uvicorn", specifier = ">=0.34.0" },
     { name = "weaviate-client", marker = "extra == 'rag'", specifier = ">=4.16.9" },
+    { name = "yfinance", specifier = ">=0.2.65" },
 ]
 
 [package.metadata.requires-dev]
@@ -6130,6 +6184,29 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/24/fd/725b8e73ac2a50e78a4534ac43c6addf5c1c2d65380dd48a9169cc6739a9/yarl-1.20.1-cp313-cp313t-win32.whl", hash = "sha256:b121ff6a7cbd4abc28985b6028235491941b9fe8fe226e6fdc539c977ea1739d", size = 86591 },
     { url = "https://files.pythonhosted.org/packages/94/c3/b2e9f38bc3e11191981d57ea08cab2166e74ea770024a646617c9cddd9f6/yarl-1.20.1-cp313-cp313t-win_amd64.whl", hash = "sha256:541d050a355bbbc27e55d906bc91cb6fe42f96c01413dd0f4ed5a5240513874f", size = 93003 },
     { url = "https://files.pythonhosted.org/packages/b4/2d/2345fce04cfd4bee161bf1e7d9cdc702e3e16109021035dbb24db654a622/yarl-1.20.1-py3-none-any.whl", hash = "sha256:83b8eb083fe4683c6115795d9fc1cfaf2cbbefb19b3a1cb68f6527460f483a77", size = 46542 },
+]
+
+[[package]]
+name = "yfinance"
+version = "0.2.65"
+source = { registry = "https://pypi.org/simple/" }
+dependencies = [
+    { name = "beautifulsoup4" },
+    { name = "curl-cffi" },
+    { name = "frozendict" },
+    { name = "multitasking" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "peewee" },
+    { name = "platformdirs" },
+    { name = "protobuf" },
+    { name = "pytz" },
+    { name = "requests" },
+    { name = "websockets" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a3/c1/2ef5acda45a71297f4be22e205359e0f93b0171f2b6ebdd681362e725686/yfinance-0.2.65.tar.gz", hash = "sha256:3d465e58c49be9d61f9862829de3e00bef6b623809f32f4efb5197b62fc60485", size = 128666 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c9/1e/631c80e0f97aef46eb73549b9b0f60d94057294e040740f4cad0cb1f48e4/yfinance-0.2.65-py2.py3-none-any.whl", hash = "sha256:7be13abb0d80a17230bf798e9c6a324fa2bef0846684a6d4f7fa2abd21938963", size = 119438 },
 ]
 
 [[package]]
