@@ -1,4 +1,6 @@
 import pytest
+from unittest.mock import patch, AsyncMock
+from contextlib import asynccontextmanager
 from upsonic import Task, Agent
 
 
@@ -42,11 +44,31 @@ class TestTaskStringContextHandling:
         # Check overall context list equality
         assert task.context == contexts  
 
-    def test_agent_can_access_single_string_context(self):
+    @patch('upsonic.models.factory.ModelFactory.create')
+    @patch('upsonic.agent.agent.PydanticAgent')
+    def test_agent_can_access_single_string_context(self, mock_pydantic_agent, mock_factory_create):
         """
         Test: Agent'ın tek string context'i kullanabilmesi
         Kontrol: Agent'ın context'e erişebildiğini test etme
         """
+        # Mock setup
+        mock_provider = AsyncMock()
+        mock_model = AsyncMock()
+        mock_provider._provision.return_value = (mock_model, None)
+        mock_factory_create.return_value = mock_provider
+        
+        mock_agent_instance = AsyncMock()
+        mock_response = AsyncMock()
+        mock_response.output = "Found various resources in New York including libraries, community centers, and business districts."
+        mock_response.all_messages = lambda: []
+        mock_agent_instance.run.return_value = mock_response
+        
+        @asynccontextmanager
+        async def mock_run_mcp_servers():
+            yield
+        mock_agent_instance.run_mcp_servers = mock_run_mcp_servers
+        mock_pydantic_agent.return_value = mock_agent_instance
+        
         city = "New York"
         task = Task("Find resources in the city", context=[city])
         agent = Agent(name="City Guide")
@@ -56,11 +78,31 @@ class TestTaskStringContextHandling:
         assert isinstance(result, str)  
         assert task.response == result  
 
-    def test_agent_can_access_multiple_string_contexts(self):
+    @patch('upsonic.models.factory.ModelFactory.create')
+    @patch('upsonic.agent.agent.PydanticAgent')
+    def test_agent_can_access_multiple_string_contexts(self, mock_pydantic_agent, mock_factory_create):
         """
         Test: Agent'ın birden çok string context'i kullanabilmesi
         Kontrol: Tüm context'lerin agent tarafından erişilebilir olması
         """
+        # Mock setup
+        mock_provider = AsyncMock()
+        mock_model = AsyncMock()
+        mock_provider._provision.return_value = (mock_model, None)
+        mock_factory_create.return_value = mock_provider
+        
+        mock_agent_instance = AsyncMock()
+        mock_response = AsyncMock()
+        mock_response.output = "Comprehensive analysis of London's technology sector in 2024 shows significant growth and innovation opportunities."
+        mock_response.all_messages = lambda: []
+        mock_agent_instance.run.return_value = mock_response
+        
+        @asynccontextmanager
+        async def mock_run_mcp_servers():
+            yield
+        mock_agent_instance.run_mcp_servers = mock_run_mcp_servers
+        mock_pydantic_agent.return_value = mock_agent_instance
+        
         contexts = ["London", "Technology", "2024"]
         task = Task("Create a comprehensive analysis", context=contexts)
         agent = Agent(name="Analyst")
@@ -85,11 +127,31 @@ class TestTaskStringContextHandling:
         assert task.context[2] == "Another Valid Context"  
 
 	
-    def test_agent_context_integration_simulation(self):
+    @patch('upsonic.models.factory.ModelFactory.create')
+    @patch('upsonic.agent.agent.PydanticAgent')
+    def test_agent_context_integration_simulation(self, mock_pydantic_agent, mock_factory_create):
         """
         Test: Agent'ın context'i task description ile nasıl entegre ettiğinin testi
         Kontrol: Context'in task description'a uygun şekilde kullanılması
         """
+        # Mock setup
+        mock_provider = AsyncMock()
+        mock_model = AsyncMock()
+        mock_provider._provision.return_value = (mock_model, None)
+        mock_factory_create.return_value = mock_provider
+        
+        mock_agent_instance = AsyncMock()
+        mock_response = AsyncMock()
+        mock_response.output = "Best restaurants in Tokyo include traditional sushi bars, ramen shops, and modern fusion cuisine establishments."
+        mock_response.all_messages = lambda: []
+        mock_agent_instance.run.return_value = mock_response
+        
+        @asynccontextmanager
+        async def mock_run_mcp_servers():
+            yield
+        mock_agent_instance.run_mcp_servers = mock_run_mcp_servers
+        mock_pydantic_agent.return_value = mock_agent_instance
+        
         city = "Tokyo"
         task = Task("Find the best restaurants", context=[city])
         agent = Agent(name="Food Guide")
@@ -99,7 +161,27 @@ class TestTaskStringContextHandling:
         assert isinstance(result, str)
         assert task.response == result
             
-    def test_context_with_non_string_values(self):
+    @patch('upsonic.models.factory.ModelFactory.create')
+    @patch('upsonic.agent.agent.PydanticAgent')
+    def test_context_with_non_string_values(self, mock_pydantic_agent, mock_factory_create):
+        # Mock setup
+        mock_provider = AsyncMock()
+        mock_model = AsyncMock()
+        mock_provider._provision.return_value = (mock_model, None)
+        mock_factory_create.return_value = mock_provider
+        
+        mock_agent_instance = AsyncMock()
+        mock_response = AsyncMock()
+        mock_response.output = "Handled mixed context including valid strings, numbers, and null values appropriately."
+        mock_response.all_messages = lambda: []
+        mock_agent_instance.run.return_value = mock_response
+        
+        @asynccontextmanager
+        async def mock_run_mcp_servers():
+            yield
+        mock_agent_instance.run_mcp_servers = mock_run_mcp_servers
+        mock_pydantic_agent.return_value = mock_agent_instance
+        
         task = Task("Handle mixed context", context=["valid", 123, None])
         agent = Agent(name="Robust")
         
@@ -120,8 +202,30 @@ class TestTaskStringContextHandling:
         assert task.context is not None
         assert isinstance(task.context, list)
         assert len(task.context) == 0
+
+    @patch('upsonic.models.factory.ModelFactory.create')
+    @patch('upsonic.agent.agent.PydanticAgent')
+    def test_task_with_empty_context_list_agent_test(self, mock_pydantic_agent, mock_factory_create):
+        """Test agent behavior with empty context list"""
+        # Mock setup
+        mock_provider = AsyncMock()
+        mock_model = AsyncMock()
+        mock_provider._provision.return_value = (mock_model, None)
+        mock_factory_create.return_value = mock_provider
         
-        # Test agent behavior with empty context
+        mock_agent_instance = AsyncMock()
+        mock_response = AsyncMock()
+        mock_response.output = "Analysis completed without specific context."
+        mock_response.all_messages = lambda: []
+        mock_agent_instance.run.return_value = mock_response
+        
+        @asynccontextmanager
+        async def mock_run_mcp_servers():
+            yield
+        mock_agent_instance.run_mcp_servers = mock_run_mcp_servers
+        mock_pydantic_agent.return_value = mock_agent_instance
+        
+        task = Task("Perform analysis without specific context", context=[])
         agent = Agent(name="Analyzer")
         
         result = agent.print_do(task)
