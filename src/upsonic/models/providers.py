@@ -19,6 +19,7 @@ from openai import AsyncOpenAI, AsyncAzureOpenAI
 from anthropic import AsyncAnthropic, AsyncAnthropicBedrock
 
 from upsonic.models.base import BaseModelProvider
+from upsonic.exceptions import APIKeyMissingError, ConfigurationError
 
 
 class BaseOpenAICompatible(BaseModelProvider):
@@ -56,7 +57,7 @@ class BaseOpenAICompatible(BaseModelProvider):
     async def _provision(self) -> Tuple[Model, Optional[ModelSettings]]:
         final_api_key = self.api_key.get_secret_value() if self.api_key else os.getenv(self._env_key_map)
         if self._env_key_map and not final_api_key:
-            raise ValueError(f"API key not found. Please provide it directly or set the {self._env_key_map} environment variable.")
+            raise APIKeyMissingError(type(self).__name__, self._env_key_map)
 
         client = AsyncOpenAI(api_key=final_api_key, base_url=self.base_url)
         provider = OpenAIProvider(openai_client=client)
@@ -121,8 +122,12 @@ class AzureOpenAI(BaseOpenAICompatible):
         final_api_version = self.api_version or os.getenv("AZURE_OPENAI_API_VERSION")
         final_api_key = self.api_key.get_secret_value() if self.api_key else os.getenv("AZURE_OPENAI_API_KEY")
 
-        if not all([final_endpoint, final_api_version, final_api_key]):
-            raise ValueError("Azure credentials not found. Set AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_VERSION, and AZURE_OPENAI_API_KEY.")
+        if not final_api_key:
+            raise APIKeyMissingError("AzureOpenAI", "AZURE_OPENAI_API_KEY")
+        if not final_endpoint:
+            raise ConfigurationError("Azure Configuration Error", "AZURE_OPENAI_ENDPOINT environment variable is not set")
+        if not final_api_version:
+            raise ConfigurationError("Azure Configuration Error", "AZURE_OPENAI_API_VERSION environment variable is not set")
 
         client = AsyncAzureOpenAI(azure_endpoint=final_endpoint, api_version=final_api_version, api_key=final_api_key)
         provider = OpenAIProvider(openai_client=client)
@@ -195,7 +200,7 @@ class Anthropic(BaseAnthropic):
     async def _provision(self) -> Tuple[Model, Optional[ModelSettings]]:
         final_api_key = self.api_key.get_secret_value() if self.api_key else os.getenv("ANTHROPIC_API_KEY")
         if not final_api_key:
-            raise ValueError("API key not found. Please provide it directly or set the ANTHROPIC_API_KEY environment variable.")
+            raise APIKeyMissingError("Anthropic", "ANTHROPIC_API_KEY")
         client = AsyncAnthropic(api_key=final_api_key)
         provider = AnthropicProvider(anthropic_client=client)
         agent_model = AnthropicModel(self.model_name, provider=provider)
@@ -213,8 +218,12 @@ class BedrockAnthropic(BaseAnthropic):
         aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
         aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
         aws_region = os.getenv("AWS_REGION")
-        if not all([aws_access_key, aws_secret_key, aws_region]):
-            raise ValueError("AWS credentials not found. Please set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION.")
+        if not aws_access_key:
+            raise ConfigurationError("AWS Configuration Error", "AWS_ACCESS_KEY_ID environment variable is not set")
+        if not aws_secret_key:
+            raise ConfigurationError("AWS Configuration Error", "AWS_SECRET_ACCESS_KEY environment variable is not set")  
+        if not aws_region:
+            raise ConfigurationError("AWS Configuration Error", "AWS_REGION environment variable is not set")
         client = AsyncAnthropicBedrock(aws_access_key=aws_access_key, aws_secret_key=aws_secret_key, aws_region=aws_region)
         provider = AnthropicProvider(anthropic_client=client)
         agent_model = AnthropicModel(self.model_name, provider=provider)
@@ -261,7 +270,7 @@ class Gemini(BaseModelProvider):
     async def _provision(self) -> Tuple[Model, Optional[ModelSettings]]:
         final_api_key = self.api_key.get_secret_value() if self.api_key else os.getenv("GOOGLE_GLA_API_KEY")
         if not final_api_key:
-            raise ValueError("API key not found. Please provide it directly or set the GOOGLE_GLA_API_KEY environment variable.")
+            raise APIKeyMissingError("Gemini", "GOOGLE_GLA_API_KEY")
         provider = GoogleGLAProvider(api_key=final_api_key)
         agent_model = GeminiModel(self.model_name, provider=provider)
         agent_settings = None
