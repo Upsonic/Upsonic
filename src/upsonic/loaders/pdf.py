@@ -104,6 +104,7 @@ class PDFLoader(DocumentLoader):
                         # Metadata processed
                 else:
                     # No document metadata found
+                    pass
 
                 documents: List[Document] = []
                 all_page_texts: List[str] = []
@@ -165,6 +166,7 @@ class PDFLoader(DocumentLoader):
                     # Created single document
                 else:
                     # Created separate page documents
+                    pass
                 
                 # Documents created
                 return documents

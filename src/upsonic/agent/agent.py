@@ -273,6 +273,7 @@ class Direct(BaseAgent):
             The response from the LLM
         """
         result = self.do(task, model, debug, retry)
+        print(result)
         return result
 
 

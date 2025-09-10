@@ -359,32 +359,27 @@ def auto_detect_best_embedding(**kwargs) -> EmbeddingProvider:
         pass
     
     if has_openai and "openai" in available:
-        print("Auto-detected OpenAI credentials, using OpenAI embedding")
+
         return create_embedding_provider("openai", **kwargs)
     
     elif has_azure and "azure_openai" in available:
-        print("Auto-detected Azure OpenAI credentials, using Azure OpenAI embedding")
+
         return create_embedding_provider("azure_openai", **kwargs)
     
     elif has_gemini and "gemini" in available:
-        print("Auto-detected Gemini credentials, using Gemini embedding")
         return create_embedding_provider("gemini", **kwargs)
     
     elif has_aws and "bedrock" in available:
-        print("Auto-detected AWS credentials, using Bedrock embedding")
         return create_embedding_provider("bedrock", **kwargs)
     
     elif "fastembed" in available:
-        print("No API credentials found, using FastEmbed for local execution")
         config = {"enable_gpu": has_gpu} if has_gpu else {}
         return create_embedding_provider("fastembed", config=config, **kwargs)
     
     elif "ollama" in available:
-        print("Using Ollama for local embedding execution")
         return create_embedding_provider("ollama", **kwargs)
     
     elif "huggingface" in available:
-        print("Using HuggingFace for local embedding execution")
         config = {"device": "cuda" if has_gpu else "cpu"}
         return create_embedding_provider("huggingface", config=config, **kwargs)
     
