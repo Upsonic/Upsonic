@@ -3,7 +3,6 @@ from typing import Any, List, Optional
 from pydantic import Field
 
 from upsonic.text_splitter.base import TextSplitter, TextSplitterConfig
-from ..utils.error_wrapper import upsonic_error_handler
 
 
 class CharacterChunkingConfig(TextSplitterConfig):
@@ -51,7 +50,6 @@ class CharacterChunkingStrategy(TextSplitter):
         
         self._separator_stats = {}
 
-    @upsonic_error_handler(max_retries=1, show_error_details=True)
     def split_text(self, text: str) -> List[str]:
         """
         Text splitting with multiple separator support and optimization.

@@ -8,7 +8,6 @@ from pydantic import Field
 from upsonic.text_splitter.base import ChunkingStrategy, ChunkingConfig
 from upsonic.schemas.data_models import Document, Chunk
 from upsonic.embeddings.base import EmbeddingProvider
-from ..utils.error_wrapper import upsonic_error_handler
 
 BreakpointThresholdType = Literal["percentile", "standard_deviation", "interquartile"]
 
@@ -85,7 +84,6 @@ class SemanticSimilarityChunkingStrategy(ChunkingStrategy):
         self._sentence_cache: Dict[str, List[str]] = {}
         self._distance_cache: Dict[str, List[float]] = {}
 
-    @upsonic_error_handler(max_retries=1, show_error_details=True)
     async def chunk(self, document: Document) -> List[Chunk]:
         """
         Semantic chunking pipeline with framework features.

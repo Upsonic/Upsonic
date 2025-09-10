@@ -8,7 +8,6 @@ from typing import Any, List, Dict, Optional, Type, Union, Callable, Literal
 
 
 from upsonic.utils.printing import get_price_id_total_cost
-from upsonic.utils.error_wrapper import upsonic_error_handler
 from pydantic_ai import Agent as PydanticAgent, BinaryContent
 
 from upsonic.knowledge_base.knowledge_base import KnowledgeBase
@@ -154,7 +153,6 @@ class Task(BaseModel):
             return None
         return self.end_time - self.start_time
 
-    @upsonic_error_handler(max_retries=2, show_error_details=True)
     def validate_tools(self):
         """
         Validates each tool in the tools list.
@@ -206,7 +204,6 @@ class Task(BaseModel):
         """
         self._context_formatted = value
     
-    @upsonic_error_handler(max_retries=2, show_error_details=True)
     async def additional_description(self, client):
         if not self.context:
             return ""

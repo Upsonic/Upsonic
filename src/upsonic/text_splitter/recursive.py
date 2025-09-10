@@ -4,7 +4,6 @@ import re
 from pydantic import Field
 
 from upsonic.text_splitter.base import TextSplitter, TextSplitterConfig
-from ..utils.error_wrapper import upsonic_error_handler
 
 class RecursiveChunkingConfig(TextSplitterConfig):
     """Enhanced configuration for recursive character chunking."""
@@ -55,7 +54,6 @@ class RecursiveCharacterChunkingStrategy(TextSplitter):
         self._separator_stats: Dict[str, Dict[str, Any]] = {}
         self._recursion_depth = 0
 
-    @upsonic_error_handler(max_retries=1, show_error_details=True)
     def split_text(self, text: str) -> List[str]:
         """
         Entry point with adaptive separator selection and content analysis.

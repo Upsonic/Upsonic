@@ -12,7 +12,7 @@ from pydantic_ai.agent import AgentRunResult
 
 
 from upsonic.canvas.canvas import Canvas
-from upsonic.utils.error_wrapper import upsonic_error_handler
+
 from upsonic.utils.printing import print_price_id_summary, cache_hit, cache_miss, cache_stored, cache_configuration, agent_started
 from upsonic.cache import CacheManager
 from upsonic.agent.base import BaseAgent
@@ -60,7 +60,7 @@ class Direct(BaseAgent):
                  reliability_layer = None,
                  agent_id_: str | None = None,
                  canvas: Canvas | None = None,
-                 retry: int = 3,
+                 retry: int = 1,
                  mode: RetryMode = "raise",
                  role: str | None = None,
                  goal: str | None = None,
@@ -200,8 +200,8 @@ class Direct(BaseAgent):
 
 
 
-    @upsonic_error_handler(max_retries=3, show_error_details=True)
-    async def print_do_async(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3):
+
+    async def print_do_async(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1):
         """
         Execute a direct LLM call and print the result asynchronously.
         
@@ -209,7 +209,7 @@ class Direct(BaseAgent):
             task: The task to execute or list of tasks
             model: The LLM model to use
             debug: Whether to enable debug mode
-            retry: Number of retries for failed calls (default: 3)
+            retry: Number of retries for failed calls 
             
         Returns:
             The response from the LLM
@@ -217,8 +217,8 @@ class Direct(BaseAgent):
         result = await self.do_async(task, model, debug, retry)
         return result
 
-    @upsonic_error_handler(max_retries=3, show_error_details=True)
-    def do(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3):
+
+    def do(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1):
         """
         Execute a direct LLM call with the given task and model synchronously.
         
@@ -226,7 +226,7 @@ class Direct(BaseAgent):
             task: The task to execute or list of tasks
             model: The LLM model to use
             debug: Whether to enable debug mode
-            retry: Number of retries for failed calls (default: 3)
+            retry: Number of retries for failed calls
             
         Returns:
             The response from the LLM
@@ -258,8 +258,8 @@ class Direct(BaseAgent):
             # Event loop exists but not running, we can use it
             return loop.run_until_complete(self.do_async(task, model, debug, retry))
 
-    @upsonic_error_handler(max_retries=3, show_error_details=True)
-    def print_do(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3):
+
+    def print_do(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1):
         """
         Execute a direct LLM call and print the result synchronously.
         
@@ -267,7 +267,7 @@ class Direct(BaseAgent):
             task: The task to execute or list of tasks
             model: The LLM model to use
             debug: Whether to enable debug mode
-            retry: Number of retries for failed calls (default: 3)
+            retry: Number of retries for failed calls
             
         Returns:
             The response from the LLM
@@ -277,7 +277,7 @@ class Direct(BaseAgent):
         return result
 
 
-    @upsonic_error_handler(max_retries=2, show_error_details=True)
+
     async def agent_create(self, provider: BaseModelProvider, single_task: "Task", system_prompt: str):
         """
         Creates and configures the underlying PydanticAgent, processing and wrapping
@@ -601,9 +601,9 @@ class Direct(BaseAgent):
         return processed_task
 
 
-    @upsonic_error_handler(max_retries=3, show_error_details=True)
+
     @retryable()
-    async def do_async(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
+    async def do_async(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1, state: Any = None, *, graph_execution_id: Optional[str] = None):
         """
         Execute a direct LLM call with robust, context-managed storage connections
         and agent-level control over history management.
@@ -703,8 +703,8 @@ class Direct(BaseAgent):
         return processed_task.response if processed_task else None
 
 
-    @upsonic_error_handler(max_retries=3, show_error_details=True)
-    def continue_run(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3):
+
+    def continue_run(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1):
         """
         Continues the execution of a paused task after external tool results have been provided.
         
@@ -731,8 +731,8 @@ class Direct(BaseAgent):
         else:
             return loop.run_until_complete(self.continue_async(task, model, debug, retry))
 
-    @upsonic_error_handler(max_retries=3, show_error_details=True)
-    async def continue_async(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
+
+    async def continue_async(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1, state: Any = None, *, graph_execution_id: Optional[str] = None):
         """
         Asynchronously continues the execution of a paused task.
         """
