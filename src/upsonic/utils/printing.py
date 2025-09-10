@@ -161,11 +161,6 @@ def call_end(result: Any, model_provider: BaseModelProvider, response_format: st
             if debug:
                 pass  # Error calculating cost
 
-    table.add_row("[bold]LLM Model:[/bold]", f"{display_model_name}")
-    # Add spacing
-    table.add_row("")
-
-
     result_str = str(result)
     # Limit result to 370 characters
     if not debug:
@@ -175,18 +170,9 @@ def call_end(result: Any, model_provider: BaseModelProvider, response_format: st
         result_str += "[bold white]...[/bold white]"
 
     table.add_row("[bold]Result:[/bold]", f"[green]{escape_rich_markup(result_str)}[/green]")
-
-    # Add spacing
-    table.add_row("")
-    table.add_row("[bold]Response Format:[/bold]", f"{response_format}")
-
-    table.add_row("[bold]Estimated Cost:[/bold]", f"{get_estimated_cost(usage['input_tokens'], usage['output_tokens'], model_provider)}$")
-    time_taken = end_time - start_time
-    time_taken_str = f"{time_taken:.2f} seconds"
-    table.add_row("[bold]Time Taken:[/bold]", f"{time_taken_str}")
     panel = Panel(
         table,
-        title="[bold white]Upsonic - Call Result[/bold white]",
+        title="[bold white]Task Result[/bold white]",
         border_style="white",
         expand=True,
         width=70
@@ -330,6 +316,7 @@ def print_price_id_summary(price_id: str, task) -> dict:
     
     Args:
         price_id (str): The price ID to look up
+        task: The task object containing timing information
         
     Returns:
         dict: A dictionary containing the usage summary, or None if price_id not found
@@ -355,10 +342,15 @@ def print_price_id_summary(price_id: str, task) -> dict:
     table.add_row("[bold]Input Tokens:[/bold]", f"[magenta]{summary['input_tokens']:,}[/magenta]")
     table.add_row("[bold]Output Tokens:[/bold]", f"[magenta]{summary['output_tokens']:,}[/magenta]")
     table.add_row("[bold]Total Estimated Cost:[/bold]", f"[magenta]{summary['estimated_cost']}[/magenta]")
+    
+    # Add total time if available from task
+    if task and hasattr(task, 'duration') and task.duration is not None:
+        time_str = f"{task.duration:.2f} seconds"
+        table.add_row("[bold]Time Taken:[/bold]", f"[magenta]{time_str}[/magenta]")
 
     panel = Panel(
         table,
-        title="[bold magenta]Upsonic - Price ID Summary[/bold magenta]",
+        title="[bold magenta]Task Metrics[/bold magenta]",
         border_style="magenta",
         expand=True,
         width=70
@@ -895,6 +887,33 @@ def cache_configuration(enable_cache: bool, cache_method: Literal["vector_search
         table,
         title="[bold cyan]⚙️ Cache Configuration[/bold cyan]",
         border_style="cyan",
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
+
+def agent_started(agent_name: str) -> None:
+    """
+    Prints a formatted panel when an agent starts to work.
+    
+    Args:
+        agent_name: Name or ID of the agent that started working
+    """
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    # Escape input values
+    agent_name_esc = escape_rich_markup(agent_name)
+    
+    table.add_row("[bold]Agent Status:[/bold]", "[green]🚀 Started to work[/green]")
+    table.add_row("[bold]Agent Name:[/bold]", f"[cyan]{agent_name_esc}[/cyan]")
+    
+    panel = Panel(
+        table,
+        title="[bold green]🤖 Agent Started[/bold green]",
+        border_style="green",
         expand=True,
         width=70
     )

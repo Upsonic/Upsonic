@@ -13,7 +13,7 @@ from pydantic_ai.agent import AgentRunResult
 
 from upsonic.canvas.canvas import Canvas
 from upsonic.utils.error_wrapper import upsonic_error_handler
-from upsonic.utils.printing import print_price_id_summary, cache_hit, cache_miss, cache_stored, cache_configuration
+from upsonic.utils.printing import print_price_id_summary, cache_hit, cache_miss, cache_stored, cache_configuration, agent_started
 from upsonic.cache import CacheManager
 from upsonic.agent.base import BaseAgent
 from upsonic.tools.processor import ToolProcessor, ExternalExecutionPause
@@ -608,6 +608,9 @@ class Direct(BaseAgent):
         Execute a direct LLM call with robust, context-managed storage connections
         and agent-level control over history management.
         """
+        # Print agent started message
+        agent_started(self.get_agent_id())
+        
         self.tool_call_count = 0
         async with self._managed_storage_connection():
             processed_task = None
