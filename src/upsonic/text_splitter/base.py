@@ -7,7 +7,6 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, Coroutine, Dict, Generic, List, Optional, TypeVar
 
 from pydantic import BaseModel, Field
-
 from upsonic.schemas.data_models import Chunk, Document
 
 logger = logging.getLogger(__name__)

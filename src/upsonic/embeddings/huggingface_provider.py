@@ -12,7 +12,6 @@ from huggingface_hub import hf_hub_download, login, InferenceClient
 from pydantic import Field, validator
 
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
-from ..utils.error_wrapper import upsonic_error_handler
 from ..utils.package.exception import ConfigurationError, ModelConnectionError
 
 
@@ -331,7 +330,6 @@ class HuggingFaceEmbedding(EmbeddingProvider):
         except Exception as e:
             raise ModelConnectionError(f"Failed to get embeddings via API: {str(e)}", original_error=e)
     
-    @upsonic_error_handler(max_retries=3, show_error_details=True)
     async def _embed_batch(self, texts: List[str], mode: EmbeddingMode = EmbeddingMode.DOCUMENT) -> List[List[float]]:
         """
         Embed a batch of texts using HuggingFace model or API.

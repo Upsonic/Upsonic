@@ -27,7 +27,7 @@ from upsonic.utils.package.exception import (
     RetryExhaustedError,
     NoAPIKeyException
 )
-from upsonic.utils.error_wrapper import upsonic_error_handler
+
 
 
 from .storage import (
@@ -75,7 +75,7 @@ __all__ = [
     "ConfigurationError", 
     "RetryExhaustedError",
     "NoAPIKeyException",
-    "upsonic_error_handler",
+
     "Memory",
     "Storage",
     "InMemoryStorage",

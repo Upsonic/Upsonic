@@ -1,6 +1,6 @@
 [project]
 name = "upsonic"
-version = "0.60.0"
+version = "0.61.0"
 description = "Task oriented AI agent framework for digital workers and vertical AI agents"
 readme = "README.md"
 authors = [
@@ -48,6 +48,7 @@ dependencies = [
     "rapidocr-onnxruntime>=1.4.4",
     "markdown-it-py>=3.0.0",
     "python-frontmatter>=1.1.0",
+    "yfinance>=0.2.65",
 ]
 
 [project.optional-dependencies]
@@ -59,7 +60,11 @@ rag = [
     "pymilvus>=2.6.1",
     "qdrant-client>=1.12.1",
     "weaviate-client>=4.16.9",
+    "scipy>=1.13.0",
+    "scikit-learn>=1.4.0",
+    "reportlab>=4.1.0",
 ]
+
 storage = [
     "aiosqlite>=0.21.0",
     "asyncpg>=0.30.0",

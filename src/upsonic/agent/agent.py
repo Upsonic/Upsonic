@@ -12,8 +12,8 @@ from pydantic_ai.agent import AgentRunResult
 
 
 from upsonic.canvas.canvas import Canvas
-from upsonic.utils.error_wrapper import upsonic_error_handler
-from upsonic.utils.printing import print_price_id_summary, cache_hit, cache_miss, cache_stored, cache_configuration
+
+from upsonic.utils.printing import print_price_id_summary, cache_hit, cache_miss, cache_stored, cache_configuration, agent_started
 from upsonic.cache import CacheManager
 from upsonic.agent.base import BaseAgent
 from upsonic.tools.processor import ToolProcessor, ExternalExecutionPause
@@ -48,7 +48,7 @@ class Direct(BaseAgent):
 
     def __init__(self, 
                  name: str | None = None, 
-                 model: Union[str, BaseModelProvider] | None = None,
+                 model: Union[str, BaseModelProvider] | None = "openai/gpt-4o",
                  memory: Optional[Memory] = None,
                  debug: bool = False, 
                  company_url: str | None = None, 
@@ -60,7 +60,7 @@ class Direct(BaseAgent):
                  reliability_layer = None,
                  agent_id_: str | None = None,
                  canvas: Canvas | None = None,
-                 retry: int = 3,
+                 retry: int = 1,
                  mode: RetryMode = "raise",
                  role: str | None = None,
                  goal: str | None = None,
@@ -81,9 +81,7 @@ class Direct(BaseAgent):
 
 
         if self.memory:
-            print(f"Using existing Memory instance feed_tool_call_results: {self.memory.feed_tool_call_results}")
             self.memory.feed_tool_call_results = feed_tool_call_results
-            print("Updated Memory feed_tool_call_results:", self.memory.feed_tool_call_results)
 
         
         self.debug = debug
@@ -92,6 +90,9 @@ class Direct(BaseAgent):
             self.model_provider = ModelFactory.create(model)
         else:
             self.model_provider = None
+
+        # Setup LLM models for UpsonicLLMProvider agents if policies use them
+        self._setup_policy_llm_models(user_policy, agent_policy) 
         self.agent_id_ = agent_id_
         self.name = name
         self.company_url = company_url
@@ -129,6 +130,51 @@ class Direct(BaseAgent):
         self.agent_policy = agent_policy
         
         self._cache_manager = CacheManager(session_id=f"agent_{self.agent_id}")
+    
+    def _setup_policy_llm_models(self, user_policy, agent_policy):
+        """Setup LLM models for agents in UpsonicLLMProvider objects used by policies"""
+        from upsonic.safety_engine.llm.upsonic_llm import UpsonicLLMProvider
+        
+        policies = [user_policy, agent_policy]
+        
+        for policy in policies:
+            if policy is None:
+                continue
+                
+            # If the policy doesn't have a base_llm and we have a model_provider, create one
+            if policy.base_llm is None and self.model_provider is not None:
+                policy.base_llm = UpsonicLLMProvider(
+                    agent_name="Policy Base Agent",
+                    model=None  # Will be set below
+                )
+                policy.base_llm.agent.model_provider = self.model_provider
+            
+            # Check if policy.base_llm is an UpsonicLLMProvider
+            elif isinstance(policy.base_llm, UpsonicLLMProvider):
+                # Set the model for the UpsonicLLMProvider's agent if we have a model_provider
+                if self.model_provider is not None:
+                    policy.base_llm.agent.model_provider = self.model_provider
+            
+            # Also check other LLM providers in the policy
+            if policy.language_identify_llm is None and self.model_provider is not None:
+                policy.language_identify_llm = UpsonicLLMProvider(
+                    agent_name="Policy Language Detection Agent",
+                    model=None
+                )
+                policy.language_identify_llm.agent.model_provider = self.model_provider
+            elif isinstance(policy.language_identify_llm, UpsonicLLMProvider):
+                if self.model_provider is not None:
+                    policy.language_identify_llm.agent.model_provider = self.model_provider
+                    
+            if policy.text_finder_llm is None and self.model_provider is not None:
+                policy.text_finder_llm = UpsonicLLMProvider(
+                    agent_name="Policy Text Finder Agent", 
+                    model=None
+                )
+                policy.text_finder_llm.agent.model_provider = self.model_provider
+            elif isinstance(policy.text_finder_llm, UpsonicLLMProvider):
+                if self.model_provider is not None:
+                    policy.text_finder_llm.agent.model_provider = self.model_provider
 
 
 
@@ -154,8 +200,8 @@ class Direct(BaseAgent):
 
 
 
-    @upsonic_error_handler(max_retries=3, show_error_details=True)
-    async def print_do_async(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3):
+
+    async def print_do_async(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1):
         """
         Execute a direct LLM call and print the result asynchronously.
         
@@ -163,17 +209,16 @@ class Direct(BaseAgent):
             task: The task to execute or list of tasks
             model: The LLM model to use
             debug: Whether to enable debug mode
-            retry: Number of retries for failed calls (default: 3)
+            retry: Number of retries for failed calls 
             
         Returns:
             The response from the LLM
         """
         result = await self.do_async(task, model, debug, retry)
-        print(result)
         return result
 
-    @upsonic_error_handler(max_retries=3, show_error_details=True)
-    def do(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3):
+
+    def do(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1):
         """
         Execute a direct LLM call with the given task and model synchronously.
         
@@ -181,7 +226,7 @@ class Direct(BaseAgent):
             task: The task to execute or list of tasks
             model: The LLM model to use
             debug: Whether to enable debug mode
-            retry: Number of retries for failed calls (default: 3)
+            retry: Number of retries for failed calls
             
         Returns:
             The response from the LLM
@@ -212,8 +257,8 @@ class Direct(BaseAgent):
             # No event loop running, create a new one
             return asyncio.run(self.do_async(task, model, debug, retry))
 
-    @upsonic_error_handler(max_retries=3, show_error_details=True)
-    def print_do(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3):
+
+    def print_do(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1):
         """
         Execute a direct LLM call and print the result synchronously.
         
@@ -221,7 +266,7 @@ class Direct(BaseAgent):
             task: The task to execute or list of tasks
             model: The LLM model to use
             debug: Whether to enable debug mode
-            retry: Number of retries for failed calls (default: 3)
+            retry: Number of retries for failed calls
             
         Returns:
             The response from the LLM
@@ -231,7 +276,7 @@ class Direct(BaseAgent):
         return result
 
 
-    @upsonic_error_handler(max_retries=2, show_error_details=True)
+
     async def agent_create(self, provider: BaseModelProvider, single_task: "Task", system_prompt: str):
         """
         Creates and configures the underlying PydanticAgent, processing and wrapping
@@ -555,13 +600,16 @@ class Direct(BaseAgent):
         return processed_task
 
 
-    @upsonic_error_handler(max_retries=3, show_error_details=True)
+
     @retryable()
-    async def do_async(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
+    async def do_async(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1, state: Any = None, *, graph_execution_id: Optional[str] = None):
         """
         Execute a direct LLM call with robust, context-managed storage connections
         and agent-level control over history management.
         """
+        # Print agent started message
+        agent_started(self.get_agent_id())
+        
         self.tool_call_count = 0
         async with self._managed_storage_connection():
             processed_task = None
@@ -614,7 +662,7 @@ class Direct(BaseAgent):
                                         async with agent.run_mcp_servers():
                                             model_response = await self._execute_with_guardrail(agent, task, memory_handler)
                                     except ExternalExecutionPause as e:
-                                        print(f"Agent paused for external execution of '{e.tool_call.tool_name}'")
+                                        # Agent paused for external execution
                                         task_handler.task.is_paused = True
                                         task_handler.task._tools_awaiting_external_execution.append(e.tool_call)
                                         processed_task = task_handler.task
@@ -654,8 +702,8 @@ class Direct(BaseAgent):
         return processed_task.response if processed_task else None
 
 
-    @upsonic_error_handler(max_retries=3, show_error_details=True)
-    def continue_run(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3):
+
+    def continue_run(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1):
         """
         Continues the execution of a paused task after external tool results have been provided.
         
@@ -681,8 +729,8 @@ class Direct(BaseAgent):
         except RuntimeError:
             return asyncio.run(self.continue_async(task, model, debug, retry))
 
-    @upsonic_error_handler(max_retries=3, show_error_details=True)
-    async def continue_async(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 3, state: Any = None, *, graph_execution_id: Optional[str] = None):
+
+    async def continue_async(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1, state: Any = None, *, graph_execution_id: Optional[str] = None):
         """
         Asynchronously continues the execution of a paused task.
         """

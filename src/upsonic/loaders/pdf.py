@@ -48,7 +48,6 @@ class PdfLoader(BaseLoader):
             )
 
 
-
     @classmethod
     def get_supported_extensions(cls) -> List[str]:
         """Gets a list of file extensions supported by this loader."""

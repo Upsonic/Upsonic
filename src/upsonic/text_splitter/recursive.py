@@ -8,9 +8,8 @@ from typing import List, Optional, Tuple
 
 from pydantic import Field
 
-from upsonic.text_splitter.base import BaseChunkingConfig
+from upsonic.text_splitter.base import BaseChunkingConfig, BaseChunker
 from upsonic.schemas.data_models import Chunk, Document
-from upsonic.text_splitter.base import BaseChunker
 
 logger = logging.getLogger(__name__)
 

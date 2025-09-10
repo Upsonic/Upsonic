@@ -39,7 +39,7 @@ def retryable(
 
         @functools.wraps(func)
         def wrapper(self, *args: Any, **kwargs: Any) -> Any:
-            final_retries = retries if retries is not None else getattr(self, 'retry', 3)
+            final_retries = retries if retries is not None else getattr(self, 'retry', 0)
             final_mode = mode if mode is not None else getattr(self, 'mode', 'raise')
 
             if final_retries < 1:
@@ -53,7 +53,7 @@ def retryable(
                     return func(self, *args, **kwargs)
                 except Exception as e:
                     if isinstance(e, GuardrailValidationError):
-                        raise
+                        raise e
                     last_known_exception = e
                     if attempt < final_retries:
                         print(f"Warning: Call to '{self.__class__.__name__}.{func.__name__}' failed (Attempt {attempt}/{final_retries}). Retrying in {current_delay:.2f}s... Error: {e}")
@@ -82,7 +82,7 @@ def retryable(
                     return await func(self, *args, **kwargs)
                 except Exception as e:
                     if isinstance(e, GuardrailValidationError):
-                        raise
+                        raise e
                     last_known_exception = e
                     if attempt < final_retries:
                         print(f"Warning: Call to '{self.__class__.__name__}.{func.__name__}' failed (Attempt {attempt}/{final_retries}). Retrying in {current_delay:.2f}s... Error: {e}")
