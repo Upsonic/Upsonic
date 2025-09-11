@@ -85,7 +85,7 @@ class PdfLoader(BaseLoader):
                 if self.config.error_handling == "raise":
                     raise result
                 elif self.config.error_handling == "warn":
-                    print(f"Warning: Failed to process PDF: {result}")
+                    self._logger.warning(f"Failed to process PDF: {result}")
             else:
                 documents.extend(result)
 
@@ -113,11 +113,8 @@ class PdfLoader(BaseLoader):
                 )
             self._processed_document_ids.add(document_id)
             
-            if self.config.max_file_size is not None:
-                stat_result = await asyncio.to_thread(path.stat)
-                if stat_result.st_size > self.config.max_file_size:
-                    print(f"Warning: Skipping file {path} because its size ({stat_result.st_size} bytes) exceeds the max_file_size of {self.config.max_file_size} bytes.")
-                    return []
+            if not self._check_file_size(path):
+                return []
             
             reader = await asyncio.to_thread(PdfReader, str(path))
 

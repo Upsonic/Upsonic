@@ -156,8 +156,7 @@ class HTMLLoader(BaseLoader):
     
     def _load_from_file(self, file_path: Path) -> List[Document]:
         """Loads and parses a single local HTML file."""
-        if self.config.max_file_size is not None and file_path.stat().st_size > self.config.max_file_size:
-            print(f"Warning: Skipping file {file_path} due to size.")
+        if not self._check_file_size(file_path):
             return []
         try:
             source_identifier = str(file_path.resolve())

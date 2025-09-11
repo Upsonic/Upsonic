@@ -68,6 +68,9 @@ class MarkdownChunkingConfig(BaseChunkingConfig):
     class Config:
         arbitrary_types_allowed = True
 
+# Rebuild the model to resolve forward references
+MarkdownChunkingConfig.model_rebuild()
+
 class _SemanticBlock(NamedTuple):
     """An internal data structure for a semantically distinct block of Markdown."""
     type: str

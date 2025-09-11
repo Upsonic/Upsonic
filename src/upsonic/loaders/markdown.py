@@ -67,8 +67,7 @@ class MarkdownLoader(BaseLoader):
 
     def _load_single_file(self, file_path: Path) -> List[Document]:
         """Loads, parses, and chunks a single Markdown file based on the config."""
-        if self.config.max_file_size is not None and file_path.stat().st_size > self.config.max_file_size:
-            print(f"Warning: Skipping file {file_path} because its size ({file_path.stat().st_size} bytes) exceeds max_file_size.")
+        if not self._check_file_size(file_path):
             return []
         
         try:
