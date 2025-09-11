@@ -26,34 +26,13 @@
 
 
 # Introduction
-Upsonic is a reliability-focused framework designed for real-world applications. It enables trusted agent workflows in your organization through advanced reliability features, including verification layers, triangular architecture, validator agents, and output evaluation systems.
+Upsonic is an AI agent development framework used by fintech leaders and tested at their scale against attacks and reasoning puzzles.
 
-
-# 🛠️ Getting Started
-
-### Prerequisites
-
-- Python 3.10 or higher
-- Access to OpenAI or Anthropic API keys (Azure and Bedrock Supported)
-
-## Installation
 
 ```bash
 pip install upsonic
 
 ```
-
-
-
-# Basic Example
-
-Set your OPENAI_API_KEY
-
-```console
-export OPENAI_API_KEY=sk-***
-```
-
-Start the agent 
 
 ```python
 from upsonic import Task, Agent
@@ -68,61 +47,35 @@ agent.print_do(task)
 <br>
 <br>
 
-# Why Choose Upsonic?
-Upsonic is a next-generation framework that makes agents production-ready by solving three critical challenges:
-
-1- **Reliability**: While other frameworks require expertise and complex coding for reliability features, Upsonic offers easy-to-activate reliability layers without disrupting functionality.
-
-2- **Model Context Protocol (MCP)**: The MCP allows you to leverage tools with various functionalities developed both officially and by third parties without requiring you to build custom tools from scratch.
-
-3- **Integrated Browser Use and Computer Use**: Directly use and deploy agents that works on non-API systems.
-
-4- **Secure Runtime**: Isolated environment to run agents
-
-![sdk-server](https://github.com/user-attachments/assets/1b276199-ae60-4221-b8e6-b266443a3641)
-
-<br>
-
-## 📊 Reliability Layer
-
-LLM output reliability is critical, particularly for numerical operations and action execution. Upsonic addresses this through a multi-layered reliability system, enabling control agents and verification rounds to ensure output accuracy.
-
-**Verifier Agent**: Validates outputs, tasks, and formats - detecting inconsistencies, numerical errors, and hallucinations
-
-**Editor Agent**: Works with verifier feedback to revise and refine outputs until they meet quality standards
-
-**Rounds**: Implements iterative quality improvement through scored verification cycles
-
-**Loops**: Ensures accuracy through controlled feedback loops at critical reliability checkpoints
+# Guides | 5 Step
+See our guides to jumpstart your AI agent within minutes. We design them to onboard the new users to the framework.
 
 
-Upsonic is a reliability-focused framework. The results in the table were generated with a small dataset. They show success rates in the transformation of JSON keys. No hard-coded changes were made to the frameworks during testing; only the existing features of each framework were activated and run. GPT-4o was used in the tests.
-
-10 transfers were performed for each section. The numbers show the error count. So if it says 7, it means 7 out of 10 were done **incorrectly**. The table has been created based on initial results. We are expanding the dataset. The tests will become more reliable after creating a larger test set. Reliability benchmark [repo](https://github.com/Upsonic/Reliability-Benchmark)
-
-
-```python
-class ReliabilityLayer:
-  prevent_hallucination = 10
-
-agent = Agent(name="Coder", reliability_layer=ReliabilityLayer, model="openai/gpt4o")
-```
+1. [Create an Agent](https://docs.upsonic.ai/guides/1_create_a_task)
+2. [Create a Task](https://docs.upsonic.ai/guides/2_create_an_agent)
+3. [Add a Safety Engine](https://docs.upsonic.ai/guides/3_add_a_safety_engine)
+4. [Add a Tool](https://docs.upsonic.ai/guides/4_add_a_tool)
+5. [Add an MCP](https://docs.upsonic.ai/guides/5_add_an_mcp)
+6. [Integrate a Memory](https://docs.upsonic.ai/guides/6_integrate_a_memory)
+7. [Creating a Team of Agents](https://docs.upsonic.ai/guides/7_creating_a_team_of_agents)
 
 <br>
 
+# Why Upsonic?
 
-**Key features:**
+Upsonic provides a feature set to build safety-first, high-performance AI Agents. It helps you go to production without spending hours on research and boilerplate. These are the main parts:
 
-- **Production-Ready Scalability**: Deploy seamlessly on AWS, GCP, or locally using Docker.
-- **Task-Centric Design**: Focus on practical task execution, with options for:
-    - Basic tasks via LLM calls.
-    - Advanced tasks with V1 agents.
-    - Complex automation using V2 agents with MCP integration.
-- **MCP Server Support**: Utilize multi-client processing for high-performance tasks.
-- **Tool-Calling Server**: Exception-secure tool management with robust server API interactions.
-- **Computer Use Integration**: Execute human-like tasks using Anthropic’s ‘Computer Use’ capabilities.
-- **Easily adding tools:** You can add your custom tools and MCP tools with a single line of code.
-<br>
+- **Safety First**: Upsonic provides its own **Safety Engine** that manages User and Agent messages and checks their status for your policies. You can customize it by designing new **rule** and **action** sets.
+- **Direct LLM Calls**: In Upsonic we support the same interface for your whole AI operations. You don't need to go with another framework to complete your **small jobs**.
+- **Structured Outputs**: Upsonic sets agent outputs to make them **Python objects**. So you can integrate your application without struggling with **LLM outputs**.
+- **Built-in RAG and Memory**: In Upsonic you can create world class . We support the Agentic RAG, Memory Logics and providers of them.
+- **Customizable Memory Logics**: You are able to create **memories** that focus on **user**, **event** and **chat**. Also you are free to use **Local** and **Cloud databases**.
+- **Agent Teams**: Upsonic provides the most **reliable** agent team architecture with memory, context management and leader agent.
+- **FastAPI Compatible Agents**: You can turn your agents into production-ready APIs
+- **Tracking the Executions**: You can use <u>Upsonic AgentOS</u> to get the execution history, monthly costs andresponse times  of your agents.
+- **Deploy at scale**: Upsonic agents work in the greatest and fastest-growing fintech companies and scaling is available on <u>Upsonic AgentOS</u>.
+
+
 
 # 📙 Documentation
 
@@ -134,71 +87,6 @@ You can access our documentation at [docs.upsonic.ai](https://docs.upsonic.ai/) 
 
 
 
-## Tool Integration via MCP
-
-Upsonic officially supports [Model Context Protocol (MCP)](https://github.com/modelcontextprotocol/servers) and custom tools. You can use hundreds of MCP servers at [glama](https://glama.ai/mcp/servers) or [mcprun](https://mcp.run) We also support Python functions inside a class as a tool. You can easily generate your integrations with that.
-
-```python
-from upsonic import Agent, Task
-from pydantic import BaseModel
-
-# Define Fetch MCP configuration
-class FetchMCP:
-    command = "uvx"
-    args = ["mcp-server-fetch"]
-
-# Create response format for web content
-class WebContent(BaseModel):
-    title: str
-    content: str
-    summary: str
-    word_count: int
-
-# Initialize agent
-web_agent = Agent(
-    name="Web Content Analyzer",
-    model="openai/gpt-4o",  # You can use other models
-)
-
-# Create a task to analyze a web page
-task = Task(
-    description="Fetch and analyze the content from url. Extract the main content, title, and create a brief summary.",
-    context=["https://upsonic.ai"],
-    tools=[FetchMCP],
-    response_format=WebContent
-)
-    
-# Usage
-result = web_agent.print_do(task)
-print(result.title)
-print(result.summary)
-
-```
-<br>
-
-
-
-## Direct LLM Call
-
-Direct LLM calls offer faster, cheaper solutions for simple tasks. In Upsonic, you can make calls to model providers without any abstraction level and organize structured outputs. You can also use tools with LLM calls.
-
-```python
-from upsonic import Task, Direct
-
-direct = Direct(model="openai/gpt-4o")
-
-task = Task("Where can I use agents in real life?")
-
-direct.print_do(task)
-
-```
-
-<br>
-
-## Cookbook
-You can [check out many examples](https://github.com/Upsonic/cookbook) showing how to build agents using MCP tools and browser use with Upsonic.
-
-<br>
 
 ## Telemetry
 
