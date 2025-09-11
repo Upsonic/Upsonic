@@ -260,7 +260,7 @@ class ContextManager:
     async def manage_context(self, memory_handler: Optional[MemoryManager] = None):
         """The asynchronous context manager for building the task-specific context."""
         self.context_prompt = await self._build_context_prompt(memory_handler)
-        print(f"\n\nContext Prompt: \n\n{self.context_prompt}\n\n")
+
         self.task.context_formatted = self.context_prompt
             
         try:
