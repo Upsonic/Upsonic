@@ -375,7 +375,7 @@ class PgvectorProvider(BaseVectorDBProvider):
             raise VectorDBError(f"Failed to fetch data from '{table_name}': {e}")
 
 
-    def search(self, top_k: Optional[int] = None, query_vector: Optional[List[float]] = None, query_text: Optional[str] = None, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[TypingLiteral['rrf', 'weighted']] = None, **kwargs) -> List[VectorSearchResult]:
+    def search(self, top_k: Optional[int] = None, query_vector: Optional[List[float]] = None, query_text: Optional[str] = None, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[TypingLiteral['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         
         filter = filter if filter is not None else self._config.search.filter
         final_top_k = top_k if top_k is not None else self._config.search.default_top_k or 10
@@ -386,30 +386,32 @@ class PgvectorProvider(BaseVectorDBProvider):
             if self._config.search.dense_search_enabled is False:
                 raise ConfigurationError("Dense search is disabled by the current configuration.")
             print("Dispatching to: dense_search")
-            return self.dense_search(query_vector=query_vector, top_k=final_top_k, filter=filter, **kwargs)
+            return self.dense_search(query_vector=query_vector, top_k=final_top_k, filter=filter, similarity_threshold=similarity_threshold, **kwargs)
         
         elif not has_vector and has_text:
             if self._config.search.full_text_search_enabled is False:
                 raise ConfigurationError("Full-text search is disabled by the current configuration.")
             print("Dispatching to: full_text_search")
-            return self.full_text_search(query_text=query_text, top_k=final_top_k, filter=filter, **kwargs)
+            return self.full_text_search(query_text=query_text, top_k=final_top_k, filter=filter, similarity_threshold=similarity_threshold, **kwargs)
 
         elif has_vector and has_text:
             if self._config.search.hybrid_search_enabled is False:
                 raise ConfigurationError("Hybrid search is disabled by the current configuration.")
             print("Dispatching to: hybrid_search")
-            return self.hybrid_search(query_vector=query_vector, query_text=query_text, top_k=final_top_k, filter=filter, alpha=alpha, fusion_method=fusion_method, **kwargs)
+            return self.hybrid_search(query_vector=query_vector, query_text=query_text, top_k=final_top_k, filter=filter, alpha=alpha, fusion_method=fusion_method, similarity_threshold=similarity_threshold, **kwargs)
         else:
             raise ConfigurationError("Search requires at least one of 'query_vector' or 'query_text'.")
 
 
-    def dense_search(self, query_vector: List[float], top_k: int, filter: Optional[Dict[str, Any]] = None, **kwargs) -> List[VectorSearchResult]:
+    def dense_search(self, query_vector: List[float], top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         if not self._is_connected or not self._connection:
             raise VectorDBConnectionError("Must be connected to PostgreSQL before searching.")
         
         tenant_id = self._config.advanced.namespace
         if not tenant_id:
             raise ConfigurationError("A `namespace` must be provided for pgvector multi-tenancy.")
+
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
 
         table_name = self._config.core.collection_name
         
@@ -468,26 +470,30 @@ class PgvectorProvider(BaseVectorDBProvider):
                         vector = row[2]
                     
                     text = payload.get("chunk", "") if payload else ""
+                    score = float(row[3])
                     
-                    results.append(VectorSearchResult(
-                        id=row[0],
-                        payload=payload,
-                        vector=vector,
-                        score=float(row[3]),
-                        text=text
-                    ))
+                    if score >= final_similarity_threshold:
+                        results.append(VectorSearchResult(
+                            id=row[0],
+                            payload=payload,
+                            vector=vector,
+                            score=score,
+                            text=text
+                        ))
             return results
         except (Exception, psycopg.Error) as e:
             if self._connection: self._connection.rollback()
             raise SearchError(f"An error occurred during dense search: {e}")
 
-    def full_text_search(self, query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, **kwargs) -> List[VectorSearchResult]:
+    def full_text_search(self, query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         if not self._is_connected or not self._connection:
             raise VectorDBConnectionError("Must be connected to PostgreSQL before searching.")
 
         tenant_id = self._config.advanced.namespace
         if not tenant_id:
             raise ConfigurationError("A `namespace` must be provided for pgvector multi-tenancy.")
+        
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
         
         fts_field = kwargs.get("fts_field")
         if not fts_field:
@@ -536,20 +542,22 @@ class PgvectorProvider(BaseVectorDBProvider):
                         vector = row[2]
                     
                     text = payload.get("chunk", "") if payload else ""
+                    score = float(row[3])
                     
-                    results.append(VectorSearchResult(
-                        id=row[0], 
-                        payload=payload, 
-                        vector=vector, 
-                        score=float(row[3]),
-                        text=text
-                    ))
+                    if score >= final_similarity_threshold:
+                        results.append(VectorSearchResult(
+                            id=row[0], 
+                            payload=payload, 
+                            vector=vector, 
+                            score=score,
+                            text=text
+                        ))
             return results
         except (Exception, psycopg.Error) as e:
             if self._connection: self._connection.rollback()
             raise SearchError(f"An error occurred during full-text search: {e}")
 
-    def hybrid_search(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[TypingLiteral['rrf', 'weighted']] = None, **kwargs) -> List[VectorSearchResult]:
+    def hybrid_search(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[TypingLiteral['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         """
         Performs a hybrid search by fetching results from dense and full-text searches
         and fusing them using a Reciprocal Rank Fusion (RRF) algorithm.
@@ -559,9 +567,9 @@ class PgvectorProvider(BaseVectorDBProvider):
 
         candidate_pool_size = top_k
 
-        dense_results = self.dense_search(query_vector, candidate_pool_size, filter, **kwargs)
+        dense_results = self.dense_search(query_vector, candidate_pool_size, filter, similarity_threshold, **kwargs)
 
-        keyword_results = self.full_text_search(query_text, candidate_pool_size, filter, **kwargs)
+        keyword_results = self.full_text_search(query_text, candidate_pool_size, filter, similarity_threshold, **kwargs)
 
         all_docs = {doc.id: doc for doc in dense_results}
         all_docs.update({doc.id: doc for doc in keyword_results})

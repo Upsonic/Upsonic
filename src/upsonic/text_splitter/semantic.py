@@ -1,549 +1,235 @@
 from __future__ import annotations
-from typing import List, Any, Literal, Optional, Dict
+
+import asyncio
+import logging
 import re
-import time
-import numpy as np
-from pydantic import Field
+from enum import Enum
+from typing import Callable, List
 
-from upsonic.text_splitter.base import ChunkingStrategy, ChunkingConfig
-from upsonic.schemas.data_models import Document, Chunk
+from pydantic import Field, field_validator, ValidationInfo
+try:
+    import numpy as np
+except ImportError:
+    raise ImportError(
+        "numpy is required for the SemanticChunker. "
+        "Please install it with 'pip install numpy'."
+    )
+
+from upsonic.schemas.data_models import Chunk, Document
 from upsonic.embeddings.base import EmbeddingProvider
+from upsonic.text_splitter.base import BaseChunkingConfig, BaseChunker
 
-BreakpointThresholdType = Literal["percentile", "standard_deviation", "interquartile"]
+logger = logging.getLogger(__name__)
 
-
-class SemanticChunkingConfig(ChunkingConfig):
-    """Enhanced configuration for semantic similarity chunking."""
-    buffer_size: int = Field(1, description="Number of sentences to include before and after for context")
-    breakpoint_threshold_type: BreakpointThresholdType = Field("percentile", description="Statistical method for breakpoint detection")
-    breakpoint_threshold_amount: float = Field(95, description="Threshold value for breakpoint detection")
-    
-    enable_topic_modeling: bool = Field(False, description="Enable topic modeling for better boundaries")
-    min_semantic_chunk_size: int = Field(100, description="Minimum size for semantic chunks")
-    max_semantic_chunk_size: int = Field(3000, description="Maximum size for semantic chunks")
-    
-    sentence_similarity_threshold: float = Field(0.7, description="Minimum similarity to group sentences")
-    enable_sentence_grouping: bool = Field(True, description="Group similar consecutive sentences")
-    
-    enable_embedding_cache: bool = Field(True, description="Cache sentence embeddings")
-    batch_embedding_size: int = Field(50, description="Batch size for embedding generation")
-    
-    merge_small_chunks: bool = Field(True, description="Merge chunks smaller than min_semantic_chunk_size")
-    split_large_chunks: bool = Field(True, description="Split chunks larger than max_semantic_chunk_size")
-    preserve_sentence_integrity: bool = Field(True, description="Never split in the middle of sentences")
-
-class SemanticSimilarityChunkingStrategy(ChunkingStrategy):
+class BreakpointThresholdType(str, Enum):
     """
-    Semantic similarity chunking strategy with framework-level features.
-
-    This sophisticated method splits documents based on semantic similarity,
-    identifying breakpoints where topics shift.
-    
-    Features:
-    - Advanced topic modeling and boundary detection
-    - Sentence grouping and similarity analysis
-    - Performance optimization with embedding caching
-    - Quality controls for chunk size management
-    - Batch processing and async support
-    - Comprehensive metrics and monitoring
-
-    This method operates by:
-    1. Splitting the document into individual sentences
-    2. Embedding each sentence within contextual windows
-    3. Calculating semantic distances between consecutive sentences
-    4. Identifying statistically significant topic breaks
-    5. Grouping sentences into semantically coherent chunks
-    6. Applying quality controls and optimizations
-
-
+    Defines the statistical method used to determine the threshold for a topic break.
     """
+    PERCENTILE = "percentile"
+    STD_DEV = "standard_deviation"
+    INTERQUARTILE = "interquartile"
+    GRADIENT = "gradient"
 
-    def __init__(self, embedding_provider: EmbeddingProvider, config: Optional[SemanticChunkingConfig] = None):
-        """
-        Initialize semantic similarity chunking strategy.
 
-        Args:
-            embedding_provider: EmbeddingProvider instance for generating vectors
-            config: Configuration object with all settings
-        """
-        if not isinstance(embedding_provider, EmbeddingProvider):
-            raise TypeError("An instance of EmbeddingProvider is required.")
-        
-        if config is None:
-            config = SemanticChunkingConfig()
-        
-        super().__init__(config)
-        
-        self.embedding_provider = embedding_provider
-        
-        self.buffer_size = self.config.buffer_size
-        self.breakpoint_threshold_type = self.config.breakpoint_threshold_type
-        self.breakpoint_threshold_amount = self.config.breakpoint_threshold_amount
-        
-        self._embedding_cache: Dict[str, List[float]] = {}
-        self._sentence_cache: Dict[str, List[str]] = {}
-        self._distance_cache: Dict[str, List[float]] = {}
+def default_sentence_splitter(text: str) -> List[str]:
+    pattern = r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|!)\s'
+    sentences = re.split(pattern, text)
+    return [s for s in sentences if s and s.strip()]
 
-    async def chunk(self, document: Document) -> List[Chunk]:
-        """
-        Semantic chunking pipeline with framework features.
-        
-        Args:
-            document: Document to chunk
-            
-        Returns:
-            List of semantically coherent chunks
-        """
-        start_time = time.time()
-        
-        if not document.content.strip():
-            return []
-        
-        cache_key = self._get_cache_key(document.content) if self.config.enable_embedding_cache else None
-        if cache_key and cache_key in self._sentence_cache:
-            sentences = self._sentence_cache[cache_key]
-        else:
-            sentences = self._split_into_sentences_enhanced(document.content)
-            if cache_key:
-                self._sentence_cache[cache_key] = sentences
 
-        if len(sentences) <= 1:
-            chunk = self._create_chunk(
-                text_content=document.content,
-                document=document,
-                chunk_index=0,
-                total_chunks=1
-            )
-            chunk.metadata['semantic_analysis'] = 'single_sentence'
-            return [chunk]
+class SemanticChunkingConfig(BaseChunkingConfig):
+    """
+    A specialized configuration model for the data-driven Semantic Chunker.
 
-        sentence_embeddings = await self._embed_contextual_sentences_enhanced(sentences, cache_key)
-
-        distances = self._calculate_semantic_distances_enhanced(sentence_embeddings)
-
-        breakpoint_indices = self._detect_breakpoints_enhanced(distances, sentences)
-
-        if self.config.enable_sentence_grouping:
-            breakpoint_indices = self._refine_breakpoints_with_grouping(
-                sentences, sentence_embeddings, breakpoint_indices
-            )
-
-        initial_chunks = self._create_semantic_chunks(
-            sentences, breakpoint_indices, document
+    This config requires an embedding provider and provides fine-grained control
+    over the statistical methods used to identify semantic boundaries in text.
+    """
+    embedding_provider: EmbeddingProvider = Field(
+        ...,
+        description=(
+            "A required, initialized instance of an EmbeddingProvider (e.g., "
+            "OpenAIEmbedding). This will be used to generate the embeddings for "
+            "semantic analysis."
+        ),
+        exclude=True
+    )
+    breakpoint_threshold_type: BreakpointThresholdType = Field(
+        default=BreakpointThresholdType.PERCENTILE,
+        description=(
+            "The statistical method to use for identifying topic breaks. 'PERCENTILE' "
+            "is a robust default."
         )
+    )
+    breakpoint_threshold_amount: float = Field(
+        default=95.0,
+        description=(
+            "The numeric value for the chosen threshold type. For PERCENTILE, this "
+            "is the percentile (0-100). For STD_DEV, it's the number of standard "
+            "deviations above the mean."
+        )
+    )
+    sentence_splitter: Callable[[str], List[str]] = Field(
+        default_factory=lambda: default_sentence_splitter,
+        description=(
+            "A function that takes a string and returns a list of sentence strings. "
+            "Defaults to a regex-based splitter, but can be replaced with more "
+            "advanced tokenizers like from NLTK or spaCy."
+        ),
+        exclude=True
+    )
 
-        overlapped_chunks = self._apply_semantic_overlap(initial_chunks, sentences, document)
+    class Config:
+        arbitrary_types_allowed = True
 
-        final_chunks = self._apply_quality_controls(overlapped_chunks, document)
+    @field_validator("breakpoint_threshold_amount")
+    @classmethod
+    def validate_threshold_amount(
+        cls, v: float, info: ValidationInfo
+    ) -> float:
+        if "breakpoint_threshold_type" in info.data:
+            threshold_type = info.data["breakpoint_threshold_type"]
+            if threshold_type == BreakpointThresholdType.PERCENTILE and not (0 <= v <= 100):
+                raise ValueError("PERCENTILE threshold amount must be between 0 and 100.")
+        return v
 
-        processing_time = (time.time() - start_time) * 1000
-        self._update_metrics(final_chunks, processing_time, document)
 
-        return final_chunks
+class _Sentence:
+    def __init__(self, text: str, start_index: int, end_index: int):
+        self.text = text
+        self.start_index = start_index
+        self.end_index = end_index
+        self.embedding: List[float] = []
 
-    def _get_cache_key(self, text: str) -> str:
-        """Generate cache key for text content."""
-        import hashlib
-        return hashlib.md5(text.encode()).hexdigest()[:16]
-    
-    def _split_into_sentences_enhanced(self, text: str) -> List[str]:
-        """Sentence splitting with better handling of edge cases."""
-        sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', text)
-        
-        cleaned_sentences = []
-        for sentence in sentences:
-            sentence = sentence.strip()
-            if sentence and len(sentence) > 10:
-                cleaned_sentences.append(sentence)
-        
-        return cleaned_sentences
 
-    def _split_into_sentences(self, text: str) -> List[str]:
-        """Legacy sentence splitting method for backward compatibility."""
-        return self._split_into_sentences_enhanced(text)
 
-    async def _embed_contextual_sentences_enhanced(self, sentences: List[str], cache_key: Optional[str] = None) -> List[List[float]]:
-        """Contextual embedding with caching and batch processing."""
-        if cache_key and cache_key in self._embedding_cache:
-            return self._embedding_cache[cache_key]
-        
-        contextual_sentences: List[str] = []
-        for i in range(len(sentences)):
-            start = max(0, i - self.config.buffer_size)
-            end = min(len(sentences), i + 1 + self.config.buffer_size)
+class SemanticChunker(BaseChunker[SemanticChunkingConfig]):
+    """
+    An advanced chunker that splits text based on semantic topic shifts.
+
+    This chunker identifies boundaries by embedding individual sentences and finding
+    points of high cosine distance between adjacent sentences, indicating a change
+    in topic. It is an asynchronous process that leverages an `EmbeddingProvider`.
+    """
+
+    def __init__(self, config: SemanticChunkingConfig):
+        """
+        Initializes the chunker with a specific configuration.
+        Note: A config with an `embedding_provider` is required for this chunker.
+        """
+        super().__init__(config)
+
+    def _chunk_document(self, document: Document) -> List[Chunk]:
+        try:
+            loop = asyncio.get_running_loop()
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, self._achunk_document(document))
+                return future.result()
+        except RuntimeError:
+            return asyncio.run(self._achunk_document(document))
+
+    async def _achunk_document(self, document: Document) -> List[Chunk]:
+        sentences = self._segment_into_sentences(document.content)
+        if len(sentences) < 2:
+            return [self._create_chunk(document, document.content, 0, len(document.content))]
             
-            context = " ".join(sentences[start:end])
-            contextual_sentences.append(context)
-        
-        embeddings = []
-        batch_size = self.config.batch_embedding_size
-        
-        for i in range(0, len(contextual_sentences), batch_size):
-            batch = contextual_sentences[i:i + batch_size]
-            mock_chunks = [Chunk(text_content=s, metadata={}, document_id="temp") for s in batch]
-            batch_embeddings = await self.embedding_provider.embed_documents(mock_chunks)
-            embeddings.extend(batch_embeddings)
-        
-        if cache_key and self.config.enable_embedding_cache:
-            self._embedding_cache[cache_key] = embeddings
-        
-        return embeddings
-    
-    async def _embed_contextual_sentences(self, sentences: List[str]) -> List[List[float]]:
-        """Legacy method for backward compatibility."""
-        return await self._embed_contextual_sentences_enhanced(sentences)
+        sentence_texts = [s.text for s in sentences]
+        embeddings = await self.config.embedding_provider.embed_texts(sentence_texts, show_progress=False)
+        for i, sentence in enumerate(sentences):
+            sentence.embedding = embeddings[i]
 
-    def _calculate_semantic_distances_enhanced(self, embeddings: List[List[float]]) -> List[float]:
-        """Distance calculation with better normalization and edge case handling."""
-        if len(embeddings) < 2:
+        distances = self._calculate_distances(sentences)
+        threshold = self._calculate_breakpoint_threshold(distances)
+        breakpoints = [i for i, dist in enumerate(distances) if dist > threshold]
+        all_chunks: List[Chunk] = []
+        start_sentence_idx = 0
+        for breakpoint_idx in breakpoints:
+            end_sentence_idx = breakpoint_idx + 1
+            chunk_sentences = sentences[start_sentence_idx:end_sentence_idx]
+            if chunk_sentences:
+                text = " ".join(s.text for s in chunk_sentences)
+                all_chunks.append(self._create_chunk(
+                    document, text, chunk_sentences[0].start_index, chunk_sentences[-1].end_index
+                ))
+            start_sentence_idx = end_sentence_idx
+
+        final_group = sentences[start_sentence_idx:]
+        if final_group:
+            text = " ".join(s.text for s in final_group)
+            all_chunks.append(self._create_chunk(
+                document, text, final_group[0].start_index, final_group[-1].end_index
+            ))
+
+        if not all_chunks:
             return []
+
+        min_chunk_size = self._get_effective_min_chunk_size()
+
+        if len(all_chunks) > 1 and self.config.length_function(all_chunks[-1].text_content) < min_chunk_size:
+            last_chunk = all_chunks.pop()
+            previous_chunk = all_chunks.pop()
+            
+            merged_text = previous_chunk.text_content.rstrip() + " " + last_chunk.text_content.lstrip()
+            
+            merged_chunk = self._create_chunk(
+                parent_document=document,
+                text_content=merged_text,
+                start_index=previous_chunk.start_index,
+                end_index=last_chunk.end_index,
+                extra_metadata=previous_chunk.metadata
+            )
+            all_chunks.append(merged_chunk)
+            
+        return all_chunks
+
+    def _segment_into_sentences(self, text: str) -> List[_Sentence]:
+        sentence_strings = self.config.sentence_splitter(text)
+        sentences: List[_Sentence] = []
+        cursor = 0
         
+        for s_text in sentence_strings:
+            try:
+                start_index = text.find(s_text, cursor)
+                if start_index == -1:
+                    start_index = text.find(s_text)
+                    if start_index == -1:
+                        logger.warning(f"Could not find sentence '{s_text[:30]}...' in the original text. Skipping.")
+                        continue
+                
+                end_index = start_index + len(s_text)
+                sentences.append(_Sentence(s_text, start_index, end_index))
+                cursor = end_index
+                
+            except Exception as e:
+                logger.warning(f"Error processing sentence '{s_text[:30]}...': {e}. Skipping.")
+                continue
+                
+        return sentences
+        
+    def _calculate_distances(self, sentences: List[_Sentence]) -> List[float]:
         distances: List[float] = []
-        for i in range(len(embeddings) - 1):
-            embedding_current = np.array(embeddings[i])
-            embedding_next = np.array(embeddings[i + 1])
-            
-            norm_current = embedding_current / (np.linalg.norm(embedding_current) + 1e-8)
-            norm_next = embedding_next / (np.linalg.norm(embedding_next) + 1e-8)
-            
-            similarity = np.dot(norm_current, norm_next)
-            
-            similarity = np.clip(similarity, -1.0, 1.0)
-            
-            distance = 1 - similarity
-            distances.append(float(distance))
-            
+        for i in range(len(sentences) - 1):
+            emb_curr = np.array(sentences[i].embedding)
+            emb_next = np.array(sentences[i+1].embedding)
+            similarity = np.dot(emb_curr, emb_next) / (np.linalg.norm(emb_curr) * np.linalg.norm(emb_next))
+            distances.append(1 - similarity)
         return distances
 
-    def _calculate_cosine_distances(self, embeddings: List[List[float]]) -> List[float]:
-        """Legacy method for backward compatibility."""
-        return self._calculate_semantic_distances_enhanced(embeddings)
-    
-    def _detect_breakpoints_enhanced(self, distances: List[float], sentences: List[str]) -> List[int]:
-        """Breakpoint detection with multiple criteria."""
-        if not distances:
-            return []
-        
-        threshold = self._calculate_breakpoint_threshold(distances)
-        
-        candidate_breakpoints = []
-        for i, distance in enumerate(distances):
-            if distance > threshold:
-                candidate_breakpoints.append(i)
-        
-        refined_breakpoints = self._refine_breakpoints(
-            candidate_breakpoints, distances, sentences
-        )
-        
-        return refined_breakpoints
-    
     def _calculate_breakpoint_threshold(self, distances: List[float]) -> float:
-        """Threshold calculation with better statistical methods."""
         if not distances:
             return 0.0
-        
-        distances_array = np.array(distances)
-        
-        if self.config.breakpoint_threshold_type == "percentile":
-            return float(np.percentile(distances_array, self.config.breakpoint_threshold_amount))
-        
-        elif self.config.breakpoint_threshold_type == "standard_deviation":
-            mean = np.mean(distances_array)
-            std_dev = np.std(distances_array)
-            return float(mean + (self.config.breakpoint_threshold_amount * std_dev))
-            
-        elif self.config.breakpoint_threshold_type == "interquartile":
-            q1, q3 = np.percentile(distances_array, [25, 75])
-            iqr = q3 - q1
-            return float(q3 + (self.config.breakpoint_threshold_amount * iqr))
-            
-        else:
-            raise ValueError(f"Unknown breakpoint_threshold_type: {self.config.breakpoint_threshold_type}")
-    
-    def _refine_breakpoints(self, breakpoints: List[int], distances: List[float], sentences: List[str]) -> List[int]:
-        """Refine breakpoints based on sentence context and quality."""
-        if not breakpoints:
-            return breakpoints
-        
-        refined = []
-        
-        for bp in breakpoints:
-            if self._is_valid_breakpoint(bp, distances, sentences):
-                refined.append(bp)
-        
-        final_breakpoints = []
-        last_bp = -10
-        
-        for bp in refined:
-            if bp - last_bp >= 2:
-                final_breakpoints.append(bp)
-                last_bp = bp
-        
-        return final_breakpoints
-    
-    def _is_valid_breakpoint(self, breakpoint: int, distances: List[float], sentences: List[str]) -> bool:
-        """Check if a breakpoint is valid based on context."""
-        if breakpoint < len(sentences) - 1:
-            current_sentence = sentences[breakpoint]
-            next_sentence = sentences[breakpoint + 1]
-            
-            if len(current_sentence) < 20 or len(next_sentence) < 20:
-                return False
-        
-        return True
-    
-    def _refine_breakpoints_with_grouping(
-        self, 
-        sentences: List[str], 
-        embeddings: List[List[float]], 
-        breakpoints: List[int]
-    ) -> List[int]:
-        """Refine breakpoints using sentence similarity grouping."""
-        if not self.config.enable_sentence_grouping or not breakpoints:
-            return breakpoints
-        
-        grouped_breakpoints = []
-        
-        for bp in breakpoints:
-            should_keep = True
-            
-            if bp > 0 and bp < len(embeddings) - 1:
-                prev_emb = np.array(embeddings[bp - 1])
-                curr_emb = np.array(embeddings[bp])
-                next_emb = np.array(embeddings[bp + 1])
-                
-                prev_sim = np.dot(prev_emb, curr_emb) / (np.linalg.norm(prev_emb) * np.linalg.norm(curr_emb))
-                next_sim = np.dot(curr_emb, next_emb) / (np.linalg.norm(curr_emb) * np.linalg.norm(next_emb))
-                
-                if (prev_sim > self.config.sentence_similarity_threshold or 
-                    next_sim > self.config.sentence_similarity_threshold):
-                    should_keep = False
-            
-            if should_keep:
-                grouped_breakpoints.append(bp)
-        
-        return grouped_breakpoints
-    
-    def _create_semantic_chunks(
-        self, 
-        sentences: List[str], 
-        breakpoint_indices: List[int], 
-        document: Document
-    ) -> List[Chunk]:
-        """Create chunks with metadata from semantic analysis."""
-        chunks = []
-        start_index = 0
 
-        for end_index in breakpoint_indices:
-            group = sentences[start_index : end_index + 1]
-            chunk_text = " ".join(group)
-            
-            chunk = self._create_chunk(
-                text_content=chunk_text,
-                document=document,
-                chunk_index=len(chunks),
-                total_chunks=len(breakpoint_indices) + 1,
-                start_pos=start_index,
-                end_pos=end_index + 1
-            )
-            
-            chunk.metadata.update({
-                'semantic_analysis': 'breakpoint_detected',
-                'sentence_count': len(group),
-                'semantic_coherence': 'high'
-            })
-            
-            chunks.append(chunk)
-            start_index = end_index + 1
+        amount = self.config.breakpoint_threshold_amount
+        method = self.config.breakpoint_threshold_type
 
-        if start_index < len(sentences):
-            last_group = sentences[start_index:]
-            last_group_text = " ".join(last_group)
-            
-            chunk = self._create_chunk(
-                text_content=last_group_text,
-                document=document,
-                chunk_index=len(chunks),
-                total_chunks=len(chunks) + 1,
-                start_pos=start_index,
-                end_pos=len(sentences)
-            )
-            
-            chunk.metadata.update({
-                'semantic_analysis': 'final_group',
-                'sentence_count': len(last_group),
-                'semantic_coherence': 'high'
-            })
-            
-            chunks.append(chunk)
-        
-        return chunks
-    
-    def _apply_quality_controls(self, chunks: List[Chunk], document: Document) -> List[Chunk]:
-        """Apply quality controls to ensure good chunk sizes and coherence."""
-        if not chunks:
-            return chunks
-        
-        processed_chunks = []
-        
-        for chunk in chunks:
-            chunk_size = len(chunk.text_content)
-            
-            if chunk_size < self.config.min_semantic_chunk_size and self.config.merge_small_chunks:
-                if processed_chunks:
-                    prev_chunk = processed_chunks[-1]
-                    merged_content = prev_chunk.text_content + " " + chunk.text_content
-                    prev_chunk.text_content = merged_content
-                    prev_chunk.metadata['merged_small_chunk'] = True
-                    continue
-            
-            if chunk_size > self.config.max_semantic_chunk_size and self.config.split_large_chunks:
-                split_chunks = self._split_large_semantic_chunk(chunk, document)
-                processed_chunks.extend(split_chunks)
-            else:
-                processed_chunks.append(chunk)
-        
-        for i, chunk in enumerate(processed_chunks):
-            chunk.metadata['chunk_index'] = i
-            chunk.metadata['total_chunks'] = len(processed_chunks)
-        
-        return processed_chunks
-    
-    def _split_large_semantic_chunk(self, chunk: Chunk, document: Document) -> List[Chunk]:
-        """Split a large chunk while preserving sentence integrity."""
-        if not self.config.preserve_sentence_integrity:
-            content = chunk.text_content
-            target_size = self.config.max_semantic_chunk_size
-            
-            sub_chunks = []
-            for i in range(0, len(content), target_size):
-                sub_content = content[i:i + target_size]
-                if sub_content.strip():
-                    sub_chunk = self._create_chunk(
-                        text_content=sub_content,
-                        document=document,
-                        chunk_index=len(sub_chunks),
-                        total_chunks=1
-                    )
-                    sub_chunk.metadata.update(chunk.metadata)
-                    sub_chunk.metadata['split_from_large'] = True
-                    sub_chunks.append(sub_chunk)
-            
-            return sub_chunks if sub_chunks else [chunk]
-        
-        sentences = self._split_into_sentences_enhanced(chunk.text_content)
-        if len(sentences) <= 1:
-            return [chunk]
-        
-        sub_chunks = []
-        current_sentences = []
-        current_size = 0
-        
-        for sentence in sentences:
-            sentence_size = len(sentence)
-            
-            if current_size + sentence_size > self.config.max_semantic_chunk_size and current_sentences:
-                sub_content = " ".join(current_sentences)
-                sub_chunk = self._create_chunk(
-                    text_content=sub_content,
-                    document=document,
-                    chunk_index=len(sub_chunks),
-                    total_chunks=1
-                )
-                sub_chunk.metadata.update(chunk.metadata)
-                sub_chunk.metadata['split_from_large'] = True
-                sub_chunks.append(sub_chunk)
-                
-                current_sentences = [sentence]
-                current_size = sentence_size
-            else:
-                current_sentences.append(sentence)
-                current_size += sentence_size
-        
-        if current_sentences:
-            sub_content = " ".join(current_sentences)
-            sub_chunk = self._create_chunk(
-                text_content=sub_content,
-                document=document,
-                chunk_index=len(sub_chunks),
-                total_chunks=1
-            )
-            sub_chunk.metadata.update(chunk.metadata)
-            sub_chunk.metadata['split_from_large'] = True
-            sub_chunks.append(sub_chunk)
-        
-        return sub_chunks
-    
-    def _apply_semantic_overlap(self, chunks: List[Chunk], sentences: List[str], document: Document) -> List[Chunk]:
-        """Apply semantic-aware overlap between chunks."""
-        if len(chunks) <= 1 or self.config.chunk_overlap == 0:
-            return chunks
-        
-        overlapped_chunks = []
-        
-        for i, chunk in enumerate(chunks):
-            if i == 0:
-                overlapped_chunks.append(chunk)
-                continue
-            
-            prev_chunk = chunks[i - 1]
-            overlap_content = self._create_semantic_overlap(prev_chunk, chunk, sentences)
-            
-            if overlap_content:
-                enhanced_content = overlap_content + " " + chunk.text_content
-                chunk.text_content = enhanced_content
-                chunk.metadata['has_semantic_overlap'] = True
-                chunk.metadata['overlap_length'] = len(overlap_content)
-            
-            overlapped_chunks.append(chunk)
-        
-        return overlapped_chunks
-    
-    def _create_semantic_overlap(self, prev_chunk: Chunk, current_chunk: Chunk, sentences: List[str]) -> str:
-        """Create semantic-aware overlap between two chunks."""
-        prev_text = prev_chunk.text_content
-        overlap_size = self.config.chunk_overlap
-        
-        if overlap_size <= 0:
-            return ""
-        
-        if len(prev_text) <= overlap_size:
-            overlap_text = prev_text
+        if method == BreakpointThresholdType.PERCENTILE:
+            return float(np.percentile(distances, amount))
+        elif method == BreakpointThresholdType.STD_DEV:
+            return float(np.mean(distances) + amount * np.std(distances))
+        elif method == BreakpointThresholdType.INTERQUARTILE:
+            q1, q3 = np.percentile(distances, [25, 75])
+            return float(np.mean(distances) + amount * (q3 - q1))
+        elif method == BreakpointThresholdType.GRADIENT:
+            return float(np.percentile(np.gradient(distances), amount))
         else:
-            prev_sentences = self._split_into_sentences_enhanced(prev_text)
-            
-            overlap_sentences = []
-            current_length = 0
-            
-            for sentence in reversed(prev_sentences):
-                sentence_length = len(sentence)
-                if current_length + sentence_length <= overlap_size:
-                    overlap_sentences.insert(0, sentence)
-                    current_length += sentence_length
-                else:
-                    if not overlap_sentences and sentence_length <= overlap_size * 1.2:
-                        overlap_sentences.insert(0, sentence)
-                    break
-            
-            overlap_text = " ".join(overlap_sentences)
-        
-        return overlap_text.strip()
-    
-    def get_semantic_stats(self) -> Dict[str, Any]:
-        """Get statistics about semantic chunking performance."""
-        return {
-            "embedding_cache_size": len(self._embedding_cache),
-            "sentence_cache_size": len(self._sentence_cache),
-            "distance_cache_size": len(self._distance_cache),
-            "buffer_size": self.config.buffer_size,
-            "threshold_type": self.config.breakpoint_threshold_type,
-            "threshold_amount": self.config.breakpoint_threshold_amount,
-            "sentence_grouping_enabled": self.config.enable_sentence_grouping,
-            "embedding_cache_enabled": self.config.enable_embedding_cache
-        }
-    
-    def clear_semantic_caches(self):
-        """Clear all semantic analysis caches."""
-        self._embedding_cache.clear()
-        self._sentence_cache.clear()
-        self._distance_cache.clear()
+            raise ValueError(f"Unknown breakpoint threshold type: {method}")

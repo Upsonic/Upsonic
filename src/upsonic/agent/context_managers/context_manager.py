@@ -181,7 +181,7 @@ class ContextManager:
                 page_number = result.metadata.get('page_number', 'Unknown')
                 chunk_id = result.chunk_id or result.metadata.get('chunk_id', 'Unknown')
 
-                retrieved_keys = {'source', 'page_number', 'chunk_id'}
+                retrieved_keys = {'source', 'page_number', 'chunk_id', 'chunk'}
                 metadata_parts = [f"source: {source}"]
                 if page_number is not None:
                     metadata_parts.append(f"page: {page_number}")
@@ -260,6 +260,7 @@ class ContextManager:
     async def manage_context(self, memory_handler: Optional[MemoryManager] = None):
         """The asynchronous context manager for building the task-specific context."""
         self.context_prompt = await self._build_context_prompt(memory_handler)
+        print(f"\n\nContext Prompt: \n\n{self.context_prompt}\n\n")
         self.task.context_formatted = self.context_prompt
             
         try:

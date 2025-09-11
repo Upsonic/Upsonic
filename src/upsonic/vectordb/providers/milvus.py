@@ -107,6 +107,11 @@ class MilvusProvider(BaseVectorDBProvider):
                 "must be specified in CoreConfig (e.g., './milvus.db')."
             )
 
+        if self._config.core.mode == Mode.CLOUD and not self._config.core.host:
+            raise ConfigurationError(
+                "For 'cloud' mode with Milvus, a `host` must be specified in CoreConfig."
+            )
+
         if self._config.core.distance_metric not in self._DISTANCE_MAP:
             raise ConfigurationError(
                 f"Distance metric '{self._config.core.distance_metric}' is not "
@@ -205,7 +210,7 @@ class MilvusProvider(BaseVectorDBProvider):
             fields.append(sparse_vector_field)
         
         if self._config.indexing.payload_indexes:
-            reserved_names = ["id", "dense_vector", "sparse_vector"]
+            reserved_names = ["id", "dense_vector", "sparse_vector", "chunk"]
             for payload_index in self._config.indexing.payload_indexes:
                 field_name = payload_index.field_name
                 if field_name in reserved_names:
@@ -234,29 +239,49 @@ class MilvusProvider(BaseVectorDBProvider):
         index_cfg = self._config.indexing.index_config
         metric_type = self._DISTANCE_MAP[self._config.core.distance_metric]
 
-        if isinstance(index_cfg, HNSWTuningConfig):
-            return {
-                "metric_type": metric_type,
-                "index_type": "HNSW",
-                "params": {
-                    "M": index_cfg.m,
-                    "efConstruction": index_cfg.ef_construction,
-                },
-            }
-        elif isinstance(index_cfg, IVFTuningConfig):
-            return {
-                "metric_type": metric_type,
-                "index_type": "IVF_FLAT",
-                "params": {"nlist": index_cfg.nlist},
-            }
-        elif isinstance(index_cfg, FlatTuningConfig):
-            return {
-                "metric_type": metric_type,
-                "index_type": "FLAT",
-                "params": {},
-            }
+        if self._config.core.mode == Mode.EMBEDDED:
+            if isinstance(index_cfg, HNSWTuningConfig):
+                return {
+                    "metric_type": metric_type,
+                    "index_type": "FLAT",
+                    "params": {},
+                }
+            elif isinstance(index_cfg, IVFTuningConfig):
+                return {
+                    "metric_type": metric_type,
+                    "index_type": "IVF_FLAT",
+                    "params": {"nlist": index_cfg.nlist},
+                }
+            elif isinstance(index_cfg, FlatTuningConfig):
+                return {
+                    "metric_type": metric_type,
+                    "index_type": "FLAT",
+                    "params": {},
+                }
         else:
-            raise ConfigurationError(f"Unsupported index type: {index_cfg.index_type}")
+            if isinstance(index_cfg, HNSWTuningConfig):
+                return {
+                    "metric_type": metric_type,
+                    "index_type": "HNSW",
+                    "params": {
+                        "M": index_cfg.m,
+                        "efConstruction": index_cfg.ef_construction,
+                    },
+                }
+            elif isinstance(index_cfg, IVFTuningConfig):
+                return {
+                    "metric_type": metric_type,
+                    "index_type": "IVF_FLAT",
+                    "params": {"nlist": index_cfg.nlist},
+                }
+            elif isinstance(index_cfg, FlatTuningConfig):
+                return {
+                    "metric_type": metric_type,
+                    "index_type": "FLAT",
+                    "params": {},
+                }
+        
+        raise ConfigurationError(f"Unsupported index type: {index_cfg.index_type}")
 
 
     def connect(self) -> None:
@@ -282,12 +307,15 @@ class MilvusProvider(BaseVectorDBProvider):
             self._is_connected = True
             print("MilvusProvider: Connection successful.")
 
-            if utility.has_collection(self._config.core.collection_name, using=alias):
-                self._collection = Collection(
-                    name=self._config.core.collection_name, 
-                    using=alias
-                )
-                print(f"MilvusProvider: Attached to existing collection '{self._config.core.collection_name}'.")
+            try:
+                if utility.has_collection(self._config.core.collection_name, using=alias):
+                    self._collection = Collection(
+                        name=self._config.core.collection_name, 
+                        using=alias
+                    )
+                    print(f"MilvusProvider: Attached to existing collection '{self._config.core.collection_name}'.")
+            except MilvusException as e:
+                print(f"MilvusProvider: Could not check collection existence: {e}")
 
         except MilvusException as e:
             self._is_connected = False
@@ -622,7 +650,7 @@ class MilvusProvider(BaseVectorDBProvider):
 
         return " and ".join(clauses) if clauses else None
 
-    def search(self, top_k: Optional[int] = None, query_vector: Optional[List[float]] = None, query_text: Optional[str] = None, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, **kwargs) -> List[VectorSearchResult]:
+    def search(self, top_k: Optional[int] = None, query_vector: Optional[List[float]] = None, query_text: Optional[str] = None, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         """
         Master search dispatcher. Routes queries to the appropriate specialized
         search method based on provided arguments and collection configuration.
@@ -639,21 +667,23 @@ class MilvusProvider(BaseVectorDBProvider):
         
         if is_hybrid:
             if not self._config.search.hybrid_search_enabled: raise ConfigurationError("Hybrid search is disabled.")
-            return self.hybrid_search(query_vector, query_text, k, final_filter, alpha, fusion_method, **kwargs)
+            return self.hybrid_search(query_vector, query_text, k, final_filter, alpha, fusion_method, similarity_threshold, **kwargs)
         elif is_dense:
             if not self._config.search.dense_search_enabled: raise ConfigurationError("Dense search is disabled.")
-            return self.dense_search(query_vector, k, final_filter, **kwargs)
+            return self.dense_search(query_vector, k, final_filter, similarity_threshold, **kwargs)
         elif is_full_text:
             if not self._config.search.full_text_search_enabled: raise ConfigurationError("Full-text search is disabled.")
-            return self.full_text_search(query_text, k, final_filter, **kwargs)
+            return self.full_text_search(query_text, k, final_filter, similarity_threshold, **kwargs)
         else:
             raise SearchError("Search requires at least one of 'query_vector' or 'query_text'.")
 
-    def dense_search(self, query_vector: List[float], top_k: int, filter: Optional[Dict[str, Any]] = None, **kwargs) -> List[VectorSearchResult]:
+    def dense_search(self, query_vector: List[float], top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         """Performs a pure dense vector similarity search."""
-        self._ensure_collection_handle()
         if not self._config.indexing.create_dense_index:
             raise ConfigurationError("Dense search is not possible; no dense index was created for this collection.")
+        self._ensure_collection_handle()
+        
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
         
         params = {"metric_type": self._DISTANCE_MAP[self._config.core.distance_metric], "params": {}}
         index_cfg = self._config.indexing.index_config
@@ -680,20 +710,24 @@ class MilvusProvider(BaseVectorDBProvider):
                 
                 payload = {k: v for k, v in entity_data.items() if k not in ['id', 'dense_vector', 'sparse_vector', 'chunk']}
                 
-                search_results.append(VectorSearchResult(
-                    id=hit.id, 
-                    score=hit.distance, 
-                    payload=payload, 
-                    vector=entity_data.get('dense_vector'), 
-                    text=entity_data.get('chunk')
-                ))
+                if hit.distance >= final_similarity_threshold:
+                    search_results.append(VectorSearchResult(
+                        id=hit.id, 
+                        score=hit.distance, 
+                        payload=payload, 
+                        vector=entity_data.get('dense_vector'), 
+                        text=entity_data.get('chunk')
+                    ))
             return search_results
         except MilvusException as e:
             raise SearchError(f"Failed to perform dense search in Milvus: {e}")
 
-    def full_text_search(self, query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, **kwargs) -> List[VectorSearchResult]:
+    def full_text_search(self, query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         """Performs true full-text search using the best available index."""
         self._ensure_collection_handle()
+        
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
+        
         filter_expr = self._build_filter_expression(filter)
 
         try:
@@ -720,18 +754,29 @@ class MilvusProvider(BaseVectorDBProvider):
                 final_expr = f"({text_expr}) and ({filter_expr})" if filter_expr else text_expr
                 
                 hits = self._collection.query(expr=final_expr, limit=top_k, output_fields=["*"])
-                return [VectorSearchResult(id=hit['id'], score=1.0, payload={k: v for k, v in hit.items() if k not in ['id', 'dense_vector', 'sparse_vector', 'chunk']}, text=hit['chunk']) for hit in hits]
+                filtered_results = []
+                for hit in hits:
+                    score = 1.0  # Default score for full-text search
+                    if score >= final_similarity_threshold:
+                        filtered_results.append(VectorSearchResult(
+                            id=hit['id'], 
+                            score=score, 
+                            payload={k: v for k, v in hit.items() if k not in ['id', 'dense_vector', 'sparse_vector', 'chunk']}, 
+                            text=hit['chunk']
+                        ))
+                return filtered_results
 
             search_results = []
             for hit in results[0]:
                 payload = {k: v for k, v in hit.entity.items() if k not in ['id', 'dense_vector', 'sparse_vector']}
-                search_results.append(VectorSearchResult(id=hit.id, score=hit.distance, payload=payload, vector=hit.entity.get('sparse_vector')))
+                if hit.distance >= final_similarity_threshold:
+                    search_results.append(VectorSearchResult(id=hit.id, score=hit.distance, payload=payload, vector=hit.entity.get('sparse_vector')))
             return search_results
 
         except MilvusException as e:
             raise SearchError(f"Failed to perform full-text search in Milvus: {e}")
 
-    def hybrid_search(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, **kwargs) -> List[VectorSearchResult]:
+    def hybrid_search(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         """Performs native hybrid search using Milvus's multi-vector search and server-side reranking."""
         self._ensure_collection_handle()
         
@@ -744,6 +789,8 @@ class MilvusProvider(BaseVectorDBProvider):
 
         fusion = fusion_method or self._config.search.default_fusion_method or 'weighted'
         final_alpha = alpha if alpha is not None else self._config.search.default_hybrid_alpha or 0.5
+        
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
 
         filter_expr = self._build_filter_expression(filter)
 
@@ -781,7 +828,8 @@ class MilvusProvider(BaseVectorDBProvider):
                 payload = {k: v for k, v in hit.entity['entity'].items() if k not in ['id', 'dense_vector', 'sparse_vector', 'chunk']}
                 vector = hit.entity['entity'].get('dense_vector')
                 text = hit.entity['entity'].get('chunk')
-                search_results.append(VectorSearchResult(id=hit.id, score=hit.distance, payload=payload, vector=vector, text=text))
+                if hit.distance >= final_similarity_threshold:
+                    search_results.append(VectorSearchResult(id=hit.id, score=hit.distance, payload=payload, vector=vector, text=text))
             return search_results
  
         except MilvusException as e:

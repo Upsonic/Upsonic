@@ -1,126 +1,116 @@
-from __future__ import annotations
-from typing import List, Optional, Dict, Any
-import os
-from datetime import datetime
+import asyncio
+import re
+from pathlib import Path
+from typing import List, Union
 
-from .base import DocumentLoader
-from .config import TextLoaderConfig
-from ..schemas.data_models import Document
+from upsonic.schemas.data_models import Document
+from upsonic.loaders.base import BaseLoader
+from upsonic.loaders.config import TextLoaderConfig
 
 try:
-    import chardet
+    import aiofiles
 except ImportError:
-    chardet = None
+    aiofiles = None
 
 
-class TextLoader(DocumentLoader):
+class TextLoader(BaseLoader):
     """
-    A loader for plain text (`.txt`) files.
+    A versatile and high-performance loader for various text-based files.
+
+    This loader can structure content from a single file into multiple documents
+    based on lines or paragraphs. It leverages asynchronous I/O to efficiently
+    process large numbers of files and includes options for cleaning and
+    filtering the extracted text.
     """
 
-    def __init__(self, config: Optional[TextLoaderConfig] = None):
-        """Initialize TextLoader with optional configuration."""
-        super().__init__(config)
-        self.config = config or TextLoaderConfig()
-
-    def load(self, source: str) -> List[Document]:
+    def __init__(self, config: TextLoaderConfig):
         """
-        Loads a plain text file into a single Document object.
+        Initializes the TextLoader with its specific configuration.
 
         Args:
-            source: The full file path to the .txt file.
-
-        Returns:
-            A list containing a single Document object if successful, or an
-            empty list if the file cannot be read.
+            config: A TextLoaderConfig object with settings for text processing.
         """
-        try:
-            file_path = os.path.abspath(source)
-            if not os.path.isfile(file_path):
-                raise FileNotFoundError(f"Source path '{source}' is not a valid file.")
+        super().__init__(config)
+        self.config: TextLoaderConfig = config
 
-            stats = os.stat(file_path)
-            metadata: Dict[str, Any] = {
-                "source": source,
-                "file_name": os.path.basename(file_path),
-                "file_path": file_path,
-                "file_size": stats.st_size,
-                "creation_time": datetime.fromtimestamp(stats.st_ctime).isoformat(),
-                "last_modified_time": datetime.fromtimestamp(stats.st_mtime).isoformat(),
-            }
-
-            encoding = self.config.encoding or "utf-8"
-            try:
-                with open(file_path, "r", encoding=encoding) as f:
-                    content = f.read()
-                metadata["detected_encoding"] = encoding
-            except UnicodeDecodeError:
-                if self.config.error_handling in ["warn", "raise"]:
-                    print(f"Warning: {encoding} decoding failed for '{source}'. Attempting to detect encoding.")
-                
-                if not chardet:
-                    error_msg = f"Error: `chardet` library not installed. Cannot detect encoding for '{source}'. Please run 'pip install chardet'."
-                    if self.config.error_handling == "ignore":
-                        return []
-                    elif self.config.error_handling == "warn":
-                        print(error_msg)
-                        return []
-                    else:
-                        raise ImportError(error_msg)
-                
-                with open(file_path, "rb") as f_raw:
-                    raw_data = f_raw.read()
-                    detection_result = chardet.detect(raw_data)
-                    detected_encoding = detection_result.get("encoding")
-
-                if detected_encoding:
-                    metadata["detected_encoding"] = detected_encoding
-                    if self.config.error_handling in ["warn", "raise"]:
-                        print(f"Info: Detected encoding '{detected_encoding}' for '{source}'.")
-                    content = raw_data.decode(detected_encoding)
-                else:
-                    raise IOError("Could not determine file encoding.")
-
-            if self.config.skip_empty_content and not content.strip():
-                return []
-
-            if self.config.custom_metadata:
-                metadata.update(self.config.custom_metadata)
-
-            document = Document(content=content, metadata=metadata)
-            return [document]
-
-        except FileNotFoundError as e:
-            error_msg = f"Error: [TextLoader] File not found at path: {e}"
-            return self._handle_error(error_msg, e)
-        except PermissionError as e:
-            error_msg = f"Error: [TextLoader] Permission denied for file: {e}"
-            return self._handle_error(error_msg, e)
-        except Exception as e:
-            error_msg = f"Error: [TextLoader] An unexpected error occurred while loading '{source}': {e}"
-            return self._handle_error(error_msg, e)
-
-    def _handle_error(self, message: str, exception: Exception) -> List[Document]:
-        """Handle errors based on configuration."""
-        if self.config.error_handling == "ignore":
-            return []
-        elif self.config.error_handling == "warn":
-            print(message)
-            return []
-        else:
-            raise exception
 
     @classmethod
     def get_supported_extensions(cls) -> List[str]:
-        """Get list of file extensions supported by this loader."""
-        return ['.txt']
+        """Gets a list of file extensions supported by this loader."""
+        return [
+            ".txt", ".md", ".rst", ".log", ".py", ".js", ".ts", ".java",
+            ".c", ".cpp", ".h", ".cs", ".go", ".rs", ".php", ".rb",
+            ".html", ".css", ".xml", ".json", ".yaml", ".yml", ".ini"
+        ]
 
-    @classmethod
-    def can_load(cls, source: str) -> bool:
-        """Check if this loader can handle the given source."""
-        if not source:
-            return False
-        
-        from pathlib import Path
-        source_path = Path(source)
-        return source_path.suffix.lower() in cls.get_supported_extensions()
+    def load(self, source: Union[str, Path, List[Union[str, Path]]]) -> List[Document]:
+        """
+        Loads all text documents from the given source synchronously.
+
+        This is a convenience wrapper around the async `aload` method.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, self.aload(source))
+                return future.result()
+        except RuntimeError:
+            return asyncio.run(self.aload(source))
+
+    async def aload(self, source: Union[str, Path, List[Union[str, Path]]]) -> List[Document]:
+        """
+        Loads all text documents from the given source asynchronously and concurrently.
+        """
+        file_paths = self._resolve_sources(source)
+        if not file_paths:
+            return []
+
+        tasks = [self._process_single_file(path) for path in file_paths]
+        results = await asyncio.gather(*tasks)
+
+        return [doc for doc_list in results for doc in doc_list]
+
+    def batch(self, sources: List[Union[str, Path]]) -> List[Document]:
+        """Loads documents from a list of sources, leveraging the core `load` method."""
+        return self.load(sources)
+
+    async def abatch(self, sources: List[Union[str, Path]]) -> List[Document]:
+        """Loads documents from a list of sources asynchronously, leveraging `aload`."""
+        return await self.aload(sources)
+
+ 
+
+    async def _process_single_file(self, path: Path) -> List[Document]:
+        """
+        Processes a single text file, loading its entire content into one Document.
+        """
+        try:
+            document_id = self._generate_document_id(path)
+            if document_id in self._processed_document_ids:
+                raise FileExistsError(
+                    f"Source file '{path.resolve()}' has already been processed by this loader instance."
+                )
+            self._processed_document_ids.add(document_id)
+
+            if aiofiles:
+                async with aiofiles.open(path, mode="r", encoding=self.config.encoding, errors="ignore") as f:
+                    content = await f.read()
+            else:
+                content = await asyncio.to_thread(path.read_text, self.config.encoding, "ignore")
+
+            if self.config.strip_whitespace:
+                content = content.strip()
+
+            if self.config.skip_empty_content and not content:
+                return []
+            
+            if len(content) < self.config.min_chunk_length:
+                return []
+
+            metadata = self._create_metadata(path)
+            
+            return [Document(document_id=document_id, content=content, metadata=metadata)]
+
+        except Exception as e:
+            return self._handle_loading_error(str(path), e)

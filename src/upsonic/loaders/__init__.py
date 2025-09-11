@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from .base import DocumentLoader, LoadingResult, LoadingProgress
+from .base import BaseLoader
 from .config import (
-    LoaderConfig, TextLoaderConfig, CSVLoaderConfig, PDFLoaderConfig,
+    LoaderConfig, TextLoaderConfig, CSVLoaderConfig, PdfLoaderConfig,
     DOCXLoaderConfig, JSONLoaderConfig, XMLLoaderConfig, YAMLLoaderConfig,
     MarkdownLoaderConfig, HTMLLoaderConfig, LoaderConfigFactory, simple_config, advanced_config
 )
 
 from .text import TextLoader
 from .csv import CSVLoader
-from .pdf import PDFLoader
+from .pdf import PdfLoader
 from .docx import DOCXLoader
 from .json import JSONLoader
 from .xml import XMLLoader
@@ -26,13 +26,13 @@ from .factory import (
 
 
 __all__ = [
-    'DocumentLoader', 'LoadingResult', 'LoadingProgress',
-    
-    'LoaderConfig', 'TextLoaderConfig', 'CSVLoaderConfig', 'PDFLoaderConfig',
+    'BaseLoader',
+
+    'LoaderConfig', 'TextLoaderConfig', 'CSVLoaderConfig', 'PdfLoaderConfig',
     'DOCXLoaderConfig', 'JSONLoaderConfig', 'XMLLoaderConfig', 'YAMLLoaderConfig',
     'MarkdownLoaderConfig', 'HTMLLoaderConfig', 'LoaderConfigFactory', 'simple_config', 'advanced_config',
     
-    'TextLoader', 'CSVLoader', 'PDFLoader', 'DOCXLoader',
+    'TextLoader', 'CSVLoader', 'PdfLoader', 'DOCXLoader',
     'JSONLoader', 'XMLLoader', 'YAMLLoader', 'MarkdownLoader', 'HTMLLoader',
     
     'LoaderFactory', 'get_factory', 'create_loader', 'create_loader_for_file',

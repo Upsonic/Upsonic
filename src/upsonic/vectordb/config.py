@@ -65,16 +65,16 @@ class CoreConfig(pydantic.BaseModel):
     use_tls: bool = True
     
     vector_size: int
-    vector_size_sparse: int
+    vector_size_sparse: Optional[int] = None
     distance_metric: DistanceMetric = DistanceMetric.COSINE
     
     recreate_if_exists: bool = False
 
     @pydantic.validator('host', 'api_key')
-    def cloud_requirements(cls, v, values, **kwargs):
+    def cloud_requirements(cls, v, values):
         """Validator to ensure cloud mode has the necessary credentials."""
         if values.get('mode') == Mode.CLOUD and v is None:
-            raise ValueError(f"'{kwargs['field'].name}' is required for 'cloud' mode")
+            raise ValueError("host and api_key are required for 'cloud' mode")
         return v
 
 class HNSWTuningConfig(pydantic.BaseModel):
@@ -152,6 +152,8 @@ class SearchConfig(pydantic.BaseModel):
 
     default_fusion_method: Optional[Literal['rrf', 'weighted']] = None
     
+    default_similarity_threshold: Optional[float] = None
+    
     dense_search_enabled: Optional[bool] = None
     full_text_search_enabled: Optional[bool] = None
     hybrid_search_enabled: Optional[bool] = None
@@ -160,8 +162,14 @@ class SearchConfig(pydantic.BaseModel):
 
     @pydantic.validator('default_hybrid_alpha')
     def alpha_in_range(cls, v):
-        if not (0.0 <= v <= 1.0):
+        if v is not None and not (0.0 <= v <= 1.0):
             raise ValueError("alpha must be between 0.0 and 1.0")
+        return v
+
+    @pydantic.validator('default_similarity_threshold')
+    def similarity_threshold_in_range(cls, v):
+        if v is not None and not (0.0 <= v <= 1.0):
+            raise ValueError("similarity_threshold must be between 0.0 and 1.0")
         return v
 
 class DataManagementConfig(pydantic.BaseModel):

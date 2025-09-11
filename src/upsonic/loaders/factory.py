@@ -5,11 +5,15 @@ from pathlib import Path
 import logging
 from functools import lru_cache
 
-from .base import DocumentLoader
-from .config import LoaderConfig, LoaderConfigFactory
+from .base import BaseLoader
+from .config import (
+    LoaderConfig, LoaderConfigFactory, TextLoaderConfig, CSVLoaderConfig, 
+    PdfLoaderConfig, DOCXLoaderConfig, JSONLoaderConfig, XMLLoaderConfig, 
+    YAMLLoaderConfig, MarkdownLoaderConfig, HTMLLoaderConfig
+)
 from .text import TextLoader
 from .csv import CSVLoader
-from .pdf import PDFLoader
+from .pdf import PdfLoader
 from .docx import DOCXLoader
 from .json import JSONLoader
 from .xml import XMLLoader
@@ -20,7 +24,7 @@ from .html import HTMLLoader
 
 class LoaderFactory:
     def __init__(self):
-        self._loaders: Dict[str, Type[DocumentLoader]] = {}
+        self._loaders: Dict[str, Type[BaseLoader]] = {}
         self._extensions: Dict[str, str] = {}
         self._configs: Dict[str, Type[LoaderConfig]] = {}
         self._logger = logging.getLogger(__name__)
@@ -29,12 +33,12 @@ class LoaderFactory:
     
     def _register_default_loaders(self):
         default_loaders = [
-            (TextLoader, ['.txt']),
+            (TextLoader, ['.txt', '.md', '.rst', '.log', '.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.cs', '.go', '.rs', '.php', '.rb', '.html', '.css', '.xml', '.json', '.yaml', '.yml', '.ini']),
             (CSVLoader, ['.csv']),
-            (PDFLoader, ['.pdf']),
+            (PdfLoader, ['.pdf']),
             (DOCXLoader, ['.docx']),
-            (JSONLoader, ['.json', '.jsonl', '.js']),
-            (XMLLoader, ['.xml', '.xhtml', '.rss', '.atom']),
+            (JSONLoader, ['.json', '.jsonl']),
+            (XMLLoader, ['.xml']),
             (YAMLLoader, ['.yaml', '.yml']),
             (MarkdownLoader, ['.md', '.markdown']),
             (HTMLLoader, ['.html', '.htm', '.xhtml'])
@@ -43,7 +47,7 @@ class LoaderFactory:
         for loader_class, extensions in default_loaders:
             self.register_loader(loader_class, extensions)
     
-    def register_loader(self, loader_class: Type[DocumentLoader], extensions: List[str]):
+    def register_loader(self, loader_class: Type[BaseLoader], extensions: List[str]):
         loader_name = loader_class.__name__.lower().replace('loader', '')
         
         self._loaders[loader_name] = loader_class
@@ -51,17 +55,24 @@ class LoaderFactory:
         for ext in extensions:
             self._extensions[ext.lower()] = loader_name
         
-        try:
-            config_name = f"{loader_name.title()}Config"
-            config_class = getattr(loader_class, 'config_class', None)
-            if config_class:
-                self._configs[loader_name] = config_class
-        except AttributeError:
-            pass
+        config_mapping = {
+            'text': TextLoaderConfig,
+            'csv': CSVLoaderConfig,
+            'pdf': PdfLoaderConfig,
+            'docx': DOCXLoaderConfig,
+            'json': JSONLoaderConfig,
+            'xml': XMLLoaderConfig,
+            'yaml': YAMLLoaderConfig,
+            'markdown': MarkdownLoaderConfig,
+            'html': HTMLLoaderConfig
+        }
+        
+        if loader_name in config_mapping:
+            self._configs[loader_name] = config_mapping[loader_name]
         
         self._logger.debug(f"Registered loader '{loader_name}' with extensions: {extensions}")
     
-    def get_loader(self, source: str, loader_type: Optional[str] = None, **config_kwargs) -> DocumentLoader:
+    def get_loader(self, source: str, loader_type: Optional[str] = None, **config_kwargs) -> BaseLoader:
         try:
             if loader_type:
                 loader_name = loader_type.lower()
@@ -81,42 +92,45 @@ class LoaderFactory:
             self._logger.error(f"Failed to create loader for '{source}': {e}")
             raise
     
-    def create_intelligent_loaders(self, sources: List[str], **global_config_kwargs) -> List[DocumentLoader]:
+    def create_intelligent_loaders(self, sources: List[Union[str, Path]], **global_config_kwargs) -> List[BaseLoader]:
         """
         Intelligently create appropriate loaders for a list of sources.
         
         This method analyzes each source and creates the most appropriate loader
         with optimized configuration based on the source type and content.
+        String content sources are skipped (no loader needed for direct content).
         
         Args:
-            sources: List of source paths or content strings
+            sources: List of source paths (Path objects) or content strings
             **global_config_kwargs: Global configuration options to apply to all loaders
             
         Returns:
-            List of configured DocumentLoader instances
+            List of configured BaseLoader instances (only for file sources)
         """
         loaders = []
         
         for source in sources:
+            if isinstance(source, str):
+                self._logger.debug(f"Skipping loader creation for string content: {source[:50]}...")
+                continue
+                
             try:
-                # Detect the best loader for this source
-                loader_type = self._detect_loader_type(source)
+                source_str = str(source)
                 
-                # Create source-specific configuration
-                source_config = self._create_optimized_config(source, loader_type, **global_config_kwargs)
+                loader_type = self._detect_loader_type(source_str)
                 
-                # Create and configure the loader
-                loader = self.get_loader(source, loader_type, **source_config)
+                source_config = self._create_optimized_config(source_str, loader_type, **global_config_kwargs)
+                
+                loader = self.get_loader(source_str, loader_type, **source_config)
                 loaders.append(loader)
                 
                 self._logger.debug(f"Created {loader_type} loader for {source}")
                 
             except Exception as e:
                 self._logger.warning(f"Failed to create loader for {source}: {e}")
-                # Fallback to text loader
                 try:
-                    fallback_config = self._create_optimized_config(source, 'text', **global_config_kwargs)
-                    fallback_loader = self.get_loader(source, 'text', **fallback_config)
+                    fallback_config = self._create_optimized_config(source_str, 'text', **global_config_kwargs)
+                    fallback_loader = self.get_loader(source_str, 'text', **fallback_config)
                     loaders.append(fallback_loader)
                     self._logger.info(f"Using text loader fallback for {source}")
                 except Exception as fallback_error:
@@ -139,17 +153,14 @@ class LoaderFactory:
         """
         config = global_config_kwargs.copy()
         
-        # Source-specific optimizations
         if os.path.exists(source) and os.path.isfile(source):
             file_size = os.path.getsize(source)
             file_path = Path(source)
             
-            # File size optimizations
             if file_size > 100 * 1024 * 1024:  # > 100MB
                 config.setdefault('enable_streaming', True)
                 config.setdefault('batch_processing', True)
             
-            # File type specific optimizations
             if loader_type == 'pdf':
                 if file_size > 50 * 1024 * 1024:  # > 50MB
                     config.setdefault('use_ocr', False)  # Disable OCR for large files
@@ -180,7 +191,6 @@ class LoaderFactory:
                     config.setdefault('preserve_links', True)
                     config.setdefault('user_agent', 'Upsonic HTML Loader 1.0')
         
-        # Content-based optimizations for string sources
         elif isinstance(source, str) and len(source) > 10000:
             if loader_type == 'json':
                 config.setdefault('lazy_parsing', True)
@@ -194,17 +204,19 @@ class LoaderFactory:
         if source.startswith(('http://', 'https://', 'ftp://')):
             return 'html'
         
+        file_path = Path(source)
+        extension = file_path.suffix.lower()
+        
+        if extension in self._extensions:
+            return self._extensions[extension]
+        
+        if len(file_path.suffixes) >= 2:
+            double_ext = ''.join(file_path.suffixes[-2:]).lower()
+            if double_ext in self._extensions:
+                return self._extensions[double_ext]
+        
         if os.path.exists(source) and os.path.isfile(source):
-            file_path = Path(source)
-            extension = file_path.suffix.lower()
-            
-            if extension in self._extensions:
-                return self._extensions[extension]
-            
-            if len(file_path.suffixes) >= 2:
-                double_ext = ''.join(file_path.suffixes[-2:]).lower()
-                if double_ext in self._extensions:
-                    return self._extensions[double_ext]
+            pass
         
         if isinstance(source, str):
             source_stripped = source.strip()
@@ -225,15 +237,19 @@ class LoaderFactory:
     
     def _create_config(self, loader_name: str, **config_kwargs) -> LoaderConfig:
         try:
-            if config_kwargs:
-                return LoaderConfigFactory.create_config(loader_name, **config_kwargs)
+            if loader_name in self._configs:
+                config_class = self._configs[loader_name]
+                return config_class(**config_kwargs)
             else:
-                return LoaderConfigFactory.create_config(loader_name)
+                if config_kwargs:
+                    return LoaderConfigFactory.create_config(loader_name, **config_kwargs)
+                else:
+                    return LoaderConfigFactory.create_config(loader_name)
         except Exception as e:
             self._logger.warning(f"Failed to create config for '{loader_name}': {e}")
             return LoaderConfig(**config_kwargs)
     
-    def get_loader_for_file(self, file_path: str, **config_kwargs) -> DocumentLoader:
+    def get_loader_for_file(self, file_path: str, **config_kwargs) -> BaseLoader:
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
         
@@ -242,7 +258,7 @@ class LoaderFactory:
         
         return self.get_loader(file_path, **config_kwargs)
     
-    def get_loader_for_content(self, content: str, content_type: str, **config_kwargs) -> DocumentLoader:
+    def get_loader_for_content(self, content: str, content_type: str, **config_kwargs) -> BaseLoader:
         return self.get_loader(content, content_type, **config_kwargs)
     
     def get_loaders_for_directory(
@@ -252,7 +268,7 @@ class LoaderFactory:
         file_patterns: Optional[List[str]] = None,
         exclude_patterns: Optional[List[str]] = None,
         **config_kwargs
-    ) -> Dict[str, DocumentLoader]:
+    ) -> Dict[str, BaseLoader]:
         if not os.path.isdir(directory_path):
             raise ValueError(f"Directory does not exist: {directory_path}")
         
@@ -345,19 +361,19 @@ def get_factory() -> LoaderFactory:
     return _global_factory
 
 
-def create_loader(source: str, loader_type: Optional[str] = None, **config_kwargs) -> DocumentLoader:
+def create_loader(source: str, loader_type: Optional[str] = None, **config_kwargs) -> BaseLoader:
     return get_factory().get_loader(source, loader_type, **config_kwargs)
 
 
-def create_loader_for_file(file_path: str, **config_kwargs) -> DocumentLoader:
+def create_loader_for_file(file_path: str, **config_kwargs) -> BaseLoader:
     return get_factory().get_loader_for_file(file_path, **config_kwargs)
 
 
-def create_loader_for_content(content: str, content_type: str, **config_kwargs) -> DocumentLoader:
+def create_loader_for_content(content: str, content_type: str, **config_kwargs) -> BaseLoader:
     return get_factory().get_loader_for_content(content, content_type, **config_kwargs)
 
 
-def create_intelligent_loaders(sources: List[str], **config_kwargs) -> List[DocumentLoader]:
+def create_intelligent_loaders(sources: List[str], **config_kwargs) -> List[BaseLoader]:
     """Create intelligent loaders for multiple sources."""
     return get_factory().create_intelligent_loaders(sources, **config_kwargs)
 

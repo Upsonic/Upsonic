@@ -243,7 +243,7 @@ class ChromaProvider(BaseVectorDBProvider):
             raise VectorDBError(f"Failed to fetch records from collection '{collection.name}': {e}") from e
         
 
-    def search(self, top_k: Optional[int] = None, query_vector: Optional[List[float]] = None, query_text: Optional[str] = None, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, **kwargs) -> List[VectorSearchResult]:
+    def search(self, top_k: Optional[int] = None, query_vector: Optional[List[float]] = None, query_text: Optional[str] = None, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
 
         filter = filter if filter is not None else self._config.search.filter
         final_top_k = top_k if top_k is not None else self._config.search.default_top_k
@@ -254,44 +254,64 @@ class ChromaProvider(BaseVectorDBProvider):
 
         if is_hybrid:
             if not self._config.search.hybrid_search_enabled: raise ConfigurationError("Hybrid search is not enabled for this provider.")
-            return self.hybrid_search(query_vector=query_vector, query_text=query_text, top_k=final_top_k, filter=filter, alpha=alpha, fusion_method=fusion_method, **kwargs)
+            return self.hybrid_search(query_vector=query_vector, query_text=query_text, top_k=final_top_k, filter=filter, alpha=alpha, fusion_method=fusion_method, similarity_threshold=similarity_threshold, **kwargs)
         elif is_dense:
             if not self._config.search.dense_search_enabled: raise ConfigurationError("Dense search is not enabled for this provider.")
-            return self.dense_search(query_vector=query_vector, top_k=final_top_k, filter=filter, **kwargs)
+            return self.dense_search(query_vector=query_vector, top_k=final_top_k, filter=filter, similarity_threshold=similarity_threshold, **kwargs)
         elif is_full_text:
             if not self._config.search.full_text_search_enabled: raise ConfigurationError("Full-text search is not enabled for this provider.")
-            return self.full_text_search(query_text=query_text, top_k=final_top_k, filter=filter, **kwargs)
+            return self.full_text_search(query_text=query_text, top_k=final_top_k, filter=filter, similarity_threshold=similarity_threshold, **kwargs)
         else:
             raise ValueError("Invalid search arguments: Please provide 'query_vector', 'query_text', or both.")
 
-    def dense_search(self, query_vector: List[float], top_k: int, filter: Optional[Dict[str, Any]] = None, **kwargs) -> List[VectorSearchResult]:
+    def dense_search(self, query_vector: List[float], top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         if not self._config.search.dense_search_enabled:
             raise ConfigurationError("Dense search is not enabled for this provider.")
         collection = self._get_active_collection()
+        
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
+        
         try:
             results = collection.query(query_embeddings=[query_vector], n_results=top_k, where=filter, include=["metadatas", "distances", "embeddings", "documents"])
             ids, distances, metadatas = results['ids'][0], results['distances'][0], results['metadatas'][0]
             vectors = results['embeddings'][0] if results['embeddings'] else [None] * len(ids)
             chunks = results['documents'][0] if results['documents'] else [None] * len(ids)
             max_dist = max(distances) if distances else 1.0
-            return [VectorSearchResult(id=ids[i], score=min(1.0, max(0.0, 1 - distances[i] / max_dist if max_dist > 0 else 1.0)), payload=metadatas[i], vector=vectors[i], text=chunks[i]) for i in range(len(ids))]
+            
+            filtered_results = []
+            for i in range(len(ids)):
+                score = min(1.0, max(0.0, 1 - distances[i] / max_dist if max_dist > 0 else 1.0))
+                if score >= final_similarity_threshold:
+                    filtered_results.append(VectorSearchResult(id=ids[i], score=score, payload=metadatas[i], vector=vectors[i], text=chunks[i]))
+            
+            return filtered_results
         except Exception as e: raise SearchError(f"An error occurred during dense search: {e}") from e
 
-    def full_text_search(self, query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, **kwargs) -> List[VectorSearchResult]:
+    def full_text_search(self, query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         if not self._config.search.full_text_search_enabled:
             raise ConfigurationError("Full-text search is not enabled for this provider.")
         collection = self._get_active_collection()
+        
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
+        
         where_document_filter = {"$contains": query_text}
         final_where = {"$and": [filter, where_document_filter]} if filter else where_document_filter
         try:
             results = collection.get(where=final_where, limit=top_k, include=["metadatas", "embeddings", "documents"])
-            return [VectorSearchResult(id=results['ids'][i], 
-                                       score=0.5, 
-                                       payload=results['metadatas'][i], 
-                                       vector=results['embeddings'][i],
-                                       text=results['documents'][i] if results['documents'] else None
-                                    ) 
-                                    for i in range(len(results['ids']))]
+            
+            filtered_results = []
+            for i in range(len(results['ids'])):
+                score = 0.5  # Default score for full-text search
+                if score >= final_similarity_threshold:
+                    filtered_results.append(VectorSearchResult(
+                        id=results['ids'][i], 
+                        score=score, 
+                        payload=results['metadatas'][i], 
+                        vector=results['embeddings'][i],
+                        text=results['documents'][i] if results['documents'] else None
+                    ))
+            
+            return filtered_results
         except Exception as e: raise SearchError(f"An error occurred during full-text search: {e}") from e
 
     def _reciprocal_rank_fusion(self, results_lists: List[List[VectorSearchResult]], k: int = 60) -> dict:
@@ -313,7 +333,7 @@ class ChromaProvider(BaseVectorDBProvider):
             fused_scores[doc_id] += doc.score * (1 - alpha)
         return fused_scores
 
-    def hybrid_search(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, **kwargs) -> List[VectorSearchResult]:
+    def hybrid_search(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         if not self._config.search.hybrid_search_enabled:
             raise ConfigurationError("Hybrid search is not enabled for this provider.")
         final_alpha = alpha if alpha is not None else self._config.search.default_hybrid_alpha
@@ -321,8 +341,8 @@ class ChromaProvider(BaseVectorDBProvider):
         
         try:
             candidate_k = max(top_k * 2, 20)
-            dense_results = self.dense_search(query_vector, candidate_k, filter, **kwargs)
-            ft_results = self.full_text_search(query_text, candidate_k, filter, **kwargs)
+            dense_results = self.dense_search(query_vector, candidate_k, filter, similarity_threshold, **kwargs)
+            ft_results = self.full_text_search(query_text, candidate_k, filter, similarity_threshold, **kwargs)
             
             fused_scores: dict
             if fusion_method == 'rrf':

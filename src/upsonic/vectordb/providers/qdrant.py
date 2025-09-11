@@ -365,7 +365,7 @@ class QdrantProvider(BaseVectorDBProvider):
         except Exception as e:
             raise VectorDBError(f"Failed to fetch points from collection '{self._config.core.collection_name}': {e}") from e
         
-    def search(self, top_k: Optional[int] = None, query_vector: Optional[List[float]] = None, query_text: Optional[str] = None, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, **kwargs) -> List[VectorSearchResult]:
+    def search(self, top_k: Optional[int] = None, query_vector: Optional[List[float]] = None, query_text: Optional[str] = None, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         if not self._is_connected or not self._client:
             raise VectorDBConnectionError("Must be connected to perform a search.")
 
@@ -379,23 +379,25 @@ class QdrantProvider(BaseVectorDBProvider):
         if is_dense:
             if self._config.search.dense_search_enabled is False:
                 raise ConfigurationError("Dense search is disabled by the current configuration.")
-            return self.dense_search(query_vector, effective_top_k, filter, **kwargs)
+            return self.dense_search(query_vector, effective_top_k, filter, similarity_threshold, **kwargs)
         
         elif is_hybrid:
             if self._config.search.hybrid_search_enabled is False:
                 raise ConfigurationError("Hybrid search is disabled by the current configuration.")
-            return self.hybrid_search(query_vector, query_text, effective_top_k, filter, alpha, fusion_method, **kwargs)
+            return self.hybrid_search(query_vector, query_text, effective_top_k, filter, alpha, fusion_method, similarity_threshold, **kwargs)
 
         elif is_full_text:
             if self._config.search.full_text_search_enabled is False:
                 raise ConfigurationError("Full-text search is disabled by the current configuration.")
-            return self.full_text_search(query_text, effective_top_k, filter, **kwargs)
+            return self.full_text_search(query_text, effective_top_k, filter, similarity_threshold, **kwargs)
         
         else:
             raise SearchError("Invalid search query: You must provide a 'query_vector' and/or 'query_text'.")
 
-    def dense_search(self, query_vector: List[float], top_k: int, filter: Optional[Dict[str, Any]] = None, **kwargs) -> List[VectorSearchResult]:
+    def dense_search(self, query_vector: List[float], top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         try:
+            final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
+            
             search_params = models.SearchParams(
                 hnsw_ef=kwargs.get('ef_search', self._config.search.default_ef_search),
                 exact=False,
@@ -413,20 +415,21 @@ class QdrantProvider(BaseVectorDBProvider):
                 with_vectors=True
             )
 
-            return [
-                VectorSearchResult(
-                    id=point.id,
-                    score=point.score,
-                    payload=point.payload,
-                    vector=point.vector,
-                    text=point.payload["chunk"]
-                )
-                for point in query_response.points
-            ]
+            filtered_results = []
+            for point in query_response.points:
+                if point.score >= final_similarity_threshold:
+                    filtered_results.append(VectorSearchResult(
+                        id=point.id,
+                        score=point.score,
+                        payload=point.payload,
+                        vector=point.vector,
+                        text=point.payload["chunk"]
+                    ))
+            return filtered_results
         except Exception as e:
             raise SearchError(f"An error occurred during dense search: {e}") from e
     
-    def full_text_search(self, query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, **kwargs) -> List[VectorSearchResult]:
+    def full_text_search(self, query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         """
         Performs a full-text search using Qdrant's payload filtering.
 
@@ -436,50 +439,98 @@ class QdrantProvider(BaseVectorDBProvider):
         if not self._is_connected or not self._client:
             raise VectorDBConnectionError("Must be connected to perform a full-text search.")
 
-        target_text_field = kwargs.get("text_search_field", "text")
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
 
-        text_condition = models.FieldCondition(
-            key=target_text_field, 
-            match=models.MatchText(text=query_text)
-        )
+        target_text_field = kwargs.get("text_search_field", "chunk")
 
-        if filter:
-            metadata_filter = self._build_qdrant_filter(filter)
-            metadata_filter.must.append(text_condition)
-            final_filter = metadata_filter
-        else:
-            final_filter = models.Filter(must=[text_condition])
-        
-        try:
-            records = self._client.scroll(
-                collection_name=self._config.core.collection_name,
-                scroll_filter=final_filter,
-                limit=top_k,
-                with_payload=True,
-                with_vectors=True,
-            )
-            return [
-                VectorSearchResult(
-                    id=r.id,
-                    score=1.0,
-                    payload=r.payload,
-                    vector=r.vector,
-                    text=r.payload["chunk"]
+        if self._config.core.mode == Mode.IN_MEMORY:
+            try:
+                records = self._client.scroll(
+                    collection_name=self._config.core.collection_name,
+                    limit=10000,  # Get all records
+                    with_payload=True,
+                    with_vectors=True,
                 )
-                for r in records[0]
-            ]
-        except Exception as e:
-            raise SearchError(f"An error occurred during full-text search: {e}") from e
+                
+                query_words = query_text.lower().split()
+                matching_records = []
+                
+                for record in records[0]:
+                    if target_text_field in record.payload:
+                        chunk_text = record.payload[target_text_field].lower()
+                        if any(word in chunk_text for word in query_words):
+                            word_matches = sum(1 for word in query_words if word in chunk_text)
+                            relevance_score = word_matches / len(query_words)
+                            
+                            if relevance_score >= final_similarity_threshold:
+                                matching_records.append(VectorSearchResult(
+                                    id=record.id,
+                                    score=relevance_score,
+                                    payload=record.payload,
+                                    vector=record.vector,
+                                    text=record.payload["chunk"]
+                                ))
+                
+                matching_records.sort(key=lambda x: x.score, reverse=True)
+                return matching_records[:top_k]
+                
+            except Exception as e:
+                raise SearchError(f"An error occurred during full-text search: {e}") from e
+        else:
+            try:
+                self._client.create_payload_index(
+                    collection_name=self._config.core.collection_name,
+                    field_name=target_text_field,
+                    field_schema=models.TextIndexParams(type="text"),
+                    wait=True
+                )
+            except Exception:
+                pass
 
-    def hybrid_search(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, **kwargs) -> List[VectorSearchResult]:
+            text_condition = models.FieldCondition(
+                key=target_text_field, 
+                match=models.MatchText(text=query_text)
+            )
+
+            if filter:
+                metadata_filter = self._build_qdrant_filter(filter)
+                metadata_filter.must.append(text_condition)
+                final_filter = metadata_filter
+            else:
+                final_filter = models.Filter(must=[text_condition])
+            
+            try:
+                records = self._client.scroll(
+                    collection_name=self._config.core.collection_name,
+                    scroll_filter=final_filter,
+                    limit=top_k,
+                    with_payload=True,
+                    with_vectors=True,
+                )
+                filtered_results = []
+                for r in records[0]:
+                    score = 1.0  # Default score for full-text search
+                    if score >= final_similarity_threshold:
+                        filtered_results.append(VectorSearchResult(
+                            id=r.id,
+                            score=score,
+                            payload=r.payload,
+                            vector=r.vector,
+                            text=r.payload["chunk"]
+                        ))
+                return filtered_results
+            except Exception as e:
+                raise SearchError(f"An error occurred during full-text search: {e}") from e
+
+    def hybrid_search(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         """
         Combines dense and full-text search results using a specified fusion method.
         """
         effective_alpha = alpha if alpha is not None else self._config.search.default_hybrid_alpha or 0.5
         effective_fusion = fusion_method if fusion_method is not None else self._config.search.default_fusion_method or 'weighted'
 
-        dense_results = self.dense_search(query_vector, top_k, filter, **kwargs)
-        ft_results = self.full_text_search(query_text, top_k, filter, **kwargs)
+        dense_results = self.dense_search(query_vector, top_k, filter, similarity_threshold, **kwargs)
+        ft_results = self.full_text_search(query_text, top_k, filter, similarity_threshold, **kwargs)
 
         if effective_fusion == 'weighted':
             fused_results = self._fuse_weighted(dense_results, ft_results, effective_alpha)
@@ -498,14 +549,11 @@ class QdrantProvider(BaseVectorDBProvider):
         
         new_scores: Dict[Union[str, int], float] = defaultdict(float)
 
-        max_score1 = max([res.score for res in list1] or [1.0])
-        max_score2 = max([res.score for res in list2] or [1.0])
-
         for res in list1:
-            new_scores[res.id] += (res.score / max_score1) * alpha
+            new_scores[res.id] += res.score * alpha
 
         for res in list2:
-            new_scores[res.id] += (res.score / max_score2) * (1 - alpha)
+            new_scores[res.id] += res.score * (1 - alpha)
         
         final_results = []
         for doc_id, fused_score in new_scores.items():

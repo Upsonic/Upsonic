@@ -432,7 +432,7 @@ class WeaviateProvider(BaseVectorDBProvider):
                 raise VectorDBError(f"An error occurred while fetching objects: {e}")
 
 
-    def search(self, top_k: Optional[int] = None, query_vector: Optional[List[float]] = None, query_text: Optional[str] = None, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, **kwargs) -> List[VectorSearchResult]:
+    def search(self, top_k: Optional[int] = None, query_vector: Optional[List[float]] = None, query_text: Optional[str] = None, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         """
         A master search method that dispatches to the appropriate specialized
         search function based on the provided arguments.
@@ -458,12 +458,12 @@ class WeaviateProvider(BaseVectorDBProvider):
         if is_dense:
             if self._config.search.dense_search_enabled is False:
                 raise ConfigurationError("Dense search is disabled by the current configuration.")
-            return self.dense_search(query_vector=query_vector, top_k=final_top_k, filter=filter, **kwargs)
+            return self.dense_search(query_vector=query_vector, top_k=final_top_k, filter=filter, similarity_threshold=similarity_threshold, **kwargs)
         
         elif is_full_text:
             if self._config.search.full_text_search_enabled is False:
                 raise ConfigurationError("Full-text search is disabled by the current configuration.")
-            return self.full_text_search(query_text=query_text, top_k=final_top_k, filter=filter, **kwargs)
+            return self.full_text_search(query_text=query_text, top_k=final_top_k, filter=filter, similarity_threshold=similarity_threshold, **kwargs)
 
         elif is_hybrid:
             if self._config.search.hybrid_search_enabled is False:
@@ -476,13 +476,14 @@ class WeaviateProvider(BaseVectorDBProvider):
                 filter=filter, 
                 alpha=final_alpha, 
                 fusion_method=fusion_method, 
+                similarity_threshold=similarity_threshold,
                 **kwargs
             )
         else:
             raise ConfigurationError("Search requires at least one of 'query_vector' or 'query_text'.")
 
 
-    def dense_search(self, query_vector: List[float], top_k: int, filter: Optional[Dict[str, Any]] = None, **kwargs) -> List[VectorSearchResult]:
+    def dense_search(self, query_vector: List[float], top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         """ 
         Performs a pure vector similarity search using Weaviate's `near_vector` query.
 
@@ -496,6 +497,8 @@ class WeaviateProvider(BaseVectorDBProvider):
             A list of the most similar results, translated into the standard VectorSearchResult format.
         """
         collection_obj = self._get_collection()
+
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
 
         try:
             weaviate_filter = self._translate_filter(filter) if filter else None
@@ -515,20 +518,21 @@ class WeaviateProvider(BaseVectorDBProvider):
             for obj in response.objects:
                 score = obj.metadata.certainty if obj.metadata and obj.metadata.certainty is not None else 0.0
 
-                results.append(VectorSearchResult(
-                    id=str(obj.uuid),
-                    score=score,
-                    payload=obj.properties,
-                    vector=obj.vector.get('default') if obj.vector else None,
-                    text=obj.properties["chunk"]
-                ))
+                if score >= final_similarity_threshold:
+                    results.append(VectorSearchResult(
+                        id=str(obj.uuid),
+                        score=score,
+                        payload=obj.properties,
+                        vector=obj.vector.get('default') if obj.vector else None,
+                        text=obj.properties["chunk"]
+                    ))
             
             return results
 
         except Exception as e:
             raise SearchError(f"An error occurred during dense search: {e}")
 
-    def full_text_search(self, query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, **kwargs) -> List[VectorSearchResult]:
+    def full_text_search(self, query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         """
         Performs a full-text (keyword) search using Weaviate's BM25 algorithm.
 
@@ -542,6 +546,8 @@ class WeaviateProvider(BaseVectorDBProvider):
             A list of matching results, ordered by BM25 relevance score.
         """
         collection_obj = self._get_collection()
+
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
 
         try:
             weaviate_filter = self._translate_filter(filter) if filter else None
@@ -558,13 +564,14 @@ class WeaviateProvider(BaseVectorDBProvider):
             for obj in response.objects:
                 score = obj.metadata.score if obj.metadata and obj.metadata.score is not None else 0.0
 
-                results.append(VectorSearchResult(
-                    id=str(obj.uuid),
-                    score=score,
-                    payload=obj.properties,
-                    vector=obj.vector.get('default') if obj.vector else None,
-                    text=obj.properties["chunk"]
-                ))
+                if score >= final_similarity_threshold:
+                    results.append(VectorSearchResult(
+                        id=str(obj.uuid),
+                        score=score,
+                        payload=obj.properties,
+                        vector=obj.vector.get('default') if obj.vector else None,
+                        text=obj.properties["chunk"]
+                    ))
             
             return results
 
@@ -572,7 +579,7 @@ class WeaviateProvider(BaseVectorDBProvider):
             raise SearchError(f"An error occurred during full-text search: {e}")
 
 
-    def hybrid_search(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, **kwargs) -> List[VectorSearchResult]:
+    def hybrid_search(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         """
         Combines dense and sparse search results using Weaviate's native hybrid query.
 
@@ -595,6 +602,8 @@ class WeaviateProvider(BaseVectorDBProvider):
 
         if not (0.0 <= final_alpha <= 1.0):
             raise ConfigurationError(f"Hybrid search alpha must be between 0.0 and 1.0, but got {final_alpha}.")
+
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
 
         fusion_type = None
         if fusion_method is not None:
@@ -624,13 +633,14 @@ class WeaviateProvider(BaseVectorDBProvider):
             for obj in response.objects:
                 score = obj.metadata.score if obj.metadata and obj.metadata.score is not None else 0.0
 
-                results.append(VectorSearchResult(
-                    id=str(obj.uuid),
-                    score=score,
-                    payload=obj.properties,
-                    vector=obj.vector.get('default') if obj.vector else None,
-                    text=obj.properties["chunk"]
-                ))
+                if score >= final_similarity_threshold:
+                    results.append(VectorSearchResult(
+                        id=str(obj.uuid),
+                        score=score,
+                        payload=obj.properties,
+                        vector=obj.vector.get('default') if obj.vector else None,
+                        text=obj.properties["chunk"]
+                    ))
 
             return results
             

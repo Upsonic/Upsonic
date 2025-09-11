@@ -1,187 +1,190 @@
-from __future__ import annotations
-from typing import List, Optional, Dict, Any
-import os
+import asyncio
 import csv
-from datetime import datetime
 import json
+from pathlib import Path
+from typing import Any, Dict, List, Union
 
-from .base import DocumentLoader
-from .config import CSVLoaderConfig
-from ..schemas.data_models import Document
+import aiofiles
+import aiofiles.os
 
-try:
-    import chardet
-except ImportError:
-    chardet = None
+from upsonic.schemas.data_models import Document
+from upsonic.loaders.base import BaseLoader
+from upsonic.loaders.config import CSVLoaderConfig
 
 
-class CSVLoader(DocumentLoader):
+class CSVLoader(BaseLoader):
     """
-    A row-aware loader for Comma-Separated Values (`.csv`) files.
+    A loader for CSV (Comma-Separated Values) files.
 
-    This loader embodies the "row-as-document" philosophy, transforming each row
-    in a tabular dataset into a distinct, metadata-rich Document object. It is
-    highly configurable, allowing for selective column loading and different
-    content synthesis strategies.
-
-    Its core features include:
-    - Treating each row as an independent Document.
-    - Using column headers as metadata keys for each Document.
-    - Configurable content synthesis (human-readable string or JSON).
-    - Selective inclusion/exclusion of columns.
-    - Rich metadata enrichment, including source file details and row number.
-    - Robust error handling for malformed rows and encoding issues.
-    - Configuration through CSVLoaderConfig.
+    Each row in the CSV file is treated as a separate Document. The content of the
+    document is synthesized from the row's columns based on the configuration.
     """
-    
-    def __init__(self, config: Optional[CSVLoaderConfig] = None):
-        """
-        Initializes the CSVLoader with configuration.
 
-        Args:
-            config: CSVLoaderConfig object with all configuration options
-        """
+    def __init__(self, config: CSVLoaderConfig):
+        """Initializes the CSVLoader with its specific configuration."""
         super().__init__(config)
-        self.config = config or CSVLoaderConfig()
-
-    def load(self, source: str) -> List[Document]:
-        """
-        Loads a CSV file, transforming each row into a Document object.
-        """
-        import time
-        start_time = time.time()
-        documents: List[Document] = []
-        
-        try:
-            file_path = os.path.abspath(source)
-            if not os.path.isfile(file_path):
-                raise FileNotFoundError(f"Source path '{source}' is not a valid file.")
-
-            stats = os.stat(file_path)
-            base_metadata: Dict[str, Any] = {
-                "source": source, "file_name": os.path.basename(file_path),
-                "file_path": file_path, "file_size": stats.st_size,
-                "creation_time": datetime.fromtimestamp(stats.st_ctime).isoformat(),
-                "last_modified_time": datetime.fromtimestamp(stats.st_mtime).isoformat(),
-            }
-
-            if self.config.custom_metadata:
-                base_metadata.update(self.config.custom_metadata)
-
-            encoding = self.config.encoding or "utf-8"
-            try:
-                with open(file_path, "r", newline="", encoding=encoding) as f:
-                    file_content = f.read()
-                base_metadata["detected_encoding"] = encoding
-            except UnicodeDecodeError:
-                if not chardet:
-                    error_msg = f"Error: `chardet` not installed. Cannot detect encoding for '{source}'."
-                    return self._handle_error(error_msg, ImportError(error_msg))
-                
-                with open(file_path, "rb") as f_raw:
-                    raw_data = f_raw.read()
-                detection_result = chardet.detect(raw_data)
-                encoding = detection_result.get("encoding", "utf-8")
-                base_metadata["detected_encoding"] = encoding
-                file_content = raw_data.decode(encoding)
-            
-            csv_reader = csv.reader(
-                file_content.splitlines(),
-                delimiter=self.config.delimiter,
-                quotechar=self.config.quotechar
-            )
-            
-            if self.config.has_header:
-                header = next(csv_reader)
-            else:
-                first_row = next(csv_reader)
-                header = [f"column_{i}" for i in range(len(first_row))]
-                csv_reader = csv.reader(
-                    file_content.splitlines(),
-                    delimiter=self.config.delimiter,
-                    quotechar=self.config.quotechar
-                )
-            
-            final_header = header
-            if self.config.include_columns:
-                final_header = [h for h in header if h in self.config.include_columns]
-            elif self.config.exclude_columns:
-                final_header = [h for h in header if h not in self.config.exclude_columns]
-            
-            col_indices = [header.index(h) for h in final_header]
-
-            for i, row in enumerate(csv_reader):
-                    
-                row_number = i + 1
-                if len(row) != len(header):
-                    warning_msg = f"Warning: Skipping malformed row {row_number} in '{source}'. Expected {len(header)} columns, found {len(row)}."
-                    if self.config.error_handling in ["warn", "raise"]:
-                        print(warning_msg)
-                    if self.config.error_handling == "raise":
-                        raise ValueError(warning_msg)
-                    continue
-
-                filtered_row_values = [row[j] for j in col_indices]
-                row_data = dict(zip(final_header, filtered_row_values))
-
-                if self.config.skip_empty_content and all(not str(v).strip() for v in row_data.values()):
-                    continue
-
-                content = ""
-                if self.config.content_synthesis_mode == "concatenated":
-                    content = ", ".join([f"{k}: {v}" for k, v in row_data.items()])
-                elif self.config.content_synthesis_mode == "json":
-                    content = json.dumps(row_data)
-
-                row_metadata = base_metadata.copy()
-                if self.config.row_as_document:
-                    row_metadata.update(row_data)
-                row_metadata["row_number"] = row_number
-
-                documents.append(
-                    Document(content=content, metadata=row_metadata)
-                )
-
-        except FileNotFoundError as e:
-            error_msg = f"Error: [CSVLoader] File not found at path: {e}"
-            if self.config and self.config.error_handling == "ignore":
-                return []
-            elif self.config and self.config.error_handling == "warn":
-                print(error_msg)
-                return []
-            else:
-                raise e
-        except Exception as e:
-            error_msg = f"Error: [CSVLoader] An unexpected error occurred while loading '{source}': {e}"
-            return self._handle_error(error_msg, e)
-        
-        if hasattr(self, '_update_stats'):
-            processing_time = time.time() - start_time
-            self._update_stats(len(documents), processing_time, success=True)
-            
-        return documents
-
-    def _handle_error(self, message: str, exception: Exception) -> List[Document]:
-        """Handle errors based on configuration."""
-        if self.config.error_handling == "ignore":
-            return []
-        elif self.config.error_handling == "warn":
-            print(message)
-            return []
-        else:
-            raise exception
+        self.config: CSVLoaderConfig = config
 
     @classmethod
     def get_supported_extensions(cls) -> List[str]:
-        """Get list of file extensions supported by this loader."""
-        return ['.csv']
+        """Gets the list of supported file extensions."""
+        return [".csv"]
 
-    @classmethod
-    def can_load(cls, source: str) -> bool:
-        """Check if this loader can handle the given source."""
-        if not source:
-            return False
+    def _filter_row_columns(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        """Filters columns in a row based on include/exclude rules in the config."""
+        if self.config.include_columns:
+            return {k: v for k, v in row.items() if k in self.config.include_columns}
+        if self.config.exclude_columns:
+            return {k: v for k, v in row.items() if k not in self.config.exclude_columns}
+        return row
+
+    def _synthesize_content(self, row: Dict[str, Any]) -> str:
+        """Creates the document content from a row based on the synthesis mode."""
+        filtered_row = self._filter_row_columns(row)
+        if self.config.content_synthesis_mode == "json":
+            return json.dumps(filtered_row)
         
-        from pathlib import Path
-        source_path = Path(source)
-        return source_path.suffix.lower() in cls.get_supported_extensions()
+        content_parts = []
+        for k, v in filtered_row.items():
+            if v and str(v).strip():
+                content_parts.append(f"{k}: {v}")
+        
+        return "\n".join(content_parts)
+
+    def _load_single_file(self, file_path: Path) -> List[Document]:
+        """Helper method to load documents from a single CSV file."""
+        documents = []
+        try:
+            document_id = self._generate_document_id(file_path)
+            if document_id in self._processed_document_ids:
+                raise FileExistsError(
+                    f"Source file '{file_path.resolve()}' has already been processed."
+                )
+            self._processed_document_ids.add(document_id)
+
+            with open(file_path, mode="r", encoding=self.config.encoding or "utf-8", newline="") as f:
+                if self.config.has_header:
+                    reader = csv.DictReader(
+                        f,
+                        delimiter=self.config.delimiter,
+                        quotechar=self.config.quotechar,
+                    )
+                else:
+                    standard_reader = csv.reader(
+                        f,
+                        delimiter=self.config.delimiter,
+                        quotechar=self.config.quotechar,
+                    )
+                    reader = (
+                        {f"column_{i}": val for i, val in enumerate(row)}
+                        for row in standard_reader
+                    )
+
+                all_rows = []
+                for i, row in enumerate(reader):
+                    content = self._synthesize_content(row)
+                    if self.config.skip_empty_content and not content.strip():
+                        continue
+                    all_rows.append(content)
+                
+                if all_rows:
+                    combined_content = "\n\n".join(all_rows)
+                    metadata = self._create_metadata(file_path)
+                    if self.config.include_metadata:
+                        metadata["row_count"] = len(all_rows)
+                    doc = Document(document_id=document_id, content=combined_content, metadata=metadata)
+                    documents.append(doc)
+        except Exception as e:
+            docs_from_error = self._handle_loading_error(str(file_path), e)
+            documents.extend(docs_from_error)
+        
+        return documents
+
+    def load(self, source: Union[str, Path, List[Union[str, Path]]]) -> List[Document]:
+        """
+        Loads documents from the given CSV source(s) synchronously.
+        """
+        files_to_process = self._resolve_sources(source)
+        all_documents = []
+        for file_path in files_to_process:
+            if self.config.max_file_size is not None and file_path.stat().st_size > self.config.max_file_size:
+                print(f"Warning: Skipping file {file_path} because its size ({file_path.stat().st_size} bytes) exceeds the max_file_size of {self.config.max_file_size} bytes.")
+                continue
+
+            all_documents.extend(self._load_single_file(file_path))
+        return all_documents
+
+    async def _aload_single_file(self, file_path: Path) -> List[Document]:
+        """Async helper to load documents from a single CSV file."""
+        documents = []
+        try:
+            document_id = self._generate_document_id(file_path)
+            if document_id in self._processed_document_ids:
+                raise FileExistsError(
+                    f"Source file '{file_path.resolve()}' has already been processed."
+                )
+            self._processed_document_ids.add(document_id)
+
+            if self.config.max_file_size is not None:
+                stat_result = await aiofiles.os.stat(file_path)
+                if stat_result.st_size > self.config.max_file_size:
+                    print(f"Warning: Skipping file {file_path} because its size ({stat_result.st_size} bytes) exceeds the max_file_size of {self.config.max_file_size} bytes.")
+                    return []
+
+            async with aiofiles.open(file_path, mode="r", encoding=self.config.encoding or "utf-8", newline="") as f:
+                content_str = await f.read()
+                file_lines = content_str.splitlines()
+
+                if self.config.has_header:
+                    reader = csv.DictReader(
+                        file_lines,
+                        delimiter=self.config.delimiter,
+                        quotechar=self.config.quotechar,
+                    )
+                else:
+                    standard_reader = csv.reader(
+                        file_lines,
+                        delimiter=self.config.delimiter,
+                        quotechar=self.config.quotechar,
+                    )
+                    reader = (
+                        {f"column_{i}": val for i, val in enumerate(row)}
+                        for row in standard_reader
+                    )
+                
+                all_rows = []
+                for i, row in enumerate(reader):
+                    content = self._synthesize_content(row)
+                    if self.config.skip_empty_content and not content.strip():
+                        continue
+                    all_rows.append(content)
+                
+                if all_rows:
+                    combined_content = "\n\n".join(all_rows)
+                    metadata = self._create_metadata(file_path)
+                    if self.config.include_metadata:
+                        metadata["row_count"] = len(all_rows)
+                    doc = Document(document_id=document_id, content=combined_content, metadata=metadata)
+                    documents.append(doc)
+        except Exception as e:
+            docs_from_error = self._handle_loading_error(str(file_path), e)
+            documents.extend(docs_from_error)
+
+        return documents
+
+    async def aload(self, source: Union[str, Path, List[Union[str, Path]]]) -> List[Document]:
+        """
+        Loads documents from the given CSV source(s) asynchronously.
+        """
+        files_to_process = self._resolve_sources(source)
+        tasks = [self._aload_single_file(file_path) for file_path in files_to_process]
+        results = await asyncio.gather(*tasks)
+        return [doc for sublist in results for doc in sublist]
+
+    def batch(self, sources: List[Union[str, Path]]) -> List[Document]:
+        """A simple synchronous batch load implementation."""
+        return self.load(sources)
+
+    async def abatch(self, sources: List[Union[str, Path]]) -> List[Document]:
+        """An efficient asynchronous batch load implementation using asyncio.gather."""
+        return await self.aload(sources)

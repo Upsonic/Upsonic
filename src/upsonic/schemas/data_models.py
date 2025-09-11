@@ -1,5 +1,3 @@
-# /Users/dogankeskin/Desktop/Upsonic/Upsonic/src/upsonic/schemas/data_models.py
-
 from __future__ import annotations
 import uuid
 from typing import Any, Dict, Optional
@@ -23,8 +21,8 @@ class Document(BaseModel):
         description="A flexible dictionary to store metadata about the source, e.g., {'source': 'resume1.pdf', 'author': 'John Doe'}."
     )
     document_id: str = Field(
-        default_factory=lambda: str(uuid.uuid4()),
-        description="A unique identifier for this specific document."
+        ...,
+        description="A unique, deterministic identifier for the source, typically an MD5 hash of its absolute path or URL."
     )
 
 class Chunk(BaseModel):
@@ -47,12 +45,24 @@ class Chunk(BaseModel):
     )
     document_id: str = Field(
         ...,
-        description="The ID of the parent Document this chunk belongs to."
+        description="Document ID"
     )
     chunk_id: str = Field(
         default_factory=lambda: str(uuid.uuid4()),
         description="A unique identifier for this specific chunk."
     )
+
+    start_index: Optional[int] = Field(
+        default=None,
+        description="The start index of the chunk in the original document."
+    )
+
+    end_index: Optional[int] = Field(
+        default=None,
+        description="The end index of the chunk in the original document."
+    )
+
+
 
 class RAGSearchResult(BaseModel):
     """
