@@ -1,6 +1,7 @@
 from __future__ import annotations
-from typing import Dict, Type, Optional, List, Union, Any
+from typing import Dict, Type, Optional, List, Union, Any, Tuple
 import os
+import json
 from pathlib import Path
 import logging
 from functools import lru_cache
@@ -11,6 +12,7 @@ from .config import (
     PdfLoaderConfig, DOCXLoaderConfig, JSONLoaderConfig, XMLLoaderConfig, 
     YAMLLoaderConfig, MarkdownLoaderConfig, HTMLLoaderConfig
 )
+from upsonic.schemas.data_models import Document
 from .text import TextLoader
 from .csv import CSVLoader
 from .pdf import PdfLoader
@@ -23,6 +25,19 @@ from .html import HTMLLoader
 
 
 class LoaderFactory:
+    """
+    A factory class for creating and managing document loaders.
+    
+    This factory provides intelligent loader creation, configuration management,
+    and extension-based loader detection. It supports both synchronous and
+    asynchronous operations with proper error handling and fallback mechanisms.
+    """
+    
+    _REQUIRED_METHODS = ['load', 'aload', 'batch', 'abatch', 'get_supported_extensions']
+    _URL_PREFIXES = ('http://', 'https://', 'ftp://')
+    _CONTENT_PREVIEW_SIZE = 1024
+    _LARGE_FILE_THRESHOLD = 100 * 1024 * 1024
+    _PDF_LARGE_THRESHOLD = 50 * 1024 * 1024    
     def __init__(self):
         self._loaders: Dict[str, Type[BaseLoader]] = {}
         self._extensions: Dict[str, str] = {}
@@ -30,10 +45,19 @@ class LoaderFactory:
         self._logger = logging.getLogger(__name__)
         
         self._register_default_loaders()
+        self._validate_registration()
     
     def _register_default_loaders(self):
-        default_loaders = [
-            (TextLoader, ['.txt', '.md', '.rst', '.log', '.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.cs', '.go', '.rs', '.php', '.rb', '.html', '.css', '.xml', '.json', '.yaml', '.yml', '.ini']),
+        """Register all default loaders with their extensions."""
+        default_loaders = self._get_default_loader_configs()
+        
+        for loader_class, extensions in default_loaders:
+            self.register_loader(loader_class, extensions)
+    
+    @staticmethod
+    def _get_default_loader_configs() -> List[Tuple[Type[BaseLoader], List[str]]]:
+        """Get the default loader configurations."""
+        return [
             (CSVLoader, ['.csv']),
             (PdfLoader, ['.pdf']),
             (DOCXLoader, ['.docx']),
@@ -41,21 +65,61 @@ class LoaderFactory:
             (XMLLoader, ['.xml']),
             (YAMLLoader, ['.yaml', '.yml']),
             (MarkdownLoader, ['.md', '.markdown']),
-            (HTMLLoader, ['.html', '.htm', '.xhtml'])
+            (HTMLLoader, ['.html', '.htm', '.xhtml']),
+            (TextLoader, ['.txt', '.rst', '.log', '.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.cs', '.go', '.rs', '.php', '.rb', '.css', '.ini'])
         ]
-        
-        for loader_class, extensions in default_loaders:
-            self.register_loader(loader_class, extensions)
     
     def register_loader(self, loader_class: Type[BaseLoader], extensions: List[str]):
+        """
+        Register a loader class with its supported extensions.
+        
+        Args:
+            loader_class: The loader class to register
+            extensions: List of file extensions this loader supports
+            
+        Raises:
+            ValueError: If loader_class is not a subclass of BaseLoader
+            ValueError: If extensions list is empty or contains invalid extensions
+        """
+        if not issubclass(loader_class, BaseLoader):
+            raise ValueError(f"Loader class {loader_class.__name__} must be a subclass of BaseLoader")
+        
+        if not extensions:
+            raise ValueError("Extensions list cannot be empty")
+        
+        for ext in extensions:
+            if not ext.startswith('.') or len(ext) < 2:
+                raise ValueError(f"Invalid extension '{ext}'. Extensions must start with '.' and be at least 2 characters")
+        
         loader_name = loader_class.__name__.lower().replace('loader', '')
+        
+        conflicting_extensions = []
+        for ext in extensions:
+            if ext.lower() in self._extensions and self._extensions[ext.lower()] != loader_name:
+                conflicting_extensions.append(ext)
+        
+        if conflicting_extensions:
+            self._logger.warning(f"Extension conflicts detected for {loader_name}: {conflicting_extensions}")
+            for ext in conflicting_extensions:
+                old_loader = self._extensions[ext.lower()]
+                self._logger.info(f"Replacing {old_loader} with {loader_name} for extension {ext}")
         
         self._loaders[loader_name] = loader_class
         
         for ext in extensions:
             self._extensions[ext.lower()] = loader_name
         
-        config_mapping = {
+        config_mapping = self._get_config_mapping()
+        
+        if loader_name in config_mapping:
+            self._configs[loader_name] = config_mapping[loader_name]
+        
+        self._logger.debug(f"Registered loader '{loader_name}' with extensions: {extensions}")
+    
+    @staticmethod
+    def _get_config_mapping() -> Dict[str, Type[LoaderConfig]]:
+        """Get the mapping of loader names to their config classes."""
+        return {
             'text': TextLoaderConfig,
             'csv': CSVLoaderConfig,
             'pdf': PdfLoaderConfig,
@@ -66,21 +130,69 @@ class LoaderFactory:
             'markdown': MarkdownLoaderConfig,
             'html': HTMLLoaderConfig
         }
+    
+    def _validate_registration(self):
+        """Validate that all registered loaders are properly configured."""
+        self._validate_loader_methods()
+        self._validate_loader_configs()
+        self._check_duplicate_extensions()
+    
+    def _validate_loader_methods(self):
+        """Validate that all loaders have required methods."""
+        for loader_name, loader_class in self._loaders.items():
+            for method in self._REQUIRED_METHODS:
+                if not hasattr(loader_class, method):
+                    self._logger.warning(f"Loader {loader_name} missing required method: {method}")
+    
+    def _validate_loader_configs(self):
+        """Validate that all loaders have config classes."""
+        for loader_name in self._loaders:
+            if loader_name not in self._configs:
+                self._logger.warning(f"No config class found for loader: {loader_name}")
+    
+    def _check_duplicate_extensions(self):
+        """Check for duplicate extensions across loaders."""
+        extension_counts = {}
+        for ext, loader_name in self._extensions.items():
+            extension_counts[ext] = extension_counts.get(ext, 0) + 1
         
-        if loader_name in config_mapping:
-            self._configs[loader_name] = config_mapping[loader_name]
-        
-        self._logger.debug(f"Registered loader '{loader_name}' with extensions: {extensions}")
+        duplicates = {ext: count for ext, count in extension_counts.items() if count > 1}
+        if duplicates:
+            self._logger.warning(f"Duplicate extensions found: {duplicates}")
     
     def get_loader(self, source: str, loader_type: Optional[str] = None, **config_kwargs) -> BaseLoader:
+        """
+        Get a configured loader instance for the given source.
+        
+        Args:
+            source: The source path or content to load
+            loader_type: Optional specific loader type to use
+            **config_kwargs: Configuration parameters for the loader
+            
+        Returns:
+            A configured BaseLoader instance
+            
+        Raises:
+            ValueError: If no suitable loader is found
+            ValueError: If configuration is invalid
+            FileNotFoundError: If source is a file path that doesn't exist
+        """
         try:
+            if not source:
+                raise ValueError(f"Source cannot be None or empty")
+            
+            if not source.startswith(('http://', 'https://', 'ftp://')) and not source.startswith('{') and not source.startswith('<') and not source.startswith('#'):
+                if not os.path.exists(source):
+                    raise FileNotFoundError(f"Source file does not exist: {source}")
+            
             if loader_type:
                 loader_name = loader_type.lower()
+                if loader_name not in self._loaders:
+                    raise ValueError(f"No loader found for type '{loader_type}'. Available types: {list(self._loaders.keys())}")
             else:
                 loader_name = self._detect_loader_type(source)
-            
-            if loader_name not in self._loaders:
-                raise ValueError(f"No loader found for type '{loader_type}'")
+                if loader_name not in self._loaders:
+                    raise ValueError(f"No loader found for source '{source}'. Detected type: '{loader_name}'. Available types: {list(self._loaders.keys())}")
             
             loader_class = self._loaders[loader_name]
             
@@ -153,55 +265,140 @@ class LoaderFactory:
         """
         config = global_config_kwargs.copy()
         
-        if os.path.exists(source) and os.path.isfile(source):
-            file_size = os.path.getsize(source)
-            file_path = Path(source)
-            
-            if file_size > 100 * 1024 * 1024:  # > 100MB
-                config.setdefault('enable_streaming', True)
-                config.setdefault('batch_processing', True)
-            
-            if loader_type == 'pdf':
-                if file_size > 50 * 1024 * 1024:  # > 50MB
-                    config.setdefault('use_ocr', False)  # Disable OCR for large files
-                    config.setdefault('ocr_dpi', 150)  # Lower DPI for performance
-                else:
-                    config.setdefault('use_ocr', True)
-                    config.setdefault('ocr_dpi', 200)
-            
-            elif loader_type == 'json':
-                if file_size > 10 * 1024 * 1024:  # > 10MB
-                    config.setdefault('lazy_parsing', True)
-                    config.setdefault('batch_processing', True)
-                    config.setdefault('chunk_size', 2000)
-                else:
-                    config.setdefault('lazy_parsing', False)
-                    config.setdefault('chunk_size', 4000)
-            
-            elif loader_type == 'csv':
-                if file_size > 5 * 1024 * 1024:  # > 5MB
-                    config.setdefault('batch_processing', True)
-                    config.setdefault('chunk_size', 1000)
-                else:
-                    config.setdefault('chunk_size', 2000)
-            
-            elif loader_type == 'html':
-                if source.startswith(('http://', 'https://')):
-                    config.setdefault('extract_metadata', True)
-                    config.setdefault('preserve_links', True)
-                    config.setdefault('user_agent', 'Upsonic HTML Loader 1.0')
+        if not (os.path.exists(source) and os.path.isfile(source)):
+            return config
         
-        elif isinstance(source, str) and len(source) > 10000:
-            if loader_type == 'json':
-                config.setdefault('lazy_parsing', True)
-                config.setdefault('batch_processing', True)
-            elif loader_type == 'xml':
-                config.setdefault('enable_streaming', True)
+        file_size = os.path.getsize(source)
+        
+        if file_size > self._LARGE_FILE_THRESHOLD:
+            config.setdefault('max_file_size', file_size)
+        
+        self._apply_loader_optimizations(config, loader_type, source, file_size)
         
         return config
     
+    def _apply_loader_optimizations(self, config: Dict[str, Any], loader_type: str, source: str, file_size: int) -> None:
+        """Apply loader-specific optimizations."""
+        if loader_type == 'pdf':
+            self._optimize_pdf_config(config, file_size)
+        elif loader_type == 'html':
+            self._optimize_html_config(config, source)
+        elif loader_type == 'csv':
+            self._optimize_csv_config(config, file_size)
+        elif loader_type == 'json':
+            self._optimize_json_config(config, file_size)
+        elif loader_type == 'xml':
+            self._optimize_xml_config(config, file_size)
+        elif loader_type == 'yaml':
+            self._optimize_yaml_config(config, file_size)
+        elif loader_type == 'markdown':
+            self._optimize_markdown_config(config, file_size)
+        elif loader_type == 'docx':
+            self._optimize_docx_config(config, file_size)
+        elif loader_type == 'text':
+            self._optimize_text_config(config, file_size)
+    
+    def _optimize_pdf_config(self, config: Dict[str, Any], file_size: int) -> None:
+        """Optimize PDF loader configuration based on file size."""
+        if file_size > self._PDF_LARGE_THRESHOLD:
+            config.setdefault('extraction_mode', 'text_only')
+        else:
+            config.setdefault('extraction_mode', 'hybrid')
+    
+    def _optimize_html_config(self, config: Dict[str, Any], source: str) -> None:
+        """Optimize HTML loader configuration for URLs."""
+        if source.startswith(self._URL_PREFIXES):
+            config.setdefault('extract_metadata', True)
+            config.setdefault('extract_text', True)
+            config.setdefault('user_agent', 'Upsonic HTML Loader 1.0')
+    
+    def _optimize_csv_config(self, config: Dict[str, Any], file_size: int) -> None:
+        """Optimize CSV loader configuration based on file size and content."""
+        if file_size > self._LARGE_FILE_THRESHOLD:
+            config['include_metadata'] = False
+            config['content_synthesis_mode'] = 'concatenated'
+        else:
+            config.setdefault('include_metadata', True)
+            config.setdefault('content_synthesis_mode', 'json')
+    
+    def _optimize_json_config(self, config: Dict[str, Any], file_size: int) -> None:
+        """Optimize JSON loader configuration based on file size and structure."""
+        if file_size > self._LARGE_FILE_THRESHOLD:
+            config['include_metadata'] = False
+            config['mode'] = 'single'
+        else:
+            config.setdefault('include_metadata', True)
+            config.setdefault('mode', 'multi')
+    
+    def _optimize_xml_config(self, config: Dict[str, Any], file_size: int) -> None:
+        """Optimize XML loader configuration based on file size and structure."""
+        if file_size > self._LARGE_FILE_THRESHOLD:
+            config['include_metadata'] = False
+            config['content_synthesis_mode'] = 'smart_text'
+            config['strip_namespaces'] = False
+        else:
+            config.setdefault('include_metadata', True)
+            config.setdefault('content_synthesis_mode', 'xml_snippet')
+            config.setdefault('strip_namespaces', True)
+    
+    def _optimize_yaml_config(self, config: Dict[str, Any], file_size: int) -> None:
+        """Optimize YAML loader configuration based on file size and structure."""
+        if file_size > self._LARGE_FILE_THRESHOLD:
+            config['include_metadata'] = False
+            config['content_synthesis_mode'] = 'smart_text'
+            config['flatten_metadata'] = False
+        else:
+            config.setdefault('include_metadata', True)
+            config.setdefault('content_synthesis_mode', 'canonical_yaml')
+            config.setdefault('flatten_metadata', True)
+    
+    def _optimize_markdown_config(self, config: Dict[str, Any], file_size: int) -> None:
+        """Optimize Markdown loader configuration based on file size and content."""
+        if file_size > self._LARGE_FILE_THRESHOLD:
+            config['include_metadata'] = False
+            config['code_block_language_metadata'] = False
+            config['heading_metadata'] = False
+        else:
+            config.setdefault('include_metadata', True)
+            config.setdefault('code_block_language_metadata', True)
+            config.setdefault('heading_metadata', True)
+            config.setdefault('parse_front_matter', True)
+    
+    def _optimize_docx_config(self, config: Dict[str, Any], file_size: int) -> None:
+        """Optimize DOCX loader configuration based on file size and content."""
+        if file_size > self._LARGE_FILE_THRESHOLD:
+            config['include_metadata'] = False
+            config['table_format'] = 'text'
+            config['include_headers'] = False
+            config['include_footers'] = False
+        else:
+            config.setdefault('include_metadata', True)
+            config.setdefault('table_format', 'markdown')
+            config.setdefault('include_headers', True)
+            config.setdefault('include_footers', True)
+    
+    def _optimize_text_config(self, config: Dict[str, Any], file_size: int) -> None:
+        """Optimize Text loader configuration based on file size and content."""
+        if file_size > self._LARGE_FILE_THRESHOLD:
+            config['include_metadata'] = False
+            config['min_chunk_length'] = 100
+        else:
+            config.setdefault('include_metadata', True)
+            config.setdefault('min_chunk_length', 1)
+            config.setdefault('strip_whitespace', True)
+    
+    @lru_cache(maxsize=1000)
     def _detect_loader_type(self, source: str) -> str:
-        if source.startswith(('http://', 'https://', 'ftp://')):
+        """
+        Detect the appropriate loader type for a given source.
+        
+        Args:
+            source: The source path or content string
+            
+        Returns:
+            The loader type name
+        """
+        if source.startswith(self._URL_PREFIXES):
             return 'html'
         
         file_path = Path(source)
@@ -216,38 +413,132 @@ class LoaderFactory:
                 return self._extensions[double_ext]
         
         if os.path.exists(source) and os.path.isfile(source):
-            pass
+            return self._detect_file_content_type(source)
         
-        if isinstance(source, str):
-            source_stripped = source.strip()
-            
-            if source_stripped.startswith('{') or source_stripped.startswith('['):
-                return 'json'
-            
-            if source_stripped.startswith('<'):
-                return 'xml'
-            
-            if source_stripped.startswith('---') or source_stripped.startswith('- '):
-                return 'yaml'
-            
-            if any(source_stripped.startswith(prefix) for prefix in ['# ', '## ', '### ']):
-                return 'markdown'
+        return self._detect_content_type(source)
+    
+    def _detect_file_content_type(self, file_path: str) -> str:
+        """Detect content type for existing files."""
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content_preview = f.read(self._CONTENT_PREVIEW_SIZE)
+                return self._detect_content_type(content_preview)
+        except Exception:
+            return 'text'
+    
+    def _detect_content_type(self, content: str) -> str:
+        """Detect content type based on content structure."""
+        content_stripped = content.strip()
+        
+        if self._is_json_content(content_stripped):
+            return 'json'
+        
+        if self._is_html_content(content_stripped):
+            return 'html'
+        
+        if self._is_xml_content(content_stripped):
+            return 'xml'
+        
+        if self._is_yaml_content(content_stripped):
+            return 'yaml'
+        
+        if self._is_markdown_content(content_stripped):
+            return 'markdown'
         
         return 'text'
     
+    @staticmethod
+    def _is_json_content(content: str) -> bool:
+        """Check if content is JSON."""
+        if not ((content.startswith('{') or content.startswith('[')) and 
+                (content.endswith('}') or content.endswith(']'))):
+            return False
+        try:
+            json.loads(content)
+            return True
+        except (json.JSONDecodeError, ValueError):
+            return False
+    
+    @staticmethod
+    def _is_xml_content(content: str) -> bool:
+        """Check if content is XML."""
+        return content.startswith('<') and '>' in content
+    
+    @staticmethod
+    def _is_yaml_content(content: str) -> bool:
+        """Check if content is YAML."""
+        return content.startswith('---') or content.startswith('- ')
+    
+    @staticmethod
+    def _is_markdown_content(content: str) -> bool:
+        """Check if content is Markdown."""
+        markdown_prefixes = ['# ', '## ', '### ']
+        return any(content.startswith(prefix) for prefix in markdown_prefixes)
+    
+    @staticmethod
+    def _is_html_content(content: str) -> bool:
+        """Check if content is HTML."""
+        if not content.startswith('<'):
+            return False
+        html_tags = ['<html', '<head', '<body', '<div']
+        return any(tag in content.lower() for tag in html_tags)
+    
     def _create_config(self, loader_name: str, **config_kwargs) -> LoaderConfig:
+        """
+        Create a configuration instance for the specified loader.
+        
+        Args:
+            loader_name: Name of the loader to create config for
+            **config_kwargs: Configuration parameters
+            
+        Returns:
+            A LoaderConfig instance
+            
+        Raises:
+            ValueError: If configuration creation fails
+        """
         try:
             if loader_name in self._configs:
-                config_class = self._configs[loader_name]
-                return config_class(**config_kwargs)
+                return self._create_specific_config(loader_name, config_kwargs)
             else:
-                if config_kwargs:
-                    return LoaderConfigFactory.create_config(loader_name, **config_kwargs)
-                else:
-                    return LoaderConfigFactory.create_config(loader_name)
+                return self._create_fallback_config(loader_name, config_kwargs)
         except Exception as e:
             self._logger.warning(f"Failed to create config for '{loader_name}': {e}")
-            return LoaderConfig(**config_kwargs)
+            return self._create_base_config(config_kwargs)
+    
+    def _create_specific_config(self, loader_name: str, config_kwargs: Dict[str, Any]) -> LoaderConfig:
+        """Create config for a specific loader type."""
+        config_class = self._configs[loader_name]
+        self._validate_config_params(config_class, config_kwargs)
+        return config_class(**config_kwargs)
+    
+    def _create_fallback_config(self, loader_name: str, config_kwargs: Dict[str, Any]) -> LoaderConfig:
+        """Create config using LoaderConfigFactory as fallback."""
+        if config_kwargs:
+            return LoaderConfigFactory.create_config(loader_name, **config_kwargs)
+        else:
+            return LoaderConfigFactory.create_config(loader_name)
+    
+    def _create_base_config(self, config_kwargs: Dict[str, Any]) -> LoaderConfig:
+        """Create base config with only valid parameters."""
+        valid_kwargs = {k: v for k, v in config_kwargs.items() 
+                      if k in LoaderConfig.model_fields}
+        return LoaderConfig(**valid_kwargs) if valid_kwargs else LoaderConfig()
+    
+    def _validate_config_params(self, config_class: Type[LoaderConfig], config_kwargs: Dict[str, Any]) -> None:
+        """Validate configuration parameters against the config class."""
+        if not hasattr(config_class, 'model_fields'):
+            return
+        
+        invalid_params = []
+        for param_name in config_kwargs.keys():
+            if param_name not in config_class.model_fields:
+                invalid_params.append(param_name)
+        
+        if invalid_params:
+            self._logger.warning(f"Invalid config parameters for {config_class.__name__}: {invalid_params}")
+            for param in invalid_params:
+                config_kwargs.pop(param, None)
     
     def get_loader_for_file(self, file_path: str, **config_kwargs) -> BaseLoader:
         if not os.path.exists(file_path):
@@ -269,51 +560,68 @@ class LoaderFactory:
         exclude_patterns: Optional[List[str]] = None,
         **config_kwargs
     ) -> Dict[str, BaseLoader]:
+        """
+        Get loaders for all files in a directory.
+        
+        Args:
+            directory_path: Path to the directory
+            recursive: Whether to search recursively
+            file_patterns: List of file patterns to include
+            exclude_patterns: List of file patterns to exclude
+            **config_kwargs: Configuration parameters for loaders
+            
+        Returns:
+            Dictionary mapping file paths to their loaders
+        """
         if not os.path.isdir(directory_path):
             raise ValueError(f"Directory does not exist: {directory_path}")
         
         loaders = {}
         directory = Path(directory_path)
         
-        if recursive:
-            search_pattern = "**/*"
-        else:
-            search_pattern = "*"
+        all_files = self._get_directory_files(directory, recursive)
         
-        all_files = list(directory.glob(search_pattern))
+        filtered_files = self._filter_files_by_patterns(all_files, file_patterns, exclude_patterns)
         
-        for file_path in all_files:
-            if not file_path.is_file():
-                continue
-            
-            file_path_str = str(file_path)
-            
-            if file_patterns:
-                matches_pattern = False
-                for pattern in file_patterns:
-                    if file_path.match(pattern):
-                        matches_pattern = True
-                        break
-                if not matches_pattern:
-                    continue
-            
-            if exclude_patterns:
-                should_exclude = False
-                for pattern in exclude_patterns:
-                    if file_path.match(pattern):
-                        should_exclude = True
-                        break
-                if should_exclude:
-                    continue
-            
+        for file_path in filtered_files:
             try:
-                loader = self.get_loader_for_file(file_path_str, **config_kwargs)
-                loaders[file_path_str] = loader
+                loader = self.get_loader_for_file(str(file_path), **config_kwargs)
+                loaders[str(file_path)] = loader
             except Exception as e:
-                self._logger.warning(f"Could not create loader for {file_path_str}: {e}")
+                self._logger.warning(f"Could not create loader for {file_path}: {e}")
                 continue
         
         return loaders
+    
+    def _get_directory_files(self, directory: Path, recursive: bool) -> List[Path]:
+        """Get all files from a directory."""
+        if recursive:
+            return [f for f in directory.rglob("*") if f.is_file()]
+        else:
+            return [f for f in directory.glob("*") if f.is_file()]
+    
+    def _filter_files_by_patterns(
+        self, 
+        files: List[Path], 
+        include_patterns: Optional[List[str]], 
+        exclude_patterns: Optional[List[str]]
+    ) -> List[Path]:
+        """Filter files based on include/exclude patterns."""
+        filtered_files = files
+        
+        if include_patterns:
+            filtered_files = [
+                f for f in filtered_files 
+                if any(f.match(pattern) for pattern in include_patterns)
+            ]
+        
+        if exclude_patterns:
+            filtered_files = [
+                f for f in filtered_files 
+                if not any(f.match(pattern) for pattern in exclude_patterns)
+            ]
+        
+        return filtered_files
     
     def get_supported_extensions(self) -> List[str]:
         return list(self._extensions.keys())
@@ -322,11 +630,9 @@ class LoaderFactory:
         return list(self._loaders.keys())
     
     def can_handle(self, source: str) -> bool:
-        try:
-            loader_type = self._detect_loader_type(source)
-            return loader_type in self._loaders
-        except Exception:
-            return False
+        """Check if the factory can handle the given source."""
+        validation = self.validate_source(source)
+        return validation['can_handle']
     
     def get_loader_info(self, loader_type: str) -> Dict[str, Any]:
         if loader_type not in self._loaders:
@@ -348,7 +654,75 @@ class LoaderFactory:
         return [self.get_loader_info(loader_type) for loader_type in self._loaders.keys()]
     
     def clear_cache(self):
-        pass
+        """Clear any cached data."""
+        self._detect_loader_type.cache_clear()
+        self._logger.debug("Factory cache cleared")
+    
+    def get_loader_statistics(self) -> Dict[str, Any]:
+        """Get statistics about registered loaders."""
+        return {
+            'total_loaders': len(self._loaders),
+            'total_extensions': len(self._extensions),
+            'loaders': list(self._loaders.keys()),
+            'extensions': list(self._extensions.keys()),
+            'configs_available': len(self._configs),
+            'extension_conflicts': self._find_extension_conflicts()
+        }
+    
+    def _find_extension_conflicts(self) -> Dict[str, List[str]]:
+        """Find extensions that are handled by multiple loaders."""
+        extension_to_loaders = {}
+        for ext, loader_name in self._extensions.items():
+            if ext not in extension_to_loaders:
+                extension_to_loaders[ext] = []
+            extension_to_loaders[ext].append(loader_name)
+        
+        return {ext: loaders for ext, loaders in extension_to_loaders.items() if len(loaders) > 1}
+    
+    def validate_source(self, source: str) -> Dict[str, Any]:
+        """Validate a source and return information about it."""
+        result = {
+            'source': source,
+            'is_url': source.startswith(('http://', 'https://', 'ftp://')),
+            'is_file': os.path.exists(source) and os.path.isfile(source),
+            'detected_type': None,
+            'can_handle': False,
+            'recommended_loader': None
+        }
+        
+        try:
+            if result['is_url']:
+                detected_type = 'html'
+                result['detected_type'] = detected_type
+                result['can_handle'] = detected_type in self._loaders
+                result['recommended_loader'] = detected_type if result['can_handle'] else None
+            elif result['is_file']:
+                detected_type = self._detect_loader_type(source)
+                result['detected_type'] = detected_type
+                result['can_handle'] = detected_type in self._loaders
+                result['recommended_loader'] = detected_type if result['can_handle'] else None
+            elif source.startswith(('{', '[', '<', '#', '---')):
+                detected_type = self._detect_loader_type(source)
+                result['detected_type'] = detected_type
+                result['can_handle'] = detected_type in self._loaders
+                result['recommended_loader'] = detected_type if result['can_handle'] else None
+            else:
+                result['detected_type'] = None
+                result['can_handle'] = False
+                result['recommended_loader'] = None
+        except Exception as e:
+            result['error'] = str(e)
+            result['can_handle'] = False
+        
+        return result
+    
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - clear cache on exit."""
+        self.clear_cache()
 
 
 _global_factory: Optional[LoaderFactory] = None
@@ -362,35 +736,41 @@ def get_factory() -> LoaderFactory:
 
 
 def create_loader(source: str, loader_type: Optional[str] = None, **config_kwargs) -> BaseLoader:
+    """Create a loader for the given source."""
     return get_factory().get_loader(source, loader_type, **config_kwargs)
 
 
 def create_loader_for_file(file_path: str, **config_kwargs) -> BaseLoader:
+    """Create a loader for a specific file."""
     return get_factory().get_loader_for_file(file_path, **config_kwargs)
 
 
 def create_loader_for_content(content: str, content_type: str, **config_kwargs) -> BaseLoader:
+    """Create a loader for content with a specific type."""
     return get_factory().get_loader_for_content(content, content_type, **config_kwargs)
 
 
-def create_intelligent_loaders(sources: List[str], **config_kwargs) -> List[BaseLoader]:
+def create_intelligent_loaders(sources: List[Union[str, Path]], **config_kwargs) -> List[BaseLoader]:
     """Create intelligent loaders for multiple sources."""
     return get_factory().create_intelligent_loaders(sources, **config_kwargs)
 
 
 def can_handle_file(file_path: str) -> bool:
+    """Check if the factory can handle a specific file."""
     return get_factory().can_handle(file_path)
 
 
 def get_supported_extensions() -> List[str]:
+    """Get all supported file extensions."""
     return get_factory().get_supported_extensions()
 
 
 def get_supported_loaders() -> List[str]:
+    """Get all supported loader types."""
     return get_factory().get_supported_loaders()
 
 
-def load_document(source: str, **config_kwargs) -> List[Any]:
+def load_document(source: str, **config_kwargs) -> List[Document]:
     loader = create_loader(source, **config_kwargs)
     return loader.load(source)
 
@@ -398,7 +778,17 @@ def load_document(source: str, **config_kwargs) -> List[Any]:
 def load_documents_batch(
     sources: List[str], 
     **config_kwargs
-) -> Dict[str, List[Any]]:
+) -> Dict[str, List[Document]]:
+    """
+    Load documents from multiple sources in batch.
+    
+    Args:
+        sources: List of source paths or content strings
+        **config_kwargs: Configuration parameters for loaders
+        
+    Returns:
+        Dictionary mapping sources to their loaded documents
+    """
     results = {}
     factory = get_factory()
     
@@ -412,3 +802,36 @@ def load_documents_batch(
             results[source] = []
     
     return results
+
+
+def validate_source(source: str) -> Dict[str, Any]:
+    """Validate a source and return information about it."""
+    return get_factory().validate_source(source)
+
+
+def get_loader_statistics() -> Dict[str, Any]:
+    """Get statistics about registered loaders."""
+    return get_factory().get_loader_statistics()
+
+
+def list_available_loaders() -> List[Dict[str, Any]]:
+    """List all available loaders with their information."""
+    return get_factory().list_loaders()
+
+
+def check_extension_conflicts() -> Dict[str, List[str]]:
+    """Check for extension conflicts between loaders."""
+    return get_factory()._find_extension_conflicts()
+
+
+def create_factory() -> LoaderFactory:
+    """Create a new factory instance."""
+    return LoaderFactory()
+
+
+def with_factory(func):
+    """Decorator to provide a factory instance to a function."""
+    def wrapper(*args, **kwargs):
+        with create_factory() as factory:
+            return func(factory, *args, **kwargs)
+    return wrapper

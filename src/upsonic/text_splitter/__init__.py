@@ -4,8 +4,13 @@ from .base import (
 )
 from .character import CharacterChunker, CharacterChunkingConfig
 from .recursive import RecursiveChunker, RecursiveChunkingConfig
-from .html import HTMLChunker, HTMLChunkingConfig
-from .json import JSONChunker, JSONChunkingConfig
+# HTML chunker imported conditionally to avoid conflicts
+try:
+    from .html_chunker import HTMLChunker, HTMLChunkingConfig
+except ImportError:
+    HTMLChunker = None
+    HTMLChunkingConfig = None
+from .json_chunker import JSONChunker, JSONChunkingConfig
 from .markdown import MarkdownChunker, MarkdownChunkingConfig
 from .python import PythonChunker, PythonChunkingConfig
 from .semantic import SemanticChunker, SemanticChunkingConfig

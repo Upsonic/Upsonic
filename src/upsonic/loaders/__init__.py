@@ -21,7 +21,9 @@ from .factory import (
     LoaderFactory, get_factory, create_loader, create_loader_for_file,
     create_loader_for_content, can_handle_file, get_supported_extensions,
     get_supported_loaders, load_document, load_documents_batch,
-    create_intelligent_loaders
+    create_intelligent_loaders, validate_source, get_loader_statistics,
+    list_available_loaders, check_extension_conflicts, create_factory,
+    with_factory
 )
 
 
@@ -38,5 +40,7 @@ __all__ = [
     'LoaderFactory', 'get_factory', 'create_loader', 'create_loader_for_file',
     'create_loader_for_content', 'can_handle_file', 'get_supported_extensions',
     'get_supported_loaders', 'load_document', 'load_documents_batch',
-    'create_intelligent_loaders',
+    'create_intelligent_loaders', 'validate_source', 'get_loader_statistics',
+    'list_available_loaders', 'check_extension_conflicts', 'create_factory',
+    'with_factory',
 ]

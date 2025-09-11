@@ -45,6 +45,9 @@ class JSONChunkingConfig(BaseChunkingConfig):
         )
     )
 
+# Rebuild the model to resolve forward references
+JSONChunkingConfig.model_rebuild()
+
 
 class JSONChunker(BaseChunker[JSONChunkingConfig]):
     """

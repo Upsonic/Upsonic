@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, NamedTuple, Optional
+from typing import Dict, List, NamedTuple, Optional, Any
 import ast
 import re
 
@@ -71,6 +71,9 @@ class PythonChunkingConfig(BaseChunkingConfig):
 
     class Config:
         arbitrary_types_allowed = True
+
+# Rebuild the model to resolve forward references
+PythonChunkingConfig.model_rebuild()
 
 
 class _SemanticBlock(NamedTuple):
