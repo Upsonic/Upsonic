@@ -24,6 +24,7 @@
     </a>
   </p>
 
+**ENGLISH** | [简体中文](README-zh_CN.md)
 
 # Introduction
 Upsonic is an AI agent development framework used by fintech leaders and tested at their scale against attacks and reasoning puzzles.
