@@ -44,8 +44,8 @@ class BaseChunkingConfig(BaseModel):
         exclude=True,
     )
     strip_whitespace: bool = Field(
-        default=True,
-        description="If True, strips leading and trailing whitespace from each chunk's content.",
+        default=False,
+        description="If True, strips leading and trailing whitespace from each chunk's content. Default is False to preserve content integrity.",
     )
 
     class Config:

@@ -107,8 +107,7 @@ class CSVLoader(BaseLoader):
         files_to_process = self._resolve_sources(source)
         all_documents = []
         for file_path in files_to_process:
-            if self.config.max_file_size is not None and file_path.stat().st_size > self.config.max_file_size:
-                print(f"Warning: Skipping file {file_path} because its size ({file_path.stat().st_size} bytes) exceeds the max_file_size of {self.config.max_file_size} bytes.")
+            if not self._check_file_size(file_path):
                 continue
 
             all_documents.extend(self._load_single_file(file_path))
@@ -125,11 +124,8 @@ class CSVLoader(BaseLoader):
                 )
             self._processed_document_ids.add(document_id)
 
-            if self.config.max_file_size is not None:
-                stat_result = await aiofiles.os.stat(file_path)
-                if stat_result.st_size > self.config.max_file_size:
-                    print(f"Warning: Skipping file {file_path} because its size ({stat_result.st_size} bytes) exceeds the max_file_size of {self.config.max_file_size} bytes.")
-                    return []
+            if not self._check_file_size(file_path):
+                return []
 
             async with aiofiles.open(file_path, mode="r", encoding=self.config.encoding or "utf-8", newline="") as f:
                 content_str = await f.read()

@@ -22,7 +22,6 @@ class ContentType(Enum):
     JAVASCRIPT = "javascript"
     TECHNICAL_DOC = "technical_doc"
     NARRATIVE = "narrative"
-    STRUCTURED_DATA = "structured_data"
 
 
 class ChunkingUseCase(Enum):
@@ -40,10 +39,58 @@ _CONFIG_REGISTRY: Dict[str, Type[BaseChunkingConfig]] = {}
 
 
 def register_chunking_strategy(name: str, strategy_class: Type[BaseChunker], config_class: Type[BaseChunkingConfig] = None):
-    """Register a chunking strategy for use with the factory."""
+    """
+    Register a chunking strategy for use with the factory.
+    
+    Args:
+        name: Strategy name (must be unique)
+        strategy_class: Chunker class that inherits from BaseChunker
+        config_class: Optional config class that inherits from BaseChunkingConfig
+        
+    Raises:
+        ValueError: If name is already registered or invalid
+        TypeError: If strategy_class doesn't inherit from BaseChunker
+    """
+    if not name or not isinstance(name, str):
+        raise ValueError("Strategy name must be a non-empty string")
+    
+    if not issubclass(strategy_class, BaseChunker):
+        raise TypeError(f"Strategy class must inherit from BaseChunker, got {strategy_class}")
+    
+    if config_class and not issubclass(config_class, BaseChunkingConfig):
+        raise TypeError(f"Config class must inherit from BaseChunkingConfig, got {config_class}")
+    
+    if name in _STRATEGY_REGISTRY:
+        raise ValueError(f"Strategy '{name}' is already registered")
+    
     _STRATEGY_REGISTRY[name] = strategy_class
     if config_class:
         _CONFIG_REGISTRY[name] = config_class
+
+
+def unregister_chunking_strategy(name: str) -> bool:
+    """
+    Unregister a chunking strategy from the factory.
+    
+    Args:
+        name: Strategy name to unregister
+        
+    Returns:
+        True if strategy was unregistered, False if it wasn't found
+    """
+    if name in _STRATEGY_REGISTRY:
+        del _STRATEGY_REGISTRY[name]
+        if name in _CONFIG_REGISTRY:
+            del _CONFIG_REGISTRY[name]
+        return True
+    return False
+
+
+def clear_strategy_registry():
+    """Clear all registered strategies (useful for testing)."""
+    global _STRATEGY_REGISTRY, _CONFIG_REGISTRY
+    _STRATEGY_REGISTRY.clear()
+    _CONFIG_REGISTRY.clear()
 
 
 def _lazy_import_strategies():
@@ -53,6 +100,7 @@ def _lazy_import_strategies():
     if _STRATEGY_REGISTRY:
         return
     
+    # Import and register all available strategies using try/except blocks
     try:
         from .character import CharacterChunker, CharacterChunkingConfig
         register_chunking_strategy("character", CharacterChunker, CharacterChunkingConfig)
@@ -62,7 +110,6 @@ def _lazy_import_strategies():
     try:
         from .recursive import RecursiveChunker, RecursiveChunkingConfig
         register_chunking_strategy("recursive", RecursiveChunker, RecursiveChunkingConfig)
-        register_chunking_strategy("recursive_character", RecursiveChunker, RecursiveChunkingConfig)
     except ImportError:
         pass
     
@@ -74,20 +121,18 @@ def _lazy_import_strategies():
     
     try:
         from .markdown import MarkdownChunker, MarkdownChunkingConfig
-        register_chunking_strategy("markdown_header", MarkdownChunker, MarkdownChunkingConfig)
-        register_chunking_strategy("markdown_recursive", MarkdownChunker, MarkdownChunkingConfig)
         register_chunking_strategy("markdown", MarkdownChunker, MarkdownChunkingConfig)
     except ImportError:
         pass
     
     try:
-        from .html import HTMLChunker, HTMLChunkingConfig
+        from .html_chunker import HTMLChunker, HTMLChunkingConfig
         register_chunking_strategy("html", HTMLChunker, HTMLChunkingConfig)
     except ImportError:
         pass
     
     try:
-        from .json import JSONChunker, JSONChunkingConfig
+        from .json_chunker import JSONChunker, JSONChunkingConfig
         register_chunking_strategy("json", JSONChunker, JSONChunkingConfig)
     except ImportError:
         pass
@@ -95,15 +140,41 @@ def _lazy_import_strategies():
     try:
         from .python import PythonChunker, PythonChunkingConfig
         register_chunking_strategy("python", PythonChunker, PythonChunkingConfig)
-        register_chunking_strategy("code", PythonChunker, PythonChunkingConfig)
     except ImportError:
         pass
     
     try:
         from .agentic import AgenticChunker, AgenticChunkingConfig
         register_chunking_strategy("agentic", AgenticChunker, AgenticChunkingConfig)
-        register_chunking_strategy("ai", AgenticChunker, AgenticChunkingConfig)
     except ImportError:
+        pass
+    
+    # Register aliases for common use cases
+    try:
+        if "recursive" in _STRATEGY_REGISTRY:
+            register_chunking_strategy("recursive_character", _STRATEGY_REGISTRY["recursive"], _CONFIG_REGISTRY.get("recursive"))
+    except Exception:
+        pass
+    
+    try:
+        if "markdown" in _STRATEGY_REGISTRY:
+            register_chunking_strategy("markdown_header", _STRATEGY_REGISTRY["markdown"], _CONFIG_REGISTRY.get("markdown"))
+            register_chunking_strategy("markdown_recursive", _STRATEGY_REGISTRY["markdown"], _CONFIG_REGISTRY.get("markdown"))
+    except Exception:
+        pass
+    
+    try:
+        if "python" in _STRATEGY_REGISTRY:
+            register_chunking_strategy("code", _STRATEGY_REGISTRY["python"], _CONFIG_REGISTRY.get("python"))
+            register_chunking_strategy("py", _STRATEGY_REGISTRY["python"], _CONFIG_REGISTRY.get("python"))
+            register_chunking_strategy("python_code", _STRATEGY_REGISTRY["python"], _CONFIG_REGISTRY.get("python"))
+    except Exception:
+        pass
+    
+    try:
+        if "agentic" in _STRATEGY_REGISTRY:
+            register_chunking_strategy("ai", _STRATEGY_REGISTRY["agentic"], _CONFIG_REGISTRY.get("agentic"))
+    except Exception:
         pass
     
 
@@ -121,52 +192,60 @@ def get_strategy_info() -> Dict[str, Dict[str, Any]]:
     
     strategy_info = {
         "character": {
-            "description": "Simple character-based splitting",
-            "best_for": ["Simple text", "Fixed-size chunks"],
-            "features": ["Fast", "Predictable sizes"],
-            "use_cases": ["Basic RAG", "Simple search"]
+            "description": "Simple character-based splitting with configurable separator",
+            "best_for": ["Simple text", "Fixed-size chunks", "Consistent delimiters"],
+            "features": ["Fast", "Predictable sizes", "Regex support", "Separator control"],
+            "use_cases": ["Basic RAG", "Simple search", "Log files"],
+            "config_params": ["separator", "is_separator_regex", "keep_separator"]
         },
         "recursive": {
             "description": "Intelligent recursive splitting with separator prioritization",
-            "best_for": ["General text", "Mixed content"],
-            "features": ["Adaptive", "Content-aware", "Boundary preservation"],
-            "use_cases": ["RAG", "Semantic search", "General purpose"]
+            "best_for": ["General text", "Mixed content", "Structured documents"],
+            "features": ["Adaptive", "Content-aware", "Boundary preservation", "Language-specific"],
+            "use_cases": ["RAG", "Semantic search", "General purpose", "Code chunking"],
+            "config_params": ["separators", "keep_separator", "is_separator_regex"]
         },
         "semantic": {
-            "description": "Semantic similarity-based chunking",
-            "best_for": ["Narrative text", "Topic-based splitting"],
-            "features": ["Topic coherence", "Semantic boundaries"],
-            "use_cases": ["High-quality RAG", "Topic analysis"]
+            "description": "Semantic similarity-based chunking using embeddings",
+            "best_for": ["Narrative text", "Topic-based splitting", "Coherent content"],
+            "features": ["Topic coherence", "Semantic boundaries", "Statistical thresholds"],
+            "use_cases": ["High-quality RAG", "Topic analysis", "Research documents"],
+            "config_params": ["embedding_provider", "breakpoint_threshold_type", "breakpoint_threshold_amount", "sentence_splitter"]
         },
         "markdown": {
-            "description": "Markdown-aware chunking with header structure",
-            "best_for": ["Documentation", "Structured markdown"],
-            "features": ["Header preservation", "Structure-aware"],
-            "use_cases": ["Documentation RAG", "Knowledge bases"]
+            "description": "Markdown-aware chunking with header structure preservation",
+            "best_for": ["Documentation", "Structured markdown", "Technical docs"],
+            "features": ["Header preservation", "Structure-aware", "Element filtering"],
+            "use_cases": ["Documentation RAG", "Knowledge bases", "Wiki content"],
+            "config_params": ["split_on_elements", "preserve_whole_elements", "strip_elements", "preserve_original_content"]
         },
         "html": {
-            "description": "HTML-aware chunking with element preservation",
-            "best_for": ["Web content", "HTML documents"],
-            "features": ["Tag-aware", "Content extraction", "Multiple modes"],
-            "use_cases": ["Web scraping", "Content extraction"]
+            "description": "HTML-aware chunking with element preservation and content extraction",
+            "best_for": ["Web content", "HTML documents", "Structured web pages"],
+            "features": ["Tag-aware", "Content extraction", "Multiple modes", "Link processing"],
+            "use_cases": ["Web scraping", "Content extraction", "Website analysis"],
+            "config_params": ["split_on_tags", "tags_to_ignore", "tags_to_extract", "preserve_whole_tags", "extract_link_info", "preserve_html_content", "merge_small_chunks"]
         },
         "json": {
-            "description": "JSON structure-preserving chunking",
-            "best_for": ["JSON data", "Structured data"],
-            "features": ["Structure preservation", "Path tracking"],
-            "use_cases": ["API data", "Configuration files"]
+            "description": "JSON structure-preserving chunking with path tracking",
+            "best_for": ["JSON data", "Structured data", "API responses"],
+            "features": ["Structure preservation", "Path tracking", "List conversion"],
+            "use_cases": ["API data", "Configuration files", "Data processing"],
+            "config_params": ["convert_lists_to_dicts", "max_depth", "json_encoder_options"]
         },
         "python": {
-            "description": "Python code-aware chunking",
-            "best_for": ["Python code", "Source code"],
-            "features": ["Syntax-aware", "Function/class boundaries"],
-            "use_cases": ["Code analysis", "Documentation generation"]
+            "description": "Python code-aware chunking using AST parsing",
+            "best_for": ["Python code", "Source code", "Code documentation"],
+            "features": ["Syntax-aware", "Function/class boundaries", "AST-based"],
+            "use_cases": ["Code analysis", "Documentation generation", "Code search"],
+            "config_params": ["split_on_nodes", "min_chunk_lines", "include_docstrings", "strip_decorators"]
         },
         "agentic": {
-            "description": "AI-powered intelligent chunking",
-            "best_for": ["Complex documents", "Maximum quality"],
-            "features": ["AI analysis", "Thematic coherence", "Adaptive"],
-            "use_cases": ["Premium RAG", "Research documents"]
+            "description": "AI-powered intelligent chunking with proposition extraction",
+            "best_for": ["Complex documents", "Maximum quality", "Research content"],
+            "features": ["AI analysis", "Thematic coherence", "Adaptive", "Quality scoring"],
+            "use_cases": ["Premium RAG", "Research documents", "High-quality search"],
+            "config_params": ["max_agent_retries", "min_proposition_length", "max_propositions_per_chunk", "enable_caching", "fallback_to_recursive"]
         }
     }
     
@@ -354,7 +433,7 @@ def create_chunking_strategy(
     strategy_class = _STRATEGY_REGISTRY[strategy]
     config_class = _CONFIG_REGISTRY.get(strategy)
     
-
+    # Handle special cases that require additional parameters
     if strategy == "semantic":
         embedding_provider = kwargs.pop("embedding_provider", None)
         if embedding_provider is None:
@@ -367,26 +446,9 @@ def create_chunking_strategy(
                     f"Semantic strategy requires an embedding_provider. Original error: {str(e)}",
                     error_code=error_code
                 )
-        
         kwargs["embedding_provider"] = embedding_provider
-        
-        if config is None:
-            if config_class:
-                config = config_class(**kwargs)
-            else:
-                config = BaseChunkingConfig(**kwargs)
-        elif isinstance(config, dict):
-            merged_config = {**config, **kwargs}
-            if config_class:
-                config = config_class(**merged_config)
-            else:
-                config = BaseChunkingConfig(**merged_config)
-        elif kwargs:
-            print(f"Warning: Both config object and kwargs provided. Using config object, ignoring kwargs: {list(kwargs.keys())}")
-        
-        return strategy_class(config=config)
     
-    if strategy in ["agentic", "ai"]:
+    elif strategy in ["agentic", "ai"]:
         agent = kwargs.pop("agent", None)
         if agent is None:
             raise ConfigurationError(
@@ -394,37 +456,36 @@ def create_chunking_strategy(
                 error_code="MISSING_AGENT"
             )
         
-        if config is None:
-            if config_class:
-                config = config_class(**kwargs)
-            else:
-                config = BaseChunkingConfig(**kwargs)
-        elif isinstance(config, dict):
-            merged_config = {**config, **kwargs}
-            if config_class:
-                config = config_class(**merged_config)
-            else:
-                config = BaseChunkingConfig(**merged_config)
-        elif kwargs:
-            print(f"Warning: Both config object and kwargs provided. Using config object, ignoring kwargs: {list(kwargs.keys())}")
-        
-        return strategy_class(agent, config=config)
+        # Create config for agentic strategy
+        final_config = _create_final_config(config, config_class, kwargs)
+        return strategy_class(agent, config=final_config)
     
+    # Create config for standard strategies
+    final_config = _create_final_config(config, config_class, kwargs)
+    return strategy_class(config=final_config)
+
+
+def _create_final_config(
+    config: Optional[Union[BaseChunkingConfig, Dict[str, Any]]],
+    config_class: Optional[Type[BaseChunkingConfig]],
+    kwargs: Dict[str, Any]
+) -> BaseChunkingConfig:
+    """Helper function to create final configuration object."""
     if config is None:
         if config_class:
-            config = config_class(**kwargs)
+            return config_class(**kwargs)
         else:
-            config = BaseChunkingConfig(**kwargs)
+            return BaseChunkingConfig(**kwargs)
     elif isinstance(config, dict):
         merged_config = {**config, **kwargs}
         if config_class:
-            config = config_class(**merged_config)
+            return config_class(**merged_config)
         else:
-            config = BaseChunkingConfig(**merged_config)
+            return BaseChunkingConfig(**merged_config)
     elif kwargs:
         print(f"Warning: Both config object and kwargs provided. Using config object, ignoring kwargs: {list(kwargs.keys())}")
     
-    return strategy_class(config=config)
+    return config
 
 
 def create_adaptive_strategy(
@@ -472,27 +533,23 @@ def _create_optimized_config(
     """Create optimized configuration based on content analysis."""
     config = kwargs.copy()
     
-    content_length = len(content)
-    line_count = content.count('\n')
-    avg_line_length = content_length / max(line_count, 1)
-    
+    # Set chunk size based on content type
     if content_type in [ContentType.CODE, ContentType.PYTHON, ContentType.JAVASCRIPT]:
         config.setdefault('chunk_size', 1500)
-        config.setdefault('preserve_sentences', False)
     elif content_type == ContentType.TECHNICAL_DOC:
         config.setdefault('chunk_size', 1200)
-        config.setdefault('preserve_sentences', True)
     elif content_type == ContentType.NARRATIVE:
         config.setdefault('chunk_size', 800)
-        config.setdefault('preserve_sentences', True)
     else:
         config.setdefault('chunk_size', 1000)
     
+    # Set chunk overlap based on content type
     if content_type in [ContentType.NARRATIVE, ContentType.TECHNICAL_DOC]:
         config.setdefault('chunk_overlap', int(config['chunk_size'] * 0.25))
     else:
         config.setdefault('chunk_overlap', int(config['chunk_size'] * 0.15))
     
+    # Set strategy-specific parameters
     if strategy_name == "recursive":
         if content_type == ContentType.MARKDOWN:
             config.setdefault('separators', ["\n# ", "\n## ", "\n### ", "\n\n", "\n", ". ", " ", ""])
@@ -611,49 +668,29 @@ def _create_source_optimized_config(
         file_size = source_path.stat().st_size
         extension = source_path.suffix.lower()
         
+        # Set chunk size based on file size
         if file_size > 100 * 1024 * 1024:  # > 100MB
             config.setdefault('chunk_size', 2000)
-            config.setdefault('enable_async', True)
-            config.setdefault('batch_size', 20)
         elif file_size > 10 * 1024 * 1024:  # > 10MB
             config.setdefault('chunk_size', 1500)
-            config.setdefault('enable_async', True)
-            config.setdefault('batch_size', 15)
         else:
             config.setdefault('chunk_size', 1000)
-            config.setdefault('enable_async', False)
-            config.setdefault('batch_size', 10)
         
+        # Set chunk overlap based on file type
         if extension in ['.md', '.markdown']:
-            config.setdefault('preserve_sentences', True)
-            config.setdefault('preserve_paragraphs', True)
             config.setdefault('chunk_overlap', int(config.get('chunk_size', 1000) * 0.2))
-        
         elif extension in ['.py', '.js', '.ts', '.java', '.cpp', '.c']:
-            config.setdefault('preserve_sentences', False)
-            config.setdefault('preserve_paragraphs', True)
             config.setdefault('chunk_overlap', int(config.get('chunk_size', 1000) * 0.15))
-        
         elif extension in ['.json', '.xml', '.yaml', '.yml']:
-            config.setdefault('preserve_sentences', False)
-            config.setdefault('preserve_paragraphs', False)
             config.setdefault('chunk_overlap', int(config.get('chunk_size', 1000) * 0.1))
-        
         elif extension in ['.html', '.htm']:
-            config.setdefault('preserve_sentences', True)
-            config.setdefault('preserve_paragraphs', True)
             config.setdefault('chunk_overlap', int(config.get('chunk_size', 1000) * 0.25))
-        
         elif extension in ['.pdf', '.docx']:
-            config.setdefault('preserve_sentences', True)
-            config.setdefault('preserve_paragraphs', True)
             config.setdefault('chunk_overlap', int(config.get('chunk_size', 1000) * 0.3))
-        
         else:  # .txt, .csv, etc.
-            config.setdefault('preserve_sentences', True)
-            config.setdefault('preserve_paragraphs', True)
             config.setdefault('chunk_overlap', int(config.get('chunk_size', 1000) * 0.2))
     
+    # Adjust chunk size based on content characteristics
     if content_sample:
         content_length = len(content_sample)
         line_count = content_sample.count('\n')
@@ -663,40 +700,12 @@ def _create_source_optimized_config(
             config.setdefault('chunk_size', min(config.get('chunk_size', 1000), 800))
         elif line_count > 0 and avg_line_length > 200:
             config.setdefault('chunk_size', max(config.get('chunk_size', 1000), 1200))
-        
-        # Detect if content has headers
-        if re.search(r'^#{1,6}\s+', content_sample, re.MULTILINE):
-            config.setdefault('preserve_paragraphs', True)
-            config.setdefault('chunk_overlap', int(config.get('chunk_size', 1000) * 0.25))
-        
-        if re.search(r'```[\s\S]*?```', content_sample):
-            config.setdefault('preserve_paragraphs', True)
     
-    if use_case == ChunkingUseCase.RAG_RETRIEVAL:
-        config.setdefault('add_chunk_index', True)
-        config.setdefault('add_position_info', True)
-        config.setdefault('preserve_sentences', True)
-    
-    elif use_case == ChunkingUseCase.SEMANTIC_SEARCH:
-        config.setdefault('add_chunk_index', True)
-        config.setdefault('add_position_info', True)
-        config.setdefault('preserve_sentences', True)
+    # Adjust overlap based on use case
+    if use_case == ChunkingUseCase.SEMANTIC_SEARCH:
         config.setdefault('chunk_overlap', int(config.get('chunk_size', 1000) * 0.3))
-    
     elif use_case == ChunkingUseCase.SUMMARIZATION:
-        config.setdefault('preserve_paragraphs', True)
         config.setdefault('chunk_overlap', int(config.get('chunk_size', 1000) * 0.1))
-    
-    if quality_preference == "fast":
-        config.setdefault('enable_async', False)
-        config.setdefault('batch_size', 5)
-        config.setdefault('show_progress', False)
-    elif quality_preference == "quality":
-        config.setdefault('enable_async', True)
-        config.setdefault('batch_size', 20)
-        config.setdefault('show_progress', True)
-        config.setdefault('preserve_sentences', True)
-        config.setdefault('preserve_paragraphs', True)
     
     return config
 

@@ -66,7 +66,7 @@ class BaseOpenAICompatible(BaseModelProvider):
         else:
             agent_model = self._provision_responses_model(provider)
 
-        final_settings_dict = {}
+        final_settings_dict = {'parallel_tool_calls': False}
         if self.model_settings:
             final_settings_dict.update(self.model_settings)
         
@@ -206,7 +206,7 @@ class Anthropic(BaseAnthropic):
         agent_model = AnthropicModel(self.model_name, provider=provider)
         agent_settings = None
         if self.enable_reasoning:
-            agent_settings = AnthropicModelSettings(anthropic_thinking={'type': 'enabled', 'budget_tokens': self.reasoning_budget_tokens})
+            agent_settings = AnthropicModelSettings(anthropic_thinking={'type': 'enabled', 'budget_tokens': self.reasoning_budget_tokens}, parallel_tool_calls=False)
         return agent_model, agent_settings
 
 class BedrockAnthropic(BaseAnthropic):
@@ -229,7 +229,7 @@ class BedrockAnthropic(BaseAnthropic):
         agent_model = AnthropicModel(self.model_name, provider=provider)
         agent_settings = None
         if self.enable_reasoning:
-            agent_settings = AnthropicModelSettings(anthropic_thinking={'type': 'enabled', 'budget_tokens': self.reasoning_budget_tokens})
+            agent_settings = AnthropicModelSettings(anthropic_thinking={'type': 'enabled', 'budget_tokens': self.reasoning_budget_tokens}, parallel_tool_calls=False)
         return agent_model, agent_settings
 
 class Gemini(BaseModelProvider):
