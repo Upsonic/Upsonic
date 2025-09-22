@@ -5,13 +5,13 @@ Result combiner module for combining results from multiple tasks into final answ
 from typing import List, Any, Optional
 from upsonic.tasks.tasks import Task
 from upsonic.agent.agent import Direct
-from upsonic.models.base import BaseModelProvider
+from upsonic.models.base import ModelProvider
 
 
 class ResultCombiner:
     """Handles combining results from multiple tasks into coherent final answers."""
     
-    def __init__(self, model_provider: Optional[BaseModelProvider] = None, debug: bool = False):
+    def __init__(self, model_provider: Optional[ModelProvider] = None, debug: bool = False):
         """
         Initialize the result combiner.
         

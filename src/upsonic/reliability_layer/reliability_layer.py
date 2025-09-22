@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import requests
 import asyncio
 
-from upsonic.models.base import BaseModelProvider
+from upsonic.models.base import ModelProvider
 if TYPE_CHECKING:
     from upsonic.tasks.tasks import Task
 
@@ -211,7 +211,7 @@ class ReliabilityProcessor:
     async def process_task(
         task: "Task",
         reliability_layer: Optional[Any] = None,
-        model_provider: Optional[BaseModelProvider] = None,
+        model_provider: Optional[ModelProvider] = None,
     ) -> "Task":
         if reliability_layer is None:
             return task

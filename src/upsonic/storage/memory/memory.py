@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, create_model
 from upsonic.storage.base import Storage
 from upsonic.storage.session.sessions import InteractionSession, UserProfile
 from upsonic.storage.types import SessionId, UserId
-from upsonic.models.base import BaseModelProvider
+from upsonic.models.base import ModelProvider
 from upsonic.schemas import UserTraits
 
 
@@ -33,14 +33,14 @@ class Memory:
         user_profile_schema: Optional[Type[BaseModel]] = None,
         dynamic_user_profile: bool = False,
         num_last_messages: Optional[int] = None,
-        model_provider: Optional[BaseModelProvider] = None,
+        model_provider: Optional[ModelProvider] = None,
         debug: bool = False,
         feed_tool_call_results: bool = False,
         user_memory_mode: Literal['update', 'replace'] = 'update'
     ):
         
-        if model_provider is not None and not isinstance(model_provider, BaseModelProvider):
-            raise TypeError("The `model_provider` parameter must be an instance of a BaseModelProvider subclass.")
+        if model_provider is not None and not isinstance(model_provider, ModelProvider):
+            raise TypeError("The `model_provider` parameter must be an instance of a ModelProvider subclass.")
         
         self.storage = storage
         self.num_last_messages = num_last_messages

@@ -9,7 +9,7 @@ import platform
 from rich.markup import escape
 
 from upsonic.models.utils import get_estimated_cost
-from upsonic.models.base import BaseModelProvider
+from upsonic.models.base import ModelProvider
 
 
 console = Console()
@@ -84,7 +84,7 @@ def connected_to_server(server_type: str, status: str, total_time: float = None)
 
     spacing()
 
-def call_end(result: Any, model_provider: BaseModelProvider, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, debug: bool = False, price_id: str = None):
+def call_end(result: Any, model_provider: ModelProvider, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, debug: bool = False, price_id: str = None):
     # First panel for tool usage if there are any tools used
     if tool_usage and len(tool_usage) > 0:
         tool_table = Table(show_header=True, expand=True, box=None)
@@ -183,7 +183,7 @@ def call_end(result: Any, model_provider: BaseModelProvider, response_format: st
 
 
 
-def agent_end(result: Any, model_provider: BaseModelProvider, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, tool_count: int, context_count: int, debug: bool = False, price_id:str = None):
+def agent_end(result: Any, model_provider: ModelProvider, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, tool_count: int, context_count: int, debug: bool = False, price_id:str = None):
     # First panel for tool usage if there are any tools used
     if tool_usage and len(tool_usage) > 0:
         tool_table = Table(show_header=True, expand=True, box=None)
@@ -291,7 +291,7 @@ def agent_end(result: Any, model_provider: BaseModelProvider, response_format: s
     spacing()
 
 
-def agent_total_cost(total_input_tokens: int, total_output_tokens: int, total_time: float, model_provider: BaseModelProvider):
+def agent_total_cost(total_input_tokens: int, total_output_tokens: int, total_time: float, model_provider: ModelProvider):
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
     

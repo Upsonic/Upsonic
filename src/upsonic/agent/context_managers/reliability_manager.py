@@ -1,10 +1,10 @@
 from contextlib import asynccontextmanager
 
 from upsonic.reliability_layer.reliability_layer import ReliabilityProcessor
-from upsonic.models.base import BaseModelProvider
+from upsonic.models.base import ModelProvider
 
 class ReliabilityManager:
-    def __init__(self, task, reliability_layer, model_provider: BaseModelProvider):
+    def __init__(self, task, reliability_layer, model_provider: ModelProvider):
         """
         Initializes the ReliabilityManager.
 

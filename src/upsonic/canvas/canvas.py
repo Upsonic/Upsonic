@@ -1,12 +1,12 @@
 import re
 from typing import Optional
 
-from upsonic.models.base import BaseModelProvider
+from upsonic.models.base import ModelProvider
 from upsonic.models.providers import OpenAI
 
 
 class Canvas:
-    def __init__(self, canvas_name: str, model_provider: Optional[BaseModelProvider] = None):
+    def __init__(self, canvas_name: str, model_provider: Optional[ModelProvider] = None):
         """
         Initializes the Canvas.
 

@@ -21,7 +21,7 @@ from upsonic.storage.base import Storage
 from upsonic.utils.retry import retryable
 from upsonic.utils.validators import validate_attachments_for_model
 from upsonic.storage.memory.memory import Memory
-from upsonic.models.base import BaseModelProvider
+from upsonic.models.base import ModelProvider
 from upsonic.models.factory import ModelFactory
 from upsonic.utils.package.exception import GuardrailValidationError
 from upsonic.safety_engine.base import Policy
@@ -48,7 +48,7 @@ class Direct(BaseAgent):
 
     def __init__(self, 
                  name: str | None = None, 
-                 model: Union[str, BaseModelProvider] | None = "openai/gpt-4o",
+                 model: Union[str, ModelProvider] | None = "openai/gpt-4o",
                  memory: Optional[Memory] = None,
                  debug: bool = False, 
                  company_url: str | None = None, 
@@ -201,7 +201,7 @@ class Direct(BaseAgent):
 
 
 
-    async def print_do_async(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1):
+    async def print_do_async(self, task: Union["Task", List["Task"]], model: Optional[Union[str, ModelProvider]] = None, debug: bool = False, retry: int = 1):
         """
         Execute a direct LLM call and print the result asynchronously.
         
@@ -218,7 +218,7 @@ class Direct(BaseAgent):
         return result
 
 
-    def do(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1):
+    def do(self, task: Union["Task", List["Task"]], model: Optional[Union[str, ModelProvider]] = None, debug: bool = False, retry: int = 1):
         """
         Execute a direct LLM call with the given task and model synchronously.
         
@@ -258,7 +258,7 @@ class Direct(BaseAgent):
             return asyncio.run(self.do_async(task, model, debug, retry))
 
 
-    def print_do(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1):
+    def print_do(self, task: Union["Task", List["Task"]], model: Optional[Union[str, ModelProvider]] = None, debug: bool = False, retry: int = 1):
         """
         Execute a direct LLM call and print the result synchronously.
         
@@ -277,7 +277,7 @@ class Direct(BaseAgent):
 
 
 
-    async def agent_create(self, provider: BaseModelProvider, single_task: "Task", system_prompt: str):
+    async def agent_create(self, provider: ModelProvider, single_task: "Task", system_prompt: str):
         """
         Creates and configures the underlying PydanticAgent, processing and wrapping
         all tools with the advanced behavioral logic from ToolProcessor.
@@ -602,7 +602,7 @@ class Direct(BaseAgent):
 
 
     @retryable()
-    async def do_async(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1, state: Any = None, *, graph_execution_id: Optional[str] = None):
+    async def do_async(self, task: "Task", model: Optional[Union[str, ModelProvider]] = None, debug: bool = False, retry: int = 1, state: Any = None, *, graph_execution_id: Optional[str] = None):
         """
         Execute a direct LLM call with robust, context-managed storage connections
         and agent-level control over history management.
@@ -703,7 +703,7 @@ class Direct(BaseAgent):
 
 
 
-    def continue_run(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1):
+    def continue_run(self, task: "Task", model: Optional[Union[str, ModelProvider]] = None, debug: bool = False, retry: int = 1):
         """
         Continues the execution of a paused task after external tool results have been provided.
         
@@ -730,7 +730,7 @@ class Direct(BaseAgent):
             return asyncio.run(self.continue_async(task, model, debug, retry))
 
 
-    async def continue_async(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1, state: Any = None, *, graph_execution_id: Optional[str] = None):
+    async def continue_async(self, task: "Task", model: Optional[Union[str, ModelProvider]] = None, debug: bool = False, retry: int = 1, state: Any = None, *, graph_execution_id: Optional[str] = None):
         """
         Asynchronously continues the execution of a paused task.
         """

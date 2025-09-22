@@ -1,102 +1,98 @@
-import os
-from typing import List, Dict, Type
+"""
+Utility functions for model operations and cost estimation.
+"""
+
+from typing import Any, Dict, Optional
 from decimal import Decimal
-
-from upsonic.models.base import BaseModelProvider
-from upsonic.models.providers import (
-    OpenAI, AzureOpenAI, Ollama, Anthropic, Gemini 
-)
-
-from upsonic.utils.package.exception import ConfigurationError
-
-
-ALL_PROVIDER_CLASSES = [OpenAI, AzureOpenAI, Ollama, Anthropic, Gemini]
-
-
-def list_available_models(provider_class: Type[BaseModelProvider]) -> List[str]:
-    """
-    Lists the officially supported model names for a given provider class.
-
-    Args:
-        provider_class: The provider class itself (e.g., OpenAI, not an instance).
-
-    Returns:
-        A sorted list of supported model name strings.
-    """
-    model_meta = getattr(provider_class, '_model_meta', None)
-    if not model_meta or not hasattr(model_meta, 'default'):
-        return []
-    return sorted(list(model_meta.default.keys()))
-
-
-def get_all_supported_models() -> Dict[str, List[str]]:
-    """
-    Returns a complete dictionary of all supported models, grouped by provider.
-
-    Returns:
-        A dictionary where keys are provider class names and values are
-        lists of their supported model names.
-    """
-    return {
-        provider.__name__: list_available_models(provider)
-        for provider in ALL_PROVIDER_CLASSES
-    }
-
-
-def check_provider_environment(model_provider: BaseModelProvider) -> None:
-    """
-    Performs a pre-flight check to ensure all required environment variables
-    for a given provider instance are set.
-
-    Args:
-        model_provider: An instantiated model provider object.
-
-    Raises:
-        ConfigurationError: If any required environment variables are not set.
-    """
-    missing_vars = []
-    for var_name in model_provider.required_environment_variables:
-        if not os.getenv(var_name):
-            missing_vars.append(var_name)
-    
-    if missing_vars:
-        raise ConfigurationError(
-            f"Missing required environment variables for provider '{type(model_provider).__name__}': "
-            f"{', '.join(missing_vars)}. Please set them in your environment."
-        )
 
 
 def get_estimated_cost(
     input_tokens: int, 
     output_tokens: int, 
-    model_provider: BaseModelProvider
+    model_provider: Optional[Any] = None
 ) -> str:
     """
-    Calculates the estimated cost for token usage using a configured model
-    provider instance.
-
-    This function is instance-aware and accesses pricing information directly
-    from the provider object.
-
+    Estimate the cost of a model interaction based on token usage.
+    
     Args:
-        input_tokens: The number of input tokens used.
-        output_tokens: The number of output tokens generated.
-        model_provider: The instantiated BaseModelProvider object (e.g., OpenAI, Anthropic).
-
+        input_tokens: Number of input tokens
+        output_tokens: Number of output tokens
+        model_provider: The model provider instance (optional)
+        
     Returns:
-        A formatted string representing the estimated cost (e.g., "~$0.0005").
+        Estimated cost as a formatted string (e.g., "~0.0123")
     """
-    pricing = model_provider.pricing
+    # Default pricing for common models (per 1K tokens)
+    # These are approximate rates and should be updated regularly
+    default_pricing = {
+        "gpt-4o": {"input": 0.005, "output": 0.015},
+        "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},
+        "gpt-4": {"input": 0.03, "output": 0.06},
+        "gpt-3.5-turbo": {"input": 0.001, "output": 0.002},
+        "claude-3-5-sonnet": {"input": 0.003, "output": 0.015},
+        "claude-3-opus": {"input": 0.015, "output": 0.075},
+    }
     
-    if not pricing or "input" not in pricing or "output" not in pricing:
-        return "Cost Unknown"
-
-    input_tokens_millions = Decimal(str(input_tokens)) / Decimal('1000000')
-    output_tokens_millions = Decimal(str(output_tokens)) / Decimal('1000000')
+    # Try to get model name from provider
+    model_name = "gpt-4o"  # default
+    if model_provider and hasattr(model_provider, 'model_name'):
+        model_name = model_provider.model_name
     
-    input_cost = Decimal(str(pricing["input"])) * input_tokens_millions
-    output_cost = Decimal(str(pricing["output"])) * output_tokens_millions
+    # Get pricing for the model
+    pricing = default_pricing.get(model_name, default_pricing["gpt-4o"])
+    
+    # Calculate cost
+    input_cost = (input_tokens / 1000) * pricing["input"]
+    output_cost = (output_tokens / 1000) * pricing["output"]
     total_cost = input_cost + output_cost
+    
+    # Format as string with ~ prefix
+    return f"~{total_cost:.4f}"
 
-    return f"~${float(round(total_cost, 4))}"
 
+def format_token_usage(usage: Dict[str, int]) -> str:
+    """
+    Format token usage information for display.
+    
+    Args:
+        usage: Dictionary containing token usage information
+        
+    Returns:
+        Formatted string
+    """
+    input_tokens = usage.get('input_tokens', 0)
+    output_tokens = usage.get('output_tokens', 0)
+    total_tokens = input_tokens + output_tokens
+    
+    return f"Input: {input_tokens:,} | Output: {output_tokens:,} | Total: {total_tokens:,}"
+
+
+def validate_model_settings(settings: Dict[str, Any]) -> bool:
+    """
+    Validate model settings for common issues.
+    
+    Args:
+        settings: Dictionary of model settings
+        
+    Returns:
+        True if settings are valid, False otherwise
+    """
+    # Check temperature range
+    if 'temperature' in settings:
+        temp = settings['temperature']
+        if not isinstance(temp, (int, float)) or temp < 0 or temp > 2:
+            return False
+    
+    # Check max_tokens
+    if 'max_tokens' in settings:
+        max_tokens = settings['max_tokens']
+        if not isinstance(max_tokens, int) or max_tokens <= 0:
+            return False
+    
+    # Check top_p range
+    if 'top_p' in settings:
+        top_p = settings['top_p']
+        if not isinstance(top_p, (int, float)) or top_p < 0 or top_p > 1:
+            return False
+    
+    return True

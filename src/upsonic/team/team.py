@@ -6,7 +6,7 @@ from upsonic.agent.agent import Direct as Agent
 from upsonic.context.task import turn_task_to_string
 from upsonic.storage import Memory, InMemoryStorage
 
-from upsonic.models.base import BaseModelProvider
+from upsonic.models.base import ModelProvider
 
 from .coordinator_setup import CoordinatorSetup
 from .delegation_manager import DelegationManager
@@ -21,7 +21,7 @@ class Team:
     def __init__(self, 
                  agents: list[Any], 
                  tasks: list[Task] | None = None, 
-                 model_provider: Optional[BaseModelProvider] = None,
+                 model_provider: Optional[ModelProvider] = None,
                  response_format: Any = str,  
                  ask_other_team_members: bool = False,
                  mode: Literal["sequential", "coordinate", "route"] = "sequential",
