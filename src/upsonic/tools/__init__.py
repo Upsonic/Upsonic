@@ -9,7 +9,10 @@ from .external_tool import ExternalToolCall
 
 
 from typing import Dict, List
-from duckduckgo_search import DDGS
+try:
+    from ddgs import DDGS
+except ImportError:
+    from duckduckgo_search import DDGS
 import requests
 from bs4 import BeautifulSoup
 
@@ -176,12 +179,14 @@ def Search(query: str, max_results: int = 10) -> List[Dict[str, str]]:
     Returns:
         List of dictionaries containing search results with keys: title, href, body
     """
-    
-    
-    ddgs = DDGS()
-    results = list(ddgs.text(query, max_results=max_results))
-    
-    return results
+    # Use context manager to ensure proper cleanup
+    with DDGS() as ddgs:
+        try:
+            results = list(ddgs.text(query, max_results=max_results))
+            return results
+        except Exception as e:
+            # Return empty list on error to maintain consistent return type
+            return []
 
 
 def WebSearch(query: str, max_results: int = 10) -> str:
@@ -195,19 +200,20 @@ def WebSearch(query: str, max_results: int = 10) -> str:
     Returns:
         Formatted string containing search results
     """
-    try:
-        ddgs = DDGS()
-        results = list(ddgs.text(query, max_results=max_results))
-        
-        formatted_results = f"Web search results for: {query}\n\n"
-        for i, result in enumerate(results, 1):
-            formatted_results += f"{i}. {result.get('title', 'No title')}\n"
-            formatted_results += f"   URL: {result.get('href', 'No URL')}\n"
-            formatted_results += f"   Description: {result.get('body', 'No description')}\n\n"
-        
-        return formatted_results
-    except Exception as e:
-        return f"Error performing web search: {str(e)}"
+    # Use context manager to ensure proper cleanup
+    with DDGS() as ddgs:
+        try:
+            results = list(ddgs.text(query, max_results=max_results))
+            
+            formatted_results = f"Web search results for: {query}\n\n"
+            for i, result in enumerate(results, 1):
+                formatted_results += f"{i}. {result.get('title', 'No title')}\n"
+                formatted_results += f"   URL: {result.get('href', 'No URL')}\n"
+                formatted_results += f"   Description: {result.get('body', 'No description')}\n\n"
+            
+            return formatted_results
+        except Exception as e:
+            return f"Error performing web search: {str(e)}"
 
 
 def WebRead(url: str) -> str:
@@ -220,12 +226,13 @@ def WebRead(url: str) -> str:
     Returns:
         Extracted text content from the webpage
     """
+    session = requests.Session()
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
         
-        response = requests.get(url, headers=headers, timeout=30)
+        response = session.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         
         soup = BeautifulSoup(response.content, 'html.parser')
@@ -251,5 +258,7 @@ def WebRead(url: str) -> str:
         return f"Error reading from {url}: {str(e)}"
     except Exception as e:
         return f"Error processing content from {url}: {str(e)}"
+    finally:
+        session.close()
 
     

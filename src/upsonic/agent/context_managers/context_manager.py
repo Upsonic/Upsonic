@@ -128,7 +128,7 @@ class ContextManager:
         """
         try:
             if knowledge_base.rag:
-                await knowledge_base.setup_rag(self.agent)
+                await knowledge_base.setup_rag()
                 
                 rag_results = await knowledge_base.query_async(query)
                 

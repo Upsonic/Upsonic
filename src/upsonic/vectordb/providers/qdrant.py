@@ -95,8 +95,12 @@ class QdrantProvider(BaseVectorDBProvider):
                     grpc_port=core_cfg.port + 1540 if core_cfg.port else 6334,
                 )
             elif core_cfg.mode == Mode.CLOUD:
+                # Remove port from URL for cloud connections
+                url = core_cfg.host
+                if url and ":6333" in url:
+                    url = url.replace(":6333", "")
                 self._client = QdrantClient(
-                    url=core_cfg.host,
+                    url=url,
                     api_key=core_cfg.api_key.get_secret_value() if core_cfg.api_key else None
                 )
             else:
@@ -356,7 +360,7 @@ class QdrantProvider(BaseVectorDBProvider):
                     score=1.0,
                     payload=record.payload,
                     vector=record.vector,
-                    text=record.payload["chunk"]
+                    text=record.payload.get("chunk", "")
                 )
                 for record in retrieved_records
             ]
@@ -416,15 +420,33 @@ class QdrantProvider(BaseVectorDBProvider):
             )
 
             filtered_results = []
+            
             for point in query_response.points:
-                if point.score >= final_similarity_threshold:
+                # For Qdrant, scores need to be interpreted based on distance metric
+                # Cosine: higher is better (0 to 1), Euclidean: lower is better, Dot: higher is better
+                should_include = False
+                
+                if self._config.core.distance_metric == DistanceMetric.COSINE:
+                    # Cosine similarity: 1.0 = identical, 0.0 = orthogonal, higher is better
+                    should_include = point.score >= final_similarity_threshold
+                elif self._config.core.distance_metric == DistanceMetric.DOT_PRODUCT:
+                    # Dot product: higher is better (can be negative)
+                    should_include = point.score >= final_similarity_threshold
+                elif self._config.core.distance_metric == DistanceMetric.EUCLIDEAN:
+                    # Euclidean distance: lower is better, so we need to invert the logic
+                    # Convert threshold to distance: smaller distance = higher similarity
+                    max_distance = 1.0 / final_similarity_threshold if final_similarity_threshold > 0 else float('inf')
+                    should_include = point.score <= max_distance
+                
+                if should_include:
                     filtered_results.append(VectorSearchResult(
                         id=point.id,
                         score=point.score,
                         payload=point.payload,
                         vector=point.vector,
-                        text=point.payload["chunk"]
+                        text=point.payload.get("chunk", "")
                     ))
+            
             return filtered_results
         except Exception as e:
             raise SearchError(f"An error occurred during dense search: {e}") from e
@@ -468,7 +490,7 @@ class QdrantProvider(BaseVectorDBProvider):
                                     score=relevance_score,
                                     payload=record.payload,
                                     vector=record.vector,
-                                    text=record.payload["chunk"]
+                                    text=record.payload.get("chunk", "")
                                 ))
                 
                 matching_records.sort(key=lambda x: x.score, reverse=True)
@@ -516,7 +538,7 @@ class QdrantProvider(BaseVectorDBProvider):
                             score=score,
                             payload=r.payload,
                             vector=r.vector,
-                            text=r.payload["chunk"]
+                            text=r.payload.get("chunk", "")
                         ))
                 return filtered_results
             except Exception as e:
@@ -563,7 +585,7 @@ class QdrantProvider(BaseVectorDBProvider):
                 payload=original_doc.payload,
                 vector=original_doc.vector,
                 score=fused_score,
-                text=original_doc.payload["chunk"]
+                text=original_doc.payload.get("chunk", "")
             ))
         
         return final_results
@@ -591,7 +613,7 @@ class QdrantProvider(BaseVectorDBProvider):
                 payload=original_doc.payload,
                 vector=original_doc.vector,
                 score=fused_score,
-                text=original_doc.payload["chunk"]
+                text=original_doc.payload.get("chunk", "")
             ))
             
         return final_results

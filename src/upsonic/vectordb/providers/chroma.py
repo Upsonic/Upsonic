@@ -66,8 +66,42 @@ class ChromaProvider(BaseVectorDBProvider):
                 if not self._config.core.host or not self._config.core.port: raise ConfigurationError("Host and port must be specified for LOCAL mode.")
                 client_instance = chromadb.HttpClient(host=self._config.core.host, port=self._config.core.port)
             elif self._config.core.mode == Mode.CLOUD:
-                if not self._config.core.host or not self._config.core.api_key: raise ConfigurationError("Host and api_key must be specified for CLOUD mode.")
-                client_instance = chromadb.HttpClient(host=self._config.core.host, headers={"Authorization": f"Bearer {self._config.core.api_key.get_secret_value()}"})
+                if not self._config.core.api_key: raise ConfigurationError("api_key must be specified for CLOUD mode.")
+                
+                # Prepare CloudClient kwargs
+                cloud_kwargs = {
+                    "api_key": self._config.core.api_key.get_secret_value()
+                }
+                
+                # Add tenant and database if provided in advanced config namespace
+                if hasattr(self._config.advanced, 'namespace') and self._config.advanced.namespace:
+                    # Parse namespace for tenant and database
+                    if ',' in self._config.advanced.namespace:
+                        parts = self._config.advanced.namespace.split(',')
+                        for part in parts:
+                            part = part.strip()
+                            if 'tenant=' in part:
+                                tenant = part.split('tenant=')[1].strip()
+                                cloud_kwargs["tenant"] = tenant
+                            elif 'database=' in part:
+                                database = part.split('database=')[1].strip()
+                                cloud_kwargs["database"] = database
+                
+                # Use CloudClient for Chroma Cloud connections
+                try:
+                    client_instance = chromadb.CloudClient(**cloud_kwargs)
+                except (AttributeError, ImportError, TypeError) as e:
+                    # Fallback to HttpClient if CloudClient is not available
+                    if not self._config.core.host:
+                        raise ConfigurationError("CloudClient not available and no host specified for fallback HttpClient.")
+                    
+                    headers = {"Authorization": f"Bearer {self._config.core.api_key.get_secret_value()}"}
+                    fallback_kwargs = {
+                        "host": self._config.core.host, 
+                        "headers": headers,
+                        "ssl": self._config.core.use_tls
+                    }
+                    client_instance = chromadb.HttpClient(**fallback_kwargs)
             else: raise ConfigurationError(f"Unsupported mode for ChromaProvider: {self._config.core.mode}")
             
             client_instance.heartbeat()
@@ -131,7 +165,9 @@ class ChromaProvider(BaseVectorDBProvider):
     def collection_exists(self) -> bool:
         if not self.is_ready(): raise VectorDBConnectionError("Cannot check for collection: Provider is not connected or ready.")
         try:
-            self._client.get_collection(name=self._config.core.collection_name)
+            collection = self._client.get_collection(name=self._config.core.collection_name)
+            if self._collection_instance is None:
+                self._collection_instance = collection
             return True
         except NotFoundError: return False
         except Exception as e: raise VectorDBConnectionError(f"Failed to check collection existence due to a server error: {e}") from e
@@ -280,7 +316,15 @@ class ChromaProvider(BaseVectorDBProvider):
             
             filtered_results = []
             for i in range(len(ids)):
-                score = min(1.0, max(0.0, 1 - distances[i] / max_dist if max_dist > 0 else 1.0))
+                if self._config.core.distance_metric == DistanceMetric.COSINE:
+                    score = 1 - distances[i]
+                elif self._config.core.distance_metric == DistanceMetric.EUCLIDEAN:
+                    score = min(1.0, max(0.0, 1 - distances[i] / max_dist if max_dist > 0 else 1.0))
+                elif self._config.core.distance_metric == DistanceMetric.DOT_PRODUCT:
+                    score = distances[i]
+                else:
+                    score = 1 - distances[i]
+                
                 if score >= final_similarity_threshold:
                     filtered_results.append(VectorSearchResult(id=ids[i], score=score, payload=metadatas[i], vector=vectors[i], text=chunks[i]))
             
@@ -336,8 +380,8 @@ class ChromaProvider(BaseVectorDBProvider):
     def hybrid_search(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
         if not self._config.search.hybrid_search_enabled:
             raise ConfigurationError("Hybrid search is not enabled for this provider.")
-        final_alpha = alpha if alpha is not None else self._config.search.default_hybrid_alpha
-        fusion_method = fusion_method if fusion_method is not None else self._config.search.default_fusion_method
+        final_alpha = alpha if alpha is not None else (self._config.search.default_hybrid_alpha or 0.5)
+        fusion_method = fusion_method if fusion_method is not None else (self._config.search.default_fusion_method or 'weighted')
         
         try:
             candidate_k = max(top_k * 2, 20)

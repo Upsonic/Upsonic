@@ -141,6 +141,23 @@ class PineconeProvider(BaseVectorDBProvider):
         
         logger.info("Phase 1 Succeeded: Pinecone configuration has been successfully and comprehensively validated.")
 
+    def _sanitize_collection_name(self, collection_name: str) -> str:
+        """
+        Convert collection name to Pinecone-compatible format.
+        Pinecone requires names to consist of lowercase alphanumeric characters or hyphens only.
+        """
+        import re
+        # Convert to lowercase and replace underscores and other invalid characters with hyphens
+        sanitized = re.sub(r'[^a-z0-9-]', '-', collection_name.lower())
+        # Remove multiple consecutive hyphens
+        sanitized = re.sub(r'-+', '-', sanitized)
+        # Remove leading/trailing hyphens
+        sanitized = sanitized.strip('-')
+        # Ensure it's not empty
+        if not sanitized:
+            sanitized = "default-collection"
+        return sanitized
+
 
 
     def connect(self) -> None:
@@ -156,7 +173,8 @@ class PineconeProvider(BaseVectorDBProvider):
             existing_indexes = self._client.list_indexes().names()
             
             if self._config.indexing.create_dense_index:
-                dense_name = f"{self._config.core.collection_name}-dense"
+                safe_collection_name = self._sanitize_collection_name(self._config.core.collection_name)
+                dense_name = f"{safe_collection_name}-dense"
                 if dense_name in existing_indexes:
                     self._dense_index = self._client.Index(dense_name)
                     logger.debug(f"Connected to existing dense index: {dense_name}")
@@ -164,7 +182,8 @@ class PineconeProvider(BaseVectorDBProvider):
                     logger.debug(f"Dense index {dense_name} does not exist yet")
             
             if self._config.indexing.create_sparse_index:
-                sparse_name = f"{self._config.core.collection_name}-sparse"
+                safe_collection_name = self._sanitize_collection_name(self._config.core.collection_name)
+                sparse_name = f"{safe_collection_name}-sparse"
                 if sparse_name in existing_indexes:
                     self._sparse_index = self._client.Index(sparse_name)
                     logger.debug(f"Connected to existing sparse index: {sparse_name}")
@@ -198,7 +217,8 @@ class PineconeProvider(BaseVectorDBProvider):
         
         try:
             if self._config.indexing.create_dense_index:
-                dense_name = f"{self._config.core.collection_name}-dense"
+                safe_collection_name = self._sanitize_collection_name(self._config.core.collection_name)
+                dense_name = f"{safe_collection_name}-dense"
                 try:
                     status = self._client.describe_index(dense_name)
                     if not status['status']['ready']:
@@ -209,7 +229,8 @@ class PineconeProvider(BaseVectorDBProvider):
                     return False
                     
             if self._config.indexing.create_sparse_index:
-                sparse_name = f"{self._config.core.collection_name}-sparse"
+                safe_collection_name = self._sanitize_collection_name(self._config.core.collection_name)
+                sparse_name = f"{safe_collection_name}-sparse"
                 try:
                     status = self._client.describe_index(sparse_name)
                     if not status['status']['ready']:
@@ -234,8 +255,9 @@ class PineconeProvider(BaseVectorDBProvider):
             raise Exception("Must be connected to Pinecone to check if a collection exists.")
         try:
             existing_indexes = self._client.list_indexes().names()
-            dense_exists = f"{self._config.core.collection_name}-dense" in existing_indexes
-            sparse_exists = f"{self._config.core.collection_name}-sparse" in existing_indexes
+            safe_collection_name = self._sanitize_collection_name(self._config.core.collection_name)
+            dense_exists = f"{safe_collection_name}-dense" in existing_indexes
+            sparse_exists = f"{safe_collection_name}-sparse" in existing_indexes
             
             if self._config.indexing.create_dense_index and self._config.indexing.create_sparse_index:
                 return dense_exists and sparse_exists
@@ -256,11 +278,12 @@ class PineconeProvider(BaseVectorDBProvider):
             raise VectorDBConnectionError("Must be connected to Pinecone to delete collections.")
             
         collection_name = self._config.core.collection_name
-        logger.warning(f"Attempting to permanently delete collections for: '{collection_name}'")
+        safe_collection_name = self._sanitize_collection_name(collection_name)
+        logger.warning(f"Attempting to permanently delete collections for: '{collection_name}' (sanitized: '{safe_collection_name}')")
         
         try:
             if self._config.indexing.create_dense_index:
-                dense_name = f"{collection_name}-dense"
+                dense_name = f"{safe_collection_name}-dense"
                 if dense_name in self._client.list_indexes().names():
                     logger.info(f"Deleting dense index '{dense_name}'...")
                     self._client.delete_index(dense_name)
@@ -270,7 +293,7 @@ class PineconeProvider(BaseVectorDBProvider):
                     logger.info(f"Dense index '{dense_name}' did not exist, so no deletion was necessary.")
             
             if self._config.indexing.create_sparse_index:
-                sparse_name = f"{collection_name}-sparse"
+                sparse_name = f"{safe_collection_name}-sparse"
                 if sparse_name in self._client.list_indexes().names():
                     logger.info(f"Deleting sparse index '{sparse_name}'...")
                     self._client.delete_index(sparse_name)
@@ -300,7 +323,9 @@ class PineconeProvider(BaseVectorDBProvider):
 
 
     def _create_dense_index(self) -> None:
-        dense_name = f"{self._config.core.collection_name}-dense"
+        # Convert collection name to Pinecone-compatible format (lowercase, alphanumeric and hyphens only)
+        safe_collection_name = self._sanitize_collection_name(self._config.core.collection_name)
+        dense_name = f"{safe_collection_name}-dense"
         
         if dense_name in self._client.list_indexes().names():
             if self._config.core.recreate_if_exists:
@@ -338,7 +363,9 @@ class PineconeProvider(BaseVectorDBProvider):
             raise Exception(f"Failed to create dense index '{dense_name}': {e}") from e
 
     def _create_sparse_index(self) -> None:
-        sparse_name = f"{self._config.core.collection_name}-sparse"
+        # Convert collection name to Pinecone-compatible format (lowercase, alphanumeric and hyphens only)
+        safe_collection_name = self._sanitize_collection_name(self._config.core.collection_name)
+        sparse_name = f"{safe_collection_name}-sparse"
         
         if sparse_name in self._client.list_indexes().names():
             if self._config.core.recreate_if_exists:
@@ -450,7 +477,9 @@ class PineconeProvider(BaseVectorDBProvider):
                 "metadata": metadata
             }
             if vectors:
-                record_dict["values"] = vectors[i]
+                # Convert to float32 for Pinecone compatibility
+                import numpy as np
+                record_dict["values"] = np.array(vectors[i], dtype=np.float32).tolist()
             if sparse_vectors:
                 record_dict["sparse_values"] = sparse_vectors[i]
             
@@ -485,10 +514,21 @@ class PineconeProvider(BaseVectorDBProvider):
         is_sparse_provided = sparse_vectors is not None
         
         if cfg.create_dense_index and cfg.create_sparse_index:
-            if not is_dense_provided or not is_sparse_provided:
-                raise UpsertError("In Hybrid mode, both 'vectors' and 'sparse_vectors' must be provided.")
-            if not (len(ids) == len(payloads) == len(vectors) == len(sparse_vectors)):
-                raise UpsertError("In Hybrid mode, all lists must have the same length.")
+            # In hybrid mode, we can accept either dense-only or both types
+            if not is_dense_provided and not is_sparse_provided:
+                raise UpsertError("In Hybrid mode, at least one of 'vectors' or 'sparse_vectors' must be provided.")
+            if is_dense_provided and is_sparse_provided:
+                # Both provided - validate lengths match
+                if not (len(ids) == len(payloads) == len(vectors) == len(sparse_vectors)):
+                    raise UpsertError("In Hybrid mode, all lists must have the same length.")
+            elif is_dense_provided:
+                # Only dense provided - this is allowed for dense-only upserts
+                if not (len(ids) == len(payloads) == len(vectors)):
+                    raise UpsertError("In Hybrid mode with dense-only data, ids, payloads, and vectors must have the same length.")
+            elif is_sparse_provided:
+                # Only sparse provided - this is allowed for sparse-only upserts
+                if not (len(ids) == len(payloads) == len(sparse_vectors)):
+                    raise UpsertError("In Hybrid mode with sparse-only data, ids, payloads, and sparse_vectors must have the same length.")
         elif cfg.create_dense_index:
             if not is_dense_provided:
                 raise UpsertError("In Dense-Only mode, 'vectors' must be provided.")
@@ -624,7 +664,7 @@ class PineconeProvider(BaseVectorDBProvider):
         """Performs a pure vector similarity search."""
         if not self._dense_index: raise VectorDBConnectionError("Not connected to a Pinecone index.")
         
-        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else (self._config.search.default_similarity_threshold if self._config.search.default_similarity_threshold is not None else 0.5)
         
         namespace = self._config.advanced.namespace or ""
         try:
@@ -639,7 +679,31 @@ class PineconeProvider(BaseVectorDBProvider):
             )
             results = self._parse_query_response(response)
             
-            filtered_results = [result for result in results if result.score >= final_similarity_threshold]
+            # For Pinecone with cosine similarity, scores are typically in range [0, 1]
+            # Higher scores indicate better similarity
+            # Apply similarity threshold correctly based on distance metric
+            filtered_results = []
+            for result in results:
+                should_include = False
+                
+                if self._config.core.distance_metric == DistanceMetric.COSINE:
+                    # Cosine similarity: 1.0 = identical, 0.0 = orthogonal, higher is better
+                    should_include = result.score >= final_similarity_threshold
+                elif self._config.core.distance_metric == DistanceMetric.DOT_PRODUCT:
+                    # Dot product: higher is better (can be negative)
+                    should_include = result.score >= final_similarity_threshold
+                elif self._config.core.distance_metric == DistanceMetric.EUCLIDEAN:
+                    # Euclidean distance: lower is better, but Pinecone returns similarity-like scores
+                    # For euclidean, Pinecone might normalize to similarity format
+                    should_include = result.score >= final_similarity_threshold
+                else:
+                    # Default case
+                    should_include = result.score >= final_similarity_threshold
+                
+                if should_include:
+                    filtered_results.append(result)
+            
+            logger.debug(f"Dense search found {len(results)} results, {len(filtered_results)} after similarity threshold {final_similarity_threshold}")
             return filtered_results
         except ApiException as e:
             raise SearchError(f"Dense search operation failed in Pinecone: {e}") from e
@@ -648,7 +712,7 @@ class PineconeProvider(BaseVectorDBProvider):
         """Performs a sparse-vector-only lexical search."""
         if not self._sparse_index: raise VectorDBConnectionError("Not connected to a Pinecone index.")
         
-        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else (self._config.search.default_similarity_threshold if self._config.search.default_similarity_threshold is not None else 0.5)
         
         sparse_vector = kwargs.pop("sparse_vector", None)
         if not sparse_vector:
@@ -727,7 +791,7 @@ class PineconeProvider(BaseVectorDBProvider):
             )
             sparse_results = self._parse_query_response(sparse_response)
             
-            final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
+            final_similarity_threshold = similarity_threshold if similarity_threshold is not None else (self._config.search.default_similarity_threshold if self._config.search.default_similarity_threshold is not None else 0.5)
             
             combined_results = self._merge_hybrid_results(
                 dense_results, sparse_results, alpha, fusion_method, top_k

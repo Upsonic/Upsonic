@@ -480,10 +480,21 @@ class KnowledgeBase:
         
         query_vector = await self.embedding_provider.embed_query(query)
 
-        search_results = self.vectordb.search(
-            query_vector=query_vector,
-            query_text=query
-        )
+        if hasattr(self.vectordb, '_config') and hasattr(self.vectordb._config, 'search'):
+            if self.vectordb._config.search.hybrid_search_enabled:
+                search_results = self.vectordb.search(
+                    query_vector=query_vector,
+                    query_text=query
+                )
+            else:
+                search_results = self.vectordb.search(
+                    query_vector=query_vector
+                )
+        else:
+            search_results = self.vectordb.search(
+                query_vector=query_vector,
+                query_text=query
+            )
 
         rag_results = []
         for result in search_results:
@@ -502,10 +513,13 @@ class KnowledgeBase:
             )
             rag_results.append(rag_result)
 
+        if len(rag_results) == 0:
+            print(f"Warning: No results found for KnowledgeBase '{self.name}' with query: '{query}'")
+        
         print(f"✅ Successfully processed {len(rag_results)} results for RAG")
         return rag_results
 
-    async def setup_rag(self, agent) -> None:
+    async def setup_rag(self) -> None:
         """
         Setup RAG functionality for the knowledge base.
         This method is called by the context manager when RAG is enabled.
@@ -517,7 +531,9 @@ class KnowledgeBase:
         Return a markdown representation of the knowledge base.
         Used when RAG is disabled.
         """
-        return f"# Knowledge Base: {self.name}\n\nSources: {', '.join(self.sources)}"
+        # Convert sources to strings to handle Path objects
+        source_strs = [str(source) for source in self.sources]
+        return f"# Knowledge Base: {self.name}\n\nSources: {', '.join(source_strs)}"
     
     def get_config_summary(self) -> Dict[str, Any]:
         """
@@ -697,7 +713,7 @@ class KnowledgeBase:
                 "provider": self.vectordb.__class__.__name__
             }
     
-    async def close(self):
+    async def close(self) -> None:
         """
         Clean up resources and close connections.
         

@@ -275,6 +275,7 @@ class ToolProcessor:
                 )
                 async def agent_method_logic(self, request: str) -> str:
                     """This docstring will be replaced dynamically."""
+                    from upsonic.tasks.tasks import Task
                     the_task = Task(description=request)
                     response = await self.agent.do_async(the_task)
                     return str(response) if response is not None else "The specialist agent returned no response."
