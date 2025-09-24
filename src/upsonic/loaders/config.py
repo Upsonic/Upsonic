@@ -25,9 +25,6 @@ class LoaderConfig(BaseModel, ABC):
     skip_empty_content: bool = Field(
         default=True, description="Skip documents with empty content"
     )
-    add_content_stats: bool = Field(
-        default=True, description="Add content statistics to metadata for RAG optimization"
-    )
 
     class Config:
         """Pydantic configuration."""
