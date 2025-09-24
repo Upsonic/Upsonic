@@ -55,8 +55,8 @@ class TestCSVLoaderSimple(unittest.TestCase):
         # Test with custom config
         custom_config = CSVLoaderConfig(
             delimiter=";",
-            content_columns=["product", "price"],
-            create_document_per_row=True
+            include_columns=["product", "price"],
+            content_synthesis_mode="json"
         )
         loader_custom = CSVLoader(custom_config)
         self.assertEqual(loader_custom.config.delimiter, ";")
@@ -79,9 +79,9 @@ class TestCSVLoaderSimple(unittest.TestCase):
         self.assertTrue(all(hasattr(doc, 'document_id') for doc in documents))
         self.assertTrue(all(doc.content.strip() for doc in documents))
 
-    def test_document_per_row_mode(self):
-        """Test creating one document per CSV row."""
-        config = CSVLoaderConfig(create_document_per_row=True)
+    def test_json_synthesis_mode(self):
+        """Test JSON content synthesis mode."""
+        config = CSVLoaderConfig(content_synthesis_mode="json")
         loader = CSVLoader(config)
         
         documents = loader.load(str(self.simple_csv))
@@ -90,15 +90,16 @@ class TestCSVLoaderSimple(unittest.TestCase):
         # CSV loader behavior may vary, just ensure documents are created
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
 
-    def test_single_document_mode(self):
-        """Test creating one document for entire CSV."""
-        config = CSVLoaderConfig(create_document_per_row=False)
+    def test_concatenated_synthesis_mode(self):
+        """Test concatenated content synthesis mode."""
+        config = CSVLoaderConfig(content_synthesis_mode="concatenated")
         loader = CSVLoader(config)
         
         documents = loader.load(str(self.simple_csv))
         
-        # Should create only one document for the entire CSV
-        self.assertEqual(len(documents), 1)
+        # Should create documents with concatenated content
+        self.assertGreater(len(documents), 0)
+        self.assertTrue(all(isinstance(doc, Document) for doc in documents))
 
     def test_custom_delimiter(self):
         """Test CSV with custom delimiter."""
@@ -110,11 +111,10 @@ class TestCSVLoaderSimple(unittest.TestCase):
         self.assertGreater(len(documents), 0)
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
 
-    def test_content_columns_selection(self):
+    def test_include_columns_selection(self):
         """Test selecting specific columns for content."""
         config = CSVLoaderConfig(
-            content_columns=["name", "city"],
-            create_document_per_row=True
+            include_columns=["name", "city"]
         )
         loader = CSVLoader(config)
         
@@ -177,8 +177,7 @@ class TestCSVLoaderSimple(unittest.TestCase):
     def test_metadata_inclusion(self):
         """Test CSV metadata inclusion."""
         config = CSVLoaderConfig(
-            include_metadata=True,
-            create_document_per_row=True
+            include_metadata=True
         )
         loader = CSVLoader(config)
         

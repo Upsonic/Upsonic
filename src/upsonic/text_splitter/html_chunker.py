@@ -1,16 +1,23 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Optional, Dict, NamedTuple
+from typing import List, Optional, Dict, NamedTuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from upsonic.text_splitter.base import BaseChunker
 
 from pydantic import Field
 try:
     from bs4 import BeautifulSoup, NavigableString, Tag
+    _BEAUTIFULSOUP_AVAILABLE = True
 except ImportError:
-    raise ImportError(
-        "BeautifulSoup4 is required for the HTMLChunker. "
-        "Please install it with 'pip install beautifulsoup4 lxml'."
-    )
+    _BEAUTIFULSOUP_AVAILABLE = False
+    class BeautifulSoup:
+        pass
+    class NavigableString:
+        pass
+    class Tag:
+        pass
 
 from upsonic.schemas.data_models import Chunk, Document
 from upsonic.text_splitter.base import BaseChunker, BaseChunkingConfig
@@ -77,7 +84,7 @@ class HTMLChunkingConfig(BaseChunkingConfig):
             "If False, extracts clean text but indices may not correspond to chunk content."
         )
     )
-    text_chunker_to_use: BaseChunker = Field(
+    text_chunker_to_use: "BaseChunker" = Field(
         default_factory=get_default_text_chunker,
         description=(
             "An instance of another chunker (e.g., RecursiveChunker) to be used "
@@ -106,6 +113,9 @@ class HTMLChunkingConfig(BaseChunkingConfig):
     class Config:
         arbitrary_types_allowed = True
 
+# Rebuild the model to resolve forward references
+HTMLChunkingConfig.model_rebuild()
+
 class _SemanticBlock(NamedTuple):
     """An internal data structure to hold a semantically grouped block of content."""
     text_content: str
@@ -131,6 +141,11 @@ class HTMLChunker(BaseChunker[HTMLChunkingConfig]):
 
     def __init__(self, config: Optional[HTMLChunkingConfig] = None):
         """Initializes the chunker with a specific or default configuration."""
+        if not _BEAUTIFULSOUP_AVAILABLE:
+            raise ImportError(
+                "BeautifulSoup4 is required for the HTMLChunker. "
+                "Please install it with 'pip install beautifulsoup4 lxml'."
+            )
         super().__init__(config or HTMLChunkingConfig())
         if self.config.tags_to_extract:
             for tag in self.config.split_on_tags:

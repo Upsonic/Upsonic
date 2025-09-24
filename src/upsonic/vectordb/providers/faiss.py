@@ -186,7 +186,7 @@ class FaissProvider(BaseVectorDBProvider):
         
         return self._active_db_path.is_dir() and any(self._active_db_path.iterdir())
 
-    def upsert(self, vectors: List[List[float]], payloads: List[Dict[str, Any]], ids: List[Union[str, int]], **kwargs) -> None:
+    def upsert(self, vectors: List[List[float]], payloads: List[Dict[str, Any]], ids: List[Union[str, int]], chunks: Optional[List[str]] = None, sparse_vectors: Optional[List[Dict[str, Any]]] = None, **kwargs) -> None:
         """
         Adds new data or updates existing data by performing a delete-then-add operation.
         This method synchronizes the FAISS index, metadata store, and ID maps.
@@ -201,6 +201,13 @@ class FaissProvider(BaseVectorDBProvider):
             raise UpsertError("The lengths of vectors, payloads, and ids lists must be identical.")
         if not vectors:
             return
+
+        # Handle chunks parameter - add to payloads if provided
+        if chunks is not None:
+            if len(chunks) != len(payloads):
+                raise UpsertError("The lengths of chunks and payloads lists must be identical.")
+            for i in range(len(payloads)):
+                payloads[i]["chunk"] = chunks[i]
 
         vectors_np = np.array(vectors, dtype=np.float32)
         if self._normalize_vectors:
@@ -276,11 +283,13 @@ class FaissProvider(BaseVectorDBProvider):
                     
                     vector = self._index.reconstruct(faiss_id).tolist()
                     
+                    text = payload.get("chunk", "") if payload else ""
                     results.append(VectorSearchResult(
                         id=user_id,
                         score=1.0,
                         payload=payload,
-                        vector=vector
+                        vector=vector,
+                        text=text
                     ))
                 except Exception as e:
                     print(f"Could not fetch data for ID '{user_id}': {e}")
@@ -361,11 +370,19 @@ class FaissProvider(BaseVectorDBProvider):
 
             if self._config.core.distance_metric == DistanceMetric.EUCLIDEAN:
                 score = 1 / (1 + dist)
+            elif self._config.core.distance_metric == DistanceMetric.COSINE:
+                # For cosine with L2-normalized vectors, FAISS returns inner product 
+                # which equals cosine similarity. Clamp to [0, 1] range.
+                score = max(0.0, min(1.0, float(dist)))
+            elif self._config.core.distance_metric == DistanceMetric.DOT_PRODUCT:
+                score = float(dist)  # For dot product, distance is already similarity-like
             else:
-                score = float(dist)
+                # Default to cosine-like conversion for unknown metrics
+                score = max(0.0, min(1.0, float(dist)))
 
             if score >= final_similarity_threshold:
-                results.append(VectorSearchResult(id=user_id, score=score, payload=payload))
+                text = payload.get("chunk", "") if payload else ""
+                results.append(VectorSearchResult(id=user_id, score=score, payload=payload, text=text))
         
         return results
 

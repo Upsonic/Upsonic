@@ -96,6 +96,9 @@ class RecursiveChunkingConfig(BaseChunkingConfig):
         )
     )
 
+# Rebuild the model to resolve forward references
+RecursiveChunkingConfig.model_rebuild()
+
 
 
 

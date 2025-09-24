@@ -38,9 +38,9 @@ class TextLoader(BaseLoader):
     def get_supported_extensions(cls) -> List[str]:
         """Gets a list of file extensions supported by this loader."""
         return [
-            ".txt", ".md", ".rst", ".log", ".py", ".js", ".ts", ".java",
+            ".txt", ".rst", ".log", ".py", ".js", ".ts", ".java",
             ".c", ".cpp", ".h", ".cs", ".go", ".rs", ".php", ".rb",
-            ".html", ".css", ".xml", ".json", ".yaml", ".yml", ".ini"
+            ".css", ".ini"
         ]
 
     def load(self, source: Union[str, Path, List[Union[str, Path]]]) -> List[Document]:

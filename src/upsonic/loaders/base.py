@@ -1,4 +1,5 @@
 import os
+import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, List, Union
@@ -26,6 +27,7 @@ class BaseLoader(ABC):
         """
         self.config = config
         self._processed_document_ids: set[str] = set()
+        self._logger = logging.getLogger(self.__class__.__module__ + '.' + self.__class__.__name__)
 
 
     @abstractmethod
@@ -85,7 +87,7 @@ class BaseLoader(ABC):
         if self.config.error_handling == "ignore":
             return []
         elif self.config.error_handling == "warn":
-            print(f"Warning: Failed to load {source}: {error}")
+            self._logger.warning(f"Failed to load {source}: {error}")
             return []
         else:
             raise error
@@ -121,6 +123,32 @@ class BaseLoader(ABC):
 
         return metadata
 
+    def _check_file_size(self, file_path: Path) -> bool:
+        """
+        Check if a file size is within the configured limits.
+        
+        Args:
+            file_path: Path to the file to check
+            
+        Returns:
+            True if file size is acceptable, False if it should be skipped
+        """
+        if self.config.max_file_size is None:
+            return True
+            
+        try:
+            file_size = file_path.stat().st_size
+            if file_size > self.config.max_file_size:
+                self._logger.warning(
+                    f"Skipping file {file_path} because its size ({file_size} bytes) "
+                    f"exceeds the max_file_size of {self.config.max_file_size} bytes."
+                )
+                return False
+            return True
+        except OSError as e:
+            self._logger.warning(f"Could not check file size for {file_path}: {e}")
+            return False
+
     def _get_supported_files_from_directory(self, directory: Path) -> List[Path]:
         """Recursively finds all supported files within a directory."""
         supported_files = []
@@ -150,7 +178,7 @@ class BaseLoader(ABC):
                 if self.config.error_handling == "raise":
                     raise FileNotFoundError(f"Source path does not exist: {path_item}")
                 elif self.config.error_handling == "warn":
-                    print(f"Warning: Source path does not exist, skipping: {path_item}")
+                    self._logger.warning(f"Source path does not exist, skipping: {path_item}")
                 continue
 
             if path_item.is_file():

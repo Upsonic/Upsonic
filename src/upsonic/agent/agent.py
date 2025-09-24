@@ -284,7 +284,7 @@ class Direct(BaseAgent):
         """
         validate_attachments_for_model(provider, single_task)
 
-        agent_model, agent_settings = await provider._provision()
+        agent_model, agent_settings = await provider._provision(single_task.tools)
 
         is_thinking_enabled = self.enable_thinking_tool
         if single_task.enable_thinking_tool is not None:

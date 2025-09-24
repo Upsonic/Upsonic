@@ -89,6 +89,43 @@ This is a subsection with additional details.""")
         self.assertGreater(len(documents), 0)
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
 
+    def test_markdown_config_options(self):
+        """Test Markdown loader configuration options."""
+        config = MarkdownLoaderConfig(
+            parse_front_matter=True,
+            include_code_blocks=True,
+            code_block_language_metadata=True,
+            heading_metadata=True,
+            split_by_heading="h2"
+        )
+        loader = MarkdownLoader(config)
+        
+        self.assertTrue(loader.config.parse_front_matter)
+        self.assertTrue(loader.config.include_code_blocks)
+        self.assertTrue(loader.config.code_block_language_metadata)
+        self.assertTrue(loader.config.heading_metadata)
+        self.assertEqual(loader.config.split_by_heading, "h2")
+
+    def test_heading_split_options(self):
+        """Test different heading split options."""
+        heading_levels = ["h1", "h2", "h3"]
+        for level in heading_levels:
+            config = MarkdownLoaderConfig(split_by_heading=level)
+            loader = MarkdownLoader(config)
+            self.assertEqual(loader.config.split_by_heading, level)
+
+    def test_metadata_inclusion(self):
+        """Test Markdown metadata inclusion."""
+        config = MarkdownLoaderConfig(include_metadata=True)
+        loader = MarkdownLoader(config)
+        
+        documents = loader.load(str(self.simple_md))
+        
+        self.assertGreater(len(documents), 0)
+        for doc in documents:
+            self.assertIsInstance(doc.metadata, dict)
+            self.assertIn('source', doc.metadata)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -48,6 +48,17 @@ class TestJSONLoaderSimple(unittest.TestCase):
         }
         self.nested_json.write_text(json.dumps(nested_data, indent=2))
 
+        # Create a JSONL file
+        self.jsonl_file = Path(self.temp_dir) / "data.jsonl"
+        jsonl_data = [
+            {"id": 1, "name": "Alice", "score": 95},
+            {"id": 2, "name": "Bob", "score": 87},
+            {"id": 3, "name": "Charlie", "score": 92}
+        ]
+        with open(self.jsonl_file, 'w') as f:
+            for item in jsonl_data:
+                f.write(json.dumps(item) + '\n')
+
     def tearDown(self):
         """Clean up test environment."""
         if os.path.exists(self.temp_dir):
@@ -163,6 +174,18 @@ class TestJSONLoaderSimple(unittest.TestCase):
         # Should handle error gracefully
         documents = loader.load(str(invalid_json))
         self.assertEqual(len(documents), 0)
+
+    def test_jsonl_loading(self):
+        """Test loading JSONL files."""
+        config = JSONLoaderConfig(json_lines=True)
+        loader = JSONLoader(config)
+        
+        documents = loader.load(str(self.jsonl_file))
+        
+        self.assertGreater(len(documents), 0)
+        # Should create separate documents for each line
+        self.assertGreaterEqual(len(documents), 3)
+        self.assertTrue(all(isinstance(doc, Document) for doc in documents))
 
 
 if __name__ == "__main__":

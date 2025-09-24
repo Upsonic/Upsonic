@@ -1,7 +1,7 @@
 import unittest
 import json
 import uuid
-from upsonic.text_splitter.json import JSONChunker, JSONChunkingConfig
+from upsonic.text_splitter.json_chunker import JSONChunker, JSONChunkingConfig
 from upsonic.schemas.data_models import Document, Chunk
 
 
@@ -126,23 +126,30 @@ class TestJSONChunkingSimple(unittest.TestCase):
 
     def test_array_handling_modes(self):
         """Test different array handling modes."""
-        # Test different array handling modes
-        modes = ["split", "keep", "flatten"]
+        # Test with convert_lists_to_dicts=True (default)
+        config_convert = JSONChunkingConfig(
+            convert_lists_to_dicts=True,
+            chunk_size=100,
+            chunk_overlap=20
+        )
+        chunker_convert = JSONChunker(config_convert)
+        chunks_convert = chunker_convert.chunk([self.array_doc])
         
-        for mode in modes:
-            config = JSONChunkingConfig(
-                array_handling=mode,
-                chunk_size=100,
-                chunk_overlap=20
-            )
-            chunker = JSONChunker(config)
-            chunks = chunker.chunk([self.array_doc])
-            
-            self.assertGreaterEqual(len(chunks), 1)
+        # Test with convert_lists_to_dicts=False
+        config_no_convert = JSONChunkingConfig(
+            convert_lists_to_dicts=False,
+            chunk_size=100,
+            chunk_overlap=20
+        )
+        chunker_no_convert = JSONChunker(config_no_convert)
+        chunks_no_convert = chunker_no_convert.chunk([self.array_doc])
+        
+        self.assertGreaterEqual(len(chunks_convert), 1)
+        self.assertGreaterEqual(len(chunks_no_convert), 1)
 
     def test_path_metadata(self):
         """Test inclusion of JSON path metadata."""
-        config = JSONChunkingConfig(include_path_metadata=True)
+        config = JSONChunkingConfig()
         chunker = JSONChunker(config)
         chunks = chunker.chunk([self.nested_doc])
         
@@ -157,7 +164,7 @@ class TestJSONChunkingSimple(unittest.TestCase):
     def test_json_validation(self):
         """Test JSON validation handling."""
         # Test with valid JSON
-        config = JSONChunkingConfig(validate_json_structure=True)
+        config = JSONChunkingConfig()
         chunker = JSONChunker(config)
         chunks = chunker.chunk([self.simple_doc])
         

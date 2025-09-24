@@ -53,6 +53,29 @@ class TestDOCXLoaderSimple(unittest.TestCase):
         result = loader.batch([])
         self.assertEqual(len(result), 0)
 
+    def test_docx_config_options(self):
+        """Test DOCX loader configuration options."""
+        config = DOCXLoaderConfig(
+            include_tables=True,
+            include_headers=True,
+            include_footers=True,
+            table_format="markdown"
+        )
+        loader = DOCXLoader(config)
+        
+        self.assertTrue(loader.config.include_tables)
+        self.assertTrue(loader.config.include_headers)
+        self.assertTrue(loader.config.include_footers)
+        self.assertEqual(loader.config.table_format, "markdown")
+
+    def test_table_format_options(self):
+        """Test different table format options."""
+        formats = ["text", "markdown", "html"]
+        for fmt in formats:
+            config = DOCXLoaderConfig(table_format=fmt)
+            loader = DOCXLoader(config)
+            self.assertEqual(loader.config.table_format, fmt)
+
 
 if __name__ == "__main__":
     unittest.main()

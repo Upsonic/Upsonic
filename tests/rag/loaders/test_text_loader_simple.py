@@ -73,6 +73,31 @@ It concludes the document content.""")
         self.assertGreater(len(documents), 0)
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
 
+    def test_text_config_options(self):
+        """Test text loader configuration options."""
+        config = TextLoaderConfig(
+            strip_whitespace=True,
+            min_chunk_length=10,
+            skip_empty_content=True
+        )
+        loader = TextLoader(config)
+        
+        self.assertTrue(loader.config.strip_whitespace)
+        self.assertEqual(loader.config.min_chunk_length, 10)
+        self.assertTrue(loader.config.skip_empty_content)
+
+    def test_metadata_inclusion(self):
+        """Test text metadata inclusion."""
+        config = TextLoaderConfig(include_metadata=True)
+        loader = TextLoader(config)
+        
+        documents = loader.load(str(self.simple_txt))
+        
+        self.assertGreater(len(documents), 0)
+        for doc in documents:
+            self.assertIsInstance(doc.metadata, dict)
+            self.assertIn('source', doc.metadata)
+
 
 if __name__ == "__main__":
     unittest.main()

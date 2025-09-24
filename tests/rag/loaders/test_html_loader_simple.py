@@ -158,11 +158,14 @@ class TestHTMLLoaderSimple(unittest.TestCase):
         self.assertGreater(len(documents), 0)
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
 
-    def test_tag_filtering(self):
-        """Test filtering specific HTML tags."""
+    def test_element_extraction_options(self):
+        """Test different element extraction options."""
         config = HTMLLoaderConfig(
             extract_text=True,
-            preserve_structure=True
+            extract_headers=True,
+            extract_paragraphs=True,
+            extract_lists=True,
+            extract_tables=True
         )
         loader = HTMLLoader(config)
         
@@ -186,6 +189,8 @@ class TestHTMLLoaderSimple(unittest.TestCase):
         """Test extracting content from HTML tables."""
         config = HTMLLoaderConfig(
             extract_text=True,
+            extract_tables=True,
+            table_format="markdown",
             include_images=False
         )
         loader = HTMLLoader(config)

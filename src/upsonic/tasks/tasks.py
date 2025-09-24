@@ -213,7 +213,7 @@ class Task(BaseModel):
         for context in self.context:
             
             if isinstance(context, KnowledgeBase) and context.rag == True:
-                await context.setup_rag(client)
+                await context.setup_rag()
                 rag_result_objects = await context.query_async(self.description)
                 # Convert RAGSearchResult objects to formatted strings
                 if rag_result_objects:

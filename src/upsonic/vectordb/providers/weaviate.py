@@ -17,6 +17,8 @@ from upsonic.vectordb.config import (
     WriteConsistency,
     HNSWTuningConfig
 )
+# Also import from relative path to handle import path differences
+from ..config import HNSWTuningConfig as RelativeHNSWTuningConfig
 from upsonic.vectordb.base import BaseVectorDBProvider
 
 from upsonic.utils.package.exception import(
@@ -90,9 +92,15 @@ class WeaviateProvider(BaseVectorDBProvider):
                     raise ConfigurationError("Cloud mode requires 'host' (cluster URL) and 'api_key'.")
                 
                 auth_credentials = weaviate.auth.AuthApiKey(self._config.core.api_key.get_secret_value())
+                additional_config = wvc.init.AdditionalConfig(
+                    timeout=wvc.init.Timeout(init=60, query=30, insert=30),
+                    startup_period=30
+                )
                 self._client = weaviate.connect_to_weaviate_cloud(
                     cluster_url=self._config.core.host,
-                    auth_credentials=auth_credentials
+                    auth_credentials=auth_credentials,
+                    additional_config=additional_config,
+                    skip_init_checks=True  # Skip gRPC health checks for network issues
                 )
 
             elif self._config.core.mode == Mode.LOCAL:
@@ -189,7 +197,7 @@ class WeaviateProvider(BaseVectorDBProvider):
             pq_config = wvc.config.Configure.pq(training_limit=100000) if self._config.indexing.quantization else None
             
             index_conf = self._config.indexing.index_config
-            if isinstance(index_conf, HNSWTuningConfig):
+            if isinstance(index_conf, (HNSWTuningConfig, RelativeHNSWTuningConfig)):
                 vector_index_config = wvc.config.Configure.VectorIndex.hnsw(
                     distance_metric=distance_map[self._config.core.distance_metric],
                     max_connections=index_conf.m,
@@ -498,7 +506,7 @@ class WeaviateProvider(BaseVectorDBProvider):
         """
         collection_obj = self._get_collection()
 
-        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else (self._config.search.default_similarity_threshold if self._config.search.default_similarity_threshold is not None else 0.5)
 
         try:
             weaviate_filter = self._translate_filter(filter) if filter else None
@@ -509,14 +517,22 @@ class WeaviateProvider(BaseVectorDBProvider):
                 near_vector=query_vector,
                 limit=top_k,
                 filters=weaviate_filter,
-                certainty=score_threshold, 
+                certainty=score_threshold,
                 return_metadata=wvc.query.MetadataQuery(certainty=True, distance=True), 
                 include_vector=True
             )
 
             results = []
             for obj in response.objects:
-                score = obj.metadata.certainty if obj.metadata and obj.metadata.certainty is not None else 0.0
+                certainty = obj.metadata.certainty if obj.metadata and obj.metadata.certainty is not None else None
+                distance = obj.metadata.distance if obj.metadata and obj.metadata.distance is not None else None
+                                
+                if certainty is not None:
+                    score = certainty
+                elif distance is not None:
+                    score = 1.0 - distance
+                else:
+                    score = 0.0
 
                 if score >= final_similarity_threshold:
                     results.append(VectorSearchResult(
@@ -547,7 +563,7 @@ class WeaviateProvider(BaseVectorDBProvider):
         """
         collection_obj = self._get_collection()
 
-        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else (self._config.search.default_similarity_threshold if self._config.search.default_similarity_threshold is not None else 0.5)
 
         try:
             weaviate_filter = self._translate_filter(filter) if filter else None
@@ -603,7 +619,7 @@ class WeaviateProvider(BaseVectorDBProvider):
         if not (0.0 <= final_alpha <= 1.0):
             raise ConfigurationError(f"Hybrid search alpha must be between 0.0 and 1.0, but got {final_alpha}.")
 
-        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else (self._config.search.default_similarity_threshold if self._config.search.default_similarity_threshold is not None else 0.5)
 
         fusion_type = None
         if fusion_method is not None:
@@ -632,7 +648,7 @@ class WeaviateProvider(BaseVectorDBProvider):
             results = []
             for obj in response.objects:
                 score = obj.metadata.score if obj.metadata and obj.metadata.score is not None else 0.0
-
+                
                 if score >= final_similarity_threshold:
                     results.append(VectorSearchResult(
                         id=str(obj.uuid),

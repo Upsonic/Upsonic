@@ -126,13 +126,34 @@ class MilvusProvider(BaseVectorDBProvider):
         
         print("MilvusProvider: Configuration validated successfully.")
 
+    def _sanitize_collection_name(self, collection_name: str) -> str:
+        """
+        Sanitizes collection name to conform to Milvus naming requirements.
+        Collection names can only contain numbers, letters, and underscores.
+        """
+        import re
+        # Replace invalid characters with underscores
+        sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', collection_name)
+        # Ensure it doesn't start with a number
+        if sanitized and sanitized[0].isdigit():
+            sanitized = 'col_' + sanitized
+        # Ensure it's not empty
+        if not sanitized:
+            sanitized = 'default_collection'
+        return sanitized
+
+    @property
+    def _sanitized_collection_name(self) -> str:
+        """Get the sanitized collection name."""
+        return self._sanitize_collection_name(self._config.core.collection_name)
 
     def _get_connection_alias(self) -> str:
         """Generates a unique but deterministic connection alias for pymilvus."""
         db_path = self._config.core.db_path or "memory"
         db_name = db_path.split('/')[-1].replace('.db', '') if '/' in db_path else db_path
         unique_id = str(hash(db_path))[-8:]
-        return f"upsonic_milvus_{self._config.core.collection_name}_{db_name}_{unique_id}"
+        # Use sanitized collection name for connection alias
+        return f"upsonic_milvus_{self._sanitized_collection_name}_{db_name}_{unique_id}"
 
     def _build_connection_params(self) -> Dict[str, Any]:
         """
@@ -142,9 +163,44 @@ class MilvusProvider(BaseVectorDBProvider):
         mode = self._config.core.mode
         
         if mode in [Mode.EMBEDDED, Mode.IN_MEMORY]:
-            return {"uri": self._config.core.db_path or ":memory:"}
+            db_path = self._config.core.db_path or ":memory:"
+            if mode == Mode.EMBEDDED and db_path != ":memory:" and not db_path.endswith('.db'):
+                db_path = db_path + '.db'
+            return {"uri": db_path}
 
-        elif mode in [Mode.LOCAL, Mode.CLOUD]:
+        elif mode == Mode.CLOUD:
+            if not self._config.core.host:
+                raise ConfigurationError(f"A `host` is required for '{mode.value}' mode.")
+            
+            params = {}
+            
+            if self._config.core.host.startswith('http'):
+                params["uri"] = self._config.core.host
+            else:
+                protocol = "https" if self._config.core.use_tls else "http"
+                port = self._config.core.port or (443 if self._config.core.use_tls else 19530)
+                params["uri"] = f"{protocol}://{self._config.core.host}:{port}"
+            
+            if self._config.core.use_tls:
+                params["secure"] = True
+            
+            if self._config.core.api_key:
+                api_key_value = self._config.core.api_key.get_secret_value()
+                
+                if ":" in api_key_value:
+                    if api_key_value.startswith("db_") or len(api_key_value.split(":")) == 2:
+                        params["token"] = api_key_value
+                    else:
+                        params["token"] = api_key_value
+                else:
+                    params["token"] = api_key_value
+            
+            if hasattr(self._config, 'advanced') and hasattr(self._config.advanced, 'namespace') and self._config.advanced.namespace:
+                params["db_name"] = self._config.advanced.namespace
+            
+            return params
+
+        elif mode == Mode.LOCAL:
             if not self._config.core.host:
                 raise ConfigurationError(f"A `host` is required for '{mode.value}' mode.")
             
@@ -308,12 +364,12 @@ class MilvusProvider(BaseVectorDBProvider):
             print("MilvusProvider: Connection successful.")
 
             try:
-                if utility.has_collection(self._config.core.collection_name, using=alias):
+                if utility.has_collection(self._sanitized_collection_name, using=alias):
                     self._collection = Collection(
-                        name=self._config.core.collection_name, 
+                        name=self._sanitized_collection_name, 
                         using=alias
                     )
-                    print(f"MilvusProvider: Attached to existing collection '{self._config.core.collection_name}'.")
+                    print(f"MilvusProvider: Attached to existing collection '{self._sanitized_collection_name}'.")
             except MilvusException as e:
                 print(f"MilvusProvider: Could not check collection existence: {e}")
 
@@ -372,7 +428,7 @@ class MilvusProvider(BaseVectorDBProvider):
         
         try:
             return utility.has_collection(
-                self._config.core.collection_name, 
+                self._sanitized_collection_name, 
                 using=self._get_connection_alias()
             )
         except MilvusException as e:
@@ -390,7 +446,7 @@ class MilvusProvider(BaseVectorDBProvider):
         if not self.is_ready():
             raise VectorDBConnectionError("Not connected to Milvus. Call connect() first.")
 
-        collection_name = self._config.core.collection_name
+        collection_name = self._sanitized_collection_name
         
         if not self.collection_exists():
              raise CollectionDoesNotExistError(f"Collection '{collection_name}' does not exist.")
@@ -414,7 +470,7 @@ class MilvusProvider(BaseVectorDBProvider):
         if not self.is_ready():
             raise VectorDBConnectionError("Not connected to Milvus. Call connect() first.")
         
-        collection_name = self._config.core.collection_name
+        collection_name = self._sanitized_collection_name
         alias = self._get_connection_alias()
 
         if self.collection_exists():
@@ -429,7 +485,7 @@ class MilvusProvider(BaseVectorDBProvider):
 
         try:
             fields = self._build_field_schema()
-            schema = CollectionSchema(fields, description=f"Upsonic collection: {collection_name}")
+            schema = CollectionSchema(fields, description=f"Upsonic collection: {collection_name}", enable_dynamic_field=True)
             consistency_level = self._CONSISTENCY_MAP[self._config.data_management.write_consistency]
             
             self._collection = Collection(
@@ -475,7 +531,7 @@ class MilvusProvider(BaseVectorDBProvider):
         if not self.is_ready():
             raise VectorDBConnectionError("Not connected to Milvus. Call connect() first.")
         if self._collection is None:
-            raise CollectionDoesNotExistError(f"Collection '{self._config.core.collection_name}' handle is not loaded. Was it created?")
+            raise CollectionDoesNotExistError(f"Collection '{self._sanitized_collection_name}' handle is not loaded. Was it created?")
 
     def upsert(self, vectors: List[List[float]], payloads: List[Dict[str, Any]], ids: List[Union[str, int]], chunks: Optional[List[str]], **kwargs) -> None:
         """
@@ -683,7 +739,7 @@ class MilvusProvider(BaseVectorDBProvider):
             raise ConfigurationError("Dense search is not possible; no dense index was created for this collection.")
         self._ensure_collection_handle()
         
-        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else (self._config.search.default_similarity_threshold if self._config.search.default_similarity_threshold is not None else 0.5)
         
         params = {"metric_type": self._DISTANCE_MAP[self._config.core.distance_metric], "params": {}}
         index_cfg = self._config.indexing.index_config
@@ -710,10 +766,25 @@ class MilvusProvider(BaseVectorDBProvider):
                 
                 payload = {k: v for k, v in entity_data.items() if k not in ['id', 'dense_vector', 'sparse_vector', 'chunk']}
                 
-                if hit.distance >= final_similarity_threshold:
+                # Convert distance to similarity score based on distance metric
+                # Note: After testing, Milvus with COSINE metric returns cosine similarity directly
+                if self._config.core.distance_metric == DistanceMetric.COSINE:
+                    # For Milvus cosine metric: hit.distance is actually cosine similarity
+                    score = hit.distance
+                elif self._config.core.distance_metric == DistanceMetric.EUCLIDEAN:
+                    # For Euclidean distance, convert to similarity-like score
+                    score = 1.0 / (1.0 + hit.distance)
+                elif self._config.core.distance_metric == DistanceMetric.DOT_PRODUCT:
+                    # For dot product, higher values are better (already similarity-like)
+                    score = hit.distance
+                else:
+                    # Default to treating as similarity
+                    score = hit.distance
+                
+                if score >= final_similarity_threshold:
                     search_results.append(VectorSearchResult(
                         id=hit.id, 
-                        score=hit.distance, 
+                        score=score, 
                         payload=payload, 
                         vector=entity_data.get('dense_vector'), 
                         text=entity_data.get('chunk')
@@ -726,7 +797,7 @@ class MilvusProvider(BaseVectorDBProvider):
         """Performs true full-text search using the best available index."""
         self._ensure_collection_handle()
         
-        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else (self._config.search.default_similarity_threshold if self._config.search.default_similarity_threshold is not None else 0.5)
         
         filter_expr = self._build_filter_expression(filter)
 
@@ -769,8 +840,19 @@ class MilvusProvider(BaseVectorDBProvider):
             search_results = []
             for hit in results[0]:
                 payload = {k: v for k, v in hit.entity.items() if k not in ['id', 'dense_vector', 'sparse_vector']}
-                if hit.distance >= final_similarity_threshold:
-                    search_results.append(VectorSearchResult(id=hit.id, score=hit.distance, payload=payload, vector=hit.entity.get('sparse_vector')))
+                
+                # Apply same scoring logic as dense_search
+                if self._config.core.distance_metric == DistanceMetric.COSINE:
+                    score = hit.distance  # Milvus returns cosine similarity directly
+                elif self._config.core.distance_metric == DistanceMetric.EUCLIDEAN:
+                    score = 1.0 / (1.0 + hit.distance)
+                elif self._config.core.distance_metric == DistanceMetric.DOT_PRODUCT:
+                    score = hit.distance
+                else:
+                    score = hit.distance
+                
+                if score >= final_similarity_threshold:
+                    search_results.append(VectorSearchResult(id=hit.id, score=score, payload=payload, vector=hit.entity.get('sparse_vector')))
             return search_results
 
         except MilvusException as e:
@@ -790,7 +872,7 @@ class MilvusProvider(BaseVectorDBProvider):
         fusion = fusion_method or self._config.search.default_fusion_method or 'weighted'
         final_alpha = alpha if alpha is not None else self._config.search.default_hybrid_alpha or 0.5
         
-        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else (self._config.search.default_similarity_threshold if self._config.search.default_similarity_threshold is not None else 0.5)
 
         filter_expr = self._build_filter_expression(filter)
 
@@ -828,8 +910,19 @@ class MilvusProvider(BaseVectorDBProvider):
                 payload = {k: v for k, v in hit.entity['entity'].items() if k not in ['id', 'dense_vector', 'sparse_vector', 'chunk']}
                 vector = hit.entity['entity'].get('dense_vector')
                 text = hit.entity['entity'].get('chunk')
-                if hit.distance >= final_similarity_threshold:
-                    search_results.append(VectorSearchResult(id=hit.id, score=hit.distance, payload=payload, vector=vector, text=text))
+                
+                # Apply same scoring logic as dense_search
+                if self._config.core.distance_metric == DistanceMetric.COSINE:
+                    score = hit.distance  # Milvus returns cosine similarity directly
+                elif self._config.core.distance_metric == DistanceMetric.EUCLIDEAN:
+                    score = 1.0 / (1.0 + hit.distance)
+                elif self._config.core.distance_metric == DistanceMetric.DOT_PRODUCT:
+                    score = hit.distance
+                else:
+                    score = hit.distance
+                
+                if score >= final_similarity_threshold:
+                    search_results.append(VectorSearchResult(id=hit.id, score=score, payload=payload, vector=vector, text=text))
             return search_results
  
         except MilvusException as e:

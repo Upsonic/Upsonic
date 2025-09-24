@@ -22,7 +22,6 @@ from upsonic.tools.external_tool import ExternalToolCall
 
 if TYPE_CHECKING:
     from upsonic.agent.agent import Direct
-    from upsonic.tasks.tasks import Task
 
 
 class ToolValidationError(Exception):
@@ -90,9 +89,9 @@ class ToolProcessor:
         a mandatory analysis step after each tool call, creating an 'Act-then-Analyze' loop.
         """
         async def orchestrator_wrapper(thought: Thought) -> Any:
+            from upsonic.tasks.tasks import Task
             console.print("[bold magenta]Orchestrator Activated:[/bold magenta] Received initial plan.")
             spacing()
-            
             agent = self.agent_tool
             if not agent:
                 return "Error: Orchestrator wrapper was not properly initialized with an agent instance."
@@ -101,7 +100,7 @@ class ToolProcessor:
 
             original_user_request = task.description
             execution_history = f"Orchestrator's execution history for the user's request:\n"
-            execution_history += f"Initial Thought & Plan: {thought.plan}\n and Reasoning: {thought.reasoning}\n\n"
+            execution_history += f"Initial Thought & Plan: {thought.plan}\nReasoning: {thought.reasoning}\n Criticism: {thought.criticism}\n\n"
             pending_plan = thought.plan
             program_counter = 0
 
@@ -276,6 +275,7 @@ class ToolProcessor:
                 )
                 async def agent_method_logic(self, request: str) -> str:
                     """This docstring will be replaced dynamically."""
+                    from upsonic.tasks.tasks import Task
                     the_task = Task(description=request)
                     response = await self.agent.do_async(the_task)
                     return str(response) if response is not None else "The specialist agent returned no response."

@@ -91,11 +91,8 @@ class XMLLoader(BaseLoader):
             )
         self._processed_document_ids.add(document_id)
 
-        if self.config.max_file_size is not None:
-            file_size = path.stat().st_size
-            if file_size > self.config.max_file_size:
-                print(f"Warning: Skipping file {path} because its size ({file_size} bytes) exceeds the max_file_size of {self.config.max_file_size} bytes.")
-                return []
+        if not self._check_file_size(path):
+            return []
 
         parser = etree.XMLParser(recover=self.config.recover_mode)
         tree = etree.parse(str(path), parser)
