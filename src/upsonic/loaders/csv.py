@@ -51,6 +51,53 @@ class CSVLoader(BaseLoader):
         
         return "\n".join(content_parts)
 
+    def _create_documents_from_rows(self, all_rows: List[str], file_path: Path, document_id: str) -> List[Document]:
+        """Creates documents from processed rows based on split_mode configuration."""
+        documents = []
+        
+        if self.config.split_mode == "per_row":
+            # Each row becomes a separate document
+            for i, row_content in enumerate(all_rows):
+                if self.config.include_metadata:
+                    metadata = self._create_metadata(file_path)
+                    metadata["row_index"] = i
+                    metadata["total_rows"] = len(all_rows)
+                row_doc_id = f"{document_id}_row_{i}"
+                if metadata:
+                    doc = Document(document_id=row_doc_id, content=row_content, metadata=metadata)
+                else:
+                    doc = Document(document_id=row_doc_id, content=row_content)
+                documents.append(doc)
+        elif self.config.split_mode == "per_chunk":
+            # Group rows into chunks
+            for chunk_idx in range(0, len(all_rows), self.config.rows_per_chunk):
+                chunk_rows = all_rows[chunk_idx:chunk_idx + self.config.rows_per_chunk]
+                chunk_content = "\n\n".join(chunk_rows)
+                if self.config.include_metadata:
+                    metadata = self._create_metadata(file_path)
+                    metadata["chunk_index"] = chunk_idx // self.config.rows_per_chunk
+                    metadata["rows_in_chunk"] = len(chunk_rows)
+                    metadata["total_rows"] = len(all_rows)
+                chunk_doc_id = f"{document_id}_chunk_{chunk_idx // self.config.rows_per_chunk}"
+                if metadata:
+                    doc = Document(document_id=chunk_doc_id, content=chunk_content, metadata=metadata)
+                else:
+                    doc = Document(document_id=chunk_doc_id, content=chunk_content)
+                documents.append(doc)
+        else:
+            # Original behavior: single document
+            combined_content = "\n\n".join(all_rows)
+            if self.config.include_metadata:
+                metadata = self._create_metadata(file_path)
+                metadata["row_count"] = len(all_rows)
+            if metadata:
+                doc = Document(document_id=document_id, content=combined_content, metadata=metadata)
+            else:
+                doc = Document(document_id=document_id, content=combined_content)
+            documents.append(doc)
+            
+        return documents
+
     def _load_single_file(self, file_path: Path) -> List[Document]:
         """Helper method to load documents from a single CSV file."""
         documents = []
@@ -88,12 +135,7 @@ class CSVLoader(BaseLoader):
                     all_rows.append(content)
                 
                 if all_rows:
-                    combined_content = "\n\n".join(all_rows)
-                    metadata = self._create_metadata(file_path)
-                    if self.config.include_metadata:
-                        metadata["row_count"] = len(all_rows)
-                    doc = Document(document_id=document_id, content=combined_content, metadata=metadata)
-                    documents.append(doc)
+                    documents.extend(self._create_documents_from_rows(all_rows, file_path, document_id))
         except Exception as e:
             docs_from_error = self._handle_loading_error(str(file_path), e)
             documents.extend(docs_from_error)
@@ -156,12 +198,7 @@ class CSVLoader(BaseLoader):
                     all_rows.append(content)
                 
                 if all_rows:
-                    combined_content = "\n\n".join(all_rows)
-                    metadata = self._create_metadata(file_path)
-                    if self.config.include_metadata:
-                        metadata["row_count"] = len(all_rows)
-                    doc = Document(document_id=document_id, content=combined_content, metadata=metadata)
-                    documents.append(doc)
+                    documents.extend(self._create_documents_from_rows(all_rows, file_path, document_id))
         except Exception as e:
             docs_from_error = self._handle_loading_error(str(file_path), e)
             documents.extend(docs_from_error)

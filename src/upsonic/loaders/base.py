@@ -110,6 +110,9 @@ class BaseLoader(ABC):
                 "file_size": source_path.stat().st_size,
                 "creation_datetime_utc": source_path.stat().st_ctime,
                 "last_modified_datetime_utc": source_path.stat().st_mtime,
+                "file_extension": source_path.suffix.lower(),
+                "content_type": self._detect_content_type(source_path),
+                "loader_type": self.__class__.__name__.replace("Loader", "").lower(),
             }
         except FileNotFoundError:
             metadata = {
@@ -193,3 +196,44 @@ class BaseLoader(ABC):
                         added_paths.add(file_path)
 
         return resolved_files
+
+    def _detect_content_type(self, source_path: Path) -> str:
+        """Detects content type based on file extension for RAG optimization."""
+        extension = source_path.suffix.lower()
+        
+        content_type_map = {
+            '.pdf': 'document',
+            '.docx': 'document', 
+            '.doc': 'document',
+            '.odt': 'document',
+            
+            '.md': 'markdown',
+            '.markdown': 'markdown',
+            '.html': 'web_content',
+            '.htm': 'web_content',
+            '.xml': 'structured_data',
+            
+            '.json': 'structured_data',
+            '.jsonl': 'structured_data',
+            '.csv': 'tabular_data',
+            '.tsv': 'tabular_data',
+            '.yaml': 'configuration',
+            '.yml': 'configuration',
+            
+            '.py': 'code',
+            '.js': 'code',
+            '.ts': 'code',
+            '.java': 'code',
+            '.cpp': 'code',
+            '.c': 'code',
+            '.go': 'code',
+            '.rs': 'code',
+            '.php': 'code',
+            '.rb': 'code',
+            
+            '.txt': 'plain_text',
+            '.log': 'plain_text',
+            '.rst': 'plain_text',
+        }
+        
+        return content_type_map.get(extension, 'unknown')

@@ -25,6 +25,9 @@ class LoaderConfig(BaseModel, ABC):
     skip_empty_content: bool = Field(
         default=True, description="Skip documents with empty content"
     )
+    add_content_stats: bool = Field(
+        default=True, description="Add content statistics to metadata for RAG optimization"
+    )
 
     class Config:
         """Pydantic configuration."""
@@ -61,6 +64,15 @@ class CSVLoaderConfig(LoaderConfig):
     content_synthesis_mode: Literal["concatenated", "json"] = Field(
         default="concatenated",
         description="How to create document content from rows",
+    )
+    split_mode: Literal["single_document", "per_row", "per_chunk"] = Field(
+        default="single_document",
+        description="How to split CSV into documents: 'single_document' (all rows in one), 'per_row' (each row as document), 'per_chunk' (groups of rows)"
+    )
+    rows_per_chunk: int = Field(
+        default=100,
+        description="Number of rows per document when split_mode='per_chunk'",
+        gt=0
     )
     include_columns: Optional[List[str]] = Field(
         default=None, description="Only include these columns"
