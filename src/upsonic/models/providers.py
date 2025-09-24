@@ -31,6 +31,7 @@ class BaseOpenAICompatible(BaseModelProvider):
     reasoning_effort: Literal["low", "medium", "high"] = Field(default="medium")
     reasoning_summary: str = Field(default="detailed")
     model_settings: Optional[Dict[str, Any]] = Field(default=None, description="Generic model settings like temperature, max_tokens, etc.")
+    api_mode: Literal["responses", "chat"] = Field(default="chat")
 
     _env_key_map: str = "OVERRIDE_IN_SUBCLASS"
     _model_meta: Dict[str, Dict[str, Any]] = {}
@@ -61,10 +62,11 @@ class BaseOpenAICompatible(BaseModelProvider):
 
         client = AsyncOpenAI(api_key=final_api_key, base_url=self.base_url)
         provider = OpenAIProvider(openai_client=client)
-        if self.model_name in ["gpt-4o-audio-preview", "gpt-4o-mini-audio-preview"]:
-            agent_model = self._provision_standard_model(provider)
-        else:
+
+        if self.api_mode == "responses":
             agent_model = self._provision_responses_model(provider)
+        else:
+            agent_model = self._provision_chat_model(provider)
 
         final_settings_dict = {'parallel_tool_calls': False}
         if self.model_settings:
@@ -74,11 +76,14 @@ class BaseOpenAICompatible(BaseModelProvider):
             final_settings_dict['openai_reasoning_effort'] = self.reasoning_effort
             final_settings_dict['openai_reasoning_summary'] = self.reasoning_summary
             
-        agent_settings = OpenAIResponsesModelSettings(**final_settings_dict) if final_settings_dict else None
+        if self.api_mode == "responses":
+            agent_settings = OpenAIResponsesModelSettings(**final_settings_dict) if final_settings_dict else None
+        else:
+            agent_settings = OpenAIModelSettings(**final_settings_dict) if final_settings_dict else None
             
         return agent_model, agent_settings
 
-    def _provision_standard_model(self, provider: OpenAIProvider) -> OpenAIModel:
+    def _provision_chat_model(self, provider: OpenAIProvider) -> OpenAIModel:
         """Instantiates a standard pydantic-ai OpenAIModel."""
         return OpenAIModel(model_name=self.model_name, provider=provider)
 
@@ -105,8 +110,6 @@ class OpenAI(BaseOpenAICompatible):
 
     def __init__(self, **data: Any):
         super().__init__(**data)
-        if self.model_name not in self._model_meta:
-            raise ValueError(f"Unknown model_name '{self.model_name}' for OpenAI provider.")
 
 class AzureOpenAI(BaseOpenAICompatible):
     """Configuration factory for Azure OpenAI models."""
@@ -174,8 +177,6 @@ class BaseAnthropic(BaseModelProvider):
 
     def __init__(self, **data: Any):
         super().__init__(**data)
-        if self.model_name not in self._model_meta:
-            raise ValueError(f"Unknown model_name '{self.model_name}' for {type(self).__name__} provider.")
 
     @property
     def pricing(self) -> Dict[str, float]: return self._model_meta[self.model_name]['pricing']
@@ -250,8 +251,6 @@ class Gemini(BaseModelProvider):
     
     def __init__(self, **data: Any):
         super().__init__(**data)
-        if self.model_name not in self._model_meta:
-            raise ValueError(f"Unknown model_name '{self.model_name}' for Gemini provider.")
 
     @property
     def pricing(self) -> Dict[str, float]: return self._model_meta[self.model_name]['pricing']
