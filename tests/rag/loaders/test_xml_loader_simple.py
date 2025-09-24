@@ -78,6 +78,45 @@ class TestXMLLoaderSimple(unittest.TestCase):
         self.assertGreater(len(documents), 0)
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
 
+    def test_xml_config_options(self):
+        """Test XML loader configuration options."""
+        config = XMLLoaderConfig(
+            split_by_xpath="//person",
+            content_xpath="./name",
+            content_synthesis_mode="smart_text",
+            include_attributes=True,
+            strip_namespaces=True,
+            recover_mode=False
+        )
+        loader = XMLLoader(config)
+        
+        self.assertEqual(loader.config.split_by_xpath, "//person")
+        self.assertEqual(loader.config.content_xpath, "./name")
+        self.assertEqual(loader.config.content_synthesis_mode, "smart_text")
+        self.assertTrue(loader.config.include_attributes)
+        self.assertTrue(loader.config.strip_namespaces)
+        self.assertFalse(loader.config.recover_mode)
+
+    def test_content_synthesis_modes(self):
+        """Test different content synthesis modes."""
+        modes = ["smart_text", "xml_snippet"]
+        for mode in modes:
+            config = XMLLoaderConfig(content_synthesis_mode=mode)
+            loader = XMLLoader(config)
+            self.assertEqual(loader.config.content_synthesis_mode, mode)
+
+    def test_metadata_inclusion(self):
+        """Test XML metadata inclusion."""
+        config = XMLLoaderConfig(include_metadata=True)
+        loader = XMLLoader(config)
+        
+        documents = loader.load(str(self.simple_xml))
+        
+        self.assertGreater(len(documents), 0)
+        for doc in documents:
+            self.assertIsInstance(doc.metadata, dict)
+            self.assertIn('source', doc.metadata)
+
 
 if __name__ == "__main__":
     unittest.main()

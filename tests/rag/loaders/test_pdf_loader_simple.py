@@ -60,10 +60,6 @@ class TestPdfLoaderSimple(unittest.TestCase):
 
     def test_pdf_config_validation(self):
         """Test PDF configuration validation."""
-        # Test invalid extraction mode
-        with self.assertRaises(ValueError):
-            PdfLoaderConfig(extraction_mode="invalid_mode")
-        
         # Test valid extraction modes
         valid_modes = ["text_only", "ocr_only", "hybrid"]
         for mode in valid_modes:

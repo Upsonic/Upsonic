@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import Mock, AsyncMock, patch
 import asyncio
+import pytest
 from upsonic.text_splitter.agentic import AgenticChunker, AgenticChunkingConfig
 from upsonic.schemas.data_models import Document, Chunk
 from upsonic.schemas.agentic import PropositionList, TopicAssignmentList, Topic, RefinedTopic
@@ -97,13 +98,14 @@ Global average temperatures have risen by approximately 1.1 degrees Celsius sinc
             document_id="climate_doc_001"
         )
 
+    @pytest.mark.asyncio
     async def test_basic_agentic_chunking(self):
         """Test basic agentic chunking functionality."""
         config = AgenticChunkingConfig()
         mock_agent = MockDirect()
         chunker = AgenticChunker(mock_agent, config)
         
-        chunks = await chunker.chunk(self.ai_doc)
+        chunks = await chunker._achunk_document(self.ai_doc)
         
         self.assertGreater(len(chunks), 0)
         self.assertTrue(all(isinstance(chunk, Chunk) for chunk in chunks))
@@ -114,13 +116,14 @@ Global average temperatures have risen by approximately 1.1 degrees Celsius sinc
         self.assertIn("Artificial Intelligence", all_content)
         self.assertIn("Machine learning", all_content)
 
+    @pytest.mark.asyncio
     async def test_proposition_extraction(self):
         """Test proposition extraction functionality."""
         config = AgenticChunkingConfig(enable_proposition_validation=True)
         mock_agent = MockDirect()
         chunker = AgenticChunker(mock_agent, config)
         
-        chunks = await chunker.chunk(self.ai_doc)
+        chunks = await chunker._achunk_document(self.ai_doc)
         
         self.assertGreater(len(chunks), 0)
         
@@ -131,6 +134,7 @@ Global average temperatures have risen by approximately 1.1 degrees Celsius sinc
         # Should have generated propositions
         self.assertGreater(mock_agent.call_count, 0)
 
+    @pytest.mark.asyncio
     async def test_topic_assignment_and_refinement(self):
         """Test topic assignment and refinement functionality."""
         config = AgenticChunkingConfig(
@@ -140,7 +144,7 @@ Global average temperatures have risen by approximately 1.1 degrees Celsius sinc
         mock_agent = MockDirect()
         chunker = AgenticChunker(mock_agent, config)
         
-        chunks = await chunker.chunk(self.climate_doc)
+        chunks = await chunker._achunk_document(self.climate_doc)
         
         self.assertGreater(len(chunks), 0)
         
@@ -151,6 +155,7 @@ Global average temperatures have risen by approximately 1.1 degrees Celsius sinc
         for chunk in chunks:
             self.assertIsInstance(chunk.metadata, dict)
 
+    @pytest.mark.asyncio
     async def test_error_handling_and_fallback(self):
         """Test error handling and fallback functionality."""
         config = AgenticChunkingConfig(
@@ -163,7 +168,7 @@ Global average temperatures have risen by approximately 1.1 degrees Celsius sinc
         chunker = AgenticChunker(mock_agent, config)
         
         # Should fallback gracefully
-        chunks = await chunker.chunk(self.ai_doc)
+        chunks = await chunker._achunk_document(self.ai_doc)
         
         self.assertGreater(len(chunks), 0)
         # Should fallback to recursive chunking
@@ -171,6 +176,7 @@ Global average temperatures have risen by approximately 1.1 degrees Celsius sinc
             self.assertIsInstance(chunk, Chunk)
             self.assertTrue(chunk.text_content)
 
+    @pytest.mark.asyncio
     async def test_empty_content_handling(self):
         """Test handling of empty content."""
         config = AgenticChunkingConfig()
@@ -183,11 +189,12 @@ Global average temperatures have risen by approximately 1.1 degrees Celsius sinc
             document_id="empty_doc_001"
         )
         
-        chunks = await chunker.chunk(empty_doc)
+        chunks = await chunker._achunk_document(empty_doc)
         
         # Should handle empty content gracefully
         self.assertEqual(len(chunks), 0)
 
+    @pytest.mark.asyncio
     async def test_batch_processing(self):
         """Test batch processing of multiple documents."""
         documents = [
@@ -199,14 +206,16 @@ Global average temperatures have risen by approximately 1.1 degrees Celsius sinc
         mock_agent = MockDirect()
         chunker = AgenticChunker(mock_agent, config)
         
-        batch_results = await chunker.chunk_batch_async(documents)
+        batch_results = await chunker.abatch(documents)
         
-        self.assertEqual(len(batch_results), 2)
-        self.assertTrue(all(len(chunks) > 0 for chunks in batch_results))
+        # abatch returns a flat list of all chunks from all documents
+        self.assertGreater(len(batch_results), 0)
+        self.assertTrue(all(isinstance(chunk, Chunk) for chunk in batch_results))
         
         # Should have processed both documents
-        total_chunks = sum(len(chunks) for chunks in batch_results)
-        self.assertGreater(total_chunks, 0)
+        all_text = " ".join(chunk.text_content for chunk in batch_results)
+        self.assertIn("Artificial Intelligence", all_text)
+        self.assertIn("Climate Change", all_text)
 
 
 if __name__ == "__main__":

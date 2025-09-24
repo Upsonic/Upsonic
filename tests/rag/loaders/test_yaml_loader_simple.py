@@ -75,7 +75,7 @@ company:
         # Test with custom config
         custom_config = YAMLLoaderConfig(
             split_by_jq_query=".employees[]",
-            content_serialization="json"
+            content_synthesis_mode="json"
         )
         loader_custom = YAMLLoader(custom_config)
         self.assertEqual(loader_custom.config.split_by_jq_query, ".employees[]")
@@ -128,12 +128,12 @@ company:
     def test_serialization_options(self):
         """Test different serialization options."""
         # Test JSON serialization
-        config_json = YAMLLoaderConfig(content_serialization="json")
+        config_json = YAMLLoaderConfig(content_synthesis_mode="json")
         loader_json = YAMLLoader(config_json)
         docs_json = loader_json.load(str(self.simple_yaml))
         
         # Test YAML serialization
-        config_yaml = YAMLLoaderConfig(content_serialization="yaml")
+        config_yaml = YAMLLoaderConfig(content_synthesis_mode="canonical_yaml")
         loader_yaml = YAMLLoader(config_yaml)
         docs_yaml = loader_yaml.load(str(self.simple_yaml))
         
