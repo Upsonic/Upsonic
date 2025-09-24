@@ -50,15 +50,25 @@ class TestModelSpecification(unittest.TestCase):
         self.assertIn("gpt-4o", openai_models)
 
     def test_error_handling(self):
+        # Test cases that should raise exceptions
         error_cases = [
             ("invalid/gpt-4o", "provider"),
             ("just-a-model-name", "format"),
-            ("openai/invalid-model", "model"),
         ]
         for model_spec, expected_error in error_cases:
             with self.assertRaises(Exception) as excinfo:
                 Agent(name="Invalid Agent", model=model_spec)
             self.assertIn(expected_error, str(excinfo.exception).lower())
+        
+        # Test case that should only show a warning (not raise exception)
+        # This tests that invalid model names are handled gracefully
+        try:
+            agent = Agent(name="Warning Agent", model="openai/invalid-model")
+            # Should not raise exception, just show warning
+            self.assertIsNotNone(agent)
+            self.assertEqual(agent.model_provider.model_name, "invalid-model")
+        except Exception as e:
+            self.fail(f"openai/invalid-model should not raise exception, but got: {e}")
 
 if __name__ == "__main__":
     unittest.main()

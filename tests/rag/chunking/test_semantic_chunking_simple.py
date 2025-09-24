@@ -4,7 +4,7 @@ import os
 import pytest
 from upsonic.text_splitter.semantic import SemanticChunker, SemanticChunkingConfig
 from upsonic.schemas.data_models import Document, Chunk
-from upsonic.embeddings.openai_provider import OpenAIEmbedding
+from upsonic.embeddings.fastembed_provider import FastEmbedProvider
 
 
 class TestSemanticChunkingSimple(unittest.TestCase):
@@ -13,7 +13,7 @@ class TestSemanticChunkingSimple(unittest.TestCase):
     def setUp(self):
         """Set up test documents and embedding provider."""
         
-        self.embedding_provider = OpenAIEmbedding()
+        self.embedding_provider = FastEmbedProvider()
         
         self.simple_doc = Document(
             content="""Artificial Intelligence and Machine Learning
@@ -142,35 +142,41 @@ Reinforcement learning algorithms learn through interaction with an environment.
         self.assertIn("Artificial Intelligence", all_text)
         self.assertIn("Machine Learning", all_text)
 
-    @pytest.mark.asyncio
-    async def test_async_chunking(self):
+    def test_async_chunking(self):
         """Test async chunking functionality."""
-        config = SemanticChunkingConfig(
-            embedding_provider=self.embedding_provider,
-            chunk_size=200
-        )
-        chunker = SemanticChunker(config)
+        async def _test():
+            config = SemanticChunkingConfig(
+                embedding_provider=self.embedding_provider,
+                chunk_size=200
+            )
+            chunker = SemanticChunker(config)
+            
+            chunks = await chunker._achunk_document(self.simple_doc)
+            
+            self.assertGreater(len(chunks), 0)
+            self.assertTrue(all(isinstance(chunk, Chunk) for chunk in chunks))
         
-        chunks = await chunker._achunk_document(self.simple_doc)
-        
-        self.assertGreater(len(chunks), 0)
-        self.assertTrue(all(isinstance(chunk, Chunk) for chunk in chunks))
+        import asyncio
+        asyncio.run(_test())
 
-    @pytest.mark.asyncio
-    async def test_async_batch_processing(self):
+    def test_async_batch_processing(self):
         """Test async batch processing."""
-        documents = [self.simple_doc, self.single_topic_doc]
+        async def _test():
+            documents = [self.simple_doc, self.single_topic_doc]
+            
+            config = SemanticChunkingConfig(
+                embedding_provider=self.embedding_provider,
+                chunk_size=150
+            )
+            chunker = SemanticChunker(config)
+            
+            batch_results = await chunker.abatch(documents)
+            
+            self.assertGreater(len(batch_results), 0)
+            self.assertTrue(all(isinstance(chunk, Chunk) for chunk in batch_results))
         
-        config = SemanticChunkingConfig(
-            embedding_provider=self.embedding_provider,
-            chunk_size=150
-        )
-        chunker = SemanticChunker(config)
-        
-        batch_results = await chunker.abatch(documents)
-        
-        self.assertGreater(len(batch_results), 0)
-        self.assertTrue(all(isinstance(chunk, Chunk) for chunk in batch_results))
+        import asyncio
+        asyncio.run(_test())
 
 
 if __name__ == "__main__":
