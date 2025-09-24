@@ -55,10 +55,52 @@ class BaseOpenAICompatible(BaseModelProvider):
             return sorted(list(cls._model_meta.keys()))
         return []
 
-    async def _provision(self) -> Tuple[Model, Optional[ModelSettings]]:
+    def _should_validate_api_key(self) -> bool:
+        """
+        Determine whether API key validation should be performed.
+        
+        Returns False if a custom base_url is provided (indicating a local or self-hosted service
+        that might not require an API key), True otherwise.
+        """
+        if not self._env_key_map:
+            return False
+            
+        if not self.base_url:
+            return True
+
+        standard_endpoints = [
+            "https://api.openai.com",
+            "https://api.openai.com/",
+            "https://api.openai.com/v1",
+            "https://api.openai.com/v1/",
+            
+            "https://api.deepseek.com",
+            "https://api.deepseek.com/",
+            "https://api.deepseek.com/v1",
+            "https://api.deepseek.com/v1/",
+            
+            "https://openrouter.ai/api/v1",
+            "https://openrouter.ai/api/v1/",
+            
+            "http://localhost:11434/v1",
+            "http://localhost:11434/v1/",
+            "http://127.0.0.1:11434/v1",
+            "http://127.0.0.1:11434/v1/",
+        ]
+        
+        if self.base_url.rstrip('/') in [endpoint.rstrip('/') for endpoint in standard_endpoints]:
+            return True
+            
+        return False
+
+    async def _provision(self, tools: Optional[List[Any]] = None) -> Tuple[Model, Optional[ModelSettings]]:
         final_api_key = self.api_key.get_secret_value() if self.api_key else os.getenv(self._env_key_map)
-        if self._env_key_map and not final_api_key:
+        should_validate_api_key = self._should_validate_api_key()
+        if should_validate_api_key and self._env_key_map and not final_api_key:
             raise APIKeyMissingError(type(self).__name__, self._env_key_map)
+
+        if not should_validate_api_key and not final_api_key:
+            final_api_key = "dummy-key-for-custom-endpoint"
 
         client = AsyncOpenAI(api_key=final_api_key, base_url=self.base_url)
         provider = OpenAIProvider(openai_client=client)
@@ -68,9 +110,12 @@ class BaseOpenAICompatible(BaseModelProvider):
         else:
             agent_model = self._provision_chat_model(provider)
 
-        final_settings_dict = {'parallel_tool_calls': False}
+        final_settings_dict = {}
         if self.model_settings:
             final_settings_dict.update(self.model_settings)
+        
+        if tools and len(tools) > 0:
+            final_settings_dict['parallel_tool_calls'] = False
         
         if self.enable_reasoning:
             final_settings_dict['openai_reasoning_effort'] = self.reasoning_effort
@@ -120,7 +165,7 @@ class AzureOpenAI(BaseOpenAICompatible):
     azure_endpoint: Optional[str] = Field(default=None)
     api_version: Optional[str] = Field(default=None)
 
-    async def _provision(self) -> Tuple[Model, Optional[ModelSettings]]:
+    async def _provision(self, tools: Optional[List[Any]] = None) -> Tuple[Model, Optional[ModelSettings]]:
         final_endpoint = self.azure_endpoint or os.getenv("AZURE_OPENAI_ENDPOINT")
         final_api_version = self.api_version or os.getenv("AZURE_OPENAI_API_VERSION")
         final_api_key = self.api_key.get_secret_value() if self.api_key else os.getenv("AZURE_OPENAI_API_KEY")
@@ -198,7 +243,7 @@ class Anthropic(BaseAnthropic):
         "claude-3-5-sonnet-latest": {"pricing": {"input": 3.00, "output": 15.00}, "capabilities": {"computer_use": []}, "required_environment_variables": ["ANTHROPIC_API_KEY"]},
         "claude-3-7-sonnet-latest": {"pricing": {"input": 3.00, "output": 15.00}, "capabilities": {"computer_use": []}, "required_environment_variables": ["ANTHROPIC_API_KEY"]},
     }
-    async def _provision(self) -> Tuple[Model, Optional[ModelSettings]]:
+    async def _provision(self, tools: Optional[List[Any]] = None) -> Tuple[Model, Optional[ModelSettings]]:
         final_api_key = self.api_key.get_secret_value() if self.api_key else os.getenv("ANTHROPIC_API_KEY")
         if not final_api_key:
             raise APIKeyMissingError("Anthropic", "ANTHROPIC_API_KEY")
@@ -215,7 +260,7 @@ class BedrockAnthropic(BaseAnthropic):
     _model_meta: Dict[str, Dict[str, Any]] = {
         "us.anthropic.claude-3-5-sonnet-20240620-v1:0": {"pricing": {"input": 3.00, "output": 15.00}, "capabilities": {"computer_use": []}, "required_environment_variables": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"]},
     }
-    async def _provision(self) -> Tuple[Model, Optional[ModelSettings]]:
+    async def _provision(self, tools: Optional[List[Any]] = None) -> Tuple[Model, Optional[ModelSettings]]:
         aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
         aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
         aws_region = os.getenv("AWS_REGION")
@@ -266,7 +311,7 @@ class Gemini(BaseModelProvider):
             return sorted(list(cls._model_meta.keys()))
         return []
 
-    async def _provision(self) -> Tuple[Model, Optional[ModelSettings]]:
+    async def _provision(self, tools: Optional[List[Any]] = None) -> Tuple[Model, Optional[ModelSettings]]:
         final_api_key = self.api_key.get_secret_value() if self.api_key else os.getenv("GOOGLE_GLA_API_KEY")
         if not final_api_key:
             raise APIKeyMissingError("Gemini", "GOOGLE_GLA_API_KEY")

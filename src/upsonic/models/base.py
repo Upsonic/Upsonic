@@ -23,7 +23,7 @@ class BaseModelProvider(BaseModel, ABC):
         arbitrary_types_allowed = True
 
     @abstractmethod
-    async def _provision(self) -> Tuple[Model, Optional[ModelSettings]]:
+    async def _provision(self, tools: Optional[List[Any]] = None) -> Tuple[Model, Optional[ModelSettings]]:
         """
         The core abstract method that every concrete provider must implement.
 
