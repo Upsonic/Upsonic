@@ -62,6 +62,15 @@ class CSVLoaderConfig(LoaderConfig):
         default="concatenated",
         description="How to create document content from rows",
     )
+    split_mode: Literal["single_document", "per_row", "per_chunk"] = Field(
+        default="single_document",
+        description="How to split CSV into documents: 'single_document' (all rows in one), 'per_row' (each row as document), 'per_chunk' (groups of rows)"
+    )
+    rows_per_chunk: int = Field(
+        default=100,
+        description="Number of rows per document when split_mode='per_chunk'",
+        gt=0
+    )
     include_columns: Optional[List[str]] = Field(
         default=None, description="Only include these columns"
     )

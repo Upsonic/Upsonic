@@ -188,6 +188,62 @@ class TestCSVLoaderSimple(unittest.TestCase):
             self.assertIsInstance(doc.metadata, dict)
             self.assertIn('source', doc.metadata)
 
+    def test_split_mode_per_row(self):
+        """Test CSV splitting per row mode."""
+        config = CSVLoaderConfig(
+            split_mode="per_row",
+            include_metadata=True
+        )
+        loader = CSVLoader(config)
+        
+        documents = loader.load(str(self.simple_csv))
+        
+        # Should create one document per row (3 data rows)
+        self.assertEqual(len(documents), 3)
+        for i, doc in enumerate(documents):
+            self.assertIsInstance(doc, Document)
+            self.assertIn('row_index', doc.metadata)
+            self.assertEqual(doc.metadata['row_index'], i)
+            self.assertIn('total_rows', doc.metadata)
+            self.assertEqual(doc.metadata['total_rows'], 3)
+
+    def test_split_mode_per_chunk(self):
+        """Test CSV splitting per chunk mode."""
+        config = CSVLoaderConfig(
+            split_mode="per_chunk",
+            rows_per_chunk=2,
+            include_metadata=True
+        )
+        loader = CSVLoader(config)
+        
+        documents = loader.load(str(self.simple_csv))
+        
+        # Should create chunks with 2 rows each (3 rows -> 2 chunks: 2+1)
+        self.assertEqual(len(documents), 2)
+        for doc in documents:
+            self.assertIsInstance(doc, Document)
+            self.assertIn('chunk_index', doc.metadata)
+            self.assertIn('rows_in_chunk', doc.metadata)
+            self.assertIn('total_rows', doc.metadata)
+            self.assertEqual(doc.metadata['total_rows'], 3)
+
+    def test_split_mode_single_document(self):
+        """Test CSV single document mode (default behavior)."""
+        config = CSVLoaderConfig(
+            split_mode="single_document",
+            include_metadata=True
+        )
+        loader = CSVLoader(config)
+        
+        documents = loader.load(str(self.simple_csv))
+        
+        # Should create one document with all rows
+        self.assertEqual(len(documents), 1)
+        doc = documents[0]
+        self.assertIsInstance(doc, Document)
+        self.assertIn('row_count', doc.metadata)
+        self.assertEqual(doc.metadata['row_count'], 3)
+
 
 if __name__ == "__main__":
     unittest.main()
