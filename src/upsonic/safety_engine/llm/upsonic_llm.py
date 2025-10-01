@@ -2,9 +2,10 @@
 Upsonic LLM Provider for AI Safety Engine
 """
 
-from typing import List, Optional
+from typing import List, Optional, Union
 import asyncio
 from pydantic import BaseModel
+from upsonic.models import Model
 
 from upsonic.tasks.tasks import Task
 
@@ -47,12 +48,12 @@ class TranslationResponse(BaseModel):
 class UpsonicLLMProvider:
     """Upsonic-based LLM provider for AI Safety Engine"""
     
-    def __init__(self, agent_name: str = "AI Safety Agent", model: str = None):
-        from upsonic import Agent
+    def __init__(self, agent_name: str = "AI Safety Agent", model: Union[Model, str] = None):
+        from upsonic.agent.agent import Agent
         if model:
-            self.agent = Agent(agent_name, model=model)
+            self.agent = Agent(model=model, name=agent_name)
         else:
-            self.agent = Agent(agent_name)
+            self.agent = Agent(name=agent_name)
     
     def find_keywords(self, content_type: str, text: str, language: str = "en") -> List[str]:
         """Find keywords of specified content type in text using Upsonic Agent"""

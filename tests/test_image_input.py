@@ -2,6 +2,8 @@ import pytest
 from unittest.mock import patch, AsyncMock
 from contextlib import asynccontextmanager
 from upsonic import Task, Agent
+from upsonic.agent.run_result import RunResult
+from upsonic.models import ModelResponse, TextPart
 from pydantic import BaseModel
 
 class Names(BaseModel):
@@ -9,31 +11,25 @@ class Names(BaseModel):
 
 class TestTaskImageContextHandling:
     
-    @patch('upsonic.models.factory.ModelFactory.create')
-    @patch('upsonic.agent.agent.PydanticAgent')
-    def test_agent_with_multiple_images_returns_combined_names(self, mock_pydantic_agent, mock_factory_create):
-        # Mock the factory to return a mock provider that doesn't need API keys
-        mock_provider = AsyncMock()
+    @patch('upsonic.agent.agent.infer_model')
+    def test_agent_with_multiple_images_returns_combined_names(self, mock_infer_model):
+        # Mock the model inference
         mock_model = AsyncMock()
-        mock_provider._provision.return_value = (mock_model, None)
-        mock_factory_create.return_value = mock_provider
-
+        mock_infer_model.return_value = mock_model
         
-        mock_agent_instance = AsyncMock()
-        
-        # Create a mock response object that returns the expected format
-        mock_response = AsyncMock()
-        mock_response.output = Names(names=["John Smith", "Jane Doe", "Michael Johnson"])
-        mock_response.all_messages = lambda: []
-        mock_agent_instance.run.return_value = mock_response
-        
-        # Create a proper async context manager for run_mcp_servers
-        @asynccontextmanager
-        async def mock_run_mcp_servers():
-            yield
-        
-        mock_agent_instance.run_mcp_servers = mock_run_mcp_servers
-        mock_pydantic_agent.return_value = mock_agent_instance
+        # Mock the model request to return a proper ModelResponse with structured output
+        expected_names = Names(names=["John Smith", "Jane Doe", "Michael Johnson"])
+        mock_response = ModelResponse(
+            parts=[TextPart(content=expected_names.model_dump_json())],
+            model_name="test-model",
+            timestamp="2024-01-01T00:00:00Z",
+            usage=None,
+            provider_name="test-provider",
+            provider_response_id="test-id",
+            provider_details={},
+            finish_reason="stop"
+        )
+        mock_model.request.return_value = mock_response
         
         images = ["paper1.png", "paper2.png"]
         
@@ -43,10 +39,12 @@ class TestTaskImageContextHandling:
             response_format=Names
         )
         
-        agent = Agent(name="OCR Agent")
+        agent = Agent(name="OCR Agent", model=mock_model)
         
         result = agent.print_do(task)
         
-        assert isinstance(result, Names)
-        assert isinstance(result.names, list)
-        assert all(isinstance(name, str) for name in result.names)
+        # Check that result is a RunResult with the expected output
+        assert isinstance(result, RunResult)
+        assert isinstance(result.output, Names)
+        assert isinstance(result.output.names, list)
+        assert all(isinstance(name, str) for name in result.output.names)

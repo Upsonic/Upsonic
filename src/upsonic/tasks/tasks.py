@@ -8,12 +8,11 @@ from typing import Any, List, Dict, Optional, Type, Union, Callable, Literal
 
 
 from upsonic.utils.printing import get_price_id_total_cost
-from pydantic_ai import Agent as PydanticAgent, BinaryContent
-
+from upsonic.messages.messages import BinaryContent
 from upsonic.knowledge_base.knowledge_base import KnowledgeBase
 from upsonic.schemas.data_models import RAGSearchResult
 
-from upsonic.tools.external_tool import ExternalToolCall
+from upsonic.tools import ExternalToolCall
 
 # Type aliases for better type safety
 CacheMethod = Literal["vector_search", "llm_call"]

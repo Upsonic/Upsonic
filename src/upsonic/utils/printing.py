@@ -1,4 +1,5 @@
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, Literal, Optional, Union
+from upsonic.models import Model
 from decimal import Decimal
 from rich.console import Console
 from rich.panel import Panel
@@ -8,11 +9,22 @@ from rich.text import Text
 import platform
 from rich.markup import escape
 
-from upsonic.models.utils import get_estimated_cost
-from upsonic.models.base import BaseModelProvider
-
 
 console = Console()
+
+# TODO: Implement proper implementation of get_estimated_cost
+# Temporary stub for get_estimated_cost until proper implementation
+def get_estimated_cost(input_tokens: int, output_tokens: int, model_provider: Union[Model, str]) -> str:
+    """Estimate cost based on tokens. Returns approximate cost string."""
+    # Very rough estimates - should be replaced with actual pricing
+    input_cost_per_1m = 0.50  # $0.50 per 1M input tokens (rough average)
+    output_cost_per_1m = 1.50  # $1.50 per 1M output tokens (rough average)
+    
+    input_cost = (input_tokens / 1_000_000) * input_cost_per_1m
+    output_cost = (output_tokens / 1_000_000) * output_cost_per_1m
+    total_cost = input_cost + output_cost
+    
+    return f"~{total_cost:.4f}"
 
 # Global dictionary to store aggregated values by price_id
 price_id_summary = {}
@@ -84,7 +96,7 @@ def connected_to_server(server_type: str, status: str, total_time: float = None)
 
     spacing()
 
-def call_end(result: Any, model_provider: BaseModelProvider, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, debug: bool = False, price_id: str = None):
+def call_end(result: Any, model_provider: Any, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, debug: bool = False, price_id: str = None):
     # First panel for tool usage if there are any tools used
     if tool_usage and len(tool_usage) > 0:
         tool_table = Table(show_header=True, expand=True, box=None)
@@ -183,7 +195,7 @@ def call_end(result: Any, model_provider: BaseModelProvider, response_format: st
 
 
 
-def agent_end(result: Any, model_provider: BaseModelProvider, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, tool_count: int, context_count: int, debug: bool = False, price_id:str = None):
+def agent_end(result: Any, model_provider: Any, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, tool_count: int, context_count: int, debug: bool = False, price_id:str = None):
     # First panel for tool usage if there are any tools used
     if tool_usage and len(tool_usage) > 0:
         tool_table = Table(show_header=True, expand=True, box=None)
@@ -291,7 +303,7 @@ def agent_end(result: Any, model_provider: BaseModelProvider, response_format: s
     spacing()
 
 
-def agent_total_cost(total_input_tokens: int, total_output_tokens: int, total_time: float, model_provider: BaseModelProvider):
+def agent_total_cost(total_input_tokens: int, total_output_tokens: int, total_time: float, model_provider: Any):
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
     

@@ -1,41 +1,57 @@
 import asyncio
-import os
-import uuid
-from typing import Any, List, Union, Optional, Literal, TYPE_CHECKING, Dict
-import time
-from contextlib import asynccontextmanager
 import copy
+import time
+import uuid
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, Dict, List, Literal, Optional, Union, TYPE_CHECKING
 
-from pydantic_ai import Agent as PydanticAgent
-from pydantic_ai.messages import ModelResponse, TextPart
-from pydantic_ai.agent import AgentRunResult
+try:
+    from llmlingua import PromptCompressor
+except ImportError:
+    PromptCompressor = None
 
-
-from upsonic.canvas.canvas import Canvas
-
-from upsonic.utils.printing import print_price_id_summary, cache_hit, cache_miss, cache_stored, cache_configuration, agent_started
-from upsonic.cache import CacheManager
+from upsonic import _utils
 from upsonic.agent.base import BaseAgent
-from upsonic.tools.processor import ToolProcessor, ExternalExecutionPause
-from upsonic.storage.base import Storage
+from upsonic.agent.run_result import RunResult, StreamRunResult
+from upsonic.cache import CacheManager
+from upsonic.canvas.canvas import Canvas
+from upsonic.models import (
+    Model, ModelRequestParameters, StreamedResponse, infer_model, 
+    ModelMessage, ModelRequest, ModelResponse
+)
+from upsonic.models.settings import ModelSettings
+from upsonic.messages import (
+    ModelMessagesTypeAdapter, SystemPromptPart, UserPromptPart, 
+    ToolCallPart, ToolReturnPart, TextPart, ModelResponseStreamEvent,
+    PartStartEvent, PartDeltaEvent, FinalResultEvent
+)
+from upsonic._utils import now_utc
+from upsonic.output import OutputSpec
+from upsonic.profiles import ModelProfile
+from upsonic.providers import Provider
+from upsonic.reflection import ReflectionConfig, ReflectionProcessor
+from upsonic.safety_engine.base import Policy
+from upsonic.safety_engine.exceptions import DisallowedOperation
+from upsonic.safety_engine.models import PolicyInput, RuleOutput
+# Optional storage import - only import when needed
+try:
+    from upsonic.storage.memory.memory import Memory
+except ImportError:
+    Memory = None
+from upsonic.tools import ToolManager, ToolContext, ToolDefinition
+from upsonic.tools.processor import ExternalExecutionPause
+from upsonic.usage import RequestUsage
+from upsonic.utils.package.exception import GuardrailValidationError
+from upsonic.utils.printing import (
+    agent_started, call_end, cache_hit, cache_miss, cache_stored, 
+    cache_configuration, policy_triggered, print_price_id_summary
+)
 from upsonic.utils.retry import retryable
 from upsonic.utils.validators import validate_attachments_for_model
-from upsonic.storage.memory.memory import Memory
-from upsonic.models.base import BaseModelProvider
-from upsonic.models.factory import ModelFactory
-from upsonic.utils.package.exception import GuardrailValidationError
-from upsonic.safety_engine.base import Policy
-from upsonic.safety_engine.models import PolicyInput
-from upsonic.safety_engine.exceptions import DisallowedOperation
-from upsonic.utils.printing import policy_triggered
 
 from upsonic.agent.context_managers import (
-    CallManager,
-    ContextManager,
-    ReliabilityManager,
-    MemoryManager,
-    SystemPromptManager,
-    TaskManager,
+    CallManager, ContextManager, ReliabilityManager, 
+    MemoryManager, SystemPromptManager, TaskManager
 )
 
 if TYPE_CHECKING:
@@ -43,148 +59,234 @@ if TYPE_CHECKING:
 
 RetryMode = Literal["raise", "return_false"]
 
-class Direct(BaseAgent):
-    """Static methods for making direct LLM calls using the Upsonic."""
 
-    def __init__(self, 
-                 name: str | None = None, 
-                 model: Union[str, BaseModelProvider] | None = "openai/gpt-4o",
-                 memory: Optional[Memory] = None,
-                 debug: bool = False, 
-                 company_url: str | None = None, 
-                 company_objective: str | None = None,
-                 company_description: str | None = None,
-                 system_prompt: str | None = None,
-                 reflection: str | None = None,
-                 compress_context: bool = False,
-                 reliability_layer = None,
-                 agent_id_: str | None = None,
-                 canvas: Canvas | None = None,
-                 retry: int = 1,
-                 mode: RetryMode = "raise",
-                 role: str | None = None,
-                 goal: str | None = None,
-                 instructions: str | None = None,
-                 education: str | None = None,
-                 work_experience: str | None = None,
-                 feed_tool_call_results: bool = False,
-                 show_tool_calls: bool = True,
-                 tool_call_limit: int = 5,
-                 enable_thinking_tool: bool = False,
-                 enable_reasoning_tool: bool = False,
-                 user_policy: Optional[Policy] = None,
-                 agent_policy: Optional[Policy] = None,
-                 ):
-
-        self.canvas = canvas
-        self.memory = memory
-
-
-        if self.memory:
-            self.memory.feed_tool_call_results = feed_tool_call_results
-
+class Agent(BaseAgent):
+    """
+    A comprehensive, high-level AI Agent that integrates all framework components.
+    
+    This Agent class provides:
+    - Complete model abstraction through Model/Provider/Profile system
+    - Advanced tool handling with ToolManager and Orchestrator
+    - Streaming and non-streaming execution modes
+    - Memory management and conversation history
+    - Context management and prompt engineering
+    - Caching capabilities
+    - Safety policies and guardrails
+    - Reliability layers
+    - Canvas integration
+    - External tool execution support
+    
+    Usage:
+        Basic usage:
+        ```python
+        from upsonic import Agent, Task
         
-        self.debug = debug
-        if model is not None:
-            # Use ModelFactory to handle both string and provider instances
-            self.model_provider = ModelFactory.create(model)
-        else:
-            self.model_provider = None
-
-        # Setup LLM models for UpsonicLLMProvider agents if policies use them
-        self._setup_policy_llm_models(user_policy, agent_policy) 
-        self.agent_id_ = agent_id_
+        agent = Agent("openai/gpt-4o")
+        task = Task("What is 1 + 1?")
+        result = agent.do(task)
+        ```
+        
+        Advanced usage:
+        ```python
+        agent = Agent(
+            model="openai/gpt-4o",
+            name="Math Teacher",
+            memory=memory,
+            enable_thinking_tool=True,
+            user_policy=safety_policy
+        )
+        result = agent.stream(task)
+        ```
+    """
+    
+    def __init__(
+        self,
+        model: Union[str, Model] = "openai/gpt-4o",
+        *,
+        name: str | None = None,
+        memory: Optional[Memory] = None,
+        debug: bool = False,
+        company_url: str | None = None,
+        company_objective: str | None = None,
+        company_description: str | None = None,
+        system_prompt: str | None = None,
+        reflection: str | None = None,
+        compression_strategy: Literal["none", "simple", "llmlingua"] = "none",
+        compression_settings: Optional[Dict[str, Any]] = None,
+        reliability_layer = None,
+        agent_id_: str | None = None,
+        canvas: Canvas | None = None,
+        retry: int = 1,
+        mode: RetryMode = "raise",
+        role: str | None = None,
+        goal: str | None = None,
+        instructions: str | None = None,
+        education: str | None = None,
+        work_experience: str | None = None,
+        feed_tool_call_results: bool = False,
+        show_tool_calls: bool = True,
+        tool_call_limit: int = 5,
+        enable_thinking_tool: bool = False,
+        enable_reasoning_tool: bool = False,
+        user_policy: Optional[Policy] = None,
+        agent_policy: Optional[Policy] = None,
+        settings: Optional[ModelSettings] = None,
+        profile: Optional[ModelProfile] = None,
+        reflection_config: Optional[ReflectionConfig] = None,
+    ):
+        """
+        Initialize the Agent with comprehensive configuration options.
+        
+        Args:
+            model: Model identifier or Model instance
+            name: Agent name for identification
+            memory: Memory instance for conversation history
+            debug: Enable debug logging
+            company_url: Company URL for context
+            company_objective: Company objective for context
+            company_description: Company description for context
+            system_prompt: Custom system prompt
+            reflection: Reflection capabilities
+            compression_strategy: The method for context compression ('none', 'simple', 'llmlingua').
+            compression_settings: A dictionary of settings for the chosen strategy.
+                - For "simple": {"max_length": 2000}
+                - For "llmlingua": {"ratio": 0.5, "model_name": "...", "instruction": "..."}
+            reliability_layer: Reliability layer for robustness
+            agent_id_: Specific agent ID
+            canvas: Canvas instance for visual interactions
+            retry: Number of retry attempts
+            mode: Retry mode behavior
+            role: Agent role
+            goal: Agent goal
+            instructions: Specific instructions
+            education: Agent education background
+            work_experience: Agent work experience
+            feed_tool_call_results: Include tool results in memory
+            show_tool_calls: Display tool calls
+            tool_call_limit: Maximum tool calls per execution
+            enable_thinking_tool: Enable orchestrated thinking
+            enable_reasoning_tool: Enable reasoning capabilities
+            user_policy: User input safety policy
+            agent_policy: Agent output safety policy
+            settings: Model-specific settings
+            profile: Model profile configuration
+            reflection_config: Configuration for reflection and self-evaluation
+        """
+        # Core configuration
+        self.model = infer_model(model)
         self.name = name
-        self.company_url = company_url
-        self.company_objective = company_objective
-        self.company_description = company_description
-        self.system_prompt = system_prompt
-
-        self.reliability_layer = reliability_layer
-
-
+        self.agent_id_ = agent_id_
+        
+        # Agent identity and behavior
         self.role = role
         self.goal = goal
         self.instructions = instructions
         self.education = education
         self.work_experience = work_experience
+        self.system_prompt = system_prompt
         
+        # Company context
+        self.company_url = company_url
+        self.company_objective = company_objective
+        self.company_description = company_description
+        
+        # Runtime configuration
+        self.debug = debug
+        self.reflection = reflection
+
+        self.compression_strategy = compression_strategy
+        self.compression_settings = compression_settings or {}
+        self._prompt_compressor = None
+        if self.compression_strategy == "llmlingua":
+            if PromptCompressor is None:
+                raise ImportError(
+                    "The 'llmlingua' package is required for the 'llmlingua' compression strategy. "
+                    "Please install it using: pip install llmlingua"
+                )
+            model_name = self.compression_settings.get(
+                "model_name", "microsoft/llmlingua-2-xlm-roberta-large-meetingbank"
+            )
+            self._prompt_compressor = PromptCompressor(model_name=model_name, use_llmlingua2=True)
+
+        self.reliability_layer = reliability_layer
+        
+        # Validation
         if retry < 1:
             raise ValueError("The 'retry' count must be at least 1.")
         if mode not in ("raise", "return_false"):
             raise ValueError(f"Invalid retry_mode '{mode}'. Must be 'raise' or 'return_false'.")
-
+        
         self.retry = retry
         self.mode = mode
         
+        # Tool configuration
         self.show_tool_calls = show_tool_calls
         self.tool_call_limit = tool_call_limit
-
-        self.tool_call_count = 0
-
-
         self.enable_thinking_tool = enable_thinking_tool
         self.enable_reasoning_tool = enable_reasoning_tool
-
+        
+        # Memory and storage
+        self.memory = memory
+        if self.memory:
+            self.memory.feed_tool_call_results = feed_tool_call_results
+        
+        # Canvas integration
+        self.canvas = canvas
+        
+        # Safety policies
         self.user_policy = user_policy
         self.agent_policy = agent_policy
         
-        self._cache_manager = CacheManager(session_id=f"agent_{self.agent_id}")
-    
-    def _setup_policy_llm_models(self, user_policy, agent_policy):
-        """Setup LLM models for agents in UpsonicLLMProvider objects used by policies"""
-        from upsonic.safety_engine.llm.upsonic_llm import UpsonicLLMProvider
+        # Reflection configuration
+        self.reflection_config = reflection_config
+        self.reflection_processor = ReflectionProcessor(reflection_config) if reflection_config else None
         
-        policies = [user_policy, agent_policy]
+        # Model configuration
+        if settings:
+            self.model._settings = settings
+        if profile:
+            self.model._profile = profile
+        
+        # Initialize components
+        self._cache_manager = CacheManager(session_id=f"agent_{self.agent_id}")
+        self.tool_manager = ToolManager()
+        
+        # Runtime state
+        self.tool_call_count = 0
+        self._current_messages = []
+        self._tool_call_count = 0
+        
+        # Run result tracking - persistent across all executions
+        self._run_result = RunResult(output=None)
+        
+        # Setup policy models
+        self._setup_policy_models()
+    
+    def _setup_policy_models(self):
+        """Setup model references for safety policies."""
+        policies = [self.user_policy, self.agent_policy]
         
         for policy in policies:
             if policy is None:
                 continue
-                
-            # If the policy doesn't have a base_llm and we have a model_provider, create one
-            if policy.base_llm is None and self.model_provider is not None:
+            
+            # Setup base LLM if needed
+            if hasattr(policy, 'base_llm') and policy.base_llm is None:
+                from upsonic.safety_engine.llm.upsonic_llm import UpsonicLLMProvider
                 policy.base_llm = UpsonicLLMProvider(
                     agent_name="Policy Base Agent",
-                    model=None  # Will be set below
+                    model=self.model
                 )
-                policy.base_llm.agent.model_provider = self.model_provider
-            
-            # Check if policy.base_llm is an UpsonicLLMProvider
-            elif isinstance(policy.base_llm, UpsonicLLMProvider):
-                # Set the model for the UpsonicLLMProvider's agent if we have a model_provider
-                if self.model_provider is not None:
-                    policy.base_llm.agent.model_provider = self.model_provider
-            
-            # Also check other LLM providers in the policy
-            if policy.language_identify_llm is None and self.model_provider is not None:
-                policy.language_identify_llm = UpsonicLLMProvider(
-                    agent_name="Policy Language Detection Agent",
-                    model=None
-                )
-                policy.language_identify_llm.agent.model_provider = self.model_provider
-            elif isinstance(policy.language_identify_llm, UpsonicLLMProvider):
-                if self.model_provider is not None:
-                    policy.language_identify_llm.agent.model_provider = self.model_provider
-                    
-            if policy.text_finder_llm is None and self.model_provider is not None:
-                policy.text_finder_llm = UpsonicLLMProvider(
-                    agent_name="Policy Text Finder Agent", 
-                    model=None
-                )
-                policy.text_finder_llm.agent.model_provider = self.model_provider
-            elif isinstance(policy.text_finder_llm, UpsonicLLMProvider):
-                if self.model_provider is not None:
-                    policy.text_finder_llm.agent.model_provider = self.model_provider
-
-
-
+    
     @property
-    def agent_id(self):
+    def agent_id(self) -> str:
+        """Get or generate agent ID."""
         if self.agent_id_ is None:
             self.agent_id_ = str(uuid.uuid4())
         return self.agent_id_
     
-    def get_agent_id(self):
+    def get_agent_id(self) -> str:
+        """Get display-friendly agent ID."""
         if self.name:
             return self.name
         return f"Agent_{self.agent_id[:8]}"
@@ -197,185 +299,548 @@ class Direct(BaseAgent):
         """Clear the agent's session cache."""
         self._cache_manager.clear_cache()
     
-
-
-
-
-    async def print_do_async(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1):
+    def get_run_result(self) -> RunResult:
         """
-        Execute a direct LLM call and print the result asynchronously.
+        Get the persistent RunResult that accumulates messages across all executions.
         
-        Args:
-            task: The task to execute or list of tasks
-            model: The LLM model to use
-            debug: Whether to enable debug mode
-            retry: Number of retries for failed calls 
-            
         Returns:
-            The response from the LLM
+            RunResult: The agent's run result containing all messages and the last output
         """
-        result = await self.do_async(task, model, debug, retry)
-        return result
-
-
-    def do(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1):
+        return self._run_result
+    
+    def reset_run_result(self):
         """
-        Execute a direct LLM call with the given task and model synchronously.
+        Reset the RunResult to start fresh (clears all accumulated messages).
         
-        Args:
-            task: The task to execute or list of tasks
-            model: The LLM model to use
-            debug: Whether to enable debug mode
-            retry: Number of retries for failed calls
-            
-        Returns:
-            The response from the LLM
+        Useful when you want to start a new conversation thread without creating a new agent.
         """
-        # Refresh price_id and tool call history at the start for each task
-        if isinstance(task, list):
-            for each_task in task:
-                each_task.price_id_ = None  # Reset to generate new price_id
-                _ = each_task.price_id  # Trigger price_id generation
-                each_task._tool_calls = []  # Clear tool call history
-        else:
-            task.price_id_ = None  # Reset to generate new price_id
-            _ = task.price_id  # Trigger price_id generation
-            task._tool_calls = []  # Clear tool call history
+        self._run_result = RunResult(output=None)
+    
+    def _setup_tools(self, task: "Task"):
+        """Setup tools with ToolManager for the current task."""
+        # Reset tool limit flag for new task
+        self._tool_limit_reached = False
         
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Event loop is already running, we need to run in a new thread
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, self.do_async(task, model, debug, retry))
-                    return future.result()
-            else:
-                # Event loop exists but not running, we can use it
-                return loop.run_until_complete(self.do_async(task, model, debug, retry))
-        except RuntimeError:
-            # No event loop running, create a new one
-            return asyncio.run(self.do_async(task, model, debug, retry))
-
-
-    def print_do(self, task: Union["Task", List["Task"]], model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1):
-        """
-        Execute a direct LLM call and print the result synchronously.
+        if not task.tools:
+            return
         
-        Args:
-            task: The task to execute or list of tasks
-            model: The LLM model to use
-            debug: Whether to enable debug mode
-            retry: Number of retries for failed calls
-            
-        Returns:
-            The response from the LLM
-        """
-        result = self.do(task, model, debug, retry)
-        print(result)
-        return result
-
-
-
-    async def agent_create(self, provider: BaseModelProvider, single_task: "Task", system_prompt: str):
-        """
-        Creates and configures the underlying PydanticAgent, processing and wrapping
-        all tools with the advanced behavioral logic from ToolProcessor.
-        """
-        validate_attachments_for_model(provider, single_task)
-
-        agent_model, agent_settings = await provider._provision(single_task.tools)
-
+        # Create context for tools
+        self._context = ToolContext(
+            deps=getattr(self, 'dependencies', None),
+            agent_id=self.name,
+            max_retries=self.retry,
+            tool_call_limit=self.tool_call_limit
+        )
+        
+        # Determine thinking and reasoning settings
         is_thinking_enabled = self.enable_thinking_tool
-        if single_task.enable_thinking_tool is not None:
-            is_thinking_enabled = single_task.enable_thinking_tool
-
+        if task.enable_thinking_tool is not None:
+            is_thinking_enabled = task.enable_thinking_tool
+        
         is_reasoning_enabled = self.enable_reasoning_tool
-        if single_task.enable_reasoning_tool is not None:
-            is_reasoning_enabled = single_task.enable_reasoning_tool
+        if task.enable_reasoning_tool is not None:
+            is_reasoning_enabled = task.enable_reasoning_tool
 
-        # Sanity Check: Reasoning requires Thinking.
         if is_reasoning_enabled and not is_thinking_enabled:
             raise ValueError("Configuration error: 'enable_reasoning_tool' cannot be True if 'enable_thinking_tool' is False.")
-        
+
         agent_for_this_run = copy.copy(self)
         agent_for_this_run.enable_thinking_tool = is_thinking_enabled
         agent_for_this_run.enable_reasoning_tool = is_reasoning_enabled
 
-        tool_processor = ToolProcessor(agent=agent_for_this_run)
+        # Add orchestration tools if thinking is enabled
+        final_tools = list(task.tools)
+        if is_thinking_enabled:
+            from upsonic.tools import plan_and_execute
+            final_tools.append(plan_and_execute)
         
-        final_tools_for_pydantic_ai = []
-        mcp_servers = []
-        
-        processed_tools_generator = tool_processor.normalize_and_process(single_task.tools)
-
-        for original_tool, config in processed_tools_generator:
-            if callable(original_tool):
-                if hasattr(original_tool, '_is_orchestrator'):
-                    wrapped_tool = tool_processor.generate_orchestrator_wrapper(self, single_task)
-                else:
-                    wrapped_tool = tool_processor.generate_behavioral_wrapper(original_tool, config)
-                
-                final_tools_for_pydantic_ai.append(wrapped_tool)
-            elif original_tool is None and config is not None:
-                mcp_server = config
-                mcp_servers.append(mcp_server)
-
-        the_agent = PydanticAgent(
-            agent_model,
-            output_type=single_task.response_format,
-            system_prompt=system_prompt,
-            end_strategy="exhaustive",
-            retries=5,
-            mcp_servers=mcp_servers,
-            model_settings=agent_settings,
+        # Register tools with ToolManager
+        self.tool_manager.register_tools(
+            tools=final_tools,
+            context=self._context,
+            task=task,
+            agent_instance=agent_for_this_run
         )
-
-        if not hasattr(the_agent, '_registered_tools'):
-            the_agent._registered_tools = set()
+    
+    async def _build_model_request(self, task: "Task", memory_handler: MemoryManager) -> List[ModelMessage]:
+        """Build the complete message history for the model request."""
+        messages = []
         
-        for tool_func in final_tools_for_pydantic_ai:
-            tool_id = id(tool_func)
-            if tool_id not in the_agent._registered_tools:
-                the_agent.tool_plain(tool_func)
-                the_agent._registered_tools.add(tool_id)
+        # Get message history from memory
+        message_history = memory_handler.get_message_history()
+        messages.extend(message_history)
         
-        if not hasattr(self, '_upsonic_wrapped_tools'):
-            self._upsonic_wrapped_tools = {}
-        if not hasattr(agent_for_this_run, '_upsonic_wrapped_tools'):
-            agent_for_this_run._upsonic_wrapped_tools = {}
+        # Build the current request
+        system_prompt_manager = SystemPromptManager(self, task)
+        context_manager = ContextManager(self, task, getattr(task, 'state', None))
         
-        # Store a reference to the final wrapped tools for the orchestrator to access.
-        self._upsonic_wrapped_tools = {
-            tool_func.__name__: tool_func for tool_func in final_tools_for_pydantic_ai
-        }
-        agent_for_this_run._upsonic_wrapped_tools = self._upsonic_wrapped_tools
-
-        return the_agent
-
-
-
-    @asynccontextmanager
-    async def _managed_storage_connection(self):
+        async with system_prompt_manager.manage_system_prompt(memory_handler) as sp_handler, \
+                   context_manager.manage_context(memory_handler) as ctx_handler:
+            
+            # Create user prompt with task input
+            task_input = task.build_agent_input()
+            user_part = UserPromptPart(content=task_input)
+            
+            # Build parts list for current request
+            parts = []
+            
+            # If this is the first request (no message history), include system prompt
+            if not messages:
+                system_prompt = sp_handler.get_system_prompt()
+                if system_prompt:
+                    system_part = SystemPromptPart(content=system_prompt)
+                    parts.append(system_part)
+            
+            # Add user prompt
+            parts.append(user_part)
+            
+            # Create the current request with both system (if first) and user prompt
+            current_request = ModelRequest(parts=parts)
+            messages.append(current_request)
+            
+            # Apply context compression if enabled
+            if self.compression_strategy != "none" and ctx_handler:
+                context_prompt = ctx_handler.get_context_prompt()
+                if context_prompt:
+                    compressed_context = self._compress_context(context_prompt)
+                    # Update the task's context_formatted with compressed version
+                    task.context_formatted = compressed_context
+        
+        return messages
+    
+    async def _build_model_request_with_input(
+        self, 
+        task: "Task", 
+        memory_handler: MemoryManager, 
+        current_input: Any, 
+        temporary_message_history: List[ModelMessage]
+    ) -> List[ModelMessage]:
+        """Build model request with custom input and message history for guardrail retries."""
+        messages = list(temporary_message_history)
+        
+        # Build context managers for system prompt and context
+        system_prompt_manager = SystemPromptManager(self, task)
+        context_manager = ContextManager(self, task, getattr(task, 'state', None))
+        
+        async with system_prompt_manager.manage_system_prompt(memory_handler) as sp_handler, \
+                   context_manager.manage_context(memory_handler) as ctx_handler:
+            
+            # Handle current input (could be string or complex input)
+            user_part = UserPromptPart(content=current_input)
+            
+            # Build parts list for current request
+            parts = []
+            
+            # If this is the first request (no message history), include system prompt
+            if not messages:
+                system_prompt = sp_handler.get_system_prompt()
+                if system_prompt:
+                    system_part = SystemPromptPart(content=system_prompt)
+                    parts.append(system_part)
+            
+            # Add user prompt
+            parts.append(user_part)
+            
+            # Create the current request with both system (if first) and user prompt
+            current_request = ModelRequest(parts=parts)
+            messages.append(current_request)
+            
+            # Apply context compression if enabled
+            if self.compression_strategy != "none" and ctx_handler:
+                context_prompt = ctx_handler.get_context_prompt()
+                if context_prompt:
+                    compressed_context = self._compress_context(context_prompt)
+                    # Update the task's context_formatted with compressed version
+                    task.context_formatted = compressed_context
+        
+        return messages
+    
+    def _build_model_request_parameters(self, task: "Task") -> ModelRequestParameters:
+        """Build model request parameters including tools and structured output."""
+        from pydantic import BaseModel
+        from upsonic.output import OutputObjectDefinition
+        
+        # Get tool definitions - but check if we've reached the limit
+        if hasattr(self, '_tool_limit_reached') and self._tool_limit_reached:
+            # Limit reached - don't provide any tools to the model
+            tool_definitions = []
+        elif self.tool_call_limit and self._tool_call_count >= self.tool_call_limit:
+            # Limit reached - don't provide any tools to the model
+            tool_definitions = []
+            self._tool_limit_reached = True
+        else:
+            # Get tool definitions normally
+            tool_definitions = self.tool_manager.get_tool_definitions()
+        
+        # Determine output mode and object based on response_format
+        output_mode = 'text'
+        output_object = None
+        allow_text_output = True
+        
+        if task.response_format and task.response_format != str and task.response_format is not str:
+            # Structured output requested
+            if isinstance(task.response_format, type) and issubclass(task.response_format, BaseModel):
+                # Pydantic model - use native structured output
+                output_mode = 'native'
+                allow_text_output = False
+                
+                # Create output object definition
+                schema = task.response_format.model_json_schema()
+                output_object = OutputObjectDefinition(
+                    json_schema=schema,
+                    name=task.response_format.__name__,
+                    description=task.response_format.__doc__,
+                    strict=True  # Enable strict mode for structured output
+                )
+        
+        return ModelRequestParameters(
+            function_tools=tool_definitions,
+            output_mode=output_mode,
+            output_object=output_object,
+            allow_text_output=allow_text_output
+        )
+    
+    async def _execute_tool_calls(self, tool_calls: List[ToolCallPart]) -> List[ToolReturnPart]:
         """
-        A robust async context manager that correctly manages the lifecycle of
-        the fully asynchronous storage connection using the _async API.
+        Execute tool calls and return results.
+        
+        Handles both sequential and parallel execution based on tool configuration.
+        Tools marked as sequential will be executed one at a time.
+        Other tools can be executed in parallel if multiple are called.
         """
-        if not self.memory or not self.memory.storage:
-            yield
-            return
-
-        storage = self.memory.storage
-        was_connected_before = await storage.is_connected_async()
+        if not tool_calls:
+            return []
+        
+        # Check tool call limit BEFORE executing
+        # Use agent-level count since it's the one being tracked
+        if self.tool_call_limit and self._tool_call_count >= self.tool_call_limit:
+            # Limit reached - return error results for all tool calls
+            error_results = []
+            for tool_call in tool_calls:
+                error_results.append(ToolReturnPart(
+                    tool_name=tool_call.tool_name,
+                    content=f"Tool call limit of {self.tool_call_limit} reached. Cannot execute more tools.",
+                    tool_call_id=tool_call.tool_call_id
+                ))
+            # Set a flag to stop further execution
+            self._tool_limit_reached = True
+            return error_results
+        
+        # Get tool definitions to check for sequential requirements
+        tool_defs = {td.name: td for td in self.tool_manager.get_tool_definitions()}
+        
+        # Separate sequential and parallel tools
+        sequential_calls = []
+        parallel_calls = []
+        
+        for tool_call in tool_calls:
+            tool_def = tool_defs.get(tool_call.tool_name)
+            if tool_def and tool_def.sequential:
+                sequential_calls.append(tool_call)
+            else:
+                parallel_calls.append(tool_call)
+        
+        results = []
+        
+        # Execute sequential tools one by one
+        for tool_call in sequential_calls:
+            try:
+                task_id = None
+                if hasattr(self, 'current_task') and self.current_task:
+                    task_id = getattr(self.current_task, 'id', None) or getattr(self.current_task, 'price_id', None)
+                
+                result = await self.tool_manager.execute_tool(
+                    tool_name=tool_call.tool_name,
+                    args=tool_call.args_as_dict(),
+                    context=ToolContext(
+                        deps=getattr(self, 'dependencies', None),
+                        agent_id=self.name,
+                        task_id=task_id,
+                        messages=self._current_messages,
+                        retry=0,
+                        max_retries=self.retry,
+                        tool_call_count=self._tool_call_count,
+                        tool_call_limit=self.tool_call_limit
+                    ),
+                    tool_call_id=tool_call.tool_call_id
+                )
+                
+                self._tool_call_count += 1
+                # Update context count to keep synchronized
+                if hasattr(self, '_context') and self._context:
+                    self._context.tool_call_count = self._tool_call_count
+                
+                tool_return = ToolReturnPart(
+                    tool_name=result.tool_name,
+                    content=result.content,
+                    tool_call_id=result.tool_call_id,
+                    timestamp=now_utc()
+                )
+                results.append(tool_return)
+                
+            except ExternalExecutionPause as e:
+                raise e
+            except Exception as e:
+                error_return = ToolReturnPart(
+                    tool_name=tool_call.tool_name,
+                    content=f"Error executing tool: {str(e)}",
+                    tool_call_id=tool_call.tool_call_id,
+                    timestamp=now_utc()
+                )
+                results.append(error_return)
+        
+        # Execute parallel tools concurrently
+        if parallel_calls:
+            async def execute_single_tool(tool_call: ToolCallPart) -> ToolReturnPart:
+                """Execute a single tool call and return the result."""
+                try:
+                    task_id = None
+                    if hasattr(self, 'current_task') and self.current_task:
+                        task_id = getattr(self.current_task, 'id', None) or getattr(self.current_task, 'price_id', None)
+                    
+                    result = await self.tool_manager.execute_tool(
+                        tool_name=tool_call.tool_name,
+                        args=tool_call.args_as_dict(),
+                        context=ToolContext(
+                            deps=getattr(self, 'dependencies', None),
+                            agent_id=self.name,
+                            task_id=task_id,
+                            messages=self._current_messages,
+                            retry=0,
+                            max_retries=self.retry,
+                            tool_call_count=self._tool_call_count,
+                            tool_call_limit=self.tool_call_limit
+                        ),
+                        tool_call_id=tool_call.tool_call_id
+                    )
+                    
+                    return ToolReturnPart(
+                        tool_name=result.tool_name,
+                        content=result.content,
+                        tool_call_id=result.tool_call_id,
+                        timestamp=now_utc()
+                    )
+                    
+                except ExternalExecutionPause:
+                    raise  # Let external execution pause propagate
+                except Exception as e:
+                    return ToolReturnPart(
+                        tool_name=tool_call.tool_name,
+                        content=f"Error executing tool: {str(e)}",
+                        tool_call_id=tool_call.tool_call_id,
+                        timestamp=now_utc()
+                    )
+            
+            # Execute all parallel tools concurrently
+            parallel_results = await asyncio.gather(
+                *[execute_single_tool(tc) for tc in parallel_calls],
+                return_exceptions=False
+            )
+            
+            # Increment tool call count for all parallel calls
+            self._tool_call_count += len(parallel_calls)
+            # Update context count to keep synchronized
+            if hasattr(self, '_context') and self._context:
+                self._context.tool_call_count = self._tool_call_count
+            
+            results.extend(parallel_results)
+        
+        return results
+    
+    async def _handle_model_response(
+        self, 
+        response: ModelResponse, 
+        messages: List[ModelMessage]
+    ) -> ModelResponse:
+        """Handle model response including tool calls."""
+        # Check if tool limit was already reached
+        if hasattr(self, '_tool_limit_reached') and self._tool_limit_reached:
+            # Return the current response without processing more tool calls
+            return response
+        
+        # Check for tool calls
+        tool_calls = [
+            part for part in response.parts 
+            if isinstance(part, ToolCallPart)
+        ]
+        
+        if tool_calls:
+            # Execute tool calls
+            tool_results = await self._execute_tool_calls(tool_calls)
+            
+            # Check if limit was reached during execution
+            if hasattr(self, '_tool_limit_reached') and self._tool_limit_reached:
+                # Add the error messages to response and stop
+                tool_request = ModelRequest(parts=tool_results)
+                messages.append(response)
+                messages.append(tool_request)
+                
+                # Create a final text response to stop the loop
+                # Add a user message to inform the model about the limit
+                limit_notification = UserPromptPart(
+                    content=f"[SYSTEM] Tool call limit of {self.tool_call_limit} has been reached. "
+                    f"No more tools are available. Please provide a final response based on the information you have."
+                )
+                limit_message = ModelRequest(parts=[limit_notification])
+                messages.append(limit_message)
+                
+                # Request a final response from the model without tools
+                model_params = self._build_model_request_parameters(getattr(self, 'current_task', None))
+                model_params = self.model.customize_request_parameters(model_params)
+                
+                final_response = await self.model.request(
+                    messages=messages,
+                    model_settings=self.model.settings,
+                    model_request_parameters=model_params
+                )
+                
+                return final_response
+            
+            # Check if any tool has stop_after_tool_call flag
+            should_stop = False
+            for tool_result in tool_results:
+                if hasattr(tool_result, 'content') and isinstance(tool_result.content, dict):
+                    if tool_result.content.get('_stop_execution'):
+                        should_stop = True
+                        # Clean up the flag from the content before returning
+                        tool_result.content.pop('_stop_execution', None)
+            
+            # Add tool results to message history
+            tool_request = ModelRequest(parts=tool_results)
+            messages.append(response)
+            messages.append(tool_request)
+            
+            # If stop_after_tool_call is set, return immediately without continuing
+            if should_stop:
+                # Create a final response with the tool result content
+                final_text = ""
+                for tool_result in tool_results:
+                    if hasattr(tool_result, 'content'):
+                        if isinstance(tool_result.content, dict):
+                            # Extract the main result
+                            final_text = str(tool_result.content.get('func', tool_result.content))
+                        else:
+                            final_text = str(tool_result.content)
+                
+                # Create a response with just the tool result
+                stop_response = ModelResponse(
+                    parts=[TextPart(content=final_text)],
+                    model_name=response.model_name,
+                    timestamp=response.timestamp,
+                    usage=response.usage,
+                    provider_name=response.provider_name,
+                    provider_response_id=response.provider_response_id,
+                    provider_details=response.provider_details,
+                    finish_reason="stop"
+                )
+                return stop_response
+            
+            # Continue conversation with tool results
+            model_params = self._build_model_request_parameters(getattr(self, 'current_task', None))
+            model_params = self.model.customize_request_parameters(model_params)
+            
+            # Make follow-up request
+            follow_up_response = await self.model.request(
+                messages=messages,
+                model_settings=self.model.settings,
+                model_request_parameters=model_params
+            )
+            
+            return await self._handle_model_response(follow_up_response, messages)
+        
+        return response
+    
+    async def _handle_cache(self, task: "Task") -> Optional[Any]:
+        """Handle cache operations for the task."""
+        if not task.enable_cache:
+            return None
+        
+        # Show cache configuration if debug
+        if self.debug:
+            embedding_provider_name = None
+            if task.cache_embedding_provider:
+                embedding_provider_name = getattr(task.cache_embedding_provider, 'model_name', 'Unknown')
+            
+            cache_configuration(
+                enable_cache=task.enable_cache,
+                cache_method=task.cache_method,
+                cache_threshold=task.cache_threshold if task.cache_method == "vector_search" else None,
+                cache_duration_minutes=task.cache_duration_minutes,
+                embedding_provider=embedding_provider_name
+            )
+        
+        # Get cached response
+        input_text = task._original_input or task.description
+        cached_response = await task.get_cached_response(input_text, self.model)
+        
+        if cached_response is not None:
+            # Cache hit
+            similarity = None
+            if hasattr(task, '_last_cache_entry') and 'similarity' in task._last_cache_entry:
+                similarity = task._last_cache_entry['similarity']
+            
+            cache_hit(
+                cache_method=task.cache_method,
+                similarity=similarity,
+                input_preview=(task._original_input or task.description)[:100] if (task._original_input or task.description) else None
+            )
+            
+            return cached_response
+        else:
+            # Cache miss
+            cache_miss(
+                cache_method=task.cache_method,
+                input_preview=(task._original_input or task.description)[:100] if (task._original_input or task.description) else None
+            )
+            return None
+    
+    async def _apply_user_policy(self, task: "Task") -> tuple[Optional["Task"], bool]:
+        """Apply user policy to task input."""
+        if not (self.user_policy and task.description):
+            return task, True
+        
+        policy_input = PolicyInput(input_texts=[task.description])
         try:
-            if not was_connected_before:
-                await storage.connect_async()
-            yield
-        finally:
-            if not was_connected_before and await storage.is_connected_async():
-                await storage.disconnect_async()
-
-    async def _execute_with_guardrail(self, agent: PydanticAgent, task: "Task", memory_handler: MemoryManager) -> AgentRunResult:
+            rule_output, _action_output, policy_output = await self.user_policy.execute_async(policy_input)
+            action_taken = policy_output.action_output.get("action_taken", "UNKNOWN")
+            
+            if self.debug and rule_output.confidence > 0.0:
+                policy_triggered(
+                    policy_name=self.user_policy.name,
+                    check_type="User Input Check",
+                    action_taken=action_taken,
+                    rule_output=rule_output
+                )
+            
+            if action_taken == "BLOCK":
+                task.task_end()
+                task._response = policy_output.output_texts[0] if policy_output.output_texts else "Content blocked by user policy."
+                return task, False
+            elif action_taken in ["REPLACE", "ANONYMIZE"]:
+                task.description = policy_output.output_texts[0] if policy_output.output_texts else ""
+                return task, True
+                
+        except DisallowedOperation as e:
+            mock_rule_output = RuleOutput(
+                confidence=1.0,
+                content_type="DISALLOWED_OPERATION", 
+                details=str(e)
+            )
+            if self.debug:
+                policy_triggered(
+                    policy_name=self.user_policy.name,
+                    check_type="User Input Check",
+                    action_taken="DISALLOWED_EXCEPTION",
+                    rule_output=mock_rule_output
+                )
+            
+            task.task_end()
+            task._response = f"Operation disallowed by user policy: {e}"
+            return task, False
+        
+        return task, True
+    
+    async def _execute_with_guardrail(self, task: "Task", memory_handler: MemoryManager) -> ModelResponse:
         """
         Executes the agent's run method with a validation and retry loop based on a task guardrail.
         This method encapsulates the retry logic, hiding it from the main `do_async` pipeline.
@@ -395,10 +860,23 @@ class Direct(BaseAgent):
             max_retries = 1
 
         while not validation_passed and retry_counter < max_retries:
-            current_model_response = await agent.run(
-                current_input,
-                message_history=temporary_message_history
+            # Build messages for current attempt
+            messages = await self._build_model_request_with_input(task, memory_handler, current_input, temporary_message_history)
+            self._current_messages = messages
+            
+            # Build request parameters
+            model_params = self._build_model_request_parameters(task)
+            model_params = self.model.customize_request_parameters(model_params)
+            
+            # Make model request
+            response = await self.model.request(
+                messages=messages,
+                model_settings=self.model.settings,
+                model_request_parameters=model_params
             )
+            
+            # Handle response and tool calls
+            current_model_response = await self._handle_model_response(response, messages)
             
             if task.guardrail is None:
                 validation_passed = True
@@ -406,170 +884,161 @@ class Direct(BaseAgent):
                 break
 
             final_text_output = ""
-            new_messages = current_model_response.new_messages()
-            if new_messages and isinstance(new_messages[-1], ModelResponse):
-                final_response_message = new_messages[-1]
-                text_parts = [part.content for part in final_response_message.parts if isinstance(part, TextPart)]
-                final_text_output = "".join(text_parts)
+            # Extract text from response parts
+            text_parts = [part.content for part in current_model_response.parts if isinstance(part, TextPart)]
+            final_text_output = "".join(text_parts)
 
             if not final_text_output:
                 validation_passed = True
                 final_model_response = current_model_response
                 break
 
-            is_valid, result = task.guardrail(final_text_output)
+            try:
+                guardrail_result = task.guardrail(final_text_output)
+                
+                # Handle different guardrail return formats
+                if isinstance(guardrail_result, tuple) and len(guardrail_result) == 2:
+                    is_valid, result = guardrail_result
+                elif isinstance(guardrail_result, bool):
+                    is_valid = guardrail_result
+                    result = final_text_output if guardrail_result else "Guardrail validation failed"
+                else:
+                    # Assume truthy means valid, falsy means invalid
+                    is_valid = bool(guardrail_result)
+                    result = guardrail_result if guardrail_result else "Guardrail validation failed"
 
-            if is_valid:
-                validation_passed = True
-                
-                if new_messages and isinstance(new_messages[-1], ModelResponse):
-                    final_response_message = new_messages[-1]
-                    found_and_updated = False
-                    for part in final_response_message.parts:
-                        if isinstance(part, TextPart):
-                            if not found_and_updated:
-                                part.content = result
+                if is_valid:
+                    validation_passed = True
+                    
+                    # Update the response with the result if it was modified
+                    if result != final_text_output:
+                        # Create new response with updated content
+                        updated_parts = []
+                        found_and_updated = False
+                        for part in current_model_response.parts:
+                            if isinstance(part, TextPart) and not found_and_updated:
+                                updated_parts.append(TextPart(content=str(result)))
                                 found_and_updated = True
+                            elif isinstance(part, TextPart):
+                                updated_parts.append(TextPart(content=""))
                             else:
-                                part.content = ""
-                
-                final_model_response = current_model_response
-                break
-            else:
+                                updated_parts.append(part)
+                        
+                        final_model_response = ModelResponse(
+                            parts=updated_parts,
+                            model_name=current_model_response.model_name,
+                            timestamp=current_model_response.timestamp,
+                            usage=current_model_response.usage,
+                            provider_name=current_model_response.provider_name,
+                            provider_response_id=current_model_response.provider_response_id,
+                            provider_details=current_model_response.provider_details,
+                            finish_reason=current_model_response.finish_reason
+                        )
+                    else:
+                        final_model_response = current_model_response
+                    break
+                else:
+                    retry_counter += 1
+                    last_error_message = str(result)
+                    
+                    # Add the failed response to temporary history
+                    temporary_message_history.append(current_model_response)
+                    
+                    # Create correction prompt
+                    correction_prompt = f"Your previous response failed a validation check. Please review the reason and provide a corrected response. Failure Reason: {last_error_message}"
+                    current_input = correction_prompt
+                    
+            except Exception as e:
                 retry_counter += 1
-                last_error_message = str(result)
-                temporary_message_history.extend(current_model_response.new_messages())
+                last_error_message = f"Guardrail execution error: {str(e)}"
+                
+                # Add the failed response to temporary history
+                temporary_message_history.append(current_model_response)
+                
+                # Create correction prompt
                 correction_prompt = f"Your previous response failed a validation check. Please review the reason and provide a corrected response. Failure Reason: {last_error_message}"
                 current_input = correction_prompt
 
         if not validation_passed:
-            raise GuardrailValidationError(f"Task failed after {max_retries-1} retry(s). Last error: {last_error_message}")
+            error_msg = f"Task failed after {max_retries-1} retry(s). Last error: {last_error_message}"
+            if self.mode == "raise":
+                raise GuardrailValidationError(error_msg)
+            else:  # return_false
+                # Create error response
+                error_response = ModelResponse(
+                    parts=[TextPart(content="Guardrail validation failed after retries")],
+                    model_name=self.model.model_name,
+                    timestamp=now_utc(),
+                    usage=RequestUsage()
+                )
+                return error_response
+                
         return final_model_response
+    
+    def _compress_context(self, context: str) -> str:
+        """Compress context based on the selected strategy."""
+        if self.compression_strategy == "simple":
+            return self._compress_simple(context)
+        elif self.compression_strategy == "llmlingua":
+            return self._compress_llmlingua(context)
+        return context
 
-    async def _handle_task_cache(self, task: "Task") -> Optional[Any]:
-        """
-        Handle cache operations for the task.
+    def _compress_simple(self, context: str) -> str:
+        """Compress context using simple whitespace removal and truncation."""
+        if not context:
+            return ""
         
-        Args:
-            task: The task to check cache for
-            
-        Returns:
-            Cached response if found, None otherwise
-        """
-        if not task.enable_cache:
-            return None
+        compressed = " ".join(context.split())
         
-        # Show cache configuration
-        if self.debug:
-            embedding_provider_name = None
-            if task.cache_embedding_provider:
-                embedding_provider_name = getattr(task.cache_embedding_provider, 'model_name', 'Unknown')
-            
-            cache_configuration(
-                enable_cache=task.enable_cache,
-                cache_method=task.cache_method,
-                cache_threshold=task.cache_threshold if task.cache_method == "vector_search" else None,
-                cache_duration_minutes=task.cache_duration_minutes,
-                embedding_provider=embedding_provider_name
-            )
+        max_length = self.compression_settings.get("max_length", 2000)
         
-        # Get cached response using original input
-        input_text = task._original_input or task.description
-        cached_response = await task.get_cached_response(input_text, self.model_provider)
+        if len(compressed) > max_length:
+            part_size = max_length // 2 - 20
+            compressed = compressed[:part_size] + " ... [COMPRESSED] ... " + compressed[-part_size:]
         
-        if cached_response is not None:
-            # Cache hit
-            similarity = None
-            if hasattr(task, '_last_cache_entry') and 'similarity' in task._last_cache_entry:
-                similarity = task._last_cache_entry['similarity']
-            
-            cache_hit(
-                cache_method=task.cache_method,
-                similarity=similarity,
-                input_preview=(task._original_input or task.description)[:100] if (task._original_input or task.description) else None
-            )
-            
-            # Set the response and mark task as completed
-            task._response = cached_response
-            task.task_end()
-            return cached_response
-        else:
-            # Cache miss
-            cache_miss(
-                cache_method=task.cache_method,
-                input_preview=(task._original_input or task.description)[:100] if (task._original_input or task.description) else None
-            )
-            return None
+        return compressed
+        
 
+    def _compress_llmlingua(self, context: str) -> str:
+        """Compress context using the LLMLingua library."""
+        if not context or not self._prompt_compressor:
+            return context
 
+        ratio = self.compression_settings.get("ratio", 0.5)
+        instruction = self.compression_settings.get("instruction", "")
 
-    async def _apply_user_policy_async(self, task: "Task") -> (Optional["Task"], bool):
-        """Applies the user policy to the task description, returning the modified task and a flag to continue."""
-        if not (self.user_policy and task.description):
-            return task, True
-
-        policy_input = PolicyInput(input_texts=[task.description])
         try:
-            rule_output, _action_output, policy_output = await self.user_policy.execute_async(policy_input)
-            action_taken = policy_output.action_output.get("action_taken", "UNKNOWN")
-
-            if self.debug and rule_output.confidence > 0.0:
-                policy_triggered(
-                    policy_name=self.user_policy.name,
-                    check_type="User Input Check",
-                    action_taken=action_taken,
-                    rule_output=rule_output
-                )
-
-            if action_taken == "BLOCK":
-                task.task_end()
-                task._response = policy_output.output_texts[0] if policy_output.output_texts else "Content blocked by user policy."
-                return task, False
-
-            elif action_taken in ["REPLACE", "ANONYMIZE"]:
-                task.description = policy_output.output_texts[0] if policy_output.output_texts else ""
-                return task, True
-
-        except DisallowedOperation as e:
-            from upsonic.safety_engine.models import RuleOutput
-            mock_rule_output = RuleOutput(
-                confidence=1.0, 
-                content_type="DISALLOWED_OPERATION", 
-                details=str(e)
+            result = self._prompt_compressor.compress_prompt(
+                context.split('\n'),
+                instruction=instruction,
+                ratio=ratio
             )
+            return result['compressed_prompt']
+        except Exception as e:
             if self.debug:
-                 policy_triggered(
-                    policy_name=self.user_policy.name,
-                    check_type="User Input Check",
-                    action_taken="DISALLOWED_EXCEPTION",
-                    rule_output=mock_rule_output
-                )
+                print(f"LLMLingua compression failed, falling back to simple compression. Error: {e}")
+            return self._compress_simple(context)
+    
 
-            task.task_end()
-            task._response = f"Operation disallowed by user policy: {e}"
-            return task, False
-
-        return task, True
-
-    async def _apply_agent_policy_async(self, processed_task: "Task") -> "Task":
-        """Applies the agent policy to the final response, returning the modified task."""
-        if not (self.agent_policy and processed_task and processed_task.response):
-            return processed_task
-
+    async def _apply_agent_policy(self, task: "Task") -> "Task":
+        """Apply agent policy to task output."""
+        if not (self.agent_policy and task and task.response):
+            return task
+        
         response_text = ""
-        if isinstance(processed_task.response, str):
-            response_text = processed_task.response
-        elif hasattr(processed_task.response, 'model_dump_json'):
-            response_text = processed_task.response.model_dump_json()
+        if isinstance(task.response, str):
+            response_text = task.response
+        elif hasattr(task.response, 'model_dump_json'):
+            response_text = task.response.model_dump_json()
         else:
-            response_text = str(processed_task.response)
-
+            response_text = str(task.response)
+        
         if response_text:
             agent_policy_input = PolicyInput(input_texts=[response_text])
             try:
                 rule_output, _action_output, policy_output = await self.agent_policy.execute_async(agent_policy_input)
                 action_taken = policy_output.action_output.get("action_taken", "UNKNOWN")
-
+                
                 if self.debug and rule_output.confidence > 0.0:
                     policy_triggered(
                         policy_name=self.agent_policy.name,
@@ -577,105 +1046,205 @@ class Direct(BaseAgent):
                         action_taken=action_taken,
                         rule_output=rule_output
                     )
-
+                
                 final_output = policy_output.output_texts[0] if policy_output.output_texts else "Response modified by agent policy."
-                processed_task._response = final_output
-            
+                task._response = final_output
+                
             except DisallowedOperation as e:
-                from upsonic.safety_engine.models import RuleOutput
                 mock_rule_output = RuleOutput(
-                    confidence=1.0, 
-                    content_type="DISALLOWED_OPERATION", 
+                    confidence=1.0,
+                    content_type="DISALLOWED_OPERATION",
                     details=str(e)
                 )
                 if self.debug:
                     policy_triggered(
                         policy_name=self.agent_policy.name,
-                        check_type="Agent Output Check",
+                        check_type="Agent Output Check", 
                         action_taken="DISALLOWED_EXCEPTION",
                         rule_output=mock_rule_output
                     )
-                processed_task._response = f"Agent response disallowed by policy: {e}"
+                task._response = f"Agent response disallowed by policy: {e}"
         
-        return processed_task
-
-
-
+        return task
+    
+    @asynccontextmanager
+    async def _managed_storage_connection(self):
+        """Manage storage connection lifecycle."""
+        if not self.memory or not self.memory.storage:
+            yield
+            return
+        
+        storage = self.memory.storage
+        was_connected_before = await storage.is_connected_async()
+        try:
+            if not was_connected_before:
+                await storage.connect_async()
+            yield
+        finally:
+            if not was_connected_before and await storage.is_connected_async():
+                await storage.disconnect_async()
+    
+    
     @retryable()
-    async def do_async(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1, state: Any = None, *, graph_execution_id: Optional[str] = None):
+    async def do_async(
+        self, 
+        task: "Task", 
+        model: Optional[Union[str, Model]] = None,
+        debug: bool = False,
+        retry: int = 1,
+        state: Any = None,
+        *,
+        graph_execution_id: Optional[str] = None
+    ) -> RunResult:
         """
-        Execute a direct LLM call with robust, context-managed storage connections
-        and agent-level control over history management.
+        Execute a task asynchronously with complete framework integration.
+        
+        Args:
+            task: Task to execute
+            model: Override model for this execution
+            debug: Enable debug mode
+            retry: Number of retries
+            state: Graph execution state
+            graph_execution_id: Graph execution identifier
+            
+        Returns:
+            RunResult: A result object containing:
+                - output: The actual task response
+                - all_messages(): All messages from all runs
+                - new_messages(): Messages from the last run only
+                
+        Example:
+            ```python
+            result = await agent.do_async(task)
+            print(result.output)  # Access the response
+            print(result.new_messages())  # Get last run's messages
+            ```
         """
         # Print agent started message
         agent_started(self.get_agent_id())
         
+        # Reset tool call counters for new task
         self.tool_call_count = 0
+        self._tool_call_count = 0
+        self.current_task = task
+        
+        # Mark the start of a new run in the persistent run result
+        self._run_result.start_new_run()
+        
         async with self._managed_storage_connection():
             processed_task = None
-            exception_caught = None
-            model_response = None
-
+            
             try:
                 if not task.is_paused:
-                    # Set the cache manager for the task
+                    # Set cache manager
                     if task.enable_cache:
                         task.set_cache_manager(self._cache_manager)
                     
-                    cached_response = await self._handle_task_cache(task)
+                    # Check cache
+                    cached_response = await self._handle_cache(task)
                     if cached_response is not None:
                         processed_task = task
-                        return cached_response
+                        processed_task._response = cached_response
+                        processed_task.task_end()
+                        self._run_result.output = cached_response
+                        return self._run_result
                     
-                    task, should_continue = await self._apply_user_policy_async(task)
+                    # Apply user policy
+                    task, should_continue = await self._apply_user_policy(task)
                     if not should_continue:
                         processed_task = task
-                        return processed_task.response 
-
-                if model is not None:
-                    provider_for_this_run = ModelFactory.create(model)
-                else:
-                    provider_for_this_run = self.model_provider
-                    
-                if not provider_for_this_run:
-                    raise ValueError("No model provider configured. Please pass a model object to the Direct agent constructor or to the do/do_async method.")
+                        self._run_result.output = processed_task.response
+                        return self._run_result
                 
+                # Use override model if provided
+                current_model = infer_model(model) if model else self.model
+                
+                # Validate attachments
+                validate_attachments_for_model(current_model, task)
+                
+                # Setup tools
+                self._setup_tools(task)
+                
+                # Initialize context managers
                 memory_manager = MemoryManager(self.memory)
-                async with memory_manager.manage_memory() as memory_handler:
-
-                    system_prompt_manager = SystemPromptManager(self, task)
-                    context_manager = ContextManager(self, task, state)
-                    
-                    async with system_prompt_manager.manage_system_prompt(memory_handler) as sp_handler, \
-                                context_manager.manage_context(memory_handler) as ctx_handler:
-
-                        call_manager = CallManager(provider_for_this_run, task, debug=debug, show_tool_calls=self.show_tool_calls)
-                        task_manager = TaskManager(task, self)
-                        reliability_manager = ReliabilityManager(task, self.reliability_layer, provider_for_this_run)
-
-                        agent = await self.agent_create(provider_for_this_run, task, sp_handler.get_system_prompt())
-
-                        async with reliability_manager.manage_reliability() as reliability_handler:
-                            async with call_manager.manage_call() as call_handler:
-                                async with task_manager.manage_task() as task_handler:
-                                    try:
-                                        async with agent.run_mcp_servers():
-                                            model_response = await self._execute_with_guardrail(agent, task, memory_handler)
-                                    except ExternalExecutionPause as e:
-                                        # Agent paused for external execution
-                                        task_handler.task.is_paused = True
-                                        task_handler.task._tools_awaiting_external_execution.append(e.tool_call)
-                                        processed_task = task_handler.task
-
-                                        return processed_task.response
-                                        
-                                    model_response = call_handler.process_response(model_response)
-                                    model_response = task_handler.process_response(model_response)
-                                    model_response = memory_handler.process_response(model_response)
-                                    processed_task = await reliability_handler.process_task(task_handler.task)
-
-                processed_task = await self._apply_agent_policy_async(processed_task)
+                reliability_manager = ReliabilityManager(task, self.reliability_layer, current_model) if self.reliability_layer else None
                 
+                async with memory_manager.manage_memory() as memory_handler:
+                    call_manager = CallManager(current_model, task, debug=debug, show_tool_calls=self.show_tool_calls)
+                    task_manager = TaskManager(task, self)
+                    
+                    async with call_manager.manage_call() as call_handler:
+                        async with task_manager.manage_task() as task_handler:
+                            try:
+                                # Execute with guardrail validation and retry logic
+                                if task.guardrail:
+                                    final_response = await self._execute_with_guardrail(task, memory_handler)
+                                else:
+                                    # Standard execution without guardrail
+                                    messages = await self._build_model_request(task, memory_handler)
+                                    self._current_messages = messages
+                                    
+                                    # Build request parameters
+                                    model_params = self._build_model_request_parameters(task)
+                                    model_params = current_model.customize_request_parameters(model_params)
+                                    
+                                    # Make model request
+                                    response = await current_model.request(
+                                        messages=messages,
+                                        model_settings=current_model.settings,
+                                        model_request_parameters=model_params
+                                    )
+                                    
+                                    # Handle response and tool calls
+                                    final_response = await self._handle_model_response(response, messages)
+                                
+                                # Apply reflection if configured
+                                if self.reflection_processor:
+                                    output = self._extract_output(final_response, task)
+                                    improved_output = await self.reflection_processor.process_with_reflection(
+                                        self, task, output
+                                    )
+                                    task._response = improved_output
+                                else:
+                                    # Extract output
+                                    output = self._extract_output(final_response, task)
+                                    task._response = output
+                                
+                            except ExternalExecutionPause as e:
+                                # Handle external execution pause
+                                task_handler.task.is_paused = True
+                                task_handler.task._tools_awaiting_external_execution.append(e.tool_call)
+                                processed_task = task_handler.task
+                                self._run_result.output = processed_task.response
+                                return self._run_result
+                            
+                            # Update RunResult with output and messages FIRST
+                            self._run_result.output = task._response
+                            
+                            # Add all messages from this execution to run_result
+                            # Messages contains all requests and intermediate responses
+                            self._run_result.add_messages(messages)
+                            # Add the final response (which may not be in messages yet)
+                            self._run_result.add_message(final_response)
+                            
+                            # Now process response through managers with populated RunResult
+                            # Note: call_handler and task_handler receive RunResult, not ModelResponse
+                            call_handler.process_response(self._run_result)
+                            task_handler.process_response(self._run_result)
+                            
+                            # Pass run_result to memory handler
+                            memory_handler.process_response(self._run_result)
+                            processed_task = task_handler.task
+                
+                # Apply reliability layer processing
+                if reliability_manager:
+                    async with reliability_manager.manage_reliability() as rel_handler:
+                        processed_task = await rel_handler.process_task(processed_task)
+                
+                # Apply agent policy
+                processed_task = await self._apply_agent_policy(processed_task)
+                
+                # Store in cache
                 if processed_task and processed_task.enable_cache and processed_task.response:
                     input_text = processed_task._original_input or processed_task.description
                     await processed_task.store_cache_entry(input_text, processed_task.response)
@@ -685,38 +1254,507 @@ class Direct(BaseAgent):
                             input_preview=(processed_task._original_input or processed_task.description)[:100] if (processed_task._original_input or processed_task.description) else None,
                             duration_minutes=processed_task.cache_duration_minutes
                         )
-
-            except StopIteration as e:
-                if self.debug: print(f"Execution stopped gracefully by policy: {e}")
-            except DisallowedOperation as e:
-
-                if self.debug: print(f"Caught DisallowedOperation at do_async level. Finalizing response.")
-
+                
             except Exception as e:
-                exception_caught = e
-                raise
-
+                if self.debug:
+                    print(f"Error in do_async: {e}")
+                
+                # Handle retry mode
+                if self.mode == "raise":
+                    raise
+                else:  # return_false
+                    if processed_task:
+                        processed_task._response = False
+                    self._run_result.output = False
+                    return self._run_result
+        
+        # Print summary
         if processed_task and not processed_task.not_main_task:
             print_price_id_summary(processed_task.price_id, processed_task)
-
-        return processed_task.response if processed_task else None
-
-
-
-    def continue_run(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1):
+        
+        # Update run_result with final output if not already set
+        if self._run_result.output is None and processed_task:
+            self._run_result.output = processed_task.response
+        
+        return self._run_result
+    
+    def _extract_output(self, response: ModelResponse, task: "Task") -> Any:
+        """Extract output from model response based on task response format."""
+        # Find text parts
+        text_parts = [part.content for part in response.parts if isinstance(part, TextPart)]
+        
+        if task.response_format == str or task.response_format is str:
+            return "".join(text_parts)
+        
+        # For other response formats, try to parse JSON if available
+        text_content = "".join(text_parts)
+        if task.response_format != str and text_content:
+            try:
+                import json
+                parsed = json.loads(text_content)
+                if hasattr(task.response_format, 'model_validate'):
+                    return task.response_format.model_validate(parsed)
+                return parsed
+            except:
+                pass
+        
+        return text_content
+    
+    def do(
+        self,
+        task: "Task",
+        model: Optional[Union[str, Model]] = None,
+        debug: bool = False,
+        retry: int = 1
+    ) -> RunResult:
         """
-        Continues the execution of a paused task after external tool results have been provided.
+        Execute a task synchronously.
         
         Args:
-            task: The Task object, which was previously paused and now has the results for the
-                  tools that were awaiting external execution.
-            model: The LLM model to use for continuation.
-            debug: Whether to enable debug mode.
-            retry: Number of retries for failed calls.
+            task: Task to execute
+            model: Override model for this execution
+            debug: Enable debug mode
+            retry: Number of retries
             
         Returns:
-            The final response from the LLM after continuation.
+            RunResult: A result object with output and message tracking
         """
+        # Reset task state
+        task.price_id_ = None
+        _ = task.price_id  # Trigger generation
+        task._tool_calls = []
+        
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, self.do_async(task, model, debug, retry))
+                    return future.result()
+            else:
+                return loop.run_until_complete(self.do_async(task, model, debug, retry))
+        except RuntimeError:
+            return asyncio.run(self.do_async(task, model, debug, retry))
+    
+    def print_do(
+        self,
+        task: "Task",
+        model: Optional[Union[str, Model]] = None,
+        debug: bool = False,
+        retry: int = 1
+    ) -> RunResult:
+        """
+        Execute a task synchronously and print the result.
+        
+        Returns:
+            RunResult: The result object (with output printed to console)
+        """
+        result = self.do(task, model, debug, retry)
+        print(result.output)
+        return result
+    
+    async def print_do_async(
+        self,
+        task: "Task",
+        model: Optional[Union[str, Model]] = None,
+        debug: bool = False,
+        retry: int = 1
+    ) -> RunResult:
+        """
+        Execute a task asynchronously and print the result.
+        
+        Returns:
+            RunResult: The result object (with output printed to console)
+        """
+        result = await self.do_async(task, model, debug, retry)
+        print(result.output)
+        return result
+    
+    # Streaming methods
+    
+    async def stream_async(
+        self,
+        task: "Task",
+        model: Optional[Union[str, Model]] = None,
+        debug: bool = False,
+        retry: int = 1,
+        state: Any = None,
+        *,
+        graph_execution_id: Optional[str] = None
+    ) -> StreamRunResult:
+        """
+        Stream task execution asynchronously with StreamRunResult wrapper.
+        
+        Args:
+            task: Task to execute
+            model: Override model for this execution
+            debug: Enable debug mode
+            retry: Number of retries
+            state: Graph execution state
+            graph_execution_id: Graph execution identifier
+            
+        Returns:
+            StreamRunResult: Advanced streaming result wrapper
+            
+        Example:
+            ```python
+            result = await agent.stream_async(task)
+            async with result as stream:
+                async for text in stream.stream_output():
+                    print(text, end='', flush=True)
+            ```
+        """
+        # Create StreamRunResult using the shared method
+        stream_result = self._create_stream_result(task, model, debug, retry)
+        
+        # Store additional parameters specific to stream_async
+        stream_result._state = state
+        stream_result._graph_execution_id = graph_execution_id
+        
+        return stream_result
+    
+    async def _stream_text_output(
+        self,
+        task: "Task",
+        model: Optional[Union[str, Model]] = None,
+        debug: bool = False,
+        retry: int = 1,
+        state: Any = None,
+        graph_execution_id: Optional[str] = None,
+        stream_result: Optional[StreamRunResult] = None
+    ) -> AsyncIterator[str]:
+        """Stream text content from the model response.
+        
+        This method handles text extraction and accumulation from streaming events.
+        """
+        accumulated_text = ""
+        first_token_time = None
+        
+        async for event in self._create_stream_iterator(task, model, debug, retry, state, graph_execution_id):
+            # Store events in stream_result if provided
+            if stream_result:
+                stream_result._streaming_events.append(event)
+            
+            # Extract text content
+            text_content = self._extract_text_from_stream_event(event)
+            if text_content:
+                # Mark first token time
+                if first_token_time is None and stream_result:
+                    first_token_time = time.time()
+                    stream_result._first_token_time = first_token_time
+                
+                accumulated_text += text_content
+                if stream_result:
+                    stream_result._accumulated_text = accumulated_text
+                    
+                yield text_content
+            
+            # Check for completion
+            if isinstance(event, FinalResultEvent) and stream_result:
+                stream_result._is_complete = True
+                stream_result._final_output = accumulated_text if accumulated_text else None
+    
+    async def _stream_events_output(
+        self,
+        task: "Task",
+        model: Optional[Union[str, Model]] = None,
+        debug: bool = False,
+        retry: int = 1,
+        state: Any = None,
+        graph_execution_id: Optional[str] = None,
+        stream_result: Optional[StreamRunResult] = None
+    ) -> AsyncIterator[ModelResponseStreamEvent]:
+        """Stream raw events from the model response.
+        
+        This method handles event streaming and text accumulation.
+        """
+        accumulated_text = ""
+        first_token_time = None
+        
+        async for event in self._create_stream_iterator(task, model, debug, retry, state, graph_execution_id):
+            # Store events in stream_result if provided
+            if stream_result:
+                stream_result._streaming_events.append(event)
+            
+            # Accumulate text content for final output
+            text_content = self._extract_text_from_stream_event(event)
+            if text_content:
+                if first_token_time is None and stream_result:
+                    first_token_time = time.time()
+                    stream_result._first_token_time = first_token_time
+                
+                accumulated_text += text_content
+                if stream_result:
+                    stream_result._accumulated_text = accumulated_text
+            
+            yield event
+            
+            # Check for completion
+            if isinstance(event, FinalResultEvent) and stream_result:
+                stream_result._is_complete = True
+                stream_result._final_output = accumulated_text if accumulated_text else None
+    
+    def _extract_text_from_stream_event(self, event: ModelResponseStreamEvent) -> Optional[str]:
+        """Extract text content from a streaming event."""
+        if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
+            return event.part.content
+        elif isinstance(event, PartDeltaEvent) and hasattr(event.delta, 'content_delta'):
+            return event.delta.content_delta
+        return None
+    
+    async def _create_stream_iterator(
+        self,
+        task: "Task",
+        model: Optional[Union[str, Model]] = None,
+        debug: bool = False,
+        retry: int = 1,
+        state: Any = None,
+        graph_execution_id: Optional[str] = None
+    ) -> AsyncIterator[ModelResponseStreamEvent]:
+        """Create the actual stream iterator for streaming execution.
+        
+        This iterator yields all streaming events from the model, including the FinalResultEvent
+        which now comes at the end of the stream (after all content has been received).
+        """
+        # Print agent started message
+        agent_started(self.get_agent_id())
+        
+        
+        # Reset tool call counters for new task
+        self.tool_call_count = 0
+        self._tool_call_count = 0
+        
+        # Use a local variable to avoid reassignment issues
+        current_task = task
+        self.current_task = current_task
+        
+        async with self._managed_storage_connection():
+            try:
+                if not current_task.is_paused:
+                    # Set cache manager
+                    if current_task.enable_cache:
+                        current_task.set_cache_manager(self._cache_manager)
+                    
+                    # Check cache
+                    cached_response = await self._handle_cache(current_task)
+                    if cached_response is not None:
+                        # Yield cached response as text content
+                        yield PartStartEvent(index=0, part=TextPart(content=str(cached_response)))
+                        yield FinalResultEvent(tool_name=None, tool_call_id=None)
+                        
+                        # Set the response on the task
+                        current_task._response = cached_response
+                        current_task.task_end()
+                        return
+                    
+                    # Apply user policy
+                    current_task, should_continue = await self._apply_user_policy(current_task)
+                    if not should_continue:
+                        yield FinalResultEvent(tool_name=None, tool_call_id=None)
+                        return
+            
+                # Use override model if provided
+                current_model = infer_model(model) if model else self.model
+                
+                
+                # Validate attachments
+                validate_attachments_for_model(current_model, current_task)
+                
+                # Setup tools
+                self._setup_tools(current_task)
+                
+                # Initialize context managers
+                memory_manager = MemoryManager(self.memory)
+                
+                async with memory_manager.manage_memory() as memory_handler:
+                    # Build messages
+                    messages = await self._build_model_request(current_task, memory_handler)
+                    self._current_messages = messages
+                    
+                    # Build request parameters
+                    model_params = self._build_model_request_parameters(current_task)
+                    model_params = current_model.customize_request_parameters(model_params)
+                    
+                    
+                    # Stream model response
+                    final_result_received = False
+                    try:
+                        async with current_model.request_stream(
+                            messages=messages,
+                            model_settings=current_model.settings,
+                            model_request_parameters=model_params
+                        ) as stream:
+                            event_count = 0
+                            async for event in stream:
+                                event_count += 1
+                                yield event
+                                
+                                # Track if we received FinalResultEvent (which now comes at the end)
+                                if isinstance(event, FinalResultEvent):
+                                    final_result_received = True
+                    except Exception as e:
+                        raise
+                        
+                    # Get final response
+                    final_response = stream.get()
+                    
+                    # Handle tool calls if any
+                    tool_calls = [
+                        part for part in final_response.parts 
+                        if isinstance(part, ToolCallPart)
+                    ]
+                    
+                    if tool_calls:
+                        # Execute tools and continue streaming
+                        tool_results = await self._execute_tool_calls(tool_calls)
+                        
+                        # Add to message history
+                        messages.append(final_response)
+                        messages.append(ModelRequest(parts=tool_results))
+                        
+                        # Continue streaming
+                        async with current_model.request_stream(
+                            messages=messages,
+                            model_settings=current_model.settings,
+                            model_request_parameters=model_params
+                        ) as continuation_stream:
+                            async for event in continuation_stream:
+                                yield event
+                                
+                                # Track if we received FinalResultEvent (which now comes at the end)
+                                if isinstance(event, FinalResultEvent):
+                                    final_result_received = True
+                            
+                            final_response = continuation_stream.get()
+                    
+                    # Extract and set output
+                    # Note: With the new event ordering, FinalResultEvent comes at the end,
+                    # confirming that all content has been streamed successfully
+                    output = self._extract_output(final_response, current_task)
+                    current_task._response = output
+                    current_task.task_end()
+                    
+                    # Apply agent policy
+                    await self._apply_agent_policy(current_task)
+                    
+                    # Store in cache
+                    if current_task.enable_cache and current_task.response:
+                        input_text = current_task._original_input or current_task.description
+                        await current_task.store_cache_entry(input_text, current_task.response)
+                
+            except Exception as e:
+                if self.debug:
+                    print(f"Error in stream_async: {e}")
+                raise
+    
+    def _create_stream_result(
+        self,
+        task: "Task", 
+        model: Optional[Union[str, Model]] = None,
+        debug: bool = False,
+        retry: int = 1
+    ) -> StreamRunResult:
+        """Create a StreamRunResult with deferred async execution."""
+        # Create StreamRunResult
+        stream_result = StreamRunResult()
+        stream_result._agent = self
+        stream_result._task = task
+        
+        # Store parameters for deferred execution
+        stream_result._model = model
+        stream_result._debug = debug
+        stream_result._retry = retry
+        
+        # The actual streaming will be initialized when __aenter__ is called
+        return stream_result
+    
+    def stream(
+        self,
+        task: "Task",
+        model: Optional[Union[str, Model]] = None,
+        debug: bool = False,
+        retry: int = 1
+    ) -> StreamRunResult:
+        """
+        Stream task execution with StreamRunResult wrapper.
+        
+        Args:
+            task: Task to execute
+            model: Override model for this execution
+            debug: Enable debug mode
+            retry: Number of retries
+            
+        Returns:
+            StreamRunResult: Advanced streaming result wrapper
+            
+        Example:
+            ```python
+            async with agent.stream(task) as result:
+                async for text in result.stream_output():
+                    print(text, end='', flush=True)
+            ```
+        """
+        # Reset task state
+        task.price_id_ = None
+        _ = task.price_id
+        task._tool_calls = []
+        
+        # Since stream() is not async, we need to return the StreamRunResult directly
+        # The async execution will happen when the context manager is entered
+        return self._create_stream_result(task, model, debug, retry)
+    
+    async def print_stream_async(
+        self,
+        task: "Task",
+        model: Optional[Union[str, Model]] = None,
+        debug: bool = False,
+        retry: int = 1
+    ) -> Any:
+        """Stream task execution asynchronously and print output."""
+        result = await self.stream_async(task, model, debug, retry)
+        async with result:
+            async for text_chunk in result.stream_output():
+                print(text_chunk, end='', flush=True)
+            print()  # New line after streaming
+            
+            # Return the final output
+            return result.get_final_output()
+    
+    def print_stream(
+        self,
+        task: "Task",
+        model: Optional[Union[str, Model]] = None,
+        debug: bool = False,
+        retry: int = 1
+    ) -> Any:
+        """Stream task execution synchronously and print output."""
+        # Reset task state
+        task.price_id_ = None
+        _ = task.price_id
+        task._tool_calls = []
+        
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, self.print_stream_async(task, model, debug, retry))
+                    return future.result()
+            else:
+                return loop.run_until_complete(self.print_stream_async(task, model, debug, retry))
+        except RuntimeError:
+            return asyncio.run(self.print_stream_async(task, model, debug, retry))
+    
+    # External execution support
+    
+    def continue_run(
+        self,
+        task: "Task",
+        model: Optional[Union[str, Model]] = None,
+        debug: bool = False,
+        retry: int = 1
+    ) -> Any:
+        """Continue execution of a paused task."""
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
@@ -728,25 +1766,38 @@ class Direct(BaseAgent):
                 return loop.run_until_complete(self.continue_async(task, model, debug, retry))
         except RuntimeError:
             return asyncio.run(self.continue_async(task, model, debug, retry))
-
-
-    async def continue_async(self, task: "Task", model: Optional[Union[str, BaseModelProvider]] = None, debug: bool = False, retry: int = 1, state: Any = None, *, graph_execution_id: Optional[str] = None):
-        """
-        Asynchronously continues the execution of a paused task.
-        """
+    
+    async def continue_async(
+        self,
+        task: "Task", 
+        model: Optional[Union[str, Model]] = None,
+        debug: bool = False,
+        retry: int = 1,
+        state: Any = None,
+        *,
+        graph_execution_id: Optional[str] = None
+    ) -> Any:
+        """Continue execution of a paused task asynchronously."""
         if not task.is_paused or not task.tools_awaiting_external_execution:
             raise ValueError("The 'continue_async' method can only be called on a task that is currently paused for external execution.")
-
+        
+        # Build tool results prompt
         tool_results_prompt = "\nThe following external tools were executed. Use their results to continue the task:\n"
         for tool_call in task.tools_awaiting_external_execution:
-            tool_results_prompt += f"\n- Tool '{tool_call.tool_name}' was executed with arguments {tool_call.tool_args}.\n"
+            tool_results_prompt += f"\n- Tool '{tool_call.tool_name}' was executed with arguments {tool_call.args}.\n"
             tool_results_prompt += f"  Result: {tool_call.result}\n"
         
+        # Update task state
         task.is_paused = False
         task.description += tool_results_prompt
         task._tools_awaiting_external_execution = []
         
+        # Set cache manager
         if task.enable_cache:
             task.set_cache_manager(self._cache_manager)
-
+        
         return await self.do_async(task, model, debug, retry, state, graph_execution_id=graph_execution_id)
+
+
+# Legacy alias for backwards compatibility
+Direct = Agent

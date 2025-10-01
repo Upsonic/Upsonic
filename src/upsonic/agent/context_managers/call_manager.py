@@ -1,19 +1,19 @@
 import time
 from contextlib import asynccontextmanager
 
-from upsonic.models.base import BaseModelProvider
+from upsonic.models import Model
 from upsonic.utils.printing import call_end
 from upsonic.utils.llm_usage import llm_usage
 from upsonic.utils.tool_usage import tool_usage
 
 
 class CallManager:
-    def __init__(self, model_provider: BaseModelProvider, task, debug=False, show_tool_calls=True):
+    def __init__(self, model_provider: Model, task, debug=False, show_tool_calls=True):
         """
         Initializes the CallManager.
 
         Args:
-            model_provider: The instantiated model provider object for this call.
+            model_provider: The instantiated model object for this call.
             task: The task being executed.
             debug: Whether debug mode is enabled.
             show_tool_calls: Whether to show tool calls.

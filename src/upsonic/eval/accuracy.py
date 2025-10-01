@@ -5,7 +5,7 @@ from typing import Union, Optional, List
 from rich.panel import Panel
 from rich.text import Text
 
-from upsonic.agent.agent import Direct
+from upsonic.agent.agent import Agent
 from upsonic.graph.graph import Graph
 from upsonic.team.team import Team 
 from upsonic.tasks.tasks import Task
@@ -20,17 +20,17 @@ class AccuracyEvaluator:
 
     def __init__(
         self,
-        judge_agent: Direct,
-        agent_under_test: Union[Direct, Graph, Team],
+        judge_agent: Agent,
+        agent_under_test: Union[Agent, Graph, Team],
         query: str,
         expected_output: str,
         additional_guidelines: Optional[str] = None,
         num_iterations: int = 1
     ):
-        if not isinstance(judge_agent, Direct):
-            raise TypeError("The `judge_agent` must be an instance of the `Direct` agent class.")
-        if not isinstance(agent_under_test, (Direct, Graph, Team)):
-            raise TypeError("The `agent_under_test` must be an instance of `Direct`, `Graph`, or `Team`.")
+        if not isinstance(judge_agent, Agent):
+            raise TypeError("The `judge_agent` must be an instance of the `Agent` agent class.")
+        if not isinstance(agent_under_test, (Agent, Graph, Team)):
+            raise TypeError("The `agent_under_test` must be an instance of `Agent`, `Graph`, or `Team`.")
         if not isinstance(num_iterations, int) or num_iterations < 1:
             raise ValueError("`num_iterations` must be a positive integer.")
 
@@ -53,7 +53,7 @@ class AccuracyEvaluator:
             generated_output_obj = None
             task = Task(description=self.query)
 
-            if isinstance(self.agent_under_test, Direct):
+            if isinstance(self.agent_under_test, Agent):
                 await self.agent_under_test.do_async(task)
                 generated_output_obj = task.response
             elif isinstance(self.agent_under_test, Graph):
