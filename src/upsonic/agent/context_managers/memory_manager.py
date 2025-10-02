@@ -20,7 +20,7 @@ class MemoryManager:
         response and update all relevant memories in the storage backend.
     """
 
-    def __init__(self, memory: Optional[Memory]):
+    def __init__(self, memory: Optional["Memory"]):
         """
         Initializes the MemoryManager.
 

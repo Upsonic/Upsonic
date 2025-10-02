@@ -1,18 +1,22 @@
 import base64
 import time
 from pydantic import BaseModel
+from typing import Any, List, Dict, Optional, Type, Union, Callable, Literal, TYPE_CHECKING
 
-
-from typing import Any, List, Dict, Optional, Type, Union, Callable, Literal
-
-
-
-from upsonic.utils.printing import get_price_id_total_cost
-from upsonic.messages.messages import BinaryContent
-from upsonic.knowledge_base.knowledge_base import KnowledgeBase
-from upsonic.schemas.data_models import RAGSearchResult
-
-from upsonic.tools import ExternalToolCall
+# Heavy imports moved to lazy loading for faster startup
+if TYPE_CHECKING:
+    from upsonic.utils.printing import get_price_id_total_cost
+    from upsonic.messages.messages import BinaryContent
+    from upsonic.schemas.data_models import RAGSearchResult
+    from upsonic.tools import ExternalToolCall
+    from upsonic.embeddings.factory import auto_detect_best_embedding
+else:
+    # Use string annotations to avoid importing heavy modules
+    get_price_id_total_cost = "get_price_id_total_cost"
+    BinaryContent = "BinaryContent"
+    RAGSearchResult = "RAGSearchResult"
+    ExternalToolCall = "ExternalToolCall"
+    auto_detect_best_embedding = "auto_detect_best_embedding"
 
 # Type aliases for better type safety
 CacheMethod = Literal["vector_search", "llm_call"]
@@ -26,7 +30,7 @@ class Task(BaseModel):
     response_lang: str = "en"
     _response: Any = None
     context: Any = None
-    _context_formatted: str | None = None
+    _context_formatted: Optional[str] = None
     price_id_: Optional[str] = None
     task_id_: Optional[str] = None
     not_main_task: bool = False
@@ -40,7 +44,7 @@ class Task(BaseModel):
     guardrail: Optional[Callable] = None
     guardrail_retries: Optional[int] = None
     is_paused: bool = False
-    _tools_awaiting_external_execution: List[ExternalToolCall] = []
+    _tools_awaiting_external_execution: List["ExternalToolCall"] = []
     
     enable_cache: bool = False
     cache_method: Literal["vector_search", "llm_call"] = "vector_search"
@@ -62,7 +66,7 @@ class Task(BaseModel):
         response_format: Union[Type[BaseModel], type[str], None] = str,
         response: Any = None,
         context: Any = None,
-        _context_formatted: str | None = None,
+        _context_formatted: Optional[str] = None,
         price_id_: Optional[str] = None,
         task_id_: Optional[str] = None,
         not_main_task: bool = False,
@@ -75,7 +79,7 @@ class Task(BaseModel):
         guardrail: Optional[Callable] = None,
         guardrail_retries: Optional[int] = None,
         is_paused: bool = False,
-        _tools_awaiting_external_execution: List[ExternalToolCall] = None,
+        _tools_awaiting_external_execution: List["ExternalToolCall"] = None,
         enable_cache: bool = False,
         cache_method: Literal["vector_search", "llm_call"] = "vector_search",
         cache_threshold: float = 0.7,
@@ -92,7 +96,7 @@ class Task(BaseModel):
         if not (0.0 <= cache_threshold <= 1.0):
             raise ValueError("cache_threshold must be between 0.0 and 1.0")
         
-        if cache_method == "vector_search" and cache_embedding_provider is None:
+        if enable_cache and cache_method == "vector_search" and cache_embedding_provider is None:
             try:
                 from upsonic.embeddings.factory import auto_detect_best_embedding
                 cache_embedding_provider = auto_detect_best_embedding()
@@ -170,7 +174,7 @@ class Task(BaseModel):
                         control_result = tool.__control__()
 
     @property
-    def context_formatted(self) -> str | None:
+    def context_formatted(self) -> Optional[str]:
         """
         Provides read-only access to the formatted context string.
         
@@ -181,7 +185,7 @@ class Task(BaseModel):
         return self._context_formatted
 
     @property
-    def tools_awaiting_external_execution(self) -> List[ExternalToolCall]:
+    def tools_awaiting_external_execution(self) -> List["ExternalToolCall"]:
         """
         Get the list of tool calls awaiting external execution.
         When the task is paused, this list should be iterated over,
@@ -190,7 +194,7 @@ class Task(BaseModel):
         return self._tools_awaiting_external_execution
     
     @context_formatted.setter
-    def context_formatted(self, value: str | None):
+    def context_formatted(self, value: Optional[str]):
         """
         Sets the internal `_context_formatted` attribute.
 
@@ -207,37 +211,42 @@ class Task(BaseModel):
         if not self.context:
             return ""
         
+        # Lazy import for heavy modules
+        from upsonic.knowledge_base.knowledge_base import KnowledgeBase
             
         rag_results = []
         for context in self.context:
             
-            if isinstance(context, KnowledgeBase) and context.rag == True:
-                await context.setup_rag()
-                rag_result_objects = await context.query_async(self.description)
-                # Convert RAGSearchResult objects to formatted strings
-                if rag_result_objects:
-                    formatted_results = []
-                    for i, result in enumerate(rag_result_objects, 1):
-                        cleaned_text = result.text.strip()
-                        metadata_str = ""
-                        if result.metadata:
-                            source = result.metadata.get('source', 'Unknown')
-                            page_number = result.metadata.get('page_number')
-                            chunk_id = result.chunk_id or result.metadata.get('chunk_id')
+            # Lazy import KnowledgeBase to avoid heavy imports
+            if hasattr(context, 'rag') and context.rag == True:
+                # Import KnowledgeBase only when needed
+                if isinstance(context, KnowledgeBase):
+                    await context.setup_rag()
+                    rag_result_objects = await context.query_async(self.description)
+                    # Convert RAGSearchResult objects to formatted strings
+                    if rag_result_objects:
+                        formatted_results = []
+                        for i, result in enumerate(rag_result_objects, 1):
+                            cleaned_text = result.text.strip()
+                            metadata_str = ""
+                            if result.metadata:
+                                source = result.metadata.get('source', 'Unknown')
+                                page_number = result.metadata.get('page_number')
+                                chunk_id = result.chunk_id or result.metadata.get('chunk_id')
+                                
+                                metadata_parts = [f"source: {source}"]
+                                if page_number is not None:
+                                    metadata_parts.append(f"page: {page_number}")
+                                if chunk_id:
+                                    metadata_parts.append(f"chunk_id: {chunk_id}")
+                                if result.score is not None:
+                                    metadata_parts.append(f"score: {result.score:.3f}")
+                                
+                                metadata_str = f" [metadata: {', '.join(metadata_parts)}]"
                             
-                            metadata_parts = [f"source: {source}"]
-                            if page_number is not None:
-                                metadata_parts.append(f"page: {page_number}")
-                            if chunk_id:
-                                metadata_parts.append(f"chunk_id: {chunk_id}")
-                            if result.score is not None:
-                                metadata_parts.append(f"score: {result.score:.3f}")
-                            
-                            metadata_str = f" [metadata: {', '.join(metadata_parts)}]"
+                            formatted_results.append(f"[{i}]{metadata_str} {cleaned_text}")
                         
-                        formatted_results.append(f"[{i}]{metadata_str} {cleaned_text}")
-                    
-                    rag_results.extend(formatted_results)
+                        rag_results.extend(formatted_results)
                 
         if rag_results:
             return f"The following is the RAG data: <rag>{' '.join(rag_results)}</rag>"
@@ -289,6 +298,8 @@ class Task(BaseModel):
     def get_total_cost(self):
         if self.price_id_ is None:
             return None
+        # Lazy import for heavy modules
+        from upsonic.utils.printing import get_price_id_total_cost
         return get_price_id_total_cost(self.price_id)
     
     @property
@@ -402,6 +413,9 @@ class Task(BaseModel):
         """
         Builds the input for the agent, using and then clearing the formatted context.
         """
+        # Lazy import for heavy modules
+        from upsonic.messages.messages import BinaryContent
+        
         final_description = self.description
         if self.context_formatted and isinstance(self.context_formatted, str):
             final_description += "\n" + self.context_formatted

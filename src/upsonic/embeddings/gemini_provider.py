@@ -18,7 +18,7 @@ try:
 except ImportError:
     GOOGLE_AUTH_AVAILABLE = False
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
 from ..utils.package.exception import ConfigurationError, ModelConnectionError
 
@@ -60,7 +60,8 @@ class GeminiEmbeddingConfig(EmbeddingConfig):
     output_dimensionality: Optional[int] = Field(None, description="Output embedding dimension (128-3072)")
     embedding_config: Optional[Dict[str, Any]] = Field(None, description="Additional embedding configuration")
     
-    @validator('model_name')
+    @field_validator('model_name')
+    @classmethod
     def validate_model_name(cls, v):
         """Validate Gemini model names."""
         valid_models = [
@@ -75,7 +76,8 @@ class GeminiEmbeddingConfig(EmbeddingConfig):
         
         return v
     
-    @validator('task_type')
+    @field_validator('task_type')
+    @classmethod
     def validate_task_type(cls, v):
         """Validate embedding task type."""
         valid_tasks = [
@@ -94,7 +96,8 @@ class GeminiEmbeddingConfig(EmbeddingConfig):
         
         return v
     
-    @validator('api_version')
+    @field_validator('api_version')
+    @classmethod
     def validate_api_version(cls, v):
         """Validate API version."""
         valid_versions = ["v1beta", "v1", "v1alpha"]
@@ -102,7 +105,8 @@ class GeminiEmbeddingConfig(EmbeddingConfig):
             raise ValueError(f"Invalid api_version: {v}. Valid options: {valid_versions}")
         return v
     
-    @validator('output_dimensionality')
+    @field_validator('output_dimensionality')
+    @classmethod
     def validate_output_dimensionality(cls, v):
         """Validate output dimensionality."""
         if v is not None:

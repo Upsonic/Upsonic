@@ -9,7 +9,7 @@ from transformers import AutoTokenizer, AutoModel, BitsAndBytesConfig
 import torch.nn.functional as F
 import torch
 from huggingface_hub import hf_hub_download, login, InferenceClient
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
 from ..utils.package.exception import ConfigurationError, ModelConnectionError
@@ -43,14 +43,16 @@ class HuggingFaceEmbeddingConfig(EmbeddingConfig):
     cache_dir: Optional[str] = Field(None, description="Model cache directory")
     force_download: bool = Field(False, description="Force re-download of model")
     
-    @validator('pooling_strategy')
+    @field_validator('pooling_strategy')
+    @classmethod
     def validate_pooling_strategy(cls, v):
         valid_strategies = ['mean', 'cls', 'max', 'mean_sqrt_len']
         if v not in valid_strategies:
             raise ValueError(f"Invalid pooling strategy: {v}. Valid options: {valid_strategies}")
         return v
     
-    @validator('torch_dtype')
+    @field_validator('torch_dtype')
+    @classmethod
     def validate_torch_dtype(cls, v):
         valid_dtypes = ['float16', 'float32', 'bfloat16']
         if v not in valid_dtypes:

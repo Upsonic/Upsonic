@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, Type, Optional, List, Union, Any, Tuple
+from typing import Dict, Type, Optional, List, Union, Any, Tuple, TYPE_CHECKING
 import os
 import json
 from pathlib import Path
@@ -7,21 +7,24 @@ import logging
 from functools import lru_cache
 
 from .base import BaseLoader
-from .config import (
-    LoaderConfig, LoaderConfigFactory, TextLoaderConfig, CSVLoaderConfig, 
-    PdfLoaderConfig, DOCXLoaderConfig, JSONLoaderConfig, XMLLoaderConfig, 
-    YAMLLoaderConfig, MarkdownLoaderConfig, HTMLLoaderConfig
-)
-from upsonic.schemas.data_models import Document
-from .text import TextLoader
-from .csv import CSVLoader
-from .pdf import PdfLoader
-from .docx import DOCXLoader
-from .json import JSONLoader
-from .xml import XMLLoader
-from .yaml import YAMLLoader
-from .markdown import MarkdownLoader
-from .html import HTMLLoader
+from .config import LoaderConfig, LoaderConfigFactory
+
+if TYPE_CHECKING:
+    from upsonic.schemas.data_models import Document
+    from .config import (
+        TextLoaderConfig, CSVLoaderConfig, PdfLoaderConfig, DOCXLoaderConfig, 
+        JSONLoaderConfig, XMLLoaderConfig, YAMLLoaderConfig, MarkdownLoaderConfig, 
+        HTMLLoaderConfig
+    )
+    from .text import TextLoader
+    from .csv import CSVLoader
+    from .pdf import PdfLoader
+    from .docx import DOCXLoader
+    from .json import JSONLoader
+    from .xml import XMLLoader
+    from .yaml import YAMLLoader
+    from .markdown import MarkdownLoader
+    from .html import HTMLLoader
 
 
 class LoaderFactory:
@@ -56,7 +59,17 @@ class LoaderFactory:
     
     @staticmethod
     def _get_default_loader_configs() -> List[Tuple[Type[BaseLoader], List[str]]]:
-        """Get the default loader configurations."""
+        """Get the default loader configurations with lazy imports."""
+        from .csv import CSVLoader
+        from .pdf import PdfLoader
+        from .docx import DOCXLoader
+        from .json import JSONLoader
+        from .xml import XMLLoader
+        from .yaml import YAMLLoader
+        from .markdown import MarkdownLoader
+        from .html import HTMLLoader
+        from .text import TextLoader
+        
         return [
             (CSVLoader, ['.csv']),
             (PdfLoader, ['.pdf']),
@@ -118,7 +131,13 @@ class LoaderFactory:
     
     @staticmethod
     def _get_config_mapping() -> Dict[str, Type[LoaderConfig]]:
-        """Get the mapping of loader names to their config classes."""
+        """Get the mapping of loader names to their config classes with lazy imports."""
+        from .config import (
+            TextLoaderConfig, CSVLoaderConfig, PdfLoaderConfig, DOCXLoaderConfig,
+            JSONLoaderConfig, XMLLoaderConfig, YAMLLoaderConfig, MarkdownLoaderConfig,
+            HTMLLoaderConfig
+        )
+        
         return {
             'text': TextLoaderConfig,
             'csv': CSVLoaderConfig,
@@ -770,7 +789,7 @@ def get_supported_loaders() -> List[str]:
     return get_factory().get_supported_loaders()
 
 
-def load_document(source: str, **config_kwargs) -> List[Document]:
+def load_document(source: str, **config_kwargs) -> List['Document']:
     loader = create_loader(source, **config_kwargs)
     return loader.load(source)
 
@@ -778,7 +797,7 @@ def load_document(source: str, **config_kwargs) -> List[Document]:
 def load_documents_batch(
     sources: List[str], 
     **config_kwargs
-) -> Dict[str, List[Document]]:
+) -> Dict[str, List['Document']]:
     """
     Load documents from multiple sources in batch.
     

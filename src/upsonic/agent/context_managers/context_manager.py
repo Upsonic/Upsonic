@@ -4,16 +4,26 @@ import json
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Optional, Dict, Any, List
 
-from upsonic.context.task import turn_task_to_string
-from upsonic.context.sources import TaskOutputSource
-from upsonic.schemas.data_models import RAGSearchResult
-
+# Heavy imports moved to lazy loading for faster startup
 if TYPE_CHECKING:
     from upsonic.agent.agent import Agent
     from upsonic.graph.graph import State
     from upsonic.agent.context_managers.memory_manager import MemoryManager
     from upsonic.tasks.tasks import Task
     from upsonic.knowledge_base.knowledge_base import KnowledgeBase
+    from upsonic.context.task import turn_task_to_string
+    from upsonic.context.sources import TaskOutputSource
+    from upsonic.schemas.data_models import RAGSearchResult
+else:
+    # Use string annotations to avoid importing heavy modules
+    Agent = "Agent"
+    State = "State"
+    MemoryManager = "MemoryManager"
+    Task = "Task"
+    KnowledgeBase = "KnowledgeBase"
+    turn_task_to_string = "turn_task_to_string"
+    TaskOutputSource = "TaskOutputSource"
+    RAGSearchResult = "RAGSearchResult"
 
 
 class ContextManager:
@@ -26,8 +36,14 @@ class ContextManager:
         self.state = state
         self.context_prompt: str = ""
 
-    async def _build_context_prompt(self, memory_handler: Optional[MemoryManager]) -> str:
+    async def _build_context_prompt(self, memory_handler: Optional["MemoryManager"]) -> str:
         """Asynchronously builds the complete contextual prompt string."""
+        # Lazy import for heavy modules
+        from upsonic.tasks.tasks import Task
+        from upsonic.knowledge_base.knowledge_base import KnowledgeBase
+        from upsonic.context.task import turn_task_to_string
+        from upsonic.context.sources import TaskOutputSource
+        
         final_context_parts = []
 
         if memory_handler:
@@ -43,8 +59,6 @@ class ContextManager:
             additional_parts = []
 
             for item in self.task.context:
-                from upsonic.tasks.tasks import Task
-                from upsonic.knowledge_base.knowledge_base import KnowledgeBase
                 if isinstance(item, Task):  
                     task_parts.append(f"Task ID ({item.get_task_id()}): " + turn_task_to_string(item))
                 
@@ -106,7 +120,7 @@ class ContextManager:
             except Exception as fallback_error:
                 print(f"Fallback also failed for KnowledgeBase '{knowledge_base.name}': {str(fallback_error)}")
 
-    def _format_rag_results(self, rag_results: List[RAGSearchResult], knowledge_base: "KnowledgeBase") -> str:
+    def _format_rag_results(self, rag_results: List["RAGSearchResult"], knowledge_base: "KnowledgeBase") -> str:
         """Format RAG results with enhanced context and metadata."""
         if not rag_results:
             return ""
@@ -152,7 +166,7 @@ class ContextManager:
 
     async def _process_task_output_source(
         self, 
-        item: TaskOutputSource, 
+        item: "TaskOutputSource", 
         previous_task_output_parts: List[str]
     ) -> None:
         """Process a TaskOutputSource item with error handling."""
@@ -193,7 +207,7 @@ class ContextManager:
         return self.context_prompt
 
     @asynccontextmanager
-    async def manage_context(self, memory_handler: Optional[MemoryManager] = None):
+    async def manage_context(self, memory_handler: Optional["MemoryManager"] = None):
         """The asynchronous context manager for building the task-specific context."""
         self.context_prompt = await self._build_context_prompt(memory_handler)
 
@@ -206,11 +220,13 @@ class ContextManager:
 
     async def get_knowledge_base_health_status(self) -> Dict[str, Any]:
         """Get health status of all KnowledgeBase instances in the context."""
+        # Lazy import for heavy modules
+        from upsonic.knowledge_base.knowledge_base import KnowledgeBase
+        
         health_status = {}
         
         if self.task.context:
             for item in self.task.context:
-                from upsonic.knowledge_base.knowledge_base import KnowledgeBase
                 if isinstance(item, KnowledgeBase):
                     try:
                         health_status[item.name] = await item.health_check_async()
@@ -269,9 +285,12 @@ class ContextManager:
         }
         
         if self.task.context:
+            # Lazy import for heavy modules
+            from upsonic.knowledge_base.knowledge_base import KnowledgeBase
+            from upsonic.tasks.tasks import Task
+            from upsonic.context.sources import TaskOutputSource
+            
             for item in self.task.context:
-                from upsonic.knowledge_base.knowledge_base import KnowledgeBase
-                from upsonic.tasks.tasks import Task
                 if isinstance(item, KnowledgeBase):
                     kb_info = {
                         "name": item.name,

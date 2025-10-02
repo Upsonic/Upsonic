@@ -5,57 +5,63 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Dict, List, Literal, Optional, Union, TYPE_CHECKING
 
-try:
-    from llmlingua import PromptCompressor
-except ImportError:
-    PromptCompressor = None
+PromptCompressor = None
 
 from upsonic import _utils
 from upsonic.agent.base import BaseAgent
 from upsonic.agent.run_result import RunResult, StreamRunResult
-from upsonic.cache import CacheManager
-from upsonic.canvas.canvas import Canvas
-from upsonic.models import (
-    Model, ModelRequestParameters, StreamedResponse, infer_model, 
-    ModelMessage, ModelRequest, ModelResponse
-)
-from upsonic.models.settings import ModelSettings
-from upsonic.messages import (
-    ModelMessagesTypeAdapter, SystemPromptPart, UserPromptPart, 
-    ToolCallPart, ToolReturnPart, TextPart, ModelResponseStreamEvent,
-    PartStartEvent, PartDeltaEvent, FinalResultEvent
-)
 from upsonic._utils import now_utc
-from upsonic.output import OutputSpec
-from upsonic.profiles import ModelProfile
-from upsonic.providers import Provider
-from upsonic.reflection import ReflectionConfig, ReflectionProcessor
-from upsonic.safety_engine.base import Policy
-from upsonic.safety_engine.exceptions import DisallowedOperation
-from upsonic.safety_engine.models import PolicyInput, RuleOutput
-# Optional storage import - only import when needed
-try:
-    from upsonic.storage.memory.memory import Memory
-except ImportError:
-    Memory = None
-from upsonic.tools import ToolManager, ToolContext, ToolDefinition
-from upsonic.tools.processor import ExternalExecutionPause
-from upsonic.usage import RequestUsage
-from upsonic.utils.package.exception import GuardrailValidationError
-from upsonic.utils.printing import (
-    agent_started, call_end, cache_hit, cache_miss, cache_stored, 
-    cache_configuration, policy_triggered, print_price_id_summary
-)
 from upsonic.utils.retry import retryable
 from upsonic.utils.validators import validate_attachments_for_model
 
-from upsonic.agent.context_managers import (
-    CallManager, ContextManager, ReliabilityManager, 
-    MemoryManager, SystemPromptManager, TaskManager
-)
-
 if TYPE_CHECKING:
+    from upsonic.models import Model, ModelRequest, ModelMessage, ModelRequestParameters, ModelResponse
+    from upsonic.messages import ModelResponseStreamEvent, FinalResultEvent, PartStartEvent, PartDeltaEvent, TextPart, ToolCallPart, ToolReturnPart
     from upsonic.tasks.tasks import Task
+    from upsonic.storage.memory.memory import Memory
+    from upsonic.canvas.canvas import Canvas
+    from upsonic.models.settings import ModelSettings
+    from upsonic.profiles import ModelProfile
+    from upsonic.reflection import ReflectionConfig, ReflectionProcessor
+    from upsonic.safety_engine.base import Policy
+    from upsonic.safety_engine.exceptions import DisallowedOperation
+    from upsonic.safety_engine.models import PolicyInput, RuleOutput
+    from upsonic.tools import ToolManager, ToolContext, ToolDefinition
+    from upsonic.tools.processor import ExternalExecutionPause
+    from upsonic.usage import RequestUsage
+    from upsonic.agent.context_managers import (
+        CallManager, ContextManager, ReliabilityManager, 
+        MemoryManager, SystemPromptManager, TaskManager
+    )
+else:
+    Model = "Model"
+    ModelRequest = "ModelRequest"
+    ModelMessage = "ModelMessage"
+    ModelRequestParameters = "ModelRequestParameters"
+    ModelResponse = "ModelResponse"
+    Task = "Task"
+    Memory = "Memory"
+    Canvas = "Canvas"
+    ModelSettings = "ModelSettings"
+    ModelProfile = "ModelProfile"
+    ReflectionConfig = "ReflectionConfig"
+    ReflectionProcessor = "ReflectionProcessor"
+    Policy = "Policy"
+    DisallowedOperation = "DisallowedOperation"
+    PolicyInput = "PolicyInput"
+    RuleOutput = "RuleOutput"
+    ToolManager = "ToolManager"
+    ToolContext = "ToolContext"
+    ToolDefinition = "ToolDefinition"
+    ExternalExecutionPause = "ExternalExecutionPause"
+    RequestUsage = "RequestUsage"
+    validate_attachments_for_model = "validate_attachments_for_model"
+    CallManager = "CallManager"
+    ContextManager = "ContextManager"
+    ReliabilityManager = "ReliabilityManager"
+    MemoryManager = "MemoryManager"
+    SystemPromptManager = "SystemPromptManager"
+    TaskManager = "TaskManager"
 
 RetryMode = Literal["raise", "return_false"]
 
@@ -101,38 +107,38 @@ class Agent(BaseAgent):
     
     def __init__(
         self,
-        model: Union[str, Model] = "openai/gpt-4o",
+        model: Union[str, "Model"] = "openai/gpt-4o",
         *,
-        name: str | None = None,
-        memory: Optional[Memory] = None,
+        name: Optional[str] = None,
+        memory: Optional["Memory"] = None,
         debug: bool = False,
-        company_url: str | None = None,
-        company_objective: str | None = None,
-        company_description: str | None = None,
-        system_prompt: str | None = None,
-        reflection: str | None = None,
+        company_url: Optional[str] = None,
+        company_objective: Optional[str] = None,
+        company_description: Optional[str] = None,
+        system_prompt: Optional[str] = None,
+        reflection: Optional[str] = None,
         compression_strategy: Literal["none", "simple", "llmlingua"] = "none",
         compression_settings: Optional[Dict[str, Any]] = None,
-        reliability_layer = None,
-        agent_id_: str | None = None,
-        canvas: Canvas | None = None,
+        reliability_layer: Optional["ReliabilityProcessor"] = None,
+        agent_id_: Optional[str] = None,
+        canvas: Optional["Canvas"] = None,
         retry: int = 1,
         mode: RetryMode = "raise",
-        role: str | None = None,
-        goal: str | None = None,
-        instructions: str | None = None,
-        education: str | None = None,
-        work_experience: str | None = None,
+        role: Optional[str] = None,
+        goal: Optional[str] = None,
+        instructions: Optional[str] = None,
+        education: Optional[str] = None,
+        work_experience: Optional[str] = None,
         feed_tool_call_results: bool = False,
         show_tool_calls: bool = True,
         tool_call_limit: int = 5,
         enable_thinking_tool: bool = False,
         enable_reasoning_tool: bool = False,
-        user_policy: Optional[Policy] = None,
-        agent_policy: Optional[Policy] = None,
-        settings: Optional[ModelSettings] = None,
-        profile: Optional[ModelProfile] = None,
-        reflection_config: Optional[ReflectionConfig] = None,
+        user_policy: Optional["Policy"] = None,
+        agent_policy: Optional["Policy"] = None,
+        settings: Optional["ModelSettings"] = None,
+        profile: Optional["ModelProfile"] = None,
+        reflection_config: Optional["ReflectionConfig"] = None,
     ):
         """
         Initialize the Agent with comprehensive configuration options.
@@ -172,12 +178,11 @@ class Agent(BaseAgent):
             profile: Model profile configuration
             reflection_config: Configuration for reflection and self-evaluation
         """
-        # Core configuration
+        from upsonic.models import infer_model
         self.model = infer_model(model)
         self.name = name
         self.agent_id_ = agent_id_
         
-        # Agent identity and behavior
         self.role = role
         self.goal = goal
         self.instructions = instructions
@@ -185,12 +190,10 @@ class Agent(BaseAgent):
         self.work_experience = work_experience
         self.system_prompt = system_prompt
         
-        # Company context
         self.company_url = company_url
         self.company_objective = company_objective
         self.company_description = company_description
         
-        # Runtime configuration
         self.debug = debug
         self.reflection = reflection
 
@@ -198,7 +201,9 @@ class Agent(BaseAgent):
         self.compression_settings = compression_settings or {}
         self._prompt_compressor = None
         if self.compression_strategy == "llmlingua":
-            if PromptCompressor is None:
+            try:
+                from llmlingua import PromptCompressor
+            except ImportError:
                 raise ImportError(
                     "The 'llmlingua' package is required for the 'llmlingua' compression strategy. "
                     "Please install it using: pip install llmlingua"
@@ -210,7 +215,6 @@ class Agent(BaseAgent):
 
         self.reliability_layer = reliability_layer
         
-        # Validation
         if retry < 1:
             raise ValueError("The 'retry' count must be at least 1.")
         if mode not in ("raise", "return_false"):
@@ -219,50 +223,49 @@ class Agent(BaseAgent):
         self.retry = retry
         self.mode = mode
         
-        # Tool configuration
         self.show_tool_calls = show_tool_calls
         self.tool_call_limit = tool_call_limit
         self.enable_thinking_tool = enable_thinking_tool
         self.enable_reasoning_tool = enable_reasoning_tool
         
-        # Memory and storage
         self.memory = memory
         if self.memory:
             self.memory.feed_tool_call_results = feed_tool_call_results
         
-        # Canvas integration
         self.canvas = canvas
         
-        # Safety policies
         self.user_policy = user_policy
         self.agent_policy = agent_policy
         
-        # Reflection configuration
         self.reflection_config = reflection_config
-        self.reflection_processor = ReflectionProcessor(reflection_config) if reflection_config else None
+        if reflection_config:
+            from upsonic.reflection import ReflectionProcessor
+            self.reflection_processor = ReflectionProcessor(reflection_config)
+        else:
+            self.reflection_processor = None
         
-        # Model configuration
         if settings:
             self.model._settings = settings
         if profile:
             self.model._profile = profile
         
-        # Initialize components
+        from upsonic.cache import CacheManager
+        from upsonic.tools import ToolManager
+        
         self._cache_manager = CacheManager(session_id=f"agent_{self.agent_id}")
         self.tool_manager = ToolManager()
         
-        # Runtime state
         self.tool_call_count = 0
         self._current_messages = []
         self._tool_call_count = 0
         
-        # Run result tracking - persistent across all executions
         self._run_result = RunResult(output=None)
         
-        # Setup policy models
+        self._stream_run_result = StreamRunResult()
+        
         self._setup_policy_models()
     
-    def _setup_policy_models(self):
+    def _setup_policy_models(self) -> None:
         """Setup model references for safety policies."""
         policies = [self.user_policy, self.agent_policy]
         
@@ -270,7 +273,6 @@ class Agent(BaseAgent):
             if policy is None:
                 continue
             
-            # Setup base LLM if needed
             if hasattr(policy, 'base_llm') and policy.base_llm is None:
                 from upsonic.safety_engine.llm.upsonic_llm import UpsonicLLMProvider
                 policy.base_llm = UpsonicLLMProvider(
@@ -295,7 +297,7 @@ class Agent(BaseAgent):
         """Get cache statistics for this agent's session."""
         return self._cache_manager.get_cache_stats()
     
-    def clear_cache(self):
+    def clear_cache(self) -> None:
         """Clear the agent's session cache."""
         self._cache_manager.clear_cache()
     
@@ -308,7 +310,7 @@ class Agent(BaseAgent):
         """
         return self._run_result
     
-    def reset_run_result(self):
+    def reset_run_result(self) -> None:
         """
         Reset the RunResult to start fresh (clears all accumulated messages).
         
@@ -316,15 +318,31 @@ class Agent(BaseAgent):
         """
         self._run_result = RunResult(output=None)
     
-    def _setup_tools(self, task: "Task"):
+    def get_stream_run_result(self) -> "StreamRunResult":
+        """
+        Get the persistent StreamRunResult that accumulates messages across all streaming executions.
+        
+        Returns:
+            StreamRunResult: The agent's stream run result containing all messages and the last output
+        """
+        return self._stream_run_result
+    
+    def reset_stream_run_result(self) -> None:
+        """
+        Reset the StreamRunResult to start fresh (clears all accumulated messages).
+        
+        Useful when you want to start a new conversation thread without creating a new agent.
+        """
+        self._stream_run_result = StreamRunResult()
+    
+    def _setup_tools(self, task: "Task") -> None:
         """Setup tools with ToolManager for the current task."""
-        # Reset tool limit flag for new task
         self._tool_limit_reached = False
         
         if not task.tools:
             return
         
-        # Create context for tools
+        from upsonic.tools import ToolContext
         self._context = ToolContext(
             deps=getattr(self, 'dependencies', None),
             agent_id=self.name,
@@ -332,7 +350,6 @@ class Agent(BaseAgent):
             tool_call_limit=self.tool_call_limit
         )
         
-        # Determine thinking and reasoning settings
         is_thinking_enabled = self.enable_thinking_tool
         if task.enable_thinking_tool is not None:
             is_thinking_enabled = task.enable_thinking_tool
@@ -348,13 +365,11 @@ class Agent(BaseAgent):
         agent_for_this_run.enable_thinking_tool = is_thinking_enabled
         agent_for_this_run.enable_reasoning_tool = is_reasoning_enabled
 
-        # Add orchestration tools if thinking is enabled
         final_tools = list(task.tools)
         if is_thinking_enabled:
             from upsonic.tools import plan_and_execute
             final_tools.append(plan_and_execute)
         
-        # Register tools with ToolManager
         self.tool_manager.register_tools(
             tools=final_tools,
             context=self._context,
@@ -362,135 +377,116 @@ class Agent(BaseAgent):
             agent_instance=agent_for_this_run
         )
     
-    async def _build_model_request(self, task: "Task", memory_handler: MemoryManager) -> List[ModelMessage]:
+    async def _build_model_request(self, task: "Task", memory_handler: Optional["MemoryManager"]) -> List["ModelRequest"]:
         """Build the complete message history for the model request."""
+        from upsonic.agent.context_managers import SystemPromptManager, ContextManager
+        from upsonic.messages import SystemPromptPart, UserPromptPart, ModelRequest
+        
         messages = []
         
-        # Get message history from memory
         message_history = memory_handler.get_message_history()
         messages.extend(message_history)
         
-        # Build the current request
         system_prompt_manager = SystemPromptManager(self, task)
         context_manager = ContextManager(self, task, getattr(task, 'state', None))
         
         async with system_prompt_manager.manage_system_prompt(memory_handler) as sp_handler, \
                    context_manager.manage_context(memory_handler) as ctx_handler:
             
-            # Create user prompt with task input
             task_input = task.build_agent_input()
             user_part = UserPromptPart(content=task_input)
             
-            # Build parts list for current request
             parts = []
             
-            # If this is the first request (no message history), include system prompt
             if not messages:
                 system_prompt = sp_handler.get_system_prompt()
                 if system_prompt:
                     system_part = SystemPromptPart(content=system_prompt)
                     parts.append(system_part)
             
-            # Add user prompt
             parts.append(user_part)
             
-            # Create the current request with both system (if first) and user prompt
             current_request = ModelRequest(parts=parts)
             messages.append(current_request)
             
-            # Apply context compression if enabled
             if self.compression_strategy != "none" and ctx_handler:
                 context_prompt = ctx_handler.get_context_prompt()
                 if context_prompt:
                     compressed_context = self._compress_context(context_prompt)
-                    # Update the task's context_formatted with compressed version
                     task.context_formatted = compressed_context
-        
         return messages
     
     async def _build_model_request_with_input(
         self, 
         task: "Task", 
-        memory_handler: MemoryManager, 
+        memory_handler: Optional["MemoryManager"], 
         current_input: Any, 
-        temporary_message_history: List[ModelMessage]
-    ) -> List[ModelMessage]:
+        temporary_message_history: List["ModelRequest"]
+    ) -> List["ModelRequest"]:
         """Build model request with custom input and message history for guardrail retries."""
+        from upsonic.agent.context_managers import SystemPromptManager, ContextManager
+        from upsonic.messages import SystemPromptPart, UserPromptPart, ModelRequest
+        
         messages = list(temporary_message_history)
         
-        # Build context managers for system prompt and context
         system_prompt_manager = SystemPromptManager(self, task)
         context_manager = ContextManager(self, task, getattr(task, 'state', None))
         
         async with system_prompt_manager.manage_system_prompt(memory_handler) as sp_handler, \
                    context_manager.manage_context(memory_handler) as ctx_handler:
             
-            # Handle current input (could be string or complex input)
             user_part = UserPromptPart(content=current_input)
             
-            # Build parts list for current request
             parts = []
             
-            # If this is the first request (no message history), include system prompt
             if not messages:
                 system_prompt = sp_handler.get_system_prompt()
                 if system_prompt:
                     system_part = SystemPromptPart(content=system_prompt)
                     parts.append(system_part)
             
-            # Add user prompt
             parts.append(user_part)
             
-            # Create the current request with both system (if first) and user prompt
             current_request = ModelRequest(parts=parts)
             messages.append(current_request)
             
-            # Apply context compression if enabled
             if self.compression_strategy != "none" and ctx_handler:
                 context_prompt = ctx_handler.get_context_prompt()
                 if context_prompt:
                     compressed_context = self._compress_context(context_prompt)
-                    # Update the task's context_formatted with compressed version
                     task.context_formatted = compressed_context
         
         return messages
     
-    def _build_model_request_parameters(self, task: "Task") -> ModelRequestParameters:
+    def _build_model_request_parameters(self, task: "Task") -> "ModelRequestParameters":
         """Build model request parameters including tools and structured output."""
         from pydantic import BaseModel
         from upsonic.output import OutputObjectDefinition
+        from upsonic.models import ModelRequestParameters
         
-        # Get tool definitions - but check if we've reached the limit
         if hasattr(self, '_tool_limit_reached') and self._tool_limit_reached:
-            # Limit reached - don't provide any tools to the model
             tool_definitions = []
         elif self.tool_call_limit and self._tool_call_count >= self.tool_call_limit:
-            # Limit reached - don't provide any tools to the model
             tool_definitions = []
             self._tool_limit_reached = True
         else:
-            # Get tool definitions normally
             tool_definitions = self.tool_manager.get_tool_definitions()
         
-        # Determine output mode and object based on response_format
         output_mode = 'text'
         output_object = None
         allow_text_output = True
         
         if task.response_format and task.response_format != str and task.response_format is not str:
-            # Structured output requested
             if isinstance(task.response_format, type) and issubclass(task.response_format, BaseModel):
-                # Pydantic model - use native structured output
                 output_mode = 'native'
                 allow_text_output = False
                 
-                # Create output object definition
                 schema = task.response_format.model_json_schema()
                 output_object = OutputObjectDefinition(
                     json_schema=schema,
                     name=task.response_format.__name__,
                     description=task.response_format.__doc__,
-                    strict=True  # Enable strict mode for structured output
+                    strict=True
                 )
         
         return ModelRequestParameters(
@@ -500,7 +496,7 @@ class Agent(BaseAgent):
             allow_text_output=allow_text_output
         )
     
-    async def _execute_tool_calls(self, tool_calls: List[ToolCallPart]) -> List[ToolReturnPart]:
+    async def _execute_tool_calls(self, tool_calls: List["ToolCallPart"]) -> List["ToolReturnPart"]:
         """
         Execute tool calls and return results.
         
@@ -508,13 +504,13 @@ class Agent(BaseAgent):
         Tools marked as sequential will be executed one at a time.
         Other tools can be executed in parallel if multiple are called.
         """
+        from upsonic.messages import ToolReturnPart
+        from upsonic.tools import ToolContext
+        
         if not tool_calls:
             return []
         
-        # Check tool call limit BEFORE executing
-        # Use agent-level count since it's the one being tracked
         if self.tool_call_limit and self._tool_call_count >= self.tool_call_limit:
-            # Limit reached - return error results for all tool calls
             error_results = []
             for tool_call in tool_calls:
                 error_results.append(ToolReturnPart(
@@ -522,14 +518,11 @@ class Agent(BaseAgent):
                     content=f"Tool call limit of {self.tool_call_limit} reached. Cannot execute more tools.",
                     tool_call_id=tool_call.tool_call_id
                 ))
-            # Set a flag to stop further execution
             self._tool_limit_reached = True
             return error_results
         
-        # Get tool definitions to check for sequential requirements
         tool_defs = {td.name: td for td in self.tool_manager.get_tool_definitions()}
         
-        # Separate sequential and parallel tools
         sequential_calls = []
         parallel_calls = []
         
@@ -542,7 +535,6 @@ class Agent(BaseAgent):
         
         results = []
         
-        # Execute sequential tools one by one
         for tool_call in sequential_calls:
             try:
                 task_id = None
@@ -566,7 +558,6 @@ class Agent(BaseAgent):
                 )
                 
                 self._tool_call_count += 1
-                # Update context count to keep synchronized
                 if hasattr(self, '_context') and self._context:
                     self._context.tool_call_count = self._tool_call_count
                 
@@ -589,9 +580,8 @@ class Agent(BaseAgent):
                 )
                 results.append(error_return)
         
-        # Execute parallel tools concurrently
         if parallel_calls:
-            async def execute_single_tool(tool_call: ToolCallPart) -> ToolReturnPart:
+            async def execute_single_tool(tool_call: "ToolCallPart") -> "ToolReturnPart":
                 """Execute a single tool call and return the result."""
                 try:
                     task_id = None
@@ -622,7 +612,7 @@ class Agent(BaseAgent):
                     )
                     
                 except ExternalExecutionPause:
-                    raise  # Let external execution pause propagate
+                    raise
                 except Exception as e:
                     return ToolReturnPart(
                         tool_name=tool_call.tool_name,
@@ -631,15 +621,12 @@ class Agent(BaseAgent):
                         timestamp=now_utc()
                     )
             
-            # Execute all parallel tools concurrently
             parallel_results = await asyncio.gather(
                 *[execute_single_tool(tc) for tc in parallel_calls],
                 return_exceptions=False
             )
             
-            # Increment tool call count for all parallel calls
             self._tool_call_count += len(parallel_calls)
-            # Update context count to keep synchronized
             if hasattr(self, '_context') and self._context:
                 self._context.tool_call_count = self._tool_call_count
             
@@ -649,34 +636,28 @@ class Agent(BaseAgent):
     
     async def _handle_model_response(
         self, 
-        response: ModelResponse, 
-        messages: List[ModelMessage]
-    ) -> ModelResponse:
+        response: "ModelResponse", 
+        messages: List["ModelRequest"]
+    ) -> "ModelResponse":
         """Handle model response including tool calls."""
-        # Check if tool limit was already reached
+        from upsonic.messages import ToolCallPart, ToolReturnPart, TextPart, UserPromptPart, ModelRequest, ModelResponse
+        
         if hasattr(self, '_tool_limit_reached') and self._tool_limit_reached:
-            # Return the current response without processing more tool calls
             return response
         
-        # Check for tool calls
         tool_calls = [
             part for part in response.parts 
             if isinstance(part, ToolCallPart)
         ]
         
         if tool_calls:
-            # Execute tool calls
             tool_results = await self._execute_tool_calls(tool_calls)
             
-            # Check if limit was reached during execution
             if hasattr(self, '_tool_limit_reached') and self._tool_limit_reached:
-                # Add the error messages to response and stop
                 tool_request = ModelRequest(parts=tool_results)
                 messages.append(response)
                 messages.append(tool_request)
                 
-                # Create a final text response to stop the loop
-                # Add a user message to inform the model about the limit
                 limit_notification = UserPromptPart(
                     content=f"[SYSTEM] Tool call limit of {self.tool_call_limit} has been reached. "
                     f"No more tools are available. Please provide a final response based on the information you have."
@@ -684,7 +665,6 @@ class Agent(BaseAgent):
                 limit_message = ModelRequest(parts=[limit_notification])
                 messages.append(limit_message)
                 
-                # Request a final response from the model without tools
                 model_params = self._build_model_request_parameters(getattr(self, 'current_task', None))
                 model_params = self.model.customize_request_parameters(model_params)
                 
@@ -696,33 +676,26 @@ class Agent(BaseAgent):
                 
                 return final_response
             
-            # Check if any tool has stop_after_tool_call flag
             should_stop = False
             for tool_result in tool_results:
                 if hasattr(tool_result, 'content') and isinstance(tool_result.content, dict):
                     if tool_result.content.get('_stop_execution'):
                         should_stop = True
-                        # Clean up the flag from the content before returning
                         tool_result.content.pop('_stop_execution', None)
             
-            # Add tool results to message history
             tool_request = ModelRequest(parts=tool_results)
             messages.append(response)
             messages.append(tool_request)
             
-            # If stop_after_tool_call is set, return immediately without continuing
             if should_stop:
-                # Create a final response with the tool result content
                 final_text = ""
                 for tool_result in tool_results:
                     if hasattr(tool_result, 'content'):
                         if isinstance(tool_result.content, dict):
-                            # Extract the main result
                             final_text = str(tool_result.content.get('func', tool_result.content))
                         else:
                             final_text = str(tool_result.content)
                 
-                # Create a response with just the tool result
                 stop_response = ModelResponse(
                     parts=[TextPart(content=final_text)],
                     model_name=response.model_name,
@@ -735,11 +708,9 @@ class Agent(BaseAgent):
                 )
                 return stop_response
             
-            # Continue conversation with tool results
             model_params = self._build_model_request_parameters(getattr(self, 'current_task', None))
             model_params = self.model.customize_request_parameters(model_params)
             
-            # Make follow-up request
             follow_up_response = await self.model.request(
                 messages=messages,
                 model_settings=self.model.settings,
@@ -755,8 +726,8 @@ class Agent(BaseAgent):
         if not task.enable_cache:
             return None
         
-        # Show cache configuration if debug
         if self.debug:
+            from upsonic.utils.printing import cache_configuration
             embedding_provider_name = None
             if task.cache_embedding_provider:
                 embedding_provider_name = getattr(task.cache_embedding_provider, 'model_name', 'Unknown')
@@ -769,16 +740,15 @@ class Agent(BaseAgent):
                 embedding_provider=embedding_provider_name
             )
         
-        # Get cached response
         input_text = task._original_input or task.description
         cached_response = await task.get_cached_response(input_text, self.model)
         
         if cached_response is not None:
-            # Cache hit
             similarity = None
             if hasattr(task, '_last_cache_entry') and 'similarity' in task._last_cache_entry:
                 similarity = task._last_cache_entry['similarity']
             
+            from upsonic.utils.printing import cache_hit
             cache_hit(
                 cache_method=task.cache_method,
                 similarity=similarity,
@@ -787,7 +757,7 @@ class Agent(BaseAgent):
             
             return cached_response
         else:
-            # Cache miss
+            from upsonic.utils.printing import cache_miss
             cache_miss(
                 cache_method=task.cache_method,
                 input_preview=(task._original_input or task.description)[:100] if (task._original_input or task.description) else None
@@ -799,12 +769,16 @@ class Agent(BaseAgent):
         if not (self.user_policy and task.description):
             return task, True
         
+        from upsonic.safety_engine.models import PolicyInput, RuleOutput
+        from upsonic.safety_engine.exceptions import DisallowedOperation
+        
         policy_input = PolicyInput(input_texts=[task.description])
         try:
             rule_output, _action_output, policy_output = await self.user_policy.execute_async(policy_input)
             action_taken = policy_output.action_output.get("action_taken", "UNKNOWN")
             
             if self.debug and rule_output.confidence > 0.0:
+                from upsonic.utils.printing import policy_triggered
                 policy_triggered(
                     policy_name=self.user_policy.name,
                     check_type="User Input Check",
@@ -827,6 +801,7 @@ class Agent(BaseAgent):
                 details=str(e)
             )
             if self.debug:
+                from upsonic.utils.printing import policy_triggered
                 policy_triggered(
                     policy_name=self.user_policy.name,
                     check_type="User Input Check",
@@ -840,12 +815,13 @@ class Agent(BaseAgent):
         
         return task, True
     
-    async def _execute_with_guardrail(self, task: "Task", memory_handler: MemoryManager) -> ModelResponse:
+    async def _execute_with_guardrail(self, task: "Task", memory_handler: Optional["MemoryManager"]) -> "ModelResponse":
         """
         Executes the agent's run method with a validation and retry loop based on a task guardrail.
         This method encapsulates the retry logic, hiding it from the main `do_async` pipeline.
         It returns a single, "clean" ModelResponse that represents the final, successful interaction.
         """
+        from upsonic.messages import TextPart, ModelResponse
         retry_counter = 0
         validation_passed = False
         final_model_response = None
@@ -860,22 +836,18 @@ class Agent(BaseAgent):
             max_retries = 1
 
         while not validation_passed and retry_counter < max_retries:
-            # Build messages for current attempt
             messages = await self._build_model_request_with_input(task, memory_handler, current_input, temporary_message_history)
             self._current_messages = messages
             
-            # Build request parameters
             model_params = self._build_model_request_parameters(task)
             model_params = self.model.customize_request_parameters(model_params)
             
-            # Make model request
             response = await self.model.request(
                 messages=messages,
                 model_settings=self.model.settings,
                 model_request_parameters=model_params
             )
             
-            # Handle response and tool calls
             current_model_response = await self._handle_model_response(response, messages)
             
             if task.guardrail is None:
@@ -884,7 +856,6 @@ class Agent(BaseAgent):
                 break
 
             final_text_output = ""
-            # Extract text from response parts
             text_parts = [part.content for part in current_model_response.parts if isinstance(part, TextPart)]
             final_text_output = "".join(text_parts)
 
@@ -896,23 +867,19 @@ class Agent(BaseAgent):
             try:
                 guardrail_result = task.guardrail(final_text_output)
                 
-                # Handle different guardrail return formats
                 if isinstance(guardrail_result, tuple) and len(guardrail_result) == 2:
                     is_valid, result = guardrail_result
                 elif isinstance(guardrail_result, bool):
                     is_valid = guardrail_result
                     result = final_text_output if guardrail_result else "Guardrail validation failed"
                 else:
-                    # Assume truthy means valid, falsy means invalid
                     is_valid = bool(guardrail_result)
                     result = guardrail_result if guardrail_result else "Guardrail validation failed"
 
                 if is_valid:
                     validation_passed = True
                     
-                    # Update the response with the result if it was modified
                     if result != final_text_output:
-                        # Create new response with updated content
                         updated_parts = []
                         found_and_updated = False
                         for part in current_model_response.parts:
@@ -941,10 +908,8 @@ class Agent(BaseAgent):
                     retry_counter += 1
                     last_error_message = str(result)
                     
-                    # Add the failed response to temporary history
                     temporary_message_history.append(current_model_response)
                     
-                    # Create correction prompt
                     correction_prompt = f"Your previous response failed a validation check. Please review the reason and provide a corrected response. Failure Reason: {last_error_message}"
                     current_input = correction_prompt
                     
@@ -952,19 +917,17 @@ class Agent(BaseAgent):
                 retry_counter += 1
                 last_error_message = f"Guardrail execution error: {str(e)}"
                 
-                # Add the failed response to temporary history
                 temporary_message_history.append(current_model_response)
                 
-                # Create correction prompt
                 correction_prompt = f"Your previous response failed a validation check. Please review the reason and provide a corrected response. Failure Reason: {last_error_message}"
                 current_input = correction_prompt
 
         if not validation_passed:
             error_msg = f"Task failed after {max_retries-1} retry(s). Last error: {last_error_message}"
             if self.mode == "raise":
+                from upsonic.utils.package.exception import GuardrailValidationError
                 raise GuardrailValidationError(error_msg)
-            else:  # return_false
-                # Create error response
+            else:
                 error_response = ModelResponse(
                     parts=[TextPart(content="Guardrail validation failed after retries")],
                     model_name=self.model.model_name,
@@ -1025,6 +988,9 @@ class Agent(BaseAgent):
         if not (self.agent_policy and task and task.response):
             return task
         
+        from upsonic.safety_engine.models import PolicyInput, RuleOutput
+        from upsonic.safety_engine.exceptions import DisallowedOperation
+        
         response_text = ""
         if isinstance(task.response, str):
             response_text = task.response
@@ -1040,6 +1006,7 @@ class Agent(BaseAgent):
                 action_taken = policy_output.action_output.get("action_taken", "UNKNOWN")
                 
                 if self.debug and rule_output.confidence > 0.0:
+                    from upsonic.utils.printing import policy_triggered
                     policy_triggered(
                         policy_name=self.agent_policy.name,
                         check_type="Agent Output Check",
@@ -1057,6 +1024,7 @@ class Agent(BaseAgent):
                     details=str(e)
                 )
                 if self.debug:
+                    from upsonic.utils.printing import policy_triggered
                     policy_triggered(
                         policy_name=self.agent_policy.name,
                         check_type="Agent Output Check", 
@@ -1089,13 +1057,13 @@ class Agent(BaseAgent):
     async def do_async(
         self, 
         task: "Task", 
-        model: Optional[Union[str, Model]] = None,
+        model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
         retry: int = 1,
-        state: Any = None,
+        state: Optional["State"] = None,
         *,
         graph_execution_id: Optional[str] = None
-    ) -> RunResult:
+    ) -> "RunResult":
         """
         Execute a task asynchronously with complete framework integration.
         
@@ -1120,15 +1088,16 @@ class Agent(BaseAgent):
             print(result.new_messages())  # Get last run's messages
             ```
         """
-        # Print agent started message
+        from upsonic.utils.printing import agent_started
+        from upsonic.utils.validators import validate_attachments_for_model
+        from upsonic.agent.context_managers import MemoryManager, CallManager, TaskManager, ReliabilityManager
+        
         agent_started(self.get_agent_id())
         
-        # Reset tool call counters for new task
         self.tool_call_count = 0
         self._tool_call_count = 0
         self.current_task = task
         
-        # Mark the start of a new run in the persistent run result
         self._run_result.start_new_run()
         
         async with self._managed_storage_connection():
@@ -1136,11 +1105,9 @@ class Agent(BaseAgent):
             
             try:
                 if not task.is_paused:
-                    # Set cache manager
                     if task.enable_cache:
                         task.set_cache_manager(self._cache_manager)
                     
-                    # Check cache
                     cached_response = await self._handle_cache(task)
                     if cached_response is not None:
                         processed_task = task
@@ -1149,23 +1116,22 @@ class Agent(BaseAgent):
                         self._run_result.output = cached_response
                         return self._run_result
                     
-                    # Apply user policy
                     task, should_continue = await self._apply_user_policy(task)
                     if not should_continue:
                         processed_task = task
                         self._run_result.output = processed_task.response
                         return self._run_result
                 
-                # Use override model if provided
-                current_model = infer_model(model) if model else self.model
+                if model:
+                    from upsonic.models import infer_model
+                    current_model = infer_model(model)
+                else:
+                    current_model = self.model
                 
-                # Validate attachments
                 validate_attachments_for_model(current_model, task)
                 
-                # Setup tools
                 self._setup_tools(task)
                 
-                # Initialize context managers
                 memory_manager = MemoryManager(self.memory)
                 reliability_manager = ReliabilityManager(task, self.reliability_layer, current_model) if self.reliability_layer else None
                 
@@ -1176,29 +1142,23 @@ class Agent(BaseAgent):
                     async with call_manager.manage_call() as call_handler:
                         async with task_manager.manage_task() as task_handler:
                             try:
-                                # Execute with guardrail validation and retry logic
                                 if task.guardrail:
                                     final_response = await self._execute_with_guardrail(task, memory_handler)
                                 else:
-                                    # Standard execution without guardrail
                                     messages = await self._build_model_request(task, memory_handler)
                                     self._current_messages = messages
                                     
-                                    # Build request parameters
                                     model_params = self._build_model_request_parameters(task)
                                     model_params = current_model.customize_request_parameters(model_params)
                                     
-                                    # Make model request
                                     response = await current_model.request(
                                         messages=messages,
                                         model_settings=current_model.settings,
                                         model_request_parameters=model_params
                                     )
                                     
-                                    # Handle response and tool calls
                                     final_response = await self._handle_model_response(response, messages)
                                 
-                                # Apply reflection if configured
                                 if self.reflection_processor:
                                     output = self._extract_output(final_response, task)
                                     improved_output = await self.reflection_processor.process_with_reflection(
@@ -1206,49 +1166,42 @@ class Agent(BaseAgent):
                                     )
                                     task._response = improved_output
                                 else:
-                                    # Extract output
                                     output = self._extract_output(final_response, task)
                                     task._response = output
                                 
                             except ExternalExecutionPause as e:
-                                # Handle external execution pause
                                 task_handler.task.is_paused = True
                                 task_handler.task._tools_awaiting_external_execution.append(e.tool_call)
                                 processed_task = task_handler.task
                                 self._run_result.output = processed_task.response
                                 return self._run_result
                             
-                            # Update RunResult with output and messages FIRST
                             self._run_result.output = task._response
                             
-                            # Add all messages from this execution to run_result
-                            # Messages contains all requests and intermediate responses
-                            self._run_result.add_messages(messages)
-                            # Add the final response (which may not be in messages yet)
+                            history_length = len(memory_handler.get_message_history()) if memory_handler else 0
+                            new_messages_start = history_length
+                            
+                            if new_messages_start < len(messages):
+                                self._run_result.add_messages(messages[new_messages_start:])
                             self._run_result.add_message(final_response)
                             
-                            # Now process response through managers with populated RunResult
-                            # Note: call_handler and task_handler receive RunResult, not ModelResponse
                             call_handler.process_response(self._run_result)
                             task_handler.process_response(self._run_result)
                             
-                            # Pass run_result to memory handler
                             memory_handler.process_response(self._run_result)
                             processed_task = task_handler.task
                 
-                # Apply reliability layer processing
                 if reliability_manager:
                     async with reliability_manager.manage_reliability() as rel_handler:
                         processed_task = await rel_handler.process_task(processed_task)
                 
-                # Apply agent policy
                 processed_task = await self._apply_agent_policy(processed_task)
                 
-                # Store in cache
                 if processed_task and processed_task.enable_cache and processed_task.response:
                     input_text = processed_task._original_input or processed_task.description
                     await processed_task.store_cache_entry(input_text, processed_task.response)
                     if self.debug:
+                        from upsonic.utils.printing import cache_stored
                         cache_stored(
                             cache_method=processed_task.cache_method,
                             input_preview=(processed_task._original_input or processed_task.description)[:100] if (processed_task._original_input or processed_task.description) else None,
@@ -1259,34 +1212,32 @@ class Agent(BaseAgent):
                 if self.debug:
                     print(f"Error in do_async: {e}")
                 
-                # Handle retry mode
                 if self.mode == "raise":
                     raise
-                else:  # return_false
+                else:
                     if processed_task:
                         processed_task._response = False
                     self._run_result.output = False
                     return self._run_result
         
-        # Print summary
         if processed_task and not processed_task.not_main_task:
+            from upsonic.utils.printing import print_price_id_summary
             print_price_id_summary(processed_task.price_id, processed_task)
         
-        # Update run_result with final output if not already set
         if self._run_result.output is None and processed_task:
             self._run_result.output = processed_task.response
         
         return self._run_result
     
-    def _extract_output(self, response: ModelResponse, task: "Task") -> Any:
+    def _extract_output(self, response: "ModelResponse", task: "Task") -> Any:
         """Extract output from model response based on task response format."""
-        # Find text parts
+        from upsonic.messages import TextPart
+        
         text_parts = [part.content for part in response.parts if isinstance(part, TextPart)]
         
         if task.response_format == str or task.response_format is str:
             return "".join(text_parts)
         
-        # For other response formats, try to parse JSON if available
         text_content = "".join(text_parts)
         if task.response_format != str and text_content:
             try:
@@ -1303,10 +1254,10 @@ class Agent(BaseAgent):
     def do(
         self,
         task: "Task",
-        model: Optional[Union[str, Model]] = None,
+        model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
         retry: int = 1
-    ) -> RunResult:
+    ) -> "RunResult":
         """
         Execute a task synchronously.
         
@@ -1319,9 +1270,8 @@ class Agent(BaseAgent):
         Returns:
             RunResult: A result object with output and message tracking
         """
-        # Reset task state
         task.price_id_ = None
-        _ = task.price_id  # Trigger generation
+        _ = task.price_id
         task._tool_calls = []
         
         try:
@@ -1339,10 +1289,10 @@ class Agent(BaseAgent):
     def print_do(
         self,
         task: "Task",
-        model: Optional[Union[str, Model]] = None,
+        model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
         retry: int = 1
-    ) -> RunResult:
+    ) -> "RunResult":
         """
         Execute a task synchronously and print the result.
         
@@ -1356,10 +1306,10 @@ class Agent(BaseAgent):
     async def print_do_async(
         self,
         task: "Task",
-        model: Optional[Union[str, Model]] = None,
+        model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
         retry: int = 1
-    ) -> RunResult:
+    ) -> "RunResult":
         """
         Execute a task asynchronously and print the result.
         
@@ -1370,18 +1320,16 @@ class Agent(BaseAgent):
         print(result.output)
         return result
     
-    # Streaming methods
-    
     async def stream_async(
         self,
         task: "Task",
-        model: Optional[Union[str, Model]] = None,
+        model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
         retry: int = 1,
-        state: Any = None,
+        state: Optional["State"] = None,
         *,
         graph_execution_id: Optional[str] = None
-    ) -> StreamRunResult:
+    ) -> "StreamRunResult":
         """
         Stream task execution asynchronously with StreamRunResult wrapper.
         
@@ -1404,22 +1352,24 @@ class Agent(BaseAgent):
                     print(text, end='', flush=True)
             ```
         """
-        # Create StreamRunResult using the shared method
-        stream_result = self._create_stream_result(task, model, debug, retry)
+        self._stream_run_result._agent = self
+        self._stream_run_result._task = task
+        self._stream_run_result._model = model
+        self._stream_run_result._debug = debug
+        self._stream_run_result._retry = retry
         
-        # Store additional parameters specific to stream_async
-        stream_result._state = state
-        stream_result._graph_execution_id = graph_execution_id
+        self._stream_run_result._state = state
+        self._stream_run_result._graph_execution_id = graph_execution_id
         
-        return stream_result
+        return self._stream_run_result
     
     async def _stream_text_output(
         self,
         task: "Task",
-        model: Optional[Union[str, Model]] = None,
+        model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
         retry: int = 1,
-        state: Any = None,
+        state: Optional["State"] = None,
         graph_execution_id: Optional[str] = None,
         stream_result: Optional[StreamRunResult] = None
     ) -> AsyncIterator[str]:
@@ -1427,18 +1377,17 @@ class Agent(BaseAgent):
         
         This method handles text extraction and accumulation from streaming events.
         """
+        from upsonic.messages import FinalResultEvent
+        
         accumulated_text = ""
         first_token_time = None
         
         async for event in self._create_stream_iterator(task, model, debug, retry, state, graph_execution_id):
-            # Store events in stream_result if provided
             if stream_result:
                 stream_result._streaming_events.append(event)
             
-            # Extract text content
             text_content = self._extract_text_from_stream_event(event)
             if text_content:
-                # Mark first token time
                 if first_token_time is None and stream_result:
                     first_token_time = time.time()
                     stream_result._first_token_time = first_token_time
@@ -1449,7 +1398,6 @@ class Agent(BaseAgent):
                     
                 yield text_content
             
-            # Check for completion
             if isinstance(event, FinalResultEvent) and stream_result:
                 stream_result._is_complete = True
                 stream_result._final_output = accumulated_text if accumulated_text else None
@@ -1457,13 +1405,13 @@ class Agent(BaseAgent):
     async def _stream_events_output(
         self,
         task: "Task",
-        model: Optional[Union[str, Model]] = None,
+        model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
         retry: int = 1,
-        state: Any = None,
+        state: Optional["State"] = None,
         graph_execution_id: Optional[str] = None,
         stream_result: Optional[StreamRunResult] = None
-    ) -> AsyncIterator[ModelResponseStreamEvent]:
+    ) -> AsyncIterator["ModelResponseStreamEvent"]:
         """Stream raw events from the model response.
         
         This method handles event streaming and text accumulation.
@@ -1472,11 +1420,9 @@ class Agent(BaseAgent):
         first_token_time = None
         
         async for event in self._create_stream_iterator(task, model, debug, retry, state, graph_execution_id):
-            # Store events in stream_result if provided
             if stream_result:
                 stream_result._streaming_events.append(event)
             
-            # Accumulate text content for final output
             text_content = self._extract_text_from_stream_event(event)
             if text_content:
                 if first_token_time is None and stream_result:
@@ -1489,13 +1435,14 @@ class Agent(BaseAgent):
             
             yield event
             
-            # Check for completion
             if isinstance(event, FinalResultEvent) and stream_result:
                 stream_result._is_complete = True
                 stream_result._final_output = accumulated_text if accumulated_text else None
     
-    def _extract_text_from_stream_event(self, event: ModelResponseStreamEvent) -> Optional[str]:
+    def _extract_text_from_stream_event(self, event: "ModelResponseStreamEvent") -> Optional[str]:
         """Extract text content from a streaming event."""
+        from upsonic.messages import PartStartEvent, PartDeltaEvent, TextPart
+        
         if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
             return event.part.content
         elif isinstance(event, PartDeltaEvent) and hasattr(event.delta, 'content_delta'):
@@ -1505,78 +1452,71 @@ class Agent(BaseAgent):
     async def _create_stream_iterator(
         self,
         task: "Task",
-        model: Optional[Union[str, Model]] = None,
+        model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
         retry: int = 1,
-        state: Any = None,
+        state: Optional["State"] = None,
         graph_execution_id: Optional[str] = None
-    ) -> AsyncIterator[ModelResponseStreamEvent]:
+    ) -> AsyncIterator["ModelResponseStreamEvent"]:
         """Create the actual stream iterator for streaming execution.
         
         This iterator yields all streaming events from the model, including the FinalResultEvent
         which now comes at the end of the stream (after all content has been received).
         """
-        # Print agent started message
+        from upsonic.utils.printing import agent_started
+        from upsonic.utils.validators import validate_attachments_for_model
+        from upsonic.agent.context_managers import MemoryManager
+        from upsonic.messages import PartStartEvent, TextPart, FinalResultEvent, ToolCallPart, ModelRequest
+        
         agent_started(self.get_agent_id())
         
-        
-        # Reset tool call counters for new task
         self.tool_call_count = 0
         self._tool_call_count = 0
         
-        # Use a local variable to avoid reassignment issues
         current_task = task
         self.current_task = current_task
+        
+        self._stream_run_result.start_new_run()
         
         async with self._managed_storage_connection():
             try:
                 if not current_task.is_paused:
-                    # Set cache manager
                     if current_task.enable_cache:
                         current_task.set_cache_manager(self._cache_manager)
                     
-                    # Check cache
                     cached_response = await self._handle_cache(current_task)
                     if cached_response is not None:
-                        # Yield cached response as text content
                         yield PartStartEvent(index=0, part=TextPart(content=str(cached_response)))
                         yield FinalResultEvent(tool_name=None, tool_call_id=None)
                         
-                        # Set the response on the task
                         current_task._response = cached_response
                         current_task.task_end()
                         return
                     
-                    # Apply user policy
                     current_task, should_continue = await self._apply_user_policy(current_task)
                     if not should_continue:
                         yield FinalResultEvent(tool_name=None, tool_call_id=None)
                         return
             
-                # Use override model if provided
-                current_model = infer_model(model) if model else self.model
+                if model:
+                    from upsonic.models import infer_model
+                    current_model = infer_model(model)
+                else:
+                    current_model = self.model
                 
-                
-                # Validate attachments
                 validate_attachments_for_model(current_model, current_task)
                 
-                # Setup tools
                 self._setup_tools(current_task)
                 
-                # Initialize context managers
                 memory_manager = MemoryManager(self.memory)
                 
                 async with memory_manager.manage_memory() as memory_handler:
-                    # Build messages
                     messages = await self._build_model_request(current_task, memory_handler)
                     self._current_messages = messages
                     
-                    # Build request parameters
                     model_params = self._build_model_request_parameters(current_task)
                     model_params = current_model.customize_request_parameters(model_params)
                     
-                    
-                    # Stream model response
                     final_result_received = False
                     try:
                         async with current_model.request_stream(
@@ -1589,30 +1529,24 @@ class Agent(BaseAgent):
                                 event_count += 1
                                 yield event
                                 
-                                # Track if we received FinalResultEvent (which now comes at the end)
                                 if isinstance(event, FinalResultEvent):
                                     final_result_received = True
                     except Exception as e:
                         raise
                         
-                    # Get final response
                     final_response = stream.get()
                     
-                    # Handle tool calls if any
                     tool_calls = [
                         part for part in final_response.parts 
                         if isinstance(part, ToolCallPart)
                     ]
                     
                     if tool_calls:
-                        # Execute tools and continue streaming
                         tool_results = await self._execute_tool_calls(tool_calls)
                         
-                        # Add to message history
                         messages.append(final_response)
                         messages.append(ModelRequest(parts=tool_results))
                         
-                        # Continue streaming
                         async with current_model.request_stream(
                             messages=messages,
                             model_settings=current_model.settings,
@@ -1621,23 +1555,28 @@ class Agent(BaseAgent):
                             async for event in continuation_stream:
                                 yield event
                                 
-                                # Track if we received FinalResultEvent (which now comes at the end)
                                 if isinstance(event, FinalResultEvent):
                                     final_result_received = True
                             
                             final_response = continuation_stream.get()
                     
-                    # Extract and set output
-                    # Note: With the new event ordering, FinalResultEvent comes at the end,
-                    # confirming that all content has been streamed successfully
                     output = self._extract_output(final_response, current_task)
                     current_task._response = output
                     current_task.task_end()
                     
-                    # Apply agent policy
+                    self._stream_run_result._final_output = current_task._response
+                    
+                    history_length = len(memory_handler.get_message_history()) if memory_handler else 0
+                    new_messages_start = history_length
+                    
+                    if new_messages_start < len(messages):
+                        self._stream_run_result.add_messages(messages[new_messages_start:])
+                    self._stream_run_result.add_message(final_response)
+                    
+                    memory_handler.process_response(self._stream_run_result)
+                    
                     await self._apply_agent_policy(current_task)
                     
-                    # Store in cache
                     if current_task.enable_cache and current_task.response:
                         input_text = current_task._original_input or current_task.description
                         await current_task.store_cache_entry(input_text, current_task.response)
@@ -1650,31 +1589,28 @@ class Agent(BaseAgent):
     def _create_stream_result(
         self,
         task: "Task", 
-        model: Optional[Union[str, Model]] = None,
+        model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
         retry: int = 1
-    ) -> StreamRunResult:
+    ) -> "StreamRunResult":
         """Create a StreamRunResult with deferred async execution."""
-        # Create StreamRunResult
         stream_result = StreamRunResult()
         stream_result._agent = self
         stream_result._task = task
         
-        # Store parameters for deferred execution
         stream_result._model = model
         stream_result._debug = debug
         stream_result._retry = retry
         
-        # The actual streaming will be initialized when __aenter__ is called
         return stream_result
     
     def stream(
         self,
         task: "Task",
-        model: Optional[Union[str, Model]] = None,
+        model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
         retry: int = 1
-    ) -> StreamRunResult:
+    ) -> "StreamRunResult":
         """
         Stream task execution with StreamRunResult wrapper.
         
@@ -1694,19 +1630,22 @@ class Agent(BaseAgent):
                     print(text, end='', flush=True)
             ```
         """
-        # Reset task state
         task.price_id_ = None
         _ = task.price_id
         task._tool_calls = []
         
-        # Since stream() is not async, we need to return the StreamRunResult directly
-        # The async execution will happen when the context manager is entered
-        return self._create_stream_result(task, model, debug, retry)
+        self._stream_run_result._agent = self
+        self._stream_run_result._task = task
+        self._stream_run_result._model = model
+        self._stream_run_result._debug = debug
+        self._stream_run_result._retry = retry
+        
+        return self._stream_run_result
     
     async def print_stream_async(
         self,
         task: "Task",
-        model: Optional[Union[str, Model]] = None,
+        model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
         retry: int = 1
     ) -> Any:
@@ -1715,20 +1654,18 @@ class Agent(BaseAgent):
         async with result:
             async for text_chunk in result.stream_output():
                 print(text_chunk, end='', flush=True)
-            print()  # New line after streaming
+            print()
             
-            # Return the final output
             return result.get_final_output()
     
     def print_stream(
         self,
         task: "Task",
-        model: Optional[Union[str, Model]] = None,
+        model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
         retry: int = 1
     ) -> Any:
         """Stream task execution synchronously and print output."""
-        # Reset task state
         task.price_id_ = None
         _ = task.price_id
         task._tool_calls = []
@@ -1750,10 +1687,10 @@ class Agent(BaseAgent):
     def continue_run(
         self,
         task: "Task",
-        model: Optional[Union[str, Model]] = None,
+        model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
         retry: int = 1
-    ) -> Any:
+    ) -> "RunResult":
         """Continue execution of a paused task."""
         try:
             loop = asyncio.get_event_loop()
@@ -1770,29 +1707,26 @@ class Agent(BaseAgent):
     async def continue_async(
         self,
         task: "Task", 
-        model: Optional[Union[str, Model]] = None,
+        model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
         retry: int = 1,
-        state: Any = None,
+        state: Optional["State"] = None,
         *,
         graph_execution_id: Optional[str] = None
-    ) -> Any:
+    ) -> "RunResult":
         """Continue execution of a paused task asynchronously."""
         if not task.is_paused or not task.tools_awaiting_external_execution:
             raise ValueError("The 'continue_async' method can only be called on a task that is currently paused for external execution.")
         
-        # Build tool results prompt
         tool_results_prompt = "\nThe following external tools were executed. Use their results to continue the task:\n"
         for tool_call in task.tools_awaiting_external_execution:
             tool_results_prompt += f"\n- Tool '{tool_call.tool_name}' was executed with arguments {tool_call.args}.\n"
             tool_results_prompt += f"  Result: {tool_call.result}\n"
         
-        # Update task state
         task.is_paused = False
         task.description += tool_results_prompt
         task._tools_awaiting_external_execution = []
         
-        # Set cache manager
         if task.enable_cache:
             task.set_cache_manager(self._cache_manager)
         

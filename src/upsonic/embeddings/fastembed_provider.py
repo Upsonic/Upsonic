@@ -12,7 +12,7 @@ try:
 except ImportError:
     FASTEMBED_AVAILABLE = False
 
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
 from ..utils.package.exception import ConfigurationError, ModelConnectionError
 
@@ -40,7 +40,8 @@ class FastEmbedConfig(EmbeddingConfig):
     enable_sparse_embeddings: bool = Field(False, description="Use sparse embeddings for better performance")
     sparse_model_name: Optional[str] = Field(None, description="Sparse model name if different from dense")
     
-    @validator('providers')
+    @field_validator('providers')
+    @classmethod
     def validate_providers(cls, v):
         """Validate ONNX providers."""
         valid_providers = [
@@ -57,7 +58,8 @@ class FastEmbedConfig(EmbeddingConfig):
         
         return v
     
-    @validator('doc_embed_type')
+    @field_validator('doc_embed_type')
+    @classmethod
     def validate_embed_type(cls, v):
         """Validate document embedding type."""
         valid_types = ["default", "passage"]

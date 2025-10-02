@@ -139,7 +139,9 @@ class Memory:
         
         if self.full_session_memory_enabled:
             from pydantic_core import to_jsonable_python
-            all_messages_as_dicts = to_jsonable_python(model_response.new_messages())
+            # Get only the new messages from this run
+            new_messages_only = model_response.new_messages()
+            all_messages_as_dicts = to_jsonable_python(new_messages_only)
             session.chat_history.extend(all_messages_as_dicts)  # Store as a list of messages
 
         if self.summary_memory_enabled:
@@ -267,7 +269,7 @@ class Memory:
         task = Task(description=prompt, response_format=str)
         
         summary_response = await summarizer.do_async(task)
-        return str(summary_response)
+        return str(summary_response.output)
 
     def _extract_user_prompt_content(self, messages: list) -> list[str]:
         """Extracts the content string from all UserPromptParts in a list of messages."""
@@ -353,10 +355,10 @@ class Memory:
             schema_task = Task(description=schema_generator_prompt, response_format=ProposedSchema)
             proposed_schema_response = await analyzer.do_async(schema_task)
 
-            if not proposed_schema_response or not proposed_schema_response.fields:
+            if not proposed_schema_response or not proposed_schema_response.output or not proposed_schema_response.output.fields:
                 return {}
 
-            dynamic_fields = {name: (Optional[Any], Field(None, description=desc)) for name, desc in proposed_schema_response.fields.items()}
+            dynamic_fields = {name: (Optional[Any], Field(None, description=desc)) for name, desc in proposed_schema_response.output.fields.items()}
             DynamicUserTraitModel = create_model('DynamicUserTraitModel', **dynamic_fields)
 
             trait_extractor_prompt = f"""
@@ -370,8 +372,8 @@ class Memory:
             trait_task = Task(description=trait_extractor_prompt, response_format=DynamicUserTraitModel)
             trait_response = await analyzer.do_async(trait_task)
             
-            if trait_response:
-                return trait_response.model_dump()
+            if trait_response and trait_response.output:
+                return trait_response.output.model_dump()
             return {}
 
         else:
@@ -387,6 +389,6 @@ class Memory:
             task = Task(description=prompt, response_format=self.profile_schema_model)
             
             trait_response = await analyzer.do_async(task)
-            if trait_response:
-                return trait_response.model_dump()
+            if trait_response and trait_response.output:
+                return trait_response.output.model_dump()
             return {}

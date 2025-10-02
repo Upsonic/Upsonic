@@ -4,14 +4,23 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Dict, Any, Optional
 import json
 
-from upsonic.context.agent import turn_agent_to_string
-from upsonic.context.default_prompt import default_prompt
-from upsonic.tools import Thought, AnalysisResult
-
+# Heavy imports moved to lazy loading for faster startup
 if TYPE_CHECKING:
     from upsonic.agent.agent import Agent
     from upsonic.tasks.tasks import Task
     from upsonic.agent.context_managers.memory_manager import MemoryManager
+    from upsonic.context.agent import turn_agent_to_string
+    from upsonic.context.default_prompt import default_prompt
+    from upsonic.tools import Thought, AnalysisResult
+else:
+    # Use string annotations to avoid importing heavy modules
+    Agent = "Agent"
+    Task = "Task"
+    MemoryManager = "MemoryManager"
+    turn_agent_to_string = "turn_agent_to_string"
+    default_prompt = "default_prompt"
+    Thought = "Thought"
+    AnalysisResult = "AnalysisResult"
 
 
 class SystemPromptManager:
@@ -23,8 +32,12 @@ class SystemPromptManager:
         self.task = task
         self.system_prompt: str = ""
 
-    def _build_system_prompt(self, memory_handler: Optional[MemoryManager]) -> str:
+    def _build_system_prompt(self, memory_handler: Optional["MemoryManager"]) -> str:
         """Builds the complete system prompt string by assembling its components."""
+        from upsonic.tools import Thought, AnalysisResult
+        from upsonic.context.agent import turn_agent_to_string
+        from upsonic.context.default_prompt import default_prompt
+        
         prompt_parts = []
     
         is_thinking_enabled = self.agent.enable_thinking_tool
@@ -257,7 +270,7 @@ class SystemPromptManager:
         return self.system_prompt
 
     @asynccontextmanager
-    async def manage_system_prompt(self, memory_handler: Optional[MemoryManager] = None):
+    async def manage_system_prompt(self, memory_handler: Optional["MemoryManager"] = None):
         """
         The asynchronous context manager for building the system prompt.
 
