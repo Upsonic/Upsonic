@@ -29,7 +29,7 @@ class CallTracker:
 class AgentToolTestCase(TestCase):
     """Test cases for Agent tool function calls"""
     
-    @patch('upsonic.agent.agent.infer_model')
+    @patch('upsonic.models.infer_model')
     def test_agent_tool_function_call(self, mock_infer_model):
         """Test that agent correctly calls tool function with proper arguments"""
         # Test parameters

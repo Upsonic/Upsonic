@@ -46,7 +46,7 @@ class TestTaskStringContextHandling:
         # Check overall context list equality
         assert task.context == contexts  
 
-    @patch('upsonic.agent.agent.infer_model')
+    @patch('upsonic.models.infer_model')
     def test_agent_can_access_single_string_context(self, mock_infer_model):
         """
         Test: Agent'ın tek string context'i kullanabilmesi
@@ -79,7 +79,7 @@ class TestTaskStringContextHandling:
         assert isinstance(result.output, str)  
         assert task.response == result.output  
 
-    @patch('upsonic.agent.agent.infer_model')
+    @patch('upsonic.models.infer_model')
     def test_agent_can_access_multiple_string_contexts(self, mock_infer_model):
         """
         Test: Agent'ın birden çok string context'i kullanabilmesi
@@ -127,7 +127,7 @@ class TestTaskStringContextHandling:
         assert task.context[2] == "Another Valid Context"  
 
 	
-    @patch('upsonic.agent.agent.infer_model')
+    @patch('upsonic.models.infer_model')
     def test_agent_context_integration_simulation(self, mock_infer_model):
         """
         Test: Agent'ın context'i task description ile nasıl entegre ettiğinin testi
@@ -160,7 +160,7 @@ class TestTaskStringContextHandling:
         assert isinstance(result.output, str)
         assert task.response == result.output
             
-    @patch('upsonic.agent.agent.infer_model')
+    @patch('upsonic.models.infer_model')
     def test_context_with_non_string_values(self, mock_infer_model):
         # Mock the model inference
         mock_model = AsyncMock()
@@ -201,7 +201,7 @@ class TestTaskStringContextHandling:
         assert isinstance(task.context, list)
         assert len(task.context) == 0
 
-    @patch('upsonic.agent.agent.infer_model')
+    @patch('upsonic.models.infer_model')
     def test_task_with_empty_context_list_agent_test(self, mock_infer_model):
         """Test agent behavior with empty context list"""
         # Mock the model inference

@@ -70,7 +70,7 @@ CustomCodenamePolicy = Policy(
 
 
 @pytest.mark.asyncio
-@patch('upsonic.agent.agent.infer_model')
+@patch('upsonic.models.infer_model')
 async def test_user_policy_block(mock_infer_model):
     """
     TEST 1: User Policy Blocks Malicious Input
@@ -115,7 +115,7 @@ async def test_user_policy_block(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.agent.agent.infer_model')
+@patch('upsonic.models.infer_model')
 async def test_user_policy_modify(mock_infer_model):
     """
     TEST 2: User Policy Modifies User Input
@@ -161,7 +161,7 @@ async def test_user_policy_modify(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.agent.agent.infer_model')
+@patch('upsonic.models.infer_model')
 async def test_agent_policy_modify(mock_infer_model):
     """
     TEST 3: Agent Policy Modifies Agent Output
@@ -209,7 +209,7 @@ async def test_agent_policy_modify(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.agent.agent.infer_model')
+@patch('upsonic.models.infer_model')
 async def test_agent_policy_exception(mock_infer_model):
     """
     TEST 4: Agent Policy Blocks Agent Output via Exception
@@ -258,7 +258,7 @@ async def test_agent_policy_exception(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.agent.agent.infer_model')
+@patch('upsonic.models.infer_model')
 async def test_all_clear(mock_infer_model):
     """
     TEST 5: Happy Path - No Policies Triggered

@@ -9,7 +9,7 @@ from upsonic.models import ModelResponse, TextPart
 class TestDo(unittest.TestCase):
     """Test suite for Task, Agent, and do functionality"""
     
-    @patch('upsonic.agent.agent.infer_model')
+    @patch('upsonic.models.infer_model')
     def test_agent_do_basic(self, mock_infer_model):
         """Test basic functionality of Agent.do with a Task"""
         # Mock the model inference

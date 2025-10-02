@@ -11,7 +11,7 @@ class Names(BaseModel):
 
 class TestTaskImageContextHandling:
     
-    @patch('upsonic.agent.agent.infer_model')
+    @patch('upsonic.models.infer_model')
     def test_agent_with_multiple_images_returns_combined_names(self, mock_infer_model):
         # Mock the model inference
         mock_model = AsyncMock()

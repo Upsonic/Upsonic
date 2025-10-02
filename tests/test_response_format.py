@@ -42,7 +42,7 @@ class MixedTypes(BaseModel):
 class TestTaskResponseFormat:
     """Test suite for Task response_format parameter behavior."""
 
-    @patch('upsonic.agent.agent.infer_model')
+    @patch('upsonic.models.infer_model')
     def test_task_response_format_behavior(self, mock_infer_model):
         """
         Test response_format parameter behavior:
@@ -113,7 +113,7 @@ class TestTaskResponseFormat:
         # Does result match task.response?
         assert result_with_format.output.cities == task_with_format.response.cities  
 
-    @patch('upsonic.agent.agent.infer_model')
+    @patch('upsonic.models.infer_model')
     def test_diverse_pydantic_types(self, mock_infer_model):
         """
         Test various Pydantic field types to ensure the system handles different data structures correctly.
