@@ -62,6 +62,7 @@ class LoaderFactory:
         """Get the default loader configurations with lazy imports."""
         from .csv import CSVLoader
         from .pdf import PdfLoader
+        from .pymupdf import PyMuPDFLoader
         from .docx import DOCXLoader
         from .json import JSONLoader
         from .xml import XMLLoader
@@ -73,6 +74,7 @@ class LoaderFactory:
         return [
             (CSVLoader, ['.csv']),
             (PdfLoader, ['.pdf']),
+            (PyMuPDFLoader, ['.pdf']),  # Alternative PDF loader
             (DOCXLoader, ['.docx']),
             (JSONLoader, ['.json', '.jsonl']),
             (XMLLoader, ['.xml']),
@@ -133,7 +135,7 @@ class LoaderFactory:
     def _get_config_mapping() -> Dict[str, Type[LoaderConfig]]:
         """Get the mapping of loader names to their config classes with lazy imports."""
         from .config import (
-            TextLoaderConfig, CSVLoaderConfig, PdfLoaderConfig, DOCXLoaderConfig,
+            TextLoaderConfig, CSVLoaderConfig, PdfLoaderConfig, PyMuPDFLoaderConfig, DOCXLoaderConfig,
             JSONLoaderConfig, XMLLoaderConfig, YAMLLoaderConfig, MarkdownLoaderConfig,
             HTMLLoaderConfig
         )
@@ -142,6 +144,7 @@ class LoaderFactory:
             'text': TextLoaderConfig,
             'csv': CSVLoaderConfig,
             'pdf': PdfLoaderConfig,
+            'pymupdf': PyMuPDFLoaderConfig,
             'docx': DOCXLoaderConfig,
             'json': JSONLoaderConfig,
             'xml': XMLLoaderConfig,
@@ -300,6 +303,8 @@ class LoaderFactory:
         """Apply loader-specific optimizations."""
         if loader_type == 'pdf':
             self._optimize_pdf_config(config, file_size)
+        elif loader_type == 'pymupdf':
+            self._optimize_pymupdf_config(config, file_size)
         elif loader_type == 'html':
             self._optimize_html_config(config, source)
         elif loader_type == 'csv':
@@ -323,6 +328,20 @@ class LoaderFactory:
             config.setdefault('extraction_mode', 'text_only')
         else:
             config.setdefault('extraction_mode', 'hybrid')
+    
+    def _optimize_pymupdf_config(self, config: Dict[str, Any], file_size: int) -> None:
+        """Optimize PyMuPDF loader configuration based on file size."""
+        if file_size > self._PDF_LARGE_THRESHOLD:
+            config.setdefault('extraction_mode', 'text_only')
+            config.setdefault('include_images', False)
+            config.setdefault('extract_annotations', False)
+            config.setdefault('image_dpi', 72)  # Lower DPI for large files
+        else:
+            config.setdefault('extraction_mode', 'hybrid')
+            config.setdefault('include_images', True)
+            config.setdefault('extract_annotations', True)
+            config.setdefault('image_dpi', 150)  # Higher DPI for better quality
+            config.setdefault('text_extraction_method', 'dict')  # Better structure for smaller files
     
     def _optimize_html_config(self, config: Dict[str, Any], source: str) -> None:
         """Optimize HTML loader configuration for URLs."""

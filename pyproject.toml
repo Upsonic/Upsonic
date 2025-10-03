@@ -64,6 +64,7 @@ dependencies = [
     "pandas>=2.3.2",
     "tavily-python>=0.7.12",
     "genai-prices>=0.0.29",
+    "pymupdf>=1.26.4",
 ]
 
 [project.optional-dependencies]

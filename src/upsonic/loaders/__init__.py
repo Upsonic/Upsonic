@@ -6,13 +6,14 @@ from .config import LoaderConfig, LoaderConfigFactory
 
 if TYPE_CHECKING:
     from .config import (
-        TextLoaderConfig, CSVLoaderConfig, PdfLoaderConfig,
+        TextLoaderConfig, CSVLoaderConfig, PdfLoaderConfig, PyMuPDFLoaderConfig,
         DOCXLoaderConfig, JSONLoaderConfig, XMLLoaderConfig, YAMLLoaderConfig,
         MarkdownLoaderConfig, HTMLLoaderConfig, simple_config, advanced_config
     )
     from .text import TextLoader
     from .csv import CSVLoader
     from .pdf import PdfLoader
+    from .pymupdf import PyMuPDFLoader
     from .docx import DOCXLoader
     from .json import JSONLoader
     from .xml import XMLLoader
@@ -33,6 +34,7 @@ def _get_loader_classes():
     from .text import TextLoader
     from .csv import CSVLoader
     from .pdf import PdfLoader
+    from .pymupdf import PyMuPDFLoader
     from .docx import DOCXLoader
     from .json import JSONLoader
     from .xml import XMLLoader
@@ -44,6 +46,7 @@ def _get_loader_classes():
         'TextLoader': TextLoader,
         'CSVLoader': CSVLoader,
         'PdfLoader': PdfLoader,
+        'PyMuPDFLoader': PyMuPDFLoader,
         'DOCXLoader': DOCXLoader,
         'JSONLoader': JSONLoader,
         'XMLLoader': XMLLoader,
@@ -55,7 +58,7 @@ def _get_loader_classes():
 def _get_config_classes():
     """Lazy import of config classes."""
     from .config import (
-        TextLoaderConfig, CSVLoaderConfig, PdfLoaderConfig,
+        TextLoaderConfig, CSVLoaderConfig, PdfLoaderConfig, PyMuPDFLoaderConfig,
         DOCXLoaderConfig, JSONLoaderConfig, XMLLoaderConfig, YAMLLoaderConfig,
         MarkdownLoaderConfig, HTMLLoaderConfig, simple_config, advanced_config
     )
@@ -64,6 +67,7 @@ def _get_config_classes():
         'TextLoaderConfig': TextLoaderConfig,
         'CSVLoaderConfig': CSVLoaderConfig,
         'PdfLoaderConfig': PdfLoaderConfig,
+        'PyMuPDFLoaderConfig': PyMuPDFLoaderConfig,
         'DOCXLoaderConfig': DOCXLoaderConfig,
         'JSONLoaderConfig': JSONLoaderConfig,
         'XMLLoaderConfig': XMLLoaderConfig,
@@ -125,11 +129,11 @@ def __getattr__(name: str) -> Any:
 __all__ = [
     'BaseLoader',
 
-    'LoaderConfig', 'TextLoaderConfig', 'CSVLoaderConfig', 'PdfLoaderConfig',
+    'LoaderConfig', 'TextLoaderConfig', 'CSVLoaderConfig', 'PdfLoaderConfig', 'PyMuPDFLoaderConfig',
     'DOCXLoaderConfig', 'JSONLoaderConfig', 'XMLLoaderConfig', 'YAMLLoaderConfig',
     'MarkdownLoaderConfig', 'HTMLLoaderConfig', 'LoaderConfigFactory', 'simple_config', 'advanced_config',
     
-    'TextLoader', 'CSVLoader', 'PdfLoader', 'DOCXLoader',
+    'TextLoader', 'CSVLoader', 'PdfLoader', 'PyMuPDFLoader', 'DOCXLoader',
     'JSONLoader', 'XMLLoader', 'YAMLLoader', 'MarkdownLoader', 'HTMLLoader',
     
     'LoaderFactory', 'get_factory', 'create_loader', 'create_loader_for_file',
