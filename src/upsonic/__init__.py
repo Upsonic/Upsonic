@@ -1,6 +1,7 @@
 import warnings
 import importlib
 from typing import Any
+from dotenv import load_dotenv
 
 warnings.filterwarnings("ignore", category=ResourceWarning)
 warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
@@ -9,6 +10,8 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 __version__ = "0.1.0"
 
 _lazy_imports = {}
+
+load_dotenv()
 
 def _lazy_import(module_name: str, class_name: str = None):
     """Lazy import function to defer heavy imports until actually needed."""
