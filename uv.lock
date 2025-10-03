@@ -1204,6 +1204,20 @@ wheels = [
 ]
 
 [[package]]
+name = "genai-prices"
+version = "0.0.29"
+source = { registry = "https://pypi.org/simple/" }
+dependencies = [
+    { name = "eval-type-backport", marker = "python_full_version < '3.11'" },
+    { name = "httpx" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b8/65/157725dc28e29afd54d26d10b6d5ca3b54e52b34494b6119ed474626cc56/genai_prices-0.0.29.tar.gz", hash = "sha256:efa8ba68e575357e2249b0c7ad53d4c2094e2b22e19c85ccfbf5ae3217335656", size = 45703, upload-time = "2025-09-29T20:42:50.442Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a1/e3/2ffded479db7e78f6fb4d338417bbde64534f7608c515e8f8adbef083a36/genai_prices-0.0.29-py3-none-any.whl", hash = "sha256:447d10a3d38fe1b66c062a2678253c153761a3b5807f1bf8a1f2533971296f7d", size = 48324, upload-time = "2025-09-29T20:42:48.381Z" },
+]
+
+[[package]]
 name = "google"
 version = "3.0.0"
 source = { registry = "https://pypi.org/simple/" }
@@ -5643,6 +5657,7 @@ dependencies = [
     { name = "cohere" },
     { name = "duckduckgo-search" },
     { name = "fastembed" },
+    { name = "genai-prices" },
     { name = "google" },
     { name = "google-auth" },
     { name = "google-genai" },
@@ -5739,6 +5754,7 @@ requires-dist = [
     { name = "duckduckgo-search", specifier = ">=7.3.1" },
     { name = "faiss-cpu", marker = "extra == 'rag'", specifier = ">=1.12.0" },
     { name = "fastembed", specifier = ">=0.4.1" },
+    { name = "genai-prices", specifier = ">=0.0.29" },
     { name = "google", specifier = ">=3.0.0" },
     { name = "google-auth", specifier = ">=2.40.3" },
     { name = "google-genai", specifier = ">=1.39.1" },

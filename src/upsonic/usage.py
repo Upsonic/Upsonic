@@ -125,7 +125,7 @@ class RequestUsage(UsageBase):
 class RunUsage(UsageBase):
     """LLM usage associated with an agent run.
 
-    Responsibility for calculating request usage is on the model; Pydantic AI simply sums the usage information across requests.
+    Responsibility for calculating request usage is on the model; We simply sums the usage information across requests.
     """
 
     requests: int = 0

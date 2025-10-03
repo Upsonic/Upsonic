@@ -10,6 +10,19 @@ from __future__ import annotations
 from abc import ABC
 from dataclasses import dataclass
 from typing import Literal, Optional, TypedDict
+import requests
+
+from bs4 import BeautifulSoup
+try:
+    try:
+        from ddgs import DDGS
+    except ImportError:  # Fallback for older versions of ddgs
+        from duckduckgo_search import DDGS
+except ImportError as _import_error:
+    raise ImportError(
+        'Please install `ddgs` to use the DuckDuckGo search tool, '
+        'pip install ddgs`'
+    ) from _import_error
 
 
 __all__ = (
@@ -17,7 +30,9 @@ __all__ = (
     'WebSearchTool',
     'WebSearchUserLocation',
     'CodeExecutionTool',
-    'UrlContextTool'
+    'UrlContextTool',
+    'WebSearch',
+    'WebRead'
 )
 
 
@@ -135,3 +150,71 @@ class UrlContextTool(AbstractBuiltinTool):
     
     kind: str = 'url_context'
     """The kind of tool."""
+
+
+def WebSearch(query: str, max_results: int = 10) -> str:
+    """
+    Search the web for the given query and return formatted results.
+    
+    Args:
+        query: The search query
+        max_results: Maximum number of results to return (default: 10)
+        
+    Returns:
+        Formatted string containing search results
+    """
+    with DDGS() as ddgs:
+        try:
+            results = list(ddgs.text(query, max_results=max_results))
+            
+            formatted_results = f"Web search results for: {query}\n\n"
+            for i, result in enumerate(results, 1):
+                formatted_results += f"{i}. {result.get('title', 'No title')}\n"
+                formatted_results += f"   URL: {result.get('href', 'No URL')}\n"
+                formatted_results += f"   Description: {result.get('body', 'No description')}\n\n"
+            
+            return formatted_results
+        except Exception as e:
+            return f"Error performing web search: {str(e)}"
+
+
+def WebRead(url: str) -> str:
+    """
+    Read and extract text content from a web page.
+    
+    Args:
+        url: The URL to read from
+        
+    Returns:
+        Extracted text content from the webpage
+    """
+    session = requests.Session()
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        response = session.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        for script in soup(["script", "style"]):
+            script.decompose()
+        
+        text = soup.get_text()
+        
+        lines = (line.strip() for line in text.splitlines())
+        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+        text = ' '.join(chunk for chunk in chunks if chunk)
+        
+        if len(text) > 5000:
+            text = text[:5000] + "... [Content truncated]"
+        
+        return f"Content from {url}:\n\n{text}"
+    except requests.exceptions.RequestException as e:
+        return f"Error reading from {url}: {str(e)}"
+    except Exception as e:
+        return f"Error processing content from {url}: {str(e)}"
+    finally:
+        session.close()

@@ -12,7 +12,7 @@ from upsonic.agent.base import BaseAgent
 from upsonic.agent.run_result import RunResult, StreamRunResult
 from upsonic._utils import now_utc
 from upsonic.utils.retry import retryable
-from upsonic.utils.validators import validate_attachments_for_model
+from upsonic.utils.validators import validate_attachments_exist
 
 if TYPE_CHECKING:
     from upsonic.models import Model, ModelRequest, ModelMessage, ModelRequestParameters, ModelResponse
@@ -55,7 +55,7 @@ else:
     ToolDefinition = "ToolDefinition"
     ExternalExecutionPause = "ExternalExecutionPause"
     RequestUsage = "RequestUsage"
-    validate_attachments_for_model = "validate_attachments_for_model"
+    validate_attachments_exist = "validate_attachments_exist"
     CallManager = "CallManager"
     ContextManager = "ContextManager"
     ReliabilityManager = "ReliabilityManager"
@@ -1089,7 +1089,7 @@ class Agent(BaseAgent):
             ```
         """
         from upsonic.utils.printing import agent_started
-        from upsonic.utils.validators import validate_attachments_for_model
+        from upsonic.utils.validators import validate_attachments_exist
         from upsonic.agent.context_managers import MemoryManager, CallManager, TaskManager, ReliabilityManager
         
         agent_started(self.get_agent_id())
@@ -1128,7 +1128,7 @@ class Agent(BaseAgent):
                 else:
                     current_model = self.model
                 
-                validate_attachments_for_model(current_model, task)
+                validate_attachments_exist(task)
                 
                 self._setup_tools(task)
                 
@@ -1464,7 +1464,7 @@ class Agent(BaseAgent):
         which now comes at the end of the stream (after all content has been received).
         """
         from upsonic.utils.printing import agent_started
-        from upsonic.utils.validators import validate_attachments_for_model
+        from upsonic.utils.validators import validate_attachments_exist
         from upsonic.agent.context_managers import MemoryManager
         from upsonic.messages import PartStartEvent, TextPart, FinalResultEvent, ToolCallPart, ModelRequest
         
@@ -1504,7 +1504,7 @@ class Agent(BaseAgent):
                 else:
                     current_model = self.model
                 
-                validate_attachments_for_model(current_model, current_task)
+                validate_attachments_exist(current_task)
                 
                 self._setup_tools(current_task)
                 

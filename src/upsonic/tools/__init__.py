@@ -80,6 +80,8 @@ if TYPE_CHECKING:
         WebSearchUserLocation,
         CodeExecutionTool,
         UrlContextTool,
+        WebSearch,
+        WebRead,
     )
 
 def _get_base_classes():
@@ -238,6 +240,8 @@ def _get_builtin_classes():
         WebSearchUserLocation,
         CodeExecutionTool,
         UrlContextTool,
+        WebSearch,
+        WebRead,
     )
     
     return {
@@ -246,6 +250,8 @@ def _get_builtin_classes():
         'WebSearchUserLocation': WebSearchUserLocation,
         'CodeExecutionTool': CodeExecutionTool,
         'UrlContextTool': UrlContextTool,
+        'WebSearch': WebSearch,
+        'WebRead': WebRead,
     }
 
 def __getattr__(name: str) -> Any:
@@ -517,4 +523,6 @@ __all__ = [
     'WebSearchUserLocation',
     'CodeExecutionTool',
     'UrlContextTool',
+    'WebSearch',
+    'WebRead',
 ]

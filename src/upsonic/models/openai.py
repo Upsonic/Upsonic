@@ -1202,7 +1202,7 @@ class OpenAIResponsesModel(Model):
                         )
                         openai_messages.append(item)
                     elif isinstance(part, RetryPromptPart):
-                        # TODO(Marcelo): How do we test this conditional branch?
+                        # TODO: How do we test this conditional branch?
                         if part.tool_name is None:  # pragma: no cover
                             openai_messages.append(
                                 Message(role='user', content=[{'type': 'input_text', 'text': part.model_response()}])
@@ -1652,7 +1652,7 @@ class OpenAIResponsesStreamedResponse(StreamedResponse):
                     id=chunk.item_id,
                 )
 
-            # TODO(Marcelo): We should support annotations in the future.
+            # TODO: We should support annotations in the future.
             elif isinstance(chunk, responses.ResponseOutputTextAnnotationAddedEvent):  # pragma: no cover
                 pass  # there's nothing we need to do here
 

@@ -63,6 +63,7 @@ dependencies = [
     "llmlingua>=0.2.2",
     "pandas>=2.3.2",
     "tavily-python>=0.7.12",
+    "genai-prices>=0.0.29",
 ]
 
 [project.optional-dependencies]
