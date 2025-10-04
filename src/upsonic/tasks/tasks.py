@@ -27,7 +27,7 @@ class Task(BaseModel):
     attachments: Optional[List[str]] = None
     tools: list[Any] = None
     response_format: Union[Type[BaseModel], type[str], None] = str
-    response_lang: str = "en"
+    response_lang: Optional[str] = "en"
     _response: Any = None
     context: Any = None
     _context_formatted: Optional[str] = None
@@ -37,7 +37,6 @@ class Task(BaseModel):
     start_time: Optional[int] = None
     end_time: Optional[int] = None
     agent: Optional[Any] = None
-    response_lang: Optional[str] = None
     enable_thinking_tool: Optional[bool] = None
     enable_reasoning_tool: Optional[bool] = None
     _tool_calls: List[Dict[str, Any]] = None
@@ -112,6 +111,7 @@ class Task(BaseModel):
             _tools_awaiting_external_execution = []
             
         super().__init__(**{
+            "description": description,
             "attachments": attachments,
             "tools": tools,
             "response_format": response_format,
@@ -250,10 +250,10 @@ class Task(BaseModel):
 
     @property
     def images_base_64(self):
-        if self.images is None:
+        if self.attachments is None:
             return None
         base_64_images = []
-        for image in self.images:
+        for image in self.attachments:
             with open(image, "rb") as image_file:
                 base_64_images.append(base64.b64encode(image_file.read()).decode('utf-8'))
         return base_64_images

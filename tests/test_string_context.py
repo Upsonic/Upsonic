@@ -75,9 +75,8 @@ class TestTaskStringContextHandling:
         
         result = agent.print_do(task)
         
-        assert isinstance(result, RunResult)
-        assert isinstance(result.output, str)  
-        assert task.response == result.output  
+        assert isinstance(result, str)  
+        assert task.response == result  
 
     @patch('upsonic.models.infer_model')
     def test_agent_can_access_multiple_string_contexts(self, mock_infer_model):
@@ -108,9 +107,8 @@ class TestTaskStringContextHandling:
         
         result = agent.print_do(task)
         
-        assert isinstance(result, RunResult)
-        assert isinstance(result.output, str)
-        assert task.response == result.output
+        assert isinstance(result, str)
+        assert task.response == result
 
    
     def test_task_empty_string_context_handling(self):
@@ -156,9 +154,8 @@ class TestTaskStringContextHandling:
         
         result = agent.print_do(task)
         
-        assert isinstance(result, RunResult)
-        assert isinstance(result.output, str)
-        assert task.response == result.output
+        assert isinstance(result, str)
+        assert task.response == result
             
     @patch('upsonic.models.infer_model')
     def test_context_with_non_string_values(self, mock_infer_model):
@@ -184,9 +181,8 @@ class TestTaskStringContextHandling:
         
         result = agent.print_do(task)
         
-        assert isinstance(result, RunResult)
-        assert isinstance(result.output, str)
-        assert task.response == result.output
+        assert isinstance(result, str)
+        assert task.response == result
 
     def test_task_with_empty_context_list(self):
         """
@@ -226,6 +222,5 @@ class TestTaskStringContextHandling:
         
         result = agent.print_do(task)
         
-        assert isinstance(result, RunResult)
-        assert isinstance(result.output, str)
-        assert task.response == result.output
+        assert isinstance(result, str)
+        assert task.response == result

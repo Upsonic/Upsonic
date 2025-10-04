@@ -80,14 +80,13 @@ class AgentToolTestCase(TestCase):
 
         result = agent.do(task)
 
-        # Check that result is a RunResult
-        self.assertIsInstance(result, RunResult)
-        self.assertIsInstance(result.output, str)
+        # Check that result is a string (the actual output)
+        self.assertIsInstance(result, str)
         
         # Use unittest assertions instead of plain assert
         self.assertEqual(tracker.call_count, 1, "The tool function was not called exactly once.")
         self.assertEqual(tracker.called_with, (num_a, num_b), f"Function was called with wrong arguments: {tracker.called_with}")
-        self.assertIn(str(expected_result), str(result.output), f"Expected result '{expected_result}' not found in agent output: {result.output}")
+        self.assertIn(str(expected_result), str(result), f"Expected result '{expected_result}' not found in agent output: {result}")
         
         # Test passed successfully
 

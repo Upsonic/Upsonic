@@ -42,11 +42,10 @@ class TestDo(unittest.TestCase):
         self.assertNotEqual(task.response, "")
         self.assertIsInstance(task.response, str)
 
-        # Check that result is a RunResult
-        self.assertIsInstance(result, RunResult)
-        self.assertNotEqual(result.output, None)
-        self.assertNotEqual(result.output, "")
-        self.assertIsInstance(result.output, str)
+        # Check that result is a string (the actual output)
+        self.assertIsInstance(result, str)
+        self.assertNotEqual(result, None)
+        self.assertNotEqual(result, "")
 
         
 

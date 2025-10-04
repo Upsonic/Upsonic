@@ -73,12 +73,11 @@ class TestTaskResponseFormat:
         result_no_format = agent.print_do(task_no_format)
         
         # Type check
-        assert isinstance(result_no_format, RunResult)
-        assert isinstance(result_no_format.output, str)  
+        assert isinstance(result_no_format, str)
         assert isinstance(task_no_format.response, str) 
         
         # Does results match task.response?
-        assert result_no_format.output == task_no_format.response  
+        assert result_no_format == task_no_format.response  
         
         # Case 2 With BaseModel response_format -> return BaseModel instance
         expected_travel = TravelResponse(cities=["Toronto", "Vancouver", "Montreal"])
@@ -102,16 +101,15 @@ class TestTaskResponseFormat:
         result_with_format = agent.print_do(task_with_format)
         
         # Type check
-        assert isinstance(result_with_format, RunResult)
-        assert isinstance(result_with_format.output, TravelResponse)  
+        assert isinstance(result_with_format, TravelResponse)
         assert isinstance(task_with_format.response, TravelResponse)  
         
         # Field structure correctness
-        assert isinstance(result_with_format.output.cities, list)  
-        assert all(isinstance(city, str) for city in result_with_format.output.cities)  
+        assert isinstance(result_with_format.cities, list)  
+        assert all(isinstance(city, str) for city in result_with_format.cities)  
         
         # Does result match task.response?
-        assert result_with_format.output.cities == task_with_format.response.cities  
+        assert result_with_format.cities == task_with_format.response.cities  
 
     @patch('upsonic.models.infer_model')
     def test_diverse_pydantic_types(self, mock_infer_model):
@@ -148,12 +146,11 @@ class TestTaskResponseFormat:
         result_user = agent.print_do(task_user)
         
         # Type check
-        assert isinstance(result_user, RunResult)
-        assert isinstance(result_user.output, UserProfile)
-        assert isinstance(result_user.output.name, str)
-        assert isinstance(result_user.output.age, int)
-        assert isinstance(result_user.output.is_active, bool)
-        assert isinstance(result_user.output.preferences, dict)
+        assert isinstance(result_user, UserProfile)
+        assert isinstance(result_user.name, str)
+        assert isinstance(result_user.age, int)
+        assert isinstance(result_user.is_active, bool)
+        assert isinstance(result_user.preferences, dict)
         
         # Case 2 Product with float and complex nested structures
         expected_product = Product(
@@ -180,11 +177,10 @@ class TestTaskResponseFormat:
         result_product = agent.print_do(task_product)
         
         # Type check
-        assert isinstance(result_product, RunResult)
-        assert isinstance(result_product.output, Product)
-        assert isinstance(result_product.output.price, float)
-        assert isinstance(result_product.output.tags, list)
-        assert all(isinstance(tag, str) for tag in result_product.output.tags)
+        assert isinstance(result_product, Product)
+        assert isinstance(result_product.price, float)
+        assert isinstance(result_product.tags, list)
+        assert all(isinstance(tag, str) for tag in result_product.tags)
         
         # Case 3 MixedTypes with Union types and complex structures
         expected_mixed = MixedTypes(
@@ -212,7 +208,6 @@ class TestTaskResponseFormat:
         result_mixed = agent.print_do(task_mixed)
         
         # Type check
-        assert isinstance(result_mixed, RunResult)
-        assert isinstance(result_mixed.output, MixedTypes)
-        assert isinstance(result_mixed.output.list_field, list)
-        assert isinstance(result_mixed.output.dict_field, dict)
+        assert isinstance(result_mixed, MixedTypes)
+        assert isinstance(result_mixed.list_field, list)
+        assert isinstance(result_mixed.dict_field, dict)

@@ -109,8 +109,8 @@ async def test_user_policy_block(mock_infer_model):
     result = agent_with_user_policy.do(malicious_task)
     
     # Final result check
-    assert isinstance(result, RunResult)
-    assert "blocked" in result.output.lower()
+    assert isinstance(result, str)
+    assert "blocked" in result.lower()
     # Test passed - user input blocked
 
 
@@ -155,8 +155,8 @@ async def test_user_policy_modify(mock_infer_model):
     result = agent_with_sanitizer.do(pii_task)
     
     # Final result check
-    assert isinstance(result, RunResult)
-    assert "555-867-5309" not in result.output
+    assert isinstance(result, str)
+    assert "555-867-5309" not in result
     # Test passed - phone number anonymized
 
 
@@ -201,10 +201,10 @@ async def test_agent_policy_modify(mock_infer_model):
     result = agent_with_agent_policy.do(leaky_task)
     
     # Final result check
-    assert isinstance(result, RunResult)
+    assert isinstance(result, str)
     # The policy is working (we can see it in the output), but since we're mocking the model response
     # directly, the policy doesn't get to modify the actual output. The policy detection is working.
-    assert "Project Hermes" in result.output  # The mock response contains this
+    assert "Project Hermes" in result  # The mock response contains this
     # Test passed - policy detection working (visible in console output)
 
 
@@ -250,10 +250,10 @@ async def test_agent_policy_exception(mock_infer_model):
     result = agent_with_crypto_block.do(crypto_task)
     
     # Final result check
-    assert isinstance(result, RunResult)
+    assert isinstance(result, str)
     # The policy is working (we can see it in the output), but since we're mocking the model response
     # directly, the policy doesn't get to block the actual output. The policy detection is working.
-    assert "bitcoin" in result.output.lower()  # The mock response contains this
+    assert "bitcoin" in result.lower()  # The mock response contains this
     # Test passed - policy detection working (visible in console output)
 
 
@@ -292,8 +292,8 @@ async def test_all_clear(mock_infer_model):
     result = plain_agent.do(safe_task)
 
     # Final result check
-    assert isinstance(result, RunResult)
-    assert "paris" in result.output.lower()
+    assert isinstance(result, str)
+    assert "paris" in result.lower()
     # Test passed - normal operation
 
 

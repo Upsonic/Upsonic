@@ -35,7 +35,7 @@ class TestTaskImageContextHandling:
         
         task = Task(
             "Extract the names in the paper",
-            images=images,
+            attachments=images,
             response_format=Names
         )
         
@@ -43,8 +43,7 @@ class TestTaskImageContextHandling:
         
         result = agent.print_do(task)
         
-        # Check that result is a RunResult with the expected output
-        assert isinstance(result, RunResult)
-        assert isinstance(result.output, Names)
-        assert isinstance(result.output.names, list)
-        assert all(isinstance(name, str) for name in result.output.names)
+        # Check that result is a Names object with the expected output
+        assert isinstance(result, Names)
+        assert isinstance(result.names, list)
+        assert all(isinstance(name, str) for name in result.names)
