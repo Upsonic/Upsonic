@@ -249,14 +249,31 @@ class Task(BaseModel):
 
 
     @property
-    def images_base_64(self):
+    def attachments_base64(self):
+        """
+        Convert all attachment files to base64 encoded strings.
+        
+        Base64 encoding works with any file type (images, PDFs, documents, etc.)
+        and is commonly used for embedding binary data in text-based formats.
+        
+        Returns:
+            List[str]: List of base64 encoded strings, one for each attachment
+            None: If no attachments are present
+        """
         if self.attachments is None:
             return None
-        base_64_images = []
-        for image in self.attachments:
-            with open(image, "rb") as image_file:
-                base_64_images.append(base64.b64encode(image_file.read()).decode('utf-8'))
-        return base_64_images
+        base64_attachments = []
+        for attachment_path in self.attachments:
+            try:
+                with open(attachment_path, "rb") as attachment_file:
+                    file_data = attachment_file.read()
+                    base64_encoded = base64.b64encode(file_data).decode('utf-8')
+                    base64_attachments.append(base64_encoded)
+            except Exception as e:
+                # Log the error but continue with other attachments
+                print(f"Warning: Could not encode attachment {attachment_path} to base64: {e}")
+        return base64_attachments
+
 
     @property
     def price_id(self):
