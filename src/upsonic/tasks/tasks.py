@@ -85,7 +85,6 @@ class Task(BaseModel):
         cache_threshold: float = 0.7,
         cache_embedding_provider: Optional[Any] = None,
         cache_duration_minutes: int = 60,
-        **data
     ):
         if guardrail is not None and not callable(guardrail):
             raise TypeError("The 'guardrail' parameter must be a callable function.")
@@ -102,9 +101,6 @@ class Task(BaseModel):
                 cache_embedding_provider = auto_detect_best_embedding()
             except Exception:
                 raise ValueError("cache_embedding_provider is required when cache_method is 'vector_search'")
-        
-        if description is not None:
-            data["description"] = description
             
         if tools is None:
             tools = []
@@ -115,7 +111,7 @@ class Task(BaseModel):
         if _tools_awaiting_external_execution is None:
             _tools_awaiting_external_execution = []
             
-        data.update({
+        super().__init__(**{
             "attachments": attachments,
             "tools": tools,
             "response_format": response_format,
@@ -147,7 +143,6 @@ class Task(BaseModel):
             "_last_cache_entry": None
         })
         
-        super().__init__(**data)
         self.validate_tools()
 
     @property

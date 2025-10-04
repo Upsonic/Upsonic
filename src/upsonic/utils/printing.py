@@ -1,6 +1,8 @@
-from typing import Any, Dict, Literal, Optional, Union
-from upsonic.models import Model
+from typing import Any, Dict, Literal, Optional, Union, TYPE_CHECKING
 from decimal import Decimal
+
+if TYPE_CHECKING:
+    from upsonic.models import Model
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -12,7 +14,7 @@ from rich.markup import escape
 
 console = Console()
 
-def get_estimated_cost(input_tokens: int, output_tokens: int, model_provider: Union[Model, str]) -> str:
+def get_estimated_cost(input_tokens: int, output_tokens: int, model_provider: Union["Model", str]) -> str:
     """
     Calculate estimated cost based on tokens and model provider.
     
@@ -80,7 +82,7 @@ def get_estimated_cost(input_tokens: int, output_tokens: int, model_provider: Un
         return "~$0.0000"
 
 
-def _get_model_name(model_provider: Union[Model, str]) -> str:
+def _get_model_name(model_provider: Union["Model", str]) -> str:
     """Extract model name from model provider."""
     if isinstance(model_provider, str):
         if '/' in model_provider:
@@ -232,7 +234,7 @@ def _get_model_pricing(model_name: str) -> Optional[Dict[str, float]]:
     return pricing_map.get(model_name)
 
 
-def get_estimated_cost_from_usage(usage: Union[Dict[str, int], Any], model_provider: Union[Model, str]) -> str:
+def get_estimated_cost_from_usage(usage: Union[Dict[str, int], Any], model_provider: Union["Model", str]) -> str:
     """Calculate estimated cost from usage data."""
     try:
         if isinstance(usage, dict):
@@ -250,7 +252,7 @@ def get_estimated_cost_from_usage(usage: Union[Dict[str, int], Any], model_provi
         return "~$0.0000"
 
 
-def get_estimated_cost_from_run_result(run_result: Any, model_provider: Union[Model, str]) -> str:
+def get_estimated_cost_from_run_result(run_result: Any, model_provider: Union["Model", str]) -> str:
     """Calculate estimated cost from a RunResult object."""
     try:
         total_input_tokens = 0
@@ -272,7 +274,7 @@ def get_estimated_cost_from_run_result(run_result: Any, model_provider: Union[Mo
         return "~$0.0000"
 
 
-def get_estimated_cost_from_stream_result(stream_result: Any, model_provider: Union[Model, str]) -> str:
+def get_estimated_cost_from_stream_result(stream_result: Any, model_provider: Union["Model", str]) -> str:
     """Calculate estimated cost from a StreamRunResult object."""
     try:
         total_input_tokens = 0

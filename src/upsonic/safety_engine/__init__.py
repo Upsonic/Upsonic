@@ -44,6 +44,7 @@ def _get_exception_classes():
 def _get_policy_classes():
     """Lazy import of policy classes."""
     from .policies import (
+        # Original policies
         AdultContentBlockPolicy,
         AnonymizePhoneNumbersPolicy,
         CryptoBlockPolicy,
@@ -58,9 +59,55 @@ def _get_policy_classes():
         SensitiveSocialBlockPolicy_LLM_Finder,
         SensitiveSocialRaiseExceptionPolicy_LLM,
         AnonymizePhoneNumbersPolicy_LLM_Finder,
+        
+        # PII Policies
+        PIIBlockPolicy,
+        PIIBlockPolicy_LLM,
+        PIIBlockPolicy_LLM_Finder,
+        PIIAnonymizePolicy,
+        PIIReplacePolicy,
+        PIIRaiseExceptionPolicy,
+        PIIRaiseExceptionPolicy_LLM,
+        
+        # Financial Policies
+        FinancialInfoBlockPolicy,
+        FinancialInfoBlockPolicy_LLM,
+        FinancialInfoBlockPolicy_LLM_Finder,
+        FinancialInfoAnonymizePolicy,
+        FinancialInfoReplacePolicy,
+        FinancialInfoRaiseExceptionPolicy,
+        FinancialInfoRaiseExceptionPolicy_LLM,
+        
+        # Medical Policies
+        MedicalInfoBlockPolicy,
+        MedicalInfoBlockPolicy_LLM,
+        MedicalInfoBlockPolicy_LLM_Finder,
+        MedicalInfoAnonymizePolicy,
+        MedicalInfoReplacePolicy,
+        MedicalInfoRaiseExceptionPolicy,
+        MedicalInfoRaiseExceptionPolicy_LLM,
+        
+        # Legal Policies
+        LegalInfoBlockPolicy,
+        LegalInfoBlockPolicy_LLM,
+        LegalInfoBlockPolicy_LLM_Finder,
+        LegalInfoAnonymizePolicy,
+        LegalInfoReplacePolicy,
+        LegalInfoRaiseExceptionPolicy,
+        LegalInfoRaiseExceptionPolicy_LLM,
+        
+        # Technical Security Policies
+        TechnicalSecurityBlockPolicy,
+        TechnicalSecurityBlockPolicy_LLM,
+        TechnicalSecurityBlockPolicy_LLM_Finder,
+        TechnicalSecurityAnonymizePolicy,
+        TechnicalSecurityReplacePolicy,
+        TechnicalSecurityRaiseExceptionPolicy,
+        TechnicalSecurityRaiseExceptionPolicy_LLM,
     )
     
     return {
+        # Original policies
         'AdultContentBlockPolicy': AdultContentBlockPolicy,
         'AnonymizePhoneNumbersPolicy': AnonymizePhoneNumbersPolicy,
         'CryptoBlockPolicy': CryptoBlockPolicy,
@@ -75,6 +122,51 @@ def _get_policy_classes():
         'SensitiveSocialBlockPolicy_LLM_Finder': SensitiveSocialBlockPolicy_LLM_Finder,
         'SensitiveSocialRaiseExceptionPolicy_LLM': SensitiveSocialRaiseExceptionPolicy_LLM,
         'AnonymizePhoneNumbersPolicy_LLM_Finder': AnonymizePhoneNumbersPolicy_LLM_Finder,
+        
+        # PII Policies
+        'PIIBlockPolicy': PIIBlockPolicy,
+        'PIIBlockPolicy_LLM': PIIBlockPolicy_LLM,
+        'PIIBlockPolicy_LLM_Finder': PIIBlockPolicy_LLM_Finder,
+        'PIIAnonymizePolicy': PIIAnonymizePolicy,
+        'PIIReplacePolicy': PIIReplacePolicy,
+        'PIIRaiseExceptionPolicy': PIIRaiseExceptionPolicy,
+        'PIIRaiseExceptionPolicy_LLM': PIIRaiseExceptionPolicy_LLM,
+        
+        # Financial Policies
+        'FinancialInfoBlockPolicy': FinancialInfoBlockPolicy,
+        'FinancialInfoBlockPolicy_LLM': FinancialInfoBlockPolicy_LLM,
+        'FinancialInfoBlockPolicy_LLM_Finder': FinancialInfoBlockPolicy_LLM_Finder,
+        'FinancialInfoAnonymizePolicy': FinancialInfoAnonymizePolicy,
+        'FinancialInfoReplacePolicy': FinancialInfoReplacePolicy,
+        'FinancialInfoRaiseExceptionPolicy': FinancialInfoRaiseExceptionPolicy,
+        'FinancialInfoRaiseExceptionPolicy_LLM': FinancialInfoRaiseExceptionPolicy_LLM,
+        
+        # Medical Policies
+        'MedicalInfoBlockPolicy': MedicalInfoBlockPolicy,
+        'MedicalInfoBlockPolicy_LLM': MedicalInfoBlockPolicy_LLM,
+        'MedicalInfoBlockPolicy_LLM_Finder': MedicalInfoBlockPolicy_LLM_Finder,
+        'MedicalInfoAnonymizePolicy': MedicalInfoAnonymizePolicy,
+        'MedicalInfoReplacePolicy': MedicalInfoReplacePolicy,
+        'MedicalInfoRaiseExceptionPolicy': MedicalInfoRaiseExceptionPolicy,
+        'MedicalInfoRaiseExceptionPolicy_LLM': MedicalInfoRaiseExceptionPolicy_LLM,
+        
+        # Legal Policies
+        'LegalInfoBlockPolicy': LegalInfoBlockPolicy,
+        'LegalInfoBlockPolicy_LLM': LegalInfoBlockPolicy_LLM,
+        'LegalInfoBlockPolicy_LLM_Finder': LegalInfoBlockPolicy_LLM_Finder,
+        'LegalInfoAnonymizePolicy': LegalInfoAnonymizePolicy,
+        'LegalInfoReplacePolicy': LegalInfoReplacePolicy,
+        'LegalInfoRaiseExceptionPolicy': LegalInfoRaiseExceptionPolicy,
+        'LegalInfoRaiseExceptionPolicy_LLM': LegalInfoRaiseExceptionPolicy_LLM,
+        
+        # Technical Security Policies
+        'TechnicalSecurityBlockPolicy': TechnicalSecurityBlockPolicy,
+        'TechnicalSecurityBlockPolicy_LLM': TechnicalSecurityBlockPolicy_LLM,
+        'TechnicalSecurityBlockPolicy_LLM_Finder': TechnicalSecurityBlockPolicy_LLM_Finder,
+        'TechnicalSecurityAnonymizePolicy': TechnicalSecurityAnonymizePolicy,
+        'TechnicalSecurityReplacePolicy': TechnicalSecurityReplacePolicy,
+        'TechnicalSecurityRaiseExceptionPolicy': TechnicalSecurityRaiseExceptionPolicy,
+        'TechnicalSecurityRaiseExceptionPolicy_LLM': TechnicalSecurityRaiseExceptionPolicy_LLM,
     }
 
 def __getattr__(name: str) -> Any:
@@ -109,6 +201,8 @@ __all__ = [
     "PolicyInput",
     "PolicyOutput",
     "DisallowedOperation",
+    
+    # Original policies
     "AdultContentBlockPolicy",
     "AnonymizePhoneNumbersPolicy",
     "CryptoBlockPolicy",
@@ -123,4 +217,49 @@ __all__ = [
     "SensitiveSocialBlockPolicy_LLM_Finder",
     "SensitiveSocialRaiseExceptionPolicy_LLM",
     "AnonymizePhoneNumbersPolicy_LLM_Finder",
+    
+    # PII Policies
+    "PIIBlockPolicy",
+    "PIIBlockPolicy_LLM",
+    "PIIBlockPolicy_LLM_Finder",
+    "PIIAnonymizePolicy",
+    "PIIReplacePolicy",
+    "PIIRaiseExceptionPolicy",
+    "PIIRaiseExceptionPolicy_LLM",
+    
+    # Financial Policies
+    "FinancialInfoBlockPolicy",
+    "FinancialInfoBlockPolicy_LLM",
+    "FinancialInfoBlockPolicy_LLM_Finder",
+    "FinancialInfoAnonymizePolicy",
+    "FinancialInfoReplacePolicy",
+    "FinancialInfoRaiseExceptionPolicy",
+    "FinancialInfoRaiseExceptionPolicy_LLM",
+    
+    # Medical Policies
+    "MedicalInfoBlockPolicy",
+    "MedicalInfoBlockPolicy_LLM",
+    "MedicalInfoBlockPolicy_LLM_Finder",
+    "MedicalInfoAnonymizePolicy",
+    "MedicalInfoReplacePolicy",
+    "MedicalInfoRaiseExceptionPolicy",
+    "MedicalInfoRaiseExceptionPolicy_LLM",
+    
+    # Legal Policies
+    "LegalInfoBlockPolicy",
+    "LegalInfoBlockPolicy_LLM",
+    "LegalInfoBlockPolicy_LLM_Finder",
+    "LegalInfoAnonymizePolicy",
+    "LegalInfoReplacePolicy",
+    "LegalInfoRaiseExceptionPolicy",
+    "LegalInfoRaiseExceptionPolicy_LLM",
+    
+    # Technical Security Policies
+    "TechnicalSecurityBlockPolicy",
+    "TechnicalSecurityBlockPolicy_LLM",
+    "TechnicalSecurityBlockPolicy_LLM_Finder",
+    "TechnicalSecurityAnonymizePolicy",
+    "TechnicalSecurityReplacePolicy",
+    "TechnicalSecurityRaiseExceptionPolicy",
+    "TechnicalSecurityRaiseExceptionPolicy_LLM",
 ]

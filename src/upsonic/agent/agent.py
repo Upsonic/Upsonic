@@ -13,6 +13,7 @@ from upsonic.agent.run_result import RunResult, StreamRunResult
 from upsonic._utils import now_utc
 from upsonic.utils.retry import retryable
 from upsonic.utils.validators import validate_attachments_exist
+from upsonic.tools.processor import ExternalExecutionPause
 
 if TYPE_CHECKING:
     from upsonic.models import Model, ModelRequest, ModelMessage, ModelRequestParameters, ModelResponse
@@ -27,12 +28,12 @@ if TYPE_CHECKING:
     from upsonic.safety_engine.exceptions import DisallowedOperation
     from upsonic.safety_engine.models import PolicyInput, RuleOutput
     from upsonic.tools import ToolManager, ToolContext, ToolDefinition
-    from upsonic.tools.processor import ExternalExecutionPause
     from upsonic.usage import RequestUsage
     from upsonic.agent.context_managers import (
         CallManager, ContextManager, ReliabilityManager, 
         MemoryManager, SystemPromptManager, TaskManager
     )
+    from upsonic.graph.graph import State
 else:
     Model = "Model"
     ModelRequest = "ModelRequest"
@@ -53,7 +54,6 @@ else:
     ToolManager = "ToolManager"
     ToolContext = "ToolContext"
     ToolDefinition = "ToolDefinition"
-    ExternalExecutionPause = "ExternalExecutionPause"
     RequestUsage = "RequestUsage"
     validate_attachments_exist = "validate_attachments_exist"
     CallManager = "CallManager"
@@ -62,6 +62,7 @@ else:
     MemoryManager = "MemoryManager"
     SystemPromptManager = "SystemPromptManager"
     TaskManager = "TaskManager"
+    State = "State"
 
 RetryMode = Literal["raise", "return_false"]
 
@@ -119,7 +120,7 @@ class Agent(BaseAgent):
         reflection: Optional[str] = None,
         compression_strategy: Literal["none", "simple", "llmlingua"] = "none",
         compression_settings: Optional[Dict[str, Any]] = None,
-        reliability_layer: Optional["ReliabilityProcessor"] = None,
+        reliability_layer: Optional[Any] = None,
         agent_id_: Optional[str] = None,
         canvas: Optional["Canvas"] = None,
         retry: int = 1,
@@ -370,6 +371,8 @@ class Agent(BaseAgent):
             from upsonic.tools import plan_and_execute
             final_tools.append(plan_and_execute)
         
+        self._builtin_tools = self.tool_manager.processor.extract_builtin_tools(final_tools)
+        
         self.tool_manager.register_tools(
             tools=final_tools,
             context=self._context,
@@ -377,7 +380,7 @@ class Agent(BaseAgent):
             agent_instance=agent_for_this_run
         )
     
-    async def _build_model_request(self, task: "Task", memory_handler: Optional["MemoryManager"]) -> List["ModelRequest"]:
+    async def _build_model_request(self, task: "Task", memory_handler: Optional["MemoryManager"], state: Optional["State"] = None) -> List["ModelRequest"]:
         """Build the complete message history for the model request."""
         from upsonic.agent.context_managers import SystemPromptManager, ContextManager
         from upsonic.messages import SystemPromptPart, UserPromptPart, ModelRequest
@@ -388,7 +391,7 @@ class Agent(BaseAgent):
         messages.extend(message_history)
         
         system_prompt_manager = SystemPromptManager(self, task)
-        context_manager = ContextManager(self, task, getattr(task, 'state', None))
+        context_manager = ContextManager(self, task, state)
         
         async with system_prompt_manager.manage_system_prompt(memory_handler) as sp_handler, \
                    context_manager.manage_context(memory_handler) as ctx_handler:
@@ -421,7 +424,8 @@ class Agent(BaseAgent):
         task: "Task", 
         memory_handler: Optional["MemoryManager"], 
         current_input: Any, 
-        temporary_message_history: List["ModelRequest"]
+        temporary_message_history: List["ModelRequest"],
+        state: Optional["State"] = None
     ) -> List["ModelRequest"]:
         """Build model request with custom input and message history for guardrail retries."""
         from upsonic.agent.context_managers import SystemPromptManager, ContextManager
@@ -430,7 +434,7 @@ class Agent(BaseAgent):
         messages = list(temporary_message_history)
         
         system_prompt_manager = SystemPromptManager(self, task)
-        context_manager = ContextManager(self, task, getattr(task, 'state', None))
+        context_manager = ContextManager(self, task, state)
         
         async with system_prompt_manager.manage_system_prompt(memory_handler) as sp_handler, \
                    context_manager.manage_context(memory_handler) as ctx_handler:
@@ -472,6 +476,8 @@ class Agent(BaseAgent):
         else:
             tool_definitions = self.tool_manager.get_tool_definitions()
         
+        builtin_tools = getattr(self, '_builtin_tools', [])
+        
         output_mode = 'text'
         output_object = None
         allow_text_output = True
@@ -491,6 +497,7 @@ class Agent(BaseAgent):
         
         return ModelRequestParameters(
             function_tools=tool_definitions,
+            builtin_tools=builtin_tools,
             output_mode=output_mode,
             output_object=output_object,
             allow_text_output=allow_text_output
@@ -815,7 +822,7 @@ class Agent(BaseAgent):
         
         return task, True
     
-    async def _execute_with_guardrail(self, task: "Task", memory_handler: Optional["MemoryManager"]) -> "ModelResponse":
+    async def _execute_with_guardrail(self, task: "Task", memory_handler: Optional["MemoryManager"], state: Optional["State"] = None) -> "ModelResponse":
         """
         Executes the agent's run method with a validation and retry loop based on a task guardrail.
         This method encapsulates the retry logic, hiding it from the main `do_async` pipeline.
@@ -836,7 +843,7 @@ class Agent(BaseAgent):
             max_retries = 1
 
         while not validation_passed and retry_counter < max_retries:
-            messages = await self._build_model_request_with_input(task, memory_handler, current_input, temporary_message_history)
+            messages = await self._build_model_request_with_input(task, memory_handler, current_input, temporary_message_history, state)
             self._current_messages = messages
             
             model_params = self._build_model_request_parameters(task)
@@ -1063,7 +1070,7 @@ class Agent(BaseAgent):
         state: Optional["State"] = None,
         *,
         graph_execution_id: Optional[str] = None
-    ) -> "RunResult":
+    ) -> Any:
         """
         Execute a task asynchronously with complete framework integration.
         
@@ -1114,13 +1121,13 @@ class Agent(BaseAgent):
                         processed_task._response = cached_response
                         processed_task.task_end()
                         self._run_result.output = cached_response
-                        return self._run_result
+                        return self._run_result.output
                     
                     task, should_continue = await self._apply_user_policy(task)
                     if not should_continue:
                         processed_task = task
                         self._run_result.output = processed_task.response
-                        return self._run_result
+                        return self._run_result.output
                 
                 if model:
                     from upsonic.models import infer_model
@@ -1143,9 +1150,9 @@ class Agent(BaseAgent):
                         async with task_manager.manage_task() as task_handler:
                             try:
                                 if task.guardrail:
-                                    final_response = await self._execute_with_guardrail(task, memory_handler)
+                                    final_response = await self._execute_with_guardrail(task, memory_handler, state)
                                 else:
-                                    messages = await self._build_model_request(task, memory_handler)
+                                    messages = await self._build_model_request(task, memory_handler, state)
                                     self._current_messages = messages
                                     
                                     model_params = self._build_model_request_parameters(task)
@@ -1174,7 +1181,7 @@ class Agent(BaseAgent):
                                 task_handler.task._tools_awaiting_external_execution.append(e.tool_call)
                                 processed_task = task_handler.task
                                 self._run_result.output = processed_task.response
-                                return self._run_result
+                                return self._run_result.output
                             
                             self._run_result.output = task._response
                             
@@ -1218,7 +1225,7 @@ class Agent(BaseAgent):
                     if processed_task:
                         processed_task._response = False
                     self._run_result.output = False
-                    return self._run_result
+                    return self._run_result.output
         
         if processed_task and not processed_task.not_main_task:
             from upsonic.utils.printing import print_price_id_summary
@@ -1227,7 +1234,7 @@ class Agent(BaseAgent):
         if self._run_result.output is None and processed_task:
             self._run_result.output = processed_task.response
         
-        return self._run_result
+        return self._run_result.output
     
     def _extract_output(self, response: "ModelResponse", task: "Task") -> Any:
         """Extract output from model response based on task response format."""
@@ -1257,7 +1264,7 @@ class Agent(BaseAgent):
         model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
         retry: int = 1
-    ) -> "RunResult":
+    ) -> Any:
         """
         Execute a task synchronously.
         
@@ -1292,7 +1299,7 @@ class Agent(BaseAgent):
         model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
         retry: int = 1
-    ) -> "RunResult":
+    ) -> Any:
         """
         Execute a task synchronously and print the result.
         
@@ -1300,7 +1307,7 @@ class Agent(BaseAgent):
             RunResult: The result object (with output printed to console)
         """
         result = self.do(task, model, debug, retry)
-        print(result.output)
+        print(result)
         return result
     
     async def print_do_async(
@@ -1309,7 +1316,7 @@ class Agent(BaseAgent):
         model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
         retry: int = 1
-    ) -> "RunResult":
+    ) -> Any:
         """
         Execute a task asynchronously and print the result.
         
@@ -1317,7 +1324,7 @@ class Agent(BaseAgent):
             RunResult: The result object (with output printed to console)
         """
         result = await self.do_async(task, model, debug, retry)
-        print(result.output)
+        print(result)
         return result
     
     async def stream_async(
@@ -1511,7 +1518,7 @@ class Agent(BaseAgent):
                 memory_manager = MemoryManager(self.memory)
                 
                 async with memory_manager.manage_memory() as memory_handler:
-                    messages = await self._build_model_request(current_task, memory_handler)
+                    messages = await self._build_model_request(current_task, memory_handler, state)
                     self._current_messages = messages
                     
                     model_params = self._build_model_request_parameters(current_task)
@@ -1690,7 +1697,7 @@ class Agent(BaseAgent):
         model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
         retry: int = 1
-    ) -> "RunResult":
+    ) -> Any:
         """Continue execution of a paused task."""
         try:
             loop = asyncio.get_event_loop()
@@ -1713,7 +1720,7 @@ class Agent(BaseAgent):
         state: Optional["State"] = None,
         *,
         graph_execution_id: Optional[str] = None
-    ) -> "RunResult":
+    ) -> Any:
         """Continue execution of a paused task asynchronously."""
         if not task.is_paused or not task.tools_awaiting_external_execution:
             raise ValueError("The 'continue_async' method can only be called on a task that is currently paused for external execution.")

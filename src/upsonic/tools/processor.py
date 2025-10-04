@@ -62,6 +62,8 @@ class ToolProcessor:
             if tool_item is None:
                 continue
                 
+            if self._is_builtin_tool(tool_item):
+                continue
             # Process based on tool type
             if self._is_mcp_tool(tool_item):
                 # Process MCP tool
@@ -110,6 +112,19 @@ class ToolProcessor:
         if not inspect.isclass(tool_item):
             return False
         return hasattr(tool_item, 'url') or hasattr(tool_item, 'command')
+    
+    def _is_builtin_tool(self, tool_item: Any) -> bool:
+        """Check if an item is a built-in tool."""
+        from upsonic.tools.builtin_tools import AbstractBuiltinTool
+        return isinstance(tool_item, AbstractBuiltinTool)
+    
+    def extract_builtin_tools(self, tools: List[Any]) -> List[Any]:
+        """Extract built-in tools from a list of tools."""
+        builtin_tools = []
+        for tool_item in tools:
+            if tool_item is not None and self._is_builtin_tool(tool_item):
+                builtin_tools.append(tool_item)
+        return builtin_tools
     
     def _process_mcp_tool(self, mcp_config: Type) -> Dict[str, Tool]:
         """Process MCP tool configuration."""

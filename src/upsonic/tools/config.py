@@ -79,7 +79,7 @@ class ToolConfig(BaseModel):
     )
     
     timeout: Optional[float] = Field(
-        default=None,
+        default=30.0,
         description="Timeout for tool execution in seconds."
     )
     
