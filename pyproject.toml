@@ -65,6 +65,7 @@ dependencies = [
     "tavily-python>=0.7.12",
     "genai-prices>=0.0.29",
     "pymupdf>=1.26.4",
+    "pillow>=11.3.0",
 ]
 
 [project.optional-dependencies]

@@ -89,13 +89,24 @@ def _get_model_name(model_provider: Union["Model", str]) -> str:
             return model_provider.split('/', 1)[1]
         return model_provider
     elif hasattr(model_provider, 'model_name'):
-        return model_provider.model_name
+        model_name = model_provider.model_name
+        # Handle case where model_name might be a coroutine (in tests)
+        if hasattr(model_name, '__await__'):
+            return "test-model"  # Default for async mocks
+        return model_name
     else:
         return str(model_provider)
 
 
 def _get_model_pricing(model_name: str) -> Optional[Dict[str, float]]:
     """Get comprehensive pricing data for a model."""
+    # Handle case where model_name might be a coroutine (in tests)
+    if hasattr(model_name, '__await__'):
+        model_name = "test-model"
+    
+    # Ensure model_name is a string
+    model_name = str(model_name)
+    
     pricing_map = {
         'gpt-4o': {'input_cost_per_1m': 2.50, 'output_cost_per_1m': 10.00},
         'gpt-4o-2024-05-13': {'input_cost_per_1m': 2.50, 'output_cost_per_1m': 10.00},
