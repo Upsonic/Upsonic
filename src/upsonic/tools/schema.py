@@ -1,5 +1,3 @@
-"""Schema generation for tools without pydantic-ai dependency."""
-
 from __future__ import annotations
 
 import inspect

@@ -4,7 +4,13 @@ from pydantic import BaseModel, Field
 from enum import Enum
 import re
 from urllib.parse import urlparse
-import requests
+try:
+    import requests
+except ImportError as _import_error:
+    raise ImportError(
+        'Please install the `requests` package to use reliability layer functionality, '
+        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
+    ) from _import_error
 import asyncio
 
 from upsonic.models import Model

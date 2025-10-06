@@ -1,7 +1,14 @@
 import re
 import base64
-import requests
 from typing import List
+
+try:
+    import requests
+except ImportError as _import_error:
+    raise ImportError(
+        'Please install the `requests` package to use image utilities, '
+        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
+    ) from _import_error
 
 def extract_image_urls(text: str) -> List[str]:
     """

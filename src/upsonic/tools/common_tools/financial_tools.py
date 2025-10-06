@@ -5,8 +5,21 @@ from __future__ import annotations
 import json
 from typing import List
 
-import pandas as pd
-import yfinance as yf
+try:
+    import pandas as pd
+except ImportError as _import_error:
+    raise ImportError(
+        'Please install the `pandas` package to use the financial tools, '
+        'you can use the `tools` optional group — `pip install "upsonic[tools]"`'
+    ) from _import_error
+
+try:
+    import yfinance as yf
+except ImportError as _import_error:
+    raise ImportError(
+        'Please install the `yfinance` package to use the financial tools, '
+        'you can use the `tools` optional group — `pip install "upsonic[tools]"`'
+    ) from _import_error
 
 
 class YFinanceTools:

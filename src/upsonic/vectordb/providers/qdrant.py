@@ -4,11 +4,11 @@ from collections import defaultdict
 try:
     from qdrant_client import QdrantClient, models
     from qdrant_client.http.exceptions import UnexpectedResponse
-except ImportError:
+except ImportError as _import_error:
     raise ImportError(
-        "The 'qdrant-client' package is required to use the Qdrant provider. "
-        "Please install it with 'pip install qdrant-client'."
-    )
+        'Please install the `qdrant-client` package to use the Qdrant vector database provider, '
+        'you can use the `rag` optional group — `pip install "upsonic[rag]"`'
+    ) from _import_error
 
 from upsonic.vectordb.base import BaseVectorDBProvider
 

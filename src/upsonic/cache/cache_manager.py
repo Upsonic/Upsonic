@@ -2,7 +2,13 @@ import time
 import hashlib
 from typing import Any, Dict, List, Optional, Literal, Union
 from upsonic.models import Model
-import numpy as np
+try:
+    import numpy as np
+except ImportError as _import_error:
+    raise ImportError(
+        'Please install the `numpy` package to use cache functionality, '
+        'you can use the `embeddings` optional group — `pip install "upsonic[embeddings]"`'
+    ) from _import_error
 
 CacheMethod = Literal["vector_search", "llm_call"]
 CacheEntry = Dict[str, Any]

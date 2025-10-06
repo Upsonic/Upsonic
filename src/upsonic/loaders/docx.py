@@ -2,10 +2,16 @@ import asyncio
 from pathlib import Path
 from typing import List, Union
 
-import docx
-from docx.document import Document as DocxDocument
-from docx.table import Table as DocxTable
-from docx.text.paragraph import Paragraph as DocxParagraph
+try:
+    import docx
+    from docx.document import Document as DocxDocument
+    from docx.table import Table as DocxTable
+    from docx.text.paragraph import Paragraph as DocxParagraph
+except ImportError as _import_error:
+    raise ImportError(
+        'Please install the `python-docx` package to use the DOCX loader, '
+        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
+    ) from _import_error
 
 from upsonic.schemas.data_models import Document
 from upsonic.loaders.base import BaseLoader

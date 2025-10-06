@@ -67,6 +67,9 @@ def _get_Team():
 def _get_tool():
     return _lazy_import("upsonic.tools", "tool")()
 
+def _get_Chat():
+    return _lazy_import("upsonic.chat.chat", "Chat")()
+
 def _get_safety_engine_components():
     """Lazy import of safety engine components to avoid circular imports."""
     try:
@@ -165,6 +168,8 @@ def __getattr__(name: str) -> Any:
         return _get_Team()
     elif name == "tool":
         return _get_tool()
+    elif name == "Chat":
+        return _get_Chat()
     
     safety_components = _get_safety_engine_components()
     if name in safety_components:
@@ -195,6 +200,7 @@ __all__ = [
     "Canvas",
     "MultiAgent",
     "Team",
+    "Chat",
     "UupsonicError",
     "AgentExecutionError", 
     "ModelConnectionError", 

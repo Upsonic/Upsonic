@@ -5,10 +5,16 @@ from typing import List, Dict, Any, Optional
 import numpy as np
 
 
-from transformers import AutoTokenizer, AutoModel, BitsAndBytesConfig
-import torch.nn.functional as F
-import torch
-from huggingface_hub import hf_hub_download, login, InferenceClient
+try:
+    from transformers import AutoTokenizer, AutoModel, BitsAndBytesConfig
+    import torch.nn.functional as F
+    import torch
+    from huggingface_hub import hf_hub_download, login, InferenceClient
+except ImportError as _import_error:
+    raise ImportError(
+        'Please install the `transformers` and `torch` packages to use the HuggingFace embedding provider, '
+        'you can use the `embeddings` optional group — `pip install "upsonic[embeddings]"`'
+    ) from _import_error
 from pydantic import Field, field_validator
 
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode

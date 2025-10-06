@@ -10,8 +10,11 @@ from upsonic.storage.session.sessions import InteractionSession, UserProfile
 try:
     from redis.asyncio import Redis
     from redis.exceptions import ConnectionError as RedisConnectionError
-except ImportError:
-    raise ImportError("`redis` is required for async RedisStorage. Please install it using `pip install redis`.")
+except ImportError as _import_error:
+    raise ImportError(
+        'Please install the `redis` package to use the Redis storage provider, '
+        'you can use the `storage` optional group — `pip install "upsonic[storage]"`'
+    ) from _import_error
 
 T = TypeVar('T', bound=BaseModel)
 

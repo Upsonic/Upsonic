@@ -9,8 +9,11 @@ try:
     from fastembed.common import OnnxProvider
     import onnxruntime as ort
     FASTEMBED_AVAILABLE = True
-except ImportError:
-    FASTEMBED_AVAILABLE = False
+except ImportError as _import_error:
+    raise ImportError(
+        'Please install the `fastembed` package to use the FastEmbed embedding provider, '
+        'you can use the `embeddings` optional group — `pip install "upsonic[embeddings]"`'
+    ) from _import_error
 
 from pydantic import Field, field_validator
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
@@ -73,11 +76,6 @@ class FastEmbedProvider(EmbeddingProvider):
     config: FastEmbedConfig
     
     def __init__(self, config: Optional[FastEmbedConfig] = None, **kwargs):
-        if not FASTEMBED_AVAILABLE:
-            raise ConfigurationError(
-                "FastEmbed package not found. Install with: pip install fastembed",
-                error_code="DEPENDENCY_MISSING"
-            )
         
         if config is None:
             config = FastEmbedConfig(**kwargs)

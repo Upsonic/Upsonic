@@ -15,8 +15,8 @@ try:
         from duckduckgo_search import DDGS
 except ImportError as _import_error:
     raise ImportError(
-        'Please install `ddgs` to use the DuckDuckGo search tool, '
-        'pip install ddgs`'
+        'Please install the `duckduckgo-search` package to use the DuckDuckGo search tool, '
+        'you can use the `tools` optional group — `pip install "upsonic[tools]"`'
     ) from _import_error
 
 __all__ = ('duckduckgo_search_tool',)

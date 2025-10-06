@@ -2,7 +2,13 @@ import time
 import json
 from typing import Optional, Type, Union, TypeVar
 
-import asyncpg
+try:
+    import asyncpg
+except ImportError as _import_error:
+    raise ImportError(
+        'Please install the `asyncpg` package to use the PostgreSQL storage provider, '
+        'you can use the `storage` optional group — `pip install "upsonic[storage]"`'
+    ) from _import_error
 from pydantic import BaseModel
 
 from upsonic.storage.base import Storage

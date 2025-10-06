@@ -10,9 +10,22 @@ from __future__ import annotations
 from abc import ABC
 from dataclasses import dataclass
 from typing import Literal, Optional, TypedDict
-import requests
+try:
+    import requests
+except ImportError as _import_error:
+    raise ImportError(
+        'Please install the `requests` package to use the built-in tools, '
+        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
+    ) from _import_error
 
-from bs4 import BeautifulSoup
+try:
+    from bs4 import BeautifulSoup
+except ImportError as _import_error:
+    raise ImportError(
+        'Please install the `beautifulsoup4` package to use the built-in tools, '
+        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
+    ) from _import_error
+
 try:
     try:
         from ddgs import DDGS
@@ -20,8 +33,8 @@ try:
         from duckduckgo_search import DDGS
 except ImportError as _import_error:
     raise ImportError(
-        'Please install `ddgs` to use the DuckDuckGo search tool, '
-        'pip install ddgs`'
+        'Please install the `duckduckgo-search` package to use the DuckDuckGo search tool, '
+        'you can use the `tools` optional group — `pip install "upsonic[tools]"`'
     ) from _import_error
 
 

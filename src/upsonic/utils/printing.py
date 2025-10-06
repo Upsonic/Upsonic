@@ -456,7 +456,7 @@ def call_end(result: Any, model_provider: Any, response_format: str, start_time:
     if not debug:
         result_str = result_str[:370]
     if len(result_str) < len(str(result)):
-        result_str += "[bold white]...[/bold white]"
+        result_str += "..."
 
     table.add_row("[bold]Result:[/bold]", f"[green]{escape_rich_markup(result_str)}[/green]")
     panel = Panel(
@@ -540,7 +540,7 @@ def agent_end(result: Any, model_provider: Any, response_format: str, start_time
     if not debug:
         result_str = result_str[:370]
     if len(result_str) < len(str(result)):
-        result_str += "[bold white]...[/bold white]"
+        result_str += "..."
 
     table.add_row("[bold]Result:[/bold]", f"[green]{escape_rich_markup(result_str)}[/green]")
     table.add_row("")

@@ -3,7 +3,13 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
-import jq
+try:
+    import jq
+except ImportError as _import_error:
+    raise ImportError(
+        'Please install the `jq` package to use the JSON loader, '
+        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
+    ) from _import_error
 
 from upsonic.schemas.data_models import Document
 from upsonic.loaders.base import BaseLoader

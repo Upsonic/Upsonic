@@ -10,8 +10,8 @@ try:
     from tavily import AsyncTavilyClient
 except ImportError as _import_error:
     raise ImportError(
-        'Please install `tavily-python` to use the Tavily search tool, '
-        '`pip install tavily-python`'
+        'Please install the `tavily-python` package to use the Tavily search tool, '
+        'you can use the `tools` optional group — `pip install "upsonic[tools]"`'
     ) from _import_error
 
 __all__ = ('tavily_search_tool',)
