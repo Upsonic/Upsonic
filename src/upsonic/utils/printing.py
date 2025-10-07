@@ -1173,7 +1173,6 @@ def import_error(package_name: str, install_command: str = None, feature_name: s
         feature_name: Optional name of the feature requiring this package
     """
     table = Table(show_header=False, expand=True, box=None)
-    table.width = 60
 
     package_name_esc = escape_rich_markup(package_name)
 
