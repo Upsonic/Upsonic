@@ -1,77 +1,109 @@
 from __future__ import annotations
-from typing import Dict, Type, List, Any, Optional, Union
+from typing import Dict, Type, List, Any, Optional, Union, Callable, Tuple
 import os
+import importlib
+from functools import lru_cache
 
 from .base import EmbeddingProvider, EmbeddingConfig
 from ..utils.package.exception import ConfigurationError
 
 
+# Registry for lazy loading - stores import functions instead of classes
+_PROVIDER_IMPORTERS: Dict[str, Callable[[], Tuple[Type[EmbeddingProvider], Type[EmbeddingConfig]]]] = {}
 _PROVIDER_REGISTRY: Dict[str, Type[EmbeddingProvider]] = {}
 _PROVIDER_CONFIGS: Dict[str, Type[EmbeddingConfig]] = {}
 
 
-def register_provider(name: str, provider_class: Type[EmbeddingProvider], config_class: Type[EmbeddingConfig]):
-    """Register an embedding provider."""
-    _PROVIDER_REGISTRY[name] = provider_class
-    _PROVIDER_CONFIGS[name] = config_class
+def _register_provider_importer(
+    name: str, 
+    import_func: Callable[[], Tuple[Type[EmbeddingProvider], Type[EmbeddingConfig]]]
+):
+    """Register a provider import function for lazy loading."""
+    _PROVIDER_IMPORTERS[name] = import_func
 
 
-def _lazy_import_providers():
-    """Lazy import all providers to populate registry."""
-    global _PROVIDER_REGISTRY, _PROVIDER_CONFIGS
+def _lazy_import_provider(provider_name: str) -> Tuple[Type[EmbeddingProvider], Type[EmbeddingConfig]]:
+    """Lazy import a specific provider only when needed."""
+    if provider_name not in _PROVIDER_IMPORTERS:
+        raise ConfigurationError(
+            f"Unknown provider '{provider_name}'. Available providers: {list(_PROVIDER_IMPORTERS.keys())}",
+            error_code="UNKNOWN_PROVIDER"
+        )
     
-    if _PROVIDER_REGISTRY:
+    try:
+        provider_class, config_class = _PROVIDER_IMPORTERS[provider_name]()
+        _PROVIDER_REGISTRY[provider_name] = provider_class
+        _PROVIDER_CONFIGS[provider_name] = config_class
+        return provider_class, config_class
+    except ImportError as e:
+        raise ConfigurationError(
+            f"Failed to import provider '{provider_name}': {str(e)}. Please install required dependencies.",
+            error_code="PROVIDER_IMPORT_ERROR"
+        )
+
+
+def _setup_provider_importers():
+    """Setup provider import functions without actually importing them."""
+    if _PROVIDER_IMPORTERS:
         return
     
-    try:
+    # OpenAI provider
+    def _import_openai():
         from .openai_provider import OpenAIEmbedding, OpenAIEmbeddingConfig
-        register_provider("openai", OpenAIEmbedding, OpenAIEmbeddingConfig)
-    except ImportError:
-        pass
+        return OpenAIEmbedding, OpenAIEmbeddingConfig
     
-    try:
+    _register_provider_importer("openai", _import_openai)
+    
+    # Azure OpenAI provider
+    def _import_azure_openai():
         from .azure_openai_provider import AzureOpenAIEmbedding, AzureOpenAIEmbeddingConfig
-        register_provider("azure_openai", AzureOpenAIEmbedding, AzureOpenAIEmbeddingConfig)
-        register_provider("azure", AzureOpenAIEmbedding, AzureOpenAIEmbeddingConfig)
-    except ImportError:
-        pass
+        return AzureOpenAIEmbedding, AzureOpenAIEmbeddingConfig
     
-    try:
+    _register_provider_importer("azure_openai", _import_azure_openai)
+    _register_provider_importer("azure", _import_azure_openai)
+    
+    # Bedrock provider
+    def _import_bedrock():
         from .bedrock_provider import BedrockEmbedding, BedrockEmbeddingConfig
-        register_provider("bedrock", BedrockEmbedding, BedrockEmbeddingConfig)
-        register_provider("aws", BedrockEmbedding, BedrockEmbeddingConfig)
-    except ImportError:
-        pass
+        return BedrockEmbedding, BedrockEmbeddingConfig
     
-    try:
+    _register_provider_importer("bedrock", _import_bedrock)
+    _register_provider_importer("aws", _import_bedrock)
+    
+    # HuggingFace provider
+    def _import_huggingface():
         from .huggingface_provider import HuggingFaceEmbedding, HuggingFaceEmbeddingConfig
-        register_provider("huggingface", HuggingFaceEmbedding, HuggingFaceEmbeddingConfig)
-        register_provider("hf", HuggingFaceEmbedding, HuggingFaceEmbeddingConfig)
-    except ImportError:
-        pass
+        return HuggingFaceEmbedding, HuggingFaceEmbeddingConfig
     
-    try:
+    _register_provider_importer("huggingface", _import_huggingface)
+    _register_provider_importer("hf", _import_huggingface)
+    
+    # FastEmbed provider
+    def _import_fastembed():
         from .fastembed_provider import FastEmbedProvider, FastEmbedConfig
-        register_provider("fastembed", FastEmbedProvider, FastEmbedConfig)
-        register_provider("qdrant", FastEmbedProvider, FastEmbedConfig)
-    except ImportError:
-        pass
+        return FastEmbedProvider, FastEmbedConfig
     
-    try:
+    _register_provider_importer("fastembed", _import_fastembed)
+    _register_provider_importer("qdrant", _import_fastembed)
+    
+    # Ollama provider
+    def _import_ollama():
         from .ollama_provider import OllamaEmbedding, OllamaEmbeddingConfig
-        register_provider("ollama", OllamaEmbedding, OllamaEmbeddingConfig)
-    except ImportError:
-        pass
+        return OllamaEmbedding, OllamaEmbeddingConfig
     
-    try:
+    _register_provider_importer("ollama", _import_ollama)
+    
+    # Gemini provider
+    def _import_gemini():
         from .gemini_provider import GeminiEmbedding, GeminiEmbeddingConfig
-        register_provider("gemini", GeminiEmbedding, GeminiEmbeddingConfig)
-        register_provider("google", GeminiEmbedding, GeminiEmbeddingConfig)
-    except ImportError:
-        pass
+        return GeminiEmbedding, GeminiEmbeddingConfig
+    
+    _register_provider_importer("gemini", _import_gemini)
+    _register_provider_importer("google", _import_gemini)
 
 
 
+@lru_cache(maxsize=1)
 def list_available_providers() -> List[str]:
     """
     List all available embedding providers.
@@ -79,10 +111,11 @@ def list_available_providers() -> List[str]:
     Returns:
         List of provider names that can be used with create_embedding_provider()
     """
-    _lazy_import_providers()
-    return list(_PROVIDER_REGISTRY.keys())
+    _setup_provider_importers()
+    return list(_PROVIDER_IMPORTERS.keys())
 
 
+@lru_cache(maxsize=1)
 def get_provider_info() -> Dict[str, Dict[str, Any]]:
     """
     Get detailed information about all available providers.
@@ -90,7 +123,7 @@ def get_provider_info() -> Dict[str, Dict[str, Any]]:
     Returns:
         Dictionary with provider information including dependencies and features
     """
-    _lazy_import_providers()
+    _setup_provider_importers()
     
     provider_info = {
         "openai": {
@@ -155,7 +188,8 @@ def create_embedding_provider(
     Create an embedding provider using the factory pattern.
     
     This function provides a unified interface for creating any embedding provider
-    with automatic configuration and sensible defaults.
+    with automatic configuration and sensible defaults. Uses lazy loading to only
+    import the specific provider when needed.
     
     Args:
         provider: Provider name (e.g., "openai", "huggingface", "ollama")
@@ -192,19 +226,12 @@ def create_embedding_provider(
             }
         )
     """
-    _lazy_import_providers()
+    _setup_provider_importers()
     
     provider = provider.lower().replace("-", "_")
     
-    if provider not in _PROVIDER_REGISTRY:
-        available = ", ".join(list_available_providers())
-        raise ConfigurationError(
-            f"Unknown provider '{provider}'. Available providers: {available}",
-            error_code="UNKNOWN_PROVIDER"
-        )
-    
-    provider_class = _PROVIDER_REGISTRY[provider]
-    config_class = _PROVIDER_CONFIGS[provider]
+    # Use lazy loading to import only the specific provider needed
+    provider_class, config_class = _lazy_import_provider(provider)
     
     if config is None:
         config = config_class(**kwargs)
@@ -274,7 +301,7 @@ def create_best_available_embedding(
     Returns:
         Best available embedding provider for the specified criteria
     """
-    _lazy_import_providers()
+    _setup_provider_importers()
     available = list_available_providers()
     
     preferences = {
@@ -343,7 +370,7 @@ def auto_detect_best_embedding(**kwargs) -> EmbeddingProvider:
     Returns:
         Best automatically detected embedding provider
     """
-    _lazy_import_providers()
+    _setup_provider_importers()
     available = list_available_providers()
     
     has_openai = bool(os.getenv("OPENAI_API_KEY"))
@@ -359,11 +386,9 @@ def auto_detect_best_embedding(**kwargs) -> EmbeddingProvider:
         pass
     
     if has_openai and "openai" in available:
-
         return create_embedding_provider("openai", **kwargs)
     
     elif has_azure and "azure_openai" in available:
-
         return create_embedding_provider("azure_openai", **kwargs)
     
     elif has_gemini and "gemini" in available:

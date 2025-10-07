@@ -10,7 +10,7 @@ try:
 except ImportError:
     BOTO3_AVAILABLE = False
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
 from ..utils.package.exception import ConfigurationError, ModelConnectionError
 
@@ -38,7 +38,8 @@ class BedrockEmbeddingConfig(EmbeddingConfig):
     enable_cloudwatch_logging: bool = Field(True, description="Enable CloudWatch logging")
     log_group_name: Optional[str] = Field(None, description="CloudWatch log group name")
     
-    @validator('model_name')
+    @field_validator('model_name')
+    @classmethod
     def validate_model_name(cls, v):
         """Validate and map Bedrock model names."""
         model_mapping = {
@@ -60,7 +61,8 @@ class BedrockEmbeddingConfig(EmbeddingConfig):
         print(f"Warning: Unknown model '{v}', defaulting to amazon.titan-embed-text-v1")
         return "amazon.titan-embed-text-v1"
     
-    @validator('region_name')
+    @field_validator('region_name')
+    @classmethod
     def validate_region(cls, v):
         """Validate AWS region for Bedrock availability."""
         bedrock_regions = [

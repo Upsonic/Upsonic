@@ -1,5 +1,8 @@
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, Literal, Optional, Union, TYPE_CHECKING
 from decimal import Decimal
+
+if TYPE_CHECKING:
+    from upsonic.models import Model
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -8,13 +11,324 @@ from rich.text import Text
 import platform
 from rich.markup import escape
 
-from upsonic.models.utils import get_estimated_cost
-from upsonic.models.base import BaseModelProvider
-
 
 console = Console()
 
-# Global dictionary to store aggregated values by price_id
+def get_estimated_cost(input_tokens: int, output_tokens: int, model_provider: Union["Model", str]) -> str:
+    """
+    Calculate estimated cost based on tokens and model provider.
+    
+    This function provides accurate cost estimation for both streaming and non-streaming
+    agent executions by using comprehensive pricing data for all supported models.
+    
+    Args:
+        input_tokens: Number of input/prompt tokens
+        output_tokens: Number of output/completion tokens  
+        model_provider: Model instance or model name string
+        
+    Returns:
+        Formatted cost string (e.g., "~$0.0123")
+    """
+    try:
+        if input_tokens is None or output_tokens is None:
+            return "~$0.0000"
+        
+        try:
+            input_tokens = max(0, int(input_tokens))
+            output_tokens = max(0, int(output_tokens))
+        except (ValueError, TypeError):
+            return "~$0.0000"
+        
+        try:
+            from genai_prices import calculate_cost
+            from upsonic.usage import RequestUsage
+            
+            usage = RequestUsage(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens
+            )
+            
+            model_name = _get_model_name(model_provider)
+            cost = calculate_cost(usage, model_name)
+            return f"~${cost:.4f}"
+            
+        except ImportError:
+            pass
+        except Exception:
+            pass
+        
+        model_name = _get_model_name(model_provider)
+        pricing_data = _get_model_pricing(model_name)
+        
+        if not pricing_data:
+            pricing_data = {
+                'input_cost_per_1m': 0.50,
+                'output_cost_per_1m': 1.50
+            }
+        
+        input_cost = (input_tokens / 1_000_000) * pricing_data['input_cost_per_1m']
+        output_cost = (output_tokens / 1_000_000) * pricing_data['output_cost_per_1m']
+        total_cost = input_cost + output_cost
+        
+        if total_cost < 0.0001:
+            return f"~${total_cost:.6f}"
+        elif total_cost < 0.01:
+            return f"~${total_cost:.5f}"
+        else:
+            return f"~${total_cost:.4f}"
+        
+    except Exception as e:
+        console.print(f"[yellow]Warning: Cost calculation failed: {e}[/yellow]")
+        return "~$0.0000"
+
+
+def _get_model_name(model_provider: Union["Model", str]) -> str:
+    """Extract model name from model provider."""
+    if isinstance(model_provider, str):
+        if '/' in model_provider:
+            return model_provider.split('/', 1)[1]
+        return model_provider
+    elif hasattr(model_provider, 'model_name'):
+        model_name = model_provider.model_name
+        # Handle case where model_name might be a coroutine (in tests)
+        if hasattr(model_name, '__await__'):
+            return "test-model"  # Default for async mocks
+        return model_name
+    else:
+        return str(model_provider)
+
+
+def _get_model_pricing(model_name: str) -> Optional[Dict[str, float]]:
+    """Get comprehensive pricing data for a model."""
+    # Handle case where model_name might be a coroutine (in tests)
+    if hasattr(model_name, '__await__'):
+        model_name = "test-model"
+    
+    # Ensure model_name is a string
+    model_name = str(model_name)
+    
+    pricing_map = {
+        'gpt-4o': {'input_cost_per_1m': 2.50, 'output_cost_per_1m': 10.00},
+        'gpt-4o-2024-05-13': {'input_cost_per_1m': 2.50, 'output_cost_per_1m': 10.00},
+        'gpt-4o-2024-08-06': {'input_cost_per_1m': 2.50, 'output_cost_per_1m': 10.00},
+        'gpt-4o-2024-11-20': {'input_cost_per_1m': 2.50, 'output_cost_per_1m': 10.00},
+        'gpt-4o-mini': {'input_cost_per_1m': 0.15, 'output_cost_per_1m': 0.60},
+        'gpt-4o-mini-2024-07-18': {'input_cost_per_1m': 0.15, 'output_cost_per_1m': 0.60},
+        'gpt-4-turbo': {'input_cost_per_1m': 10.00, 'output_cost_per_1m': 30.00},
+        'gpt-4-turbo-2024-04-09': {'input_cost_per_1m': 10.00, 'output_cost_per_1m': 30.00},
+        'gpt-4': {'input_cost_per_1m': 30.00, 'output_cost_per_1m': 60.00},
+        'gpt-4-0613': {'input_cost_per_1m': 30.00, 'output_cost_per_1m': 60.00},
+        'gpt-4-32k': {'input_cost_per_1m': 60.00, 'output_cost_per_1m': 120.00},
+        'gpt-4-32k-0613': {'input_cost_per_1m': 60.00, 'output_cost_per_1m': 120.00},
+        'gpt-3.5-turbo': {'input_cost_per_1m': 0.50, 'output_cost_per_1m': 1.50},
+        'gpt-3.5-turbo-1106': {'input_cost_per_1m': 0.50, 'output_cost_per_1m': 1.50},
+        'gpt-3.5-turbo-16k': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 4.00},
+        'gpt-3.5-turbo-16k-0613': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 4.00},
+        'gpt-5': {'input_cost_per_1m': 5.00, 'output_cost_per_1m': 15.00},
+        'gpt-5-2025-08-07': {'input_cost_per_1m': 5.00, 'output_cost_per_1m': 15.00},
+        'gpt-5-mini': {'input_cost_per_1m': 0.30, 'output_cost_per_1m': 1.20},
+        'gpt-5-mini-2025-08-07': {'input_cost_per_1m': 0.30, 'output_cost_per_1m': 1.20},
+        'gpt-5-nano': {'input_cost_per_1m': 0.10, 'output_cost_per_1m': 0.40},
+        'gpt-5-nano-2025-08-07': {'input_cost_per_1m': 0.10, 'output_cost_per_1m': 0.40},
+        'gpt-4.1': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 12.00},
+        'gpt-4.1-2025-04-14': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 12.00},
+        'gpt-4.1-mini': {'input_cost_per_1m': 0.20, 'output_cost_per_1m': 0.80},
+        'gpt-4.1-mini-2025-04-14': {'input_cost_per_1m': 0.20, 'output_cost_per_1m': 0.80},
+        'gpt-4.1-nano': {'input_cost_per_1m': 0.08, 'output_cost_per_1m': 0.32},
+        'gpt-4.1-nano-2025-04-14': {'input_cost_per_1m': 0.08, 'output_cost_per_1m': 0.32},
+        'o1': {'input_cost_per_1m': 15.00, 'output_cost_per_1m': 60.00},
+        'o1-2024-12-17': {'input_cost_per_1m': 15.00, 'output_cost_per_1m': 60.00},
+        'o1-mini': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 12.00},
+        'o1-mini-2024-09-12': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 12.00},
+        'o1-preview': {'input_cost_per_1m': 15.00, 'output_cost_per_1m': 60.00},
+        'o1-preview-2024-09-12': {'input_cost_per_1m': 15.00, 'output_cost_per_1m': 60.00},
+        'o1-pro': {'input_cost_per_1m': 60.00, 'output_cost_per_1m': 180.00},
+        'o1-pro-2025-03-19': {'input_cost_per_1m': 60.00, 'output_cost_per_1m': 180.00},
+        'o3': {'input_cost_per_1m': 20.00, 'output_cost_per_1m': 80.00},
+        'o3-2025-04-16': {'input_cost_per_1m': 20.00, 'output_cost_per_1m': 80.00},
+        'o3-mini': {'input_cost_per_1m': 4.00, 'output_cost_per_1m': 16.00},
+        'o3-mini-2025-01-31': {'input_cost_per_1m': 4.00, 'output_cost_per_1m': 16.00},
+        'o3-pro': {'input_cost_per_1m': 80.00, 'output_cost_per_1m': 240.00},
+        'o3-pro-2025-06-10': {'input_cost_per_1m': 80.00, 'output_cost_per_1m': 240.00},
+        'o3-deep-research': {'input_cost_per_1m': 100.00, 'output_cost_per_1m': 300.00},
+        'o3-deep-research-2025-06-26': {'input_cost_per_1m': 100.00, 'output_cost_per_1m': 300.00},
+        'claude-3-5-sonnet-20241022': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 15.00},
+        'claude-3-5-sonnet-latest': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 15.00},
+        'claude-3-5-sonnet-20240620': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 15.00},
+        'claude-3-5-haiku-20241022': {'input_cost_per_1m': 0.80, 'output_cost_per_1m': 4.00},
+        'claude-3-5-haiku-latest': {'input_cost_per_1m': 0.80, 'output_cost_per_1m': 4.00},
+        'claude-3-7-sonnet-20250219': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 15.00},
+        'claude-3-7-sonnet-latest': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 15.00},
+        'claude-3-opus-20240229': {'input_cost_per_1m': 15.00, 'output_cost_per_1m': 75.00},
+        'claude-3-opus-latest': {'input_cost_per_1m': 15.00, 'output_cost_per_1m': 75.00},
+        'claude-3-haiku-20240307': {'input_cost_per_1m': 0.25, 'output_cost_per_1m': 1.25},
+        'claude-4-opus-20250514': {'input_cost_per_1m': 20.00, 'output_cost_per_1m': 100.00},
+        'claude-4-sonnet-20250514': {'input_cost_per_1m': 4.00, 'output_cost_per_1m': 20.00},
+        'claude-opus-4-0': {'input_cost_per_1m': 20.00, 'output_cost_per_1m': 100.00},
+        'claude-opus-4-1-20250805': {'input_cost_per_1m': 20.00, 'output_cost_per_1m': 100.00},
+        'claude-opus-4-20250514': {'input_cost_per_1m': 20.00, 'output_cost_per_1m': 100.00},
+        'claude-sonnet-4-0': {'input_cost_per_1m': 4.00, 'output_cost_per_1m': 20.00},
+        'claude-sonnet-4-20250514': {'input_cost_per_1m': 4.00, 'output_cost_per_1m': 20.00},
+        
+        'gemini-2.0-flash': {'input_cost_per_1m': 0.075, 'output_cost_per_1m': 0.30},
+        'gemini-2.0-flash-lite': {'input_cost_per_1m': 0.0375, 'output_cost_per_1m': 0.15},
+        'gemini-2.5-flash': {'input_cost_per_1m': 0.075, 'output_cost_per_1m': 0.30},
+        'gemini-2.5-flash-lite': {'input_cost_per_1m': 0.0375, 'output_cost_per_1m': 0.15},
+        'gemini-2.5-pro': {'input_cost_per_1m': 1.25, 'output_cost_per_1m': 5.00},
+        'gemini-1.5-pro': {'input_cost_per_1m': 1.25, 'output_cost_per_1m': 5.00},
+        'gemini-1.5-flash': {'input_cost_per_1m': 0.075, 'output_cost_per_1m': 0.30},
+        'gemini-1.0-pro': {'input_cost_per_1m': 0.50, 'output_cost_per_1m': 1.50},
+        
+        'llama-3.3-70b-versatile': {'input_cost_per_1m': 0.59, 'output_cost_per_1m': 0.79},
+        'llama-3.1-8b-instant': {'input_cost_per_1m': 0.05, 'output_cost_per_1m': 0.05},
+        'llama3-70b-8192': {'input_cost_per_1m': 0.59, 'output_cost_per_1m': 0.79},
+        'llama3-8b-8192': {'input_cost_per_1m': 0.05, 'output_cost_per_1m': 0.05},
+        'mixtral-8x7b-32768': {'input_cost_per_1m': 0.24, 'output_cost_per_1m': 0.24},
+        'gemma2-9b-it': {'input_cost_per_1m': 0.10, 'output_cost_per_1m': 0.10},
+        
+        'mistral-large-latest': {'input_cost_per_1m': 2.00, 'output_cost_per_1m': 6.00},
+        'mistral-small-latest': {'input_cost_per_1m': 1.00, 'output_cost_per_1m': 3.00},
+        'codestral-latest': {'input_cost_per_1m': 0.20, 'output_cost_per_1m': 0.20},
+        
+        'command': {'input_cost_per_1m': 1.00, 'output_cost_per_1m': 2.00},
+        'command-light': {'input_cost_per_1m': 0.30, 'output_cost_per_1m': 0.30},
+        'command-r': {'input_cost_per_1m': 0.50, 'output_cost_per_1m': 1.50},
+        'command-r-plus': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 15.00},
+        
+        'deepseek-chat': {'input_cost_per_1m': 0.14, 'output_cost_per_1m': 0.28},
+        'deepseek-reasoner': {'input_cost_per_1m': 0.55, 'output_cost_per_1m': 2.19},
+        
+        'grok-4': {'input_cost_per_1m': 0.01, 'output_cost_per_1m': 0.03},
+        'grok-4-0709': {'input_cost_per_1m': 0.01, 'output_cost_per_1m': 0.03},
+        'grok-3': {'input_cost_per_1m': 0.01, 'output_cost_per_1m': 0.03},
+        'grok-3-mini': {'input_cost_per_1m': 0.01, 'output_cost_per_1m': 0.03},
+        'grok-3-fast': {'input_cost_per_1m': 0.01, 'output_cost_per_1m': 0.03},
+        'grok-3-mini-fast': {'input_cost_per_1m': 0.01, 'output_cost_per_1m': 0.03},
+        
+        'moonshot-v1-8k': {'input_cost_per_1m': 0.012, 'output_cost_per_1m': 0.012},
+        'moonshot-v1-32k': {'input_cost_per_1m': 0.024, 'output_cost_per_1m': 0.024},
+        'moonshot-v1-128k': {'input_cost_per_1m': 0.06, 'output_cost_per_1m': 0.06},
+        'kimi-latest': {'input_cost_per_1m': 0.012, 'output_cost_per_1m': 0.012},
+        'kimi-thinking-preview': {'input_cost_per_1m': 0.012, 'output_cost_per_1m': 0.012},
+        
+        'gpt-oss-120b': {'input_cost_per_1m': 0.10, 'output_cost_per_1m': 0.10},
+        'llama3.1-8b': {'input_cost_per_1m': 0.05, 'output_cost_per_1m': 0.05},
+        'llama-3.3-70b': {'input_cost_per_1m': 0.20, 'output_cost_per_1m': 0.20},
+        'llama-4-scout-17b-16e-instruct': {'input_cost_per_1m': 0.15, 'output_cost_per_1m': 0.15},
+        'llama-4-maverick-17b-128e-instruct': {'input_cost_per_1m': 0.15, 'output_cost_per_1m': 0.15},
+        'qwen-3-235b-a22b-instruct-2507': {'input_cost_per_1m': 0.30, 'output_cost_per_1m': 0.30},
+        'qwen-3-32b': {'input_cost_per_1m': 0.10, 'output_cost_per_1m': 0.10},
+        'qwen-3-coder-480b': {'input_cost_per_1m': 0.50, 'output_cost_per_1m': 0.50},
+        'qwen-3-235b-a22b-thinking-2507': {'input_cost_per_1m': 0.30, 'output_cost_per_1m': 0.30},
+        
+        'Qwen/QwQ-32B': {'input_cost_per_1m': 0.10, 'output_cost_per_1m': 0.10},
+        'Qwen/Qwen2.5-72B-Instruct': {'input_cost_per_1m': 0.20, 'output_cost_per_1m': 0.20},
+        'Qwen/Qwen3-235B-A22B': {'input_cost_per_1m': 0.30, 'output_cost_per_1m': 0.30},
+        'Qwen/Qwen3-32B': {'input_cost_per_1m': 0.10, 'output_cost_per_1m': 0.10},
+        'deepseek-ai/DeepSeek-R1': {'input_cost_per_1m': 0.55, 'output_cost_per_1m': 2.19},
+        'meta-llama/Llama-3.3-70B-Instruct': {'input_cost_per_1m': 0.20, 'output_cost_per_1m': 0.20},
+        'meta-llama/Llama-4-Maverick-17B-128E-Instruct': {'input_cost_per_1m': 0.15, 'output_cost_per_1m': 0.15},
+        'meta-llama/Llama-4-Scout-17B-16E-Instruct': {'input_cost_per_1m': 0.15, 'output_cost_per_1m': 0.15},
+        
+        'test': {'input_cost_per_1m': 0.00, 'output_cost_per_1m': 0.00},
+    }
+    
+    if model_name.startswith('bedrock:'):
+        model_name = model_name.replace('bedrock:', '')
+    
+    provider_prefixes = ['anthropic:', 'google-gla:', 'google-vertex:', 'groq:', 'mistral:', 'cohere:', 'deepseek:', 'grok:', 'moonshotai:', 'cerebras:', 'huggingface:', 'heroku:']
+    for prefix in provider_prefixes:
+        if model_name.startswith(prefix):
+            model_name = model_name.replace(prefix, '')
+            break
+    
+    return pricing_map.get(model_name)
+
+
+def get_estimated_cost_from_usage(usage: Union[Dict[str, int], Any], model_provider: Union["Model", str]) -> str:
+    """Calculate estimated cost from usage data."""
+    try:
+        if isinstance(usage, dict):
+            input_tokens = usage.get('input_tokens', 0)
+            output_tokens = usage.get('output_tokens', 0)
+        else:
+            # RequestUsage objects have input_tokens and output_tokens attributes
+            input_tokens = usage.input_tokens
+            output_tokens = usage.output_tokens
+        
+        return get_estimated_cost(input_tokens, output_tokens, model_provider)
+        
+    except Exception as e:
+        console.print(f"[yellow]Warning: Cost calculation from usage failed: {e}[/yellow]")
+        return "~$0.0000"
+
+
+def get_estimated_cost_from_run_result(run_result: Any, model_provider: Union["Model", str]) -> str:
+    """Calculate estimated cost from a RunResult object."""
+    try:
+        total_input_tokens = 0
+        total_output_tokens = 0
+        
+        if hasattr(run_result, 'all_messages'):
+            messages = run_result.all_messages()
+            for message in messages:
+                # Only ModelResponse objects have usage information
+                if hasattr(message, 'usage') and message.usage and hasattr(message, 'kind') and message.kind == 'response':
+                    usage = message.usage
+                    total_input_tokens += usage.input_tokens
+                    total_output_tokens += usage.output_tokens
+        
+        return get_estimated_cost(total_input_tokens, total_output_tokens, model_provider)
+        
+    except Exception as e:
+        console.print(f"[yellow]Warning: Cost calculation from RunResult failed: {e}[/yellow]")
+        return "~$0.0000"
+
+
+def get_estimated_cost_from_stream_result(stream_result: Any, model_provider: Union["Model", str]) -> str:
+    """Calculate estimated cost from a StreamRunResult object."""
+    try:
+        total_input_tokens = 0
+        total_output_tokens = 0
+        
+        if hasattr(stream_result, 'all_messages'):
+            messages = stream_result.all_messages()
+            for message in messages:
+                # Only ModelResponse objects have usage information
+                if hasattr(message, 'usage') and message.usage and hasattr(message, 'kind') and message.kind == 'response':
+                    usage = message.usage
+                    total_input_tokens += usage.input_tokens
+                    total_output_tokens += usage.output_tokens
+        
+        return get_estimated_cost(total_input_tokens, total_output_tokens, model_provider)
+        
+    except Exception as e:
+        console.print(f"[yellow]Warning: Cost calculation from StreamRunResult failed: {e}[/yellow]")
+        return "~$0.0000"
+
+
+def get_estimated_cost_from_agent(agent: Any, run_type: str = "last") -> str:
+    """Calculate estimated cost from an Agent's run results."""
+    try:
+        if run_type in ["last", "non_stream"]:
+            if hasattr(agent, 'get_run_result'):
+                run_result = agent.get_run_result()
+                if run_result and hasattr(run_result, 'all_messages') and run_result.all_messages():
+                    return get_estimated_cost_from_run_result(run_result, agent.model)
+        
+        if run_type in ["last", "stream"]:
+            if hasattr(agent, 'get_stream_run_result'):
+                stream_result = agent.get_stream_run_result()
+                if stream_result and hasattr(stream_result, 'all_messages') and stream_result.all_messages():
+                    return get_estimated_cost_from_stream_result(stream_result, agent.model)
+        
+        return "~$0.0000"
+        
+    except Exception as e:
+        console.print(f"[yellow]Warning: Cost calculation from Agent failed: {e}[/yellow]")
+        return "~$0.0000"
+
+
 price_id_summary = {}
 
 def spacing():
@@ -26,11 +340,9 @@ def escape_rich_markup(text):
     if text is None:
         return ""
     
-    # Convert to string if not already
     if not isinstance(text, str):
         text = str(text)
     
-    # Use Rich's built-in escape function
     return escape(text)
 
 
@@ -42,10 +354,8 @@ def connected_to_server(server_type: str, status: str, total_time: float = None)
       - right column (values) left-aligned, positioned on the right half 
     """
 
-    # Escape input text
     server_type = escape_rich_markup(server_type)
 
-    # Determine color and symbol for the status
     if status.lower() == "established":
         status_text = "[green]✓ Established[/green]"
     elif status.lower() == "failed":
@@ -53,15 +363,11 @@ def connected_to_server(server_type: str, status: str, total_time: float = None)
     else:
         status_text = f"[cyan]… {escape_rich_markup(status)}[/cyan]"
 
-    # Build a table that expands to full console width
     table = Table(show_header=False, expand=True, box=None)
     
-    # We define 2 columns, each with ratio=1 so they evenly split the width
-    # Both are left-aligned, but the second column will end up on the right half.
     table.add_column("Label", justify="left", ratio=1)
     table.add_column("Value", justify="left", ratio=1)
 
-    # Rows: one for server type, one for status
     table.add_row("[bold]Server Type:[/bold]", f"[yellow]{server_type}[/yellow]")
     table.add_row("[bold]Connection Status:[/bold]", status_text)
     
@@ -70,7 +376,6 @@ def connected_to_server(server_type: str, status: str, total_time: float = None)
 
     table.width = 60
 
-    # Wrap the table in a Panel that also expands full width
     panel = Panel(
         table, 
         title="[bold cyan]Upsonic - Server Connection[/bold cyan]",
@@ -79,29 +384,24 @@ def connected_to_server(server_type: str, status: str, total_time: float = None)
         width=70  # Adjust as preferred
     )
 
-    # Print the panel (it will fill the entire width, with two columns inside)
     console.print(panel)
 
     spacing()
 
-def call_end(result: Any, model_provider: BaseModelProvider, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, debug: bool = False, price_id: str = None):
-    # First panel for tool usage if there are any tools used
+def call_end(result: Any, model_provider: Any, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, debug: bool = False, price_id: str = None):
     if tool_usage and len(tool_usage) > 0:
         tool_table = Table(show_header=True, expand=True, box=None)
         tool_table.width = 60
         
-        # Add columns for the tool usage table
         tool_table.add_column("[bold]Tool Name[/bold]", justify="left")
         tool_table.add_column("[bold]Parameters[/bold]", justify="left")
         tool_table.add_column("[bold]Result[/bold]", justify="left")
 
-        # Add each tool usage as a row
         for tool in tool_usage:
             tool_name = escape_rich_markup(str(tool.get('tool_name', '')))
             params = escape_rich_markup(str(tool.get('params', '')))
             result_str = escape_rich_markup(str(tool.get('tool_result', '')))
             
-            # Truncate long strings
             if len(params) > 50:
                 params = params[:47] + "..."
             if len(result_str) > 50:
@@ -124,16 +424,13 @@ def call_end(result: Any, model_provider: BaseModelProvider, response_format: st
         console.print(tool_panel)
         spacing()
 
-    # Second panel with main results
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
 
-    # Escape input values
     display_model_name = escape_rich_markup(model_provider.model_name)
     response_format = escape_rich_markup(response_format)
     price_id_display = escape_rich_markup(price_id) if price_id else None
 
-    # Track values if price_id is provided
     if price_id:
         estimated_cost = get_estimated_cost(usage['input_tokens'], usage['output_tokens'], model_provider)
         if price_id not in price_id_summary:
@@ -144,30 +441,22 @@ def call_end(result: Any, model_provider: BaseModelProvider, response_format: st
             }
         price_id_summary[price_id]['input_tokens'] += usage['input_tokens']
         price_id_summary[price_id]['output_tokens'] += usage['output_tokens']
-        # Extract the numeric value from the estimated_cost string
-        # Handle the format from get_estimated_cost which returns "~0.0123"
         try:
-            # Remove tilde and dollar sign (if present) and convert to Decimal
             cost_str = str(estimated_cost).replace('~', '').replace('$', '').strip()
-            # The cost is already calculated as a number - use it directly
             if isinstance(price_id_summary[price_id]['estimated_cost'], (float, int)):
                 price_id_summary[price_id]['estimated_cost'] += float(cost_str)
             else:
-                # For Decimal objects or other types
                 from decimal import Decimal
                 price_id_summary[price_id]['estimated_cost'] = Decimal(str(price_id_summary[price_id]['estimated_cost'])) + Decimal(cost_str)
         except Exception as e:
-            # If there's any error in cost calculation, log it but continue
             if debug:
                 pass  # Error calculating cost
 
     result_str = str(result)
-    # Limit result to 370 characters
     if not debug:
         result_str = result_str[:370]
-    # Add ellipsis if result is truncated
     if len(result_str) < len(str(result)):
-        result_str += "[bold white]...[/bold white]"
+        result_str += "..."
 
     table.add_row("[bold]Result:[/bold]", f"[green]{escape_rich_markup(result_str)}[/green]")
     panel = Panel(
@@ -183,24 +472,20 @@ def call_end(result: Any, model_provider: BaseModelProvider, response_format: st
 
 
 
-def agent_end(result: Any, model_provider: BaseModelProvider, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, tool_count: int, context_count: int, debug: bool = False, price_id:str = None):
-    # First panel for tool usage if there are any tools used
+def agent_end(result: Any, model_provider: Any, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, tool_count: int, context_count: int, debug: bool = False, price_id:str = None):
     if tool_usage and len(tool_usage) > 0:
         tool_table = Table(show_header=True, expand=True, box=None)
         tool_table.width = 60
         
-        # Add columns for the tool usage table
         tool_table.add_column("[bold]Tool Name[/bold]", justify="left")
         tool_table.add_column("[bold]Parameters[/bold]", justify="left")
         tool_table.add_column("[bold]Result[/bold]", justify="left")
 
-        # Add each tool usage as a row
         for tool in tool_usage:
             tool_name = escape_rich_markup(str(tool.get('tool_name', '')))
             params = escape_rich_markup(str(tool.get('params', '')))
             result_str = escape_rich_markup(str(tool.get('tool_result', '')))
             
-            # Truncate long strings
             if len(params) > 50:
                 params = params[:47] + "..."
             if len(result_str) > 50:
@@ -223,16 +508,13 @@ def agent_end(result: Any, model_provider: BaseModelProvider, response_format: s
         console.print(tool_panel)
         spacing()
 
-    # Main result panel
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
 
-    # Escape input values
     display_model_name = escape_rich_markup(model_provider.model_name)
     response_format = escape_rich_markup(response_format)
     price_id = escape_rich_markup(price_id) if price_id else None
 
-    # Track values if price_id is provided
     if price_id:
         estimated_cost = get_estimated_cost(usage['input_tokens'], usage['output_tokens'], model_provider)
         if price_id not in price_id_summary:
@@ -243,34 +525,24 @@ def agent_end(result: Any, model_provider: BaseModelProvider, response_format: s
             }
         price_id_summary[price_id]['input_tokens'] += usage['input_tokens']
         price_id_summary[price_id]['output_tokens'] += usage['output_tokens']
-        # Extract the numeric value from the estimated_cost string
-        # Handle the format from get_estimated_cost which returns "~0.0123"
         try:
-            # Remove tilde and dollar sign (if present) and convert to Decimal
             cost_str = str(estimated_cost).replace('~', '').replace('$', '').strip()
-            # The cost is already calculated as a number - use it directly
             if isinstance(price_id_summary[price_id]['estimated_cost'], (float, int)):
                 price_id_summary[price_id]['estimated_cost'] += float(cost_str)
             else:
-                # If it's stored as Decimal already
                 price_id_summary[price_id]['estimated_cost'] = Decimal(str(price_id_summary[price_id]['estimated_cost'])) + Decimal(cost_str)
         except Exception as e:
-            # Fallback in case of conversion errors
             console.print(f"[bold red]Warning: Could not parse cost value: {estimated_cost}. Error: {e}[/bold red]")
 
     table.add_row("[bold]LLM Model:[/bold]", f"{display_model_name}")
-    # Add spacing
     table.add_row("")
     result_str = str(result)
-    # Limit result to 370 characters
     if not debug:
         result_str = result_str[:370]
-    # Add ellipsis if result is truncated
     if len(result_str) < len(str(result)):
-        result_str += "[bold white]...[/bold white]"
+        result_str += "..."
 
     table.add_row("[bold]Result:[/bold]", f"[green]{escape_rich_markup(result_str)}[/green]")
-    # Add spacing
     table.add_row("")
     table.add_row("[bold]Response Format:[/bold]", f"{response_format}")
     
@@ -291,11 +563,10 @@ def agent_end(result: Any, model_provider: BaseModelProvider, response_format: s
     spacing()
 
 
-def agent_total_cost(total_input_tokens: int, total_output_tokens: int, total_time: float, model_provider: BaseModelProvider):
+def agent_total_cost(total_input_tokens: int, total_output_tokens: int, total_time: float, model_provider: Any):
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
     
-    # Escape input values
     llm_model = escape_rich_markup(model_provider.model_name)
 
     table.add_row("[bold]Estimated Cost:[/bold]", f"{get_estimated_cost(total_input_tokens, total_output_tokens, model_provider)}$")
@@ -321,7 +592,6 @@ def print_price_id_summary(price_id: str, task) -> dict:
     Returns:
         dict: A dictionary containing the usage summary, or None if price_id not found
     """
-    # Escape input values
     price_id_display = escape_rich_markup(price_id)
     task_display = escape_rich_markup(str(task))
     
@@ -330,10 +600,8 @@ def print_price_id_summary(price_id: str, task) -> dict:
         return None
     
     summary = price_id_summary[price_id].copy()
-    # Format the estimated cost to include $ symbol
     summary['estimated_cost'] = f"${summary['estimated_cost']:.4f}"
 
-    # Create a table for pretty printing
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
 
@@ -343,7 +611,6 @@ def print_price_id_summary(price_id: str, task) -> dict:
     table.add_row("[bold]Output Tokens:[/bold]", f"[magenta]{summary['output_tokens']:,}[/magenta]")
     table.add_row("[bold]Total Estimated Cost:[/bold]", f"[magenta]{summary['estimated_cost']}[/magenta]")
     
-    # Add total time if available from task
     if task and hasattr(task, 'duration') and task.duration is not None:
         time_str = f"{task.duration:.2f} seconds"
         table.add_row("[bold]Time Taken:[/bold]", f"[magenta]{time_str}[/magenta]")
@@ -427,11 +694,9 @@ def mcp_tool_operation(operation: str, result=None):
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
     
-    # Format the operation text
     operation_text = f"[bold cyan]{escape_rich_markup(operation)}[/bold cyan]"
     table.add_row(operation_text)
     
-    # If there's a result, add it to the table
     if result:
         result_str = str(result)
         table.add_row("")  # Add spacing
@@ -460,12 +725,10 @@ def error_message(error_type: str, detail: str, error_code: int = None):
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
     
-    # Add error code if provided
     if error_code:
         table.add_row("[bold]Error Code:[/bold]", f"[red]{error_code}[/red]")
         table.add_row("")  # Add spacing
     
-    # Add error details
     table.add_row("[bold]Error Details:[/bold]")
     table.add_row(f"[red]{escape_rich_markup(detail)}[/red]")
     
@@ -491,20 +754,15 @@ def missing_dependencies(tool_name: str, missing_deps: list):
     if not missing_deps:
         return
     
-    # Escape input values
     tool_name = escape_rich_markup(tool_name)
     missing_deps = [escape_rich_markup(dep) for dep in missing_deps]
     
-    # Create the installation command
     install_cmd = "pip install " + " ".join(missing_deps)
     
-    # Create a bulleted list of dependencies
     deps_list = "\n".join([f"  • [bold white]{dep}[/bold white]" for dep in missing_deps])
     
-    # Create the content with the dependencies list and installation command
     content = f"[bold red]Missing Dependencies for {tool_name}:[/bold red]\n\n{deps_list}\n\n[bold green]Installation Command:[/bold green]\n  {install_cmd}"
     
-    # Create and print the panel
     panel = Panel(content, title="[bold yellow]⚠️ Dependencies Required[/bold yellow]", border_style="yellow", expand=False)
     console.print(panel)
 
@@ -517,14 +775,11 @@ def missing_api_key(tool_name: str, env_var_name: str, dotenv_support: bool = Tr
         env_var_name: Name of the environment variable for the API key
         dotenv_support: Whether the tool supports loading from .env file
     """
-    # Escape input values
     tool_name = escape_rich_markup(tool_name)
     env_var_name = escape_rich_markup(env_var_name)
     
-    # Determine the operating system
     system = platform.system()
     
-    # Create OS-specific instructions for setting the API key
     if system == "Windows":
         env_instructions = f"setx {env_var_name} your_api_key_here"
         env_instructions_temp = f"set {env_var_name}=your_api_key_here"
@@ -540,7 +795,6 @@ def missing_api_key(tool_name: str, env_var_name: str, dotenv_support: bool = Tr
     else:
         content = f"[bold red]Missing API Key for {tool_name}[/bold red]\n\n[bold white]The {env_var_name} environment variable is not set.[/bold white]\n\n{env_description}"
     
-    # Create and print the panel
     panel = Panel(content, title="[bold yellow]🔑 API Key Required[/bold yellow]", border_style="yellow", expand=False)
     console.print(panel)
 
@@ -555,11 +809,9 @@ def tool_operation(operation: str, result=None):
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
     
-    # Format the operation text
     operation_text = f"[bold magenta]{escape_rich_markup(operation)}[/bold magenta]"
     table.add_row(operation_text)
     
-    # If there's a result, add it to the table
     if result:
         result_str = str(result)
         table.add_row("")  # Add spacing
@@ -584,17 +836,14 @@ def print_orchestrator_tool_step(tool_name: str, params: dict, result: Any):
     tool_table = Table(show_header=True, expand=True, box=None)
     tool_table.width = 70
 
-    # Add columns for the tool usage table
     tool_table.add_column("[bold]Tool Name[/bold]", justify="left")
     tool_table.add_column("[bold]Parameters[/bold]", justify="left")
     tool_table.add_column("[bold]Result[/bold]", justify="left")
 
-    # Escape and format the data for display
     tool_name_str = escape_rich_markup(str(tool_name))
     params_str = escape_rich_markup(str(params))
     result_str = escape_rich_markup(str(result))
     
-    # Truncate long strings for clean display
     if len(params_str) > 50:
         params_str = params_str[:47] + "..."
     if len(result_str) > 50:
@@ -606,7 +855,6 @@ def print_orchestrator_tool_step(tool_name: str, params: dict, result: Any):
         f"[green]{result_str}[/green]"
     )
 
-    # Use a more descriptive title for clarity
     tool_panel = Panel(
         tool_table,
         title=f"[bold cyan]Orchestrator - Tool Call Result[/bold cyan]",
@@ -681,7 +929,6 @@ def cache_hit(cache_method: Literal["vector_search", "llm_call"], similarity: Op
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
     
-    # Escape input values
     cache_method_esc = escape_rich_markup(cache_method)
     input_preview_esc = escape_rich_markup(input_preview) if input_preview else "N/A"
     
@@ -720,7 +967,6 @@ def cache_miss(cache_method: Literal["vector_search", "llm_call"], input_preview
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
     
-    # Escape input values
     cache_method_esc = escape_rich_markup(cache_method)
     input_preview_esc = escape_rich_markup(input_preview) if input_preview else "N/A"
     
@@ -757,7 +1003,6 @@ def cache_stored(cache_method: Literal["vector_search", "llm_call"], input_previ
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
     
-    # Escape input values
     cache_method_esc = escape_rich_markup(cache_method)
     input_preview_esc = escape_rich_markup(input_preview) if input_preview else "N/A"
     
@@ -794,7 +1039,6 @@ def cache_stats(stats: Dict[str, Any]) -> None:
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
     
-    # Extract and escape values
     total_entries = stats.get("total_entries", 0)
     active_entries = stats.get("active_entries", 0)
     expired_entries = stats.get("expired_entries", 0)
@@ -865,7 +1109,6 @@ def cache_configuration(enable_cache: bool, cache_method: Literal["vector_search
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
     
-    # Escape input values
     cache_method_esc = escape_rich_markup(cache_method)
     embedding_provider_esc = escape_rich_markup(embedding_provider) if embedding_provider else "Auto-detected"
     
@@ -897,19 +1140,18 @@ def cache_configuration(enable_cache: bool, cache_method: Literal["vector_search
 def agent_started(agent_name: str) -> None:
     """
     Prints a formatted panel when an agent starts to work.
-    
+
     Args:
         agent_name: Name or ID of the agent that started working
     """
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
-    
-    # Escape input values
+
     agent_name_esc = escape_rich_markup(agent_name)
-    
+
     table.add_row("[bold]Agent Status:[/bold]", "[green]🚀 Started to work[/green]")
     table.add_row("[bold]Agent Name:[/bold]", f"[cyan]{agent_name_esc}[/cyan]")
-    
+
     panel = Panel(
         table,
         title="[bold green]🤖 Agent Started[/bold green]",
@@ -917,6 +1159,49 @@ def agent_started(agent_name: str) -> None:
         expand=True,
         width=70
     )
-    
+
     console.print(panel)
     spacing()
+
+def import_error(package_name: str, install_command: str = None, feature_name: str = None) -> None:
+    """
+    Prints a formatted error panel for missing package imports.
+
+    Args:
+        package_name: Name of the missing package
+        install_command: Command to install the package (e.g., "pip install package_name")
+        feature_name: Optional name of the feature requiring this package
+    """
+    table = Table(show_header=False, expand=True, box=None)
+
+    package_name_esc = escape_rich_markup(package_name)
+
+    if feature_name:
+        feature_name_esc = escape_rich_markup(feature_name)
+        title = f"[bold red]📦 Missing Package for {feature_name_esc}[/bold red]"
+        table.add_row("[bold]Feature:[/bold]", f"[cyan]{feature_name_esc}[/cyan]")
+    else:
+        title = "[bold red]📦 Missing Package[/bold red]"
+
+    table.add_row("[bold]Package:[/bold]", f"[yellow]{package_name_esc}[/yellow]")
+    table.add_row("")  # Add spacing
+
+    if install_command:
+        install_command_esc = escape_rich_markup(install_command)
+        table.add_row("[bold]Install Command:[/bold]")
+        table.add_row(f"[green]{install_command_esc}[/green]")
+    else:
+        table.add_row("[bold]Install Command:[/bold]")
+        table.add_row(f"[green]pip install {package_name_esc}[/green]")
+
+    panel = Panel(
+        table,
+        title=title,
+        border_style="red",
+        expand=True,
+        width=70
+    )
+
+    console.print(panel)
+    spacing()
+    raise ImportError(f"Missing required package: {package_name}")

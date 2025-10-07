@@ -1,27 +1,18 @@
 import re
-from typing import Optional
+from typing import Optional, Any
 
-from upsonic.models.base import BaseModelProvider
-from upsonic.models.providers import OpenAI
+from upsonic.models import infer_model, Model
 
 
 class Canvas:
-    def __init__(self, canvas_name: str, model_provider: Optional[BaseModelProvider] = None):
-        """
-        Initializes the Canvas.
-
-        Args:
-            canvas_name: The name of the canvas, used for the filename.
-            model_provider: An instantiated model provider object (e.g., OpenAI)
-                              to be used for modifying the canvas. If None, a
-                              default OpenAI GPT-4o Mini model is used.
-        """
+    def __init__(self, canvas_name: str, model_provider: Optional[Model | str] = None):
+        """Initializes the Canvas."""
         self.canvas_name = canvas_name
         
         if model_provider is None:
-            self.model_provider = OpenAI(model_name="gpt-4o-mini")
+            self.model_provider = infer_model("openai/gpt-4o-mini")
         else:
-            self.model_provider = model_provider
+            self.model_provider = infer_model(model_provider) if isinstance(model_provider, str) else model_provider
 
         self._clean_canvas()
     
@@ -55,9 +46,10 @@ class Canvas:
 
     async def change_in_canvas(self, new_text_of_part: str, part_definition: str) -> str:
         """Change the text of a part of the canvas"""
-        from upsonic import Task, Direct
+        from upsonic import Task
+        from upsonic.agent.agent import Agent
         
-        direct = Direct(model=self.model_provider)
+        agent = Agent(model=self.model_provider, name="Canvas Editor")
         
         current_canvas = self.get_current_state_of_canvas()
         
@@ -75,7 +67,7 @@ class Canvas:
         )
         
         task = Task(description=prompt)
-        await direct.do_async(task)
+        await agent.do_async(task)
         result = task.response
         
         self._save_canvas(result)

@@ -1,16 +1,16 @@
 import asyncio
-from typing import Any, Dict, List, Optional, Type, Tuple, Literal
+from typing import Any, Dict, List, Optional, Type, Tuple, Literal, Union
 import json
 import copy
 
-from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelRequest, ModelResponse, SystemPromptPart, UserPromptPart
+from upsonic.messages.messages import ModelMessagesTypeAdapter, ModelRequest, ModelResponse, SystemPromptPart, UserPromptPart
 from pydantic import BaseModel, Field, create_model
 
 from upsonic.storage.base import Storage
 from upsonic.storage.session.sessions import InteractionSession, UserProfile
 from upsonic.storage.types import SessionId, UserId
-from upsonic.models.base import BaseModelProvider
 from upsonic.schemas import UserTraits
+from upsonic.models import Model
 
 
 class Memory:
@@ -33,14 +33,11 @@ class Memory:
         user_profile_schema: Optional[Type[BaseModel]] = None,
         dynamic_user_profile: bool = False,
         num_last_messages: Optional[int] = None,
-        model_provider: Optional[BaseModelProvider] = None,
+        model_provider: Optional[Union[Model, str]] = None,
         debug: bool = False,
         feed_tool_call_results: bool = False,
         user_memory_mode: Literal['update', 'replace'] = 'update'
     ):
-        
-        if model_provider is not None and not isinstance(model_provider, BaseModelProvider):
-            raise TypeError("The `model_provider` parameter must be an instance of a BaseModelProvider subclass.")
         
         self.storage = storage
         self.num_last_messages = num_last_messages
@@ -142,7 +139,9 @@ class Memory:
         
         if self.full_session_memory_enabled:
             from pydantic_core import to_jsonable_python
-            all_messages_as_dicts = to_jsonable_python(model_response.new_messages())
+            # Get only the new messages from this run
+            new_messages_only = model_response.new_messages()
+            all_messages_as_dicts = to_jsonable_python(new_messages_only)
             session.chat_history.extend(all_messages_as_dicts)  # Store as a list of messages
 
         if self.summary_memory_enabled:
@@ -252,14 +251,14 @@ class Memory:
         
 
     async def _generate_new_summary(self, previous_summary: str, model_response) -> str:
-        from upsonic.agent.agent import Direct
+        from upsonic.agent.agent import Agent
         from upsonic.tasks.tasks import Task
         from pydantic_core import to_jsonable_python
 
         last_turn = to_jsonable_python(model_response.new_messages())
         session = await self.storage.read_async(self.session_id, InteractionSession)
         
-        summarizer = Direct("Summarizer", model=self.model_provider, debug=self.debug)
+        summarizer = Agent(name="Summarizer", model=self.model_provider, debug=self.debug)
         
         prompt = f"""
         Previous Summary: "{previous_summary or 'None'}"
@@ -270,7 +269,7 @@ class Memory:
         task = Task(description=prompt, response_format=str)
         
         summary_response = await summarizer.do_async(task)
-        return str(summary_response)
+        return str(summary_response.output)
 
     def _extract_user_prompt_content(self, messages: list) -> list[str]:
         """Extracts the content string from all UserPromptParts in a list of messages."""
@@ -296,7 +295,7 @@ class Memory:
 
         It then feeds this combined, clearly demarcated context to the analyzer LLM.
         """
-        from upsonic.agent.agent import Direct
+        from upsonic.agent.agent import Agent
         from upsonic.tasks.tasks import Task
 
         if not self.model_provider:
@@ -337,7 +336,7 @@ class Memory:
         conversation_context_str = "\n\n".join(prompt_context_parts)
         print(f"Analyzing traits using context from: {', '.join(source_log)}.")
         
-        analyzer = Direct("User Trait Analyzer", model=self.model_provider, debug=self.debug)
+        analyzer = Agent(name="User Trait Analyzer", model=self.model_provider, debug=self.debug)
 
         if self.is_profile_dynamic:
             class ProposedSchema(BaseModel):
@@ -356,10 +355,10 @@ class Memory:
             schema_task = Task(description=schema_generator_prompt, response_format=ProposedSchema)
             proposed_schema_response = await analyzer.do_async(schema_task)
 
-            if not proposed_schema_response or not proposed_schema_response.fields:
+            if not proposed_schema_response or not proposed_schema_response.output or not proposed_schema_response.output.fields:
                 return {}
 
-            dynamic_fields = {name: (Optional[Any], Field(None, description=desc)) for name, desc in proposed_schema_response.fields.items()}
+            dynamic_fields = {name: (Optional[Any], Field(None, description=desc)) for name, desc in proposed_schema_response.output.fields.items()}
             DynamicUserTraitModel = create_model('DynamicUserTraitModel', **dynamic_fields)
 
             trait_extractor_prompt = f"""
@@ -373,8 +372,8 @@ class Memory:
             trait_task = Task(description=trait_extractor_prompt, response_format=DynamicUserTraitModel)
             trait_response = await analyzer.do_async(trait_task)
             
-            if trait_response:
-                return trait_response.model_dump()
+            if trait_response and trait_response.output:
+                return trait_response.output.model_dump()
             return {}
 
         else:
@@ -390,6 +389,6 @@ class Memory:
             task = Task(description=prompt, response_format=self.profile_schema_model)
             
             trait_response = await analyzer.do_async(task)
-            if trait_response:
-                return trait_response.model_dump()
+            if trait_response and trait_response.output:
+                return trait_response.output.model_dump()
             return {}

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, Type, Optional, List, Union, Any, Tuple
+from typing import Dict, Type, Optional, List, Union, Any, Tuple, TYPE_CHECKING
 import os
 import json
 from pathlib import Path
@@ -7,21 +7,24 @@ import logging
 from functools import lru_cache
 
 from .base import BaseLoader
-from .config import (
-    LoaderConfig, LoaderConfigFactory, TextLoaderConfig, CSVLoaderConfig, 
-    PdfLoaderConfig, DOCXLoaderConfig, JSONLoaderConfig, XMLLoaderConfig, 
-    YAMLLoaderConfig, MarkdownLoaderConfig, HTMLLoaderConfig
-)
-from upsonic.schemas.data_models import Document
-from .text import TextLoader
-from .csv import CSVLoader
-from .pdf import PdfLoader
-from .docx import DOCXLoader
-from .json import JSONLoader
-from .xml import XMLLoader
-from .yaml import YAMLLoader
-from .markdown import MarkdownLoader
-from .html import HTMLLoader
+from .config import LoaderConfig, LoaderConfigFactory
+
+if TYPE_CHECKING:
+    from upsonic.schemas.data_models import Document
+    from .config import (
+        TextLoaderConfig, CSVLoaderConfig, PdfLoaderConfig, DOCXLoaderConfig, 
+        JSONLoaderConfig, XMLLoaderConfig, YAMLLoaderConfig, MarkdownLoaderConfig, 
+        HTMLLoaderConfig
+    )
+    from .text import TextLoader
+    from .csv import CSVLoader
+    from .pdf import PdfLoader
+    from .docx import DOCXLoader
+    from .json import JSONLoader
+    from .xml import XMLLoader
+    from .yaml import YAMLLoader
+    from .markdown import MarkdownLoader
+    from .html import HTMLLoader
 
 
 class LoaderFactory:
@@ -56,10 +59,22 @@ class LoaderFactory:
     
     @staticmethod
     def _get_default_loader_configs() -> List[Tuple[Type[BaseLoader], List[str]]]:
-        """Get the default loader configurations."""
+        """Get the default loader configurations with lazy imports."""
+        from .csv import CSVLoader
+        from .pdf import PdfLoader
+        from .pymupdf import PyMuPDFLoader
+        from .docx import DOCXLoader
+        from .json import JSONLoader
+        from .xml import XMLLoader
+        from .yaml import YAMLLoader
+        from .markdown import MarkdownLoader
+        from .html import HTMLLoader
+        from .text import TextLoader
+        
         return [
             (CSVLoader, ['.csv']),
             (PdfLoader, ['.pdf']),
+            (PyMuPDFLoader, ['.pdf']),  # Alternative PDF loader
             (DOCXLoader, ['.docx']),
             (JSONLoader, ['.json', '.jsonl']),
             (XMLLoader, ['.xml']),
@@ -118,11 +133,18 @@ class LoaderFactory:
     
     @staticmethod
     def _get_config_mapping() -> Dict[str, Type[LoaderConfig]]:
-        """Get the mapping of loader names to their config classes."""
+        """Get the mapping of loader names to their config classes with lazy imports."""
+        from .config import (
+            TextLoaderConfig, CSVLoaderConfig, PdfLoaderConfig, PyMuPDFLoaderConfig, DOCXLoaderConfig,
+            JSONLoaderConfig, XMLLoaderConfig, YAMLLoaderConfig, MarkdownLoaderConfig,
+            HTMLLoaderConfig
+        )
+        
         return {
             'text': TextLoaderConfig,
             'csv': CSVLoaderConfig,
             'pdf': PdfLoaderConfig,
+            'pymupdf': PyMuPDFLoaderConfig,
             'docx': DOCXLoaderConfig,
             'json': JSONLoaderConfig,
             'xml': XMLLoaderConfig,
@@ -281,6 +303,8 @@ class LoaderFactory:
         """Apply loader-specific optimizations."""
         if loader_type == 'pdf':
             self._optimize_pdf_config(config, file_size)
+        elif loader_type == 'pymupdf':
+            self._optimize_pymupdf_config(config, file_size)
         elif loader_type == 'html':
             self._optimize_html_config(config, source)
         elif loader_type == 'csv':
@@ -304,6 +328,20 @@ class LoaderFactory:
             config.setdefault('extraction_mode', 'text_only')
         else:
             config.setdefault('extraction_mode', 'hybrid')
+    
+    def _optimize_pymupdf_config(self, config: Dict[str, Any], file_size: int) -> None:
+        """Optimize PyMuPDF loader configuration based on file size."""
+        if file_size > self._PDF_LARGE_THRESHOLD:
+            config.setdefault('extraction_mode', 'text_only')
+            config.setdefault('include_images', False)
+            config.setdefault('extract_annotations', False)
+            config.setdefault('image_dpi', 72)  # Lower DPI for large files
+        else:
+            config.setdefault('extraction_mode', 'hybrid')
+            config.setdefault('include_images', True)
+            config.setdefault('extract_annotations', True)
+            config.setdefault('image_dpi', 150)  # Higher DPI for better quality
+            config.setdefault('text_extraction_method', 'dict')  # Better structure for smaller files
     
     def _optimize_html_config(self, config: Dict[str, Any], source: str) -> None:
         """Optimize HTML loader configuration for URLs."""
@@ -770,7 +808,7 @@ def get_supported_loaders() -> List[str]:
     return get_factory().get_supported_loaders()
 
 
-def load_document(source: str, **config_kwargs) -> List[Document]:
+def load_document(source: str, **config_kwargs) -> List['Document']:
     loader = create_loader(source, **config_kwargs)
     return loader.load(source)
 
@@ -778,7 +816,7 @@ def load_document(source: str, **config_kwargs) -> List[Document]:
 def load_documents_batch(
     sources: List[str], 
     **config_kwargs
-) -> Dict[str, List[Document]]:
+) -> Dict[str, List['Document']]:
     """
     Load documents from multiple sources in batch.
     

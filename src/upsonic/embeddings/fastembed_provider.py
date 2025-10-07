@@ -9,10 +9,15 @@ try:
     from fastembed.common import OnnxProvider
     import onnxruntime as ort
     FASTEMBED_AVAILABLE = True
-except ImportError:
-    FASTEMBED_AVAILABLE = False
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="fastembed",
+        install_command='pip install fastembed',
+        feature_name="fastembed provider"
+    )
 
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
 from ..utils.package.exception import ConfigurationError, ModelConnectionError
 
@@ -40,7 +45,8 @@ class FastEmbedConfig(EmbeddingConfig):
     enable_sparse_embeddings: bool = Field(False, description="Use sparse embeddings for better performance")
     sparse_model_name: Optional[str] = Field(None, description="Sparse model name if different from dense")
     
-    @validator('providers')
+    @field_validator('providers')
+    @classmethod
     def validate_providers(cls, v):
         """Validate ONNX providers."""
         valid_providers = [
@@ -57,7 +63,8 @@ class FastEmbedConfig(EmbeddingConfig):
         
         return v
     
-    @validator('doc_embed_type')
+    @field_validator('doc_embed_type')
+    @classmethod
     def validate_embed_type(cls, v):
         """Validate document embedding type."""
         valid_types = ["default", "passage"]
@@ -71,11 +78,6 @@ class FastEmbedProvider(EmbeddingProvider):
     config: FastEmbedConfig
     
     def __init__(self, config: Optional[FastEmbedConfig] = None, **kwargs):
-        if not FASTEMBED_AVAILABLE:
-            raise ConfigurationError(
-                "FastEmbed package not found. Install with: pip install fastembed",
-                error_code="DEPENDENCY_MISSING"
-            )
         
         if config is None:
             config = FastEmbedConfig(**kwargs)

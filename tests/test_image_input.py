@@ -1,7 +1,12 @@
 import pytest
 from unittest.mock import patch, AsyncMock
 from contextlib import asynccontextmanager
+from PIL import Image
+import tempfile
+import os
 from upsonic import Task, Agent
+from upsonic.agent.run_result import RunResult
+from upsonic.models import ModelResponse, TextPart
 from pydantic import BaseModel
 
 class Names(BaseModel):
@@ -9,44 +14,52 @@ class Names(BaseModel):
 
 class TestTaskImageContextHandling:
     
-    @patch('upsonic.models.factory.ModelFactory.create')
-    @patch('upsonic.agent.agent.PydanticAgent')
-    def test_agent_with_multiple_images_returns_combined_names(self, mock_pydantic_agent, mock_factory_create):
-        # Mock the factory to return a mock provider that doesn't need API keys
-        mock_provider = AsyncMock()
-        mock_model = AsyncMock()
-        mock_provider._provision.return_value = (mock_model, None)
-        mock_factory_create.return_value = mock_provider
-
-        
-        mock_agent_instance = AsyncMock()
-        
-        # Create a mock response object that returns the expected format
-        mock_response = AsyncMock()
-        mock_response.output = Names(names=["John Smith", "Jane Doe", "Michael Johnson"])
-        mock_response.all_messages = lambda: []
-        mock_agent_instance.run.return_value = mock_response
-        
-        # Create a proper async context manager for run_mcp_servers
-        @asynccontextmanager
-        async def mock_run_mcp_servers():
-            yield
-        
-        mock_agent_instance.run_mcp_servers = mock_run_mcp_servers
-        mock_pydantic_agent.return_value = mock_agent_instance
-        
-        images = ["paper1.png", "paper2.png"]
-        
-        task = Task(
-            "Extract the names in the paper",
-            images=images,
-            response_format=Names
-        )
-        
-        agent = Agent(name="OCR Agent")
-        
-        result = agent.print_do(task)
-        
-        assert isinstance(result, Names)
-        assert isinstance(result.names, list)
-        assert all(isinstance(name, str) for name in result.names)
+    @patch('upsonic.models.infer_model')
+    def test_agent_with_multiple_images_returns_combined_names(self, mock_infer_model):
+        # Create temporary test images
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create simple test images
+            img1_path = os.path.join(temp_dir, "paper1.png")
+            img2_path = os.path.join(temp_dir, "paper2.png")
+            
+            # Create simple white images
+            img1 = Image.new('RGB', (100, 100), color='white')
+            img2 = Image.new('RGB', (100, 100), color='white')
+            
+            img1.save(img1_path)
+            img2.save(img2_path)
+            
+            # Mock the model inference
+            mock_model = AsyncMock()
+            mock_infer_model.return_value = mock_model
+            
+            # Mock the model request to return a proper ModelResponse with structured output
+            expected_names = Names(names=["John Smith", "Jane Doe", "Michael Johnson"])
+            mock_response = ModelResponse(
+                parts=[TextPart(content=expected_names.model_dump_json())],
+                model_name="test-model",
+                timestamp="2024-01-01T00:00:00Z",
+                usage=None,
+                provider_name="test-provider",
+                provider_response_id="test-id",
+                provider_details={},
+                finish_reason="stop"
+            )
+            mock_model.request.return_value = mock_response
+            
+            images = [img1_path, img2_path]
+            
+            task = Task(
+                "Extract the names in the paper",
+                attachments=images,
+                response_format=Names
+            )
+            
+            agent = Agent(name="OCR Agent", model=mock_model)
+            
+            result = agent.print_do(task)
+            
+            # Check that result is a Names object with the expected output
+            assert isinstance(result, Names)
+            assert isinstance(result.names, list)
+            assert all(isinstance(name, str) for name in result.names)

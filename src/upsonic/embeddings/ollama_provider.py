@@ -11,7 +11,7 @@ try:
 except ImportError:
     HTTP_AVAILABLE = False
 
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
 from ..utils.package.exception import ConfigurationError, ModelConnectionError
 
@@ -37,7 +37,8 @@ class OllamaEmbeddingConfig(EmbeddingConfig):
     enable_keep_alive: bool = Field(True, description="Keep model loaded between requests")
     enable_model_preload: bool = Field(True, description="Preload model on startup")
     
-    @validator('base_url')
+    @field_validator('base_url')
+    @classmethod
     def validate_base_url(cls, v):
         """Validate Ollama base URL format."""
         if not v.startswith(('http://', 'https://')):
@@ -47,7 +48,8 @@ class OllamaEmbeddingConfig(EmbeddingConfig):
         
         return v
     
-    @validator('model_name')
+    @field_validator('model_name')
+    @classmethod
     def validate_model_name(cls, v):
         """Validate and suggest Ollama model names."""
         known_models = [

@@ -1,14 +1,23 @@
 import uuid 
 from typing import Any, Dict, List, Optional, Union, Literal
 
-import weaviate
-import weaviate.classes as wvc
-from weaviate.exceptions import (
-    WeaviateConnectionError,
-    UnexpectedStatusCodeError,
-)
-from weaviate.util import generate_uuid5
-from weaviate.classes.query import HybridFusion
+try:
+    import weaviate
+    import weaviate.classes as wvc
+    from weaviate.exceptions import (
+        WeaviateConnectionError,
+        UnexpectedStatusCodeError,
+    )
+    from weaviate.util import generate_uuid5
+    from weaviate.classes.query import HybridFusion
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="weaviate-client",
+        install_command='pip install "upsonic[rag]"',
+        feature_name="Weaviate vector database provider"
+    )
+
 
 from upsonic.vectordb.config import (
     Config, 

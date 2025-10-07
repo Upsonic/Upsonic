@@ -1,6 +1,6 @@
 [project]
 name = "upsonic"
-version = "0.61.1"
+version = "0.62.0"
 description = "Task oriented AI agent framework for digital workers and vertical AI agents"
 readme = "README.md"
 authors = [
@@ -14,41 +14,18 @@ dependencies = [
     "toml>=0.10.2",
     "uv>=0.5.20",
     "mcp[cli]==1.9.4",
-    "pydantic-ai==0.3.2",
     "python-dotenv>=1.0.1",
     "uvicorn>=0.34.0",
-    "beautifulsoup4>=4.12.3",
-    "boto3>=1.35.99",
-    "botocore>=1.35.99",
-    "google>=3.0.0",
-    "python-multipart>=0.0.20",
-    "requests>=2.32.3",
-    "duckduckgo-search>=7.3.1",
     "nest-asyncio>=1.6.0",
-    "pydantic-ai-slim[anthropic,bedrock,openai,mcp]>=0.3.2",
     "pydantic==2.10.5",
-    "celery[redis]>=5.5.3",
-    "transformers>=4.55.4",
-    "openai>=1.86.0",
-    "azure-identity>=1.23.0",
-    "azure-core>=1.34.0",
-    "fastembed>=0.4.1",
-    "onnxruntime>=1.22.1",
-    "google-generativeai>=0.8.5",
-    "google-auth>=2.40.3",
-    "torch>=2.8.0",
-    "huggingface-hub>=0.34.4",
+    "pydantic-core>=2.27.2",
+    "typing-extensions>=4.15.0",
+    "anyio>=4.10.0",
+    "griffe>=1.14.0",
+    "typing-inspection>=0.4.1",
+    "httpx>=0.28.1",
     "aiohttp>=3.12.15",
-    "python-docx>=1.2.0",
-    "jq>=1.10.0",
-    "pypdf>=6.0.0",
-    "lxml>=5.4.0",
-    "pyyaml>=6.0.2",
-    "aiofiles>=24.1.0",
-    "rapidocr-onnxruntime>=1.4.4",
-    "markdown-it-py>=3.0.0",
-    "python-frontmatter>=1.1.0",
-    "yfinance>=0.2.65",
+    "requests>=2.32.5",
 ]
 
 [project.optional-dependencies]
@@ -74,6 +51,70 @@ storage = [
     "psycopg[binary]>=3.2.9",
     "redis>=5.2.1",
     "sqlalchemy>=2.0.42",
+]
+models = [
+    "anthropic>=0.69.0",
+    "anyio>=4.10.0",
+    "azure-core>=1.35.1",
+    "azure-identity>=1.25.0",
+    "boto3>=1.40.45",
+    "botocore>=1.40.45",
+    "cohere>=5.18.0",
+    "google-auth>=2.40.3",
+    "google-genai>=1.41.0",
+    "groq>=0.32.0",
+    "httpx>=0.28.1",
+    "mistralai>=1.9.11",
+    "mypy-boto3-bedrock-runtime>=1.40.41",
+    "openai>=2.1.0",
+]
+embeddings = [
+    "aiohttp>=3.12.15",
+    "anthropic>=0.69.0",
+    "azure-core>=1.35.1",
+    "azure-identity>=1.25.0",
+    "boto3>=1.40.45",
+    "botocore>=1.40.45",
+    "fastembed>=0.7.3",
+    "google-auth>=2.40.3",
+    "google-genai>=1.41.0",
+    "huggingface-hub>=0.34.4",
+    "numpy>=2.2.6",
+    "onnxruntime>=1.22.1",
+    "openai>=2.1.0",
+    "requests>=2.32.5",
+    "torch>=2.8.0",
+    "transformers>=4.57.0",
+]
+loaders = [
+    "aiofiles>=24.1.0",
+    "aiohttp>=3.12.15",
+    "beautifulsoup4>=4.14.2",
+    "jq>=1.10.0",
+    "lxml>=6.0.2",
+    "markdown-it-py>=4.0.0",
+    "pillow>=11.3.0",
+    "pymupdf>=1.26.4",
+    "pypdf>=6.1.1",
+    "python-docx>=1.2.0",
+    "python-frontmatter>=1.1.0",
+    "pyyaml>=6.0.2",
+    "rapidocr-onnxruntime>=1.4.4",
+    "requests>=2.32.5",
+]
+tools = [
+    "beautifulsoup4>=4.14.2",
+    "duckduckgo-search>=8.1.1",
+    "genai-prices>=0.0.29",
+    "llmlingua>=0.2.2",
+    "pandas>=2.3.2",
+    "tavily-python>=0.7.12",
+    "yfinance>=0.2.66",
+]
+web = [
+    "celery>=5.5.3",
+    "python-multipart>=0.0.20",
+    "uvicorn>=0.35.0",
 ]
 
 [build-system]

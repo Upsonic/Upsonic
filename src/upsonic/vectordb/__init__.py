@@ -1,3 +1,6 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING, Any
+
 from .base import (
     BaseVectorDBProvider,
 )
@@ -7,6 +10,15 @@ from .config import (
     IndexType,
     QuantizationConfig,
 )
+
+if TYPE_CHECKING:
+    from .providers.chroma import ChromaProvider
+    from .providers.faiss import FaissProvider
+    from .providers.pinecone import PineconeProvider
+    from .providers.qdrant import QdrantProvider
+    from .providers.milvus import MilvusProvider
+    from .providers.weaviate import WeaviateProvider
+    from .providers.pgvector import PgvectorProvider
 
 def _get_provider_classes():
     """Get provider classes with lazy importing."""
@@ -57,7 +69,7 @@ def _get_provider_classes():
     return providers
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     """Lazy import of provider classes."""
     providers = _get_provider_classes()
     if name in providers:
@@ -66,7 +78,6 @@ def __getattr__(name: str):
 
 
 __all__ = [
-    
     'ChromaProvider',
     'FaissProvider',
     'PineconeProvider',

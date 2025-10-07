@@ -1,77 +1,217 @@
-from typing import Set, List, Dict, TYPE_CHECKING
-
-from upsonic.utils.package.exception import ModelCapabilityError
-from upsonic.utils.file_helpers import get_clean_extension
-from upsonic.models.base import BaseModelProvider
+import os
+from typing import List, TYPE_CHECKING
+from pathlib import Path
 
 if TYPE_CHECKING:
-    from upsonic.tasks.tasks import Task 
+    from upsonic.tasks.tasks import Task
 
-GENERIC_IMAGE_EXTS: Set[str] = {"png", "jpeg", "jpg", "webp", "heic", "heif", "gif", "bmp"}
-GENERIC_AUDIO_EXTS: Set[str] = {"wav", "mp3", "aiff", "aac", "ogg", "flac", "m4a"}
-GENERIC_VIDEO_EXTS: Set[str] = {"mp4", "mpeg", "mpg", "mov", "avi", "flv", "webm", "wmv", "3gpp", "3gp", "mkv"}
 
-def validate_attachments_for_model(model_provider: BaseModelProvider, single_task: "Task") -> None:
+class AttachmentFileNotFoundError(Exception):
     """
-    Validates if the attachments in a task are supported by the model provider,
-    checking both the general capability and the specific file extension.
+    Exception raised when an attachment file does not exist.
+    
+    This exception provides detailed information about which file is missing
+    and helpful suggestions for resolving the issue.
+    """
+    
+    def __init__(self, attachment_path: str, task_description: str = None):
+        self.attachment_path = attachment_path
+        self.task_description = task_description
+        
+        message = f"Attachment file not found: '{attachment_path}'"
+        
+        if task_description:
+            message += f"\nTask: {task_description}"
+        
+        suggestions = []
+        
+        if not os.path.isabs(attachment_path):
+            suggestions.append(f"• Check if the file path is correct relative to the current working directory: {os.getcwd()}")
+            suggestions.append(f"• Try using an absolute path instead of a relative path")
+        
+        parent_dir = os.path.dirname(attachment_path)
+        if parent_dir and os.path.exists(parent_dir) and not os.access(parent_dir, os.R_OK):
+            suggestions.append(f"• Check if you have read permissions for the directory: {parent_dir}")
+        
+        if '.' in attachment_path:
+            suggestions.append(f"• Verify the file extension is correct")
+        
+        if suggestions:
+            message += f"\n\nSuggestions:\n" + "\n".join(suggestions)
+        
+        super().__init__(message)
 
+
+def validate_attachments_exist(task: "Task") -> None:
+    """
+    Validates that all attachment files in a task actually exist on the filesystem.
+    
+    This is a critical validation for AI Agent frameworks to ensure that
+    all referenced files are accessible before processing begins.
+    
     Args:
-        model_provider: The instantiated model provider object (e.g., OpenAI, Gemini).
-        single_task: The Task object containing the list of attachments.
-
+        task: The Task object containing the list of attachments to validate.
+        
     Raises:
-        ModelCapabilityError: If an attachment requires a capability or a specific
-                              file extension not supported by the model.
+        AttachmentFileNotFoundError: If any attachment file does not exist.
+        
+    Example:
+        ```python
+        from upsonic import Task
+        from upsonic.utils.validators import validate_attachments_exist
+        
+        task = Task("Analyze this image", attachments=["image.jpg"])
+        
+        try:
+            validate_attachments_exist(task)
+            print("All attachments are valid!")
+        except AttachmentFileNotFoundError as e:
+            print(f"Validation failed: {e}")
+        ```
     """
-    if not single_task.attachments:
+    if not task.attachments:
         return
-
-    supported_capabilities_dict = model_provider.capabilities
-
-    if not supported_capabilities_dict:
-        raise ModelCapabilityError(
-            model_name=model_provider.model_name,
-            attachment_path=single_task.attachments[0],
-            attachment_extension=get_clean_extension(single_task.attachments[0]),
-            required_capability="vision, audio, or video",
-            supported_extensions=[]
+    
+    missing_files = []
+    
+    for attachment_path in task.attachments:
+        if not attachment_path:
+            continue
+            
+        path = Path(attachment_path)
+        
+        if not path.exists():
+            missing_files.append(attachment_path)
+        elif not path.is_file():
+            missing_files.append(attachment_path)
+    
+    if missing_files:
+        # Use the first missing file for the detailed error message
+        raise AttachmentFileNotFoundError(
+            attachment_path=missing_files[0],
+            task_description=task.description
         )
 
-    for attachment_path in single_task.attachments:
-        extension = get_clean_extension(attachment_path)
-        if not extension:
+
+def validate_attachments_readable(task: "Task") -> None:
+    """
+    Validates that all attachment files in a task are readable.
+    
+    This goes beyond just checking existence to ensure the files can actually
+    be opened and read by the application.
+    
+    Args:
+        task: The Task object containing the list of attachments to validate.
+        
+    Raises:
+        AttachmentFileNotFoundError: If any attachment file cannot be read.
+        
+    Example:
+        ```python
+        from upsonic import Task
+        from upsonic.utils.validators import validate_attachments_readable
+        
+        task = Task("Process this document", attachments=["document.pdf"])
+        
+        try:
+            validate_attachments_readable(task)
+            print("All attachments are readable!")
+        except AttachmentFileNotFoundError as e:
+            print(f"Read validation failed: {e}")
+        ```
+    """
+    if not task.attachments:
+        return
+    
+    unreadable_files = []
+    
+    for attachment_path in task.attachments:
+        if not attachment_path:
             continue
-
-        required_capability = None
-        if extension in GENERIC_IMAGE_EXTS: required_capability = "vision"
-        elif extension in GENERIC_AUDIO_EXTS: required_capability = "audio"
-        elif extension in GENERIC_VIDEO_EXTS: required_capability = "video"
-
-        if not required_capability:
-            continue
-
-        if required_capability in supported_capabilities_dict:
             
-            supported_extensions_for_cap = supported_capabilities_dict[required_capability]
-            if extension in supported_extensions_for_cap:
-                continue
-            else:
-                raise ModelCapabilityError(
-                    model_name=model_provider.model_name,
-                    attachment_path=attachment_path,
-                    attachment_extension=extension,
-                    required_capability=required_capability,
-                    supported_extensions=sorted(supported_extensions_for_cap)
-                )
+        path = Path(attachment_path)
+        
+        if not path.exists():
+            unreadable_files.append(attachment_path)
+        elif not path.is_file():
+            unreadable_files.append(attachment_path)
+        elif not os.access(path, os.R_OK):
+            unreadable_files.append(attachment_path)
         else:
-            all_supported_extensions: List[str] = [
-                ext for cap_exts in supported_capabilities_dict.values() for ext in cap_exts
-            ]
-            raise ModelCapabilityError(
-                model_name=model_provider.model_name,
-                attachment_path=attachment_path,
-                attachment_extension=extension,
-                required_capability=required_capability,
-                supported_extensions=sorted(all_supported_extensions)
-            )
+            try:
+                with open(path, 'rb') as f:
+                    f.read(1024)
+            except (IOError, OSError, PermissionError):
+                unreadable_files.append(attachment_path)
+    
+    if unreadable_files:
+        raise AttachmentFileNotFoundError(
+            attachment_path=unreadable_files[0],
+            task_description=task.description
+        )
+
+
+def get_attachment_info(task: "Task") -> List[dict]:
+    """
+    Get detailed information about all attachments in a task.
+    
+    This is useful for debugging and providing comprehensive information
+    about the files that will be processed.
+    
+    Args:
+        task: The Task object containing the list of attachments.
+        
+    Returns:
+        List[dict]: A list of dictionaries containing file information.
+                   Each dictionary contains:
+                   - path: The file path
+                   - exists: Whether the file exists
+                   - is_file: Whether it's a file (not directory)
+                   - readable: Whether the file is readable
+                   - size: File size in bytes (if exists and readable)
+                   - extension: File extension (if exists)
+                   
+    Example:
+        ```python
+        from upsonic import Task
+        from upsonic.utils.validators import get_attachment_info
+        
+        task = Task("Process files", attachments=["file1.txt", "file2.jpg"])
+        info = get_attachment_info(task)
+        
+        for file_info in info:
+            print(f"File: {file_info['path']}")
+            print(f"  Exists: {file_info['exists']}")
+            print(f"  Size: {file_info.get('size', 'N/A')} bytes")
+        ```
+    """
+    if not task.attachments:
+        return []
+    
+    attachment_info = []
+    
+    for attachment_path in task.attachments:
+        if not attachment_path:
+            continue
+            
+        path = Path(attachment_path)
+        info = {
+            'path': attachment_path,
+            'exists': path.exists(),
+            'is_file': path.is_file() if path.exists() else False,
+            'readable': False,
+            'size': None,
+            'extension': path.suffix.lower() if path.suffix else None
+        }
+        
+        if info['exists'] and info['is_file']:
+            try:
+                if os.access(path, os.R_OK):
+                    info['readable'] = True
+                    info['size'] = path.stat().st_size
+            except (OSError, PermissionError):
+                pass
+        
+        attachment_info.append(info)
+    
+    return attachment_info

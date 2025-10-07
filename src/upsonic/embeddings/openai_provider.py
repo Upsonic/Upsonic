@@ -11,7 +11,7 @@ try:
 except ImportError:
     OPENAI_AVAILABLE = False
 
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
 from ..utils.package.exception import ConfigurationError, ModelConnectionError
 
@@ -32,7 +32,8 @@ class OpenAIEmbeddingConfig(EmbeddingConfig):
     parallel_requests: int = Field(5, description="Number of parallel requests")
     request_timeout: float = Field(60.0, description="Request timeout in seconds")
     
-    @validator('model_name')
+    @field_validator('model_name')
+    @classmethod
     def validate_model_name(cls, v):
         """Validate and auto-correct model names."""
         model_mapping = {

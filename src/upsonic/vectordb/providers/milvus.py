@@ -2,18 +2,27 @@ from typing import Any, Dict, List, Optional, Union, Literal, Generator
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, message=".*Cannot infer schema from data.*")
 
-from pymilvus import (
-    connections,
-    utility,
-    Collection,
-    FieldSchema,
-    CollectionSchema,
-    DataType,
-    WeightedRanker,
-    RRFRanker,
-    AnnSearchRequest
-)
-from pymilvus.exceptions import MilvusException
+try:
+    from pymilvus import (
+        connections,
+        utility,
+        Collection,
+        FieldSchema,
+        CollectionSchema,
+        DataType,
+        WeightedRanker,
+        RRFRanker,
+        AnnSearchRequest
+    )
+    from pymilvus.exceptions import MilvusException
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="pymilvus",
+        install_command='pip install "upsonic[rag]"',
+        feature_name="Milvus vector database provider"
+    )
+
 
 
 from upsonic.vectordb.base import BaseVectorDBProvider
@@ -85,11 +94,7 @@ class MilvusProvider(BaseVectorDBProvider):
             ImportError: If the `pymilvus` package is not installed.
             ConfigurationError: If the provided config is incompatible with Milvus.
         """
-        if Collection is None:
-            raise ImportError(
-                "The 'pymilvus' package is required to use MilvusProvider. "
-                "Please install it with 'pip install pymilvus'."
-            )
+        # Collection is now guaranteed to be available due to the try-except block above
         
         super().__init__(config)
         self._validate_config()

@@ -4,7 +4,15 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional, Union, Tuple
 from enum import Enum
 import time
-import numpy as np
+try:
+    import numpy as np
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="numpy",
+        install_command='pip install numpy',
+        feature_name="numpy embeddings"
+    )
 from concurrent.futures import ThreadPoolExecutor
 
 from pydantic import BaseModel, Field, ConfigDict

@@ -1,264 +1,528 @@
-from .tool import tool
-from .processor import ToolConfig, ToolKit
-from .pseudo_tools import plan_and_execute
-from .thought import Thought, AnalysisResult
-from .external_tool import ExternalToolCall
+"""
+Upsonic Tools System
+
+A comprehensive, modular tool handling system for AI agents that supports:
+- Function tools with decorators
+- Class-based tools and toolkits
+- Agent-as-tool functionality
+- MCP (Model Context Protocol) tools
+- Deferred and external tool execution
+- Tool orchestration and planning
+- Rich behavioral configuration (caching, confirmation, hooks, etc.)
+"""
+
+from __future__ import annotations
+import time
+import uuid
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from upsonic.tasks.tasks import Task
+    from upsonic.tools.base import (
+        Tool,
+        ToolBase,
+        ToolKit,
+        ToolDefinition,
+        ToolCall,
+        ToolResult,
+        ToolMetadata,
+        ToolSchema,
+        DocstringFormat,
+        ObjectJsonSchema,
+    )
+    from upsonic.tools.config import (
+        tool,
+        ToolConfig,
+        ToolHooks,
+    )
+    from upsonic.tools.context import (
+        ToolContext,
+        AgentDepsT,
+    )
+    from upsonic.tools.schema import (
+        FunctionSchema,
+        generate_function_schema,
+        validate_tool_function,
+        SchemaGenerationError,
+    )
+    from upsonic.tools.processor import (
+        ToolProcessor,
+        ToolValidationError,
+        ExternalExecutionPause,
+    )
+    from upsonic.tools.wrappers import (
+        FunctionTool,
+        AgentTool,
+        MethodTool,
+    )
+    from upsonic.tools.orchestration import (
+        PlanStep,
+        AnalysisResult,
+        Thought,
+        ExecutionResult,
+        plan_and_execute,
+        Orchestrator,
+    )
+    from upsonic.tools.deferred import (
+        ExternalToolCall,
+        DeferredToolRequests,
+        DeferredToolResults,
+        ToolApproval,
+        DeferredExecutionManager,
+    )
+    from upsonic.tools.mcp import (
+        MCPTool,
+        MCPHandler,
+    )
+    from upsonic.tools.builtin_tools import (
+        AbstractBuiltinTool,
+        WebSearchTool,
+        WebSearchUserLocation,
+        CodeExecutionTool,
+        UrlContextTool,
+        WebSearch,
+        WebRead,
+    )
+
+def _get_base_classes():
+    """Lazy import of base classes."""
+    from upsonic.tools.base import (
+        Tool,
+        ToolBase,
+        ToolKit,
+        ToolDefinition,
+        ToolCall,
+        ToolResult,
+        ToolMetadata,
+        ToolSchema,
+        DocstringFormat,
+        ObjectJsonSchema,
+    )
+    
+    return {
+        'Tool': Tool,
+        'ToolBase': ToolBase,
+        'ToolKit': ToolKit,
+        'ToolDefinition': ToolDefinition,
+        'ToolCall': ToolCall,
+        'ToolResult': ToolResult,
+        'ToolMetadata': ToolMetadata,
+        'ToolSchema': ToolSchema,
+        'DocstringFormat': DocstringFormat,
+        'ObjectJsonSchema': ObjectJsonSchema,
+    }
+
+def _get_config_classes():
+    """Lazy import of config classes."""
+    from upsonic.tools.config import (
+        tool,
+        ToolConfig,
+        ToolHooks,
+    )
+    
+    return {
+        'tool': tool,
+        'ToolConfig': ToolConfig,
+        'ToolHooks': ToolHooks,
+    }
+
+def _get_context_classes():
+    """Lazy import of context classes."""
+    from upsonic.tools.context import (
+        ToolContext,
+        AgentDepsT,
+    )
+    
+    return {
+        'ToolContext': ToolContext,
+        'AgentDepsT': AgentDepsT,
+    }
+
+def _get_schema_classes():
+    """Lazy import of schema classes."""
+    from upsonic.tools.schema import (
+        FunctionSchema,
+        generate_function_schema,
+        validate_tool_function,
+        SchemaGenerationError,
+    )
+    
+    return {
+        'FunctionSchema': FunctionSchema,
+        'generate_function_schema': generate_function_schema,
+        'validate_tool_function': validate_tool_function,
+        'SchemaGenerationError': SchemaGenerationError,
+    }
+
+def _get_processor_classes():
+    """Lazy import of processor classes."""
+    from upsonic.tools.processor import (
+        ToolProcessor,
+        ToolValidationError,
+        ExternalExecutionPause,
+    )
+    
+    return {
+        'ToolProcessor': ToolProcessor,
+        'ToolValidationError': ToolValidationError,
+        'ExternalExecutionPause': ExternalExecutionPause,
+    }
+
+def _get_wrapper_classes():
+    """Lazy import of wrapper classes."""
+    from upsonic.tools.wrappers import (
+        FunctionTool,
+        AgentTool,
+        MethodTool,
+    )
+    
+    return {
+        'FunctionTool': FunctionTool,
+        'AgentTool': AgentTool,
+        'MethodTool': MethodTool,
+    }
+
+def _get_orchestration_classes():
+    """Lazy import of orchestration classes."""
+    from upsonic.tools.orchestration import (
+        PlanStep,
+        AnalysisResult,
+        Thought,
+        ExecutionResult,
+        plan_and_execute,
+        Orchestrator,
+    )
+    
+    return {
+        'PlanStep': PlanStep,
+        'AnalysisResult': AnalysisResult,
+        'Thought': Thought,
+        'ExecutionResult': ExecutionResult,
+        'plan_and_execute': plan_and_execute,
+        'Orchestrator': Orchestrator,
+    }
+
+def _get_deferred_classes():
+    """Lazy import of deferred classes."""
+    from upsonic.tools.deferred import (
+        ExternalToolCall,
+        DeferredToolRequests,
+        DeferredToolResults,
+        ToolApproval,
+        DeferredExecutionManager,
+    )
+    
+    return {
+        'ExternalToolCall': ExternalToolCall,
+        'DeferredToolRequests': DeferredToolRequests,
+        'DeferredToolResults': DeferredToolResults,
+        'ToolApproval': ToolApproval,
+        'DeferredExecutionManager': DeferredExecutionManager,
+    }
+
+def _get_mcp_classes():
+    """Lazy import of MCP classes."""
+    from upsonic.tools.mcp import (
+        MCPTool,
+        MCPHandler,
+    )
+    
+    return {
+        'MCPTool': MCPTool,
+        'MCPHandler': MCPHandler,
+    }
+
+def _get_builtin_classes():
+    """Lazy import of builtin classes."""
+    from upsonic.tools.builtin_tools import (
+        AbstractBuiltinTool,
+        WebSearchTool,
+        WebSearchUserLocation,
+        CodeExecutionTool,
+        UrlContextTool,
+        WebSearch,
+        WebRead,
+    )
+    
+    return {
+        'AbstractBuiltinTool': AbstractBuiltinTool,
+        'WebSearchTool': WebSearchTool,
+        'WebSearchUserLocation': WebSearchUserLocation,
+        'CodeExecutionTool': CodeExecutionTool,
+        'UrlContextTool': UrlContextTool,
+        'WebSearch': WebSearch,
+        'WebRead': WebRead,
+    }
+
+def __getattr__(name: str) -> Any:
+    """Lazy loading of heavy modules and classes."""
+    # Base classes
+    base_classes = _get_base_classes()
+    if name in base_classes:
+        return base_classes[name]
+    
+    # Config classes
+    config_classes = _get_config_classes()
+    if name in config_classes:
+        return config_classes[name]
+    
+    # Context classes
+    context_classes = _get_context_classes()
+    if name in context_classes:
+        return context_classes[name]
+    
+    # Schema classes
+    schema_classes = _get_schema_classes()
+    if name in schema_classes:
+        return schema_classes[name]
+    
+    # Processor classes
+    processor_classes = _get_processor_classes()
+    if name in processor_classes:
+        return processor_classes[name]
+    
+    # Wrapper classes
+    wrapper_classes = _get_wrapper_classes()
+    if name in wrapper_classes:
+        return wrapper_classes[name]
+    
+    # Orchestration classes
+    orchestration_classes = _get_orchestration_classes()
+    if name in orchestration_classes:
+        return orchestration_classes[name]
+    
+    # Deferred classes
+    deferred_classes = _get_deferred_classes()
+    if name in deferred_classes:
+        return deferred_classes[name]
+    
+    # MCP classes
+    mcp_classes = _get_mcp_classes()
+    if name in mcp_classes:
+        return mcp_classes[name]
+    
+    # Builtin classes
+    builtin_classes = _get_builtin_classes()
+    if name in builtin_classes:
+        return builtin_classes[name]
+    
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
-
-
-
-from typing import Dict, List
-try:
-    from ddgs import DDGS
-except ImportError:
-    from duckduckgo_search import DDGS
-import requests
-from bs4 import BeautifulSoup
-
-import yfinance as yf
-import json
-import pandas as pd
-
-class YFinanceTools:
-    def __init__(
+class ToolManager:
+    """High-level manager for all tool operations."""
+    
+    def __init__(self):
+        from upsonic.tools.processor import ToolProcessor
+        from upsonic.tools.deferred import DeferredExecutionManager
+        
+        self.processor = ToolProcessor()
+        self.deferred_manager = DeferredExecutionManager()
+        self.orchestrator = None
+        self.wrapped_tools = {}
+        self.current_task = None
+        
+    def register_tools(
         self,
-        stock_price=True,
-        company_info=False,
-        analyst_recommendations=False,
-        company_news=False,
-        enable_all=False,
-    ):
-        self._tools = []
-        if stock_price or enable_all:
-            self._tools.append(self.get_current_stock_price)
-        if company_info or enable_all:
-            self._tools.append(self.get_company_info)
-        if analyst_recommendations or enable_all:
-            self._tools.append(self.get_analyst_recommendations)
-        if company_news or enable_all:
-            self._tools.append(self.get_company_news)
-
-    def get_current_stock_price(self, symbol: str) -> str:
-        try:
-            stock = yf.Ticker(symbol)
-            price = stock.info.get("regularMarketPrice", stock.info.get("currentPrice"))
-            return f"{price:.4f}" if price else f"Could not fetch current price for {symbol}"
-        except Exception as e:
-            return f"Error fetching current price for {symbol}: {e}"
-
-    def get_company_info(self, symbol: str) -> str:
-        try:
-            info = yf.Ticker(symbol).info
-            if not info:
-                return f"Could not fetch company info for {symbol}"
-            return json.dumps(info, indent=2)
-        except Exception as e:
-            return f"Error fetching company info for {symbol}: {e}"
-
-    def get_analyst_recommendations(self, symbol: str) -> str:
-        try:
-            recs = yf.Ticker(symbol).recommendations
-            if recs is not None and isinstance(recs, (pd.DataFrame, pd.Series)):
-                result = recs.to_json(orient="index")
-                return result if result is not None else f"No recommendations for {symbol}"
-            elif recs is not None:
-                return json.dumps(recs, indent=2)
-            else:
-                return f"No recommendations for {symbol}"
-        except Exception as e:
-            return f"Error fetching analyst recommendations for {symbol}: {e}"
-
-    def get_company_news(self, symbol: str, num_stories: int = 3) -> str:
-        try:
-            news = yf.Ticker(symbol).news
-            if news is not None:
-                return json.dumps(news[:num_stories], indent=2)
-            else:
-                return f"No news for {symbol}"
-        except Exception as e:
-            return f"Error fetching company news for {symbol}: {e}"
-
-    def get_stock_fundamentals(self, symbol: str) -> str:
-        try:
-            stock = yf.Ticker(symbol)
-            info = stock.info
-            fundamentals = {
-                "symbol": symbol,
-                "company_name": info.get("longName", ""),
-                "sector": info.get("sector", ""),
-                "industry": info.get("industry", ""),
-                "market_cap": info.get("marketCap", "N/A"),
-                "pe_ratio": info.get("forwardPE", "N/A"),
-                "pb_ratio": info.get("priceToBook", "N/A"),
-                "dividend_yield": info.get("dividendYield", "N/A"),
-                "eps": info.get("trailingEps", "N/A"),
-                "beta": info.get("beta", "N/A"),
-                "52_week_high": info.get("fiftyTwoWeekHigh", "N/A"),
-                "52_week_low": info.get("fiftyTwoWeekLow", "N/A"),
-            }
-            return json.dumps(fundamentals, indent=2)
-        except Exception as e:
-            return f"Error getting fundamentals for {symbol}: {e}"
-
-    def get_income_statements(self, symbol: str) -> str:
-        try:
-            stock = yf.Ticker(symbol)
-            financials = stock.financials
-            if isinstance(financials, (pd.DataFrame, pd.Series)):
-                result = financials.to_json(orient="index")
-                return result if result is not None else f"No income statements for {symbol}"
-            elif financials is not None:
-                return json.dumps(financials, indent=2)
-            else:
-                return f"No income statements for {symbol}"
-        except Exception as e:
-            return f"Error fetching income statements for {symbol}: {e}"
-
-    def get_key_financial_ratios(self, symbol: str) -> str:
-        try:
-            stock = yf.Ticker(symbol)
-            key_ratios = stock.info
-            return json.dumps(key_ratios, indent=2)
-        except Exception as e:
-            return f"Error fetching key financial ratios for {symbol}: {e}"
-
-    def get_historical_stock_prices(self, symbol: str, period: str = "1mo", interval: str = "1d") -> str:
-        try:
-            stock = yf.Ticker(symbol)
-            historical_price = stock.history(period=period, interval=interval)
-            if isinstance(historical_price, (pd.DataFrame, pd.Series)):
-                result = historical_price.to_json(orient="index")
-                return result if result is not None else f"No historical prices for {symbol}"
-            elif historical_price is not None:
-                return json.dumps(historical_price, indent=2)
-            else:
-                return f"No historical prices for {symbol}"
-        except Exception as e:
-            return f"Error fetching historical prices for {symbol}: {e}"
-
-    def get_technical_indicators(self, symbol: str, period: str = "3mo") -> str:
-        try:
-            indicators = yf.Ticker(symbol).history(period=period)
-            if isinstance(indicators, (pd.DataFrame, pd.Series)):
-                result = indicators.to_json(orient="index")
-                return result if result is not None else f"No technical indicators for {symbol}"
-            elif indicators is not None:
-                return json.dumps(indicators, indent=2)
-            else:
-                return f"No technical indicators for {symbol}"
-        except Exception as e:
-            return f"Error fetching technical indicators for {symbol}: {e}"
-
-    def functions(self):
-        """Return the list of tool functions to be used by the agent."""
-        return self._tools
-
-    def enable_all_tools(self):
-        self._tools = [
-            self.get_current_stock_price,
-            self.get_company_info,
-            self.get_analyst_recommendations,
-            self.get_company_news,
-            self.get_stock_fundamentals,
-            self.get_income_statements,
-            self.get_key_financial_ratios,
-            self.get_historical_stock_prices,
-            self.get_technical_indicators,
-        ]
-
-
-def Search(query: str, max_results: int = 10) -> List[Dict[str, str]]:
-    """
-    Search DuckDuckGo for the given query and return text results.
-    
-    Args:
-        query: The search query
-        max_results: Maximum number of results to return (default: 10)
+        tools: list,
+        context: Optional[ToolContext] = None,
+        task: Optional['Task'] = None,
+        agent_instance: Optional[Any] = None
+    ) -> Dict[str, Tool]:
+        """Register a list of tools and create appropriate wrappers."""
+        self.current_task = task
         
-    Returns:
-        List of dictionaries containing search results with keys: title, href, body
-    """
-    # Use context manager to ensure proper cleanup
-    with DDGS() as ddgs:
-        try:
-            results = list(ddgs.text(query, max_results=max_results))
-            return results
-        except Exception as e:
-            # Return empty list on error to maintain consistent return type
-            return []
-
-
-def WebSearch(query: str, max_results: int = 10) -> str:
-    """
-    Search the web for the given query and return formatted results.
-    
-    Args:
-        query: The search query
-        max_results: Maximum number of results to return (default: 10)
+        registered_tools = self.processor.process_tools(tools, context)
         
-    Returns:
-        Formatted string containing search results
-    """
-    # Use context manager to ensure proper cleanup
-    with DDGS() as ddgs:
+        for name, tool in registered_tools.items():
+            if name != 'plan_and_execute':
+                if context is None:
+                    from upsonic.tools.context import ToolContext
+                    context = ToolContext(deps=None)
+                self.wrapped_tools[name] = self.processor.create_behavioral_wrapper(
+                    tool, context
+                )
+        
+        if 'plan_and_execute' in registered_tools and agent_instance and agent_instance.enable_thinking_tool:
+            if not self.orchestrator and agent_instance:
+                from upsonic.tools.orchestration import Orchestrator
+                self.orchestrator = Orchestrator(
+                    agent_instance=agent_instance,
+                    task=task,
+                    wrapped_tools=self.wrapped_tools
+                )
+            async def orchestrator_executor(thought) -> Any:
+                return await self.orchestrator.execute(thought)
+            self.wrapped_tools['plan_and_execute'] = orchestrator_executor
+        elif 'plan_and_execute' in registered_tools:
+            if context is None:
+                from upsonic.tools.context import ToolContext
+                context = ToolContext(deps=None)
+            self.wrapped_tools['plan_and_execute'] = self.processor.create_behavioral_wrapper(
+                registered_tools['plan_and_execute'], 
+                context
+            )
+        
+        return registered_tools
+    
+    async def execute_tool(
+        self,
+        tool_name: str,
+        args: Dict[str, Any],
+        context: Optional[ToolContext] = None,
+        tool_call_id: Optional[str] = None
+    ) -> ToolResult:
+        """Execute a tool by name using pre-wrapped executor."""
+        wrapped = self.wrapped_tools.get(tool_name)
+        if not wrapped:
+            raise ValueError(f"Tool '{tool_name}' not found or not wrapped")
+        
+        if context:
+            self.processor.current_context = context
+        
+        if not tool_call_id:
+            tool_call_id = f"call_{uuid.uuid4().hex[:8]}"
+        
         try:
-            results = list(ddgs.text(query, max_results=max_results))
+            start_time = time.time()
             
-            formatted_results = f"Web search results for: {query}\n\n"
-            for i, result in enumerate(results, 1):
-                formatted_results += f"{i}. {result.get('title', 'No title')}\n"
-                formatted_results += f"   URL: {result.get('href', 'No URL')}\n"
-                formatted_results += f"   Description: {result.get('body', 'No description')}\n\n"
+            if tool_name == 'plan_and_execute' and 'thought' in args:
+                from upsonic.tools.orchestration import Thought
+                thought_data = args['thought']
+                if isinstance(thought_data, dict):
+                    thought = Thought(**thought_data)
+                else:
+                    thought = thought_data
+                result = await wrapped(thought)
+            else:
+                result = await wrapped(**args)
+                
+            execution_time = time.time() - start_time
             
-            return formatted_results
+            from upsonic.tools.base import ToolResult
+            return ToolResult(
+                tool_name=tool_name,
+                content=result,
+                tool_call_id=tool_call_id,
+                success=True,
+                execution_time=execution_time
+            )
+            
         except Exception as e:
-            return f"Error performing web search: {str(e)}"
-
-
-def WebRead(url: str) -> str:
-    """
-    Read and extract text content from a web page.
+            from upsonic.tools.processor import ExternalExecutionPause
+            if isinstance(e, ExternalExecutionPause):
+                external_call = self.deferred_manager.create_external_call(
+                    tool_name=tool_name,
+                    args=args,
+                    tool_call_id=tool_call_id,
+                    requires_approval=False
+                )
+                e.external_call = external_call
+                raise e
+            
+            from upsonic.tools.base import ToolResult
+            return ToolResult(
+                tool_name=tool_name,
+                content=str(e),
+                tool_call_id=tool_call_id,
+                success=False,
+                error=str(e)
+            )
     
-    Args:
-        url: The URL to read from
+    def get_tool_definitions(self) -> List['ToolDefinition']:
+        """Get definitions for all registered tools."""
+        from upsonic.tools.base import ToolDefinition
         
-    Returns:
-        Extracted text content from the webpage
-    """
-    session = requests.Session()
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        
-        response = session.get(url, headers=headers, timeout=30)
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Remove script and style elements
-        for script in soup(["script", "style"]):
-            script.decompose()
-        
-        # Get text content
-        text = soup.get_text()
-        
-        # Clean up text
-        lines = (line.strip() for line in text.splitlines())
-        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-        text = ' '.join(chunk for chunk in chunks if chunk)
-        
-        # Limit text length to avoid overwhelming output
-        if len(text) > 5000:
-            text = text[:5000] + "... [Content truncated]"
-        
-        return f"Content from {url}:\n\n{text}"
-    except requests.exceptions.RequestException as e:
-        return f"Error reading from {url}: {str(e)}"
-    except Exception as e:
-        return f"Error processing content from {url}: {str(e)}"
-    finally:
-        session.close()
-
+        definitions = []
+        for tool in self.processor.registered_tools.values():
+            config = getattr(tool, 'config', None)
+            strict = config.strict if config and config.strict is not None else tool.schema.strict
+            sequential = config.sequential if config else False
+            
+            definition = ToolDefinition(
+                name=tool.name,
+                description=tool.description,
+                parameters_json_schema=tool.schema.json_schema,
+                kind='function',
+                strict=strict,
+                sequential=sequential,
+                metadata=tool.metadata.custom if hasattr(tool, 'metadata') else None
+            )
+            definitions.append(definition)
+        return definitions
     
+    def has_deferred_requests(self) -> bool:
+        """Check if there are pending deferred requests."""
+        return self.deferred_manager.has_pending_requests()
+    
+    def get_deferred_requests(self) -> 'DeferredToolRequests':
+        """Get pending deferred requests."""
+        return self.deferred_manager.get_pending_requests()
+    
+    def process_deferred_results(
+        self,
+        results: 'DeferredToolResults'
+    ) -> List['ToolResult']:
+        """Process results from deferred execution."""
+        return self.deferred_manager.process_results(results)
+
+
+__all__ = [
+    'Tool',
+    'ToolBase', 
+    'ToolKit',
+    'ToolDefinition',
+    'ToolCall',
+    'ToolResult',
+    'ToolMetadata',
+    'ToolSchema',
+    'DocstringFormat',
+    'ObjectJsonSchema',
+    
+    'tool',
+    'ToolConfig',
+    'ToolHooks',
+    
+    'ToolContext',
+    'AgentDepsT',
+    
+    'FunctionSchema',
+    'generate_function_schema',
+    'validate_tool_function',
+    'SchemaGenerationError',
+    
+    'ToolProcessor',
+    'ToolValidationError',
+    'ExternalExecutionPause',
+    
+    'FunctionTool',
+    'AgentTool',
+    'MethodTool',
+    
+    
+    'PlanStep',
+    'AnalysisResult',
+    'Thought',
+    'ExecutionResult',
+    'plan_and_execute',
+    'Orchestrator',
+    
+    'ExternalToolCall',
+    'DeferredToolRequests',
+    'DeferredToolResults',
+    'ToolApproval',
+    'DeferredExecutionManager',
+    
+    'MCPTool',
+    'MCPHandler',
+    
+    'ToolManager',
+    
+    'AbstractBuiltinTool',
+    'WebSearchTool',
+    'WebSearchUserLocation',
+    'CodeExecutionTool',
+    'UrlContextTool',
+    'WebSearch',
+    'WebRead',
+]

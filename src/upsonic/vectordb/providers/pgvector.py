@@ -1,8 +1,17 @@
-import psycopg
-import json
+try:
+    import psycopg
+    from psycopg.errors import OperationalError, InFailedSqlTransaction
+    from psycopg.sql import SQL, Identifier, Literal as SqlLiteral, Composed, Placeholder
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="psycopg",
+        install_command='pip install "upsonic[rag]"',
+        feature_name="PostgreSQL vector database provider"
+    )
 
-from psycopg.errors import OperationalError, InFailedSqlTransaction
-from psycopg.sql import SQL, Identifier, Literal as SqlLiteral, Composed, Placeholder
+
+import json
 
 from typing import Any, Dict, List, Optional, Union, Literal as TypingLiteral, Tuple
 

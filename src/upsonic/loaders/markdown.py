@@ -4,14 +4,26 @@ from typing import Any, Dict, List, Optional, Union
 
 try:
     import frontmatter
-except ImportError:
-    raise ImportError("`python-frontmatter` is not installed. Please install it with `pip install python-frontmatter`.")
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="python-frontmatter",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="Markdown loader"
+    )
+
 
 try:
     from markdown_it import MarkdownIt
     from markdown_it.token import Token
-except ImportError:
-    raise ImportError("`markdown-it-py` is not installed. Please install it with `pip install markdown-it-py`.")
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="markdown-it-py",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="Markdown loader"
+    )
+
 
 from upsonic.schemas.data_models import Document
 from upsonic.loaders.base import BaseLoader

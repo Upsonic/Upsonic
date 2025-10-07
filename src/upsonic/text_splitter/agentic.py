@@ -14,7 +14,7 @@ from upsonic.schemas.agentic import PropositionList, TopicAssignmentList, Topic,
 from upsonic.utils.error_wrapper import upsonic_error_handler
 
 if TYPE_CHECKING:
-    from upsonic.agent.agent import Direct
+    from upsonic.agent.agent import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -102,17 +102,17 @@ class AgenticChunker(BaseChunker[AgenticChunkingConfig]):
     - Rich metadata enrichment
     """
     
-    def __init__(self, agent: "Direct", config: Optional[AgenticChunkingConfig] = None):
+    def __init__(self, agent: "Agent", config: Optional[AgenticChunkingConfig] = None):
         """
         Initialize agentic chunker.
         
         Args:
-            agent: Pre-configured Direct agent for cognitive processing
+            agent: Pre-configured Agent class for cognitive processing
             config: Configuration object with all settings
         """
-        from upsonic.agent.agent import Direct
-        if not isinstance(agent, Direct):
-            raise TypeError("An instance of the `Direct` agent is required.")
+        from upsonic.agent.agent import Agent
+        if not isinstance(agent, Agent):
+            raise TypeError("An instance of the `Agent` agent is required.")
         
         super().__init__(config)
         self.agent = agent

@@ -142,6 +142,104 @@ class PdfLoaderConfig(LoaderConfig):
         pass
 
 
+class PyMuPDFLoaderConfig(LoaderConfig):
+    """
+    Advanced configuration for PyMuPDF-based PDF document loading.
+
+    This configuration leverages PyMuPDF's superior performance and features
+    for text extraction, OCR, image handling, and content structuring.
+    """
+
+    extraction_mode: Literal["hybrid", "text_only", "ocr_only"] = Field(
+        default="hybrid",
+        description=(
+            "The core strategy for content extraction. "
+            "'hybrid': Extracts digital text and runs OCR on embedded images. "
+            "'text_only': Fastest mode, extracts only digital text. "
+            "'ocr_only': For scanned documents, runs OCR on the entire page."
+        ),
+    )
+
+    start_page: Optional[int] = Field(
+        default=None,
+        description="The first page number to process (1-indexed). If None, starts from the beginning.",
+        ge=1
+    )
+    end_page: Optional[int] = Field(
+        default=None,
+        description="The last page number to process (inclusive). If None, processes to the end.",
+        ge=1
+    )
+
+    clean_page_numbers: bool = Field(
+        default=True,
+        description="If True, intelligently identifies and removes page numbers from page headers/footers.",
+    )
+    page_num_start_format: Optional[str] = Field(
+        default=None,
+        description="A Python f-string to prepend to each page's content if page numbers are cleaned. "
+                    "Example: '<start page {page_nr}>'. If None, nothing is prepended."
+    )
+    page_num_end_format: Optional[str] = Field(
+        default=None,
+        description="A Python f-string to append to each page's content if page numbers are cleaned. "
+                    "Example: '<end page {page_nr}>'. If None, nothing is appended."
+    )
+    extra_whitespace_removal: bool = Field(
+        default=True,
+        description="If True, normalizes whitespace by collapsing multiple newlines and spaces, cleaning up layout artifacts.",
+    )
+
+    pdf_password: Optional[str] = Field(
+        default=None,
+        description="Password to use for decrypting protected PDF files.",
+        min_length=1
+    )
+
+    # PyMuPDF-specific configurations
+    text_extraction_method: Literal["text", "dict", "html", "xml"] = Field(
+        default="text",
+        description=(
+            "Method for text extraction from pages. "
+            "'text': Plain text extraction. "
+            "'dict': Structured text with positioning. "
+            "'html': HTML formatted text. "
+            "'xml': XML formatted text."
+        ),
+    )
+
+    include_images: bool = Field(
+        default=False,
+        description="If True, extracts and includes image information in metadata.",
+    )
+
+    image_dpi: int = Field(
+        default=150,
+        description="DPI for image rendering when performing OCR.",
+        ge=72,
+        le=600
+    )
+
+    preserve_layout: bool = Field(
+        default=True,
+        description="If True, preserves text layout and positioning information.",
+    )
+
+    extract_annotations: bool = Field(
+        default=False,
+        description="If True, extracts annotations and comments from the PDF.",
+    )
+
+    annotation_format: Literal["text", "json"] = Field(
+        default="text",
+        description="Format for extracted annotations.",
+    )
+
+    class Config(LoaderConfig.Config):
+        """Pydantic configuration."""
+        pass
+
+
 
 class DOCXLoaderConfig(LoaderConfig):
     """Configuration for DOCX file loading."""
@@ -341,6 +439,7 @@ class LoaderConfigFactory:
         'text': TextLoaderConfig,
         'csv': CSVLoaderConfig,
         'pdf': PdfLoaderConfig,
+        'pymupdf': PyMuPDFLoaderConfig,
         'docx': DOCXLoaderConfig,
         'json': JSONLoaderConfig,
         'jsonl': JSONLoaderConfig,

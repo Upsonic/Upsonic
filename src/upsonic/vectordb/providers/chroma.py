@@ -1,9 +1,18 @@
 from typing import Any, Dict, List, Optional, Union, Literal
 
-import chromadb
-from chromadb.api.client import Client as ChromaClientAPI
-from chromadb.api.models.Collection import Collection as ChromaCollection
-from chromadb.errors import NotFoundError
+try:
+    import chromadb
+    from chromadb.api.client import Client as ChromaClientAPI
+    from chromadb.api.models.Collection import Collection as ChromaCollection
+    from chromadb.errors import NotFoundError
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="chromadb",
+        install_command='pip install "upsonic[rag]"',
+        feature_name="ChromaDB vector database provider"
+    )
+
 
 from upsonic.vectordb.base import BaseVectorDBProvider
 

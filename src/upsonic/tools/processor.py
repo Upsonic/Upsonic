@@ -1,5 +1,8 @@
+"""Tool processor for handling, validating, and wrapping tools."""
+
 from __future__ import annotations
 
+import asyncio
 import functools
 import hashlib
 import inspect
@@ -7,430 +10,415 @@ import json
 import re
 import time
 from pathlib import Path
-from typing import Callable, Any, Generator, Tuple, Dict, TYPE_CHECKING, List, Optional
-import asyncio
-import copy
+from typing import (
+    Any, Callable, Dict, Generator, List, Optional, Tuple, Type, Union, TYPE_CHECKING
+)
 
-from pydantic_ai.mcp import MCPServerSSE, MCPServerStdio
-
-from .tool import ToolConfig, ToolKit
-from upsonic.utils.printing import console, spacing, print_orchestrator_tool_step
-from upsonic.tools.pseudo_tools import plan_and_execute
-from upsonic.tools.thought import Thought, AnalysisResult
-from upsonic.tools.external_tool import ExternalToolCall
-
+from upsonic.tools.base import (
+    Tool, ToolBase, ToolCall, ToolDefinition, ToolKit, ToolResult
+)
+from upsonic.tools.config import ToolConfig
+from upsonic.tools.context import ToolContext
+from upsonic.tools.schema import (
+    FunctionSchema, generate_function_schema, validate_tool_function
+)
+from upsonic.tools.wrappers import FunctionTool
 
 if TYPE_CHECKING:
-    from upsonic.agent.agent import Direct
+    from upsonic.tools.mcp import MCPTool
+    from upsonic.tasks.tasks import Task
 
 
 class ToolValidationError(Exception):
-    """Custom exception raised for invalid tool definitions."""
+    """Exception raised for invalid tool definitions."""
     pass
 
+
 class ExternalExecutionPause(Exception):
-    """
-    Custom exception used to signal a pause in the agent's execution flow,
-    allowing for external tool execution (human-in-the-loop).
-    """
-    def __init__(self, tool_call: ExternalToolCall):
+    """Exception for pausing agent execution for external tool execution."""
+    def __init__(self, tool_call: ToolCall):
         self.tool_call = tool_call
         super().__init__(f"Agent paused for external execution of tool: {tool_call.tool_name}")
 
 
 class ToolProcessor:
-    """
-    The internal engine for inspecting, validating, normalizing, and wrapping
-    user-provided tools into a format the agent can execute.
-    """
-    def __init__(self, agent: Optional['Direct'] = None):
-        """
-        Initializes the ToolProcessor.
-        Args:
-            agent: An optional instance of the Direct agent to enable context-aware
-                   features like tool call limits.
-        """
-        self.agent_tool = agent
-
-    def _validate_function(self, func: Callable):
-        """
-        Inspects a function to ensure it meets the requirements for a valid tool.
-        A valid tool must have type hints for all parameters, a return type hint,
-        and a non-empty docstring.
-        Raises:
-            ToolValidationError: If the function fails validation.
-        """
-        signature = inspect.signature(func)
-
-        for param_name, param in signature.parameters.items():
-            if param.name in ('self', 'cls'):
+    """Main engine for processing, validating, and managing tools."""
+    
+    def __init__(self):
+        self.registered_tools: Dict[str, Tool] = {}
+        self.tool_definitions: Dict[str, ToolDefinition] = {}
+        self.mcp_handlers: List[Any] = []
+        self.current_context: Optional[ToolContext] = None
+    
+    def process_tools(
+        self,
+        tools: List[Any],
+        context: Optional[ToolContext] = None
+    ) -> Dict[str, Tool]:
+        """Process a list of raw tools and return registered Tool instances."""
+        processed_tools = {}
+        
+        for tool_item in tools:
+            if tool_item is None:
                 continue
-            if param.annotation is inspect.Parameter.empty:
-                raise ToolValidationError(
-                    f"Tool '{func.__name__}' is missing a type hint for parameter '{param_name}'."
-                )
-
-        if signature.return_annotation is inspect.Signature.empty:
-            raise ToolValidationError(
-                f"Tool '{func.__name__}' is missing a return type hint."
-            )
-
-        if not inspect.getdoc(func):
-            raise ToolValidationError(
-                f"Tool '{func.__name__}' is missing a docstring. The docstring is required to explain the tool's purpose to the LLM."
-            )
-
-    def generate_orchestrator_wrapper(self, original_agent_instance: 'Direct', task: 'Task') -> Callable:
-        """
-        Generates a highly specialized wrapper for the 'plan_and_execute' tool.
-
-        This wrapper acts as the main orchestration engine. It takes a high-level plan
-        of tool calls from the LLM. If reasoning is enabled, it automatically injects
-        a mandatory analysis step after each tool call, creating an 'Act-then-Analyze' loop.
-        """
-        async def orchestrator_wrapper(thought: Thought) -> Any:
-            from upsonic.tasks.tasks import Task
-            console.print("[bold magenta]Orchestrator Activated:[/bold magenta] Received initial plan.")
-            spacing()
-            agent = self.agent_tool
-            if not agent:
-                return "Error: Orchestrator wrapper was not properly initialized with an agent instance."
-
-            is_reasoning_enabled = agent.enable_reasoning_tool
-
-            original_user_request = task.description
-            execution_history = f"Orchestrator's execution history for the user's request:\n"
-            execution_history += f"Initial Thought & Plan: {thought.plan}\nReasoning: {thought.reasoning}\n Criticism: {thought.criticism}\n\n"
-            pending_plan = thought.plan
-            program_counter = 0
-
-            all_tools = {
-                tool_func.__name__: tool_func 
-                for tool_func in original_agent_instance._upsonic_wrapped_tools.values()
-                if tool_func.__name__ != 'plan_and_execute'
-            }
-
-            while program_counter < len(pending_plan):
-                step = pending_plan[program_counter]
                 
-                tool_name = step.tool_name
-                params = step.parameters
-                tool_name = tool_name.split('.')[-1]
-
-                console.print(f"[bold blue]Executing Tool Step {program_counter + 1}/{len(pending_plan)}:[/bold blue] Calling tool [cyan]{tool_name}[/cyan] with params {params}")
+            if self._is_builtin_tool(tool_item):
+                continue
+            # Process based on tool type
+            if self._is_mcp_tool(tool_item):
+                # Process MCP tool
+                mcp_tools = self._process_mcp_tool(tool_item)
+                for name, tool in mcp_tools.items():
+                    processed_tools[name] = tool
+                    
+            elif inspect.isfunction(tool_item):
+                # Process function tool
+                tool = self._process_function_tool(tool_item)
+                processed_tools[tool.name] = tool
                 
-                if tool_name not in all_tools:
-                    result = f"Error: Tool '{tool_name}' is not an available tool."
-                    console.print(f"[bold red]{result}[/bold red]")
+            elif inspect.isclass(tool_item):
+                # Check if it's a ToolKit
+                if issubclass(tool_item, ToolKit):
+                    # Process ToolKit instance
+                    toolkit_tools = self._process_toolkit(tool_item())
+                    processed_tools.update(toolkit_tools)
                 else:
-                    try:
-                        tool_to_call = all_tools[tool_name]
-                        result = await tool_to_call(**params)
-                    except Exception as e:
-                        error_message = f"An error occurred while executing tool '{tool_name}': {e}"
-                        console.print(f"[bold red]{error_message}[/bold red]")
-                        result = error_message
-
-                print_orchestrator_tool_step(tool_name, params, result)
-                execution_history += f"\nStep {program_counter + 1} (Tool: {tool_name}):\nResult: {result}\n"
-
-                if is_reasoning_enabled:
-                    console.print(f"[bold yellow]Injecting Mandatory Analysis Step after Tool '{tool_name}'...[/bold yellow]")
+                    # Process regular class with methods
+                    class_tools = self._process_class_tools(tool_item())
+                    processed_tools.update(class_tools)
                     
-                    analysis_prompt = (
-                        f"Original user request(This is just for remembrance. You have to follow instructions below based on this. But this is not the main focus you will try to fulfill right now): '{original_user_request}'\n\n"
-                        "You are in the middle of a multi-step plan. An action has just been completed. You must now analyze the outcome before proceeding. "
-                        "Based on the execution history, evaluate the result of the last tool call and decide the "
-                        "most logical next action.\n\n"
-                        "<ExecutionHistory>\n"
-                        f"{execution_history}"
-                        "</ExecutionHistory>"
-                    )
-
-                    analysis_task = Task(description=analysis_prompt, not_main_task=True, response_format=AnalysisResult)
-                    analysis_agent = copy.copy(agent)
-                    analysis_agent.enable_thinking_tool = False
-                    analysis_agent.enable_reasoning_tool = False
-
-                    analysis_result: AnalysisResult = await analysis_agent.do_async(analysis_task)
-                    execution_history += f"\n--- Injected Analysis ---\nEvaluation: {analysis_result.evaluation}\n"
-
-                    if analysis_result.next_action == 'continue_plan':
-                        console.print("[bold green]Analysis complete. Continuing with the original plan.[/bold green]")
-                        program_counter += 1
-                        continue
-                    
-                    elif analysis_result.next_action == 'final_answer':
-                        console.print("[bold green]Analysis concluded that the task is complete. Proceeding to final synthesis.[/bold green]")
-                        break
-                    
-                    elif analysis_result.next_action == 'revise_plan':
-                        console.print("[bold red]Analysis concluded that the plan is flawed. Requesting a new plan.[/bold red]")
-                        
-                        revision_prompt = (
-                            f"Original user request(This is just for remembrance. You have to follow instructions below based on this. But this is not the main focus you will try to fulfill right now): '{original_user_request}'\n\n"
-                            "You are in the middle of a multi-step plan. Your own analysis has determined that the "
-                            "original plan is flawed or insufficient. Based on the *entire* execution history so far, "
-                            "formulate a new, complete `Thought` object with a better plan to achieve the user's "
-                            "original goal.\n\n"
-                            "<ExecutionHistory>\n"
-                            f"{execution_history}"
-                            "</ExecutionHistory>"
-                        )
-
-                        revision_task = Task(description=revision_prompt, not_main_task=True, response_format=Thought)
-                        revision_agent = copy.copy(agent)
-                        revision_agent.enable_thinking_tool = False
-                        revision_agent.enable_reasoning_tool = False
-
-                        new_thought: Thought = await revision_agent.do_async(revision_task)
-                        
-                        console.print("[bold magenta]Orchestrator:[/bold magenta] Received revised plan. Restarting execution.")
-                        pending_plan = new_thought.plan
-                        program_counter = 0
-                        execution_history += f"\n--- PLAN REVISED ---\nNew Reasoning: {new_thought.reasoning}\n"
-                        continue
-                
-                program_counter += 1
-
-            console.print("[bold magenta]Orchestrator:[/bold magenta] Plan complete. Preparing for final synthesis.")
-            spacing()
-
-            synthesis_prompt = (
-                f"Original user request(This is just for remembrance. You have to follow instructions below based on this. But this is not the main focus you will try to fulfill right now): '{original_user_request}'\n\n"
-                "You are in the final step of a multi-step task. "
-                "You have already executed a plan and gathered all necessary information. "
-                "Based *only* on the execution history provided below, synthesize a complete "
-                "and final answer for the user's original request.\n\n"
-                "<ExecutionHistory>\n"
-                f"{execution_history}"
-                "</ExecutionHistory>"
+            elif hasattr(tool_item, '__class__'):
+                # Process instance
+                if isinstance(tool_item, ToolKit):
+                    # Process ToolKit instance
+                    toolkit_tools = self._process_toolkit(tool_item)
+                    processed_tools.update(toolkit_tools)
+                elif self._is_agent_instance(tool_item):
+                    # Process agent as tool
+                    agent_tool = self._process_agent_tool(tool_item)
+                    processed_tools[agent_tool.name] = agent_tool
+                else:
+                    # Process regular instance with methods
+                    instance_tools = self._process_class_tools(tool_item)
+                    processed_tools.update(instance_tools)
+        
+        # Register all processed tools
+        self.registered_tools.update(processed_tools)
+        
+        return processed_tools
+    
+    def _is_mcp_tool(self, tool_item: Any) -> bool:
+        """Check if an item is an MCP tool configuration."""
+        if not inspect.isclass(tool_item):
+            return False
+        return hasattr(tool_item, 'url') or hasattr(tool_item, 'command')
+    
+    def _is_builtin_tool(self, tool_item: Any) -> bool:
+        """Check if an item is a built-in tool."""
+        from upsonic.tools.builtin_tools import AbstractBuiltinTool
+        return isinstance(tool_item, AbstractBuiltinTool)
+    
+    def extract_builtin_tools(self, tools: List[Any]) -> List[Any]:
+        """Extract built-in tools from a list of tools."""
+        builtin_tools = []
+        for tool_item in tools:
+            if tool_item is not None and self._is_builtin_tool(tool_item):
+                builtin_tools.append(tool_item)
+        return builtin_tools
+    
+    def _process_mcp_tool(self, mcp_config: Type) -> Dict[str, Tool]:
+        """Process MCP tool configuration."""
+        from upsonic.tools.mcp import MCPHandler
+        
+        handler = MCPHandler(mcp_config)
+        self.mcp_handlers.append(handler)
+        
+        # Get tools from MCP server
+        mcp_tools = handler.get_tools()
+        return {tool.name: tool for tool in mcp_tools}
+    
+    def _process_function_tool(self, func: Callable) -> Tool:
+        """Process a function into a Tool."""
+        # Validate function
+        errors = validate_tool_function(func)
+        if errors:
+            raise ToolValidationError(
+                f"Invalid tool function '{func.__name__}': " + "; ".join(errors)
             )
+        
+        # Get tool config
+        config = getattr(func, '_upsonic_tool_config', ToolConfig())
+        
+        # Generate schema
+        schema = generate_function_schema(
+            func,
+            docstring_format=config.docstring_format,
+            require_parameter_descriptions=config.require_parameter_descriptions
+        )
+        
+        # Create wrapped tool
+        return FunctionTool(
+            function=func,
+            schema=schema,
+            config=config
+        )
+    
+    def _process_toolkit(self, toolkit: ToolKit) -> Dict[str, Tool]:
+        """Process a ToolKit instance."""
+        tools = {}
+        
+        for name, method in inspect.getmembers(toolkit, inspect.ismethod):
+            # Only process methods marked with @tool
+            if hasattr(method, '_upsonic_is_tool'):
+                tool = self._process_function_tool(method)
+                tools[tool.name] = tool
+        
+        return tools
+    
+    def _process_class_tools(self, instance: Any) -> Dict[str, Tool]:
+        """Process all public methods of a class instance as tools."""
+        tools = {}
+        
+        for name, method in inspect.getmembers(instance, inspect.ismethod):
+            # Skip private methods
+            if name.startswith('_'):
+                continue
+                
+            # Process as tool
+            try:
+                tool = self._process_function_tool(method)
+                tools[tool.name] = tool
+            except ToolValidationError:
+                # Skip invalid methods
+                continue
+        
+        return tools
+    
+    def _is_agent_instance(self, obj: Any) -> bool:
+        """Check if an object is an agent instance."""
+        # Check for agent-like attributes
+        return hasattr(obj, 'name') and (
+            hasattr(obj, 'do_async') or 
+            hasattr(obj, 'do') or
+            hasattr(obj, 'agent_id')
+        )
+    
+    def _process_agent_tool(self, agent: Any) -> Tool:
+        """Process an agent instance as a tool."""
+        from upsonic.tools.wrappers import AgentTool
+        
+        return AgentTool(agent)
+    
+    def create_behavioral_wrapper(
+        self,
+        tool: Tool,
+        context: ToolContext
+    ) -> Callable:
+        """Create a wrapper function with behavioral logic for a tool."""
+        # Track if this tool requires sequential execution
+        config = getattr(tool, 'config', ToolConfig())
+        is_sequential = config.sequential
+        
+        @functools.wraps(tool.execute)
+        async def wrapper(**kwargs: Any) -> Any:
+            from upsonic.utils.printing import console, spacing
             
-            synthesis_task = Task(description=synthesis_prompt, not_main_task=True)
-            synthesis_agent = copy.copy(agent)
-            synthesis_agent.enable_thinking_tool = False
-            synthesis_agent.enable_reasoning_tool = False
-            final_response = await synthesis_agent.do_async(synthesis_task)
-            return final_response
+            # Get tool config (re-fetch to ensure latest)
+            config = getattr(tool, 'config', ToolConfig())
 
-        return orchestrator_wrapper
-
-    def normalize_and_process(self, task_tools: List[Any]) -> Generator[Tuple[Callable, Any], None, None]:
-        """
-        Processes a list of raw tools from a Task.
-        This method iterates through functions, agent instances, and other object methods,
-        validates them, and yields a standardized tuple. It also identifies, processes,
-        and separates MCP server tools.
-        Args:
-            task_tools: The raw list of tools from `task.tools`. This list will be
-                        modified in place to remove the processed MCP tools.
-        Yields:
-            A tuple of two possible forms:
-            - For a regular tool: (callable_function, ToolConfig)
-            - For an MCP tool: (None, mcp_server_instance)
-        """
-        if self.agent_tool and getattr(self.agent_tool, 'enable_thinking_tool', False):
-            setattr(plan_and_execute, '_is_orchestrator', True)
-            self._validate_function(plan_and_execute)
-            yield (plan_and_execute, ToolConfig())
-
-        from upsonic.agent.agent import Direct
-        if not task_tools:
-            return
-        mcp_tools_to_remove = []
-        for tool_item in task_tools:
-            if inspect.isclass(tool_item):
-                is_mcp_tool = False
-                if hasattr(tool_item, 'url'):
-                    url = getattr(tool_item, 'url')
-                    the_mcp_server = MCPServerSSE(url)
-                    yield (None, the_mcp_server)
-                    is_mcp_tool = True
-                elif hasattr(tool_item, 'command'):
-                    env = getattr(tool_item, 'env', {}) if hasattr(tool_item, 'env') and isinstance(getattr(tool_item, 'env', None), dict) else {}
-                    command = getattr(tool_item, 'command', None)
-                    args = getattr(tool_item, 'args', [])
-                    the_mcp_server = MCPServerStdio(command, args=args, env=env)
-                    yield (None, the_mcp_server)
-                    is_mcp_tool = True
-                if is_mcp_tool:
-                    mcp_tools_to_remove.append(tool_item)
-                    continue
-            if inspect.isfunction(tool_item):
-                self._validate_function(tool_item)
-                config = getattr(tool_item, '_upsonic_tool_config', ToolConfig())
-                yield (tool_item, config)
-            elif isinstance(tool_item, Direct):
-                class_name_base = tool_item.name or f"AgentTool{tool_item.agent_id[:8]}"
-                dynamic_class_name = "".join(word.capitalize() for word in re.sub(r"[^a-zA-Z0-9 ]", "", class_name_base).split())
-                method_name_base = tool_item.name or f"AgentTool{tool_item.agent_id[:8]}"
-                dynamic_method_name = "ask_" + re.sub(r"[^a-zA-Z0-9_]", "", method_name_base.lower().replace(" ", "_"))
-                agent_specialty = tool_item.system_prompt or tool_item.company_description or f"a general purpose assistant named '{tool_item.name}'"
-                dynamic_docstring = (
-                    f"Delegates a sub-task to a specialist agent named '{tool_item.name}'. "
-                    f"This agent's role is: {agent_specialty}. "
-                    f"Use this tool ONLY for tasks that fall squarely within this agent's described expertise. "
-                    f"The 'request' parameter must be a full, clear, and self-contained instruction for the specialist agent."
+            func_dict: Dict[str, Any] = {}
+            # Before hook
+            if config.tool_hooks and config.tool_hooks.before:
+                try:
+                    result = config.tool_hooks.before(**kwargs)
+                    if result is not None:
+                        func_dict["func_before"] = result
+                except Exception as e:
+                    console.print(f"[red]Before hook error: {e}[/red]")
+                    raise
+            
+            # User confirmation
+            if config.requires_confirmation:
+                if not self._get_user_confirmation(tool.name, kwargs):
+                    return "Tool execution cancelled by user"
+            
+            # User input
+            if config.requires_user_input and config.user_input_fields:
+                kwargs = self._get_user_input(
+                    tool.name, 
+                    kwargs, 
+                    config.user_input_fields
                 )
-                async def agent_method_logic(self, request: str) -> str:
-                    """This docstring will be replaced dynamically."""
-                    from upsonic.tasks.tasks import Task
-                    the_task = Task(description=request)
-                    response = await self.agent.do_async(the_task)
-                    return str(response) if response is not None else "The specialist agent returned no response."
-                agent_method_logic.__doc__ = dynamic_docstring
-                agent_method_logic.__name__ = dynamic_method_name
-                def agent_tool_init(self, agent: Direct):
-                    self.agent = agent
-                AgentToolWrapper = type(
-                    dynamic_class_name,
-                    (object,),
-                    {
-                        "__init__": agent_tool_init,
-                        dynamic_method_name: agent_method_logic,
-                    },
-                )
-                wrapper_instance = AgentToolWrapper(agent=tool_item)
-                for name, method in inspect.getmembers(wrapper_instance, inspect.ismethod):
-                    if not name.startswith('_'):
-                        self._validate_function(method)
-                        config = getattr(method, '_upsonic_tool_config', ToolConfig())
-                        yield (method, config)
-            elif not inspect.isfunction(tool_item) and hasattr(tool_item, '__class__'):
-                is_toolkit = isinstance(tool_item, ToolKit)
-                if is_toolkit:
-                    for name, method in inspect.getmembers(tool_item, inspect.ismethod):
-                        if hasattr(method, '_upsonic_tool_config'):
-                            self._validate_function(method)
-                            config = getattr(method, '_upsonic_tool_config', ToolConfig())
-                            yield (method, config)
-                else:
-                    for name, method in inspect.getmembers(tool_item, inspect.ismethod):
-                        if not name.startswith('_'):
-                            self._validate_function(method)
-                            config = getattr(method, '_upsonic_tool_config', ToolConfig())
-                            yield (method, config)
-
-        if mcp_tools_to_remove:
-            for tool in mcp_tools_to_remove:
-                while tool in task_tools:
-                    task_tools.remove(tool)
-
-    def generate_behavioral_wrapper(self, original_func: Callable, config: ToolConfig) -> Callable:
-        """
-        Dynamically generates and returns a new function that wraps the original tool.
-        This new function contains all the behavioral logic (caching, confirmation, etc.)
-        defined in the ToolConfig.
-        """
-        @functools.wraps(original_func)
-        async def behavioral_wrapper(*args: Any, **kwargs: Any) -> Any:
+            
+            # External execution
             if config.external_execution:
-                tool_call = ExternalToolCall(
-                    tool_name=original_func.__name__,
-                    tool_args=kwargs
+                tool_call = ToolCall(
+                    tool_name=tool.name,
+                    args=kwargs
                 )
                 raise ExternalExecutionPause(tool_call)
-
-            if self.agent_tool and self.agent_tool.tool_call_limit is not None:
-                if self.agent_tool.tool_call_count >= self.agent_tool.tool_call_limit:
-                    message = f"Tool call limit of {self.agent_tool.tool_call_limit} has been reached. Cannot execute '{original_func.__name__}'."
-                    console.print(f"[bold red]LIMIT REACHED:[/bold red] {message}")
-                    spacing()
-                    return message
-                self.agent_tool.tool_call_count += 1
-            func_dict: Dict[str, Any] = {}
             
-            if config.tool_hooks and config.tool_hooks.before:
-                result_before = config.tool_hooks.before(*args, **kwargs)
-                func_dict["func_before"] = result_before if result_before else None
-
-            if config.requires_confirmation:
-                console.print(f"[bold yellow]⚠️ Confirmation Required[/bold yellow]")
-                console.print(f"About to execute tool: [cyan]{original_func.__name__}[/cyan]")
-                console.print(f"With arguments: [dim]{args}, {kwargs}[/dim]")
-                try:
-                    confirm = input("Do you want to proceed? (y/n): ").lower().strip()
-                except KeyboardInterrupt:
-                    confirm = 'n'
-                if confirm not in ['y', 'yes']:
-                    console.print("[bold red]Tool execution cancelled by user.[/bold red]")
-                    spacing()
-                    return "Tool execution was cancelled by the user."
-                spacing()
-
-            if config.requires_user_input and config.user_input_fields:
-                console.print(f"[bold blue]📝 User Input Required for {original_func.__name__}[/bold blue]")
-                for field_name in config.user_input_fields:
-                    try:
-                        user_provided_value = input(f"Please provide a value for '{field_name}': ")
-                        kwargs[field_name] = user_provided_value
-                    except KeyboardInterrupt:
-                        console.print("\n[bold red]Input cancelled by user.[/bold red]")
-                        return "Tool execution was cancelled by the user during input."
-                spacing()
-
-            cache_file = None
+            # Caching
+            cache_key = None
             if config.cache_results:
-                cache_dir_path = Path(config.cache_dir) if config.cache_dir else Path.home() / '.upsonic' / 'cache'
-                arg_string = json.dumps((args, kwargs), sort_keys=True, default=str)
-                call_signature = f"{original_func.__name__}:{arg_string}".encode('utf-8')
-                cache_key = hashlib.sha256(call_signature).hexdigest()
-                cache_file = cache_dir_path / f"{cache_key}.json"
-                if cache_file.exists():
-                    try:
-                        with open(cache_file, 'r') as f:
-                            cache_data = json.load(f)
-                        is_expired = False
-                        if config.cache_ttl is not None:
-                            age = time.time() - cache_data.get('timestamp', 0)
-                            if age > config.cache_ttl:
-                                is_expired = True
-                        if not is_expired:
-                            console.print(f"[bold green]✓ Cache Hit[/bold green] for tool [cyan]{original_func.__name__}[/cyan]. Returning cached result.")
-                            spacing()
-                            return cache_data['result']
-                        else:
-                            cache_file.unlink()
-                    except (json.JSONDecodeError, KeyError, OSError):
-                        pass
-
-            try:
-                if inspect.iscoroutinefunction(original_func):
-                    result = await original_func(*args, **kwargs)
-                else:
-                    # To avoid blocking the event loop with a long-running sync function,
-                    # run it in a thread pool executor * _ *
-                    loop = asyncio.get_running_loop()
-                    result = await loop.run_in_executor(
-                        None,
-                        functools.partial(original_func, *args, **kwargs)
-                    )
-                func_dict["func"] = result if result else None
-                if result and config.show_result:
-                    console.print(f"[bold green]✓ Tool Result[/bold green]: {result}")
-                    spacing()
-                if result and config.stop_after_tool_call:
-                    exit()
-            except Exception as e:
-                console.print(f"[bold red]An error occurred while executing tool '{original_func.__name__}': {e}[/bold red]")
-                raise
-
-            if config.cache_results and cache_file:
+                cache_key = self._get_cache_key(tool.name, kwargs)
+                cached = self._get_cached_result(cache_key, config)
+                if cached is not None:
+                    console.print(f"[green]✓ Cache hit for {tool.name}[/green]")
+                    func_dict["func_cache"] = cached
+                    return func_dict
+            
+            # Execute tool with retry logic
+            start_time = time.time()
+            
+            max_retries = config.max_retries
+            last_error = None
+            result = None
+            
+            for attempt in range(max_retries + 1):
                 try:
-                    cache_file.parent.mkdir(parents=True, exist_ok=True)
-                    cache_data_to_write = {'timestamp': time.time(), 'result': result}
-                    with open(cache_file, 'w') as f:
-                        json.dump(cache_data_to_write, f, indent=2, default=str)
-                except (TypeError, OSError) as e:
-                    console.print(f"[yellow]Warning: Could not cache result for tool '{original_func.__name__}'. Reason: {e}[/yellow]")
-
+                    # Apply timeout if configured
+                    if config.timeout:
+                        result = await asyncio.wait_for(
+                            tool.execute(**kwargs),
+                            timeout=config.timeout
+                        )
+                    else:
+                        result = await tool.execute(**kwargs)
+                    
+                    # Success - break out of retry loop
+                    break
+                    
+                except asyncio.TimeoutError as e:
+                    last_error = e
+                    if attempt < max_retries:
+                        wait_time = 2 ** attempt  # Exponential backoff
+                        console.print(f"[yellow]Tool '{tool.name}' timed out, retrying in {wait_time}s... (attempt {attempt + 1}/{max_retries + 1})[/yellow]")
+                        await asyncio.sleep(wait_time)
+                    else:
+                        raise TimeoutError(f"Tool '{tool.name}' timed out after {config.timeout}s and {max_retries} retries")
+                        
+                except Exception as e:
+                    last_error = e
+                    if attempt < max_retries:
+                        wait_time = 2 ** attempt  # Exponential backoff
+                        console.print(f"[yellow]Tool '{tool.name}' failed, retrying in {wait_time}s... (attempt {attempt + 1}/{max_retries + 1})[/yellow]")
+                        await asyncio.sleep(wait_time)
+                    else:
+                        console.print(f"[bold red]Tool error after {max_retries} retries: {e}[/bold red]")
+                        raise
+            
+            execution_time = time.time() - start_time
+            
+            # Cache result
+            if config.cache_results and cache_key:
+                self._cache_result(cache_key, result, config)
+            
+            # Show result if configured
+            if config.show_result:
+                console.print(f"[bold green]Tool Result:[/bold green] {result}")
+                spacing()
+            
+            # After hook
             if config.tool_hooks and config.tool_hooks.after:
-                result_after = config.tool_hooks.after(result)
-                func_dict["funct_after"] = result_after if result_after else None
-
-            setattr(behavioral_wrapper, '_upsonic_stop_after_call', config.stop_after_tool_call)
-            setattr(behavioral_wrapper, '_upsonic_show_result', config.show_result)
-
+                try:
+                    hook_result = config.tool_hooks.after(result)
+                    if hook_result is not None:
+                        func_dict["func_after"] = hook_result
+                except Exception as e:
+                    console.print(f"[bold red]After hook error: {e}[/bold red]")
+            
+            func_dict["func"] = result
+            
+            # Stop after call if configured
+            if config.stop_after_tool_call:
+                console.print("[bold yellow]Stopping after tool call[/bold yellow]")
+                func_dict["_stop_execution"] = True
+            
             return func_dict
-        return behavioral_wrapper
+        
+        return wrapper
+    
+    def _get_user_confirmation(self, tool_name: str, args: Dict[str, Any]) -> bool:
+        """Get user confirmation for tool execution."""
+        from upsonic.utils.printing import console
+        console.print(f"[bold yellow]⚠️ Confirmation Required[/bold yellow]")
+        console.print(f"Tool: [cyan]{tool_name}[/cyan]")
+        console.print(f"Arguments: {args}")
+        
+        try:
+            response = input("Proceed? (y/n): ").lower().strip()
+            return response in ('y', 'yes')
+        except KeyboardInterrupt:
+            return False
+    
+    def _get_user_input(
+        self,
+        tool_name: str,
+        args: Dict[str, Any],
+        fields: List[str]
+    ) -> Dict[str, Any]:
+        """Get user input for specified fields."""
+        from upsonic.utils.printing import console
+        console.print(f"[bold blue]📝 Input Required for {tool_name}[/bold blue]")
+        
+        for field in fields:
+            try:
+                value = input(f"Enter value for '{field}': ")
+                args[field] = value
+            except KeyboardInterrupt:
+                console.print("[bold red]Input cancelled[/bold red]")
+                break
+        
+        return args
+    
+    def _get_cache_key(self, tool_name: str, args: Dict[str, Any]) -> str:
+        """Generate cache key for tool call."""
+        key_data = json.dumps(
+            {"tool": tool_name, "args": args},
+            sort_keys=True,
+            default=str
+        )
+        return hashlib.sha256(key_data.encode()).hexdigest()
+    
+    def _get_cached_result(self, cache_key: str, config: ToolConfig) -> Any:
+        """Get cached result if available and valid."""
+        cache_dir = Path(config.cache_dir or Path.home() / '.upsonic' / 'cache')
+        cache_file = cache_dir / f"{cache_key}.json"
+        
+        if not cache_file.exists():
+            return None
+        
+        try:
+            with open(cache_file, 'r') as f:
+                data = json.load(f)
+            
+            # Check TTL
+            if config.cache_ttl:
+                age = time.time() - data.get('timestamp', 0)
+                if age > config.cache_ttl:
+                    cache_file.unlink()
+                    return None
+            
+            return data.get('result')
+            
+        except Exception:
+            return None
+    
+    def _cache_result(self, cache_key: str, result: Any, config: ToolConfig) -> None:
+        """Cache tool result."""
+        cache_dir = Path(config.cache_dir or Path.home() / '.upsonic' / 'cache')
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        cache_file = cache_dir / f"{cache_key}.json"
+        
+        try:
+            data = {
+                'timestamp': time.time(),
+                'result': result
+            }
+            with open(cache_file, 'w') as f:
+                json.dump(data, f, indent=2, default=str)
+        except Exception as e:
+            from upsonic.utils.printing import console
+            console.print(f"[bold yellow]Warning: Could not cache result: {e}[/bold yellow]")

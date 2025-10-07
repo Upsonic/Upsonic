@@ -18,7 +18,7 @@ try:
 except ImportError:
     AZURE_IDENTITY_AVAILABLE = False
 
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
 
 from ..utils.package.exception import ConfigurationError, ModelConnectionError
@@ -45,7 +45,8 @@ class AzureOpenAIEmbeddingConfig(EmbeddingConfig):
     requests_per_minute: int = Field(240, description="Requests per minute for Azure")
     tokens_per_minute: int = Field(240000, description="Tokens per minute for Azure")
     
-    @validator('azure_endpoint')
+    @field_validator('azure_endpoint')
+    @classmethod
     def validate_azure_endpoint(cls, v):
         """Validate Azure endpoint format."""
         if v and not v.startswith('https://'):
@@ -57,7 +58,8 @@ class AzureOpenAIEmbeddingConfig(EmbeddingConfig):
                 v = v + '/'
         return v
     
-    @validator('deployment_name')
+    @field_validator('deployment_name')
+    @classmethod
     def validate_deployment_name(cls, v):
         """Validate deployment name format."""
         if v and not v.replace('-', '').replace('_', '').isalnum():

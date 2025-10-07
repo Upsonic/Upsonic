@@ -1,7 +1,27 @@
-import faiss
+try:
+    import faiss
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="faiss-cpu",
+        install_command='pip install "upsonic[rag]"',
+        feature_name="FAISS vector database provider"
+    )
+
+
+try:
+    import numpy as np
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="numpy",
+        install_command='pip install "upsonic[embeddings]"',
+        feature_name="FAISS vector database provider"
+    )
+
+
 import json
 import shutil
-import numpy as np
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union, Literal, Callable
 
