@@ -16,10 +16,13 @@ try:
     )
     from pymilvus.exceptions import MilvusException
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `pymilvus` package to use the Milvus vector database provider, '
-        'you can use the `rag` optional group — `pip install "upsonic[rag]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="pymilvus",
+        install_command='pip install "upsonic[rag]"',
+        feature_name="Milvus vector database provider"
+    )
+
 
 
 from upsonic.vectordb.base import BaseVectorDBProvider

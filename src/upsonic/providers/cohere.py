@@ -13,10 +13,13 @@ from upsonic.providers import Provider
 try:
     from cohere import AsyncClientV2
 except ImportError as _import_error:  # pragma: no cover
-    raise ImportError(
-        'Please install the `cohere` package to use the Cohere provider, '
-        'you can use the `cohere` optional group — `pip install "upsonic[cohere]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="cohere",
+        install_command='pip install cohere',
+        feature_name="cohere provider"
+    )
+
 
 
 class CohereProvider(Provider[AsyncClientV2]):

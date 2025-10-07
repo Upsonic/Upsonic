@@ -5,10 +5,13 @@ from typing import Optional, Type, Union, TypeVar
 try:
     import asyncpg
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `asyncpg` package to use the PostgreSQL storage provider, '
-        'you can use the `storage` optional group — `pip install "upsonic[storage]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="asyncpg",
+        install_command='pip install "upsonic[storage]"',
+        feature_name="PostgreSQL storage provider"
+    )
+
 from pydantic import BaseModel
 
 from upsonic.storage.base import Storage

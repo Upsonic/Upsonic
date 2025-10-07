@@ -107,9 +107,12 @@ try:
     from anthropic.types.model_param import ModelParam
 
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install `anthropic` to use the Anthropic model.'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="anthropic",
+        install_command='pip install anthropic',
+        feature_name="anthropic model"
+    )
 
 LatestAnthropicModelNames = ModelParam
 """Latest Anthropic models."""

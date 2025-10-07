@@ -8,18 +8,24 @@ from typing import List
 try:
     import pandas as pd
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `pandas` package to use the financial tools, '
-        'you can use the `tools` optional group — `pip install "upsonic[tools]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="pandas",
+        install_command='pip install "upsonic[tools]"',
+        feature_name="financial tools"
+    )
+
 
 try:
     import yfinance as yf
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `yfinance` package to use the financial tools, '
-        'you can use the `tools` optional group — `pip install "upsonic[tools]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="yfinance",
+        install_command='pip install "upsonic[tools]"',
+        feature_name="financial tools"
+    )
+
 
 
 class YFinanceTools:

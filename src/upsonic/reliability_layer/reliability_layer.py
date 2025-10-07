@@ -7,10 +7,12 @@ from urllib.parse import urlparse
 try:
     import requests
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `requests` package to use reliability layer functionality, '
-        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="requests",
+        install_command='pip install requests',
+        feature_name="requests"
+    )
 import asyncio
 
 from upsonic.models import Model

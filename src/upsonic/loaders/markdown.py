@@ -5,19 +5,25 @@ from typing import Any, Dict, List, Optional, Union
 try:
     import frontmatter
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `python-frontmatter` package to use the Markdown loader, '
-        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="python-frontmatter",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="Markdown loader"
+    )
+
 
 try:
     from markdown_it import MarkdownIt
     from markdown_it.token import Token
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `markdown-it-py` package to use the Markdown loader, '
-        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="markdown-it-py",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="Markdown loader"
+    )
+
 
 from upsonic.schemas.data_models import Document
 from upsonic.loaders.base import BaseLoader

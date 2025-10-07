@@ -8,10 +8,13 @@ try:
     from pinecone import Pinecone, ServerlessSpec
     from pinecone.exceptions import PineconeApiException as ApiException, NotFoundException
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `pinecone` package to use the Pinecone vector database provider, '
-        'you can use the `rag` optional group — `pip install "upsonic[rag]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="pinecone",
+        install_command='pip install "upsonic[rag]"',
+        feature_name="Pinecone vector database provider"
+    )
+
 
 from upsonic.vectordb.base import BaseVectorDBProvider
 

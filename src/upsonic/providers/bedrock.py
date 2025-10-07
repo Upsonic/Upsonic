@@ -22,10 +22,13 @@ try:
     from botocore.config import Config
     from botocore.exceptions import NoRegionError
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `boto3` package to use the Bedrock provider, '
-        'you can use the `bedrock` optional group — `pip install "upsonic[bedrock]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="boto3",
+        install_command='pip install "upsonic[bedrock]"',
+        feature_name="Bedrock provider"
+    )
+
 
 
 @dataclass(kw_only=True)

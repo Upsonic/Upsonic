@@ -7,10 +7,12 @@ import time
 try:
     import numpy as np
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `numpy` package to use embedding functionality, '
-        'you can use the `embeddings` optional group — `pip install "upsonic[embeddings]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="numpy",
+        install_command='pip install numpy',
+        feature_name="numpy embeddings"
+    )
 from concurrent.futures import ThreadPoolExecutor
 
 from pydantic import BaseModel, Field, ConfigDict

@@ -16,10 +16,13 @@ try:
     from google.genai import Client
     from google.genai.types import HttpOptionsDict
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `google-genai` package to use the Google provider, '
-        'you can use the `google` optional group — `pip install "upsonic[google]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="google-genai",
+        install_command='pip install "upsonic[google]"',
+        feature_name="Google provider"
+    )
+
 
 
 class GoogleProvider(Provider[Client]):

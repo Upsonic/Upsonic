@@ -1,18 +1,24 @@
 try:
     import faiss
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `faiss-cpu` package to use the FAISS vector database provider, '
-        'you can use the `rag` optional group — `pip install "upsonic[rag]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="faiss-cpu",
+        install_command='pip install "upsonic[rag]"',
+        feature_name="FAISS vector database provider"
+    )
+
 
 try:
     import numpy as np
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `numpy` package to use the FAISS vector database provider, '
-        'you can use the `embeddings` optional group — `pip install "upsonic[embeddings]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="numpy",
+        install_command='pip install "upsonic[embeddings]"',
+        feature_name="FAISS vector database provider"
+    )
+
 
 import json
 import shutil

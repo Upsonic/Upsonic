@@ -12,10 +12,13 @@ from upsonic.loaders.config import PyMuPDFLoaderConfig
 try:
     import pymupdf
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `pymupdf` package to use the PyMuPDF loader, '
-        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="pymupdf",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="PyMuPDF loader"
+    )
+
 
 try:
     from rapidocr_onnxruntime import RapidOCR

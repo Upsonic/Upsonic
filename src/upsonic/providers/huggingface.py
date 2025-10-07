@@ -17,10 +17,13 @@ from upsonic.providers import Provider
 try:
     from huggingface_hub import AsyncInferenceClient
 except ImportError as _import_error:  # pragma: no cover
-    raise ImportError(
-        'Please install the `huggingface_hub` package to use the HuggingFace provider, '
-        "you can use the `huggingface` optional group — `pip install 'upsonic[huggingface]'`"
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="huggingface_hub",
+        install_command='pip install huggingface_hub',
+        feature_name="huggingface hub provider"
+    )
+
 
 
 

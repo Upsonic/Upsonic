@@ -10,10 +10,12 @@ from upsonic.loaders.config import TextLoaderConfig
 try:
     import aiofiles
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `aiofiles` package to use the text loader, '
-        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="aiofiles",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="text loader"
+    )
 
 
 class TextLoader(BaseLoader):

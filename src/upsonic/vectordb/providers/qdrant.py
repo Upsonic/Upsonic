@@ -5,10 +5,13 @@ try:
     from qdrant_client import QdrantClient, models
     from qdrant_client.http.exceptions import UnexpectedResponse
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `qdrant-client` package to use the Qdrant vector database provider, '
-        'you can use the `rag` optional group — `pip install "upsonic[rag]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="qdrant-client",
+        install_command='pip install "upsonic[rag]"',
+        feature_name="Qdrant vector database provider"
+    )
+
 
 from upsonic.vectordb.base import BaseVectorDBProvider
 

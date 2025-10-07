@@ -9,10 +9,13 @@ from upsonic.tools import tool
 try:
     from tavily import AsyncTavilyClient
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `tavily-python` package to use the Tavily search tool, '
-        'you can use the `tools` optional group — `pip install "upsonic[tools]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="tavily-python",
+        install_command='pip install "upsonic[tools]"',
+        feature_name="Tavily search tool"
+    )
+
 
 __all__ = ('tavily_search_tool',)
 

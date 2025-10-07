@@ -13,18 +13,24 @@ from typing import Literal, Optional, TypedDict
 try:
     import requests
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `requests` package to use the built-in tools, '
-        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="requests",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="built-in tools"
+    )
+
 
 try:
     from bs4 import BeautifulSoup
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `beautifulsoup4` package to use the built-in tools, '
-        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="beautifulsoup4",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="built-in tools"
+    )
+
 
 try:
     try:
@@ -32,6 +38,12 @@ try:
     except ImportError:  # Fallback for older versions of ddgs
         from duckduckgo_search import DDGS
 except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="duckduckgo-search",
+        install_command='pip install "upsonic[tools]"',
+        feature_name="DuckDuckGo search tool"
+    )
     raise ImportError(
         'Please install the `duckduckgo-search` package to use the DuckDuckGo search tool, '
         'you can use the `tools` optional group — `pip install "upsonic[tools]"`'
