@@ -18,6 +18,8 @@ try:
 except ImportError:
     AZURE_IDENTITY_AVAILABLE = False
 
+from upsonic.utils.printing import debug_log, warning_log
+
 from pydantic import Field, field_validator
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
 
@@ -338,7 +340,7 @@ class AzureOpenAIEmbedding(EmbeddingProvider):
             return len(test_result) > 0 and len(test_result[0]) > 0
             
         except Exception as e:
-            print(f"Azure OpenAI connection validation failed: {str(e)}")
+            debug_log(f"Azure OpenAI connection validation failed: {str(e)}", context="AzureOpenAIEmbedding")
             return False
     
     def get_azure_info(self) -> Dict[str, Any]:
@@ -387,7 +389,7 @@ class AzureOpenAIEmbedding(EmbeddingProvider):
                 del self.client
                 self.client = None
             except Exception as e:
-                print(f"Warning: Error closing Azure OpenAI client: {e}")
+                warning_log(f"Error closing Azure OpenAI client: {e}", context="AzureOpenAIEmbedding")
         
         if hasattr(self, '_credential') and self._credential:
             try:
@@ -402,7 +404,7 @@ class AzureOpenAIEmbedding(EmbeddingProvider):
                 del self._credential
                 self._credential = None
             except Exception as e:
-                print(f"Warning: Error closing Azure credential: {e}")
+                warning_log(f"Error closing Azure credential: {e}", context="AzureOpenAIEmbedding")
         
         await super().close()
 

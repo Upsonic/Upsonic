@@ -115,7 +115,8 @@ class JSONStorage(Storage):
                 data = self._deserialize(content)
                 return model_type.from_dict(data)
             except (json.JSONDecodeError, TypeError) as e:
-                print(f"Warning: Could not parse file {file_path}. Error: {e}")
+                from upsonic.utils.printing import warning_log
+                warning_log(f"Could not parse file {file_path}. Error: {e}", "JSONStorage")
                 return None
 
     async def upsert_async(self, data: Union[InteractionSession, UserProfile]) -> None:
@@ -140,7 +141,8 @@ class JSONStorage(Storage):
                 try: 
                     await asyncio.to_thread(file_path.unlink)
                 except OSError as e: 
-                    print(f"Error: Could not delete file {file_path}. Reason: {e}")
+                    from upsonic.utils.printing import error_log
+                    error_log(f"Could not delete file {file_path}. Reason: {e}", "JSONStorage")
 
     async def drop_async(self) -> None:
         async with self.lock:

@@ -1162,3 +1162,59 @@ def agent_started(agent_name: str) -> None:
     
     console.print(panel)
     spacing()
+
+
+def info_log(message: str, context: str = "Upsonic") -> None:
+    """
+    Prints an info log message.
+    
+    Args:
+        message: The log message
+        context: The context/module name
+    """
+    message_esc = escape_rich_markup(message)
+    context_esc = escape_rich_markup(context)
+    
+    console.print(f"[blue][INFO][/blue] [{context_esc}] {message_esc}")
+
+
+def warning_log(message: str, context: str = "Upsonic") -> None:
+    """
+    Prints a warning log message.
+    
+    Args:
+        message: The log message
+        context: The context/module name
+    """
+    message_esc = escape_rich_markup(message)
+    context_esc = escape_rich_markup(context)
+    
+    console.print(f"[yellow][WARNING][/yellow] [{context_esc}] {message_esc}")
+
+
+def error_log(message: str, context: str = "Upsonic") -> None:
+    """
+    Prints an error log message.
+    
+    Args:
+        message: The log message
+        context: The context/module name
+    """
+    message_esc = escape_rich_markup(message)
+    context_esc = escape_rich_markup(context)
+    
+    console.print(f"[red][ERROR][/red] [{context_esc}] {message_esc}")
+
+
+def debug_log(message: str, context: str = "Upsonic") -> None:
+    """
+    Prints a debug log message.
+    
+    Args:
+        message: The log message
+        context: The context/module name
+    """
+    message_esc = escape_rich_markup(message)
+    context_esc = escape_rich_markup(context)
+    
+    console.print(f"[dim][DEBUG][/dim] [{context_esc}] {message_esc}")

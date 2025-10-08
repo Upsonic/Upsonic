@@ -11,7 +11,7 @@ from upsonic.graph.graph import Graph
 from upsonic.team.team import Team
 from upsonic.tasks.tasks import Task
 from upsonic.eval.models import PerformanceRunResult, PerformanceEvaluationResult
-from upsonic.utils.printing import console
+from upsonic.utils.printing import console, debug_log
 
 from rich.table import Table
 
@@ -77,7 +77,7 @@ class PerformanceEvaluator:
 
             tracemalloc.clear_traces()
             start_mem, _ = tracemalloc.get_traced_memory()
-            print(f"start_mem: {start_mem}")
+            debug_log(f"start_mem: {start_mem}", context="PerformanceEvaluator")
             
             start_time = time.perf_counter()
 
@@ -87,7 +87,7 @@ class PerformanceEvaluator:
             latency = end_time - start_time
             
             end_mem, peak_mem = tracemalloc.get_traced_memory()
-            print(f"end_mem: {end_mem}, peak_mem: {peak_mem}")
+            debug_log(f"end_mem: {end_mem}, peak_mem: {peak_mem}", context="PerformanceEvaluator")
             
             run_result = PerformanceRunResult(
                 latency_seconds=latency,

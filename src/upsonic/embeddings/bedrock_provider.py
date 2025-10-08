@@ -13,6 +13,7 @@ except ImportError:
 from pydantic import BaseModel, Field, field_validator
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
 from ..utils.package.exception import ConfigurationError, ModelConnectionError
+from upsonic.utils.printing import warning_log, info_log, debug_log
 
 
 class BedrockEmbeddingConfig(EmbeddingConfig):
@@ -58,7 +59,7 @@ class BedrockEmbeddingConfig(EmbeddingConfig):
         if "." in v:
             return v
         
-        print(f"Warning: Unknown model '{v}', defaulting to amazon.titan-embed-text-v1")
+        warning_log(f"Unknown model '{v}', defaulting to amazon.titan-embed-text-v1", context="BedrockEmbedding")
         return "amazon.titan-embed-text-v1"
     
     @field_validator('region_name')
@@ -71,7 +72,7 @@ class BedrockEmbeddingConfig(EmbeddingConfig):
         ]
         
         if v not in bedrock_regions:
-            print(f"Warning: Region '{v}' may not support Bedrock. Supported regions: {bedrock_regions}")
+            warning_log(f"Region '{v}' may not support Bedrock. Supported regions: {bedrock_regions}", context="BedrockEmbedding")
         
         return v
 
@@ -119,7 +120,7 @@ class BedrockEmbedding(EmbeddingProvider):
             
             sts_client = self.session.client('sts', region_name=self.config.region_name)
             identity = sts_client.get_caller_identity()
-            print(f"AWS authentication successful. Account: {identity.get('Account')}")
+            info_log(f"AWS authentication successful. Account: {identity.get('Account')}", context="BedrockEmbedding")
             
         except NoCredentialsError:
             raise ConfigurationError(
@@ -249,7 +250,7 @@ class BedrockEmbedding(EmbeddingProvider):
                     "supported_inference_types": model_details.get('inferenceTypesSupported', [])
                 })
             except Exception as e:
-                print(f"Could not fetch live model info: {e}")
+                debug_log(f"Could not fetch live model info: {e}", context="BedrockEmbedding")
         
         return self._model_info
     
@@ -388,7 +389,7 @@ class BedrockEmbedding(EmbeddingProvider):
             return len(test_result) > 0 and len(test_result[0]) > 0
             
         except Exception as e:
-            print(f"Bedrock connection validation failed: {str(e)}")
+            debug_log(f"Bedrock connection validation failed: {str(e)}", context="BedrockEmbedding")
             return False
     
     def get_aws_info(self) -> Dict[str, Any]:
@@ -449,7 +450,7 @@ class BedrockEmbedding(EmbeddingProvider):
             return models
             
         except Exception as e:
-            print(f"Could not list models: {e}")
+            debug_log(f"Could not list models: {e}", context="BedrockEmbedding")
             return []
 
     async def close(self):
@@ -463,7 +464,7 @@ class BedrockEmbedding(EmbeddingProvider):
                 elif hasattr(self.bedrock_client, 'close'):
                     self.bedrock_client.close()
             except Exception as e:
-                print(f"Warning: Error closing Bedrock client: {e}")
+                warning_log(f"Error closing Bedrock client: {e}", context="BedrockEmbedding")
         
         if hasattr(self, 'bedrock_info_client') and self.bedrock_info_client:
             try:
@@ -472,7 +473,7 @@ class BedrockEmbedding(EmbeddingProvider):
                 elif hasattr(self.bedrock_info_client, 'close'):
                     self.bedrock_info_client.close()
             except Exception as e:
-                print(f"Warning: Error closing Bedrock info client: {e}")
+                warning_log(f"Error closing Bedrock info client: {e}", context="BedrockEmbedding")
         
         if hasattr(self, 'session') and self.session:
             try:
@@ -481,7 +482,7 @@ class BedrockEmbedding(EmbeddingProvider):
                 elif hasattr(self.session, 'close'):
                     self.session.close()
             except Exception as e:
-                print(f"Warning: Error closing AWS session: {e}")
+                warning_log(f"Error closing AWS session: {e}", context="BedrockEmbedding")
         
         await super().close()
 

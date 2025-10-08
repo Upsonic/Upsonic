@@ -18,14 +18,39 @@ class CryptoRule(RuleBase):
     def __init__(self, options: Optional[Dict[str, Any]] = None):
         super().__init__(options)
         
-        # Default crypto keywords
+        # Default crypto keywords - more specific to avoid false positives
         self.keywords_list = [
             "bitcoin", "btc", "ethereum", "eth", "cryptocurrency", 
             "crypto", "blockchain", "mining", "wallet", "coinbase",
             "binance", "dogecoin", "litecoin", "ripple", "xrp",
             "altcoin", "defi", "nft", "hodl", "satoshi", "hash rate",
             "proof of work", "proof of stake", "smart contract",
-            "token", "coin", "exchange", "trading", "pump", "dump",
+            "crypto token", "crypto coin", "crypto exchange", "crypto trading", 
+            "crypto pump", "crypto dump", "digital currency", "virtual currency",
+        ]
+        
+        # Context-aware patterns to avoid false positives
+        self.false_positive_patterns = [
+            r'\bcurrency\s+exchange\b',  # "currency exchange" (foreign exchange)
+            r'\bforeign\s+exchange\b',  # "foreign exchange"
+            r'\bforex\b',  # "forex"
+            r'\bexchange\s+rate\b',  # "exchange rate"
+            r'\bexchange\s+office\b',  # "exchange office"
+            r'\bexchange\s+bureau\b',  # "exchange bureau"
+            r'\bstock\s+exchange\b',  # "stock exchange"
+            r'\bcommodity\s+exchange\b',  # "commodity exchange"
+            r'\benergy\s+exchange\b',  # "energy exchange"
+            r'\bdata\s+exchange\b',  # "data exchange"
+            r'\binformation\s+exchange\b',  # "information exchange"
+            r'\bknowledge\s+exchange\b',  # "knowledge exchange"
+            r'\bstudent\s+exchange\b',  # "student exchange"
+            r'\bcultural\s+exchange\b',  # "cultural exchange"
+            r'\bexchange\s+program\b',  # "exchange program"
+            r'\bexchange\s+student\b',  # "exchange student"
+            r'\bexchange\s+visitor\b',  # "exchange visitor"
+            r'\bexchange\s+agreement\b',  # "exchange agreement"
+            r'\bexchange\s+of\s+ideas\b',  # "exchange of ideas"
+            r'\bexchange\s+of\s+information\b',  # "exchange of information"
         ]
         
         # Allow custom keywords from options
@@ -38,13 +63,21 @@ class CryptoRule(RuleBase):
         # Combine all input texts
         combined_text = " ".join(policy_input.input_texts or []).lower()
         
-        # Find matching keywords
+        # Find matching keywords with false positive filtering
         triggered_keywords = []
         for keyword in self.keywords_list:
             # Use word boundaries to avoid false positives
             pattern = r'\b' + re.escape(keyword.lower()) + r'\b'
             if re.search(pattern, combined_text):
-                triggered_keywords.append(keyword)
+                # Check for false positive patterns
+                is_false_positive = False
+                for fp_pattern in self.false_positive_patterns:
+                    if re.search(fp_pattern, combined_text.lower()):
+                        is_false_positive = True
+                        break
+                
+                if not is_false_positive:
+                    triggered_keywords.append(keyword)
         
         # Calculate confidence based on number of matches
         if not triggered_keywords:

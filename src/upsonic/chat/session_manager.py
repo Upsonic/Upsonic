@@ -113,7 +113,8 @@ class SessionManager:
         )
         
         if self.debug:
-            print(f"SessionManager initialized: session_id={session_id}, user_id={user_id}")
+            from upsonic.utils.printing import debug_log
+            debug_log(f"SessionManager initialized: session_id={session_id}, user_id={user_id}", "SessionManager")
     
     # State Management
     @property
@@ -124,7 +125,8 @@ class SessionManager:
     def transition_state(self, new_state: SessionState) -> None:
         """Transition to a new session state."""
         if self.debug:
-            print(f"Session state transition: {self._state.value} -> {new_state.value}")
+            from upsonic.utils.printing import debug_log
+            debug_log(f"Session state transition: {self._state.value} -> {new_state.value}", "SessionManager")
         self._state = new_state
     
     def can_accept_invocation(self) -> bool:
@@ -165,7 +167,8 @@ class SessionManager:
         )
         
         if self.debug:
-            print("Session reset to initial state")
+            from upsonic.utils.printing import debug_log
+            debug_log("Session reset to initial state", "SessionManager")
     
     # Message History Management
     @property
@@ -180,7 +183,8 @@ class SessionManager:
         self._update_activity()
         
         if self.debug:
-            print(f"Added {message.role} message to session history")
+            from upsonic.utils.printing import debug_log
+            debug_log(f"Added {message.role} message to session history", "SessionManager")
     
     def clear_history(self) -> None:
         """Clear the message history."""
@@ -188,7 +192,8 @@ class SessionManager:
         self._metrics.message_count = 0
         
         if self.debug:
-            print("Session message history cleared")
+            from upsonic.utils.printing import debug_log
+            debug_log("Session message history cleared", "SessionManager")
     
     def get_message_count(self) -> int:
         """Get the number of messages in the session."""
@@ -217,7 +222,8 @@ class SessionManager:
             output_tokens = usage.output_tokens or 0
             # Get the cost for this individual usage
             individual_cost = self._cost_tracker._cost_history[-1].estimated_cost if self._cost_tracker._cost_history else 0.0
-            print(f"Added usage: {input_tokens} in, {output_tokens} out, ${individual_cost:.4f} (cumulative: {self._cost_tracker.input_tokens} in, {self._cost_tracker.output_tokens} out, ${self._cost_tracker.total_cost:.4f})")
+            from upsonic.utils.printing import info_log
+            info_log(f"Added usage: {input_tokens} in, {output_tokens} out, ${individual_cost:.4f} (cumulative: {self._cost_tracker.input_tokens} in, {self._cost_tracker.output_tokens} out, ${self._cost_tracker.total_cost:.4f})", "SessionManager")
     
     @property
     def input_tokens(self) -> int:
@@ -305,7 +311,8 @@ class SessionManager:
         self._concurrent_invocations = 0
         
         if self.debug:
-            print(f"Session closed: {self.get_session_summary()}")
+            from upsonic.utils.printing import debug_log
+            debug_log(f"Session closed: {self.get_session_summary()}", "SessionManager")
     
     def is_session_active(self) -> bool:
         """Check if the session is still active."""

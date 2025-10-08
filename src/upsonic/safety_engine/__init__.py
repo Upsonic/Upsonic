@@ -48,7 +48,11 @@ def _get_policy_classes():
         AdultContentBlockPolicy,
         AnonymizePhoneNumbersPolicy,
         CryptoBlockPolicy,
+        CryptoBlockPolicy_LLM_Block,
+        CryptoBlockPolicy_LLM_Finder,
+        CryptoReplace,
         CryptoRaiseExceptionPolicy,
+        CryptoRaiseExceptionPolicy_LLM_Raise,
         SensitiveSocialBlockPolicy,
         SensitiveSocialRaiseExceptionPolicy,
         AdultContentBlockPolicy_LLM,
@@ -104,6 +108,51 @@ def _get_policy_classes():
         TechnicalSecurityReplacePolicy,
         TechnicalSecurityRaiseExceptionPolicy,
         TechnicalSecurityRaiseExceptionPolicy_LLM,
+        
+        # Cybersecurity Policies
+        CybersecurityBlockPolicy,
+        CybersecurityBlockPolicy_LLM,
+        CybersecurityBlockPolicy_LLM_Finder,
+        CybersecurityAnonymizePolicy,
+        CybersecurityReplacePolicy,
+        CybersecurityRaiseExceptionPolicy,
+        CybersecurityRaiseExceptionPolicy_LLM,
+        
+        # Data Privacy Policies
+        DataPrivacyBlockPolicy,
+        DataPrivacyBlockPolicy_LLM,
+        DataPrivacyBlockPolicy_LLM_Finder,
+        DataPrivacyAnonymizePolicy,
+        DataPrivacyReplacePolicy,
+        DataPrivacyRaiseExceptionPolicy,
+        DataPrivacyRaiseExceptionPolicy_LLM,
+        
+        # Fraud Detection Policies
+        FraudDetectionBlockPolicy,
+        FraudDetectionBlockPolicy_LLM,
+        FraudDetectionBlockPolicy_LLM_Finder,
+        FraudDetectionAnonymizePolicy,
+        FraudDetectionReplacePolicy,
+        FraudDetectionRaiseExceptionPolicy,
+        FraudDetectionRaiseExceptionPolicy_LLM,
+        
+        # Phishing Policies
+        PhishingBlockPolicy,
+        PhishingBlockPolicy_LLM,
+        PhishingBlockPolicy_LLM_Finder,
+        PhishingAnonymizePolicy,
+        PhishingReplacePolicy,
+        PhishingRaiseExceptionPolicy,
+        PhishingRaiseExceptionPolicy_LLM,
+        
+        # Insider Threat Policies
+        InsiderThreatBlockPolicy,
+        InsiderThreatBlockPolicy_LLM,
+        InsiderThreatBlockPolicy_LLM_Finder,
+        InsiderThreatAnonymizePolicy,
+        InsiderThreatReplacePolicy,
+        InsiderThreatRaiseExceptionPolicy,
+        InsiderThreatRaiseExceptionPolicy_LLM,
     )
     
     return {
@@ -167,6 +216,51 @@ def _get_policy_classes():
         'TechnicalSecurityReplacePolicy': TechnicalSecurityReplacePolicy,
         'TechnicalSecurityRaiseExceptionPolicy': TechnicalSecurityRaiseExceptionPolicy,
         'TechnicalSecurityRaiseExceptionPolicy_LLM': TechnicalSecurityRaiseExceptionPolicy_LLM,
+        
+        # Cybersecurity Policies
+        'CybersecurityBlockPolicy': CybersecurityBlockPolicy,
+        'CybersecurityBlockPolicy_LLM': CybersecurityBlockPolicy_LLM,
+        'CybersecurityBlockPolicy_LLM_Finder': CybersecurityBlockPolicy_LLM_Finder,
+        'CybersecurityAnonymizePolicy': CybersecurityAnonymizePolicy,
+        'CybersecurityReplacePolicy': CybersecurityReplacePolicy,
+        'CybersecurityRaiseExceptionPolicy': CybersecurityRaiseExceptionPolicy,
+        'CybersecurityRaiseExceptionPolicy_LLM': CybersecurityRaiseExceptionPolicy_LLM,
+        
+        # Data Privacy Policies
+        'DataPrivacyBlockPolicy': DataPrivacyBlockPolicy,
+        'DataPrivacyBlockPolicy_LLM': DataPrivacyBlockPolicy_LLM,
+        'DataPrivacyBlockPolicy_LLM_Finder': DataPrivacyBlockPolicy_LLM_Finder,
+        'DataPrivacyAnonymizePolicy': DataPrivacyAnonymizePolicy,
+        'DataPrivacyReplacePolicy': DataPrivacyReplacePolicy,
+        'DataPrivacyRaiseExceptionPolicy': DataPrivacyRaiseExceptionPolicy,
+        'DataPrivacyRaiseExceptionPolicy_LLM': DataPrivacyRaiseExceptionPolicy_LLM,
+        
+        # Fraud Detection Policies
+        'FraudDetectionBlockPolicy': FraudDetectionBlockPolicy,
+        'FraudDetectionBlockPolicy_LLM': FraudDetectionBlockPolicy_LLM,
+        'FraudDetectionBlockPolicy_LLM_Finder': FraudDetectionBlockPolicy_LLM_Finder,
+        'FraudDetectionAnonymizePolicy': FraudDetectionAnonymizePolicy,
+        'FraudDetectionReplacePolicy': FraudDetectionReplacePolicy,
+        'FraudDetectionRaiseExceptionPolicy': FraudDetectionRaiseExceptionPolicy,
+        'FraudDetectionRaiseExceptionPolicy_LLM': FraudDetectionRaiseExceptionPolicy_LLM,
+        
+        # Phishing Policies
+        'PhishingBlockPolicy': PhishingBlockPolicy,
+        'PhishingBlockPolicy_LLM': PhishingBlockPolicy_LLM,
+        'PhishingBlockPolicy_LLM_Finder': PhishingBlockPolicy_LLM_Finder,
+        'PhishingAnonymizePolicy': PhishingAnonymizePolicy,
+        'PhishingReplacePolicy': PhishingReplacePolicy,
+        'PhishingRaiseExceptionPolicy': PhishingRaiseExceptionPolicy,
+        'PhishingRaiseExceptionPolicy_LLM': PhishingRaiseExceptionPolicy_LLM,
+        
+        # Insider Threat Policies
+        'InsiderThreatBlockPolicy': InsiderThreatBlockPolicy,
+        'InsiderThreatBlockPolicy_LLM': InsiderThreatBlockPolicy_LLM,
+        'InsiderThreatBlockPolicy_LLM_Finder': InsiderThreatBlockPolicy_LLM_Finder,
+        'InsiderThreatAnonymizePolicy': InsiderThreatAnonymizePolicy,
+        'InsiderThreatReplacePolicy': InsiderThreatReplacePolicy,
+        'InsiderThreatRaiseExceptionPolicy': InsiderThreatRaiseExceptionPolicy,
+        'InsiderThreatRaiseExceptionPolicy_LLM': InsiderThreatRaiseExceptionPolicy_LLM,
     }
 
 def __getattr__(name: str) -> Any:
@@ -206,7 +300,11 @@ __all__ = [
     "AdultContentBlockPolicy",
     "AnonymizePhoneNumbersPolicy",
     "CryptoBlockPolicy",
+    "CryptoBlockPolicy_LLM_Block",
+    "CryptoBlockPolicy_LLM_Finder",
+    "CryptoReplace",
     "CryptoRaiseExceptionPolicy",
+    "CryptoRaiseExceptionPolicy_LLM_Raise",
     "SensitiveSocialBlockPolicy",
     "SensitiveSocialRaiseExceptionPolicy",
     "AdultContentBlockPolicy_LLM",
@@ -262,4 +360,49 @@ __all__ = [
     "TechnicalSecurityReplacePolicy",
     "TechnicalSecurityRaiseExceptionPolicy",
     "TechnicalSecurityRaiseExceptionPolicy_LLM",
+    
+    # Cybersecurity Policies
+    "CybersecurityBlockPolicy",
+    "CybersecurityBlockPolicy_LLM",
+    "CybersecurityBlockPolicy_LLM_Finder",
+    "CybersecurityAnonymizePolicy",
+    "CybersecurityReplacePolicy",
+    "CybersecurityRaiseExceptionPolicy",
+    "CybersecurityRaiseExceptionPolicy_LLM",
+    
+    # Data Privacy Policies
+    "DataPrivacyBlockPolicy",
+    "DataPrivacyBlockPolicy_LLM",
+    "DataPrivacyBlockPolicy_LLM_Finder",
+    "DataPrivacyAnonymizePolicy",
+    "DataPrivacyReplacePolicy",
+    "DataPrivacyRaiseExceptionPolicy",
+    "DataPrivacyRaiseExceptionPolicy_LLM",
+    
+    # Fraud Detection Policies
+    "FraudDetectionBlockPolicy",
+    "FraudDetectionBlockPolicy_LLM",
+    "FraudDetectionBlockPolicy_LLM_Finder",
+    "FraudDetectionAnonymizePolicy",
+    "FraudDetectionReplacePolicy",
+    "FraudDetectionRaiseExceptionPolicy",
+    "FraudDetectionRaiseExceptionPolicy_LLM",
+    
+    # Phishing Policies
+    "PhishingBlockPolicy",
+    "PhishingBlockPolicy_LLM",
+    "PhishingBlockPolicy_LLM_Finder",
+    "PhishingAnonymizePolicy",
+    "PhishingReplacePolicy",
+    "PhishingRaiseExceptionPolicy",
+    "PhishingRaiseExceptionPolicy_LLM",
+    
+    # Insider Threat Policies
+    "InsiderThreatBlockPolicy",
+    "InsiderThreatBlockPolicy_LLM",
+    "InsiderThreatBlockPolicy_LLM_Finder",
+    "InsiderThreatAnonymizePolicy",
+    "InsiderThreatReplacePolicy",
+    "InsiderThreatRaiseExceptionPolicy",
+    "InsiderThreatRaiseExceptionPolicy_LLM",
 ]

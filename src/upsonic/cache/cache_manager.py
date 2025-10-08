@@ -9,6 +9,7 @@ except ImportError as _import_error:
         'Please install the `numpy` package to use cache functionality, '
         'you can use the `embeddings` optional group — `pip install "upsonic[embeddings]"`'
     ) from _import_error
+from upsonic.utils.printing import warning_log
 
 CacheMethod = Literal["vector_search", "llm_call"]
 CacheEntry = Dict[str, Any]
@@ -206,7 +207,7 @@ class CacheManager:
             return None
             
         except Exception as e:
-            print(f"Warning: Batch LLM comparison failed: {e}")
+            warning_log(f"Batch LLM comparison failed: {e}", context="CacheManager")
             return None
     
     async def get_cached_response(

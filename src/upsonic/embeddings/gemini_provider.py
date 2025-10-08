@@ -18,6 +18,8 @@ try:
 except ImportError:
     GOOGLE_AUTH_AVAILABLE = False
 
+from upsonic.utils.printing import warning_log, info_log, debug_log
+
 from pydantic import BaseModel, Field, field_validator
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
 from ..utils.package.exception import ConfigurationError, ModelConnectionError
@@ -72,7 +74,7 @@ class GeminiEmbeddingConfig(EmbeddingConfig):
         ]
         
         if v not in valid_models:
-            print(f"Warning: '{v}' may not be a valid Gemini embedding model. Known models: {valid_models}")
+            warning_log(f"'{v}' may not be a valid Gemini embedding model. Known models: {valid_models}", context="GeminiEmbedding")
         
         return v
     
@@ -159,7 +161,7 @@ class GeminiEmbedding(EmbeddingProvider):
                         error_code="PROJECT_ID_MISSING"
                     )
                 
-                print(f"Using Google Cloud authentication for project: {self.project_id}")
+                info_log(f"Using Google Cloud authentication for project: {self.project_id}", context="GeminiEmbedding")
                 
             except Exception as e:
                 raise ConfigurationError(
@@ -175,7 +177,7 @@ class GeminiEmbedding(EmbeddingProvider):
                     error_code="API_KEY_MISSING"
                 )
             
-            print("Using Google AI API key authentication")
+            info_log("Using Google AI API key authentication", context="GeminiEmbedding")
     
     def _setup_client(self):
         """Setup Gemini client with new google-genai library."""
@@ -189,14 +191,14 @@ class GeminiEmbedding(EmbeddingProvider):
                     location=self.config.location,
                     http_options=http_options
                 )
-                print(f"Gemini client configured for Vertex AI with model: {self.config.model_name}")
+                info_log(f"Gemini client configured for Vertex AI with model: {self.config.model_name}", context="GeminiEmbedding")
             else:
                 api_key = self.config.api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_AI_API_KEY") or os.getenv("GEMINI_API_KEY")
                 self.client = genai.Client(
                     api_key=api_key,
                     http_options=http_options
                 )
-                print(f"Gemini client configured for Gemini Developer API with model: {self.config.model_name}")
+                info_log(f"Gemini client configured for Gemini Developer API with model: {self.config.model_name}", context="GeminiEmbedding")
             
             if self.config.enable_caching:
                 self._setup_caching()
@@ -215,9 +217,9 @@ class GeminiEmbedding(EmbeddingProvider):
                 ttl_seconds=self.config.cache_ttl_seconds
             )
             self.cache = self.client.caches.create(config=cache_config)
-            print(f"Response caching enabled with TTL: {self.config.cache_ttl_seconds}s")
+            info_log(f"Response caching enabled with TTL: {self.config.cache_ttl_seconds}s", context="GeminiEmbedding")
         except Exception as e:
-            print(f"Warning: Could not setup caching: {e}")
+            warning_log(f"Could not setup caching: {e}", context="GeminiEmbedding")
             self.cache = None
     
     @property
@@ -369,7 +371,7 @@ class GeminiEmbedding(EmbeddingProvider):
                     embeddings = await self._embed_texts_batch(texts, task_type)
                     all_embeddings.extend(embeddings)
                 except Exception as batch_error:
-                    print(f"Batch processing failed, falling back to individual requests: {batch_error}")
+                    warning_log(f"Batch processing failed, falling back to individual requests: {batch_error}", context="GeminiEmbedding")
                     for text in texts:
                         embedding = await self._embed_single_text(text, task_type)
                         all_embeddings.append(embedding)
@@ -474,7 +476,7 @@ class GeminiEmbedding(EmbeddingProvider):
             return results
             
         except Exception as e:
-            print(f"Batch embedding failed, using individual requests: {e}")
+            warning_log(f"Batch embedding failed, using individual requests: {e}", context="GeminiEmbedding")
             results = []
             for text in texts:
                 embedding = await self._embed_single_text(text, task_type)
@@ -488,7 +490,7 @@ class GeminiEmbedding(EmbeddingProvider):
             return len(test_result) > 0 and len(test_result[0]) > 0
             
         except Exception as e:
-            print(f"Gemini connection validation failed: {str(e)}")
+            debug_log(f"Gemini connection validation failed: {str(e)}", context="GeminiEmbedding")
             return False
     
     def get_usage_stats(self) -> Dict[str, Any]:
@@ -545,7 +547,7 @@ class GeminiEmbedding(EmbeddingProvider):
             return models
             
         except Exception as e:
-            print(f"Could not list Gemini models: {e}")
+            debug_log(f"Could not list Gemini models: {e}", context="GeminiEmbedding")
             return []
 
     async def close(self):
@@ -565,7 +567,7 @@ class GeminiEmbedding(EmbeddingProvider):
                 del self.client
                 self.client = None
             except Exception as e:
-                print(f"Warning: Error closing Gemini client: {e}")
+                warning_log(f"Error closing Gemini client: {e}", context="GeminiEmbedding")
         
         if hasattr(self, 'cache') and self.cache:
             try:
@@ -580,7 +582,7 @@ class GeminiEmbedding(EmbeddingProvider):
                 del self.cache
                 self.cache = None
             except Exception as e:
-                print(f"Warning: Error closing Gemini cache: {e}")
+                warning_log(f"Error closing Gemini cache: {e}", context="GeminiEmbedding")
         
         if hasattr(self, '_credential') and self._credential:
             try:
@@ -595,7 +597,7 @@ class GeminiEmbedding(EmbeddingProvider):
                 del self._credential
                 self._credential = None
             except Exception as e:
-                print(f"Warning: Error closing Google credential: {e}")
+                warning_log(f"Error closing Google credential: {e}", context="GeminiEmbedding")
         
         if hasattr(self, '_model_info'):
             self._model_info = None
