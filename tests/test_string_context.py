@@ -67,7 +67,7 @@ class TestTaskStringContextHandling:
             provider_details={},
             finish_reason="stop"
         )
-        mock_model.request.return_value = mock_response
+        mock_model.request = AsyncMock(return_value=mock_response)
         
         city = "New York"
         task = Task("Find resources in the city", context=[city])
@@ -99,7 +99,7 @@ class TestTaskStringContextHandling:
             provider_details={},
             finish_reason="stop"
         )
-        mock_model.request.return_value = mock_response
+        mock_model.request = AsyncMock(return_value=mock_response)
         
         contexts = ["London", "Technology", "2024"]
         task = Task("Create a comprehensive analysis", context=contexts)
@@ -146,7 +146,7 @@ class TestTaskStringContextHandling:
             provider_details={},
             finish_reason="stop"
         )
-        mock_model.request.return_value = mock_response
+        mock_model.request = AsyncMock(return_value=mock_response)
         
         city = "Tokyo"
         task = Task("Find the best restaurants", context=[city])
@@ -174,7 +174,7 @@ class TestTaskStringContextHandling:
             provider_details={},
             finish_reason="stop"
         )
-        mock_model.request.return_value = mock_response
+        mock_model.request = AsyncMock(return_value=mock_response)
         
         task = Task("Handle mixed context", context=["valid", 123, None])
         agent = Agent(name="Robust", model=mock_model)
@@ -215,7 +215,7 @@ class TestTaskStringContextHandling:
             provider_details={},
             finish_reason="stop"
         )
-        mock_model.request.return_value = mock_response
+        mock_model.request = AsyncMock(return_value=mock_response)
         
         task = Task("Perform analysis without specific context", context=[])
         agent = Agent(name="Analyzer", model=mock_model)

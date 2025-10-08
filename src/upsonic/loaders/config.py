@@ -432,6 +432,146 @@ class HTMLLoaderConfig(LoaderConfig):
     user_agent: str = Field(default="Upsonic HTML Loader 1.0", description="User agent for web requests")
 
 
+class DoclingLoaderConfig(LoaderConfig):
+    """
+    Advanced configuration for Docling-based document loading.
+    
+    Docling provides enterprise-grade document processing with support for
+    PDF, DOCX, XLSX, PPTX, HTML, Markdown, AsciiDoc, CSV, and various image formats.
+    It leverages advanced ML models for layout understanding and content extraction.
+    """
+
+    extraction_mode: Literal["markdown", "chunks"] = Field(
+        default="chunks",
+        description=(
+            "Content extraction strategy: "
+            "'markdown' exports entire document as formatted markdown. "
+            "'chunks' intelligently segments document into semantic chunks for RAG."
+        ),
+    )
+
+    chunker_type: Literal["hybrid", "hierarchical"] = Field(
+        default="hybrid",
+        description=(
+            "Chunking algorithm when extraction_mode='chunks': "
+            "'hybrid' combines semantic and structural chunking for optimal retrieval. "
+            "'hierarchical' preserves document hierarchy (sections, subsections)."
+        ),
+    )
+
+    allowed_formats: Optional[List[str]] = Field(
+        default=None,
+        description=(
+            "Restrict input formats. Options: 'pdf', 'docx', 'xlsx', 'pptx', 'html', "
+            "'md', 'asciidoc', 'csv', 'image'. If None, all formats are allowed."
+        ),
+    )
+
+    # Markdown export options (used when extraction_mode='markdown')
+    markdown_image_placeholder: str = Field(
+        default="",
+        description="Placeholder text for images in markdown export. Empty string removes images.",
+    )
+
+    # OCR Configuration (for PDFs and images)
+    ocr_enabled: bool = Field(
+        default=True,
+        description="Enable OCR for scanned documents and images. Uses hybrid mode (smart OCR + text extraction).",
+    )
+
+    ocr_force_full_page: bool = Field(
+        default=False,
+        description="Force full-page OCR instead of hybrid mode. Slower but better for scanned documents.",
+    )
+
+    ocr_backend: Literal["rapidocr", "tesseract"] = Field(
+        default="rapidocr",
+        description="OCR engine to use. 'rapidocr' is fast and accurate, 'tesseract' supports more languages.",
+    )
+
+    ocr_lang: List[str] = Field(
+        default_factory=lambda: ["english"],
+        description="OCR languages. For RapidOCR: ['english', 'chinese']. For Tesseract: ['eng', 'fra', etc.] or ['auto'] for auto-detection.",
+    )
+
+    ocr_backend_engine: Literal["onnxruntime", "openvino", "paddle", "torch"] = Field(
+        default="onnxruntime",
+        description="Backend engine for RapidOCR. 'onnxruntime' recommended for best compatibility.",
+    )
+
+    ocr_text_score: float = Field(
+        default=0.5,
+        description="Minimum confidence score for OCR text (0.0-1.0). Lower values include more uncertain text.",
+        ge=0.0,
+        le=1.0
+    )
+
+    # Table Structure Detection
+    enable_table_structure: bool = Field(
+        default=True,
+        description="Enable table structure detection and parsing.",
+    )
+
+    table_structure_cell_matching: bool = Field(
+        default=True,
+        description="Enable cell-level matching in tables for better structure preservation.",
+    )
+
+    # Performance and resource management
+    max_pages: Optional[int] = Field(
+        default=None,
+        description="Maximum number of pages to process per document. None means no limit.",
+        ge=1
+    )
+
+    page_range: Optional[tuple[int, int]] = Field(
+        default=None,
+        description="Specific page range to process (start, end) - 1-indexed, inclusive.",
+    )
+
+    parallel_processing: bool = Field(
+        default=True,
+        description="Enable parallel processing for batch operations.",
+    )
+
+    batch_size: int = Field(
+        default=10,
+        description="Number of documents to process in parallel during batch operations.",
+        ge=1,
+        le=100
+    )
+
+    # Metadata extraction
+    extract_document_metadata: bool = Field(
+        default=True,
+        description="Extract document properties (title, author, creation date, etc.).",
+    )
+
+    confidence_threshold: float = Field(
+        default=0.5,
+        description="Minimum confidence score for extracted chunks (0.0-1.0).",
+        ge=0.0,
+        le=1.0
+    )
+
+    # URL handling
+    support_urls: bool = Field(
+        default=True,
+        description="Allow loading documents from HTTP/HTTPS URLs.",
+    )
+
+    url_timeout: int = Field(
+        default=30,
+        description="Timeout in seconds for URL downloads.",
+        ge=1,
+        le=300
+    )
+
+    class Config(LoaderConfig.Config):
+        """Pydantic configuration."""
+        pass
+
+
 class LoaderConfigFactory:
     """Factory for creating loader configurations."""
     
@@ -450,6 +590,7 @@ class LoaderConfigFactory:
         'md': MarkdownLoaderConfig,
         'html': HTMLLoaderConfig,
         'htm': HTMLLoaderConfig,
+        'docling': DoclingLoaderConfig,
     }
     
     @classmethod

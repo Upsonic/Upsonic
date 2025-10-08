@@ -163,13 +163,13 @@ class PyMuPDFLoader(BaseLoader):
                 doc.close()
                 return []
             
-            # Create metadata
+            # Create metadata using base class method (includes custom_metadata from base config)
             metadata = self._create_metadata(path)
             metadata["page_count"] = len(page_contents)
             metadata["total_pages"] = total_pages
             metadata["processed_pages"] = f"{start_idx + 1}-{end_idx}"
             
-            # Add PyMuPDF-specific metadata
+            # Add PyMuPDF-specific metadata if include_metadata is enabled
             if self.config.include_metadata:
                 metadata.update({
                     "extraction_method": self.config.text_extraction_method,
@@ -189,10 +189,8 @@ class PyMuPDFLoader(BaseLoader):
 
             doc.close()
             
-            if self.config.include_metadata:
-                return [Document(document_id=document_id, content=full_content, metadata=metadata)]
-            else:
-                return [Document(document_id=document_id, content=full_content)]
+            # Return document with proper fields (always include metadata since _create_metadata handles include_metadata)
+            return [Document(document_id=document_id, content=full_content, metadata=metadata)]
 
         except (PermissionError, FileExistsError) as e:
             raise e

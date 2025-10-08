@@ -244,6 +244,9 @@ class Chat:
         """Safely transition to a new state."""
         self._session_manager.transition_state(new_state)
     
+    def get_recent_messages(self, count: int = 10) -> List[ChatMessage]:
+        """Get the most recent messages."""
+        return self._session_manager.get_recent_messages(count)
     
     def _normalize_input(self, input_data: Union[str, Task], attachments: Optional[List[str]] = None) -> Task:
         """Normalize various input types into a Task object."""

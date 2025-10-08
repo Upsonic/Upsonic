@@ -54,7 +54,7 @@ async def test_cybersecurity_block_malware(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request.return_value = mock_response
+    mock_model.request = AsyncMock(return_value=mock_response)
     
     agent_with_cybersecurity_policy = Agent(
         model=mock_model,
@@ -98,7 +98,7 @@ async def test_cybersecurity_block_exploit(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request.return_value = mock_response
+    mock_model.request = AsyncMock(return_value=mock_response)
 
     agent_with_cybersecurity_policy = Agent(
         model=mock_model,
@@ -144,7 +144,7 @@ async def test_cybersecurity_anonymize_vulnerability(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request.return_value = mock_response
+    mock_model.request = AsyncMock(return_value=mock_response)
     
     agent_with_anonymize_policy = Agent(
         model=mock_model,
@@ -188,7 +188,7 @@ async def test_cybersecurity_replace_attack_vector(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request.return_value = mock_response
+    mock_model.request = AsyncMock(return_value=mock_response)
     
     agent_with_replace_policy = Agent(
         model=mock_model,
@@ -233,7 +233,7 @@ async def test_cybersecurity_agent_policy_exception(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request.return_value = mock_response
+    mock_model.request = AsyncMock(return_value=mock_response)
     
     agent_with_cybersecurity_exception = Agent(
         model=mock_model,
@@ -279,7 +279,7 @@ async def test_cybersecurity_llm_policy(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request.return_value = mock_response
+    mock_model.request = AsyncMock(return_value=mock_response)
     
     agent_with_llm_policy = Agent(
         model=mock_model,
@@ -323,7 +323,7 @@ async def test_cybersecurity_all_clear(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request.return_value = mock_response
+    mock_model.request = AsyncMock(return_value=mock_response)
     
     plain_agent = Agent(model=mock_model, debug=True)
     

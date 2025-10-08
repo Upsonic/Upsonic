@@ -175,7 +175,7 @@ class OllamaEmbedding(EmbeddingProvider):
                     if response.status == 200:
                         version_info = await response.json()
                         from upsonic.utils.printing import connection_info
-                connection_info("Ollama", version_info.get('version', 'unknown'))
+                        connection_info("Ollama", version_info.get('version', 'unknown'))
                         return True
                     else:
                         from upsonic.utils.printing import error_log

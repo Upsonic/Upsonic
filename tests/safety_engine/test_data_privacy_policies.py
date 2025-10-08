@@ -54,7 +54,7 @@ async def test_data_privacy_block_gdpr_violation(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request.return_value = mock_response
+    mock_model.request = AsyncMock(return_value=mock_response)
     
     agent_with_data_privacy_policy = Agent(
         model=mock_model,
@@ -98,7 +98,7 @@ async def test_data_privacy_block_data_breach(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request.return_value = mock_response
+    mock_model.request = AsyncMock(return_value=mock_response)
 
     agent_with_data_privacy_policy = Agent(
         model=mock_model,
@@ -144,7 +144,7 @@ async def test_data_privacy_anonymize_consent_violation(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request.return_value = mock_response
+    mock_model.request = AsyncMock(return_value=mock_response)
     
     agent_with_anonymize_policy = Agent(
         model=mock_model,
@@ -188,7 +188,7 @@ async def test_data_privacy_replace_children_data(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request.return_value = mock_response
+    mock_model.request = AsyncMock(return_value=mock_response)
     
     agent_with_replace_policy = Agent(
         model=mock_model,
@@ -233,7 +233,7 @@ async def test_data_privacy_agent_policy_exception(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request.return_value = mock_response
+    mock_model.request = AsyncMock(return_value=mock_response)
     
     agent_with_data_privacy_exception = Agent(
         model=mock_model,
@@ -279,7 +279,7 @@ async def test_data_privacy_llm_policy(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request.return_value = mock_response
+    mock_model.request = AsyncMock(return_value=mock_response)
     
     agent_with_llm_policy = Agent(
         model=mock_model,
@@ -323,7 +323,7 @@ async def test_data_privacy_all_clear(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request.return_value = mock_response
+    mock_model.request = AsyncMock(return_value=mock_response)
     
     plain_agent = Agent(model=mock_model, debug=True)
     

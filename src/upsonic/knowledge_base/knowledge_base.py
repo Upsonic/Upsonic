@@ -367,12 +367,10 @@ class KnowledgeBase:
             
             for source_index, source in enumerate(self.sources):
                 source_str = str(source)
-                from upsonic.utils.printing import info_log
-                info_log(f"Processing source {source_index}: {source_str[:100]}{'...' if len(source_str) > 100 else ''}", "KnowledgeBase")
+                info_log(f"Processing source {source_index}: {source_str[:100]}{'...' if len(source_str) > 100 else ''}", context="KnowledgeBase")
                 
                 if isinstance(source, str):
-                    from upsonic.utils.printing import info_log
-                    info_log("Detected direct content, creating document directly...", "KnowledgeBase")
+                    info_log("Detected direct content, creating document directly...", context="KnowledgeBase")
                     try:
                         document = self._create_document_from_content(source, source_index)
                         source_documents = [document]
@@ -388,13 +386,11 @@ class KnowledgeBase:
                 else:
                     if self.loaders:
                         loader = self._get_component_for_source(source_index, self.loaders, "loader")
-                        from upsonic.utils.printing import info_log
-                        info_log(f"Using loader: {loader.__class__.__name__}", "KnowledgeBase")
+                        info_log(f"Using loader: {loader.__class__.__name__}", context="KnowledgeBase")
                         
-                        from upsonic.utils.printing import info_log
-                        info_log(f"Checking if {loader.__class__.__name__} can load {source}...", "KnowledgeBase")
+                        info_log(f"Checking if {loader.__class__.__name__} can load {source}...", context="KnowledgeBase")
                         can_load_result = loader.can_load(source)
-                        info_log(f"can_load result: {can_load_result}", "KnowledgeBase")
+                        info_log(f"can_load result: {can_load_result}", context="KnowledgeBase")
                         
                         if can_load_result:
                             try:

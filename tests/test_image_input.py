@@ -45,7 +45,7 @@ class TestTaskImageContextHandling:
                 provider_details={},
                 finish_reason="stop"
             )
-            mock_model.request.return_value = mock_response
+            mock_model.request = AsyncMock(return_value=mock_response)
             
             images = [img1_path, img2_path]
             

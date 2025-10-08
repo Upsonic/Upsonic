@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from .config import (
         TextLoaderConfig, CSVLoaderConfig, PdfLoaderConfig, PyMuPDFLoaderConfig,
         DOCXLoaderConfig, JSONLoaderConfig, XMLLoaderConfig, YAMLLoaderConfig,
-        MarkdownLoaderConfig, HTMLLoaderConfig, simple_config, advanced_config
+        MarkdownLoaderConfig, HTMLLoaderConfig, DoclingLoaderConfig, simple_config, advanced_config
     )
     from .text import TextLoader
     from .csv import CSVLoader
@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from .yaml import YAMLLoader
     from .markdown import MarkdownLoader
     from .html import HTMLLoader
+    from .docling import DoclingLoader
     from .factory import (
         LoaderFactory, get_factory, create_loader, create_loader_for_file,
         create_loader_for_content, can_handle_file, get_supported_extensions,
@@ -42,7 +43,7 @@ def _get_loader_classes():
     from .markdown import MarkdownLoader
     from .html import HTMLLoader
     
-    return {
+    loaders = {
         'TextLoader': TextLoader,
         'CSVLoader': CSVLoader,
         'PdfLoader': PdfLoader,
@@ -54,13 +55,22 @@ def _get_loader_classes():
         'MarkdownLoader': MarkdownLoader,
         'HTMLLoader': HTMLLoader,
     }
+    
+    # Try to import DoclingLoader (optional dependency)
+    try:
+        from .docling import DoclingLoader
+        loaders['DoclingLoader'] = DoclingLoader
+    except ImportError:
+        pass  # Docling not installed
+    
+    return loaders
 
 def _get_config_classes():
     """Lazy import of config classes."""
     from .config import (
         TextLoaderConfig, CSVLoaderConfig, PdfLoaderConfig, PyMuPDFLoaderConfig,
         DOCXLoaderConfig, JSONLoaderConfig, XMLLoaderConfig, YAMLLoaderConfig,
-        MarkdownLoaderConfig, HTMLLoaderConfig, simple_config, advanced_config
+        MarkdownLoaderConfig, HTMLLoaderConfig, DoclingLoaderConfig, simple_config, advanced_config
     )
     
     return {
@@ -74,6 +84,7 @@ def _get_config_classes():
         'YAMLLoaderConfig': YAMLLoaderConfig,
         'MarkdownLoaderConfig': MarkdownLoaderConfig,
         'HTMLLoaderConfig': HTMLLoaderConfig,
+        'DoclingLoaderConfig': DoclingLoaderConfig,
         'simple_config': simple_config,
         'advanced_config': advanced_config,
     }
@@ -131,10 +142,10 @@ __all__ = [
 
     'LoaderConfig', 'TextLoaderConfig', 'CSVLoaderConfig', 'PdfLoaderConfig', 'PyMuPDFLoaderConfig',
     'DOCXLoaderConfig', 'JSONLoaderConfig', 'XMLLoaderConfig', 'YAMLLoaderConfig',
-    'MarkdownLoaderConfig', 'HTMLLoaderConfig', 'LoaderConfigFactory', 'simple_config', 'advanced_config',
+    'MarkdownLoaderConfig', 'HTMLLoaderConfig', 'DoclingLoaderConfig', 'LoaderConfigFactory', 'simple_config', 'advanced_config',
     
     'TextLoader', 'CSVLoader', 'PdfLoader', 'PyMuPDFLoader', 'DOCXLoader',
-    'JSONLoader', 'XMLLoader', 'YAMLLoader', 'MarkdownLoader', 'HTMLLoader',
+    'JSONLoader', 'XMLLoader', 'YAMLLoader', 'MarkdownLoader', 'HTMLLoader', 'DoclingLoader',
     
     'LoaderFactory', 'get_factory', 'create_loader', 'create_loader_for_file',
     'create_loader_for_content', 'can_handle_file', 'get_supported_extensions',
