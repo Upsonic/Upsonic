@@ -8,24 +8,24 @@ from typing import List, Dict, Any, Optional, Union
 from unittest.mock import Mock, patch, AsyncMock, MagicMock
 import numpy as np
 
-from src.upsonic.embeddings.base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode, EmbeddingMetrics
-from src.upsonic.embeddings.openai_provider import OpenAIEmbedding, OpenAIEmbeddingConfig
-from src.upsonic.embeddings.azure_openai_provider import AzureOpenAIEmbedding, AzureOpenAIEmbeddingConfig
-from src.upsonic.embeddings.bedrock_provider import BedrockEmbedding, BedrockEmbeddingConfig
-from src.upsonic.embeddings.huggingface_provider import HuggingFaceEmbedding, HuggingFaceEmbeddingConfig
-from src.upsonic.embeddings.fastembed_provider import FastEmbedProvider, FastEmbedConfig
-from src.upsonic.embeddings.ollama_provider import OllamaEmbedding, OllamaEmbeddingConfig
-from src.upsonic.embeddings.gemini_provider import GeminiEmbedding, GeminiEmbeddingConfig
-from src.upsonic.embeddings.factory import create_embedding_provider, list_available_providers
+from upsonic.embeddings.base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode, EmbeddingMetrics
+from upsonic.embeddings.openai_provider import OpenAIEmbedding, OpenAIEmbeddingConfig
+from upsonic.embeddings.azure_openai_provider import AzureOpenAIEmbedding, AzureOpenAIEmbeddingConfig
+from upsonic.embeddings.bedrock_provider import BedrockEmbedding, BedrockEmbeddingConfig
+from upsonic.embeddings.huggingface_provider import HuggingFaceEmbedding, HuggingFaceEmbeddingConfig
+from upsonic.embeddings.fastembed_provider import FastEmbedProvider, FastEmbedConfig
+from upsonic.embeddings.ollama_provider import OllamaEmbedding, OllamaEmbeddingConfig
+from upsonic.embeddings.gemini_provider import GeminiEmbedding, GeminiEmbeddingConfig
+from upsonic.embeddings.factory import create_embedding_provider, list_available_providers
 
-from src.upsonic.knowledge_base.knowledge_base import KnowledgeBase
-from src.upsonic.vectordb.providers.faiss import FaissProvider
-from src.upsonic.vectordb.config import Config, Mode, DistanceMetric, IndexType
-from src.upsonic.schemas.data_models import Chunk, Document
-from src.upsonic.text_splitter.base import BaseChunker
-from src.upsonic.loaders.base import BaseLoader
+from upsonic.knowledge_base.knowledge_base import KnowledgeBase
+from upsonic.vectordb.providers.faiss import FaissProvider
+from upsonic.vectordb.config import Config, Mode, DistanceMetric, IndexType
+from upsonic.schemas.data_models import Chunk, Document
+from upsonic.text_splitter.base import BaseChunker
+from upsonic.loaders.base import BaseLoader
 
-from src.upsonic.utils.package.exception import ConfigurationError, ModelConnectionError
+from upsonic.utils.package.exception import ConfigurationError, ModelConnectionError
 
 
 class MockEmbeddingProvider(EmbeddingProvider):
@@ -224,7 +224,7 @@ class TestEmbeddingProviders:
     
     def test_openai_embedding_creation(self, mock_openai_client):
         """Test OpenAI embedding provider creation and basic functionality."""
-        with patch('src.upsonic.embeddings.openai_provider.AsyncOpenAI', return_value=mock_openai_client):
+        with patch('upsonic.embeddings.openai_provider.AsyncOpenAI', return_value=mock_openai_client):
             with patch.dict(os.environ, {'OPENAI_API_KEY': 'test-key'}):
                 config = OpenAIEmbeddingConfig(
                     model_name="text-embedding-3-small",
@@ -238,7 +238,7 @@ class TestEmbeddingProviders:
     
     def test_azure_openai_embedding_creation(self, mock_azure_client):
         """Test Azure OpenAI embedding provider creation."""
-        with patch('src.upsonic.embeddings.azure_openai_provider.AsyncAzureOpenAI', return_value=mock_azure_client):
+        with patch('upsonic.embeddings.azure_openai_provider.AsyncAzureOpenAI', return_value=mock_azure_client):
             config = AzureOpenAIEmbeddingConfig(
                 model_name="text-embedding-3-small",
                 api_key="test-key",
@@ -253,7 +253,7 @@ class TestEmbeddingProviders:
     
     def test_bedrock_embedding_creation(self, mock_bedrock_client):
         """Test AWS Bedrock embedding provider creation."""
-        with patch('src.upsonic.embeddings.bedrock_provider.boto3.Session') as mock_session:
+        with patch('upsonic.embeddings.bedrock_provider.boto3.Session') as mock_session:
             mock_session.return_value.client.return_value = mock_bedrock_client
             
             config = BedrockEmbeddingConfig(
@@ -269,7 +269,7 @@ class TestEmbeddingProviders:
     
     def test_gemini_embedding_creation(self, mock_gemini_client):
         """Test Google Gemini embedding provider creation."""
-        with patch('src.upsonic.embeddings.gemini_provider.genai.Client', return_value=mock_gemini_client):
+        with patch('upsonic.embeddings.gemini_provider.genai.Client', return_value=mock_gemini_client):
             with patch.dict(os.environ, {'GOOGLE_API_KEY': 'test-key'}):
                 config = GeminiEmbeddingConfig(
                     model_name="gemini-embedding-001",
@@ -302,8 +302,8 @@ class TestEmbeddingProviders:
         """Test HuggingFace embedding provider creation."""
         mock_model, mock_tokenizer = mock_huggingface_model
         
-        with patch('src.upsonic.embeddings.huggingface_provider.AutoModel.from_pretrained', return_value=mock_model):
-            with patch('src.upsonic.embeddings.huggingface_provider.AutoTokenizer.from_pretrained', return_value=mock_tokenizer):
+        with patch('upsonic.embeddings.huggingface_provider.AutoModel.from_pretrained', return_value=mock_model):
+            with patch('upsonic.embeddings.huggingface_provider.AutoTokenizer.from_pretrained', return_value=mock_tokenizer):
                 config = HuggingFaceEmbeddingConfig(
                     model_name="sentence-transformers/all-MiniLM-L6-v2",
                     use_local=True,
@@ -316,7 +316,7 @@ class TestEmbeddingProviders:
     
     def test_fastembed_embedding_creation(self, mock_fastembed_model):
         """Test FastEmbed provider creation."""
-        with patch('src.upsonic.embeddings.fastembed_provider.TextEmbedding', return_value=mock_fastembed_model):
+        with patch('upsonic.embeddings.fastembed_provider.TextEmbedding', return_value=mock_fastembed_model):
             config = FastEmbedConfig(
                 model_name="BAAI/bge-small-en-v1.5"
             )
@@ -403,7 +403,7 @@ class TestKnowledgeBaseIntegration:
     @pytest.fixture
     def mock_vectordb_config(self, temp_dir):
         """Create mock vector database configuration."""
-        from src.upsonic.vectordb.config import CoreConfig, IndexingConfig, SearchConfig
+        from upsonic.vectordb.config import CoreConfig, IndexingConfig, SearchConfig
         
         core_config = CoreConfig(
             provider_name="faiss",
@@ -413,7 +413,7 @@ class TestKnowledgeBaseIntegration:
             distance_metric=DistanceMetric.COSINE
         )
         
-        from src.upsonic.vectordb.config import FlatTuningConfig
+        from upsonic.vectordb.config import FlatTuningConfig
         
         indexing_config = IndexingConfig(
             index_config=FlatTuningConfig(index_type=IndexType.FLAT),
@@ -575,7 +575,7 @@ class TestEmbeddingProviderFactory:
     def test_create_embedding_provider_openai(self):
         """Test creating OpenAI embedding provider via factory."""
         with patch.dict(os.environ, {'OPENAI_API_KEY': 'test-key'}):
-            with patch('src.upsonic.embeddings.openai_provider.AsyncOpenAI'):
+            with patch('upsonic.embeddings.openai_provider.AsyncOpenAI'):
                 provider = create_embedding_provider("openai", model_name="text-embedding-3-small")
                 
                 assert isinstance(provider, OpenAIEmbedding)
@@ -583,8 +583,8 @@ class TestEmbeddingProviderFactory:
     
     def test_create_embedding_provider_huggingface(self):
         """Test creating HuggingFace embedding provider via factory."""
-        with patch('src.upsonic.embeddings.huggingface_provider.AutoModel.from_pretrained'):
-            with patch('src.upsonic.embeddings.huggingface_provider.AutoTokenizer.from_pretrained'):
+        with patch('upsonic.embeddings.huggingface_provider.AutoModel.from_pretrained'):
+            with patch('upsonic.embeddings.huggingface_provider.AutoTokenizer.from_pretrained'):
                 provider = create_embedding_provider(
                     "huggingface", 
                     model_name="sentence-transformers/all-MiniLM-L6-v2"
@@ -595,7 +595,7 @@ class TestEmbeddingProviderFactory:
     
     def test_create_embedding_provider_fastembed(self):
         """Test creating FastEmbed provider via factory."""
-        with patch('src.upsonic.embeddings.fastembed_provider.TextEmbedding'):
+        with patch('upsonic.embeddings.fastembed_provider.TextEmbedding'):
             provider = create_embedding_provider("fastembed", model_name="BAAI/bge-small-en-v1.5")
             
             assert isinstance(provider, FastEmbedProvider)
@@ -612,7 +612,7 @@ class TestEmbeddingProviderFactory:
     def test_create_embedding_provider_gemini(self):
         """Test creating Gemini embedding provider via factory."""
         with patch.dict(os.environ, {'GOOGLE_API_KEY': 'test-key'}):
-            with patch('src.upsonic.embeddings.gemini_provider.genai.Client'):
+            with patch('upsonic.embeddings.gemini_provider.genai.Client'):
                 provider = create_embedding_provider("gemini", model_name="gemini-embedding-001")
                 
                 assert isinstance(provider, GeminiEmbedding)
@@ -637,14 +637,15 @@ class TestEmbeddingProviderErrorHandling:
     
     def test_azure_openai_missing_endpoint(self):
         """Test Azure OpenAI provider with missing endpoint."""
-        with pytest.raises(ConfigurationError) as exc_info:
-            AzureOpenAIEmbedding()
-        
-        assert "azure_endpoint" in str(exc_info.value).lower()
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(ConfigurationError) as exc_info:
+                AzureOpenAIEmbedding()
+
+            assert "azure_endpoint" in str(exc_info.value).lower()
     
     def test_bedrock_missing_credentials(self):
         """Test Bedrock provider with missing credentials."""
-        with patch('src.upsonic.embeddings.bedrock_provider.boto3.Session') as mock_session:
+        with patch('upsonic.embeddings.bedrock_provider.boto3.Session') as mock_session:
             mock_session.side_effect = Exception("No credentials found")
             
             with pytest.raises(ConfigurationError) as exc_info:
