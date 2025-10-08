@@ -8,10 +8,13 @@ try:
     from docx.table import Table as DocxTable
     from docx.text.paragraph import Paragraph as DocxParagraph
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `python-docx` package to use the DOCX loader, '
-        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="python-docx",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="DOCX loader"
+    )
+
 
 from upsonic.schemas.data_models import Document
 from upsonic.loaders.base import BaseLoader

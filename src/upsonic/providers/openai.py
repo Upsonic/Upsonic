@@ -13,10 +13,13 @@ from upsonic.providers import Provider
 try:
     from openai import AsyncOpenAI
 except ImportError as _import_error:  # pragma: no cover
-    raise ImportError(
-        'Please install the `openai` package to use the OpenAI provider, '
-        'you can use the `openai` optional group — `pip install "upsonic[openai]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="openai",
+        install_command='pip install "upsonic[openai]"',
+        feature_name="OpenAI provider"
+    )
+
 
 
 class OpenAIProvider(Provider[AsyncOpenAI]):

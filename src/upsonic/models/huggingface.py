@@ -64,10 +64,12 @@ try:
     from huggingface_hub.errors import HfHubHTTPError
 
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install `huggingface_hub` to use Hugging Face Inference Providers, '
-        'use pip install huggingface'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="huggingface_hub",
+        install_command='pip install huggingface_hub',
+        feature_name="huggingface hub provider"
+    )
 
 __all__ = (
     'HuggingFaceModel',

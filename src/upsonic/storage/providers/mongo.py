@@ -8,10 +8,13 @@ try:
         AsyncIOMotorCollection,
     )
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `motor` package to use the MongoDB storage provider, '
-        'you can use the `storage` optional group — `pip install "upsonic[storage]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="motor",
+        install_command='pip install "upsonic[storage]"',
+        feature_name="MongoDB storage provider"
+    )
+
 from pydantic import BaseModel
 
 from upsonic.storage.base import Storage

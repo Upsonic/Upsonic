@@ -10,10 +10,12 @@ try:
     import onnxruntime as ort
     FASTEMBED_AVAILABLE = True
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `fastembed` package to use the FastEmbed embedding provider, '
-        'you can use the `embeddings` optional group — `pip install "upsonic[embeddings]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="fastembed",
+        install_command='pip install fastembed',
+        feature_name="fastembed provider"
+    )
 
 from pydantic import Field, field_validator
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode

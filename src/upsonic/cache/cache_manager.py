@@ -5,11 +5,12 @@ from upsonic.models import Model
 try:
     import numpy as np
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `numpy` package to use cache functionality, '
-        'you can use the `embeddings` optional group — `pip install "upsonic[embeddings]"`'
-    ) from _import_error
-from upsonic.utils.printing import warning_log
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="numpy",
+        install_command='pip install numpy',
+        feature_name="numpy"
+    )
 
 CacheMethod = Literal["vector_search", "llm_call"]
 CacheEntry = Dict[str, Any]

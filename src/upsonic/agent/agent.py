@@ -218,10 +218,13 @@ class Agent(BaseAgent):
             try:
                 from llmlingua import PromptCompressor
             except ImportError:
-                raise ImportError(
-                    "The 'llmlingua' package is required for the 'llmlingua' compression strategy. "
-                    "Please install it using: pip install llmlingua"
+                from upsonic.utils.printing import import_error
+                import_error(
+                    package_name="llmlingua",
+                    install_command="pip install llmlingua",
+                    feature_name="llmlingua compression strategy"
                 )
+
             model_name = self.compression_settings.get(
                 "model_name", "microsoft/llmlingua-2-xlm-roberta-large-meetingbank"
             )

@@ -80,9 +80,12 @@ try:
     from openai.types.shared import ReasoningEffort
     from openai.types.shared_params import Reasoning
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install `openai` to use the OpenAI model.'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="openai",
+        install_command='pip install openai',
+        feature_name="openai model"
+    )
 
 __all__ = (
     'OpenAIModel',

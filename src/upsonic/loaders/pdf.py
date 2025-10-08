@@ -11,19 +11,25 @@ from upsonic.loaders.config import PdfLoaderConfig
 try:
     from pypdf import PdfReader, PageObject
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `pypdf` package to use the PDF loader, '
-        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="pypdf",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="PDF loader"
+    )
+
 
 try:
     from rapidocr_onnxruntime import RapidOCR
     OCR_ENGINE = RapidOCR()
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `rapidocr-onnxruntime` package to use OCR functionality in the PDF loader, '
-        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="rapidocr-onnxruntime",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="PDF OCR functionality"
+    )
+
 
 
 

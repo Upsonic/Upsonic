@@ -5,10 +5,13 @@ from typing import List, Union
 try:
     from lxml import etree
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `lxml` package to use the XML loader, '
-        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="lxml",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="XML loader"
+    )
+
 
 from upsonic.schemas.data_models import Document
 from upsonic.loaders.base import BaseLoader

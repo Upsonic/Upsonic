@@ -88,9 +88,12 @@ try:
 
     from upsonic.providers.google import GoogleProvider
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install `google-genai` to use the Google model.'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="google-genai",
+        install_command='pip install google-genai',
+        feature_name="google-genai model"
+    )
 
 LatestGoogleModelNames = Literal[
     'gemini-2.0-flash',

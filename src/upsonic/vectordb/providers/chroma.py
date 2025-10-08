@@ -6,10 +6,13 @@ try:
     from chromadb.api.models.Collection import Collection as ChromaCollection
     from chromadb.errors import NotFoundError
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `chromadb` package to use the ChromaDB vector database provider, '
-        'you can use the `rag` optional group — `pip install "upsonic[rag]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="chromadb",
+        install_command='pip install "upsonic[rag]"',
+        feature_name="ChromaDB vector database provider"
+    )
+
 
 from upsonic.vectordb.base import BaseVectorDBProvider
 from upsonic.utils.printing import info_log, debug_log

@@ -14,10 +14,13 @@ try:
     except ImportError:  # Fallback for older versions of ddgs
         from duckduckgo_search import DDGS
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `duckduckgo-search` package to use the DuckDuckGo search tool, '
-        'you can use the `tools` optional group — `pip install "upsonic[tools]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="duckduckgo-search",
+        install_command='pip install "upsonic[tools]"',
+        feature_name="DuckDuckGo search tool"
+    )
+
 
 __all__ = ('duckduckgo_search_tool',)
 

@@ -6,10 +6,13 @@ from typing import Optional, Type, Union, TypeVar
 try:
     import aiosqlite
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `aiosqlite` package to use the SQLite storage provider, '
-        'you can use the `storage` optional group — `pip install "upsonic[storage]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="aiosqlite",
+        install_command='pip install "upsonic[storage]"',
+        feature_name="SQLite storage provider"
+    )
+
 
 from pydantic import BaseModel
 

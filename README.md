@@ -47,7 +47,7 @@ agent.print_do(task)
 <br>
 <br>
 
-# Guides | 5 Step
+# Guides | 7 Step
 See our guides to jumpstart your AI agent within minutes. We design them to onboard the new users to the framework.
 
 

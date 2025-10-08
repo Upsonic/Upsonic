@@ -11,10 +11,13 @@ try:
     from weaviate.util import generate_uuid5
     from weaviate.classes.query import HybridFusion
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `weaviate-client` package to use the Weaviate vector database provider, '
-        'you can use the `rag` optional group — `pip install "upsonic[rag]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="weaviate-client",
+        install_command='pip install "upsonic[rag]"',
+        feature_name="Weaviate vector database provider"
+    )
+
 
 from upsonic.vectordb.config import (
     Config, 

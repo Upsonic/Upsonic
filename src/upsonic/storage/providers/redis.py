@@ -11,10 +11,13 @@ try:
     from redis.asyncio import Redis
     from redis.exceptions import ConnectionError as RedisConnectionError
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `redis` package to use the Redis storage provider, '
-        'you can use the `storage` optional group — `pip install "upsonic[storage]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="redis",
+        install_command='pip install "upsonic[storage]"',
+        feature_name="Redis storage provider"
+    )
+
 
 T = TypeVar('T', bound=BaseModel)
 

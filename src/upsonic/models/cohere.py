@@ -54,10 +54,12 @@ try:
     from cohere.core.api_error import ApiError
     from cohere.v2.client import OMIT
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install `cohere` to use the Cohere model, '
-        'use pip install cohere'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="cohere",
+        install_command='pip install cohere',
+        feature_name="cohere model"
+    )
 
 LatestCohereModelNames = Literal[
     'c4ai-aya-expanse-32b',

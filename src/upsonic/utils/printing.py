@@ -1140,18 +1140,18 @@ def cache_configuration(enable_cache: bool, cache_method: Literal["vector_search
 def agent_started(agent_name: str) -> None:
     """
     Prints a formatted panel when an agent starts to work.
-    
+
     Args:
         agent_name: Name or ID of the agent that started working
     """
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
-    
+
     agent_name_esc = escape_rich_markup(agent_name)
-    
+
     table.add_row("[bold]Agent Status:[/bold]", "[green]🚀 Started to work[/green]")
     table.add_row("[bold]Agent Name:[/bold]", f"[cyan]{agent_name_esc}[/cyan]")
-    
+
     panel = Panel(
         table,
         title="[bold green]🤖 Agent Started[/bold green]",
@@ -1159,7 +1159,7 @@ def agent_started(agent_name: str) -> None:
         expand=True,
         width=70
     )
-    
+
     console.print(panel)
     spacing()
 
@@ -1218,3 +1218,45 @@ def debug_log(message: str, context: str = "Upsonic") -> None:
     context_esc = escape_rich_markup(context)
     
     console.print(f"[dim][DEBUG][/dim] [{context_esc}] {message_esc}")
+def import_error(package_name: str, install_command: str = None, feature_name: str = None) -> None:
+    """
+    Prints a formatted error panel for missing package imports.
+
+    Args:
+        package_name: Name of the missing package
+        install_command: Command to install the package (e.g., "pip install package_name")
+        feature_name: Optional name of the feature requiring this package
+    """
+    table = Table(show_header=False, expand=True, box=None)
+
+    package_name_esc = escape_rich_markup(package_name)
+
+    if feature_name:
+        feature_name_esc = escape_rich_markup(feature_name)
+        title = f"[bold red]📦 Missing Package for {feature_name_esc}[/bold red]"
+        table.add_row("[bold]Feature:[/bold]", f"[cyan]{feature_name_esc}[/cyan]")
+    else:
+        title = "[bold red]📦 Missing Package[/bold red]"
+
+    table.add_row("[bold]Package:[/bold]", f"[yellow]{package_name_esc}[/yellow]")
+    table.add_row("")  # Add spacing
+
+    if install_command:
+        install_command_esc = escape_rich_markup(install_command)
+        table.add_row("[bold]Install Command:[/bold]")
+        table.add_row(f"[green]{install_command_esc}[/green]")
+    else:
+        table.add_row("[bold]Install Command:[/bold]")
+        table.add_row(f"[green]pip install {package_name_esc}[/green]")
+
+    panel = Panel(
+        table,
+        title=title,
+        border_style="red",
+        expand=True,
+        width=70
+    )
+
+    console.print(panel)
+    spacing()
+    raise ImportError(f"Missing required package: {package_name}")

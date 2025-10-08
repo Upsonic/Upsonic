@@ -7,26 +7,35 @@ import hashlib
 try:
     import aiohttp
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `aiohttp` package to use the HTML loader, '
-        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="aiohttp",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="HTML loader"
+    )
+
 
 try:
     import requests
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `requests` package to use the HTML loader, '
-        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="requests",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="HTML loader"
+    )
+
 
 try:
     from bs4 import BeautifulSoup, Tag
 except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `beautifulsoup4` package to use the HTML loader, '
-        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
-    ) from _import_error
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="beautifulsoup4",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="HTML loader"
+    )
+
 
 from upsonic.schemas.data_models import Document
 from upsonic.loaders.base import BaseLoader
