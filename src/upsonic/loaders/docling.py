@@ -1,11 +1,3 @@
-"""
-Docling-based document loader for enterprise-grade document processing.
-
-This module provides a high-level loader for processing various document formats
-using the Docling library, which leverages advanced ML models for layout understanding,
-content extraction, and semantic chunking.
-"""
-
 from __future__ import annotations
 import asyncio
 from pathlib import Path
@@ -16,7 +8,6 @@ from upsonic.loaders.base import BaseLoader
 from upsonic.loaders.config import DoclingLoaderConfig
 from upsonic.schemas.data_models import Document
 
-# Lazy imports for optional dependencies
 try:
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling.datamodel.base_models import InputFormat
@@ -28,13 +19,11 @@ try:
     )
     from docling.exceptions import ConversionError
     
-    # Chunking imports
     try:
         from docling.chunking import HybridChunker
         from docling_core.transforms.chunker.hierarchical_chunker import HierarchicalChunker
         CHUNKING_AVAILABLE = True
     except ImportError:
-        # Fallback for different package structures
         try:
             from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
             from docling_core.transforms.chunker.hierarchical_chunker import HierarchicalChunker
