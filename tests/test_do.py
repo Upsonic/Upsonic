@@ -27,7 +27,7 @@ class TestDo(unittest.TestCase):
             provider_details={},
             finish_reason="stop"
         )
-        mock_model.request.return_value = mock_response
+        mock_model.request = AsyncMock(return_value=mock_response)
         
         # Create a task
         task = Task("Who developed you?")

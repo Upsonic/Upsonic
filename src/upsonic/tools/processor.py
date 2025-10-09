@@ -420,5 +420,5 @@ class ToolProcessor:
             with open(cache_file, 'w') as f:
                 json.dump(data, f, indent=2, default=str)
         except Exception as e:
-            from upsonic.utils.printing import console
-            console.print(f"[bold yellow]Warning: Could not cache result: {e}[/bold yellow]")
+            from upsonic.utils.printing import warning_log
+            warning_log(f"Could not cache result: {e}", "ToolProcessor")

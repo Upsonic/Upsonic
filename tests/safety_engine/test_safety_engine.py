@@ -96,7 +96,7 @@ async def test_user_policy_block(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request.return_value = mock_response
+    mock_model.request = AsyncMock(return_value=mock_response)
     
     agent_with_user_policy = Agent(
         model=mock_model,
@@ -142,7 +142,7 @@ async def test_user_policy_modify(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request.return_value = mock_response
+    mock_model.request = AsyncMock(return_value=mock_response)
 
     agent_with_sanitizer = Agent(
         model=mock_model,
@@ -188,7 +188,7 @@ async def test_agent_policy_modify(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request.return_value = mock_response
+    mock_model.request = AsyncMock(return_value=mock_response)
     
     agent_with_agent_policy = Agent(
         model=mock_model,
@@ -237,7 +237,7 @@ async def test_agent_policy_exception(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request.return_value = mock_response
+    mock_model.request = AsyncMock(return_value=mock_response)
     
     agent_with_crypto_block = Agent(
         model=mock_model,
@@ -283,7 +283,7 @@ async def test_all_clear(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request.return_value = mock_response
+    mock_model.request = AsyncMock(return_value=mock_response)
     
     plain_agent = Agent(model=mock_model, debug=True)
     

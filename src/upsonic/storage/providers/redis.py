@@ -115,7 +115,8 @@ class RedisStorage(Storage):
             data_dict = self._deserialize(data_str)
             return model_type.from_dict(data_dict)
         except (json.JSONDecodeError, TypeError) as e:
-            print(f"Warning: Could not parse key {key}. Error: {e}")
+            from upsonic.utils.printing import warning_log
+            warning_log(f"Could not parse key {key}. Error: {e}", "RedisStorage")
             return None
 
     async def upsert_async(self, data: Union[InteractionSession, UserProfile]) -> None:

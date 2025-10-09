@@ -6,6 +6,7 @@ from functools import lru_cache
 
 from .base import EmbeddingProvider, EmbeddingConfig
 from ..utils.package.exception import ConfigurationError
+from upsonic.utils.printing import warning_log, info_log
 
 
 # Registry for lazy loading - stores import functions instead of classes
@@ -239,7 +240,7 @@ def create_embedding_provider(
         merged_config = {**config, **kwargs}
         config = config_class(**merged_config)
     elif kwargs:
-        print(f"Warning: Both config object and kwargs provided. Using config object, ignoring kwargs: {list(kwargs.keys())}")
+        warning_log(f"Both config object and kwargs provided. Using config object, ignoring kwargs: {list(kwargs.keys())}", context="EmbeddingFactory")
     
     return provider_class(config=config)
 
@@ -335,7 +336,7 @@ def create_best_available_embedding(
     
     for provider in preference_order:
         if provider in available:
-            print(f"Selected {provider} embedding provider for {use_case} use case with {preference} preference")
+            info_log(f"Selected {provider} embedding provider for {use_case} use case with {preference} preference", context="EmbeddingFactory")
             
             use_case_defaults = {
                 "enterprise": {"batch_size": 100, "cache_embeddings": True},
@@ -351,7 +352,7 @@ def create_best_available_embedding(
     
     if available:
         provider = available[0]
-        print(f"No preferred provider available, using {provider}")
+        info_log(f"No preferred provider available, using {provider}", context="EmbeddingFactory")
         return create_embedding_provider(provider, **kwargs)
     
     raise ConfigurationError(

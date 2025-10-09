@@ -271,7 +271,8 @@ class Task(BaseModel):
                     base64_attachments.append(base64_encoded)
             except Exception as e:
                 # Log the error but continue with other attachments
-                print(f"Warning: Could not encode attachment {attachment_path} to base64: {e}")
+                from upsonic.utils.printing import warning_log
+                warning_log(f"Could not encode attachment {attachment_path} to base64: {e}", "TaskProcessor")
         return base64_attachments
 
 
@@ -453,7 +454,8 @@ class Task(BaseModel):
                 input_list.append(BinaryContent(data=attachment_data, media_type=media_type))
                 
             except Exception as e:
-                print(f"Warning: Could not load image {attachment_path}: {e}")
+                from upsonic.utils.printing import warning_log
+                warning_log(f"Could not load image {attachment_path}: {e}", "TaskProcessor")
 
         return input_list
 

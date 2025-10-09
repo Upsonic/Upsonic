@@ -25,6 +25,7 @@ from upsonic.vectordb.config import (
     FlatTuningConfig
 )
 from upsonic.vectordb.base import BaseVectorDBProvider
+from upsonic.utils.printing import info_log, debug_log
 
 from upsonic.utils.package.exception import(
     VectorDBConnectionError, 
@@ -55,14 +56,14 @@ class PgvectorProvider(BaseVectorDBProvider):
             )
         super().__init__(config)
         self._connection: Optional[psycopg.Connection] = None
-        print(f"PgvectorProvider initialized for table '{self._config.core.collection_name}'.")
+        info_log(f"PgvectorProvider initialized for table '{self._config.core.collection_name}'.", context="PgVectorDB")
 
     def connect(self) -> None:
         if self._is_connected and self._connection:
-            print("Already connected to PostgreSQL.")
+            info_log("Already connected to PostgreSQL.", context="PgVectorDB")
             return
 
-        print(f"Attempting to connect to PostgreSQL at {self._config.core.host}:{self._config.core.port}...")
+        debug_log(f"Attempting to connect to PostgreSQL at {self._config.core.host}:{self._config.core.port}...", context="PgVectorDB")
         try:
             conninfo = (
                 f"host={self._config.core.host} "
@@ -77,13 +78,13 @@ class PgvectorProvider(BaseVectorDBProvider):
                 raise OperationalError("psycopg.connect() returned None.")
             
             with self._connection.cursor() as cursor:
-                print("Verifying 'vector' extension exists in PostgreSQL...")
+                debug_log("Verifying 'vector' extension exists in PostgreSQL...", context="PgVectorDB")
                 cursor.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-                print("'vector' extension is enabled.")
+                info_log("'vector' extension is enabled.", context="PgVectorDB")
             
             self._connection.commit()
             self._is_connected = True
-            print("Successfully connected to PostgreSQL.")
+            info_log("Successfully connected to PostgreSQL.", context="PgVectorDB")
         except OperationalError as e:
             self._connection = None
             self._is_connected = False
@@ -99,13 +100,13 @@ class PgvectorProvider(BaseVectorDBProvider):
                 self._connection.close()
                 self._is_connected = False
                 self._connection = None
-                print("Successfully disconnected from PostgreSQL.")
+                info_log("Successfully disconnected from PostgreSQL.", context="PgVectorDB")
             except Exception as e:
                 self._is_connected = False
                 self._connection = None
-                print(f"An error occurred during disconnection, but status is now 'disconnected'. Error: {e}")
+                debug_log(f"An error occurred during disconnection, but status is now 'disconnected'. Error: {e}", context="PgVectorDB")
         else:
-            print("Already disconnected. No action taken.")
+            debug_log("Already disconnected. No action taken.", context="PgVectorDB")
 
     def is_ready(self) -> bool:
         if not self._is_connected or not self._connection or self._connection.closed:
@@ -129,10 +130,10 @@ class PgvectorProvider(BaseVectorDBProvider):
         try:
             if self.collection_exists():
                 if self._config.core.recreate_if_exists:
-                    print(f"Table '{table_name}' already exists. Deleting and recreating as requested.")
+                    info_log(f"Table '{table_name}' already exists. Deleting and recreating as requested.", context="PgVectorDB")
                     self.delete_collection()
                 else:
-                    print(f"Table '{table_name}' already exists and 'recreate_if_exists' is False. No action taken.")
+                    info_log(f"Table '{table_name}' already exists and 'recreate_if_exists' is False. No action taken.", context="PgVectorDB")
                     return
 
             with self._connection.cursor() as cursor:
@@ -147,10 +148,10 @@ class PgvectorProvider(BaseVectorDBProvider):
                     table=Identifier(table_name),
                     vector_size=SqlLiteral(self._config.core.vector_size)
                 )
-                print(f"Creating table '{table_name}'...")
+                debug_log(f"Creating table '{table_name}'...", context="PgVectorDB")
                 cursor.execute(create_table_sql)
 
-                print("Creating indexes...")
+                debug_log("Creating indexes...", context="PgVectorDB")
                 tenant_index_sql = SQL("CREATE INDEX ON {table} (tenant_id);").format(table=Identifier(table_name))
                 cursor.execute(tenant_index_sql)
                 
@@ -180,14 +181,14 @@ class PgvectorProvider(BaseVectorDBProvider):
                         table=Identifier(table_name), index_type=SQL(index_type),
                         operator_class=SQL(operator_class), with_opts=SQL(with_opts)
                     )
-                    print(f"Creating {index_type.upper()} index on 'vector' column...")
+                    debug_log(f"Creating {index_type.upper()} index on 'vector' column...", context="PgVectorDB")
                     cursor.execute(vector_index_sql)
 
                 elif isinstance(index_conf, FlatTuningConfig):
-                    print("Index type is FLAT. No vector index created.")
+                    debug_log("Index type is FLAT. No vector index created.", context="PgVectorDB")
             
             self._connection.commit()
-            print(f"Successfully created table '{table_name}' and its indexes.")
+            info_log(f"Successfully created table '{table_name}' and its indexes.", context="PgVectorDB")
         except (Exception, psycopg.Error) as e:
             if self._connection: self._connection.rollback()
             raise VectorDBError(f"Failed to create collection '{table_name}': {e}")
@@ -201,11 +202,11 @@ class PgvectorProvider(BaseVectorDBProvider):
         try:
             with self._connection.cursor() as cursor:
                 delete_sql = SQL("DROP TABLE IF EXISTS {table} CASCADE;").format(table=Identifier(table_name))
-                print(f"Deleting table '{table_name}'...")
+                debug_log(f"Deleting table '{table_name}'...", context="PgVectorDB")
                 cursor.execute(delete_sql)
             
             self._connection.commit()
-            print(f"Successfully deleted table '{table_name}'.")
+            info_log(f"Successfully deleted table '{table_name}'.", context="PgVectorDB")
         except (Exception, psycopg.Error) as e:
             if self._connection: self._connection.rollback()
             raise VectorDBError(f"Failed to delete collection '{table_name}': {e}")
@@ -223,7 +224,7 @@ class PgvectorProvider(BaseVectorDBProvider):
         except (Exception, psycopg.Error) as e:
             if isinstance(e, InFailedSqlTransaction) and self._connection:
                 self._connection.rollback()
-            print(f"Could not check for collection existence: {e}")
+            debug_log(f"Could not check for collection existence: {e}", context="PgVectorDB")
             return False
 
     def upsert(self, vectors: List[List[float]], payloads: List[Dict[str, Any]], ids: List[Union[str, int]], chunks: Optional[List[str]], **kwargs) -> None:
@@ -247,7 +248,7 @@ class PgvectorProvider(BaseVectorDBProvider):
         if not (len(vectors) == len(payloads) == len(ids)):
             raise UpsertError("The lengths of vectors, payloads, and ids lists must be identical.")
         if not vectors:
-            print("Upsert called with empty lists. No action taken.")
+            debug_log("Upsert called with empty lists. No action taken.", context="PgVectorDB")
             return
 
         if chunks is not None:
@@ -276,11 +277,11 @@ class PgvectorProvider(BaseVectorDBProvider):
             """).format(table=Identifier(table_name))
 
             with self._connection.cursor() as cursor:
-                print(f"Upserting {len(data_to_insert)} records into '{table_name}'...")
+                debug_log(f"Upserting {len(data_to_insert)} records into '{table_name}'...", context="PgVectorDB")
                 cursor.executemany(upsert_sql, data_to_insert)
             
             self._connection.commit()
-            print("Upsert successful.")
+            info_log("Upsert successful.", context="PgVectorDB")
 
         except (Exception, psycopg.Error) as e:
             if self._connection: self._connection.rollback()
@@ -298,7 +299,7 @@ class PgvectorProvider(BaseVectorDBProvider):
         if not self._is_connected or not self._connection:
             raise VectorDBConnectionError("Must be connected to PostgreSQL before deleting data.")
         if not ids:
-            print("Delete called with an empty list of IDs. No action taken.")
+            debug_log("Delete called with an empty list of IDs. No action taken.", context="PgVectorDB")
             return
 
         tenant_id = self._config.advanced.namespace
@@ -314,7 +315,7 @@ class PgvectorProvider(BaseVectorDBProvider):
             
             with self._connection.cursor() as cursor:
                 cursor.execute(delete_sql, (tenant_id, [str(id_val) for id_val in ids]))
-                print(f"Delete command affected {cursor.rowcount} rows in '{table_name}'.")
+                debug_log(f"Delete command affected {cursor.rowcount} rows in '{table_name}'.", context="PgVectorDB")
 
             self._connection.commit()
         except (Exception, psycopg.Error) as e:
@@ -394,19 +395,19 @@ class PgvectorProvider(BaseVectorDBProvider):
         if has_vector and not has_text:
             if self._config.search.dense_search_enabled is False:
                 raise ConfigurationError("Dense search is disabled by the current configuration.")
-            print("Dispatching to: dense_search")
+            debug_log("Dispatching to: dense_search", context="PgVectorDB")
             return self.dense_search(query_vector=query_vector, top_k=final_top_k, filter=filter, similarity_threshold=similarity_threshold, **kwargs)
         
         elif not has_vector and has_text:
             if self._config.search.full_text_search_enabled is False:
                 raise ConfigurationError("Full-text search is disabled by the current configuration.")
-            print("Dispatching to: full_text_search")
+            debug_log("Dispatching to: full_text_search", context="PgVectorDB")
             return self.full_text_search(query_text=query_text, top_k=final_top_k, filter=filter, similarity_threshold=similarity_threshold, **kwargs)
 
         elif has_vector and has_text:
             if self._config.search.hybrid_search_enabled is False:
                 raise ConfigurationError("Hybrid search is disabled by the current configuration.")
-            print("Dispatching to: hybrid_search")
+            debug_log("Dispatching to: hybrid_search", context="PgVectorDB")
             return self.hybrid_search(query_vector=query_vector, query_text=query_text, top_k=final_top_k, filter=filter, alpha=alpha, fusion_method=fusion_method, similarity_threshold=similarity_threshold, **kwargs)
         else:
             raise ConfigurationError("Search requires at least one of 'query_vector' or 'query_text'.")

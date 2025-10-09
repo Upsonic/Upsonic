@@ -14,6 +14,7 @@ except ImportError:
 from pydantic import Field, field_validator
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
 from ..utils.package.exception import ConfigurationError, ModelConnectionError
+from upsonic.utils.printing import debug_log, warning_log
 
 
 class OpenAIEmbeddingConfig(EmbeddingConfig):
@@ -269,7 +270,7 @@ class OpenAIEmbedding(EmbeddingProvider):
             return len(test_result) > 0 and len(test_result[0]) > 0
             
         except Exception as e:
-            print(f"OpenAI connection validation failed: {str(e)}")
+            debug_log(f"OpenAI connection validation failed: {str(e)}", context="OpenAIEmbedding")
             return False
     
     def get_usage_stats(self) -> Dict[str, Any]:
@@ -355,7 +356,7 @@ class OpenAIEmbedding(EmbeddingProvider):
                 del self.client
                 self.client = None
             except Exception as e:
-                print(f"Warning: Error closing OpenAI client: {e}")
+                warning_log(f"Error closing OpenAI client: {e}", context="OpenAIEmbedding")
         
         await super().close()
 

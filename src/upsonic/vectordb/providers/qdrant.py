@@ -14,6 +14,7 @@ except ImportError as _import_error:
 
 
 from upsonic.vectordb.base import BaseVectorDBProvider
+from upsonic.utils.printing import info_log, debug_log, warning_log
 
 from upsonic.vectordb.config import (
     Config,
@@ -80,7 +81,7 @@ class QdrantProvider(BaseVectorDBProvider):
             VectorDBConnectionError: If the connection fails for any reason.
         """
         if self._is_connected:
-            print("Already connected to Qdrant.")
+            info_log("Already connected to Qdrant.", context="QdrantVectorDB")
             return
 
         core_cfg = self._config.core
@@ -110,7 +111,7 @@ class QdrantProvider(BaseVectorDBProvider):
                 raise ConfigurationError(f"Unsupported mode for Qdrant: {core_cfg.mode.value}")
 
             self._is_connected = True
-            print("Successfully connected to Qdrant.")
+            info_log("Successfully connected to Qdrant.", context="QdrantVectorDB")
 
         except Exception as e:
             self._client = None
@@ -136,9 +137,11 @@ class QdrantProvider(BaseVectorDBProvider):
                 elif hasattr(self._client, 'close'):
                     self._client.close()
                 
-                print("Successfully disconnected from Qdrant.")
+                from upsonic.utils.printing import success_log
+                success_log("Successfully disconnected from Qdrant.", "QdrantProvider")
             except Exception as e:
-                print(f"Error during Qdrant disconnection: {e}")
+                from upsonic.utils.printing import error_log
+                error_log(f"Error during Qdrant disconnection: {e}", "QdrantProvider")
             finally:
                 self._client = None
                 self._is_connected = False
@@ -154,9 +157,11 @@ class QdrantProvider(BaseVectorDBProvider):
                 elif hasattr(self._client, 'close'):
                     self._client.close()
                 
-                print("Successfully disconnected from Qdrant.")
+                from upsonic.utils.printing import success_log
+                success_log("Successfully disconnected from Qdrant.", "QdrantProvider")
             except Exception as e:
-                print(f"Error during Qdrant disconnection: {e}")
+                from upsonic.utils.printing import error_log
+                error_log(f"Error during Qdrant disconnection: {e}", "QdrantProvider")
             finally:
                 self._client = None
                 self._is_connected = False
@@ -184,7 +189,7 @@ class QdrantProvider(BaseVectorDBProvider):
         
         try:
             if self._config.core.recreate_if_exists and self.collection_exists():
-                print(f"Collection '{collection_name}' exists and `recreate_if_exists` is True. Deleting...")
+                info_log(f"Collection '{collection_name}' exists and `recreate_if_exists` is True. Deleting...", context="QdrantVectorDB")
                 self.delete_collection()
             
             vectors_config = models.VectorParams(
@@ -224,7 +229,7 @@ class QdrantProvider(BaseVectorDBProvider):
                 shard_number=sharding_cfg.num_shards,
                 replication_factor=sharding_cfg.replication_factor,
             )
-            print(f"Successfully created or configured collection '{collection_name}'.")
+            info_log(f"Successfully created or configured collection '{collection_name}'.", context="QdrantVectorDB")
             if self._config.indexing.payload_indexes:
                 self._create_payload_indexes(collection_name)
 
@@ -254,7 +259,7 @@ class QdrantProvider(BaseVectorDBProvider):
                     else:
                         raise VectorDBError(f"Failed to delete collection '{collection_name}' but it still exists.")
                     
-            print(f"Successfully deleted collection '{collection_name}'.")
+            info_log(f"Successfully deleted collection '{collection_name}'.", context="QdrantVectorDB")
         except UnexpectedResponse as e:
             if e.status_code == 404:
                 raise CollectionDoesNotExistError(f"Collection '{collection_name}' does not exist.") from e
@@ -652,7 +657,7 @@ class QdrantProvider(BaseVectorDBProvider):
         """
         Private helper method to create payload indexes on a collection.
         """
-        print("Applying payload indexes...")
+        debug_log("Applying payload indexes...", context="QdrantVectorDB")
         schema_map = {
             'text': models.TextIndexParams,
             'keyword': models.KeywordIndexParams,
@@ -668,7 +673,7 @@ class QdrantProvider(BaseVectorDBProvider):
             params = index_config.params or {}
 
             if schema_type not in schema_map:
-                print(f"Warning: Unknown payload index schema type '{schema_type}'. Skipping field '{field_name}'.")
+                warning_log(f"Unknown payload index schema type '{schema_type}'. Skipping field '{field_name}'.", context="QdrantVectorDB")
                 continue
 
             try:
@@ -687,7 +692,7 @@ class QdrantProvider(BaseVectorDBProvider):
                 else:
                     qdrant_schema = schema_map[schema_type](**params)
                 
-                print(f"  - Creating index for field '{field_name}' of type '{schema_type}'...")
+                debug_log(f"Creating index for field '{field_name}' of type '{schema_type}'...", context="QdrantVectorDB")
                 self._client.create_payload_index(
                     collection_name=collection_name,
                     field_name=field_name,
@@ -700,4 +705,4 @@ class QdrantProvider(BaseVectorDBProvider):
                     f"Failed to create payload index for field '{field_name}' "
                     f"in collection '{collection_name}': {e}"
                 ) from e
-        print("Payload indexes applied successfully.")
+        info_log("Payload indexes applied successfully.", context="QdrantVectorDB")

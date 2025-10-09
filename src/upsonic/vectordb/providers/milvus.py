@@ -26,6 +26,7 @@ except ImportError as _import_error:
 
 
 from upsonic.vectordb.base import BaseVectorDBProvider
+from upsonic.utils.printing import info_log, debug_log
 
 from upsonic.vectordb.config import (
     Config,
@@ -129,7 +130,7 @@ class MilvusProvider(BaseVectorDBProvider):
              )
     
         
-        print("MilvusProvider: Configuration validated successfully.")
+        info_log("Configuration validated successfully.", context="MilvusVectorDB")
 
     def _sanitize_collection_name(self, collection_name: str) -> str:
         """
@@ -363,10 +364,10 @@ class MilvusProvider(BaseVectorDBProvider):
         params = self._build_connection_params()
         
         try:
-            print(f"MilvusProvider: Attempting to connect with alias '{alias}' and params: {params}")
+            debug_log(f"Attempting to connect with alias '{alias}' and params: {params}", context="MilvusVectorDB")
             connections.connect(alias=alias, **params)
             self._is_connected = True
-            print("MilvusProvider: Connection successful.")
+            info_log("Connection successful.", context="MilvusVectorDB")
 
             try:
                 if utility.has_collection(self._sanitized_collection_name, using=alias):
@@ -374,9 +375,9 @@ class MilvusProvider(BaseVectorDBProvider):
                         name=self._sanitized_collection_name, 
                         using=alias
                     )
-                    print(f"MilvusProvider: Attached to existing collection '{self._sanitized_collection_name}'.")
+                    info_log(f"Attached to existing collection '{self._sanitized_collection_name}'.", context="MilvusVectorDB")
             except MilvusException as e:
-                print(f"MilvusProvider: Could not check collection existence: {e}")
+                debug_log(f"Could not check collection existence: {e}", context="MilvusVectorDB")
 
         except MilvusException as e:
             self._is_connected = False
@@ -393,9 +394,11 @@ class MilvusProvider(BaseVectorDBProvider):
         alias = self._get_connection_alias()
         try:
             connections.disconnect(alias)
-            print(f"MilvusProvider: Disconnected from alias '{alias}'.")
+            from upsonic.utils.printing import success_log
+            success_log(f"MilvusProvider: Disconnected from alias '{alias}'.", "MilvusProvider")
         except MilvusException as e:
-            print(f"Warning: Error during Milvus disconnection: {e}")
+            from upsonic.utils.printing import warning_log
+            warning_log(f"Error during Milvus disconnection: {e}", "MilvusProvider")
         finally:
             self._is_connected = False
             self._collection = None
@@ -459,7 +462,7 @@ class MilvusProvider(BaseVectorDBProvider):
         try:
             utility.drop_collection(collection_name, using=self._get_connection_alias())
             self._collection = None
-            print(f"MilvusProvider: Successfully deleted collection '{collection_name}'.")
+            info_log(f"Successfully deleted collection '{collection_name}'.", context="MilvusVectorDB")
         except MilvusException as e:
             raise VectorDBError(f"Failed to delete collection '{collection_name}': {e}")
 
@@ -480,10 +483,10 @@ class MilvusProvider(BaseVectorDBProvider):
 
         if self.collection_exists():
             if self._config.core.recreate_if_exists:
-                print(f"MilvusProvider: Collection '{collection_name}' exists and will be recreated.")
+                info_log(f"Collection '{collection_name}' exists and will be recreated.", context="MilvusVectorDB")
                 self.delete_collection()
             else:
-                print(f"MilvusProvider: Collection '{collection_name}' already exists. Skipping creation.")
+                info_log(f"Collection '{collection_name}' already exists. Skipping creation.", context="MilvusVectorDB")
                 if self._collection is None:
                     self._collection = Collection(name=collection_name, using=alias)
                 return
@@ -496,34 +499,34 @@ class MilvusProvider(BaseVectorDBProvider):
             self._collection = Collection(
                 name=collection_name, schema=schema, using=alias, consistency_level=consistency_level
             )
-            print(f"MilvusProvider: Collection '{collection_name}' created successfully with dynamic schema.")
+            info_log(f"Collection '{collection_name}' created successfully with dynamic schema.", context="MilvusVectorDB")
 
             if self._config.indexing.create_dense_index:
                 index_params = self._build_index_params()
-                print(f"MilvusProvider: Creating dense vector index on field 'dense_vector' with params: {index_params}")
+                debug_log(f"Creating dense vector index on field 'dense_vector' with params: {index_params}", context="MilvusVectorDB")
                 self._collection.create_index(field_name="dense_vector", index_params=index_params)
-                print("MilvusProvider: Dense vector index created successfully.")
+                info_log("Dense vector index created successfully.", context="MilvusVectorDB")
 
             if self._config.indexing.create_sparse_index:
                 sparse_index_params = {
                     "index_type": "SPARSE_INVERTED_INDEX",
                     "metric_type": "IP"
                 }
-                print(f"MilvusProvider: Creating sparse vector index on field 'sparse_vector' with params: {sparse_index_params}")
+                debug_log(f"Creating sparse vector index on field 'sparse_vector' with params: {sparse_index_params}", context="MilvusVectorDB")
                 self._collection.create_index(field_name="sparse_vector", index_params=sparse_index_params)
-                print("MilvusProvider: Sparse vector index created successfully.")
+                info_log("Sparse vector index created successfully.", context="MilvusVectorDB")
 
             if self._config.indexing.payload_indexes:
                 for payload_config in self._config.indexing.payload_indexes:
                     if payload_config.enable_full_text_index:
                         field_name = payload_config.field_name
-                        print(f"MilvusProvider: Creating full-text index on payload field '{field_name}'.")
+                        debug_log(f"Creating full-text index on payload field '{field_name}'.", context="MilvusVectorDB")
                         self._collection.create_index(field_name=field_name, index_params={"index_type": "FULL_TEXT"})
-                        print(f"MilvusProvider: Full-text index on '{field_name}' created successfully.")
+                        info_log(f"Full-text index on '{field_name}' created successfully.", context="MilvusVectorDB")
 
-            print("MilvusProvider: Loading collection into memory...")
+            info_log("Loading collection into memory...", context="MilvusVectorDB")
             self._collection.load()
-            print("MilvusProvider: Collection loaded successfully and is ready for operations.")
+            info_log("Collection loaded successfully and is ready for operations.", context="MilvusVectorDB")
 
         except MilvusException as e:
             if self.collection_exists():
@@ -561,7 +564,7 @@ class MilvusProvider(BaseVectorDBProvider):
         self._ensure_collection_handle()
 
         if not ids:
-            print("MilvusProvider: Upsert called with empty 'ids' list. No action taken.")
+            debug_log("Upsert called with empty 'ids' list. No action taken.", context="MilvusVectorDB")
             return
 
         sparse_vectors = kwargs.get("sparse_vectors")
@@ -599,15 +602,15 @@ class MilvusProvider(BaseVectorDBProvider):
 
             batch_size = self._config.data_management.batch_size
             total = len(entities_to_upsert)
-            print(f"MilvusProvider: Starting upsert of {total} entities in batches of {batch_size}.")
+            info_log(f"Starting upsert of {total} entities in batches of {batch_size}.", context="MilvusVectorDB")
 
             for i in range(0, total, batch_size):
                 batch = entities_to_upsert[i : i + batch_size]
-                print(f"MilvusProvider: Upserting batch {i//batch_size + 1}/{ -(-total // batch_size) }, size: {len(batch)}")
+                debug_log(f"Upserting batch {i//batch_size + 1}/{ -(-total // batch_size) }, size: {len(batch)}", context="MilvusVectorDB")
                 self._collection.upsert(batch)
 
             self._collection.flush()
-            print("MilvusProvider: Upsert complete and data flushed successfully.")
+            info_log("Upsert complete and data flushed successfully.", context="MilvusVectorDB")
 
         except MilvusException as e:
             raise UpsertError(f"Failed to upsert data into Milvus: {e}")
@@ -635,10 +638,10 @@ class MilvusProvider(BaseVectorDBProvider):
         expr = f"id in [{','.join(str_ids)}]"
         
         try:
-            print(f"MilvusProvider: Deleting {len(ids)} entities with expression: {expr}")
+            debug_log(f"Deleting {len(ids)} entities with expression: {expr}", context="MilvusVectorDB")
             self._collection.delete(expr)
             self._collection.flush()
-            print("MilvusProvider: Deletion complete and data flushed.")
+            info_log("Deletion complete and data flushed.", context="MilvusVectorDB")
         except MilvusException as e:
             raise VectorDBError(f"Failed to delete entities from Milvus: {e}")
     

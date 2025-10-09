@@ -73,7 +73,7 @@ class PIIRule(RuleBase):
         # MAC Address patterns
         self.mac_pattern = r'\b(?:[0-9A-Fa-f]{2}[:-]){5}(?:[0-9A-Fa-f]{2})\b'
         
-        # Common PII keywords
+        # Common PII keywords - more specific to avoid false positives
         self.pii_keywords = [
             "full name", "first name", "last name", "middle name", "maiden name",
             "date of birth", "birth date", "dob", "age", "birthday",
@@ -84,12 +84,36 @@ class PIIRule(RuleBase):
             "bank account", "account number", "routing number", "iban", "swift",
             "address", "home address", "mailing address", "billing address",
             "phone number", "mobile number", "cell phone", "telephone",
-            "email address", "email", "e-mail", "contact email",
+            "email address", "contact email", "personal email", "my email",
             "ip address", "mac address", "device id", "user id",
             "employee id", "student id", "customer id", "member id",
             "tax id", "ein", "tin", "vat number",
             "mother's maiden name", "father's name", "emergency contact",
             "medical record", "patient id", "health insurance", "policy number"
+        ]
+        
+        # Context-aware patterns to avoid false positives
+        self.false_positive_patterns = [
+            r'\bemail\s+system\b',  # "email system"
+            r'\bemail\s+server\b',  # "email server"
+            r'\bemail\s+service\b', # "email service"
+            r'\bemail\s+client\b',  # "email client"
+            r'\bemail\s+protocol\b', # "email protocol"
+            r'\bemail\s+security\b', # "email security"
+            r'\bemail\s+marketing\b', # "email marketing"
+            r'\bemail\s+campaign\b', # "email campaign"
+            r'\bemail\s+template\b', # "email template"
+            r'\bemail\s+delivery\b', # "email delivery"
+            r'\bemail\s+infrastructure\b', # "email infrastructure"
+            r'\bemail\s+platform\b', # "email platform"
+            r'\bemail\s+software\b', # "email software"
+            r'\bemail\s+application\b', # "email application"
+            r'\bemail\s+management\b', # "email management"
+            r'\bemail\s+administration\b', # "email administration"
+            r'\bemail\s+configuration\b', # "email configuration"
+            r'\bemail\s+settings\b', # "email settings"
+            r'\bemail\s+policy\b', # "email policy"
+            r'\bemail\s+compliance\b', # "email compliance"
         ]
         
         # Allow custom patterns from options
@@ -157,11 +181,19 @@ class PIIRule(RuleBase):
         mac_matches = re.findall(self.mac_pattern, combined_text)
         triggered_items.extend([f"MAC_ADDRESS:{mac}" for mac in mac_matches])
         
-        # Check PII keywords
+        # Check PII keywords with false positive filtering
         combined_text_lower = combined_text.lower()
         for keyword in self.pii_keywords:
             if keyword.lower() in combined_text_lower:
-                triggered_items.append(f"PII_KEYWORD:{keyword}")
+                # Check for false positive patterns
+                is_false_positive = False
+                for pattern in self.false_positive_patterns:
+                    if re.search(pattern, combined_text_lower):
+                        is_false_positive = True
+                        break
+                
+                if not is_false_positive:
+                    triggered_items.append(f"PII_KEYWORD:{keyword}")
         
         # Calculate confidence based on number and type of matches
         if not triggered_items:

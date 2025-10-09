@@ -1163,6 +1163,62 @@ def agent_started(agent_name: str) -> None:
     console.print(panel)
     spacing()
 
+
+def info_log(message: str, context: str = "Upsonic") -> None:
+    """
+    Prints an info log message.
+    
+    Args:
+        message: The log message
+        context: The context/module name
+    """
+    message_esc = escape_rich_markup(message)
+    context_esc = escape_rich_markup(context)
+    
+    console.print(f"[blue][INFO][/blue] [{context_esc}] {message_esc}")
+
+
+def warning_log(message: str, context: str = "Upsonic") -> None:
+    """
+    Prints a warning log message.
+    
+    Args:
+        message: The log message
+        context: The context/module name
+    """
+    message_esc = escape_rich_markup(message)
+    context_esc = escape_rich_markup(context)
+    
+    console.print(f"[yellow][WARNING][/yellow] [{context_esc}] {message_esc}")
+
+
+def error_log(message: str, context: str = "Upsonic") -> None:
+    """
+    Prints an error log message.
+    
+    Args:
+        message: The log message
+        context: The context/module name
+    """
+    message_esc = escape_rich_markup(message)
+    context_esc = escape_rich_markup(context)
+    
+    console.print(f"[red][ERROR][/red] [{context_esc}] {message_esc}")
+
+
+def debug_log(message: str, context: str = "Upsonic") -> None:
+    """
+    Prints a debug log message.
+    
+    Args:
+        message: The log message
+        context: The context/module name
+    """
+    message_esc = escape_rich_markup(message)
+    context_esc = escape_rich_markup(context)
+    
+    console.print(f"[dim][DEBUG][/dim] [{context_esc}] {message_esc}")
+    
 def import_error(package_name: str, install_command: str = None, feature_name: str = None) -> None:
     """
     Prints a formatted error panel for missing package imports.
@@ -1205,3 +1261,31 @@ def import_error(package_name: str, install_command: str = None, feature_name: s
     console.print(panel)
     spacing()
     raise ImportError(f"Missing required package: {package_name}")
+
+
+def success_log(message: str, context: str = "Upsonic") -> None:
+    """
+    Prints a success log message.
+    
+    Args:
+        message: The log message
+        context: The context/module name
+    """
+    message_esc = escape_rich_markup(message)
+    context_esc = escape_rich_markup(context)
+    
+    console.print(f"[green][SUCCESS][/green] [{context_esc}] {message_esc}")
+
+
+def connection_info(provider: str, version: str = "unknown") -> None:
+    """
+    Log connection information for a provider.
+    
+    Args:
+        provider: The provider name
+        version: The provider version
+    """
+    provider_esc = escape_rich_markup(provider)
+    version_esc = escape_rich_markup(version)
+    
+    console.print(f"[green][CONNECTED][/green] [{provider_esc}] version: {version_esc}")

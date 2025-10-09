@@ -14,6 +14,7 @@ from upsonic._utils import now_utc
 from upsonic.utils.retry import retryable
 from upsonic.utils.validators import validate_attachments_exist
 from upsonic.tools.processor import ExternalExecutionPause
+from upsonic.messages import FinalResultEvent
 
 if TYPE_CHECKING:
     from upsonic.models import Model, ModelRequest, ModelMessage, ModelRequestParameters, ModelResponse
@@ -140,6 +141,9 @@ class Agent(BaseAgent):
         settings: Optional["ModelSettings"] = None,
         profile: Optional["ModelProfile"] = None,
         reflection_config: Optional["ReflectionConfig"] = None,
+        recommend_model: bool = False,
+        model_selection_criteria: Optional[Dict[str, Any]] = None,
+        use_llm_for_selection: bool = False,
     ):
         """
         Initialize the Agent with comprehensive configuration options.
@@ -178,6 +182,9 @@ class Agent(BaseAgent):
             settings: Model-specific settings
             profile: Model profile configuration
             reflection_config: Configuration for reflection and self-evaluation
+            recommend_model: Deprecated - use recommend_model_for_task() method instead
+            model_selection_criteria: Default criteria dictionary for recommend_model_for_task() (see SelectionCriteria)
+            use_llm_for_selection: Default flag for whether to use LLM in recommend_model_for_task()
         """
         from upsonic.models import infer_model
         self.model = infer_model(model)
@@ -197,6 +204,12 @@ class Agent(BaseAgent):
         
         self.debug = debug
         self.reflection = reflection
+        
+        # Model selection attributes
+        self.recommend_model = recommend_model
+        self.model_selection_criteria = model_selection_criteria
+        self.use_llm_for_selection = use_llm_for_selection
+        self._model_recommendation: Optional[Any] = None  # Store last recommendation
 
         self.compression_strategy = compression_strategy
         self.compression_settings = compression_settings or {}
@@ -991,6 +1004,159 @@ class Agent(BaseAgent):
             if self.debug:
                 print(f"LLMLingua compression failed, falling back to simple compression. Error: {e}")
             return self._compress_simple(context)
+    
+    async def recommend_model_for_task_async(
+        self,
+        task: Union["Task", str],
+        criteria: Optional[Dict[str, Any]] = None,
+        use_llm: Optional[bool] = None
+    ) -> "ModelRecommendation":
+        """
+        Get a model recommendation for a specific task.
+        
+        This method analyzes the task and returns a recommendation for the best model to use.
+        The user can then decide whether to use the recommended model or stick with the default.
+        
+        Args:
+            task: Task object or task description string
+            criteria: Optional criteria dictionary for model selection (overrides agent's default)
+            use_llm: Optional flag to use LLM for selection (overrides agent's default)
+        
+        Returns:
+            ModelRecommendation: Object containing:
+                - model_name: Recommended model identifier
+                - reason: Explanation for the recommendation
+                - confidence_score: Confidence level (0.0 to 1.0)
+                - selection_method: "rule_based" or "llm_based"
+                - estimated_cost_tier: Cost estimate (1-10)
+                - estimated_speed_tier: Speed estimate (1-10)
+                - alternative_models: List of alternative model names
+        
+        Example:
+            ```python
+            # Get recommendation
+            recommendation = await agent.recommend_model_for_task_async(task)
+            print(f"Recommended: {recommendation.model_name}")
+            print(f"Reason: {recommendation.reason}")
+            print(f"Confidence: {recommendation.confidence_score}")
+            
+            # Use it if you have credentials
+            if user_has_credentials(recommendation.model_name):
+                result = await agent.do_async(task, model=recommendation.model_name)
+            else:
+                result = await agent.do_async(task)  # Use default
+            ```
+        """
+        try:
+            from upsonic.models.model_selector import select_model_async, SelectionCriteria
+            
+            task_description = task.description if hasattr(task, 'description') else str(task)
+            
+            selection_criteria = None
+            if criteria:
+                selection_criteria = SelectionCriteria(**criteria)
+            elif self.model_selection_criteria:
+                selection_criteria = SelectionCriteria(**self.model_selection_criteria)
+            
+            use_llm_selection = use_llm if use_llm is not None else self.use_llm_for_selection
+            
+            recommendation = await select_model_async(
+                task_description=task_description,
+                criteria=selection_criteria,
+                use_llm=use_llm_selection,
+                agent=self if use_llm_selection else None,
+                default_model=self.model.model_name
+            )
+            
+            self._model_recommendation = recommendation
+            
+            if self.debug:
+                from upsonic.utils.printing import info_log
+                info_log(
+                    f"Model Recommendation ({recommendation.selection_method}):",
+                    context="ModelSelector"
+                )
+                info_log(f"  Selected: {recommendation.model_name}", context="ModelSelector")
+                info_log(f"  Reason: {recommendation.reason}", context="ModelSelector")
+                info_log(
+                    f"  Confidence: {recommendation.confidence_score:.2f}",
+                    context="ModelSelector"
+                )
+                info_log(
+                    f"  Cost Tier: {recommendation.estimated_cost_tier}/10",
+                    context="ModelSelector"
+                )
+                info_log(
+                    f"  Speed Tier: {recommendation.estimated_speed_tier}/10",
+                    context="ModelSelector"
+                )
+                if recommendation.alternative_models:
+                    info_log(
+                        f"  Alternatives: {', '.join(recommendation.alternative_models[:3])}",
+                        context="ModelSelector"
+                    )
+            
+            return recommendation
+            
+        except Exception as e:
+            if self.debug:
+                from upsonic.utils.printing import error_log
+                error_log(
+                    f"Model recommendation failed: {str(e)}",
+                    context="ModelSelector"
+                )
+            raise
+    
+    def recommend_model_for_task(
+        self,
+        task: Union["Task", str],
+        criteria: Optional[Dict[str, Any]] = None,
+        use_llm: Optional[bool] = None
+    ) -> "ModelRecommendation":
+        """
+        Synchronous version of recommend_model_for_task_async.
+        
+        Get a model recommendation for a specific task.
+        
+        Args:
+            task: Task object or task description string
+            criteria: Optional criteria dictionary for model selection
+            use_llm: Optional flag to use LLM for selection
+        
+        Returns:
+            ModelRecommendation: Object containing recommendation details
+        
+        Example:
+            ```python
+            recommendation = agent.recommend_model_for_task("Write a sorting algorithm")
+            print(f"Use: {recommendation.model_name}")
+            ```
+        """
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        asyncio.run,
+                        self.recommend_model_for_task_async(task, criteria, use_llm)
+                    )
+                    return future.result()
+            else:
+                return loop.run_until_complete(
+                    self.recommend_model_for_task_async(task, criteria, use_llm)
+                )
+        except RuntimeError:
+            return asyncio.run(self.recommend_model_for_task_async(task, criteria, use_llm))
+    
+    def get_last_model_recommendation(self) -> Optional[Any]:
+        """
+        Get the last model recommendation made by the agent.
+        
+        Returns:
+            ModelRecommendation object or None if no recommendation was made
+        """
+        return self._model_recommendation
     
 
     async def _apply_agent_policy(self, task: "Task") -> "Task":

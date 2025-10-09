@@ -65,7 +65,7 @@ class TestTaskResponseFormat:
             provider_details={},
             finish_reason="stop"
         )
-        mock_model.request.return_value = mock_response_1
+        mock_model.request = AsyncMock(return_value=mock_response_1)
         
         task_no_format = Task("Who developed you?")
         agent = Agent(name="Coder", model=mock_model)
@@ -91,7 +91,7 @@ class TestTaskResponseFormat:
             provider_details={},
             finish_reason="stop"
         )
-        mock_model.request.return_value = mock_response_2
+        mock_model.request = AsyncMock(return_value=mock_response_2)
         
         task_with_format = Task(
             "Create a plan to visit cities in Canada", 
@@ -140,7 +140,7 @@ class TestTaskResponseFormat:
             provider_details={},
             finish_reason="stop"
         )
-        mock_model.request.return_value = mock_response_1
+        mock_model.request = AsyncMock(return_value=mock_response_1)
         
         task_user = Task("Get user profile", response_format=UserProfile)
         result_user = agent.print_do(task_user)
@@ -171,7 +171,7 @@ class TestTaskResponseFormat:
             provider_details={},
             finish_reason="stop"
         )
-        mock_model.request.return_value = mock_response_2
+        mock_model.request = AsyncMock(return_value=mock_response_2)
         
         task_product = Task("Get product details", response_format=Product)
         result_product = agent.print_do(task_product)
@@ -202,7 +202,7 @@ class TestTaskResponseFormat:
             provider_details={},
             finish_reason="stop"
         )
-        mock_model.request.return_value = mock_response_3
+        mock_model.request = AsyncMock(return_value=mock_response_3)
         
         task_mixed = Task("Get mixed data", response_format=MixedTypes)
         result_mixed = agent.print_do(task_mixed)

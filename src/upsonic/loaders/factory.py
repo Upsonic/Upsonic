@@ -71,7 +71,7 @@ class LoaderFactory:
         from .html import HTMLLoader
         from .text import TextLoader
         
-        return [
+        loaders = [
             (CSVLoader, ['.csv']),
             (PdfLoader, ['.pdf']),
             (PyMuPDFLoader, ['.pdf']),  # Alternative PDF loader
@@ -83,6 +83,23 @@ class LoaderFactory:
             (HTMLLoader, ['.html', '.htm', '.xhtml']),
             (TextLoader, ['.txt', '.rst', '.log', '.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.cs', '.go', '.rs', '.php', '.rb', '.css', '.ini'])
         ]
+        
+        # Try to import DoclingLoader (optional dependency)
+        try:
+            from .docling import DoclingLoader
+            # Docling supports a wide range of formats, register with high priority
+            loaders.insert(0, (DoclingLoader, [
+                '.pdf', '.docx', '.xlsx', '.pptx',
+                '.html', '.htm',
+                '.md', '.markdown',
+                '.adoc', '.asciidoc',
+                '.csv',
+                '.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.webp'
+            ]))
+        except ImportError:
+            pass  # Docling not installed, skip registration
+        
+        return loaders
     
     def register_loader(self, loader_class: Type[BaseLoader], extensions: List[str]):
         """
@@ -140,7 +157,7 @@ class LoaderFactory:
             HTMLLoaderConfig
         )
         
-        return {
+        config_map = {
             'text': TextLoaderConfig,
             'csv': CSVLoaderConfig,
             'pdf': PdfLoaderConfig,
@@ -152,6 +169,15 @@ class LoaderFactory:
             'markdown': MarkdownLoaderConfig,
             'html': HTMLLoaderConfig
         }
+        
+        # Try to add DoclingLoaderConfig if available
+        try:
+            from .config import DoclingLoaderConfig
+            config_map['docling'] = DoclingLoaderConfig
+        except ImportError:
+            pass  # Docling not installed
+        
+        return config_map
     
     def _validate_registration(self):
         """Validate that all registered loaders are properly configured."""
@@ -305,6 +331,8 @@ class LoaderFactory:
             self._optimize_pdf_config(config, file_size)
         elif loader_type == 'pymupdf':
             self._optimize_pymupdf_config(config, file_size)
+        elif loader_type == 'docling':
+            self._optimize_docling_config(config, file_size, source)
         elif loader_type == 'html':
             self._optimize_html_config(config, source)
         elif loader_type == 'csv':
@@ -342,6 +370,48 @@ class LoaderFactory:
             config.setdefault('extract_annotations', True)
             config.setdefault('image_dpi', 150)  # Higher DPI for better quality
             config.setdefault('text_extraction_method', 'dict')  # Better structure for smaller files
+    
+    def _optimize_docling_config(self, config: Dict[str, Any], file_size: int, source: str) -> None:
+        """Optimize Docling loader configuration based on file size and source type."""
+        # Determine if source is URL
+        is_url = source.startswith(('http://', 'https://'))
+        
+        if is_url:
+            config.setdefault('support_urls', True)
+            config.setdefault('url_timeout', 60)  # Longer timeout for URLs
+        
+        # Optimize based on file size
+        if file_size > self._PDF_LARGE_THRESHOLD:
+            # Large files: prioritize speed
+            config.setdefault('extraction_mode', 'chunks')
+            config.setdefault('chunker_type', 'hybrid')
+            config.setdefault('max_pages', 100)  # Limit pages for very large files
+            config.setdefault('parallel_processing', True)
+            config.setdefault('batch_size', 5)
+            config.setdefault('extract_document_metadata', False)
+            
+            # OCR: Disable for speed on large files
+            config.setdefault('ocr_enabled', False)
+            config.setdefault('enable_table_structure', True)
+            config.setdefault('table_structure_cell_matching', False)  # Disable cell matching for speed
+        else:
+            # Smaller files: prioritize quality
+            config.setdefault('extraction_mode', 'chunks')
+            config.setdefault('chunker_type', 'hierarchical')  # Better structure for smaller files
+            config.setdefault('parallel_processing', True)
+            config.setdefault('batch_size', 10)
+            config.setdefault('extract_document_metadata', True)
+            config.setdefault('confidence_threshold', 0.7)  # Higher quality threshold
+            
+            # OCR: Full features for quality
+            config.setdefault('ocr_enabled', True)
+            config.setdefault('ocr_force_full_page', False)  # Hybrid mode (smart OCR)
+            config.setdefault('ocr_backend', 'rapidocr')  # Fast and accurate
+            config.setdefault('ocr_lang', ['english'])
+            config.setdefault('ocr_backend_engine', 'onnxruntime')  # Best compatibility
+            config.setdefault('ocr_text_score', 0.6)  # Good balance
+            config.setdefault('enable_table_structure', True)
+            config.setdefault('table_structure_cell_matching', True)  # Full quality
     
     def _optimize_html_config(self, config: Dict[str, Any], source: str) -> None:
         """Optimize HTML loader configuration for URLs."""

@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional, Union, Literal
 
 from upsonic.vectordb.config import Config 
 from upsonic.schemas.vector_schemas import VectorSearchResult
+from upsonic.utils.printing import info_log
 
 
 class BaseVectorDBProvider(ABC):
@@ -31,7 +32,7 @@ class BaseVectorDBProvider(ABC):
         self._config = config
         self._client: Any = None
         self._is_connected: bool = False
-        print(f"Initializing {self.__class__.__name__} with provider '{self._config.core.provider_name.value}'.")
+        info_log(f"Initializing {self.__class__.__name__} with provider '{self._config.core.provider_name.value}'.", context="BaseVectorDBProvider")
 
     @abstractmethod
     def connect(self) -> None:

@@ -36,6 +36,7 @@ from upsonic.vectordb.config import (
     QuantizationConfig
 )
 from upsonic.vectordb.base import BaseVectorDBProvider
+from upsonic.utils.printing import info_log, debug_log, warning_log
 
 from upsonic.utils.package.exception import(
     VectorDBConnectionError, 
@@ -97,7 +98,7 @@ class FaissProvider(BaseVectorDBProvider):
         if not self._is_connected: return
         db_path = self._active_db_path
         if not db_path:
-            print("Running in 'in_memory' mode. Clearing state without persisting.")
+            debug_log("Running in 'in_memory' mode. Clearing state without persisting.", context="FaissVectorDB")
         else:
             try:
                 db_path.mkdir(parents=True, exist_ok=True)
@@ -106,7 +107,7 @@ class FaissProvider(BaseVectorDBProvider):
                 with open(db_path / "id_map.json", 'w') as f:
                     json.dump({"user_to_faiss": self._user_id_to_faiss_id, "faiss_to_user": self._faiss_id_to_user_id}, f)
             except Exception as e:
-                print(f"[ERROR] Failed to persist FAISS state to disk: {e}")
+                warning_log(f"Failed to persist FAISS state to disk: {e}", context="FaissVectorDB")
         self._index = None; self._metadata_store = {}; self._user_id_to_faiss_id = {}; self._faiss_id_to_user_id = {}
         self._is_connected = False
 
@@ -121,15 +122,15 @@ class FaissProvider(BaseVectorDBProvider):
         if not self._is_connected:
             raise VectorDBConnectionError("Must be connected before creating a collection.")
         if self._index is not None:
-            print("Collection (FAISS index) already exists in memory.")
+            info_log("Collection (FAISS index) already exists in memory.", context="FaissVectorDB")
             return
 
         if self.collection_exists():
             if self._config.core.recreate_if_exists:
-                print("Deleting existing collection on disk to recreate.")
+                info_log("Deleting existing collection on disk to recreate.", context="FaissVectorDB")
                 self.delete_collection()
             else:
-                print("Collection path exists but index not loaded. Proceeding to create new index.")
+                info_log("Collection path exists but index not loaded. Proceeding to create new index.", context="FaissVectorDB")
 
         if self._active_db_path:
             self._active_db_path.mkdir(parents=True, exist_ok=True)
@@ -168,9 +169,9 @@ class FaissProvider(BaseVectorDBProvider):
         metric_type = metric_map[self._config.core.distance_metric]
 
         try:
-            print(f"Creating FAISS index with factory string: '{factory_string}' and dimension: {d}")
+            debug_log(f"Creating FAISS index with factory string: '{factory_string}' and dimension: {d}", context="FaissVectorDB")
             self._index = faiss.index_factory(d, factory_string, metric_type)
-            print("FAISS index created successfully.")
+            info_log("FAISS index created successfully.", context="FaissVectorDB")
         except Exception as e:
             raise VectorDBError(f"Failed to create FAISS index with factory string '{factory_string}': {e}")
 
@@ -180,17 +181,17 @@ class FaissProvider(BaseVectorDBProvider):
         Permanently deletes the collection from the filesystem.
         """
         if not self._active_db_path:
-            print("Cannot delete collection in 'in_memory' mode.")
+            debug_log("Cannot delete collection in 'in_memory' mode.", context="FaissVectorDB")
             return
 
         if self.collection_exists():
             try:
                 shutil.rmtree(self._active_db_path)
-                print(f"Successfully deleted collection directory: '{self._active_db_path}'")
+                info_log(f"Successfully deleted collection directory: '{self._active_db_path}'", context="FaissVectorDB")
             except OSError as e:
                 raise VectorDBError(f"Error deleting collection directory '{self._active_db_path}': {e}")
         else:
-            print("Collection directory does not exist. No action taken.")
+            debug_log("Collection directory does not exist. No action taken.", context="FaissVectorDB")
 
         self._index = None
         self._metadata_store.clear()
@@ -235,13 +236,13 @@ class FaissProvider(BaseVectorDBProvider):
 
         ids_to_update = [user_id for user_id in ids if user_id in self._user_id_to_faiss_id]
         if ids_to_update:
-            print(f"Updating {len(ids_to_update)} existing IDs by deleting old entries first.")
+            debug_log(f"Updating {len(ids_to_update)} existing IDs by deleting old entries first.", context="FaissVectorDB")
             self.delete(ids_to_update)
 
         if not self._index.is_trained:
-            print(f"FAISS index is not trained. Training on {len(vectors_np)} vectors...")
+            debug_log(f"FAISS index is not trained. Training on {len(vectors_np)} vectors...", context="FaissVectorDB")
             self._index.train(vectors_np)
-            print("Training complete.")
+            info_log("Training complete.", context="FaissVectorDB")
 
         try:
             start_faiss_id = self._index.ntotal
@@ -253,7 +254,7 @@ class FaissProvider(BaseVectorDBProvider):
                 self._faiss_id_to_user_id[faiss_id] = user_id
                 self._metadata_store[user_id] = payloads[i]
             
-            print(f"Successfully upserted {len(vectors)} vectors. Index total: {self._index.ntotal}")
+            info_log(f"Successfully upserted {len(vectors)} vectors. Index total: {self._index.ntotal}", context="FaissVectorDB")
 
         except Exception as e:
             raise UpsertError(f"An error occurred during FAISS add operation: {e}")
@@ -281,7 +282,7 @@ class FaissProvider(BaseVectorDBProvider):
                 deleted_count += 1
         
         if deleted_count > 0:
-            print(f"Successfully marked {deleted_count} IDs for deletion (tombstoned).")
+            info_log(f"Successfully marked {deleted_count} IDs for deletion (tombstoned).", context="FaissVectorDB")
 
     
     def fetch(self, ids: List[Union[str, int]], **kwargs) -> List[VectorSearchResult]:
@@ -312,7 +313,7 @@ class FaissProvider(BaseVectorDBProvider):
                         text=text
                     ))
                 except Exception as e:
-                    print(f"Could not fetch data for ID '{user_id}': {e}")
+                    debug_log(f"Could not fetch data for ID '{user_id}': {e}", context="FaissVectorDB")
         return results
 
     def _translate_filter(self, filter_dict: Dict[str, Any]) -> Callable[[Dict[str, Any]], bool]:
@@ -410,7 +411,7 @@ class FaissProvider(BaseVectorDBProvider):
         raise NotImplementedError("FAISS is a dense-vector-only library and does not support full-text search.")
 
     def hybrid_search(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
-        print("[WARNING] FAISS provider received a hybrid search request. It will ignore the text query and alpha, performing a dense search instead.")
+        warning_log("FAISS provider received a hybrid search request. It will ignore the text query and alpha, performing a dense search instead.", context="FaissVectorDB")
         return self.dense_search(query_vector=query_vector, top_k=top_k, filter=filter, similarity_threshold=similarity_threshold, **kwargs)
     
 

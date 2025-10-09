@@ -29,6 +29,7 @@ from upsonic.vectordb.config import (
 # Also import from relative path to handle import path differences
 from ..config import HNSWTuningConfig as RelativeHNSWTuningConfig
 from upsonic.vectordb.base import BaseVectorDBProvider
+from upsonic.utils.printing import info_log, debug_log
 
 from upsonic.utils.package.exception import(
     VectorDBConnectionError, 
@@ -72,7 +73,7 @@ class WeaviateProvider(BaseVectorDBProvider):
         
         super().__init__(config)
         self._client: Optional[weaviate.WeaviateClient] = None
-        print(f"WeaviateProvider initialized for collection '{self._config.core.collection_name}' in '{self._config.core.mode.value}' mode.")
+        info_log(f"WeaviateProvider initialized for collection '{self._config.core.collection_name}' in '{self._config.core.mode.value}' mode.", context="WeaviateVectorDB")
 
 
     def connect(self) -> None:
@@ -90,10 +91,10 @@ class WeaviateProvider(BaseVectorDBProvider):
         """
 
         if self._is_connected and self._client:
-            print("Already connected to Weaviate.")
+            info_log("Already connected to Weaviate.", context="WeaviateVectorDB")
             return
 
-        print(f"Attempting to connect to Weaviate in '{self._config.core.mode.value}' mode...")
+        debug_log(f"Attempting to connect to Weaviate in '{self._config.core.mode.value}' mode...", context="WeaviateVectorDB")
         
         try:
             if self._config.core.mode == Mode.CLOUD:
@@ -135,7 +136,7 @@ class WeaviateProvider(BaseVectorDBProvider):
                 raise WeaviateConnectionError("Health check failed after connection attempt.")
 
             self._is_connected = True
-            print("Successfully connected to Weaviate and health check passed.")
+            info_log("Successfully connected to Weaviate and health check passed.", context="WeaviateVectorDB")
 
         except WeaviateConnectionError as e:
             self._client = None
@@ -158,13 +159,13 @@ class WeaviateProvider(BaseVectorDBProvider):
                 self._client.close()
                 self._is_connected = False
                 self._client = None
-                print("Successfully disconnected from Weaviate.")
+                info_log("Successfully disconnected from Weaviate.", context="WeaviateVectorDB")
             except Exception as e:
                 self._is_connected = False
                 self._client = None
-                print(f"An error occurred during disconnection, but status is now 'disconnected'. Error: {e}")
+                debug_log(f"An error occurred during disconnection, but status is now 'disconnected'. Error: {e}", context="WeaviateVectorDB")
         else:
-            print("Already disconnected. No action taken.")
+            debug_log("Already disconnected. No action taken.", context="WeaviateVectorDB")
 
     def is_ready(self) -> bool:
         """
@@ -191,10 +192,10 @@ class WeaviateProvider(BaseVectorDBProvider):
 
         if self.collection_exists():
             if self._config.core.recreate_if_exists:
-                print(f"Collection '{collection_name}' already exists. Deleting and recreating as requested.")
+                info_log(f"Collection '{collection_name}' already exists. Deleting and recreating as requested.", context="WeaviateVectorDB")
                 self.delete_collection()
             else:
-                print(f"Collection '{collection_name}' already exists and 'recreate_if_exists' is False. No action taken.")
+                info_log(f"Collection '{collection_name}' already exists and 'recreate_if_exists' is False. No action taken.", context="WeaviateVectorDB")
                 return
 
         try:
@@ -240,15 +241,15 @@ class WeaviateProvider(BaseVectorDBProvider):
                 replication_config=replication_config,
                 multi_tenancy_config=multi_tenancy_config
             )
-            print(f"Successfully created collection '{collection_name}'.")
+            info_log(f"Successfully created collection '{collection_name}'.", context="WeaviateVectorDB")
 
             if self._config.advanced.namespace:
-                print(f"Multi-tenancy is enabled. Creating tenant: '{self._config.advanced.namespace}'...")
+                debug_log(f"Multi-tenancy is enabled. Creating tenant: '{self._config.advanced.namespace}'...", context="WeaviateVectorDB")
                 collection = self._client.collections.get(collection_name)
                 collection.tenants.create(
                     tenants=[weaviate.collections.classes.tenants.Tenant(name=self._config.advanced.namespace)]
                 )
-                print("Tenant created successfully.")
+                info_log("Tenant created successfully.", context="WeaviateVectorDB")
 
         except UnexpectedStatusCodeError as e:
             raise VectorDBError(f"Failed to create collection '{collection_name}' in Weaviate. Status: {e.status_code}. Message: {e.message}")
@@ -273,7 +274,7 @@ class WeaviateProvider(BaseVectorDBProvider):
         
         try:
             self._client.collections.delete(collection_name)
-            print(f"Successfully deleted collection '{collection_name}'.")
+            info_log(f"Successfully deleted collection '{collection_name}'.", context="WeaviateVectorDB")
         except UnexpectedStatusCodeError as e:
             if e.status_code == 404: 
                  raise CollectionDoesNotExistError(f"Collection '{collection_name}' could not be deleted because it does not exist.")
@@ -319,7 +320,7 @@ class WeaviateProvider(BaseVectorDBProvider):
         if not (len(vectors) == len(payloads) == len(ids)):
             raise UpsertError("The lengths of vectors, payloads, and ids lists must be identical.")
         if not vectors:
-            print("Upsert called with empty lists. No action taken.")
+            debug_log("Upsert called with empty lists. No action taken.", context="WeaviateVectorDB")
             return
         if chunks is not None:
             if len(chunks) != len(payloads):
@@ -336,7 +337,7 @@ class WeaviateProvider(BaseVectorDBProvider):
         consistency_level = consistency_map[self._config.data_management.write_consistency]
 
         try:
-            print(f"Starting upsert of {len(vectors)} objects with batch size {self._config.data_management.batch_size}...")
+            info_log(f"Starting upsert of {len(vectors)} objects with batch size {self._config.data_management.batch_size}...", context="WeaviateVectorDB")
             collection_with_consistency = collection_obj.with_consistency_level(consistency_level)
             with collection_with_consistency.batch.fixed_size(
                 batch_size=self._config.data_management.batch_size,
@@ -353,7 +354,7 @@ class WeaviateProvider(BaseVectorDBProvider):
                         uuid=object_uuid
                     )
             
-            print(f"Successfully upserted {len(vectors)} objects.")
+            info_log(f"Successfully upserted {len(vectors)} objects.", context="WeaviateVectorDB")
 
         except Exception as e:
             failed_objects = batch.failed_objects # WILL BE IMPLEMENTED LATER!!!
@@ -372,7 +373,7 @@ class WeaviateProvider(BaseVectorDBProvider):
             VectorDBError: If the deletion fails.
         """
         if not ids:
-            print("Delete called with an empty list of IDs. No action taken.")
+            debug_log("Delete called with an empty list of IDs. No action taken.", context="WeaviateVectorDB")
             return
         
         collection_obj = self._get_collection()
@@ -393,7 +394,7 @@ class WeaviateProvider(BaseVectorDBProvider):
             if result.failed > 0:
                  raise VectorDBError(f"Deletion partially failed. Successful: {result.successful}, Failed: {result.failed}. Check Weaviate logs for details.")
 
-            print(f"Successfully processed deletion request for {len(ids)} IDs. Matched and deleted: {result.successful}.")
+            info_log(f"Successfully processed deletion request for {len(ids)} IDs. Matched and deleted: {result.successful}.", context="WeaviateVectorDB")
 
         except Exception as e:
             raise VectorDBError(f"An error occurred during deletion: {e}")

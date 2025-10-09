@@ -11,6 +11,7 @@ from upsonic.storage.session.sessions import InteractionSession, UserProfile
 from upsonic.storage.types import SessionId, UserId
 from upsonic.schemas import UserTraits
 from upsonic.models import Model
+from upsonic.utils.printing import info_log
 
 
 class Memory:
@@ -53,7 +54,8 @@ class Memory:
         self.user_memory_mode = user_memory_mode
 
         if self.is_profile_dynamic and user_profile_schema:
-            print("Warning: `dynamic_user_profile` is True, so the provided `user_profile_schema` will be ignored.")
+            from upsonic.utils.printing import warning_log
+            warning_log("`dynamic_user_profile` is True, so the provided `user_profile_schema` will be ignored.", "MemoryStorage")
             self.profile_schema_model = None
         else:
             self.profile_schema_model = user_profile_schema or UserTraits        
@@ -114,7 +116,8 @@ class Memory:
                         prepared_data["message_history"] = limited_history
                         
                     except Exception as e:
-                        print(f"Warning: Could not validate or process stored chat history. Starting fresh. Error: {e}")
+                        from upsonic.utils.printing import warning_log
+                        warning_log(f"Could not validate or process stored chat history. Starting fresh. Error: {e}", "MemoryStorage")
                         prepared_data["message_history"] = []
         return prepared_data
 
@@ -148,7 +151,8 @@ class Memory:
             try:
                 session.summary = await self._generate_new_summary(session.summary, model_response)
             except Exception as e:
-                print(f"Warning: Failed to generate session summary: {e}")
+                from upsonic.utils.printing import warning_log
+                warning_log(f"Failed to generate session summary: {e}", "MemoryStorage")
         
         await self.storage.upsert_async(session)
 
@@ -173,7 +177,8 @@ class Memory:
                     raise ValueError(f"Unexpected update mode: {self.user_memory_mode}")
                 profile.profile_data.update(updated_traits)
             except Exception as e:
-                print(f"Warning: Failed to analyze user profile: {e}")
+                from upsonic.utils.printing import warning_log
+                warning_log(f"Failed to analyze user profile: {e}", "MemoryStorage")
 
         await self.storage.upsert_async(profile)
 
@@ -219,7 +224,8 @@ class Memory:
                     break
         
         if not original_system_prompt:
-            print("Warning: Could not find original SystemPromptPart. History might be malformed.")
+            from upsonic.utils.printing import warning_log
+            warning_log("Could not find original SystemPromptPart. History might be malformed.", "MemoryStorage")
             return [message for run in kept_runs for message in run]
 
         first_request_in_window = kept_runs[0][0]
@@ -231,7 +237,8 @@ class Memory:
                 break
                 
         if not new_user_prompt:
-            print("Warning: Could not find UserPromptPart in the first message of the limited window.")
+            from upsonic.utils.printing import warning_log
+            warning_log("Could not find UserPromptPart in the first message of the limited window.", "MemoryStorage")
             return [message for run in kept_runs for message in run]
 
         modified_first_request = copy.deepcopy(first_request_in_window)
@@ -244,8 +251,9 @@ class Memory:
         for run in kept_runs[1:]:
             final_history.extend(run)
             
-        print(f"\nOriginal history had {len(all_runs)} runs. "
-            f"Limited to the last {self.num_last_messages}, resulting in {len(final_history)} messages.")
+        info_log(f"Original history had {len(all_runs)} runs. "
+                f"Limited to the last {self.num_last_messages}, resulting in {len(final_history)} messages.", 
+                context="Memory")
 
         return final_history
         
@@ -310,7 +318,8 @@ class Memory:
                 validated_history = ModelMessagesTypeAdapter.validate_python(session.chat_history)
                 historical_prompts_content = self._extract_user_prompt_content(validated_history)
             except Exception as e:
-                print(f"Warning: Could not validate session history. It will be skipped for analysis. Error: {e}")
+                from upsonic.utils.printing import warning_log
+                warning_log(f"Could not validate session history. It will be skipped for analysis. Error: {e}", "MemoryStorage")
 
         new_messages = model_response.new_messages()
         if new_messages:
@@ -318,7 +327,8 @@ class Memory:
             # Extracted new user prompts from the latest response
 
         if not historical_prompts_content and not new_prompts_content:
-            print("Warning: No user prompts found in history or new messages. Cannot analyze traits.")
+            from upsonic.utils.printing import warning_log
+            warning_log("No user prompts found in history or new messages. Cannot analyze traits.", "MemoryStorage")
             return {}
 
         prompt_context_parts = []
@@ -334,7 +344,7 @@ class Memory:
             source_log.append("new messages")
 
         conversation_context_str = "\n\n".join(prompt_context_parts)
-        print(f"Analyzing traits using context from: {', '.join(source_log)}.")
+        info_log(f"Analyzing traits using context from: {', '.join(source_log)}.", context="Memory")
         
         analyzer = Agent(name="User Trait Analyzer", model=self.model_provider, debug=self.debug)
 

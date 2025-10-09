@@ -53,21 +53,41 @@ def _get_azure_openai_embedding():
     from .azure_openai_provider import AzureOpenAIEmbedding
     return AzureOpenAIEmbedding
 
+def _get_azure_openai_embedding_config():
+    from .azure_openai_provider import AzureOpenAIEmbeddingConfig
+    return AzureOpenAIEmbeddingConfig
+
 def _get_bedrock_embedding():
     from .bedrock_provider import BedrockEmbedding
     return BedrockEmbedding
+
+def _get_bedrock_embedding_config():
+    from .bedrock_provider import BedrockEmbeddingConfig
+    return BedrockEmbeddingConfig
 
 def _get_huggingface_embedding():
     from .huggingface_provider import HuggingFaceEmbedding
     return HuggingFaceEmbedding
 
+def _get_huggingface_embedding_config():
+    from .huggingface_provider import HuggingFaceEmbeddingConfig
+    return HuggingFaceEmbeddingConfig
+
 def _get_fastembed_provider():
     from .fastembed_provider import FastEmbedProvider
     return FastEmbedProvider
 
+def _get_fastembed_config():
+    from .fastembed_provider import FastEmbedConfig
+    return FastEmbedConfig
+
 def _get_ollama_embedding():
     from .ollama_provider import OllamaEmbedding
     return OllamaEmbedding
+
+def _get_ollama_embedding_config():
+    from .ollama_provider import OllamaEmbeddingConfig
+    return OllamaEmbeddingConfig
 
 def _get_gemini_embedding():
     from .gemini_provider import GeminiEmbedding
@@ -104,10 +124,15 @@ def __getattr__(name: str) -> Any:
         "OpenAIEmbedding": _get_openai_embedding,
         "OpenAIEmbeddingConfig": _get_openai_embedding_config,
         "AzureOpenAIEmbedding": _get_azure_openai_embedding,
+        "AzureOpenAIEmbeddingConfig": _get_azure_openai_embedding_config,
         "BedrockEmbedding": _get_bedrock_embedding,
+        "BedrockEmbeddingConfig": _get_bedrock_embedding_config,
         "HuggingFaceEmbedding": _get_huggingface_embedding,
+        "HuggingFaceEmbeddingConfig": _get_huggingface_embedding_config,
         "FastEmbedProvider": _get_fastembed_provider,
+        "FastEmbedConfig": _get_fastembed_config,
         "OllamaEmbedding": _get_ollama_embedding,
+        "OllamaEmbeddingConfig": _get_ollama_embedding_config,
         "GeminiEmbedding": _get_gemini_embedding,
         "GeminiEmbeddingConfig": _get_gemini_embedding_config,
         "create_gemini_vertex_embedding": _get_gemini_vertex_embedding,
@@ -132,11 +157,16 @@ __all__ = [
     
     "OpenAIEmbedding",
     "OpenAIEmbeddingConfig",
-    "AzureOpenAIEmbedding", 
+    "AzureOpenAIEmbedding",
+    "AzureOpenAIEmbeddingConfig", 
     "BedrockEmbedding",
+    "BedrockEmbeddingConfig",
     "HuggingFaceEmbedding",
+    "HuggingFaceEmbeddingConfig",
     "FastEmbedProvider",
+    "FastEmbedConfig",
     "OllamaEmbedding",
+    "OllamaEmbeddingConfig",
     "GeminiEmbedding",
     "GeminiEmbeddingConfig",
     "create_embedding_provider",

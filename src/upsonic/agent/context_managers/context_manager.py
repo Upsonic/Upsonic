@@ -4,6 +4,8 @@ import json
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Optional, Dict, Any, List
 
+from upsonic.utils.printing import warning_log, error_log
+
 # Heavy imports moved to lazy loading for faster startup
 if TYPE_CHECKING:
     from upsonic.agent.agent import Agent
@@ -109,16 +111,16 @@ class ContextManager:
                     formatted_results = self._format_rag_results(rag_results, knowledge_base)
                     knowledge_base_parts.append(formatted_results)
                 else:
-                    print(f"Warning: No results found for KnowledgeBase '{knowledge_base.name}' with query: '{query}'")
+                    warning_log(f"No results found for KnowledgeBase '{knowledge_base.name}' with query: '{query}'", context="ContextManager")
             else:
                 knowledge_base_parts.append(knowledge_base.markdown())
                 
         except Exception as e:
-            print(f"Error processing KnowledgeBase '{knowledge_base.name}': {str(e)}")
+            error_log(f"Error processing KnowledgeBase '{knowledge_base.name}': {str(e)}", context="ContextManager")
             try:
                 knowledge_base_parts.append(knowledge_base.markdown())
             except Exception as fallback_error:
-                print(f"Fallback also failed for KnowledgeBase '{knowledge_base.name}': {str(fallback_error)}")
+                error_log(f"Fallback also failed for KnowledgeBase '{knowledge_base.name}': {str(fallback_error)}", context="ContextManager")
 
     def _format_rag_results(self, rag_results: List["RAGSearchResult"], knowledge_base: "KnowledgeBase") -> str:
         """Format RAG results with enhanced context and metadata."""
@@ -180,10 +182,10 @@ class ContextManager:
                     f"<PreviousTaskNodeOutput id='{item.task_description_or_id}'>\n{output_str}\n</PreviousTaskNodeOutput>"
                 )
             else:
-                print(f"Warning: No output found for task '{item.task_description_or_id}'")
+                warning_log(f"No output found for task '{item.task_description_or_id}'", context="ContextManager")
                 
         except Exception as e:
-            print(f"Error processing TaskOutputSource '{item.task_description_or_id}': {str(e)}")
+            error_log(f"Error processing TaskOutputSource '{item.task_description_or_id}': {str(e)}", context="ContextManager")
 
     def _format_task_output(self, source_output: Any) -> str:
         """Format task output with serialization."""
@@ -199,7 +201,7 @@ class ContextManager:
             else:
                 return str(source_output)
         except Exception as e:
-            print(f"Error formatting task output: {str(e)}")
+            error_log(f"Error formatting task output: {str(e)}", context="ContextManager")
             return str(source_output)
 
     def get_context_prompt(self) -> str:

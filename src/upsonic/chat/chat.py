@@ -184,7 +184,8 @@ class Chat:
         
         
         if self.debug:
-            print(f"Chat initialized: session_id={session_id}, user_id={user_id}")
+            from upsonic.utils.printing import debug_log
+            debug_log(f"Chat initialized: session_id={session_id}, user_id={user_id}", "Chat")
     
     @property
     def state(self) -> SessionState:
@@ -243,6 +244,9 @@ class Chat:
         """Safely transition to a new state."""
         self._session_manager.transition_state(new_state)
     
+    def get_recent_messages(self, count: int = 10) -> List[ChatMessage]:
+        """Get the most recent messages."""
+        return self._session_manager.get_recent_messages(count)
     
     def _normalize_input(self, input_data: Union[str, Task], attachments: Optional[List[str]] = None) -> Task:
         """Normalize various input types into a Task object."""
@@ -278,17 +282,20 @@ class Chat:
                 # Check if this is a retryable error
                 if not self._is_retryable_error(e):
                     if self.debug:
-                        print(f"Non-retryable error: {e}")
+                        from upsonic.utils.printing import debug_log
+                        debug_log(f"Non-retryable error: {e}", "Chat")
                     self._transition_state(SessionState.ERROR)
                     raise e
                 
                 if attempt < self._retry_attempts:
                     if self.debug:
-                        print(f"Attempt {attempt + 1} failed: {e}. Retrying in {self._retry_delay}s...")
+                        from upsonic.utils.printing import debug_log
+                        debug_log(f"Attempt {attempt + 1} failed: {e}. Retrying in {self._retry_delay}s...", "Chat")
                     await asyncio.sleep(self._retry_delay * (2 ** attempt))  # Exponential backoff
                 else:
                     if self.debug:
-                        print(f"All {self._retry_attempts + 1} attempts failed. Last error: {e}")
+                        from upsonic.utils.printing import debug_log
+                        debug_log(f"All {self._retry_attempts + 1} attempts failed. Last error: {e}", "Chat")
         
         self._transition_state(SessionState.ERROR)
         raise last_exception
@@ -493,15 +500,18 @@ class Chat:
                         # Check if it's a context manager error that we can handle
                         if "context manager is already active" in str(e):
                             if self.debug:
-                                print(f"Streaming context manager conflict on attempt {attempt + 1}. Waiting longer...")
+                                from upsonic.utils.printing import debug_log
+                                debug_log(f"Streaming context manager conflict on attempt {attempt + 1}. Waiting longer...", "Chat")
                             await asyncio.sleep(self._retry_delay * (3 ** attempt))  # Longer wait for context conflicts
                         elif attempt < self._retry_attempts:
                             if self.debug:
-                                print(f"Streaming attempt {attempt + 1} failed: {e}. Retrying in {self._retry_delay}s...")
+                                from upsonic.utils.printing import debug_log
+                                debug_log(f"Streaming attempt {attempt + 1} failed: {e}. Retrying in {self._retry_delay}s...", "Chat")
                             await asyncio.sleep(self._retry_delay * (2 ** attempt))
                         else:
                             if self.debug:
-                                print(f"All {self._retry_attempts + 1} streaming attempts failed. Last error: {e}")
+                                from upsonic.utils.printing import debug_log
+                                debug_log(f"All {self._retry_attempts + 1} streaming attempts failed. Last error: {e}", "Chat")
                             raise last_exception
             finally:
                 # End response timer and clean up state when streaming is done
@@ -575,11 +585,13 @@ class Chat:
                     await self._storage.disconnect_async()
             except Exception as e:
                 if self.debug:
-                    print(f"Error closing storage connection: {e}")
+                    from upsonic.utils.printing import debug_log
+                    debug_log(f"Error closing storage connection: {e}", "Chat")
         
         self._session_manager.close_session()
         if self.debug:
-            print("Chat session closed")
+            from upsonic.utils.printing import debug_log
+            debug_log("Chat session closed", "Chat")
     
     async def __aenter__(self):
         """Async context manager entry."""

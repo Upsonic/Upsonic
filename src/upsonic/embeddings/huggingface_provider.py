@@ -20,6 +20,7 @@ except ImportError as _import_error:
 from pydantic import Field, field_validator
 
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
+from upsonic.utils.printing import info_log, debug_log
 from ..utils.package.exception import ConfigurationError, ModelConnectionError
 
 
@@ -102,7 +103,7 @@ class HuggingFaceEmbedding(EmbeddingProvider):
         else:
             self.device = self.config.device
             
-        print(f"HuggingFace embedding using device: {self.device}")
+        info_log(f"HuggingFace embedding using device: {self.device}", context="HuggingFaceEmbedding")
     
     def _setup_authentication(self):
         """Setup HuggingFace authentication."""
@@ -111,15 +112,17 @@ class HuggingFaceEmbedding(EmbeddingProvider):
         if hf_token:
             try:
                 login(token=hf_token)
-                print("Successfully authenticated with HuggingFace Hub")
+                from upsonic.utils.printing import success_log
+                success_log("Successfully authenticated with HuggingFace Hub", "HuggingFaceProvider")
             except Exception as e:
-                print(f"Warning: HuggingFace authentication failed: {e}")
+                from upsonic.utils.printing import warning_log
+                warning_log(f"HuggingFace authentication failed: {e}", "HuggingFaceProvider")
     
     def _setup_local_model(self):
         """Setup local model and tokenizer with optional quantization."""
         
         try:
-            print(f"Loading HuggingFace model: {self.config.model_name}")
+            info_log(f"Loading HuggingFace model: {self.config.model_name}", context="HuggingFaceEmbedding")
             
             model_kwargs = {
                 "trust_remote_code": self.config.trust_remote_code,
@@ -132,12 +135,12 @@ class HuggingFaceEmbedding(EmbeddingProvider):
             
             if self.config.enable_quantization:
                 if self.config.quantization_bits == 8:
-                    print("Configuring 8-bit quantization using bitsandbytes...")
+                    debug_log("Configuring 8-bit quantization using bitsandbytes...", context="HuggingFaceEmbedding")
                     model_kwargs['load_in_8bit'] = True
                     model_kwargs['device_map'] = "auto"
 
                 elif self.config.quantization_bits == 4:
-                    print("Configuring 4-bit quantization using bitsandbytes...")
+                    debug_log("Configuring 4-bit quantization using bitsandbytes...", context="HuggingFaceEmbedding")
                     quantization_config = BitsAndBytesConfig(
                         load_in_4bit=True,
                         bnb_4bit_quant_type="nf4",
@@ -162,14 +165,14 @@ class HuggingFaceEmbedding(EmbeddingProvider):
 
             if 'device_map' not in model_kwargs:
                 self.model = self.model.to(self.device)
-                print(f"Model moved to device: {self.device}")
+                debug_log(f"Model moved to device: {self.device}", context="HuggingFaceEmbedding")
 
             self.model.eval()
             
             if self.config.enable_gradient_checkpointing:
                 self.model.gradient_checkpointing_enable()
             
-            print(f"Model loaded successfully.")
+            info_log("Model loaded successfully.", context="HuggingFaceEmbedding")
             
         except Exception as e:
             if "bitsandbytes" in str(e).lower():
@@ -366,7 +369,7 @@ class HuggingFaceEmbedding(EmbeddingProvider):
             return len(test_result) > 0 and len(test_result[0]) > 0
             
         except Exception as e:
-            print(f"HuggingFace connection validation failed: {str(e)}")
+            debug_log(f"HuggingFace connection validation failed: {str(e)}", context="HuggingFaceEmbedding")
             return False
     
     def get_memory_usage(self) -> Dict[str, Any]:
@@ -400,14 +403,16 @@ class HuggingFaceEmbedding(EmbeddingProvider):
                 del self.model
                 self.model = None
             except Exception as e:
-                print(f"Warning: Error closing HuggingFace model: {e}")
+                from upsonic.utils.printing import warning_log
+                warning_log(f"Error closing HuggingFace model: {e}", "HuggingFaceProvider")
         
         if hasattr(self, 'tokenizer') and self.tokenizer:
             try:
                 del self.tokenizer
                 self.tokenizer = None
             except Exception as e:
-                print(f"Warning: Error closing HuggingFace tokenizer: {e}")
+                from upsonic.utils.printing import warning_log
+                warning_log(f"Error closing HuggingFace tokenizer: {e}", "HuggingFaceProvider")
         
         if hasattr(self, '_inference_client') and self._inference_client:
             try:
@@ -422,7 +427,8 @@ class HuggingFaceEmbedding(EmbeddingProvider):
                 del self._inference_client
                 self._inference_client = None
             except Exception as e:
-                print(f"Warning: Error closing HuggingFace InferenceClient: {e}")
+                from upsonic.utils.printing import warning_log
+                warning_log(f"Error closing HuggingFace InferenceClient: {e}", "HuggingFaceProvider")
         
         # Clear CUDA cache if using GPU
         if hasattr(self, 'device') and self.device.startswith('cuda'):
@@ -430,9 +436,11 @@ class HuggingFaceEmbedding(EmbeddingProvider):
                 import torch
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
-                    print("CUDA cache cleared")
+                    from upsonic.utils.printing import success_log
+                    success_log("CUDA cache cleared", "HuggingFaceProvider")
             except Exception as e:
-                print(f"Warning: Could not clear CUDA cache: {e}")
+                from upsonic.utils.printing import warning_log
+                warning_log(f"Could not clear CUDA cache: {e}", "HuggingFaceProvider")
         
         await super().close()
 
@@ -451,13 +459,16 @@ class HuggingFaceEmbedding(EmbeddingProvider):
             if model_path and os.path.exists(model_path):
                 root = os.path.dirname(model_path)
                 shutil.rmtree(root, ignore_errors=True)
-                print(f"Local cache removed for {self.config.model_name} at {root}")
+                from upsonic.utils.printing import success_log
+                success_log(f"Local cache removed for {self.config.model_name} at {root}", "HuggingFaceProvider")
                 return True
             else:
-                print(f"No local cache found for {self.config.model_name}")
+                from upsonic.utils.printing import info_log
+                info_log(f"No local cache found for {self.config.model_name}", "HuggingFaceProvider")
                 return False
         except Exception as e:
-            print(f"Error removing local cache for {self.config.model_name}: {e}")
+            from upsonic.utils.printing import error_log
+            error_log(f"Error removing local cache for {self.config.model_name}: {e}", "HuggingFaceProvider")
             return False
 
 

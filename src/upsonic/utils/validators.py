@@ -180,9 +180,10 @@ def get_attachment_info(task: "Task") -> List[dict]:
         info = get_attachment_info(task)
         
         for file_info in info:
-            print(f"File: {file_info['path']}")
-            print(f"  Exists: {file_info['exists']}")
-            print(f"  Size: {file_info.get('size', 'N/A')} bytes")
+            from upsonic.utils.printing import info_log
+            info_log(f"File: {file_info['path']}", "FileValidator")
+            info_log(f"  Exists: {file_info['exists']}", "FileValidator")
+            info_log(f"  Size: {file_info.get('size', 'N/A')} bytes", "FileValidator")
         ```
     """
     if not task.attachments:

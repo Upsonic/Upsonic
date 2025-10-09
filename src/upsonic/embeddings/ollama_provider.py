@@ -14,6 +14,7 @@ except ImportError:
 from pydantic import Field, field_validator
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
 from ..utils.package.exception import ConfigurationError, ModelConnectionError
+from upsonic.utils.printing import info_log, debug_log, warning_log
 
 
 class OllamaEmbeddingConfig(EmbeddingConfig):
@@ -67,7 +68,7 @@ class OllamaEmbeddingConfig(EmbeddingConfig):
         if ':' in v:
             return v
         
-        print(f"Note: '{v}' may not be a standard Ollama embedding model. Known models: {known_models}")
+        warning_log(f"'{v}' may not be a standard Ollama embedding model. Known models: {known_models}", context="OllamaEmbedding")
         return v
 
 
@@ -119,13 +120,14 @@ class OllamaEmbedding(EmbeddingProvider):
         """Initialize Ollama connection and model synchronously."""
         try:
             if self._check_ollama_health_sync():
-                print(f"Connected to Ollama server")
+                info_log("Connected to Ollama server", context="OllamaEmbedding")
                 
                 if self.config.auto_pull_model:
                     self._ensure_model_available_sync()
                 
         except Exception as e:
-            print(f"Warning: Ollama initialization failed: {e}")
+            from upsonic.utils.printing import warning_log
+            warning_log(f"Ollama initialization failed: {e}", "OllamaProvider")
     
     async def _initialize_async(self):
         """Initialize Ollama connection and model asynchronously."""
@@ -139,7 +141,8 @@ class OllamaEmbedding(EmbeddingProvider):
                 await self._preload_model()
                 
         except Exception as e:
-            print(f"Warning: Ollama initialization failed: {e}")
+            from upsonic.utils.printing import warning_log
+            warning_log(f"Ollama initialization failed: {e}", "OllamaProvider")
     
     def _check_ollama_health_sync(self) -> bool:
         """Check if Ollama server is healthy synchronously."""
@@ -150,14 +153,15 @@ class OllamaEmbedding(EmbeddingProvider):
             )
             if response.status_code == 200:
                 version_info = response.json()
-                print(f"Connected to Ollama server version: {version_info.get('version', 'unknown')}")
+                from upsonic.utils.printing import connection_info
+                connection_info("Ollama", version_info.get('version', 'unknown'))
                 return True
             else:
-                print(f"Ollama health check failed with status: {response.status_code}")
+                debug_log(f"Ollama health check failed with status: {response.status_code}", context="OllamaEmbedding")
                 return False
                 
         except Exception as e:
-            print(f"Ollama server not accessible: {e}")
+            debug_log(f"Ollama server not accessible: {e}", context="OllamaEmbedding")
             return False
     
     async def _check_ollama_health(self) -> bool:
@@ -170,14 +174,17 @@ class OllamaEmbedding(EmbeddingProvider):
                 ) as response:
                     if response.status == 200:
                         version_info = await response.json()
-                        print(f"Connected to Ollama server version: {version_info.get('version', 'unknown')}")
+                        from upsonic.utils.printing import connection_info
+                        connection_info("Ollama", version_info.get('version', 'unknown'))
                         return True
                     else:
-                        print(f"Ollama health check failed with status: {response.status}")
+                        from upsonic.utils.printing import error_log
+                        error_log(f"Ollama health check failed with status: {response.status}", "OllamaProvider")
                         return False
                         
         except Exception as e:
-            print(f"Ollama server not accessible: {e}")
+            from upsonic.utils.printing import error_log
+            error_log(f"Ollama server not accessible: {e}", "OllamaProvider")
             return False
     
     def _ensure_model_available_sync(self):
@@ -190,15 +197,18 @@ class OllamaEmbedding(EmbeddingProvider):
             for model_name in model_names:
                 if self.config.model_name in model_name or model_name.startswith(self.config.model_name):
                     model_found = True
-                    print(f"Model {self.config.model_name} found: {model_name}")
+                    from upsonic.utils.printing import success_log
+                    success_log(f"Model {self.config.model_name} found: {model_name}", "OllamaProvider")
                     break
             
             if not model_found:
-                print(f"Model {self.config.model_name} not found, pulling...")
+                from upsonic.utils.printing import info_log
+                info_log(f"Model {self.config.model_name} not found, pulling...", "OllamaProvider")
                 self._pull_model_sync()
             
         except Exception as e:
-            print(f"Error checking/pulling model: {e}")
+            from upsonic.utils.printing import error_log
+            error_log(f"Error checking/pulling model: {e}", "OllamaProvider")
     
     async def _ensure_model_available(self):
         """Ensure the embedding model is available asynchronously."""
@@ -210,15 +220,18 @@ class OllamaEmbedding(EmbeddingProvider):
             for model_name in model_names:
                 if self.config.model_name in model_name or model_name.startswith(self.config.model_name):
                     model_found = True
-                    print(f"Model {self.config.model_name} found: {model_name}")
+                    from upsonic.utils.printing import success_log
+                    success_log(f"Model {self.config.model_name} found: {model_name}", "OllamaProvider")
                     break
             
             if not model_found:
-                print(f"Model {self.config.model_name} not found, pulling...")
+                from upsonic.utils.printing import info_log
+                info_log(f"Model {self.config.model_name} not found, pulling...", "OllamaProvider")
                 await self._pull_model()
             
         except Exception as e:
-            print(f"Error checking/pulling model: {e}")
+            from upsonic.utils.printing import error_log
+            error_log(f"Error checking/pulling model: {e}", "OllamaProvider")
     
     def _list_models_sync(self) -> List[Dict[str, Any]]:
         """List available models in Ollama synchronously."""
@@ -234,7 +247,8 @@ class OllamaEmbedding(EmbeddingProvider):
                 return []
                 
         except Exception as e:
-            print(f"Error listing models: {e}")
+            from upsonic.utils.printing import error_log
+            error_log(f"Error listing models: {e}", "OllamaProvider")
             return []
     
     async def _list_models(self) -> List[Dict[str, Any]]:
@@ -252,7 +266,8 @@ class OllamaEmbedding(EmbeddingProvider):
                         return []
                         
         except Exception as e:
-            print(f"Error listing models: {e}")
+            from upsonic.utils.printing import error_log
+            error_log(f"Error listing models: {e}", "OllamaProvider")
             return []
     
     def _pull_model_sync(self):
@@ -267,7 +282,7 @@ class OllamaEmbedding(EmbeddingProvider):
             )
             
             if response.status_code == 200:
-                print(f"Successfully pulled model: {self.config.model_name}")
+                info_log(f"Successfully pulled model: {self.config.model_name}", context="OllamaEmbedding")
             else:
                 raise ModelConnectionError(f"Failed to pull model: HTTP {response.status_code}")
                 
@@ -295,9 +310,9 @@ class OllamaEmbedding(EmbeddingProvider):
                                 try:
                                     progress = json.loads(line.decode('utf-8'))
                                     if 'status' in progress:
-                                        print(f"Pull progress: {progress['status']}")
+                                        debug_log(f"Pull progress: {progress['status']}", context="OllamaEmbedding")
                                         if progress.get('status') == 'success':
-                                            print(f"Successfully pulled model: {self.config.model_name}")
+                                            info_log(f"Successfully pulled model: {self.config.model_name}", context="OllamaEmbedding")
                                             break
                                 except json.JSONDecodeError:
                                     continue
@@ -315,10 +330,10 @@ class OllamaEmbedding(EmbeddingProvider):
         """Preload the model to keep it in memory."""
         try:
             await self._embed_batch(["preload"], EmbeddingMode.QUERY)
-            print(f"Model {self.config.model_name} preloaded successfully")
+            info_log(f"Model {self.config.model_name} preloaded successfully", context="OllamaEmbedding")
             
         except Exception as e:
-            print(f"Model preload failed: {e}")
+            debug_log(f"Model preload failed: {e}", context="OllamaEmbedding")
     
     @property
     def supported_modes(self) -> List[EmbeddingMode]:
@@ -455,7 +470,7 @@ class OllamaEmbedding(EmbeddingProvider):
             return len(test_result) > 0 and len(test_result[0]) > 0
             
         except Exception as e:
-            print(f"Ollama connection validation failed: {str(e)}")
+            debug_log(f"Ollama connection validation failed: {str(e)}", context="OllamaEmbedding")
             return False
     
     async def get_server_info(self) -> Dict[str, Any]:
@@ -512,7 +527,8 @@ class OllamaEmbedding(EmbeddingProvider):
                 del self.session
                 self.session = None
             except Exception as e:
-                print(f"Warning: Error closing Ollama HTTP session: {e}")
+                from upsonic.utils.printing import warning_log
+                warning_log(f"Error closing Ollama HTTP session: {e}", "OllamaProvider")
     
     def __del__(self):
         """

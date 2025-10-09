@@ -208,7 +208,7 @@ class CacheManager:
             return None
             
         except Exception as e:
-            print(f"Warning: Batch LLM comparison failed: {e}")
+            warning_log(f"Batch LLM comparison failed: {e}", context="CacheManager")
             return None
     
     async def get_cached_response(

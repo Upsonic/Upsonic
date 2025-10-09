@@ -15,6 +15,7 @@ except ImportError as _import_error:
 
 
 from upsonic.vectordb.base import BaseVectorDBProvider
+from upsonic.utils.printing import info_log, debug_log
 
 from upsonic.vectordb.config import (
     Config, 
@@ -54,19 +55,19 @@ class ChromaProvider(BaseVectorDBProvider):
         self._collection_instance: Optional[ChromaCollection] = None
         
     def _validate_config(self) -> None:
-        print("Performing Chroma-specific configuration validation...")
+        debug_log("Performing Chroma-specific configuration validation...", context="ChromaVectorDB")
         if self._config.core.provider_name is not ProviderName.CHROMA:
             raise ConfigurationError(f"Configuration Mismatch: ChromaProvider received a config for '{self._config.core.provider_name.value}'.")
         if self._config.indexing.index_config.index_type not in [IndexType.HNSW, IndexType.FLAT]:
             raise ConfigurationError(f"Unsupported Index: ChromaProvider does not support index type '{self._config.indexing.index_config.index_type.value}'. Please use HNSW or FLAT.")
         if self._config.core.mode == Mode.EMBEDDED and self._config.core.db_path is None:
             raise ConfigurationError("Missing Path: 'db_path' must be set in CoreConfig for EMBEDDED (PersistentClient) mode.")
-        print("Chroma configuration validated successfully.")
+        info_log("Chroma configuration validated successfully.", context="ChromaVectorDB")
 
 
     def connect(self) -> None:
         if self._is_connected: return
-        print(f"Connecting to ChromaDB in '{self._config.core.mode.value}' mode...")
+        debug_log(f"Connecting to ChromaDB in '{self._config.core.mode.value}' mode...", context="ChromaVectorDB")
         try:
             client_instance: ChromaClientAPI
             if self._config.core.mode == Mode.IN_MEMORY: client_instance = chromadb.Client()
@@ -116,19 +117,19 @@ class ChromaProvider(BaseVectorDBProvider):
             client_instance.heartbeat()
             self._client = client_instance
             self._is_connected = True
-            print("✅ ChromaDB connection successful and verified.")
+            info_log("ChromaDB connection successful and verified.", context="ChromaVectorDB")
         except Exception as e: raise VectorDBConnectionError(f"Failed to connect to ChromaDB: {e}") from e
 
     def disconnect(self) -> None:
         if not self._is_connected or not self._client: return
-        print("Disconnecting from ChromaDB...")
+        debug_log("Disconnecting from ChromaDB...", context="ChromaVectorDB")
         try: 
             self._client.reset()
         except Exception:
             pass
         finally:
             self._client, self._is_connected, self._collection_instance = None, False, None
-            print("ChromaDB client session has been reset.")
+            info_log("ChromaDB client session has been reset.", context="ChromaVectorDB")
 
     def is_ready(self) -> bool:
         if not self._is_connected or not self._client: return False
@@ -142,12 +143,12 @@ class ChromaProvider(BaseVectorDBProvider):
         collection_name = self._config.core.collection_name
         try:
             if self._config.core.recreate_if_exists and self.collection_exists():
-                print(f"Configuration specifies 'recreate_if_exists'. Deleting existing collection '{collection_name}'...")
+                info_log(f"Configuration specifies 'recreate_if_exists'. Deleting existing collection '{collection_name}'...", context="ChromaVectorDB")
                 self.delete_collection()
             chroma_metadata = self._translate_config_to_chroma_metadata()
-            print(f"Creating or retrieving collection '{collection_name}'...")
+            debug_log(f"Creating or retrieving collection '{collection_name}'...", context="ChromaVectorDB")
             self._collection_instance = self._client.get_or_create_collection(name=collection_name, metadata=chroma_metadata)
-            print(f"✅ Successfully prepared collection '{collection_name}'.")
+            info_log(f"Successfully prepared collection '{collection_name}'.", context="ChromaVectorDB")
         except Exception as e: raise VectorDBError(f"Failed to create or get collection '{collection_name}': {e}") from e
             
     def _translate_config_to_chroma_metadata(self) -> dict:
@@ -161,11 +162,11 @@ class ChromaProvider(BaseVectorDBProvider):
     def delete_collection(self) -> None:
         if not self.is_ready(): raise VectorDBConnectionError("Cannot delete collection: Provider is not connected or ready.")
         collection_name = self._config.core.collection_name
-        print(f"Attempting to delete collection '{collection_name}'...")
+        debug_log(f"Attempting to delete collection '{collection_name}'...", context="ChromaVectorDB")
         try:
             self._client.delete_collection(name=collection_name)
             self._collection_instance = None
-            print(f"Collection '{collection_name}' deleted successfully.")
+            info_log(f"Collection '{collection_name}' deleted successfully.", context="ChromaVectorDB")
         except (ValueError, chromadb.errors.NotFoundError) as e: 
             raise CollectionDoesNotExistError(f"Cannot delete collection '{collection_name}' because it does not exist.") from e
         except Exception as e: 
@@ -202,7 +203,7 @@ class ChromaProvider(BaseVectorDBProvider):
             VectorDBError: If the collection is not initialized.
         """
         collection = self._get_active_collection()
-        print(f"Upserting {len(ids)} records into collection '{collection.name}'...")
+        debug_log(f"Upserting {len(ids)} records into collection '{collection.name}'...", context="ChromaVectorDB")
         try:
             upsert_params = {
                 "embeddings": vectors,
@@ -214,7 +215,7 @@ class ChromaProvider(BaseVectorDBProvider):
                     raise UpsertError(f"Number of documents ({len(chunks)}) must match number of IDs ({len(ids)})")
                 upsert_params["documents"] = chunks
             collection.upsert(**upsert_params)
-            print(f"Successfully upserted {len(ids)} records.")
+            info_log(f"Successfully upserted {len(ids)} records.", context="ChromaVectorDB")
         except Exception as e:
             raise UpsertError(f"Failed to upsert data into collection '{collection.name}': {e}") from e
 
@@ -229,10 +230,10 @@ class ChromaProvider(BaseVectorDBProvider):
             VectorDBError: If the deletion fails or the collection is not initialized.
         """
         collection = self._get_active_collection()
-        print(f"Deleting {len(ids)} records from collection '{collection.name}'...")
+        debug_log(f"Deleting {len(ids)} records from collection '{collection.name}'...", context="ChromaVectorDB")
         try:
             collection.delete(ids=[str(i) for i in ids])
-            print(f"Successfully deleted {len(ids)} records.")
+            info_log(f"Successfully deleted {len(ids)} records.", context="ChromaVectorDB")
         except Exception as e:
             raise VectorDBError(f"Failed to delete records from collection '{collection.name}': {e}") from e
 
@@ -251,7 +252,7 @@ class ChromaProvider(BaseVectorDBProvider):
             VectorDBError: If fetching fails or the collection is not initialized.
         """
         collection = self._get_active_collection()
-        print(f"Fetching {len(ids)} records from collection '{collection.name}'...")
+        debug_log(f"Fetching {len(ids)} records from collection '{collection.name}'...", context="ChromaVectorDB")
         try:
             results = collection.get(
                 ids=[str(i) for i in ids],
@@ -281,7 +282,7 @@ class ChromaProvider(BaseVectorDBProvider):
                         )
                     )
             
-            print(f"Successfully fetched {len(final_results)} records.")
+            info_log(f"Successfully fetched {len(final_results)} records.", context="ChromaVectorDB")
             return final_results
             
         except Exception as e:
