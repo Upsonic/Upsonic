@@ -39,10 +39,6 @@ async def test_data_privacy_block_gdpr_violation(mock_infer_model):
     """
     print_header("TEST 1: Data Privacy Policy BLOCKS GDPR Violation")
     
-    # Mock the model inference
-    mock_model = AsyncMock()
-    mock_infer_model.return_value = mock_model
-    
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
         parts=[TextPart(content="This content has been blocked by data privacy policy.")],
@@ -54,7 +50,21 @@ async def test_data_privacy_block_gdpr_violation(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request = AsyncMock(return_value=mock_response)
+    
+    # Create a mock model with proper async function
+    class MockModel:
+        def __init__(self):
+            self.settings = {}
+            self.model_name = "test-model"
+        
+        async def request(self, *args, **kwargs):
+            return mock_response
+        
+        def customize_request_parameters(self, params):
+            return params
+    
+    mock_model = MockModel()
+    mock_infer_model.return_value = mock_model
     
     agent_with_data_privacy_policy = Agent(
         model=mock_model,
@@ -83,10 +93,6 @@ async def test_data_privacy_block_data_breach(mock_infer_model):
     """
     print_header("TEST 2: Data Privacy Policy BLOCKS Data Breach Content")
 
-    # Mock the model inference
-    mock_model = AsyncMock()
-    mock_infer_model.return_value = mock_model
-    
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
         parts=[TextPart(content="This content has been blocked by data privacy policy.")],
@@ -98,7 +104,21 @@ async def test_data_privacy_block_data_breach(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request = AsyncMock(return_value=mock_response)
+    
+    # Create a mock model with proper async function
+    class MockModel:
+        def __init__(self):
+            self.settings = {}
+            self.model_name = "test-model"
+        
+        async def request(self, *args, **kwargs):
+            return mock_response
+        
+        def customize_request_parameters(self, params):
+            return params
+    
+    mock_model = MockModel()
+    mock_infer_model.return_value = mock_model
 
     agent_with_data_privacy_policy = Agent(
         model=mock_model,
@@ -129,10 +149,6 @@ async def test_data_privacy_anonymize_consent_violation(mock_infer_model):
     """
     print_header("TEST 3: Data Privacy Policy ANONYMIZES Consent Violation")
     
-    # Mock the model inference
-    mock_model = AsyncMock()
-    mock_infer_model.return_value = mock_model
-    
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
         parts=[TextPart(content="I can help you with data processing. The consent issue you mentioned has been processed.")],
@@ -144,7 +160,21 @@ async def test_data_privacy_anonymize_consent_violation(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request = AsyncMock(return_value=mock_response)
+    
+    # Create a mock model with proper async function
+    class MockModel:
+        def __init__(self):
+            self.settings = {}
+            self.model_name = "test-model"
+        
+        async def request(self, *args, **kwargs):
+            return mock_response
+        
+        def customize_request_parameters(self, params):
+            return params
+    
+    mock_model = MockModel()
+    mock_infer_model.return_value = mock_model
     
     agent_with_anonymize_policy = Agent(
         model=mock_model,
@@ -173,10 +203,6 @@ async def test_data_privacy_replace_children_data(mock_infer_model):
     """
     print_header("TEST 4: Data Privacy Policy REPLACES Children's Data Information")
     
-    # Mock the model inference
-    mock_model = AsyncMock()
-    mock_infer_model.return_value = mock_model
-    
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
         parts=[TextPart(content="I can help you with data protection. The children's data issue you mentioned has been processed.")],
@@ -188,7 +214,21 @@ async def test_data_privacy_replace_children_data(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request = AsyncMock(return_value=mock_response)
+    
+    # Create a mock model with proper async function
+    class MockModel:
+        def __init__(self):
+            self.settings = {}
+            self.model_name = "test-model"
+        
+        async def request(self, *args, **kwargs):
+            return mock_response
+        
+        def customize_request_parameters(self, params):
+            return params
+    
+    mock_model = MockModel()
+    mock_infer_model.return_value = mock_model
     
     agent_with_replace_policy = Agent(
         model=mock_model,
@@ -218,10 +258,6 @@ async def test_data_privacy_agent_policy_exception(mock_infer_model):
     """
     print_header("TEST 5: Data Privacy Agent Policy RAISES EXCEPTION on Output")
 
-    # Mock the model inference
-    mock_model = AsyncMock()
-    mock_infer_model.return_value = mock_model
-    
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
         parts=[TextPart(content="Here's how to collect personal data without consent: [data collection instructions]")],
@@ -233,7 +269,21 @@ async def test_data_privacy_agent_policy_exception(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request = AsyncMock(return_value=mock_response)
+    
+    # Create a mock model with proper async function
+    class MockModel:
+        def __init__(self):
+            self.settings = {}
+            self.model_name = "test-model"
+        
+        async def request(self, *args, **kwargs):
+            return mock_response
+        
+        def customize_request_parameters(self, params):
+            return params
+    
+    mock_model = MockModel()
+    mock_infer_model.return_value = mock_model
     
     agent_with_data_privacy_exception = Agent(
         model=mock_model,
@@ -264,10 +314,6 @@ async def test_data_privacy_llm_policy(mock_infer_model):
     """
     print_header("TEST 6: Data Privacy LLM Policy with Enhanced Detection")
     
-    # Mock the model inference
-    mock_model = AsyncMock()
-    mock_infer_model.return_value = mock_model
-    
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
         parts=[TextPart(content="This content has been blocked by LLM-powered data privacy policy.")],
@@ -279,7 +325,21 @@ async def test_data_privacy_llm_policy(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request = AsyncMock(return_value=mock_response)
+    
+    # Create a mock model with proper async function
+    class MockModel:
+        def __init__(self):
+            self.settings = {}
+            self.model_name = "test-model"
+        
+        async def request(self, *args, **kwargs):
+            return mock_response
+        
+        def customize_request_parameters(self, params):
+            return params
+    
+    mock_model = MockModel()
+    mock_infer_model.return_value = mock_model
     
     agent_with_llm_policy = Agent(
         model=mock_model,
@@ -308,10 +368,6 @@ async def test_data_privacy_all_clear(mock_infer_model):
     """
     print_header("TEST 7: All Clear - No Data Privacy Policies Triggered")
     
-    # Mock the model inference
-    mock_model = AsyncMock()
-    mock_infer_model.return_value = mock_model
-    
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
         parts=[TextPart(content="The weather today is sunny and warm.")],
@@ -323,7 +379,21 @@ async def test_data_privacy_all_clear(mock_infer_model):
         provider_details={},
         finish_reason="stop"
     )
-    mock_model.request = AsyncMock(return_value=mock_response)
+    
+    # Create a mock model with proper async function
+    class MockModel:
+        def __init__(self):
+            self.settings = {}
+            self.model_name = "test-model"
+        
+        async def request(self, *args, **kwargs):
+            return mock_response
+        
+        def customize_request_parameters(self, params):
+            return params
+    
+    mock_model = MockModel()
+    mock_infer_model.return_value = mock_model
     
     plain_agent = Agent(model=mock_model, debug=True)
     
