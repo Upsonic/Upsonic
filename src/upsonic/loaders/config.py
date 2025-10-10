@@ -432,6 +432,157 @@ class HTMLLoaderConfig(LoaderConfig):
     user_agent: str = Field(default="Upsonic HTML Loader 1.0", description="User agent for web requests")
 
 
+class PdfPlumberLoaderConfig(LoaderConfig):
+    """
+    Advanced configuration for pdfplumber-based PDF document loading.
+    
+    pdfplumber provides superior table extraction, layout preservation, and 
+    character-level text analysis. It excels at structured document processing
+    and complex layout handling for AI agent frameworks requiring high-quality
+    extraction from PDFs with tables, forms, and complex formatting.
+    """
+
+    extraction_mode: Literal["hybrid", "text_only", "ocr_only"] = Field(
+        default="hybrid",
+        description=(
+            "The core strategy for content extraction. "
+            "'hybrid': Extracts digital text and runs OCR on embedded images. "
+            "'text_only': Fastest mode, extracts only digital text using pdfplumber. "
+            "'ocr_only': For scanned documents, runs OCR on the entire page."
+        ),
+    )
+
+    start_page: Optional[int] = Field(
+        default=None,
+        description="The first page number to process (1-indexed). If None, starts from the beginning.",
+        ge=1
+    )
+    end_page: Optional[int] = Field(
+        default=None,
+        description="The last page number to process (inclusive). If None, processes to the end.",
+        ge=1
+    )
+
+    clean_page_numbers: bool = Field(
+        default=True,
+        description="If True, intelligently identifies and removes page numbers from page headers/footers.",
+    )
+    page_num_start_format: Optional[str] = Field(
+        default=None,
+        description="A Python f-string to prepend to each page's content if page numbers are cleaned. "
+                    "Example: '<start page {page_nr}>'. If None, nothing is prepended."
+    )
+    page_num_end_format: Optional[str] = Field(
+        default=None,
+        description="A Python f-string to append to each page's content if page numbers are cleaned. "
+                    "Example: '<end page {page_nr}>'. If None, nothing is appended."
+    )
+    extra_whitespace_removal: bool = Field(
+        default=True,
+        description="If True, normalizes whitespace by collapsing multiple newlines and spaces, cleaning up layout artifacts.",
+    )
+
+    pdf_password: Optional[str] = Field(
+        default=None,
+        description="Password to use for decrypting protected PDF files.",
+        min_length=1
+    )
+
+    # pdfplumber-specific configurations
+    extract_tables: bool = Field(
+        default=True,
+        description="If True, extracts tables and includes them in the content. pdfplumber excels at table extraction.",
+    )
+    
+    table_format: Literal["text", "markdown", "csv", "grid"] = Field(
+        default="markdown",
+        description=(
+            "Format for extracted tables. "
+            "'markdown': Tables as markdown format (best for AI agents). "
+            "'text': Plain text representation. "
+            "'csv': CSV format. "
+            "'grid': Grid-style ASCII table."
+        ),
+    )
+    
+    table_settings: Dict[str, Any] = Field(
+        default_factory=lambda: {
+            "vertical_strategy": "lines",
+            "horizontal_strategy": "lines",
+            "snap_tolerance": 3,
+            "join_tolerance": 3,
+            "edge_min_length": 3,
+        },
+        description=(
+            "Advanced table detection settings for pdfplumber. "
+            "Strategies: 'lines' (uses ruling lines), 'lines_strict', 'text' (infers from text positioning). "
+            "Tolerances control how strictly boundaries are detected."
+        ),
+    )
+
+    extract_images: bool = Field(
+        default=False,
+        description="If True, extracts image information and includes metadata about images found on each page.",
+    )
+
+    layout_mode: Literal["default", "layout", "simple"] = Field(
+        default="layout",
+        description=(
+            "Text extraction layout mode. "
+            "'layout': Preserves original layout and spacing (best for structured docs). "
+            "'default': Standard extraction. "
+            "'simple': Simplified extraction without layout preservation."
+        ),
+    )
+
+    use_text_flow: bool = Field(
+        default=True,
+        description="If True, uses pdfplumber's text flow analysis to maintain reading order in complex layouts.",
+    )
+
+    char_margin: float = Field(
+        default=3.0,
+        description="The minimum distance between characters for them to be considered separate words.",
+        ge=0.0
+    )
+
+    line_margin: float = Field(
+        default=0.5,
+        description="The minimum distance between lines for them to be considered separate.",
+        ge=0.0
+    )
+
+    word_margin: float = Field(
+        default=0.1,
+        description="The minimum distance between words.",
+        ge=0.0
+    )
+
+    extract_page_dimensions: bool = Field(
+        default=False,
+        description="If True, includes page dimensions (width, height) in metadata.",
+    )
+
+    crop_box: Optional[tuple[float, float, float, float]] = Field(
+        default=None,
+        description="Optional crop box (x0, y0, x1, y1) to extract only a specific region of each page.",
+    )
+
+    extract_annotations: bool = Field(
+        default=False,
+        description="If True, extracts annotations and hyperlinks from the PDF.",
+    )
+
+    keep_blank_chars: bool = Field(
+        default=False,
+        description="If True, preserves blank characters in extracted text for layout fidelity.",
+    )
+
+    class Config(LoaderConfig.Config):
+        """Pydantic configuration."""
+        pass
+
+
 class DoclingLoaderConfig(LoaderConfig):
     """
     Advanced configuration for Docling-based document loading.
@@ -580,6 +731,7 @@ class LoaderConfigFactory:
         'csv': CSVLoaderConfig,
         'pdf': PdfLoaderConfig,
         'pymupdf': PyMuPDFLoaderConfig,
+        'pdfplumber': PdfPlumberLoaderConfig,
         'docx': DOCXLoaderConfig,
         'json': JSONLoaderConfig,
         'jsonl': JSONLoaderConfig,

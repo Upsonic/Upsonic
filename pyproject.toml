@@ -94,6 +94,7 @@ loaders = [
     "jq>=1.10.0",
     "lxml>=4.9.1",
     "markdown-it-py>=4.0.0",
+    "pdfplumber>=0.11.7",
     "pillow>=10.0.0",
     "pymupdf>=1.26.4",
     "pypdf>=6.1.1",
