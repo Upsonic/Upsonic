@@ -536,7 +536,7 @@ class TestMemoryUpdateMemories:
             # Create a proper mock response with model_dump method
             mock_output = Mock()
             mock_output.model_dump.return_value = {"name": "John", "age": 30}
-            mock_agent.do_async.return_value = Mock(output=mock_output)
+            mock_agent.do_async.return_value = mock_output
             mock_agent_class.return_value = mock_agent
 
             await memory.update_memories_after_task(mock_run_result)
@@ -570,7 +570,7 @@ class TestMemoryUpdateMemories:
             # Create a proper mock response with model_dump method
             mock_output = Mock()
             mock_output.model_dump.return_value = {"name": "John"}
-            mock_agent.do_async.return_value = Mock(output=mock_output)
+            mock_agent.do_async.return_value = mock_output
             mock_agent_class.return_value = mock_agent
 
             await memory.update_memories_after_task(mock_run_result)
@@ -604,7 +604,7 @@ class TestMemoryUpdateMemories:
             # Create a proper mock response with model_dump method
             mock_output = Mock()
             mock_output.model_dump.return_value = {"name": "John"}
-            mock_agent.do_async.return_value = Mock(output=mock_output)
+            mock_agent.do_async.return_value = mock_output
             mock_agent_class.return_value = mock_agent
 
             await memory.update_memories_after_task(mock_run_result)
@@ -795,7 +795,7 @@ class TestMemoryUserProfileAnalysis:
             # Create a proper mock response with model_dump method
             mock_output = Mock()
             mock_output.model_dump.return_value = {"programming_language": "Python"}
-            mock_agent.do_async.return_value = Mock(output=mock_output)
+            mock_agent.do_async.return_value = mock_output
             mock_agent_class.return_value = mock_agent
 
             traits = await memory._analyze_interaction_for_traits({}, mock_result)
@@ -834,17 +834,25 @@ class TestMemoryDynamicProfile:
             mock_agent = AsyncMock()
             
             # Mock schema generation
-            schema_response = Mock()
-            schema_response.output = Mock()
-            schema_response.output.fields = {
-                "profession": "User's profession",
-                "experience_level": "Years of experience"
-            }
+            from upsonic.storage.memory.memory import Memory
+            from pydantic import BaseModel, Field
+            from typing import List
+            
+            class FieldDefinition(BaseModel):
+                name: str = Field(..., description="Snake_case field name")
+                description: str = Field(..., description="Description of what this field represents")
+            
+            class ProposedSchema(BaseModel):
+                fields: List[FieldDefinition] = Field(..., min_length=2, description="List of 2-5 field definitions extracted from the conversation")
+            
+            schema_response = ProposedSchema(fields=[
+                FieldDefinition(name="profession", description="User's profession"),
+                FieldDefinition(name="experience_level", description="Years of experience")
+            ])
             
             # Mock trait extraction
             trait_response = Mock()
-            trait_response.output = Mock()
-            trait_response.output.model_dump.return_value = {
+            trait_response.model_dump.return_value = {
                 "profession": "software_engineer",
                 "experience_level": "senior"
             }
