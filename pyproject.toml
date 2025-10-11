@@ -49,6 +49,7 @@ storage = [
     "motor>=3.7.1",
     "psycopg2-binary>=2.9.10",
     "psycopg[binary]>=3.2.9",
+    "mem0ai>=0.1.116",
     "redis>=5.2.1",
     "sqlalchemy>=2.0.42",
 ]
