@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from .providers import (
         InMemoryStorage,
         JSONStorage,
+        Mem0Storage,
         PostgresStorage,
         RedisStorage,
         SqliteStorage,
@@ -23,6 +24,7 @@ def _get_provider_classes():
     from .providers import (
         InMemoryStorage,
         JSONStorage,
+        Mem0Storage,
         PostgresStorage,
         RedisStorage,
         SqliteStorage,
@@ -31,6 +33,7 @@ def _get_provider_classes():
     return {
         'InMemoryStorage': InMemoryStorage,
         'JSONStorage': JSONStorage,
+        'Mem0Storage': Mem0Storage,
         'PostgresStorage': PostgresStorage,
         'RedisStorage': RedisStorage,
         'SqliteStorage': SqliteStorage,
@@ -82,6 +85,7 @@ __all__ = [
 
     "InMemoryStorage",
     "JSONStorage",
+    "Mem0Storage",
     "PostgresStorage",
     "RedisStorage",
     "SqliteStorage",

@@ -149,6 +149,42 @@ class RuleBasedSelector:
                 if not all(cap in model.capabilities for cap in criteria.required_capabilities):
                     return 0.0  # Hard requirement not met
             
+            # Check specific capability requirements (boolean fields)
+            if criteria.requires_reasoning:
+                if ModelCapability.REASONING not in model.capabilities:
+                    return 0.0  # Hard requirement not met
+                score += 50  # Bonus for having required capability
+            
+            if criteria.requires_code_generation:
+                if ModelCapability.CODE_GENERATION not in model.capabilities:
+                    return 0.0  # Hard requirement not met
+                score += 50  # Bonus for having required capability
+            
+            if criteria.requires_math:
+                if ModelCapability.MATHEMATICS not in model.capabilities:
+                    return 0.0  # Hard requirement not met
+                score += 50  # Bonus for having required capability
+            
+            if criteria.requires_creative_writing:
+                if ModelCapability.CREATIVE_WRITING not in model.capabilities:
+                    return 0.0  # Hard requirement not met
+                score += 50  # Bonus for having required capability
+            
+            if criteria.requires_vision:
+                if ModelCapability.VISION not in model.capabilities:
+                    return 0.0  # Hard requirement not met
+                score += 50  # Bonus for having required capability
+            
+            if criteria.requires_audio:
+                if ModelCapability.AUDIO not in model.capabilities:
+                    return 0.0  # Hard requirement not met
+                score += 50  # Bonus for having required capability
+            
+            if criteria.requires_long_context:
+                if ModelCapability.LONG_CONTEXT not in model.capabilities:
+                    return 0.0  # Hard requirement not met
+                score += 50  # Bonus for having required capability
+            
             # Cost considerations
             if criteria.prioritize_cost:
                 # Lower cost = higher score
@@ -461,6 +497,22 @@ class LLMBasedSelector:
             if criteria.required_capabilities:
                 caps = ", ".join([c.value for c in criteria.required_capabilities])
                 criteria_parts.append(f"- Required capabilities: {caps}")
+            
+            # Add boolean requirement fields
+            if criteria.requires_reasoning:
+                criteria_parts.append("- REQUIRED: Advanced reasoning capabilities")
+            if criteria.requires_code_generation:
+                criteria_parts.append("- REQUIRED: Code generation capabilities")
+            if criteria.requires_math:
+                criteria_parts.append("- REQUIRED: Mathematical problem solving")
+            if criteria.requires_creative_writing:
+                criteria_parts.append("- REQUIRED: Creative writing capabilities")
+            if criteria.requires_vision:
+                criteria_parts.append("- REQUIRED: Vision/image processing capabilities")
+            if criteria.requires_audio:
+                criteria_parts.append("- REQUIRED: Audio processing capabilities")
+            if criteria.requires_long_context:
+                criteria_parts.append("- REQUIRED: Large context window support")
             
             if criteria_parts:
                 criteria_text = "\n\n**Selection Criteria:**\n" + "\n".join(criteria_parts)
