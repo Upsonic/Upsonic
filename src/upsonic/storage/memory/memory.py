@@ -169,13 +169,16 @@ class Memory:
         if self.user_analysis_memory_enabled:
             try:
                 updated_traits = await self._analyze_interaction_for_traits(profile.profile_data, model_response)
+                
+                if self.debug:
+                    info_log(f"Extracted traits: {updated_traits}", "Memory")
+                
                 if self.user_memory_mode == 'replace':
                     profile.profile_data = updated_traits
                 elif self.user_memory_mode == 'update':
                     profile.profile_data.update(updated_traits)
                 else:
                     raise ValueError(f"Unexpected update mode: {self.user_memory_mode}")
-                profile.profile_data.update(updated_traits)
             except Exception as e:
                 from upsonic.utils.printing import warning_log
                 warning_log(f"Failed to analyze user profile: {e}", "MemoryStorage")
@@ -268,16 +271,22 @@ class Memory:
         
         summarizer = Agent(name="Summarizer", model=self.model_provider, debug=self.debug)
         
-        prompt = f"""
-        Previous Summary: "{previous_summary or 'None'}"
-        New Conversation Turn: {json.dumps(last_turn, indent=2)}
-        Chat History: {json.dumps(session.chat_history, indent=2) if session and session.chat_history else 'None'}
-        Update the summary concisely based on the new turn.
-        """
+        prompt = f"""Update the conversation summary based on the new interaction.
+
+Previous Summary: {previous_summary or 'None (this is the first interaction)'}
+
+New Conversation Turn:
+{json.dumps(last_turn, indent=2)}
+
+Full Chat History:
+{json.dumps(session.chat_history, indent=2) if session and session.chat_history else 'None'}
+
+YOUR TASK: Create a concise summary that captures the key points of the entire conversation, including the new turn. Focus on important information, user preferences, and topics discussed.
+"""
         task = Task(description=prompt, response_format=str)
         
         summary_response = await summarizer.do_async(task)
-        return str(summary_response.output)
+        return str(summary_response)
 
     def _extract_user_prompt_content(self, messages: list) -> list[str]:
         """Extracts the content string from all UserPromptParts in a list of messages."""
@@ -293,7 +302,7 @@ class Memory:
         return user_prompts
 
 
-    async def _analyze_interaction_for_traits(self, current_profile: dict, model_response) -> Tuple[dict, Literal['update', 'replace']]:
+    async def _analyze_interaction_for_traits(self, current_profile: dict, model_response) -> dict:
         """
         Analyzes user interaction to extract traits.
 
@@ -346,59 +355,97 @@ class Memory:
         conversation_context_str = "\n\n".join(prompt_context_parts)
         info_log(f"Analyzing traits using context from: {', '.join(source_log)}.", context="Memory")
         
+        from upsonic.utils.printing import warning_log
+        
         analyzer = Agent(name="User Trait Analyzer", model=self.model_provider, debug=self.debug)
 
         if self.is_profile_dynamic:
+            from typing import List
+            
+            class FieldDefinition(BaseModel):
+                """A single field definition"""
+                name: str = Field(..., description="Snake_case field name")
+                description: str = Field(..., description="Description of what this field represents")
+            
             class ProposedSchema(BaseModel):
-                fields: Dict[str, str] = Field(..., description="A dictionary of snake_case field names and descriptions.")
+                """Schema for defining user trait fields"""
+                fields: List[FieldDefinition] = Field(
+                    ..., 
+                    min_length=2,
+                    description="List of 2-5 field definitions extracted from the conversation"
+                )
+                
 
-            schema_generator_prompt = f"""
-            You are an expert data modeler. Analyze the user's profile and their complete conversation to design the best Pydantic schema for understanding them.
+            schema_generator_prompt = f"""Analyze this conversation and identify 2-5 specific traits about the user.
 
-            Current Profile:
-            {json.dumps(current_profile, indent=2)}
+=== USER CONVERSATION ===
+{conversation_context_str}
 
-            {conversation_context_str}
+=== YOUR TASK ===
+Create a list of field definitions where each field has:
+- name: snake_case field name (e.g., preferred_name, occupation, expertise_level, primary_interest, hobbies)
+- description: what that field represents
 
-            Propose a schema that would best capture the user's current goals and key traits based on all available information.
-            """
+You MUST provide at least 2-3 fields based on what the user explicitly mentioned in the conversation.
+
+Examples:
+- If user says "I'm Alex interested in ML": fields like preferred_name, primary_interest, expertise_level
+- If user says "I work as engineer and love coding": fields like occupation, hobbies, expertise_area
+"""
             schema_task = Task(description=schema_generator_prompt, response_format=ProposedSchema)
-            proposed_schema_response = await analyzer.do_async(schema_task)
-
-            if not proposed_schema_response or not proposed_schema_response.output or not proposed_schema_response.output.fields:
+            
+            try:
+                proposed_schema_response = await analyzer.do_async(schema_task)
+                field_count = len(proposed_schema_response.fields) if proposed_schema_response and hasattr(proposed_schema_response, 'fields') else 0
+                info_log(f"LLM generated schema with {field_count} fields", "Memory")
+                if field_count > 0:
+                    info_log(f"Generated field names: {[f.name for f in proposed_schema_response.fields]}", "Memory")
+            except Exception as e:
+                warning_log(f"Dynamic schema generation failed with error: {e}. No user traits extracted.", "Memory")
                 return {}
 
-            dynamic_fields = {name: (Optional[Any], Field(None, description=desc)) for name, desc in proposed_schema_response.output.fields.items()}
+            if not proposed_schema_response or not hasattr(proposed_schema_response, 'fields') or not proposed_schema_response.fields:
+                field_count = len(proposed_schema_response.fields) if proposed_schema_response and hasattr(proposed_schema_response, 'fields') else 0
+                info_log(f"Schema generation result: {field_count} fields generated", "Memory")
+                warning_log(f"Dynamic schema generation returned {field_count} fields (expected at least 2). No user traits extracted.", "Memory")
+                return {}
+
+            # Create dynamic model with Optional[str] type for all fields (more compatible with structured output)
+            dynamic_fields = {field_def.name: (Optional[str], Field(None, description=field_def.description)) for field_def in proposed_schema_response.fields}
             DynamicUserTraitModel = create_model('DynamicUserTraitModel', **dynamic_fields)
 
-            trait_extractor_prompt = f"""
-            Based on the user's profile and their full conversation context, populate the fields of the following dynamically generated schema.
+            trait_extractor_prompt = f"""Extract user traits from this conversation.
 
-            Current Profile:
-            {json.dumps(current_profile, indent=2)}
+Current Profile Data:
+{json.dumps(current_profile, indent=2)}
 
-            {conversation_context_str}
-            """
+User's Conversation:
+{conversation_context_str}
+
+YOUR TASK: Fill in the trait fields based on what the user explicitly stated. Extract concrete, specific information from the conversation. If information is not available for a field, you may leave it as null.
+"""
             trait_task = Task(description=trait_extractor_prompt, response_format=DynamicUserTraitModel)
             trait_response = await analyzer.do_async(trait_task)
             
-            if trait_response and trait_response.output:
-                return trait_response.output.model_dump()
+            if trait_response and hasattr(trait_response, 'model_dump'):
+                return trait_response.model_dump()
             return {}
 
         else:
-            prompt = f"""
-            Analyze the user's profile and conversation to update their traits according to the provided schema.
-            Only extract new or updated information based on the full context.
+            prompt = f"""Analyze the user's conversation and extract their traits.
 
-            Current Profile:
-            {json.dumps(current_profile, indent=2)}
+Current Profile Data:
+{json.dumps(current_profile, indent=2)}
 
-            {conversation_context_str}
-            """
+User's Conversation:
+{conversation_context_str}
+
+YOUR TASK: Fill in trait fields based on what the user explicitly stated in the conversation. Extract concrete, specific information. Update existing traits if new information is provided. Leave fields as None if information is not available.
+"""
             task = Task(description=prompt, response_format=self.profile_schema_model)
             
             trait_response = await analyzer.do_async(task)
-            if trait_response and trait_response.output:
-                return trait_response.output.model_dump()
+            # trait_response is the output directly (profile_schema_model instance)
+            if trait_response and hasattr(trait_response, 'model_dump'):
+                return trait_response.model_dump()
             return {}

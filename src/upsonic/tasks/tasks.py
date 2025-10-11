@@ -55,7 +55,149 @@ class Task(BaseModel):
     _original_input: Optional[str] = None
     _last_cache_entry: Optional[Dict[str, Any]] = None
 
-
+    @staticmethod
+    def _is_file_path(item: Any) -> bool:
+        """
+        Check if an item is a valid file path.
+        
+        Args:
+            item: Any object to check
+            
+        Returns:
+            bool: True if the item is a string representing an existing file path
+        """
+        if not isinstance(item, str):
+            return False
+        
+        import os
+        
+        # Check if it's a valid file path and the file exists
+        try:
+            return os.path.isfile(item)
+        except (TypeError, ValueError, OSError):
+            return False
+    
+    @staticmethod
+    def _is_folder_path(item: Any) -> bool:
+        """
+        Check if an item is a valid folder/directory path.
+        
+        Args:
+            item: Any object to check
+            
+        Returns:
+            bool: True if the item is a string representing an existing directory
+        """
+        if not isinstance(item, str):
+            return False
+        
+        import os
+        
+        # Check if it's a valid directory path and the directory exists
+        try:
+            return os.path.isdir(item)
+        except (TypeError, ValueError, OSError):
+            return False
+    
+    @staticmethod
+    def _get_files_from_folder(folder_path: str) -> List[str]:
+        """
+        Recursively get all file paths from a folder.
+        
+        Args:
+            folder_path: Path to the folder
+            
+        Returns:
+            List[str]: List of all file paths in the folder and subfolders
+        """
+        import os
+        
+        files = []
+        try:
+            for root, dirs, filenames in os.walk(folder_path):
+                for filename in filenames:
+                    file_path = os.path.join(root, filename)
+                    files.append(file_path)
+        except (OSError, PermissionError):
+            # If we can't access the folder, just skip it
+            pass
+        
+        return files
+    
+    @staticmethod
+    def _extract_files_from_context(context: Any) -> tuple[Any, List[str]]:
+        """
+        Extract file paths from context and return cleaned context and file list.
+        Also handles folders by extracting all files from them recursively.
+        
+        Args:
+            context: The context parameter (can be a list, dict, or any other type)
+            
+        Returns:
+            tuple: (cleaned_context, extracted_files)
+                - cleaned_context: Context with file/folder paths removed
+                - extracted_files: List of file paths found (including files from folders)
+        """
+        extracted_files = []
+        
+        # If context is None or empty, return as is
+        if not context:
+            return context, extracted_files
+        
+        # Handle list context
+        if isinstance(context, list):
+            cleaned_context = []
+            for item in context:
+                if Task._is_file_path(item):
+                    extracted_files.append(item)
+                elif Task._is_folder_path(item):
+                    # Extract all files from the folder
+                    folder_files = Task._get_files_from_folder(item)
+                    extracted_files.extend(folder_files)
+                else:
+                    cleaned_context.append(item)
+            return cleaned_context, extracted_files
+        
+        # Handle dict context - check values
+        elif isinstance(context, dict):
+            cleaned_context = {}
+            for key, value in context.items():
+                if Task._is_file_path(value):
+                    extracted_files.append(value)
+                elif Task._is_folder_path(value):
+                    # Extract all files from the folder
+                    folder_files = Task._get_files_from_folder(value)
+                    extracted_files.extend(folder_files)
+                elif isinstance(value, list):
+                    # Recursively process lists in dict values
+                    cleaned_list = []
+                    for item in value:
+                        if Task._is_file_path(item):
+                            extracted_files.append(item)
+                        elif Task._is_folder_path(item):
+                            # Extract all files from the folder
+                            folder_files = Task._get_files_from_folder(item)
+                            extracted_files.extend(folder_files)
+                        else:
+                            cleaned_list.append(item)
+                    cleaned_context[key] = cleaned_list
+                else:
+                    cleaned_context[key] = value
+            return cleaned_context, extracted_files
+        
+        # Handle single string that might be a file path or folder
+        elif Task._is_file_path(context):
+            extracted_files.append(context)
+            return [], extracted_files
+        elif Task._is_folder_path(context):
+            # Extract all files from the folder
+            folder_files = Task._get_files_from_folder(context)
+            extracted_files.extend(folder_files)
+            return [], extracted_files
+        
+        # For any other type, return as is
+        else:
+            return context, extracted_files
 
     def __init__(
         self, 
@@ -109,6 +251,14 @@ class Task(BaseModel):
 
         if _tools_awaiting_external_execution is None:
             _tools_awaiting_external_execution = []
+        
+        context, extracted_files = self._extract_files_from_context(context)
+        
+        if attachments is None:
+            attachments = []
+        
+        if extracted_files:
+            attachments.extend(extracted_files)
             
         super().__init__(**{
             "description": description,

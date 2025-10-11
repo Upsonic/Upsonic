@@ -35,6 +35,7 @@ if TYPE_CHECKING:
         MemoryManager, SystemPromptManager, TaskManager
     )
     from upsonic.graph.graph import State
+    from ..db.database import DatabaseBase
 else:
     Model = "Model"
     ModelRequest = "ModelRequest"
@@ -113,6 +114,7 @@ class Agent(BaseAgent):
         *,
         name: Optional[str] = None,
         memory: Optional["Memory"] = None,
+        db: Optional["DatabaseBase"] = None,
         debug: bool = False,
         company_url: Optional[str] = None,
         company_objective: Optional[str] = None,
@@ -151,6 +153,7 @@ class Agent(BaseAgent):
             model: Model identifier or Model instance
             name: Agent name for identification
             memory: Memory instance for conversation history
+            db: Database instance (overrides memory if provided)
             debug: Enable debug logging
             company_url: Company URL for context
             company_objective: Company objective for context
@@ -242,7 +245,15 @@ class Agent(BaseAgent):
         self.enable_thinking_tool = enable_thinking_tool
         self.enable_reasoning_tool = enable_reasoning_tool
         
-        self.memory = memory
+        # Set db attribute
+        self.db = db
+        
+        # Set memory attribute - override with db.memory if db is provided
+        if db is not None:
+            self.memory = db.memory
+        else:
+            self.memory = memory
+            
         if self.memory:
             self.memory.feed_tool_call_results = feed_tool_call_results
         

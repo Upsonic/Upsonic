@@ -70,6 +70,27 @@ def _get_tool():
 def _get_Chat():
     return _lazy_import("upsonic.chat.chat", "Chat")()
 
+def _get_database_components():
+    """Lazy import of database components."""
+    try:
+        from upsonic.db import (
+            DatabaseBase, SqliteDatabase, PostgresDatabase, MongoDatabase,
+            RedisDatabase, InMemoryDatabase, JSONDatabase, Mem0Database
+        )
+        
+        return {
+            "DatabaseBase": DatabaseBase,
+            "SqliteDatabase": SqliteDatabase,
+            "PostgresDatabase": PostgresDatabase,
+            "MongoDatabase": MongoDatabase,
+            "RedisDatabase": RedisDatabase,
+            "InMemoryDatabase": InMemoryDatabase,
+            "JSONDatabase": JSONDatabase,
+            "Mem0Database": Mem0Database,
+        }
+    except ImportError:
+        return {}
+
 def _get_safety_engine_components():
     """Lazy import of safety engine components to avoid circular imports."""
     try:
@@ -171,6 +192,10 @@ def __getattr__(name: str) -> Any:
     elif name == "Chat":
         return _get_Chat()
     
+    database_components = _get_database_components()
+    if name in database_components:
+        return database_components[name]
+    
     safety_components = _get_safety_engine_components()
     if name in safety_components:
         return safety_components[name]
@@ -232,4 +257,12 @@ __all__ = [
     "SensitiveSocialRaiseExceptionPolicy_LLM",
     "AnonymizePhoneNumbersPolicy_LLM_Finder",
     "tool",
+    "DatabaseBase",
+    "SqliteDatabase",
+    "PostgresDatabase",
+    "MongoDatabase",
+    "RedisDatabase",
+    "InMemoryDatabase",
+    "JSONDatabase",
+    "Mem0Database",
 ]
