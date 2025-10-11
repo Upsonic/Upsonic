@@ -5,6 +5,7 @@ import pytest
 import asyncio
 import os
 import shutil
+import sys
 from unittest.mock import Mock, patch, AsyncMock
 from typing import List, Dict, Any
 
@@ -154,12 +155,14 @@ class TestMilvusKnowledgeBaseIntegration:
         assert not milvus_provider._is_connected
         assert milvus_provider._collection is None
     
+    @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
     def test_milvus_provider_connection(self, milvus_provider):
         """Test MilvusProvider connection."""
         milvus_provider.connect()
         assert milvus_provider._is_connected
         assert milvus_provider.is_ready()
     
+    @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
     def test_milvus_provider_disconnection(self, milvus_provider):
         """Test MilvusProvider disconnection."""
         milvus_provider.connect()
@@ -169,6 +172,7 @@ class TestMilvusKnowledgeBaseIntegration:
         assert not milvus_provider._is_connected
         assert milvus_provider._collection is None
     
+    @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
     def test_milvus_collection_creation(self, milvus_provider):
         """Test MilvusProvider collection creation."""
         milvus_provider.connect()
@@ -177,6 +181,7 @@ class TestMilvusKnowledgeBaseIntegration:
         milvus_provider.create_collection()
         assert milvus_provider.collection_exists()
     
+    @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
     def test_milvus_collection_deletion(self, milvus_provider):
         """Test MilvusProvider collection deletion."""
         milvus_provider.connect()
@@ -186,6 +191,7 @@ class TestMilvusKnowledgeBaseIntegration:
         milvus_provider.delete_collection()
         assert not milvus_provider.collection_exists()
     
+    @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
     def test_milvus_upsert_operations(self, milvus_provider):
         """Test MilvusProvider upsert operations."""
         milvus_provider.connect()
@@ -206,6 +212,7 @@ class TestMilvusKnowledgeBaseIntegration:
         assert results[0].id == "id1"
         assert results[1].id == "id2"
     
+    @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
     def test_milvus_search_operations(self, milvus_provider):
         """Test MilvusProvider search operations."""
         milvus_provider.connect()
@@ -225,6 +232,7 @@ class TestMilvusKnowledgeBaseIntegration:
         assert len(results) <= 2
         assert all(isinstance(result, VectorSearchResult) for result in results)
     
+    @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
     def test_milvus_delete_operations(self, milvus_provider):
         """Test MilvusProvider delete operations."""
         milvus_provider.connect()
