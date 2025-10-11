@@ -63,6 +63,7 @@ class LoaderFactory:
         from .csv import CSVLoader
         from .pdf import PdfLoader
         from .pymupdf import PyMuPDFLoader
+        from .pdfplumber import PdfPlumberLoader
         from .docx import DOCXLoader
         from .json import JSONLoader
         from .xml import XMLLoader
@@ -74,7 +75,8 @@ class LoaderFactory:
         loaders = [
             (CSVLoader, ['.csv']),
             (PdfLoader, ['.pdf']),
-            (PyMuPDFLoader, ['.pdf']),  # Alternative PDF loader
+            (PyMuPDFLoader, ['.pdf']),  # Alternative PDF loader with PyMuPDF
+            (PdfPlumberLoader, ['.pdf']),  # Alternative PDF loader with pdfplumber (superior tables)
             (DOCXLoader, ['.docx']),
             (JSONLoader, ['.json', '.jsonl']),
             (XMLLoader, ['.xml']),
@@ -152,8 +154,8 @@ class LoaderFactory:
     def _get_config_mapping() -> Dict[str, Type[LoaderConfig]]:
         """Get the mapping of loader names to their config classes with lazy imports."""
         from .config import (
-            TextLoaderConfig, CSVLoaderConfig, PdfLoaderConfig, PyMuPDFLoaderConfig, DOCXLoaderConfig,
-            JSONLoaderConfig, XMLLoaderConfig, YAMLLoaderConfig, MarkdownLoaderConfig,
+            TextLoaderConfig, CSVLoaderConfig, PdfLoaderConfig, PyMuPDFLoaderConfig, PdfPlumberLoaderConfig,
+            DOCXLoaderConfig, JSONLoaderConfig, XMLLoaderConfig, YAMLLoaderConfig, MarkdownLoaderConfig,
             HTMLLoaderConfig
         )
         
@@ -162,6 +164,7 @@ class LoaderFactory:
             'csv': CSVLoaderConfig,
             'pdf': PdfLoaderConfig,
             'pymupdf': PyMuPDFLoaderConfig,
+            'pdfplumber': PdfPlumberLoaderConfig,
             'docx': DOCXLoaderConfig,
             'json': JSONLoaderConfig,
             'xml': XMLLoaderConfig,
