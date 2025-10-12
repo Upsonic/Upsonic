@@ -9,6 +9,7 @@ Also includes model selection capabilities for choosing the best model for a giv
 from __future__ import annotations as _annotations
 
 import base64
+import os
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator
@@ -45,6 +46,10 @@ from upsonic.profiles._json_schema import JsonSchemaTransformer
 from upsonic.models.settings import ModelSettings
 from upsonic.tools import ToolDefinition
 from upsonic.usage import RequestUsage
+
+from dotenv import load_dotenv
+load_dotenv()
+
 
 KnownModelName = TypeAliasType(
     'KnownModelName',
@@ -716,6 +721,29 @@ def override_allow_model_requests(allow_model_requests: bool) -> Iterator[None]:
 
 def infer_model(model: Model | KnownModelName | str) -> Model:  # noqa: C901
     """Infer the model from the name."""
+    env_set_model = os.getenv("LLM_MODEL_KEY").split(":")[0] if os.getenv("LLM_MODEL_KEY", None) else "openai/gpt-4o"
+    bypass_llm_model = None
+    try:
+        from celery import current_task
+
+        task_id = current_task.request.id
+        task_args = current_task.request.args
+        task_kwargs = current_task.request.kwargs
+
+        
+        if task_kwargs.get("bypass_llm_model", None) is not None:
+            bypass_llm_model = task_kwargs.get("bypass_llm_model")
+
+    except Exception as e:
+        pass
+
+
+    if bypass_llm_model is not None:
+        model = bypass_llm_model
+        
+    elif env_set_model is not None and env_set_model != "openai/gpt-4o":
+        model = env_set_model
+
     if isinstance(model, Model):
         return model
 

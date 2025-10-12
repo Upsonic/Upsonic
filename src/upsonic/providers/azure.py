@@ -119,7 +119,7 @@ class AzureProvider(Provider[AsyncOpenAI]):
             self._client = openai_client
         else:
             azure_endpoint = azure_endpoint or os.getenv('AZURE_OPENAI_ENDPOINT')
-            api_version = api_version or os.getenv('OPENAI_API_VERSION')
+            api_version = api_version or os.getenv('OPENAI_API_VERSION') or os.getenv('AZURE_OPENAI_API_VERSION')
             api_key = api_key or os.getenv('AZURE_OPENAI_API_KEY')
             if not azure_endpoint:
                 raise UserError(
