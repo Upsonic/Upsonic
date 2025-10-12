@@ -11,20 +11,20 @@ from upsonic.loaders.config import PyMuPDFLoaderConfig
 
 try:
     import pymupdf
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="pymupdf",
-        install_command='pip install "upsonic[loaders]"',
-        feature_name="PyMuPDF loader"
-    )
+    _PYMUPDF_AVAILABLE = True
+except ImportError:
+    pymupdf = None
+    _PYMUPDF_AVAILABLE = False
 
 
 try:
     from rapidocr_onnxruntime import RapidOCR
     OCR_ENGINE = RapidOCR()
+    _RAPIDOCR_AVAILABLE = True
 except ImportError:
+    RapidOCR = None
     OCR_ENGINE = None
+    _RAPIDOCR_AVAILABLE = False
 
 
 class PyMuPDFLoader(BaseLoader):
@@ -44,13 +44,22 @@ class PyMuPDFLoader(BaseLoader):
         Args:
             config: A PyMuPDFLoaderConfig object with settings for PDF processing.
         """
+        if not _PYMUPDF_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="pymupdf",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="PyMuPDF loader"
+            )
         super().__init__(config)
         self.config: PyMuPDFLoaderConfig = config
-        
-        if "ocr" in self.config.extraction_mode and OCR_ENGINE is None:
-            raise ImportError(
-                "`rapidocr_onnxruntime` is not installed, but the extraction mode is set to "
-                f"'{self.config.extraction_mode}'. Please install it with `pip install rapidocr_onnxruntime`."
+
+        if "ocr" in self.config.extraction_mode and not _RAPIDOCR_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="rapidocr-onnxruntime",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="PyMuPDF OCR functionality"
             )
 
     @classmethod

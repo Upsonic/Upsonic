@@ -15,13 +15,19 @@ try:
         AnnSearchRequest
     )
     from pymilvus.exceptions import MilvusException
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="pymilvus",
-        install_command='pip install "upsonic[rag]"',
-        feature_name="Milvus vector database provider"
-    )
+    _PYMILVUS_AVAILABLE = True
+except ImportError:
+    connections = None
+    utility = None
+    Collection = None
+    FieldSchema = None
+    CollectionSchema = None
+    DataType = None
+    WeightedRanker = None
+    RRFRanker = None
+    AnnSearchRequest = None
+    MilvusException = None
+    _PYMILVUS_AVAILABLE = False
 
 
 
@@ -95,8 +101,14 @@ class MilvusProvider(BaseVectorDBProvider):
             ImportError: If the `pymilvus` package is not installed.
             ConfigurationError: If the provided config is incompatible with Milvus.
         """
-        # Collection is now guaranteed to be available due to the try-except block above
-        
+        if not _PYMILVUS_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="pymilvus",
+                install_command='pip install "upsonic[rag]"',
+                feature_name="Milvus vector database provider"
+            )
+
         super().__init__(config)
         self._validate_config()
         self._collection: Optional[Collection] = None

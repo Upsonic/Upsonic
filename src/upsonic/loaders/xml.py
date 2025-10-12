@@ -4,13 +4,10 @@ from typing import List, Union
 
 try:
     from lxml import etree
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="lxml",
-        install_command='pip install "upsonic[loaders]"',
-        feature_name="XML loader"
-    )
+    _LXML_AVAILABLE = True
+except ImportError:
+    etree = None
+    _LXML_AVAILABLE = False
 
 
 from upsonic.schemas.data_models import Document
@@ -34,6 +31,13 @@ class XMLLoader(BaseLoader):
         Args:
             config: An XMLLoaderConfig object with settings for XML processing.
         """
+        if not _LXML_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="lxml",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="XML loader"
+            )
         super().__init__(config)
         self.config: XMLLoaderConfig = config
 

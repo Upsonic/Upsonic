@@ -6,35 +6,27 @@ import hashlib
 
 try:
     import aiohttp
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="aiohttp",
-        install_command='pip install "upsonic[loaders]"',
-        feature_name="HTML loader"
-    )
+    _AIOHTTP_AVAILABLE = True
+except ImportError:
+    aiohttp = None
+    _AIOHTTP_AVAILABLE = False
 
 
 try:
     import requests
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="requests",
-        install_command='pip install "upsonic[loaders]"',
-        feature_name="HTML loader"
-    )
+    _REQUESTS_AVAILABLE = True
+except ImportError:
+    requests = None
+    _REQUESTS_AVAILABLE = False
 
 
 try:
     from bs4 import BeautifulSoup, Tag
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="beautifulsoup4",
-        install_command='pip install "upsonic[loaders]"',
-        feature_name="HTML loader"
-    )
+    _BS4_AVAILABLE = True
+except ImportError:
+    BeautifulSoup = None
+    Tag = None
+    _BS4_AVAILABLE = False
 
 
 from upsonic.schemas.data_models import Document
@@ -53,6 +45,27 @@ class HTMLLoader(BaseLoader):
 
     def __init__(self, config: HTMLLoaderConfig):
         """Initializes the HTMLLoader with its specific configuration."""
+        if not _AIOHTTP_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="aiohttp",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="HTML loader"
+            )
+        if not _REQUESTS_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="requests",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="HTML loader"
+            )
+        if not _BS4_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="beautifulsoup4",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="HTML loader"
+            )
         super().__init__(config)
         self.config: HTMLLoaderConfig = config
 

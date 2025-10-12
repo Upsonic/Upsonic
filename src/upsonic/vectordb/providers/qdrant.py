@@ -1,16 +1,21 @@
-from typing import Any, Dict, List, Optional, Union, Literal
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional, Union, Literal, TYPE_CHECKING
 from collections import defaultdict
+
+if TYPE_CHECKING:
+    from qdrant_client import QdrantClient, models
+    from qdrant_client.http.exceptions import UnexpectedResponse
 
 try:
     from qdrant_client import QdrantClient, models
     from qdrant_client.http.exceptions import UnexpectedResponse
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="qdrant-client",
-        install_command='pip install "upsonic[rag]"',
-        feature_name="Qdrant vector database provider"
-    )
+    _QDRANT_AVAILABLE = True
+except ImportError:
+    QdrantClient = None  # type: ignore
+    models = None  # type: ignore
+    UnexpectedResponse = None  # type: ignore
+    _QDRANT_AVAILABLE = False
 
 
 from upsonic.vectordb.base import BaseVectorDBProvider
@@ -49,12 +54,6 @@ class QdrantProvider(BaseVectorDBProvider):
     collection from connection and creation to deletion.
     """
 
-    DISTANCE_MAP = {
-        DistanceMetric.COSINE: models.Distance.COSINE,
-        DistanceMetric.EUCLIDEAN: models.Distance.EUCLID,
-        DistanceMetric.DOT_PRODUCT: models.Distance.DOT,
-    }
-
     def __init__(self, config: Config):
         """
         Initializes the QdrantProvider.
@@ -62,6 +61,14 @@ class QdrantProvider(BaseVectorDBProvider):
         Validates that the provided configuration is compatible with Qdrant's
         capabilities before proceeding.
         """
+        if not _QDRANT_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="qdrant-client",
+                install_command='pip install "upsonic[rag]"',
+                feature_name="Qdrant vector database provider"
+            )
+
         super().__init__(config)
         if isinstance(self._config.indexing.index_config, IVFTuningConfig):
             raise ConfigurationError(
@@ -192,9 +199,16 @@ class QdrantProvider(BaseVectorDBProvider):
                 info_log(f"Collection '{collection_name}' exists and `recreate_if_exists` is True. Deleting...", context="QdrantVectorDB")
                 self.delete_collection()
             
+            # Map distance metrics
+            distance_map = {
+                DistanceMetric.COSINE: models.Distance.COSINE,
+                DistanceMetric.EUCLIDEAN: models.Distance.EUCLID,
+                DistanceMetric.DOT_PRODUCT: models.Distance.DOT,
+            }
+
             vectors_config = models.VectorParams(
                 size=self._config.core.vector_size,
-                distance=self.DISTANCE_MAP[self._config.core.distance_metric]
+                distance=distance_map[self._config.core.distance_metric]
             )
 
             hnsw_config = None

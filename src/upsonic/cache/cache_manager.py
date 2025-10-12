@@ -4,13 +4,10 @@ from typing import Any, Dict, List, Optional, Literal, Union
 from upsonic.models import Model
 try:
     import numpy as np
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="numpy",
-        install_command='pip install numpy',
-        feature_name="numpy"
-    )
+    _NUMPY_AVAILABLE = True
+except ImportError:
+    np = None
+    _NUMPY_AVAILABLE = False
 
 CacheMethod = Literal["vector_search", "llm_call"]
 CacheEntry = Dict[str, Any]
@@ -68,6 +65,14 @@ class CacheManager:
     
     def _calculate_similarity(self, vector1: List[float], vector2: List[float]) -> float:
         """Calculate cosine similarity between two vectors."""
+        if not _NUMPY_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="numpy",
+                install_command='pip install numpy',
+                feature_name="vector similarity calculation"
+            )
+
         v1 = np.array(vector1)
         v2 = np.array(vector2)
         

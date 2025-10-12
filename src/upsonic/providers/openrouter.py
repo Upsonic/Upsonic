@@ -4,7 +4,6 @@ import os
 from typing import overload
 
 import httpx
-from openai import AsyncOpenAI
 
 from upsonic.utils.package.exception import UserError
 from upsonic.models import cached_async_http_client
@@ -23,13 +22,10 @@ from upsonic.providers import Provider
 
 try:
     from openai import AsyncOpenAI
-except ImportError as _import_error:  # pragma: no cover
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="openai",
-        install_command='pip install openai',
-        feature_name="openai provider"
-    )
+    _OPENAI_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    AsyncOpenAI = None
+    _OPENAI_AVAILABLE = False
 
 
 
@@ -92,7 +88,15 @@ class OpenRouterProvider(Provider[AsyncOpenAI]):
         openai_client: AsyncOpenAI | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        api_key = api_key or os.getenv('OPENROUTER_API_KEY')
+        if not _OPENAI_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="openai",
+                install_command='pip install openai',
+                feature_name="openai provider"
+            )
+
+                api_key = api_key or os.getenv('OPENROUTER_API_KEY')
         if not api_key and openai_client is None:
             raise UserError(
                 'Set the `OPENROUTER_API_KEY` environment variable or pass it via `OpenRouterProvider(api_key=...)`'

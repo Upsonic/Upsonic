@@ -12,13 +12,10 @@ from upsonic.providers import Provider
 
 try:
     from openai import AsyncOpenAI
-except ImportError as _import_error:  # pragma: no cover
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="openai",
-        install_command='pip install "upsonic[openai]"',
-        feature_name="OpenAI provider"
-    )
+    _OPENAI_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    AsyncOpenAI = None
+    _OPENAI_AVAILABLE = False
 
 
 
@@ -71,6 +68,13 @@ class OpenAIProvider(Provider[AsyncOpenAI]):
                 client to use. If provided, `base_url`, `api_key`, and `http_client` must be `None`.
             http_client: An existing `httpx.AsyncClient` to use for making HTTP requests.
         """
+        if not _OPENAI_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="openai",
+                install_command='pip install "upsonic[openai]"',
+                feature_name="OpenAI provider"
+            )
         # This is a workaround for the OpenAI client requiring an API key, whilst locally served,
         # openai compatible models do not always need an API key, but a placeholder (non-empty) key is required.
         if api_key is None and 'OPENAI_API_KEY' not in os.environ and base_url is not None and openai_client is None:

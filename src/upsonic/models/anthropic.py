@@ -105,14 +105,13 @@ try:
     )
     from anthropic.types.beta.beta_web_search_tool_20250305_param import UserLocation
     from anthropic.types.model_param import ModelParam
-
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="anthropic",
-        install_command='pip install anthropic',
-        feature_name="anthropic model"
-    )
+    _ANTHROPIC_AVAILABLE = True
+except ImportError:
+    # Optional imports for Anthropic model
+    # If these are not available, the model instantiation will raise an error
+    _ANTHROPIC_AVAILABLE = False
+    ModelParam = None  # type: ignore
+    pass
 
 LatestAnthropicModelNames = ModelParam
 """Latest Anthropic models."""
@@ -176,6 +175,14 @@ class AnthropicModel(Model):
             profile: The model profile to use. Defaults to a profile picked by the provider based on the model name.
             settings: Default model settings for this model instance.
         """
+        if not _ANTHROPIC_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="anthropic",
+                install_command='pip install anthropic',
+                feature_name="Anthropic model"
+            )
+
         self._model_name = model_name
 
         if isinstance(provider, str):

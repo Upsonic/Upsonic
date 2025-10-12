@@ -5,27 +5,17 @@ from typing import Any, Dict, List, Union, Generator
 
 try:
     import yaml
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="pyyaml",
-        install_command='pip install "upsonic[loaders]"',
-        feature_name="YAML loader"
-    )
-    raise ImportError(
-        'Please install the `pyyaml` package to use the YAML loader, '
-        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
-    ) from _import_error
+    _YAML_AVAILABLE = True
+except ImportError:
+    yaml = None
+    _YAML_AVAILABLE = False
 
 try:
     import jq
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="jq",
-        install_command='pip install "upsonic[loaders]"',
-        feature_name="YAML loader"
-    )
+    _JQ_AVAILABLE = True
+except ImportError:
+    jq = None
+    _JQ_AVAILABLE = False
 
 
 from upsonic.schemas.data_models import Document
@@ -49,6 +39,20 @@ class YAMLLoader(BaseLoader):
         Args:
             config: A YAMLLoaderConfig object with settings for YAML processing.
         """
+        if not _YAML_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="pyyaml",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="YAML loader"
+            )
+        if not _JQ_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="jq",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="YAML loader"
+            )
         super().__init__(config)
         self.config: YAMLLoaderConfig = config
 

@@ -16,13 +16,10 @@ from upsonic.providers import Provider
 
 try:
     from huggingface_hub import AsyncInferenceClient
-except ImportError as _import_error:  # pragma: no cover
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="huggingface_hub",
-        install_command='pip install huggingface_hub',
-        feature_name="huggingface hub provider"
-    )
+    _HUGGINGFACE_HUB_AVAILABLE = True
+except ImportError:
+    AsyncInferenceClient = None
+    _HUGGINGFACE_HUB_AVAILABLE = False
 
 
 
@@ -82,7 +79,15 @@ class HuggingFaceProvider(Provider[AsyncInferenceClient]):
         http_client: AsyncClient | None = None,
         provider_name: str | None = None,
     ) -> None:
-        """Create a new Hugging Face provider.
+        if not _HUGGINGFACE_HUB_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="huggingface_hub",
+                install_command='pip install huggingface_hub',
+                feature_name="HuggingFace provider"
+            )
+
+                """Create a new Hugging Face provider.
 
         Args:
             base_url: The base url for the Hugging Face requests.

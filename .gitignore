@@ -5,6 +5,8 @@ lightrag*
 paper.png
 video.mp4
 
+*.db.lock
+
 
 KOT-*
 notes.txt

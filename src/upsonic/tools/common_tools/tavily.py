@@ -8,13 +8,10 @@ from upsonic.tools import tool
 
 try:
     from tavily import AsyncTavilyClient
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="tavily-python",
-        install_command='pip install "upsonic[tools]"',
-        feature_name="Tavily search tool"
-    )
+    _TAVILY_AVAILABLE = True
+except ImportError:
+    AsyncTavilyClient = None
+    _TAVILY_AVAILABLE = False
 
 
 __all__ = ('tavily_search_tool',)
@@ -77,6 +74,14 @@ def tavily_search_tool(api_key: str):
 
             You can get one by signing up at [https://app.tavily.com/home](https://app.tavily.com/home).
     """
+    if not _TAVILY_AVAILABLE:
+        from upsonic.utils.printing import import_error
+        import_error(
+            package_name="tavily-python",
+            install_command='pip install "upsonic[tools]"',
+            feature_name="Tavily search tool"
+        )
+
     # Create the tool instance
     tavily_tool = TavilySearchTool(client=AsyncTavilyClient(api_key))
     

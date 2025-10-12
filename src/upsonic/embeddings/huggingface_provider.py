@@ -10,13 +10,17 @@ try:
     import torch.nn.functional as F
     import torch
     from huggingface_hub import hf_hub_download, login, InferenceClient
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="transformers",
-        install_command='pip install transformers',
-        feature_name="transformers provider"
-    )
+    _TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    AutoTokenizer = None
+    AutoModel = None
+    BitsAndBytesConfig = None
+    F = None
+    torch = None
+    hf_hub_download = None
+    login = None
+    InferenceClient = None
+    _TRANSFORMERS_AVAILABLE = False
 from pydantic import Field, field_validator
 
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
@@ -74,10 +78,18 @@ class HuggingFaceEmbedding(EmbeddingProvider):
     
     config: HuggingFaceEmbeddingConfig
     
-    def __init__(self, config: Optional[HuggingFaceEmbeddingConfig] = None, **kwargs):        
+    def __init__(self, config: Optional[HuggingFaceEmbeddingConfig] = None, **kwargs):
+        if not _TRANSFORMERS_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="transformers",
+                install_command='pip install transformers',
+                feature_name="transformers provider"
+            )
+
         if config is None:
             config = HuggingFaceEmbeddingConfig(**kwargs)
-        
+
         super().__init__(config=config)
         
         self._setup_device()

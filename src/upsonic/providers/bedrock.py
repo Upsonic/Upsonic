@@ -21,13 +21,13 @@ try:
     from botocore.client import BaseClient
     from botocore.config import Config
     from botocore.exceptions import NoRegionError
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="boto3",
-        install_command='pip install "upsonic[bedrock]"',
-        feature_name="Bedrock provider"
-    )
+    _BOTO3_AVAILABLE = True
+except ImportError:
+    boto3 = None
+    BaseClient = None
+    Config = None
+    NoRegionError = None
+    _BOTO3_AVAILABLE = False
 
 
 
@@ -141,7 +141,15 @@ class BedrockProvider(Provider[BaseClient]):
         aws_read_timeout: float | None = None,
         aws_connect_timeout: float | None = None,
     ) -> None:
-        """Initialize the Bedrock provider.
+        if not _BOTO3_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="boto3",
+                install_command='pip install "upsonic[bedrock]"',
+                feature_name="Bedrock provider"
+            )
+
+                """Initialize the Bedrock provider.
 
         Args:
             bedrock_client: A boto3 client for Bedrock Runtime. If provided, other arguments are ignored.

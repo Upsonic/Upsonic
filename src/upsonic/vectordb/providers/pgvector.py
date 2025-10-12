@@ -1,19 +1,29 @@
+from __future__ import annotations
+
+import json
+
+from typing import Any, Dict, List, Optional, Union, Literal as TypingLiteral, Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import psycopg
+    from psycopg.errors import OperationalError, InFailedSqlTransaction
+    from psycopg.sql import SQL, Identifier, Literal as SqlLiteral, Composed, Placeholder
+
 try:
     import psycopg
     from psycopg.errors import OperationalError, InFailedSqlTransaction
     from psycopg.sql import SQL, Identifier, Literal as SqlLiteral, Composed, Placeholder
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="psycopg",
-        install_command='pip install "upsonic[rag]"',
-        feature_name="PostgreSQL vector database provider"
-    )
-
-
-import json
-
-from typing import Any, Dict, List, Optional, Union, Literal as TypingLiteral, Tuple
+    _PSYCOPG_AVAILABLE = True
+except ImportError:
+    psycopg = None  # type: ignore
+    OperationalError = None  # type: ignore
+    InFailedSqlTransaction = None  # type: ignore
+    SQL = None  # type: ignore
+    Identifier = None  # type: ignore
+    SqlLiteral = None  # type: ignore
+    Composed = None  # type: ignore
+    Placeholder = None  # type: ignore
+    _PSYCOPG_AVAILABLE = False
 
 from upsonic.vectordb.config import (
     Config,
@@ -49,6 +59,14 @@ class PgvectorProvider(BaseVectorDBProvider):
     """
 
     def __init__(self, config: Config):
+        if not _PSYCOPG_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="psycopg",
+                install_command='pip install "upsonic[rag]"',
+                feature_name="PostgreSQL vector database provider"
+            )
+
         if config.core.provider_name.value != 'pgvector':
             raise ConfigurationError(
                 f"Attempted to initialize PgvectorProvider with a configuration for "

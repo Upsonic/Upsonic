@@ -19,13 +19,10 @@ from upsonic.providers import Provider
 
 try:
     from groq import AsyncGroq
-except ImportError as _import_error:  # pragma: no cover
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="groq",
-        install_command='pip install groq',
-        feature_name="groq provider"
-    )
+    _GROQ_AVAILABLE = True
+except ImportError:
+    AsyncGroq = None
+    _GROQ_AVAILABLE = False
 
 
 
@@ -92,7 +89,15 @@ class GroqProvider(Provider[AsyncGroq]):
         groq_client: AsyncGroq | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        """Create a new Groq provider.
+        if not _GROQ_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="groq",
+                install_command='pip install groq',
+                feature_name="Groq provider"
+            )
+
+                """Create a new Groq provider.
 
         Args:
             api_key: The API key to use for authentication, if not provided, the `GROQ_API_KEY` environment variable

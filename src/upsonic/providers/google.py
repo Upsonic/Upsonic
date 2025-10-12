@@ -15,13 +15,12 @@ try:
     from google.auth.credentials import Credentials
     from google.genai import Client
     from google.genai.types import HttpOptionsDict
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="google-genai",
-        install_command='pip install "upsonic[google]"',
-        feature_name="Google provider"
-    )
+    _GOOGLE_GENAI_AVAILABLE = True
+except ImportError:
+    Credentials = None
+    Client = None
+    HttpOptionsDict = None
+    _GOOGLE_GENAI_AVAILABLE = False
 
 
 
@@ -71,7 +70,16 @@ class GoogleProvider(Provider[Client]):
         client: Client | None = None,
         vertexai: bool | None = None,
     ) -> None:
-        """Create a new Google provider.
+        if not _GOOGLE_GENAI_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="google-genai",
+                install_command='pip install "upsonic[google]"',
+                feature_name="Google provider"
+            )
+
+        """
+        Create a new Google provider.
 
         Args:
             api_key: The `API key <https://ai.google.dev/gemini-api/docs/api-key>`_ to

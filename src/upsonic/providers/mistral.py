@@ -13,13 +13,10 @@ from upsonic.providers import Provider
 
 try:
     from mistralai import Mistral
-except ImportError as _import_error:  # pragma: no cover
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="mistralai",
-        install_command='pip install "upsonic[mistral]"',
-        feature_name="Mistral provider"
-    )
+    _MISTRALAI_AVAILABLE = True
+except ImportError:
+    Mistral = None
+    _MISTRALAI_AVAILABLE = False
 
 
 
@@ -55,7 +52,15 @@ class MistralProvider(Provider[Mistral]):
         base_url: str | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        """Create a new Mistral provider.
+        if not _MISTRALAI_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="mistralai",
+                install_command='pip install mistralai',
+                feature_name="Mistral provider"
+            )
+
+                """Create a new Mistral provider.
 
         Args:
             api_key: The API key to use for authentication, if not provided, the `MISTRAL_API_KEY` environment variable

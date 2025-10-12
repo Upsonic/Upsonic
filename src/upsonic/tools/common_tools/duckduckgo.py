@@ -13,13 +13,10 @@ try:
         from ddgs import DDGS
     except ImportError:  # Fallback for older versions of ddgs
         from duckduckgo_search import DDGS
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="duckduckgo-search",
-        install_command='pip install "upsonic[tools]"',
-        feature_name="DuckDuckGo search tool"
-    )
+    _DDGS_AVAILABLE = True
+except ImportError:
+    DDGS = None
+    _DDGS_AVAILABLE = False
 
 
 __all__ = ('duckduckgo_search_tool',)
@@ -72,6 +69,14 @@ def duckduckgo_search_tool(duckduckgo_client: DDGS | None = None, max_results: i
         duckduckgo_client: The DuckDuckGo search client.
         max_results: The maximum number of results. If None, returns results only from the first response.
     """
+    if not _DDGS_AVAILABLE:
+        from upsonic.utils.printing import import_error
+        import_error(
+            package_name="duckduckgo-search",
+            install_command='pip install "upsonic[tools]"',
+            feature_name="DuckDuckGo search tool"
+        )
+
     # Create the tool instance
     ddg_tool = DuckDuckGoSearchTool(client=duckduckgo_client or DDGS(), max_results=max_results)
     

@@ -7,13 +7,14 @@ try:
     import pinecone
     from pinecone import Pinecone, ServerlessSpec
     from pinecone.exceptions import PineconeApiException as ApiException, NotFoundException
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="pinecone",
-        install_command='pip install "upsonic[rag]"',
-        feature_name="Pinecone vector database provider"
-    )
+    _PINECONE_AVAILABLE = True
+except ImportError:
+    pinecone = None
+    Pinecone = None
+    ServerlessSpec = None
+    ApiException = None
+    NotFoundException = None
+    _PINECONE_AVAILABLE = False
 
 
 from upsonic.vectordb.base import BaseVectorDBProvider
@@ -69,6 +70,13 @@ class PineconeProvider(BaseVectorDBProvider):
         provider instance is created in a valid, consistent, and ready-to-connect state,
         preventing runtime errors due to misconfiguration.
         """
+        if not _PINECONE_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="pinecone",
+                install_command='pip install "upsonic[rag]"',
+                feature_name="Pinecone vector database provider"
+            )
 
         super().__init__(config)
         
