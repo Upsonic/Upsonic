@@ -30,4 +30,4 @@ jobs:
 
     - name: Run unit tests
       run: |
-        uv run pytest tests
+        uv run pytest tests/unit_tests
