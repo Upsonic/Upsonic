@@ -19,7 +19,6 @@ from upsonic.tools.pseudo_tools import plan_and_execute
 from upsonic.tools.thought import Thought, AnalysisResult
 from upsonic.tools.external_tool import ExternalToolCall
 
-
 if TYPE_CHECKING:
     from upsonic.agent.agent import Direct
 

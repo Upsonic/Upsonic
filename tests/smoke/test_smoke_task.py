@@ -8,6 +8,8 @@ def web_search(query: str) -> str:
     """Searches the web for the given query and returns a short summary."""
     return f"Search results for '{query}'"
 
+
+@tool
 def summarize_text(text: str) -> str:
     """Summarizes a given text into one concise sentence."""
     return f"Summary: {text.split(':')[-1].strip().split('.')[0]}."
@@ -103,7 +105,7 @@ class TestTaskWithTools:
 		assert "Tool Usage Summary" in output
 		assert "web_search" in output
 		assert "generate_title" in output
-		# Note: summarize_text might not execute due to tool call limits
+		assert "summarize_text" in output
 
 
 
@@ -309,6 +311,9 @@ class TestComprehensiveTaskExecution:
 		if hasattr(task, 'tool_calls'):
 			assert isinstance(task.tool_calls, list)
 	
+
+	# Getting an error because processor.py task is not imported there.
+
 	#def test_task_result_access_patterns(self, capsys):
 	#	"""Test different ways to access task results and metadata"""
 	#	agent = Agent(name="Analysis Agent")
