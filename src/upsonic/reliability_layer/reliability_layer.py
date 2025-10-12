@@ -1,13 +1,21 @@
 from copy import deepcopy
-from typing import Any, Optional, Union, Type, List, TYPE_CHECKING
+from typing import Any, Optional, Union, List, TYPE_CHECKING
 from pydantic import BaseModel, Field
 from enum import Enum
 import re
 from urllib.parse import urlparse
-import requests
+try:
+    import requests
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="requests",
+        install_command='pip install requests',
+        feature_name="requests"
+    )
 import asyncio
 
-from upsonic.models.base import BaseModelProvider
+from upsonic.models import Model
 if TYPE_CHECKING:
     from upsonic.tasks.tasks import Task
 
@@ -211,12 +219,12 @@ class ReliabilityProcessor:
     async def process_task(
         task: "Task",
         reliability_layer: Optional[Any] = None,
-        model_provider: Optional[BaseModelProvider] = None,
+        model_provider: Optional[Union[Model, str]] = None,
     ) -> "Task":
         if reliability_layer is None:
             return task
         
-        from upsonic.agent.agent import Direct as AgentConfiguration
+        from upsonic.agent.agent import Agent as AgentConfiguration
     
         # Extract the result from the task
         result = task.response
@@ -324,8 +332,8 @@ class ReliabilityProcessor:
                     # Create a specific agent for each validation type
                     agent_name = f"{validation_type.replace('_', ' ').title()} Agent"
                     validator_agents[validation_type] = AgentConfiguration(
-                        agent_name,
                         model=model_provider,
+                        name=agent_name,
                     )
                     
                     # For URL validation, skip if no URLs are present
@@ -409,8 +417,8 @@ class ReliabilityProcessor:
 
                 if validation_result.any_suspicion:
                     editor_agent = AgentConfiguration(
-                        "Information Editor Agent",
-                        model=model_provider
+                        model=model_provider,
+                        name="Information Editor Agent"
                     )
                     
                     formatted_prompt = editor_task_prompt.format(

@@ -1,6 +1,5 @@
 """
 Error wrapper module for Upsonic framework.
-This module wraps pydantic-ai errors and converts them to Upsonic-specific errors.
 """
 
 import functools
@@ -21,10 +20,10 @@ from upsonic.utils.printing import error_message
 
 def map_pydantic_error_to_upsonic(error: Exception) -> UupsonicError:
     """
-    Maps pydantic-ai and other third-party errors to Upsonic-specific errors.
+    Maps third-party errors to Upsonic-specific errors.
     
     Args:
-        error: The original error from pydantic-ai or other sources
+        error: The original error from third-party sources
         
     Returns:
         UupsonicError: A wrapped Upsonic-specific error
@@ -78,7 +77,7 @@ def map_pydantic_error_to_upsonic(error: Exception) -> UupsonicError:
             original_error=error
         )
     
-    # Pydantic-AI specific errors
+    # Pydantic specific errors
     if 'pydantic' in error_type.lower() or 'pydantic' in error_str:
         return AgentExecutionError(
             message=f"Agent execution failed: {str(error)}",

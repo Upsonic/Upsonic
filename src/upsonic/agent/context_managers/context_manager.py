@@ -4,64 +4,48 @@ import json
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Optional, Dict, Any, List
 
-from upsonic.context.task import turn_task_to_string
-from upsonic.context.sources import TaskOutputSource
-from upsonic.schemas.data_models import RAGSearchResult
+from upsonic.utils.printing import warning_log, error_log
 
+# Heavy imports moved to lazy loading for faster startup
 if TYPE_CHECKING:
-    from upsonic.agent.agent import Direct
+    from upsonic.agent.agent import Agent
     from upsonic.graph.graph import State
     from upsonic.agent.context_managers.memory_manager import MemoryManager
     from upsonic.tasks.tasks import Task
     from upsonic.knowledge_base.knowledge_base import KnowledgeBase
+    from upsonic.context.task import turn_task_to_string
+    from upsonic.context.sources import TaskOutputSource
+    from upsonic.schemas.data_models import RAGSearchResult
+else:
+    # Use string annotations to avoid importing heavy modules
+    Agent = "Agent"
+    State = "State"
+    MemoryManager = "MemoryManager"
+    Task = "Task"
+    KnowledgeBase = "KnowledgeBase"
+    turn_task_to_string = "turn_task_to_string"
+    TaskOutputSource = "TaskOutputSource"
+    RAGSearchResult = "RAGSearchResult"
 
 
 class ContextManager:
-    """
-    A context manager for building the dynamic, task-specific context prompt.
+    """A context manager for building the dynamic, task-specific context prompt."""
 
-    This manager is responsible for aggregating all situational data relevant
-    to the current task.
-    
-    Features:
-    - Advanced search strategy support (dense, full-text, hybrid)
-    - Configurable query parameters for optimal retrieval
-    - Error handling and logging
-    - Support for metadata filtering and advanced query options
-    """
-
-    def __init__(self, agent: "Direct", task: "Task", state: Optional[State] = None):
-        """
-        Initializes the ContextManager.
-
-        Args:
-            agent: The parent `Direct` agent instance.
-            task: The `Task` object for the current operation.
-            state: An optional `State` object from a `Graph` execution.
-                   This is essential for resolving `TaskOutputSource` context.
-        """
+    def __init__(self, agent: "Agent", task: "Task", state: Optional[State] = None):
+        """Initializes the ContextManager."""
         self.agent = agent
         self.task = task
         self.state = state
         self.context_prompt: str = ""
 
-    async def _build_context_prompt(self, memory_handler: Optional[MemoryManager]) -> str:
-        """
-        Asynchronously builds the complete contextual prompt string.
-
-        This method now fully supports graph-specific context by resolving
-        `TaskOutputSource` objects into concrete data from the provided
-        `state`, in addition to its existing responsibilities.
-
-        Vector database search capabilities:
-        - Configurable search strategies (dense, full-text, hybrid)
-        - Metadata filtering support
-        - Query-time parameter optimization
-        - Error handling and fallback strategies
-
-        Returns:
-            A formatted string containing all relevant situational context.
-        """
+    async def _build_context_prompt(self, memory_handler: Optional["MemoryManager"]) -> str:
+        """Asynchronously builds the complete contextual prompt string."""
+        # Lazy import for heavy modules
+        from upsonic.tasks.tasks import Task
+        from upsonic.knowledge_base.knowledge_base import KnowledgeBase
+        from upsonic.context.task import turn_task_to_string
+        from upsonic.context.sources import TaskOutputSource
+        
         final_context_parts = []
 
         if memory_handler:
@@ -77,8 +61,6 @@ class ContextManager:
             additional_parts = []
 
             for item in self.task.context:
-                from upsonic.tasks.tasks import Task
-                from upsonic.knowledge_base.knowledge_base import KnowledgeBase
                 if isinstance(item, Task):  
                     task_parts.append(f"Task ID ({item.get_task_id()}): " + turn_task_to_string(item))
                 
@@ -118,14 +100,7 @@ class ContextManager:
         knowledge_base_parts: List[str], 
         query: str
     ) -> None:
-        """
-        Process a KnowledgeBase item.
-        
-        Args:
-            knowledge_base: The KnowledgeBase instance to query
-            knowledge_base_parts: List to append results to
-            query: The query string for retrieval
-        """
+        """Process a KnowledgeBase item."""
         try:
             if knowledge_base.rag:
                 await knowledge_base.setup_rag()
@@ -136,28 +111,19 @@ class ContextManager:
                     formatted_results = self._format_rag_results(rag_results, knowledge_base)
                     knowledge_base_parts.append(formatted_results)
                 else:
-                    print(f"Warning: No results found for KnowledgeBase '{knowledge_base.name}' with query: '{query}'")
+                    warning_log(f"No results found for KnowledgeBase '{knowledge_base.name}' with query: '{query}'", context="ContextManager")
             else:
                 knowledge_base_parts.append(knowledge_base.markdown())
                 
         except Exception as e:
-            print(f"Error processing KnowledgeBase '{knowledge_base.name}': {str(e)}")
+            error_log(f"Error processing KnowledgeBase '{knowledge_base.name}': {str(e)}", context="ContextManager")
             try:
                 knowledge_base_parts.append(knowledge_base.markdown())
             except Exception as fallback_error:
-                print(f"Fallback also failed for KnowledgeBase '{knowledge_base.name}': {str(fallback_error)}")
+                error_log(f"Fallback also failed for KnowledgeBase '{knowledge_base.name}': {str(fallback_error)}", context="ContextManager")
 
-    def _format_rag_results(self, rag_results: List[RAGSearchResult], knowledge_base: "KnowledgeBase") -> str:
-        """
-        Format RAG results with enhanced context and metadata.
-        
-        Args:
-            rag_results: List of RAGSearchResult objects containing text and metadata
-            knowledge_base: The KnowledgeBase instance
-            
-        Returns:
-            Formatted string with RAG results including metadata
-        """
+    def _format_rag_results(self, rag_results: List["RAGSearchResult"], knowledge_base: "KnowledgeBase") -> str:
+        """Format RAG results with enhanced context and metadata."""
         if not rag_results:
             return ""
         
@@ -202,16 +168,10 @@ class ContextManager:
 
     async def _process_task_output_source(
         self, 
-        item: TaskOutputSource, 
+        item: "TaskOutputSource", 
         previous_task_output_parts: List[str]
     ) -> None:
-        """
-        Process a TaskOutputSource item with error handling.
-        
-        Args:
-            item: The TaskOutputSource instance
-            previous_task_output_parts: List to append results to
-        """
+        """Process a TaskOutputSource item with error handling."""
         try:
             source_output = self.state.get_task_output(item.task_description_or_id)
             
@@ -222,21 +182,13 @@ class ContextManager:
                     f"<PreviousTaskNodeOutput id='{item.task_description_or_id}'>\n{output_str}\n</PreviousTaskNodeOutput>"
                 )
             else:
-                print(f"Warning: No output found for task '{item.task_description_or_id}'")
+                warning_log(f"No output found for task '{item.task_description_or_id}'", context="ContextManager")
                 
         except Exception as e:
-            print(f"Error processing TaskOutputSource '{item.task_description_or_id}': {str(e)}")
+            error_log(f"Error processing TaskOutputSource '{item.task_description_or_id}': {str(e)}", context="ContextManager")
 
     def _format_task_output(self, source_output: Any) -> str:
-        """
-        Format task output with serialization.
-        
-        Args:
-            source_output: The task output object
-            
-        Returns:
-            Formatted string representation
-        """
+        """Format task output with serialization."""
         try:
             if hasattr(source_output, 'model_dump_json'):
                 return source_output.model_dump_json(indent=2)
@@ -249,7 +201,7 @@ class ContextManager:
             else:
                 return str(source_output)
         except Exception as e:
-            print(f"Error formatting task output: {str(e)}")
+            error_log(f"Error formatting task output: {str(e)}", context="ContextManager")
             return str(source_output)
 
     def get_context_prompt(self) -> str:
@@ -257,7 +209,7 @@ class ContextManager:
         return self.context_prompt
 
     @asynccontextmanager
-    async def manage_context(self, memory_handler: Optional[MemoryManager] = None):
+    async def manage_context(self, memory_handler: Optional["MemoryManager"] = None):
         """The asynchronous context manager for building the task-specific context."""
         self.context_prompt = await self._build_context_prompt(memory_handler)
 
@@ -269,17 +221,14 @@ class ContextManager:
             pass
 
     async def get_knowledge_base_health_status(self) -> Dict[str, Any]:
-        """
-        Get health status of all KnowledgeBase instances in the context.
+        """Get health status of all KnowledgeBase instances in the context."""
+        # Lazy import for heavy modules
+        from upsonic.knowledge_base.knowledge_base import KnowledgeBase
         
-        Returns:
-            Dictionary containing health status of all KnowledgeBase components
-        """
         health_status = {}
         
         if self.task.context:
             for item in self.task.context:
-                from upsonic.knowledge_base.knowledge_base import KnowledgeBase
                 if isinstance(item, KnowledgeBase):
                     try:
                         health_status[item.name] = await item.health_check_async()
@@ -292,12 +241,7 @@ class ContextManager:
         return health_status
 
     def get_context_summary(self) -> Dict[str, Any]:
-        """
-        Get a comprehensive summary of the current context configuration.
-        
-        Returns:
-            Dictionary containing detailed context summary information
-        """
+        """Get a comprehensive summary of the current context configuration."""
         summary = {
             "task": {
                 "id": self.task.get_task_id() if hasattr(self.task, 'get_task_id') else "unknown",
@@ -343,9 +287,12 @@ class ContextManager:
         }
         
         if self.task.context:
+            # Lazy import for heavy modules
+            from upsonic.knowledge_base.knowledge_base import KnowledgeBase
+            from upsonic.tasks.tasks import Task
+            from upsonic.context.sources import TaskOutputSource
+            
             for item in self.task.context:
-                from upsonic.knowledge_base.knowledge_base import KnowledgeBase
-                from upsonic.tasks.tasks import Task
                 if isinstance(item, KnowledgeBase):
                     kb_info = {
                         "name": item.name,

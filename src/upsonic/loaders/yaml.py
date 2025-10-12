@@ -5,13 +5,28 @@ from typing import Any, Dict, List, Union, Generator
 
 try:
     import yaml
-except ImportError:
-    raise ImportError("`PyYAML` is not installed. Please install it with `pip install PyYAML`.")
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="pyyaml",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="YAML loader"
+    )
+    raise ImportError(
+        'Please install the `pyyaml` package to use the YAML loader, '
+        'you can use the `loaders` optional group — `pip install "upsonic[loaders]"`'
+    ) from _import_error
 
 try:
     import jq
-except ImportError:
-    raise ImportError("`pyjq` is not installed. Please install it with `pip install pyjq`.")
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="jq",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="YAML loader"
+    )
+
 
 from upsonic.schemas.data_models import Document
 from upsonic.loaders.base import BaseLoader

@@ -1,7 +1,16 @@
 import time
 import hashlib
-from typing import Any, Dict, List, Optional, Literal
-import numpy as np
+from typing import Any, Dict, List, Optional, Literal, Union
+from upsonic.models import Model
+try:
+    import numpy as np
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="numpy",
+        install_command='pip install numpy',
+        feature_name="numpy"
+    )
 
 CacheMethod = Literal["vector_search", "llm_call"]
 CacheEntry = Dict[str, Any]
@@ -143,14 +152,14 @@ class CacheManager:
         self, 
         input_query: str, 
         valid_entries: List[tuple], 
-        llm_provider: Any
+        llm_provider: Union[Model, str]
     ) -> Optional[CacheEntry]:
         """Use LLM to find the most relevant cached entry from a batch of entries."""
         try:
             from upsonic.tasks.tasks import Task
-            from upsonic.agent.agent import Direct
+            from upsonic.agent.agent import Agent
             
-            comparison_agent = Direct(
+            comparison_agent = Agent(
                 model=llm_provider,
                 debug=False
             )
@@ -199,7 +208,7 @@ class CacheManager:
             return None
             
         except Exception as e:
-            print(f"Warning: Batch LLM comparison failed: {e}")
+            warning_log(f"Batch LLM comparison failed: {e}", context="CacheManager")
             return None
     
     async def get_cached_response(
@@ -209,7 +218,7 @@ class CacheManager:
         cache_threshold: float,
         duration_minutes: int,
         embedding_provider: Optional[Any] = None,
-        llm_provider: Optional[Any] = None
+        llm_provider: Optional[Union[Model, str]] = None
     ) -> Optional[Any]:
         """
         Get cached response for the given input text.

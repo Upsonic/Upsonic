@@ -4,8 +4,17 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
-import aiofiles
-import aiofiles.os
+try:
+    import aiofiles
+    import aiofiles.os
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="aiofiles",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="CSV loader"
+    )
+
 
 from upsonic.schemas.data_models import Document
 from upsonic.loaders.base import BaseLoader

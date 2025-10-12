@@ -10,8 +10,14 @@ from upsonic.storage.session.sessions import InteractionSession, UserProfile
 try:
     from redis.asyncio import Redis
     from redis.exceptions import ConnectionError as RedisConnectionError
-except ImportError:
-    raise ImportError("`redis` is required for async RedisStorage. Please install it using `pip install redis`.")
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="redis",
+        install_command='pip install "upsonic[storage]"',
+        feature_name="Redis storage provider"
+    )
+
 
 T = TypeVar('T', bound=BaseModel)
 
@@ -109,7 +115,8 @@ class RedisStorage(Storage):
             data_dict = self._deserialize(data_str)
             return model_type.from_dict(data_dict)
         except (json.JSONDecodeError, TypeError) as e:
-            print(f"Warning: Could not parse key {key}. Error: {e}")
+            from upsonic.utils.printing import warning_log
+            warning_log(f"Could not parse key {key}. Error: {e}", "RedisStorage")
             return None
 
     async def upsert_async(self, data: Union[InteractionSession, UserProfile]) -> None:

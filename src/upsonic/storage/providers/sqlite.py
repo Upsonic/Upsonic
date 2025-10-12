@@ -3,7 +3,17 @@ import json
 from pathlib import Path
 from typing import Optional, Type, Union, TypeVar
 
-import aiosqlite
+try:
+    import aiosqlite
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="aiosqlite",
+        install_command='pip install "upsonic[storage]"',
+        feature_name="SQLite storage provider"
+    )
+
+
 from pydantic import BaseModel
 
 from upsonic.storage.base import Storage

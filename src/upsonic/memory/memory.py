@@ -3,7 +3,7 @@ import hashlib
 from pathlib import Path
 
 from pydantic_core import to_jsonable_python
-from pydantic_ai.messages import ModelMessagesTypeAdapter
+from upsonic.messages.messages import ModelMessagesTypeAdapter
 
 
 # Memory directory - same as current file location

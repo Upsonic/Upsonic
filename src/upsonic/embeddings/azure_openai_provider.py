@@ -18,7 +18,9 @@ try:
 except ImportError:
     AZURE_IDENTITY_AVAILABLE = False
 
-from pydantic import Field, validator
+from upsonic.utils.printing import debug_log, warning_log
+
+from pydantic import Field, field_validator
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
 
 from ..utils.package.exception import ConfigurationError, ModelConnectionError
@@ -45,7 +47,8 @@ class AzureOpenAIEmbeddingConfig(EmbeddingConfig):
     requests_per_minute: int = Field(240, description="Requests per minute for Azure")
     tokens_per_minute: int = Field(240000, description="Tokens per minute for Azure")
     
-    @validator('azure_endpoint')
+    @field_validator('azure_endpoint')
+    @classmethod
     def validate_azure_endpoint(cls, v):
         """Validate Azure endpoint format."""
         if v and not v.startswith('https://'):
@@ -57,7 +60,8 @@ class AzureOpenAIEmbeddingConfig(EmbeddingConfig):
                 v = v + '/'
         return v
     
-    @validator('deployment_name')
+    @field_validator('deployment_name')
+    @classmethod
     def validate_deployment_name(cls, v):
         """Validate deployment name format."""
         if v and not v.replace('-', '').replace('_', '').isalnum():
@@ -336,7 +340,7 @@ class AzureOpenAIEmbedding(EmbeddingProvider):
             return len(test_result) > 0 and len(test_result[0]) > 0
             
         except Exception as e:
-            print(f"Azure OpenAI connection validation failed: {str(e)}")
+            debug_log(f"Azure OpenAI connection validation failed: {str(e)}", context="AzureOpenAIEmbedding")
             return False
     
     def get_azure_info(self) -> Dict[str, Any]:
@@ -385,7 +389,7 @@ class AzureOpenAIEmbedding(EmbeddingProvider):
                 del self.client
                 self.client = None
             except Exception as e:
-                print(f"Warning: Error closing Azure OpenAI client: {e}")
+                warning_log(f"Error closing Azure OpenAI client: {e}", context="AzureOpenAIEmbedding")
         
         if hasattr(self, '_credential') and self._credential:
             try:
@@ -400,7 +404,7 @@ class AzureOpenAIEmbedding(EmbeddingProvider):
                 del self._credential
                 self._credential = None
             except Exception as e:
-                print(f"Warning: Error closing Azure credential: {e}")
+                warning_log(f"Error closing Azure credential: {e}", context="AzureOpenAIEmbedding")
         
         await super().close()
 

@@ -56,11 +56,13 @@ def retryable(
                         raise e
                     last_known_exception = e
                     if attempt < final_retries:
-                        print(f"Warning: Call to '{self.__class__.__name__}.{func.__name__}' failed (Attempt {attempt}/{final_retries}). Retrying in {current_delay:.2f}s... Error: {e}")
+                        from upsonic.utils.printing import warning_log
+                        warning_log(f"Call to '{self.__class__.__name__}.{func.__name__}' failed (Attempt {attempt}/{final_retries}). Retrying in {current_delay:.2f}s... Error: {e}", "RetryHandler")
                         time.sleep(current_delay)
                         current_delay *= backoff
 
-            print(f"Error: Call to '{self.__class__.__name__}.{func.__name__}' failed after {final_retries} attempts.")
+            from upsonic.utils.printing import error_log
+            error_log(f"Call to '{self.__class__.__name__}.{func.__name__}' failed after {final_retries} attempts.", "RetryHandler")
             if final_mode == "raise":
                 raise last_known_exception
             elif final_mode == "return_false":
@@ -85,11 +87,13 @@ def retryable(
                         raise e
                     last_known_exception = e
                     if attempt < final_retries:
-                        print(f"Warning: Call to '{self.__class__.__name__}.{func.__name__}' failed (Attempt {attempt}/{final_retries}). Retrying in {current_delay:.2f}s... Error: {e}")
+                        from upsonic.utils.printing import warning_log
+                        warning_log(f"Call to '{self.__class__.__name__}.{func.__name__}' failed (Attempt {attempt}/{final_retries}). Retrying in {current_delay:.2f}s... Error: {e}", "RetryHandler")
                         await asyncio.sleep(current_delay)
                         current_delay *= backoff
 
-            print(f"Error: Call to '{self.__class__.__name__}.{func.__name__}' failed after {final_retries} attempts.")
+            from upsonic.utils.printing import error_log
+            error_log(f"Call to '{self.__class__.__name__}.{func.__name__}' failed after {final_retries} attempts.", "RetryHandler")
             if final_mode == "raise":
                 raise last_known_exception
             else:

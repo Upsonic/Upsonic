@@ -4,9 +4,38 @@ from pathlib import Path
 from typing import Any, Dict, List, Union
 import hashlib
 
-import aiohttp
-import requests
-from bs4 import BeautifulSoup, Tag
+try:
+    import aiohttp
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="aiohttp",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="HTML loader"
+    )
+
+
+try:
+    import requests
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="requests",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="HTML loader"
+    )
+
+
+try:
+    from bs4 import BeautifulSoup, Tag
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="beautifulsoup4",
+        install_command='pip install "upsonic[loaders]"',
+        feature_name="HTML loader"
+    )
+
 
 from upsonic.schemas.data_models import Document
 from upsonic.loaders.base import BaseLoader

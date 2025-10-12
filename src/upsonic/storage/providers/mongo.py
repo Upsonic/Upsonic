@@ -1,11 +1,20 @@
 import time
 from typing import Optional, Type, Union, TypeVar, List
 
-from motor.motor_asyncio import (
-    AsyncIOMotorClient,
-    AsyncIOMotorDatabase,
-    AsyncIOMotorCollection,
-)
+try:
+    from motor.motor_asyncio import (
+        AsyncIOMotorClient,
+        AsyncIOMotorDatabase,
+        AsyncIOMotorCollection,
+    )
+except ImportError as _import_error:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="motor",
+        install_command='pip install "upsonic[storage]"',
+        feature_name="MongoDB storage provider"
+    )
+
 from pydantic import BaseModel
 
 from upsonic.storage.base import Storage

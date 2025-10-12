@@ -142,6 +142,104 @@ class PdfLoaderConfig(LoaderConfig):
         pass
 
 
+class PyMuPDFLoaderConfig(LoaderConfig):
+    """
+    Advanced configuration for PyMuPDF-based PDF document loading.
+
+    This configuration leverages PyMuPDF's superior performance and features
+    for text extraction, OCR, image handling, and content structuring.
+    """
+
+    extraction_mode: Literal["hybrid", "text_only", "ocr_only"] = Field(
+        default="hybrid",
+        description=(
+            "The core strategy for content extraction. "
+            "'hybrid': Extracts digital text and runs OCR on embedded images. "
+            "'text_only': Fastest mode, extracts only digital text. "
+            "'ocr_only': For scanned documents, runs OCR on the entire page."
+        ),
+    )
+
+    start_page: Optional[int] = Field(
+        default=None,
+        description="The first page number to process (1-indexed). If None, starts from the beginning.",
+        ge=1
+    )
+    end_page: Optional[int] = Field(
+        default=None,
+        description="The last page number to process (inclusive). If None, processes to the end.",
+        ge=1
+    )
+
+    clean_page_numbers: bool = Field(
+        default=True,
+        description="If True, intelligently identifies and removes page numbers from page headers/footers.",
+    )
+    page_num_start_format: Optional[str] = Field(
+        default=None,
+        description="A Python f-string to prepend to each page's content if page numbers are cleaned. "
+                    "Example: '<start page {page_nr}>'. If None, nothing is prepended."
+    )
+    page_num_end_format: Optional[str] = Field(
+        default=None,
+        description="A Python f-string to append to each page's content if page numbers are cleaned. "
+                    "Example: '<end page {page_nr}>'. If None, nothing is appended."
+    )
+    extra_whitespace_removal: bool = Field(
+        default=True,
+        description="If True, normalizes whitespace by collapsing multiple newlines and spaces, cleaning up layout artifacts.",
+    )
+
+    pdf_password: Optional[str] = Field(
+        default=None,
+        description="Password to use for decrypting protected PDF files.",
+        min_length=1
+    )
+
+    # PyMuPDF-specific configurations
+    text_extraction_method: Literal["text", "dict", "html", "xml"] = Field(
+        default="text",
+        description=(
+            "Method for text extraction from pages. "
+            "'text': Plain text extraction. "
+            "'dict': Structured text with positioning. "
+            "'html': HTML formatted text. "
+            "'xml': XML formatted text."
+        ),
+    )
+
+    include_images: bool = Field(
+        default=False,
+        description="If True, extracts and includes image information in metadata.",
+    )
+
+    image_dpi: int = Field(
+        default=150,
+        description="DPI for image rendering when performing OCR.",
+        ge=72,
+        le=600
+    )
+
+    preserve_layout: bool = Field(
+        default=True,
+        description="If True, preserves text layout and positioning information.",
+    )
+
+    extract_annotations: bool = Field(
+        default=False,
+        description="If True, extracts annotations and comments from the PDF.",
+    )
+
+    annotation_format: Literal["text", "json"] = Field(
+        default="text",
+        description="Format for extracted annotations.",
+    )
+
+    class Config(LoaderConfig.Config):
+        """Pydantic configuration."""
+        pass
+
+
 
 class DOCXLoaderConfig(LoaderConfig):
     """Configuration for DOCX file loading."""
@@ -334,6 +432,297 @@ class HTMLLoaderConfig(LoaderConfig):
     user_agent: str = Field(default="Upsonic HTML Loader 1.0", description="User agent for web requests")
 
 
+class PdfPlumberLoaderConfig(LoaderConfig):
+    """
+    Advanced configuration for pdfplumber-based PDF document loading.
+    
+    pdfplumber provides superior table extraction, layout preservation, and 
+    character-level text analysis. It excels at structured document processing
+    and complex layout handling for AI agent frameworks requiring high-quality
+    extraction from PDFs with tables, forms, and complex formatting.
+    """
+
+    extraction_mode: Literal["hybrid", "text_only", "ocr_only"] = Field(
+        default="hybrid",
+        description=(
+            "The core strategy for content extraction. "
+            "'hybrid': Extracts digital text and runs OCR on embedded images. "
+            "'text_only': Fastest mode, extracts only digital text using pdfplumber. "
+            "'ocr_only': For scanned documents, runs OCR on the entire page."
+        ),
+    )
+
+    start_page: Optional[int] = Field(
+        default=None,
+        description="The first page number to process (1-indexed). If None, starts from the beginning.",
+        ge=1
+    )
+    end_page: Optional[int] = Field(
+        default=None,
+        description="The last page number to process (inclusive). If None, processes to the end.",
+        ge=1
+    )
+
+    clean_page_numbers: bool = Field(
+        default=True,
+        description="If True, intelligently identifies and removes page numbers from page headers/footers.",
+    )
+    page_num_start_format: Optional[str] = Field(
+        default=None,
+        description="A Python f-string to prepend to each page's content if page numbers are cleaned. "
+                    "Example: '<start page {page_nr}>'. If None, nothing is prepended."
+    )
+    page_num_end_format: Optional[str] = Field(
+        default=None,
+        description="A Python f-string to append to each page's content if page numbers are cleaned. "
+                    "Example: '<end page {page_nr}>'. If None, nothing is appended."
+    )
+    extra_whitespace_removal: bool = Field(
+        default=True,
+        description="If True, normalizes whitespace by collapsing multiple newlines and spaces, cleaning up layout artifacts.",
+    )
+
+    pdf_password: Optional[str] = Field(
+        default=None,
+        description="Password to use for decrypting protected PDF files.",
+        min_length=1
+    )
+
+    # pdfplumber-specific configurations
+    extract_tables: bool = Field(
+        default=True,
+        description="If True, extracts tables and includes them in the content. pdfplumber excels at table extraction.",
+    )
+    
+    table_format: Literal["text", "markdown", "csv", "grid"] = Field(
+        default="markdown",
+        description=(
+            "Format for extracted tables. "
+            "'markdown': Tables as markdown format (best for AI agents). "
+            "'text': Plain text representation. "
+            "'csv': CSV format. "
+            "'grid': Grid-style ASCII table."
+        ),
+    )
+    
+    table_settings: Dict[str, Any] = Field(
+        default_factory=lambda: {
+            "vertical_strategy": "lines",
+            "horizontal_strategy": "lines",
+            "snap_tolerance": 3,
+            "join_tolerance": 3,
+            "edge_min_length": 3,
+        },
+        description=(
+            "Advanced table detection settings for pdfplumber. "
+            "Strategies: 'lines' (uses ruling lines), 'lines_strict', 'text' (infers from text positioning). "
+            "Tolerances control how strictly boundaries are detected."
+        ),
+    )
+
+    extract_images: bool = Field(
+        default=False,
+        description="If True, extracts image information and includes metadata about images found on each page.",
+    )
+
+    layout_mode: Literal["default", "layout", "simple"] = Field(
+        default="layout",
+        description=(
+            "Text extraction layout mode. "
+            "'layout': Preserves original layout and spacing (best for structured docs). "
+            "'default': Standard extraction. "
+            "'simple': Simplified extraction without layout preservation."
+        ),
+    )
+
+    use_text_flow: bool = Field(
+        default=True,
+        description="If True, uses pdfplumber's text flow analysis to maintain reading order in complex layouts.",
+    )
+
+    char_margin: float = Field(
+        default=3.0,
+        description="The minimum distance between characters for them to be considered separate words.",
+        ge=0.0
+    )
+
+    line_margin: float = Field(
+        default=0.5,
+        description="The minimum distance between lines for them to be considered separate.",
+        ge=0.0
+    )
+
+    word_margin: float = Field(
+        default=0.1,
+        description="The minimum distance between words.",
+        ge=0.0
+    )
+
+    extract_page_dimensions: bool = Field(
+        default=False,
+        description="If True, includes page dimensions (width, height) in metadata.",
+    )
+
+    crop_box: Optional[tuple[float, float, float, float]] = Field(
+        default=None,
+        description="Optional crop box (x0, y0, x1, y1) to extract only a specific region of each page.",
+    )
+
+    extract_annotations: bool = Field(
+        default=False,
+        description="If True, extracts annotations and hyperlinks from the PDF.",
+    )
+
+    keep_blank_chars: bool = Field(
+        default=False,
+        description="If True, preserves blank characters in extracted text for layout fidelity.",
+    )
+
+    class Config(LoaderConfig.Config):
+        """Pydantic configuration."""
+        pass
+
+
+class DoclingLoaderConfig(LoaderConfig):
+    """
+    Advanced configuration for Docling-based document loading.
+    
+    Docling provides enterprise-grade document processing with support for
+    PDF, DOCX, XLSX, PPTX, HTML, Markdown, AsciiDoc, CSV, and various image formats.
+    It leverages advanced ML models for layout understanding and content extraction.
+    """
+
+    extraction_mode: Literal["markdown", "chunks"] = Field(
+        default="chunks",
+        description=(
+            "Content extraction strategy: "
+            "'markdown' exports entire document as formatted markdown. "
+            "'chunks' intelligently segments document into semantic chunks for RAG."
+        ),
+    )
+
+    chunker_type: Literal["hybrid", "hierarchical"] = Field(
+        default="hybrid",
+        description=(
+            "Chunking algorithm when extraction_mode='chunks': "
+            "'hybrid' combines semantic and structural chunking for optimal retrieval. "
+            "'hierarchical' preserves document hierarchy (sections, subsections)."
+        ),
+    )
+
+    allowed_formats: Optional[List[str]] = Field(
+        default=None,
+        description=(
+            "Restrict input formats. Options: 'pdf', 'docx', 'xlsx', 'pptx', 'html', "
+            "'md', 'asciidoc', 'csv', 'image'. If None, all formats are allowed."
+        ),
+    )
+
+    # Markdown export options (used when extraction_mode='markdown')
+    markdown_image_placeholder: str = Field(
+        default="",
+        description="Placeholder text for images in markdown export. Empty string removes images.",
+    )
+
+    # OCR Configuration (for PDFs and images)
+    ocr_enabled: bool = Field(
+        default=True,
+        description="Enable OCR for scanned documents and images. Uses hybrid mode (smart OCR + text extraction).",
+    )
+
+    ocr_force_full_page: bool = Field(
+        default=False,
+        description="Force full-page OCR instead of hybrid mode. Slower but better for scanned documents.",
+    )
+
+    ocr_backend: Literal["rapidocr", "tesseract"] = Field(
+        default="rapidocr",
+        description="OCR engine to use. 'rapidocr' is fast and accurate, 'tesseract' supports more languages.",
+    )
+
+    ocr_lang: List[str] = Field(
+        default_factory=lambda: ["english"],
+        description="OCR languages. For RapidOCR: ['english', 'chinese']. For Tesseract: ['eng', 'fra', etc.] or ['auto'] for auto-detection.",
+    )
+
+    ocr_backend_engine: Literal["onnxruntime", "openvino", "paddle", "torch"] = Field(
+        default="onnxruntime",
+        description="Backend engine for RapidOCR. 'onnxruntime' recommended for best compatibility.",
+    )
+
+    ocr_text_score: float = Field(
+        default=0.5,
+        description="Minimum confidence score for OCR text (0.0-1.0). Lower values include more uncertain text.",
+        ge=0.0,
+        le=1.0
+    )
+
+    # Table Structure Detection
+    enable_table_structure: bool = Field(
+        default=True,
+        description="Enable table structure detection and parsing.",
+    )
+
+    table_structure_cell_matching: bool = Field(
+        default=True,
+        description="Enable cell-level matching in tables for better structure preservation.",
+    )
+
+    # Performance and resource management
+    max_pages: Optional[int] = Field(
+        default=None,
+        description="Maximum number of pages to process per document. None means no limit.",
+        ge=1
+    )
+
+    page_range: Optional[tuple[int, int]] = Field(
+        default=None,
+        description="Specific page range to process (start, end) - 1-indexed, inclusive.",
+    )
+
+    parallel_processing: bool = Field(
+        default=True,
+        description="Enable parallel processing for batch operations.",
+    )
+
+    batch_size: int = Field(
+        default=10,
+        description="Number of documents to process in parallel during batch operations.",
+        ge=1,
+        le=100
+    )
+
+    # Metadata extraction
+    extract_document_metadata: bool = Field(
+        default=True,
+        description="Extract document properties (title, author, creation date, etc.).",
+    )
+
+    confidence_threshold: float = Field(
+        default=0.5,
+        description="Minimum confidence score for extracted chunks (0.0-1.0).",
+        ge=0.0,
+        le=1.0
+    )
+
+    # URL handling
+    support_urls: bool = Field(
+        default=True,
+        description="Allow loading documents from HTTP/HTTPS URLs.",
+    )
+
+    url_timeout: int = Field(
+        default=30,
+        description="Timeout in seconds for URL downloads.",
+        ge=1,
+        le=300
+    )
+
+    class Config(LoaderConfig.Config):
+        """Pydantic configuration."""
+        pass
+
+
 class LoaderConfigFactory:
     """Factory for creating loader configurations."""
     
@@ -341,6 +730,8 @@ class LoaderConfigFactory:
         'text': TextLoaderConfig,
         'csv': CSVLoaderConfig,
         'pdf': PdfLoaderConfig,
+        'pymupdf': PyMuPDFLoaderConfig,
+        'pdfplumber': PdfPlumberLoaderConfig,
         'docx': DOCXLoaderConfig,
         'json': JSONLoaderConfig,
         'jsonl': JSONLoaderConfig,
@@ -351,6 +742,7 @@ class LoaderConfigFactory:
         'md': MarkdownLoaderConfig,
         'html': HTMLLoaderConfig,
         'htm': HTMLLoaderConfig,
+        'docling': DoclingLoaderConfig,
     }
     
     @classmethod
