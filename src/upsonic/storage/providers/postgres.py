@@ -1,16 +1,18 @@
+from __future__ import annotations
+
 import time
 import json
-from typing import Optional, Type, Union, TypeVar
+from typing import Optional, Type, Union, TypeVar, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import asyncpg
 
 try:
     import asyncpg
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="asyncpg",
-        install_command='pip install "upsonic[storage]"',
-        feature_name="PostgreSQL storage provider"
-    )
+    _ASYNCPG_AVAILABLE = True
+except ImportError:
+    asyncpg = None  # type: ignore
+    _ASYNCPG_AVAILABLE = False
 
 from pydantic import BaseModel
 
@@ -35,6 +37,14 @@ class PostgresStorage(Storage):
             db_url: An asyncpg-compatible database URL (e.g., "postgresql://user:pass@host:port/db").
             schema: The PostgreSQL schema to use for the tables.
         """
+        if not _ASYNCPG_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="asyncpg",
+                install_command='pip install "upsonic[storage]"',
+                feature_name="PostgreSQL storage provider"
+            )
+
         super().__init__()
         self.db_url = db_url
         self.sessions_table_name = f'"{schema}"."{sessions_table_name}"'

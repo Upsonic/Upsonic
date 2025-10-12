@@ -12,24 +12,18 @@ from dataclasses import dataclass
 from typing import Literal, Optional, TypedDict
 try:
     import requests
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="requests",
-        install_command='pip install "upsonic[loaders]"',
-        feature_name="built-in tools"
-    )
+    _REQUESTS_AVAILABLE = True
+except ImportError:
+    requests = None
+    _REQUESTS_AVAILABLE = False
 
 
 try:
     from bs4 import BeautifulSoup
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="beautifulsoup4",
-        install_command='pip install "upsonic[loaders]"',
-        feature_name="built-in tools"
-    )
+    _BEAUTIFULSOUP_AVAILABLE = True
+except ImportError:
+    BeautifulSoup = None
+    _BEAUTIFULSOUP_AVAILABLE = False
 
 
 try:
@@ -37,17 +31,10 @@ try:
         from ddgs import DDGS
     except ImportError:  # Fallback for older versions of ddgs
         from duckduckgo_search import DDGS
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="duckduckgo-search",
-        install_command='pip install "upsonic[tools]"',
-        feature_name="DuckDuckGo search tool"
-    )
-    raise ImportError(
-        'Please install the `duckduckgo-search` package to use the DuckDuckGo search tool, '
-        'you can use the `tools` optional group — `pip install "upsonic[tools]"`'
-    ) from _import_error
+    _DDGS_AVAILABLE = True
+except ImportError:
+    DDGS = None
+    _DDGS_AVAILABLE = False
 
 
 __all__ = (
@@ -180,14 +167,22 @@ class UrlContextTool(AbstractBuiltinTool):
 def WebSearch(query: str, max_results: int = 10) -> str:
     """
     Search the web for the given query and return formatted results.
-    
+
     Args:
         query: The search query
         max_results: Maximum number of results to return (default: 10)
-        
+
     Returns:
         Formatted string containing search results
     """
+    if not _DDGS_AVAILABLE:
+        from upsonic.utils.printing import import_error
+        import_error(
+            package_name="duckduckgo-search",
+            install_command='pip install "upsonic[tools]"',
+            feature_name="DuckDuckGo search tool"
+        )
+
     with DDGS() as ddgs:
         try:
             results = list(ddgs.text(query, max_results=max_results))
@@ -206,13 +201,29 @@ def WebSearch(query: str, max_results: int = 10) -> str:
 def WebRead(url: str) -> str:
     """
     Read and extract text content from a web page.
-    
+
     Args:
         url: The URL to read from
-        
+
     Returns:
         Extracted text content from the webpage
     """
+    if not _REQUESTS_AVAILABLE:
+        from upsonic.utils.printing import import_error
+        import_error(
+            package_name="requests",
+            install_command='pip install "upsonic[loaders]"',
+            feature_name="WebRead tool"
+        )
+
+    if not _BEAUTIFULSOUP_AVAILABLE:
+        from upsonic.utils.printing import import_error
+        import_error(
+            package_name="beautifulsoup4",
+            install_command='pip install "upsonic[loaders]"',
+            feature_name="WebRead tool"
+        )
+
     session = requests.Session()
     try:
         headers = {

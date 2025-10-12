@@ -1,17 +1,25 @@
-from typing import Any, Dict, List, Optional, Union, Literal
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional, Union, Literal, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import chromadb
+    from chromadb.api.client import Client as ChromaClientAPI
+    from chromadb.api.models.Collection import Collection as ChromaCollection
+    from chromadb.errors import NotFoundError
 
 try:
     import chromadb
     from chromadb.api.client import Client as ChromaClientAPI
     from chromadb.api.models.Collection import Collection as ChromaCollection
     from chromadb.errors import NotFoundError
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="chromadb",
-        install_command='pip install "upsonic[rag]"',
-        feature_name="ChromaDB vector database provider"
-    )
+    _CHROMADB_AVAILABLE = True
+except ImportError:
+    chromadb = None  # type: ignore
+    ChromaClientAPI = None  # type: ignore
+    ChromaCollection = None  # type: ignore
+    NotFoundError = None  # type: ignore
+    _CHROMADB_AVAILABLE = False
 
 
 from upsonic.vectordb.base import BaseVectorDBProvider
@@ -50,6 +58,14 @@ class ChromaProvider(BaseVectorDBProvider):
     """
     
     def __init__(self, config: Config):
+        if not _CHROMADB_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="chromadb",
+                install_command='pip install "upsonic[rag]"',
+                feature_name="ChromaDB vector database provider"
+            )
+
         super().__init__(config)
         self._validate_config()
         self._collection_instance: Optional[ChromaCollection] = None

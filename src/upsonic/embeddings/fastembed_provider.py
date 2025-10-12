@@ -9,13 +9,12 @@ try:
     from fastembed.common import OnnxProvider
     import onnxruntime as ort
     FASTEMBED_AVAILABLE = True
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="fastembed",
-        install_command='pip install fastembed',
-        feature_name="fastembed provider"
-    )
+except ImportError:
+    TextEmbedding = None
+    SparseTextEmbedding = None
+    OnnxProvider = None
+    ort = None
+    FASTEMBED_AVAILABLE = False
 
 from pydantic import Field, field_validator
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
@@ -79,10 +78,17 @@ class FastEmbedProvider(EmbeddingProvider):
     config: FastEmbedConfig
     
     def __init__(self, config: Optional[FastEmbedConfig] = None, **kwargs):
-        
+        if not FASTEMBED_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="fastembed",
+                install_command='pip install fastembed',
+                feature_name="fastembed provider"
+            )
+
         if config is None:
             config = FastEmbedConfig(**kwargs)
-        
+
         super().__init__(config=config)
         
         self._setup_providers()

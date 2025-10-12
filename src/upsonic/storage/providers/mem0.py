@@ -12,18 +12,19 @@ from upsonic.storage.types import SessionId, UserId
 try:
     from mem0 import AsyncMemoryClient, Memory
     HAS_ASYNC_CLIENT = True
+    _MEM0_AVAILABLE = True
 except ImportError:
     try:
         # Fallback: Try regular imports if async not available
         from mem0 import Memory, MemoryClient as AsyncMemoryClient
         HAS_ASYNC_CLIENT = False
-    except ImportError as _import_error:
-        from upsonic.utils.printing import import_error
-        import_error(
-            package_name="mem0ai",
-            install_command='pip install "upsonic[mem0]" or pip install mem0ai',
-            feature_name="Mem0 storage provider"
-        )
+        _MEM0_AVAILABLE = True
+    except ImportError:
+        AsyncMemoryClient = None
+        Memory = None
+        MemoryClient = None
+        HAS_ASYNC_CLIENT = False
+        _MEM0_AVAILABLE = False
 
 
 T = TypeVar('T', bound=BaseModel)
@@ -68,8 +69,16 @@ class Mem0Storage(Storage):
             output_format: Mem0 output format version.
             version: Mem0 API version.
         """
+        if not _MEM0_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="mem0ai",
+                install_command='pip install "upsonic[mem0]" or pip install mem0ai',
+                feature_name="Mem0 storage provider"
+            )
+
         super().__init__()
-        
+
         self.namespace = namespace
         self.infer = infer
         self.enable_caching = enable_caching

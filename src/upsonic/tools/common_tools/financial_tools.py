@@ -7,24 +7,18 @@ from typing import List
 
 try:
     import pandas as pd
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="pandas",
-        install_command='pip install "upsonic[tools]"',
-        feature_name="financial tools"
-    )
+    _PANDAS_AVAILABLE = True
+except ImportError:
+    pd = None
+    _PANDAS_AVAILABLE = False
 
 
 try:
     import yfinance as yf
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="yfinance",
-        install_command='pip install "upsonic[tools]"',
-        feature_name="financial tools"
-    )
+    _YFINANCE_AVAILABLE = True
+except ImportError:
+    yf = None
+    _YFINANCE_AVAILABLE = False
 
 
 
@@ -48,6 +42,22 @@ class YFinanceTools:
             company_news: Enable company news retrieval
             enable_all: Enable all available tools
         """
+        if not _PANDAS_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="pandas",
+                install_command='pip install "upsonic[tools]"',
+                feature_name="financial tools"
+            )
+
+        if not _YFINANCE_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="yfinance",
+                install_command='pip install "upsonic[tools]"',
+                feature_name="financial tools"
+            )
+
         self._tools = []
         if stock_price or enable_all:
             self._tools.append(self.get_current_stock_price)

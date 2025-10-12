@@ -63,13 +63,12 @@ try:
     )
     from huggingface_hub.errors import HfHubHTTPError
 
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="huggingface_hub",
-        install_command='pip install huggingface_hub',
-        feature_name="huggingface hub provider"
-    )
+    _HUGGINGFACE_HUB_AVAILABLE = True
+except ImportError:
+    # Optional imports for HuggingFace model
+    # If these are not available, the provider check will catch it when the model is used
+    _HUGGINGFACE_HUB_AVAILABLE = False
+    pass
 
 __all__ = (
     'HuggingFaceModel',
@@ -143,6 +142,15 @@ class HuggingFaceModel(Model):
             profile: The model profile to use. Defaults to a profile picked by the provider based on the model name.
             settings: Model-specific settings that will be used as defaults for this model.
         """
+
+        if not _HUGGINGFACE_HUB_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="huggingface_hub",
+                install_command='pip install huggingface_hub',
+                feature_name="Huggingface_Hub model"
+            )
+
         self._model_name = model_name
         if isinstance(provider, str):
             provider = infer_provider(provider)

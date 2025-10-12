@@ -1,5 +1,17 @@
-import uuid 
-from typing import Any, Dict, List, Optional, Union, Literal
+from __future__ import annotations
+
+import uuid
+from typing import Any, Dict, List, Optional, Union, Literal, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import weaviate
+    import weaviate.classes as wvc
+    from weaviate.exceptions import (
+        WeaviateConnectionError,
+        UnexpectedStatusCodeError,
+    )
+    from weaviate.util import generate_uuid5
+    from weaviate.classes.query import HybridFusion
 
 try:
     import weaviate
@@ -10,13 +22,15 @@ try:
     )
     from weaviate.util import generate_uuid5
     from weaviate.classes.query import HybridFusion
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="weaviate-client",
-        install_command='pip install "upsonic[rag]"',
-        feature_name="Weaviate vector database provider"
-    )
+    _WEAVIATE_AVAILABLE = True
+except ImportError:
+    weaviate = None  # type: ignore
+    wvc = None  # type: ignore
+    WeaviateConnectionError = None  # type: ignore
+    UnexpectedStatusCodeError = None  # type: ignore
+    generate_uuid5 = None  # type: ignore
+    HybridFusion = None  # type: ignore
+    _WEAVIATE_AVAILABLE = False
 
 
 from upsonic.vectordb.config import (
@@ -55,7 +69,7 @@ class WeaviateProvider(BaseVectorDBProvider):
     def __init__(self, config: Config):
         """
         Initializes the WeaviateProvider with a complete configuration.
-        
+
         This step validates that the provider is configured for Weaviate and stores
         the configuration. No actual connection is established until `connect()` is called.
 
@@ -65,6 +79,14 @@ class WeaviateProvider(BaseVectorDBProvider):
         Raises:
             ConfigurationError: If the provided config is not for the 'weaviate' provider.
         """
+        if not _WEAVIATE_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="weaviate-client",
+                install_command='pip install "upsonic[rag]"',
+                feature_name="Weaviate vector database provider"
+            )
+
         if config.core.provider_name.value != 'weaviate':
             raise ConfigurationError(
                 f"Attempted to initialize WeaviateProvider with a configuration for "

@@ -1,29 +1,28 @@
-try:
-    import faiss
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="faiss-cpu",
-        install_command='pip install "upsonic[rag]"',
-        feature_name="FAISS vector database provider"
-    )
-
-
-try:
-    import numpy as np
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="numpy",
-        install_command='pip install "upsonic[embeddings]"',
-        feature_name="FAISS vector database provider"
-    )
-
+from __future__ import annotations
 
 import json
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union, Literal, Callable
+from typing import Any, Dict, List, Optional, Union, Literal, Callable, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import faiss
+    import numpy as np
+
+try:
+    import faiss
+    _FAISS_AVAILABLE = True
+except ImportError:
+    faiss = None  # type: ignore
+    _FAISS_AVAILABLE = False
+
+
+try:
+    import numpy as np
+    _NUMPY_AVAILABLE = True
+except ImportError:
+    np = None  # type: ignore
+    _NUMPY_AVAILABLE = False
 
 from upsonic.vectordb.config import (
     Config,
@@ -64,6 +63,22 @@ class FaissProvider(BaseVectorDBProvider):
     """
 
     def __init__(self, config: Config):
+        if not _FAISS_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="faiss-cpu",
+                install_command='pip install "upsonic[rag]"',
+                feature_name="FAISS vector database provider"
+            )
+
+        if not _NUMPY_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="numpy",
+                install_command='pip install "upsonic[embeddings]"',
+                feature_name="FAISS vector database provider"
+            )
+
         if config.core.provider_name.value != 'faiss': raise ConfigurationError("...")
         super().__init__(config)
         self._index: Optional[faiss.Index] = None

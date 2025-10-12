@@ -26,6 +26,7 @@ dependencies = [
     "httpx>=0.28.1",
     "aiohttp>=3.12.15",
     "requests>=2.32.5",
+    "openai>=2.2.0",
 ]
 
 [project.optional-dependencies]

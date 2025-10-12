@@ -7,13 +7,13 @@ try:
     from docx.document import Document as DocxDocument
     from docx.table import Table as DocxTable
     from docx.text.paragraph import Paragraph as DocxParagraph
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="python-docx",
-        install_command='pip install "upsonic[loaders]"',
-        feature_name="DOCX loader"
-    )
+    _DOCX_AVAILABLE = True
+except ImportError:
+    docx = None
+    DocxDocument = None
+    DocxTable = None
+    DocxParagraph = None
+    _DOCX_AVAILABLE = False
 
 
 from upsonic.schemas.data_models import Document
@@ -31,6 +31,13 @@ class DOCXLoader(BaseLoader):
 
     def __init__(self, config: DOCXLoaderConfig):
         """Initializes the DOCXLoader with its specific configuration."""
+        if not _DOCX_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="python-docx",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="DOCX loader"
+            )
         super().__init__(config)
         self.config: DOCXLoaderConfig = config
 

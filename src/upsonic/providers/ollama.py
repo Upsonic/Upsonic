@@ -3,7 +3,6 @@ from __future__ import annotations as _annotations
 import os
 
 import httpx
-from openai import AsyncOpenAI
 
 from upsonic.utils.package.exception import UserError
 from upsonic.models import cached_async_http_client
@@ -19,13 +18,10 @@ from upsonic.providers import Provider
 
 try:
     from openai import AsyncOpenAI
-except ImportError as _import_error:  # pragma: no cover
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="openai",
-        install_command='pip install openai',
-        feature_name="openai provider"
-    )
+    _OPENAI_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    AsyncOpenAI = None
+    _OPENAI_AVAILABLE = False
 
 
 
@@ -72,7 +68,15 @@ class OllamaProvider(Provider[AsyncOpenAI]):
         openai_client: AsyncOpenAI | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        """Create a new Ollama provider.
+        if not _OPENAI_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="openai",
+                install_command='pip install openai',
+                feature_name="openai provider"
+            )
+
+                """Create a new Ollama provider.
 
         Args:
             base_url: The base url for the Ollama requests. If not provided, the `OLLAMA_BASE_URL` environment variable

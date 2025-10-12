@@ -1,22 +1,26 @@
+from __future__ import annotations
+
 import json
 import time
-from typing import Optional, Dict, Any, Type, Union, TypeVar
+from typing import Optional, Dict, Any, Type, Union, TypeVar, TYPE_CHECKING
 
 from pydantic import BaseModel
 
 from upsonic.storage.base import Storage
 from upsonic.storage.session.sessions import InteractionSession, UserProfile
 
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
+    from redis.exceptions import ConnectionError as RedisConnectionError
+
 try:
     from redis.asyncio import Redis
     from redis.exceptions import ConnectionError as RedisConnectionError
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="redis",
-        install_command='pip install "upsonic[storage]"',
-        feature_name="Redis storage provider"
-    )
+    _REDIS_AVAILABLE = True
+except ImportError:
+    Redis = None  # type: ignore
+    RedisConnectionError = None  # type: ignore
+    _REDIS_AVAILABLE = False
 
 
 T = TypeVar('T', bound=BaseModel)
@@ -49,6 +53,14 @@ class RedisStorage(Storage):
             ssl: If True, uses an SSL connection.
             expire: Optional TTL in seconds for all created keys.
         """
+        if not _REDIS_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="redis",
+                install_command='pip install "upsonic[storage]"',
+                feature_name="Redis storage provider"
+            )
+
         super().__init__()
         self.prefix = prefix
         self.expire = expire

@@ -4,7 +4,6 @@ import os
 from typing import overload
 
 import httpx
-from openai import AsyncOpenAI
 
 from upsonic.utils.package.exception import UserError
 from upsonic.models import cached_async_http_client
@@ -18,14 +17,12 @@ from upsonic.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIModelProf
 from upsonic.providers import Provider
 
 try:
-    from openai import AsyncAzureOpenAI
-except ImportError as _import_error:  # pragma: no cover
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="openai",
-        install_command='pip install "upsonic[openai]"',
-        feature_name="Azure provider"
-    )
+    from openai import AsyncOpenAI, AsyncAzureOpenAI
+    _OPENAI_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    AsyncOpenAI = None
+    AsyncAzureOpenAI = None
+    _OPENAI_AVAILABLE = False
 
 
 
@@ -111,6 +108,13 @@ class AzureProvider(Provider[AsyncOpenAI]):
                 client to use. If provided, `base_url`, `api_key`, and `http_client` must be `None`.
             http_client: An existing `httpx.AsyncClient` to use for making HTTP requests.
         """
+        if not _OPENAI_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="openai",
+                install_command='pip install "upsonic[openai]"',
+                feature_name="Azure provider"
+            )
         if openai_client is not None:
             assert azure_endpoint is None, 'Cannot provide both `openai_client` and `azure_endpoint`'
             assert http_client is None, 'Cannot provide both `openai_client` and `http_client`'

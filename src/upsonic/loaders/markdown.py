@@ -4,25 +4,20 @@ from typing import Any, Dict, List, Optional, Union
 
 try:
     import frontmatter
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="python-frontmatter",
-        install_command='pip install "upsonic[loaders]"',
-        feature_name="Markdown loader"
-    )
+    _FRONTMATTER_AVAILABLE = True
+except ImportError:
+    frontmatter = None
+    _FRONTMATTER_AVAILABLE = False
 
 
 try:
     from markdown_it import MarkdownIt
     from markdown_it.token import Token
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="markdown-it-py",
-        install_command='pip install "upsonic[loaders]"',
-        feature_name="Markdown loader"
-    )
+    _MARKDOWN_IT_AVAILABLE = True
+except ImportError:
+    MarkdownIt = None
+    Token = None
+    _MARKDOWN_IT_AVAILABLE = False
 
 
 from upsonic.schemas.data_models import Document
@@ -45,6 +40,20 @@ class MarkdownLoader(BaseLoader):
 
     def __init__(self, config: MarkdownLoaderConfig):
         """Initializes the MarkdownLoader with its specific configuration."""
+        if not _FRONTMATTER_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="python-frontmatter",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="Markdown loader"
+            )
+        if not _MARKDOWN_IT_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="markdown-it-py",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="Markdown loader"
+            )
         super().__init__(config)
         self.config: MarkdownLoaderConfig = config
         self.md_parser = MarkdownIt()

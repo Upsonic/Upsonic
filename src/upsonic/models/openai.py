@@ -79,13 +79,18 @@ try:
     from openai.types.responses.response_status import ResponseStatus
     from openai.types.shared import ReasoningEffort
     from openai.types.shared_params import Reasoning
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="openai",
-        install_command='pip install openai',
-        feature_name="openai model"
-    )
+    _OPENAI_AVAILABLE = True
+except ImportError:
+    _OPENAI_AVAILABLE = False
+    # Create dummy objects to allow module to load
+    NOT_GIVEN = None
+    APIStatusError = None
+    AsyncOpenAI = None
+    AsyncStream = None
+    NotGiven = None
+    AllModels = None
+    chat = None
+    responses = None
 
 __all__ = (
     'OpenAIModel',
@@ -357,6 +362,14 @@ class OpenAIChatModel(Model):
                 In the future, this may be inferred from the model name.
             settings: Default model settings for this model instance.
         """
+        if not _OPENAI_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="openai",
+                install_command='pip install openai',
+                feature_name="OpenAI Chat model"
+            )
+
         self._model_name = model_name
 
         if isinstance(provider, str):
@@ -842,6 +855,14 @@ class OpenAIResponsesModel(Model):
             profile: The model profile to use. Defaults to a profile picked by the provider based on the model name.
             settings: Default model settings for this model instance.
         """
+        if not _OPENAI_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="openai",
+                install_command='pip install openai',
+                feature_name="OpenAI Responses model"
+            )
+
         self._model_name = model_name
 
         if isinstance(provider, str):

@@ -9,13 +9,10 @@ from upsonic.loaders.config import TextLoaderConfig
 
 try:
     import aiofiles
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="aiofiles",
-        install_command='pip install "upsonic[loaders]"',
-        feature_name="text loader"
-    )
+    _AIOFILES_AVAILABLE = True
+except ImportError:
+    aiofiles = None
+    _AIOFILES_AVAILABLE = False
 
 
 class TextLoader(BaseLoader):
@@ -35,6 +32,13 @@ class TextLoader(BaseLoader):
         Args:
             config: A TextLoaderConfig object with settings for text processing.
         """
+        if not _AIOFILES_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="aiofiles",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="text loader"
+            )
         super().__init__(config)
         self.config: TextLoaderConfig = config
 

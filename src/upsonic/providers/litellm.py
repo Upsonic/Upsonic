@@ -3,7 +3,6 @@ from __future__ import annotations as _annotations
 from typing import overload
 
 from httpx import AsyncClient as AsyncHTTPClient
-from openai import AsyncOpenAI
 
 from upsonic.models import cached_async_http_client
 from upsonic.profiles import ModelProfile
@@ -22,13 +21,10 @@ from upsonic.providers import Provider
 
 try:
     from openai import AsyncOpenAI
-except ImportError as _import_error:  # pragma: no cover
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="openai",
-        install_command='pip install openai',
-        feature_name="openai provider"
-    )
+    _OPENAI_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    AsyncOpenAI = None
+    _OPENAI_AVAILABLE = False
 
 
 
@@ -110,7 +106,15 @@ class LiteLLMProvider(Provider[AsyncOpenAI]):
         openai_client: AsyncOpenAI | None = None,
         http_client: AsyncHTTPClient | None = None,
     ) -> None:
-        """Initialize a LiteLLM provider.
+        if not _OPENAI_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="openai",
+                install_command='pip install openai',
+                feature_name="openai provider"
+            )
+
+                """Initialize a LiteLLM provider.
 
         Args:
             api_key: API key for the model provider. If None, LiteLLM will try to get it from environment variables.

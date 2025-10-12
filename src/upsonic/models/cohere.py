@@ -53,13 +53,12 @@ try:
     )
     from cohere.core.api_error import ApiError
     from cohere.v2.client import OMIT
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="cohere",
-        install_command='pip install cohere',
-        feature_name="cohere model"
-    )
+    _COHERE_AVAILABLE = True
+except ImportError:
+    # Optional imports for Cohere model
+    # If these are not available, the model instantiation will raise an error
+    _COHERE_AVAILABLE = False
+    pass
 
 LatestCohereModelNames = Literal[
     'c4ai-aya-expanse-32b',
@@ -137,6 +136,14 @@ class CohereModel(Model):
             profile: The model profile to use. Defaults to a profile picked by the provider based on the model name.
             settings: Model-specific settings that will be used as defaults for this model.
         """
+        if not _COHERE_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="cohere",
+                install_command='pip install cohere',
+                feature_name="Cohere model"
+            )
+
         self._model_name = model_name
 
         if isinstance(provider, str):

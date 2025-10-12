@@ -12,13 +12,10 @@ from upsonic.providers import Provider
 
 try:
     from cohere import AsyncClientV2
-except ImportError as _import_error:  # pragma: no cover
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="cohere",
-        install_command='pip install cohere',
-        feature_name="cohere provider"
-    )
+    _COHERE_AVAILABLE = True
+except ImportError:
+    AsyncClientV2 = None
+    _COHERE_AVAILABLE = False
 
 
 
@@ -48,7 +45,15 @@ class CohereProvider(Provider[AsyncClientV2]):
         cohere_client: AsyncClientV2 | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        """Create a new Cohere provider.
+        if not _COHERE_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="cohere",
+                install_command='pip install cohere',
+                feature_name="Cohere provider"
+            )
+
+                """Create a new Cohere provider.
 
         Args:
             api_key: The API key to use for authentication, if not provided, the `CO_API_KEY` environment variable

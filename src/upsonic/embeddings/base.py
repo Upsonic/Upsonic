@@ -6,13 +6,10 @@ from enum import Enum
 import time
 try:
     import numpy as np
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="numpy",
-        install_command='pip install numpy',
-        feature_name="numpy embeddings"
-    )
+    _NUMPY_AVAILABLE = True
+except ImportError:
+    np = None
+    _NUMPY_AVAILABLE = False
 from concurrent.futures import ThreadPoolExecutor
 
 from pydantic import BaseModel, Field, ConfigDict

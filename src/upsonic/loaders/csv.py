@@ -7,13 +7,10 @@ from typing import Any, Dict, List, Union
 try:
     import aiofiles
     import aiofiles.os
-except ImportError as _import_error:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="aiofiles",
-        install_command='pip install "upsonic[loaders]"',
-        feature_name="CSV loader"
-    )
+    _AIOFILES_AVAILABLE = True
+except ImportError:
+    aiofiles = None
+    _AIOFILES_AVAILABLE = False
 
 
 from upsonic.schemas.data_models import Document
@@ -31,6 +28,13 @@ class CSVLoader(BaseLoader):
 
     def __init__(self, config: CSVLoaderConfig):
         """Initializes the CSVLoader with its specific configuration."""
+        if not _AIOFILES_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="aiofiles",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="CSV loader"
+            )
         super().__init__(config)
         self.config: CSVLoaderConfig = config
 
