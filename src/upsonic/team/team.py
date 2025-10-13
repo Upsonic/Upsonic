@@ -4,7 +4,7 @@ from typing import Any, List, Dict, Optional, Type, Union, Literal
 
 from upsonic.agent.agent import Direct as Agent
 from upsonic.context.task import turn_task_to_string
-from upsonic.utils.printing import simple_output
+
 
 try:
     from upsonic.storage import Memory, InMemoryStorage
@@ -228,7 +228,7 @@ class Team:
             The response from the multi-agent operation
         """
         result = self.do(tasks)
-        simple_output(str(result))
+        print(str(result))
         return result
     
     def add_tool(self):
