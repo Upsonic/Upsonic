@@ -4,6 +4,7 @@ from .mem0 import Mem0Storage
 from .postgres import PostgresStorage
 from .redis import RedisStorage
 from .sqlite import SqliteStorage
+from .mongo import MongoStorage
 
 
 __all__ = [
@@ -13,4 +14,5 @@ __all__ = [
     "PostgresStorage",
     "RedisStorage",
     "SqliteStorage",
+    "MongoStorage",
 ]
