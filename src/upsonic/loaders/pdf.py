@@ -10,14 +10,22 @@ from upsonic.loaders.config import PdfLoaderConfig
 
 try:
     from pypdf import PdfReader, PageObject
+    _PYPDF_AVAILABLE = True
 except ImportError:
-    raise ImportError("`pypdf` is not installed. Please install it with `pip install pypdf`.")
+    PdfReader = None
+    PageObject = None
+    _PYPDF_AVAILABLE = False
+
 
 try:
     from rapidocr_onnxruntime import RapidOCR
     OCR_ENGINE = RapidOCR()
+    _RAPIDOCR_AVAILABLE = True
 except ImportError:
+    RapidOCR = None
     OCR_ENGINE = None
+    _RAPIDOCR_AVAILABLE = False
+
 
 
 
@@ -38,14 +46,22 @@ class PdfLoader(BaseLoader):
         Args:
             config: A PdfLoaderConfig object with settings for PDF processing.
         """
+        if not _PYPDF_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="pypdf",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="PDF loader"
+            )
+        if config.extraction_mode in ("ocr_only", "hybrid") and not _RAPIDOCR_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="rapidocr-onnxruntime",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="PDF OCR functionality"
+            )
         super().__init__(config)
         self.config: PdfLoaderConfig = config
-        
-        if "ocr" in self.config.extraction_mode and OCR_ENGINE is None:
-            raise ImportError(
-                "`rapidocr_onnxruntime` is not installed, but the extraction mode is set to "
-                f"'{self.config.extraction_mode}'. Please install it with `pip install rapidocr_onnxruntime`."
-            )
 
 
     @classmethod

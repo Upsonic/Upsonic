@@ -1,9 +1,21 @@
+from __future__ import annotations
+
 import time
 import json
 from pathlib import Path
-from typing import Optional, Type, Union, TypeVar
+from typing import Optional, Type, Union, TypeVar, TYPE_CHECKING
 
-import aiosqlite
+if TYPE_CHECKING:
+    import aiosqlite
+
+try:
+    import aiosqlite
+    _AIOSQLITE_AVAILABLE = True
+except ImportError:
+    aiosqlite = None  # type: ignore
+    _AIOSQLITE_AVAILABLE = False
+
+
 from pydantic import BaseModel
 
 from upsonic.storage.base import Storage
@@ -31,6 +43,14 @@ class SqliteStorage(Storage):
             profiles_table_name: Name of the table for UserProfile storage.
             db_file: Path to a local database file. If None, uses in-memory DB.
         """
+        if not _AIOSQLITE_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="aiosqlite",
+                install_command='pip install "upsonic[storage]"',
+                feature_name="SQLite storage provider"
+            )
+
         super().__init__()
         self.db_path = ":memory:"
         if db_file:

@@ -1,11 +1,28 @@
-import time
-from typing import Optional, Type, Union, TypeVar, List
+from __future__ import annotations
 
-from motor.motor_asyncio import (
-    AsyncIOMotorClient,
-    AsyncIOMotorDatabase,
-    AsyncIOMotorCollection,
-)
+import time
+from typing import Optional, Type, Union, TypeVar, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from motor.motor_asyncio import (
+        AsyncIOMotorClient,
+        AsyncIOMotorDatabase,
+        AsyncIOMotorCollection,
+    )
+
+try:
+    from motor.motor_asyncio import (
+        AsyncIOMotorClient,
+        AsyncIOMotorDatabase,
+        AsyncIOMotorCollection,
+    )
+    _MOTOR_AVAILABLE = True
+except ImportError:
+    AsyncIOMotorClient = None  # type: ignore
+    AsyncIOMotorDatabase = None  # type: ignore
+    AsyncIOMotorCollection = None  # type: ignore
+    _MOTOR_AVAILABLE = False
+
 from pydantic import BaseModel
 
 from upsonic.storage.base import Storage
@@ -38,6 +55,14 @@ class MongoStorage(Storage):
             sessions_collection_name: The name of the collection for InteractionSession.
             profiles_collection_name: The name of the collection for UserProfile.
         """
+        if not _MOTOR_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="motor",
+                install_command='pip install "upsonic[storage]"',
+                feature_name="MongoDB storage provider"
+            )
+
         super().__init__()
         self.db_url = db_url
         self.database_name = database_name

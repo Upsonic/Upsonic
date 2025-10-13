@@ -5,13 +5,18 @@ from typing import Any, Dict, List, Union, Generator
 
 try:
     import yaml
+    _YAML_AVAILABLE = True
 except ImportError:
-    raise ImportError("`PyYAML` is not installed. Please install it with `pip install PyYAML`.")
+    yaml = None
+    _YAML_AVAILABLE = False
 
 try:
     import jq
+    _JQ_AVAILABLE = True
 except ImportError:
-    raise ImportError("`pyjq` is not installed. Please install it with `pip install pyjq`.")
+    jq = None
+    _JQ_AVAILABLE = False
+
 
 from upsonic.schemas.data_models import Document
 from upsonic.loaders.base import BaseLoader
@@ -34,6 +39,20 @@ class YAMLLoader(BaseLoader):
         Args:
             config: A YAMLLoaderConfig object with settings for YAML processing.
         """
+        if not _YAML_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="pyyaml",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="YAML loader"
+            )
+        if not _JQ_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="jq",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="YAML loader"
+            )
         super().__init__(config)
         self.config: YAMLLoaderConfig = config
 

@@ -4,54 +4,40 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Dict, Any, Optional
 import json
 
-from upsonic.context.agent import turn_agent_to_string
-from upsonic.context.default_prompt import default_prompt
-from upsonic.tools.thought import Thought, AnalysisResult
-
+# Heavy imports moved to lazy loading for faster startup
 if TYPE_CHECKING:
-    from upsonic.agent.agent import Direct
+    from upsonic.agent.agent import Agent
     from upsonic.tasks.tasks import Task
     from upsonic.agent.context_managers.memory_manager import MemoryManager
+    from upsonic.context.agent import turn_agent_to_string
+    from upsonic.context.default_prompt import default_prompt
+    from upsonic.tools import Thought, AnalysisResult
+else:
+    # Use string annotations to avoid importing heavy modules
+    Agent = "Agent"
+    Task = "Task"
+    MemoryManager = "MemoryManager"
+    turn_agent_to_string = "turn_agent_to_string"
+    default_prompt = "default_prompt"
+    Thought = "Thought"
+    AnalysisResult = "AnalysisResult"
 
 
 class SystemPromptManager:
-    """
-    A context manager responsible for constructing the final system prompt.
+    """A context manager responsible for constructing the final system prompt."""
 
-    This manager isolates the logic for defining the AI's core behavior,
-    persona, and high-level instructions, separating it from the dynamic,
-    task-specific context.
-    """
-
-    def __init__(self, agent: Direct, task: Task):
-        """
-        Initializes the SystemPromptManager.
-
-        Args:
-            agent: The parent `Direct` agent instance executing the call.
-                   This is used to access agent-level configurations like a
-                   custom system prompt.
-            task: The `Task` object for the current operation. This is used
-                  to scan for any agent identity information provided in the
-                  task's context.
-        """
+    def __init__(self, agent: Agent, task: Task):
+        """Initializes the SystemPromptManager."""
         self.agent = agent
         self.task = task
         self.system_prompt: str = ""
 
-    def _build_system_prompt(self, memory_handler: Optional[MemoryManager]) -> str:
-        """
-        Builds the complete system prompt string by assembling its components.
-
-        This method implements the core logic:
-        1.  Selects the base behavioral prompt, giving precedence to a custom
-            prompt on the `Direct` agent over the framework's default.
-        2.  Scans the task's context for other `Direct` agent instances
-            and injects their serialized information as an <Agents> block.
-
-        Returns:
-            The fully constructed system prompt string.
-        """
+    def _build_system_prompt(self, memory_handler: Optional["MemoryManager"]) -> str:
+        """Builds the complete system prompt string by assembling its components."""
+        from upsonic.tools import Thought, AnalysisResult
+        from upsonic.context.agent import turn_agent_to_string
+        from upsonic.context.default_prompt import default_prompt
+        
         prompt_parts = []
     
         is_thinking_enabled = self.agent.enable_thinking_tool
@@ -284,7 +270,7 @@ class SystemPromptManager:
         return self.system_prompt
 
     @asynccontextmanager
-    async def manage_system_prompt(self, memory_handler: Optional[MemoryManager] = None):
+    async def manage_system_prompt(self, memory_handler: Optional["MemoryManager"] = None):
         """
         The asynchronous context manager for building the system prompt.
 

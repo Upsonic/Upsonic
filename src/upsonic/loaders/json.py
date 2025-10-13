@@ -3,7 +3,13 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
-import jq
+try:
+    import jq
+    _JQ_AVAILABLE = True
+except ImportError:
+    jq = None
+    _JQ_AVAILABLE = False
+
 
 from upsonic.schemas.data_models import Document
 from upsonic.loaders.base import BaseLoader
@@ -20,6 +26,13 @@ class JSONLoader(BaseLoader):
 
     def __init__(self, config: JSONLoaderConfig):
         """Initializes the JSONLoader with its specific configuration."""
+        if not _JQ_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="jq",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="JSON loader"
+            )
         super().__init__(config)
         self.config: JSONLoaderConfig = config
         if self.config.mode == "multi" and not self.config.record_selector:

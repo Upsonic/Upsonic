@@ -10,11 +10,16 @@ try:
     import onnxruntime as ort
     FASTEMBED_AVAILABLE = True
 except ImportError:
+    TextEmbedding = None
+    SparseTextEmbedding = None
+    OnnxProvider = None
+    ort = None
     FASTEMBED_AVAILABLE = False
 
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
 from ..utils.package.exception import ConfigurationError, ModelConnectionError
+from upsonic.utils.printing import info_log, debug_log
 
 
 class FastEmbedConfig(EmbeddingConfig):
@@ -40,7 +45,8 @@ class FastEmbedConfig(EmbeddingConfig):
     enable_sparse_embeddings: bool = Field(False, description="Use sparse embeddings for better performance")
     sparse_model_name: Optional[str] = Field(None, description="Sparse model name if different from dense")
     
-    @validator('providers')
+    @field_validator('providers')
+    @classmethod
     def validate_providers(cls, v):
         """Validate ONNX providers."""
         valid_providers = [
@@ -57,7 +63,8 @@ class FastEmbedConfig(EmbeddingConfig):
         
         return v
     
-    @validator('doc_embed_type')
+    @field_validator('doc_embed_type')
+    @classmethod
     def validate_embed_type(cls, v):
         """Validate document embedding type."""
         valid_types = ["default", "passage"]
@@ -72,14 +79,16 @@ class FastEmbedProvider(EmbeddingProvider):
     
     def __init__(self, config: Optional[FastEmbedConfig] = None, **kwargs):
         if not FASTEMBED_AVAILABLE:
-            raise ConfigurationError(
-                "FastEmbed package not found. Install with: pip install fastembed",
-                error_code="DEPENDENCY_MISSING"
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="fastembed",
+                install_command='pip install fastembed',
+                feature_name="fastembed provider"
             )
-        
+
         if config is None:
             config = FastEmbedConfig(**kwargs)
-        
+
         super().__init__(config=config)
         
         self._setup_providers()
@@ -98,20 +107,20 @@ class FastEmbedProvider(EmbeddingProvider):
                 
                 if "CUDAExecutionProvider" in available_providers and "CUDAExecutionProvider" not in self.providers:
                     self.providers.insert(0, "CUDAExecutionProvider")
-                    print("CUDA provider available and enabled")
+                    debug_log("CUDA provider available and enabled", context="FastEmbed")
                 elif "ROCMExecutionProvider" in available_providers and "ROCMExecutionProvider" not in self.providers:
                     self.providers.insert(0, "ROCMExecutionProvider")
-                    print("ROCm provider available and enabled")
+                    debug_log("ROCm provider available and enabled", context="FastEmbed")
                 elif "CoreMLExecutionProvider" in available_providers and "CoreMLExecutionProvider" not in self.providers:
                     self.providers.insert(0, "CoreMLExecutionProvider")
-                    print("CoreML provider available and enabled")
+                    debug_log("CoreML provider available and enabled", context="FastEmbed")
                 else:
-                    print("GPU requested but no GPU providers available, using CPU")
+                    debug_log("GPU requested but no GPU providers available, using CPU", context="FastEmbed")
                     
             except ImportError:
-                print("ONNXRuntime not available for provider detection")
+                debug_log("ONNXRuntime not available for provider detection", context="FastEmbed")
         
-        print(f"FastEmbed using providers: {self.providers}")
+        info_log(f"FastEmbed using providers: {self.providers}", context="FastEmbed")
     
     def _initialize_models(self):
         """Initialize FastEmbed models."""
@@ -125,7 +134,7 @@ class FastEmbedProvider(EmbeddingProvider):
             
             init_params = {k: v for k, v in init_params.items() if v is not None}
             
-            print(f"Initializing FastEmbed model: {self.config.model_name}")
+            info_log(f"Initializing FastEmbed model: {self.config.model_name}", context="FastEmbed")
             self.embedding_model = TextEmbedding(**init_params)
             
             self.sparse_model = None
@@ -135,14 +144,17 @@ class FastEmbedProvider(EmbeddingProvider):
                     sparse_init_params = init_params.copy()
                     sparse_init_params["model_name"] = sparse_model_name
                     self.sparse_model = SparseTextEmbedding(**sparse_init_params)
-                    print(f"Initialized sparse embedding model: {sparse_model_name}")
+                    from upsonic.utils.printing import success_log
+                    success_log(f"Initialized sparse embedding model: {sparse_model_name}", "FastEmbedProvider")
                 except Exception as e:
-                    print(f"Warning: Could not initialize sparse model: {e}")
+                    from upsonic.utils.printing import warning_log
+                    warning_log(f"Could not initialize sparse model: {e}", "FastEmbedProvider")
             
             if self.config.model_warmup:
                 self._warmup_models()
             
-            print("FastEmbed models initialized successfully")
+            from upsonic.utils.printing import success_log
+            success_log("FastEmbed models initialized successfully", "FastEmbedProvider")
             
         except Exception as e:
             raise ConfigurationError(
@@ -161,10 +173,12 @@ class FastEmbedProvider(EmbeddingProvider):
             if self.sparse_model:
                 list(self.sparse_model.embed(warmup_texts))
             
-            print("Model warmup completed")
+            from upsonic.utils.printing import success_log
+            success_log("Model warmup completed", "FastEmbedProvider")
             
         except Exception as e:
-            print(f"Warning: Model warmup failed: {e}")
+            from upsonic.utils.printing import warning_log
+            warning_log(f"Model warmup failed: {e}", "FastEmbedProvider")
     
     @property
     def supported_modes(self) -> List[EmbeddingMode]:
@@ -209,7 +223,8 @@ class FastEmbedProvider(EmbeddingProvider):
                             if len(output_details[0].get('shape', [])) > 1:
                                 info["dimensions"] = output_details[0]['shape'][-1]
             except Exception as e:
-                print(f"Could not get detailed model info: {e}")
+                from upsonic.utils.printing import warning_log
+                warning_log(f"Could not get detailed model info: {e}", "FastEmbedProvider")
             
             if self.sparse_model:
                 info["sparse_model"] = {
@@ -290,7 +305,7 @@ class FastEmbedProvider(EmbeddingProvider):
             return len(test_result) > 0 and len(test_result[0]) > 0
             
         except Exception as e:
-            print(f"FastEmbed validation failed: {str(e)}")
+            debug_log(f"FastEmbed validation failed: {str(e)}", context="FastEmbed")
             return False
     
     def get_performance_info(self) -> Dict[str, Any]:
@@ -334,7 +349,7 @@ class FastEmbedProvider(EmbeddingProvider):
             return models
             
         except Exception as e:
-            print(f"Could not list FastEmbed models: {e}")
+            debug_log(f"Could not list FastEmbed models: {e}", context="FastEmbed")
             return []
     
     def get_cache_info(self) -> Dict[str, Any]:
@@ -385,7 +400,8 @@ class FastEmbedProvider(EmbeddingProvider):
                 del self.embedding_model
                 self.embedding_model = None
             except Exception as e:
-                print(f"Warning: Error closing FastEmbed model: {e}")
+                from upsonic.utils.printing import warning_log
+                warning_log(f"Error closing FastEmbed model: {e}", "FastEmbedProvider")
         
         if hasattr(self, 'sparse_model') and self.sparse_model:
             try:
@@ -400,13 +416,15 @@ class FastEmbedProvider(EmbeddingProvider):
                 del self.sparse_model
                 self.sparse_model = None
             except Exception as e:
-                print(f"Warning: Error closing FastEmbed sparse model: {e}")
+                from upsonic.utils.printing import warning_log
+                warning_log(f"Error closing FastEmbed sparse model: {e}", "FastEmbedProvider")
         
         try:
             import onnxruntime as ort
             ort.get_session().close() if hasattr(ort, 'get_session') else None
         except Exception as e:
-            print(f"Warning: Could not clear ONNX runtime cache: {e}")
+            from upsonic.utils.printing import warning_log
+            warning_log(f"Could not clear ONNX runtime cache: {e}", "FastEmbedProvider")
         
         await super().close()
 

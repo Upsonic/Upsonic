@@ -4,8 +4,14 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
-import aiofiles
-import aiofiles.os
+try:
+    import aiofiles
+    import aiofiles.os
+    _AIOFILES_AVAILABLE = True
+except ImportError:
+    aiofiles = None
+    _AIOFILES_AVAILABLE = False
+
 
 from upsonic.schemas.data_models import Document
 from upsonic.loaders.base import BaseLoader
@@ -22,6 +28,13 @@ class CSVLoader(BaseLoader):
 
     def __init__(self, config: CSVLoaderConfig):
         """Initializes the CSVLoader with its specific configuration."""
+        if not _AIOFILES_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="aiofiles",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="CSV loader"
+            )
         super().__init__(config)
         self.config: CSVLoaderConfig = config
 

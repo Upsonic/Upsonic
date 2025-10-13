@@ -14,6 +14,7 @@ from ..loaders.config import LoaderConfig
 from ..schemas.data_models import Document, Chunk, RAGSearchResult
 from ..loaders.factory import create_intelligent_loaders
 from ..text_splitter.factory import create_intelligent_splitters
+from ..utils.printing import info_log, debug_log, warning_log, error_log
 
 
 class KnowledgeBase:
@@ -71,19 +72,19 @@ class KnowledgeBase:
         self.vectordb = vectordb
         
         if loaders is None:
-            print(f"🔄 Auto-detecting loaders for {len(self.sources)} sources...")
+            info_log(f"Auto-detecting loaders for {len(self.sources)} sources...", context="KnowledgeBase")
             try:
                 config_to_use = loader_config or config_kwargs
                 self.loaders = create_intelligent_loaders(self.sources, **config_to_use)
-                print(f"✅ Created {len(self.loaders)} intelligent loaders")
+                info_log(f"Created {len(self.loaders)} intelligent loaders", context="KnowledgeBase")
             except Exception as e:
-                print(f"⚠️ Auto-detection failed: {e}, proceeding without loaders")
+                warning_log(f"Auto-detection failed: {e}, proceeding without loaders", context="KnowledgeBase")
                 self.loaders = []
         else:
             self.loaders = self._normalize_loaders(loaders)
         
         if splitters is None:
-            print(f"🔄 Auto-detecting splitters for {len(self.sources)} sources...")
+            info_log(f"Auto-detecting splitters for {len(self.sources)} sources...", context="KnowledgeBase")
             try:
                 config_to_use = splitter_config or config_kwargs
                 self.splitters = create_intelligent_splitters(
@@ -92,9 +93,9 @@ class KnowledgeBase:
                     quality_preference=quality_preference,
                     **config_to_use
                 )
-                print(f"✅ Created {len(self.splitters)} intelligent splitters")
+                info_log(f"Created {len(self.splitters)} intelligent splitters", context="KnowledgeBase")
             except Exception as e:
-                print(f"⚠️ Auto-detection failed: {e}, using default recursive strategy")
+                warning_log(f"Auto-detection failed: {e}, using default recursive strategy", context="KnowledgeBase")
                 from ..text_splitter.factory import create_chunking_strategy
                 self.splitters = [create_chunking_strategy("recursive")]
         else:
@@ -305,7 +306,8 @@ class KnowledgeBase:
         elif source_index < len(component_list):
             return component_list[source_index]
         else:
-            print(f"Warning: {component_name} index {source_index} out of range, using first {component_name}")
+            from upsonic.utils.printing import warning_log
+            warning_log(f"{component_name} index {source_index} out of range, using first {component_name}", "KnowledgeBase")
             return component_list[0]
 
     def _generate_knowledge_id(self) -> str:
@@ -352,11 +354,11 @@ class KnowledgeBase:
             self.vectordb.connect()
 
             if self.vectordb.collection_exists():
-                print(f"KnowledgeBase '{self.name}' is already indexed. Setup is complete.")
+                info_log(f"KnowledgeBase '{self.name}' is already indexed. Setup is complete.", context="KnowledgeBase")
                 self._is_ready = True
                 return
 
-            print(f"KnowledgeBase '{self.name}' not found in vector store. Starting indexed indexing process...")
+            info_log(f"KnowledgeBase '{self.name}' not found in vector store. Starting indexed indexing process...", context="KnowledgeBase")
 
             all_documents = []
             source_to_documents = {}
@@ -365,51 +367,57 @@ class KnowledgeBase:
             
             for source_index, source in enumerate(self.sources):
                 source_str = str(source)
-                print(f"    Processing source {source_index}: {source_str[:100]}{'...' if len(source_str) > 100 else ''}")
+                info_log(f"Processing source {source_index}: {source_str[:100]}{'...' if len(source_str) > 100 else ''}", context="KnowledgeBase")
                 
                 if isinstance(source, str):
-                    print(f"      Detected direct content, creating document directly...")
+                    info_log("Detected direct content, creating document directly...", context="KnowledgeBase")
                     try:
                         document = self._create_document_from_content(source, source_index)
                         source_documents = [document]
-                        print(f"      ✓ Created document from direct content (length: {len(source)})")
+                        from upsonic.utils.printing import success_log
+                        success_log(f"Created document from direct content (length: {len(source)})", "KnowledgeBase")
                         all_documents.extend(source_documents)
                         source_to_documents[source_index] = source_documents
                         source_to_loader[source_index] = None
                     except Exception as e:
-                        print(f"      ✗ Error creating document from direct content: {e}")
+                        from upsonic.utils.printing import error_log
+                        error_log(f"Error creating document from direct content: {e}", "KnowledgeBase")
                         continue
                 else:
                     if self.loaders:
                         loader = self._get_component_for_source(source_index, self.loaders, "loader")
-                        print(f"      Using loader: {loader.__class__.__name__}")
+                        info_log(f"Using loader: {loader.__class__.__name__}", context="KnowledgeBase")
                         
-                        print(f"      Checking if {loader.__class__.__name__} can load {source}...")
+                        info_log(f"Checking if {loader.__class__.__name__} can load {source}...", context="KnowledgeBase")
                         can_load_result = loader.can_load(source)
-                        print(f"      can_load result: {can_load_result}")
+                        info_log(f"can_load result: {can_load_result}", context="KnowledgeBase")
                         
                         if can_load_result:
                             try:
                                 source_documents = loader.load(source)
-                                print(f"      ✓ Loaded {len(source_documents)} documents from {source}")
+                                from upsonic.utils.printing import success_log
+                                success_log(f"Loaded {len(source_documents)} documents from {source}", "KnowledgeBase")
                                 all_documents.extend(source_documents)
                                 source_to_documents[source_index] = source_documents
                                 source_to_loader[source_index] = loader
                             except Exception as e:
-                                print(f"      ✗ Error loading {source}: {e}")
+                                from upsonic.utils.printing import error_log
+                                error_log(f"Error loading {source}: {e}", "KnowledgeBase")
                                 continue
                         else:
-                            print(f"      ✗ Loader {loader.__class__.__name__} cannot handle {source}")
+                            from upsonic.utils.printing import warning_log
+                            warning_log(f"Loader {loader.__class__.__name__} cannot handle {source}", "KnowledgeBase")
                             continue
                     else:
-                        print(f"      ✗ No loaders provided for {source}")
+                        from upsonic.utils.printing import warning_log
+                        warning_log(f"No loaders provided for {source}", "KnowledgeBase")
                         continue
             
             if not all_documents:
                 self._is_ready = True
                 return
 
-            print(f"  [Step 2/4] Chunking {len(all_documents)} documents with indexed splitters...")
+            info_log(f"[Step 2/4] Chunking {len(all_documents)} documents with indexed splitters...", context="KnowledgeBase")
             all_chunks = []
             chunks_per_source = {}
             
@@ -423,21 +431,21 @@ class KnowledgeBase:
                 for doc in documents:
                     doc_chunks = splitter.chunk([doc])
                     source_chunks.extend(doc_chunks)
-                    print(f"      Document '{doc.document_id}' split into {len(doc_chunks)} chunks")
+                    debug_log(f"Document '{doc.document_id}' split into {len(doc_chunks)} chunks", context="KnowledgeBase")
                 
                 chunks_per_source[source_index] = source_chunks
                 all_chunks.extend(source_chunks)
-                print(f"    ✓ Source {source_index} total chunks: {len(source_chunks)}")
+                debug_log(f"Source {source_index} total chunks: {len(source_chunks)}", context="KnowledgeBase")
             
-            print(f"  Summary: Total chunks created: {len(all_chunks)}")
+            info_log(f"Summary: Total chunks created: {len(all_chunks)}", context="KnowledgeBase")
             for source_index, chunks in chunks_per_source.items():
-                print(f"    - Source {source_index}: {len(chunks)} chunks")
+                debug_log(f"Source {source_index}: {len(chunks)} chunks", context="KnowledgeBase")
 
-            print(f"  [Step 3/4] Creating embeddings for {len(all_chunks)} chunks...")
+            info_log(f"[Step 3/4] Creating embeddings for {len(all_chunks)} chunks...", context="KnowledgeBase")
             vectors = await self.embedding_provider.embed_documents(all_chunks)
-            print(f"  ✓ Created embeddings for {len(vectors)} chunks")
+            info_log(f"Created embeddings for {len(vectors)} chunks", context="KnowledgeBase")
             
-            print(f"  [Step 4/4] Storing {len(all_chunks)} chunks in vector database...")
+            info_log(f"[Step 4/4] Storing {len(all_chunks)} chunks in vector database...", context="KnowledgeBase")
             self.vectordb.create_collection()
             
             chunk_texts = [chunk.text_content for chunk in all_chunks]
@@ -452,7 +460,7 @@ class KnowledgeBase:
             )
             
             self._is_ready = True
-            print(f"KnowledgeBase '{self.name}' indexing completed successfully!")
+            info_log(f"KnowledgeBase '{self.name}' indexing completed successfully!", context="KnowledgeBase")
 
 
 
@@ -476,7 +484,7 @@ class KnowledgeBase:
         if not self._is_ready:
             return []
 
-        print(f"Querying KnowledgeBase '{self.name}' with: '{query}'")
+        info_log(f"Querying KnowledgeBase '{self.name}' with: '{query}'", context="KnowledgeBase")
         
         query_vector = await self.embedding_provider.embed_query(query)
 
@@ -500,7 +508,7 @@ class KnowledgeBase:
         for result in search_results:
             if not result.text:
                 error_msg = f"ERROR: Vector search result {result.id} has no text content. Payload: {result.payload}"
-                print(f"❌ {error_msg}")
+                error_log(error_msg, context="KnowledgeBase")
                 raise ValueError(error_msg)
             
             text_content = result.text
@@ -514,9 +522,11 @@ class KnowledgeBase:
             rag_results.append(rag_result)
 
         if len(rag_results) == 0:
-            print(f"Warning: No results found for KnowledgeBase '{self.name}' with query: '{query}'")
+            from upsonic.utils.printing import warning_log
+            warning_log(f"No results found for KnowledgeBase '{self.name}' with query: '{query}'", "KnowledgeBase")
         
-        print(f"✅ Successfully processed {len(rag_results)} results for RAG")
+        from upsonic.utils.printing import success_log
+        success_log(f"Successfully processed {len(rag_results)} results for RAG", "KnowledgeBase")
         return rag_results
 
     async def setup_rag(self) -> None:
@@ -735,9 +745,11 @@ class KnowledgeBase:
                 self.vectordb.disconnect()
             
             self._is_closed = True
-            print(f"✅ KnowledgeBase '{self.name}' resources cleaned up successfully")
+            from upsonic.utils.printing import success_log
+            success_log(f"KnowledgeBase '{self.name}' resources cleaned up successfully", "KnowledgeBase")
         except Exception as e:
-            print(f"⚠️ Warning: Error during KnowledgeBase cleanup: {e}")
+            from upsonic.utils.printing import warning_log
+            warning_log(f"Error during KnowledgeBase cleanup: {e}", "KnowledgeBase")
             self._is_closed = True
     
     def __del__(self):
@@ -762,6 +774,7 @@ class KnowledgeBase:
                                 asyncio.run(self.vectordb.disconnect_async())
                 except Exception:
                     pass
-                print(f"⚠️ Warning: KnowledgeBase '{getattr(self, 'name', 'Unknown')}' was not explicitly closed")
+                from upsonic.utils.printing import warning_log
+                warning_log(f"KnowledgeBase '{getattr(self, 'name', 'Unknown')}' was not explicitly closed", "KnowledgeBase")
         except:
             pass

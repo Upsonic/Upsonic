@@ -9,8 +9,10 @@ from upsonic.loaders.config import TextLoaderConfig
 
 try:
     import aiofiles
+    _AIOFILES_AVAILABLE = True
 except ImportError:
     aiofiles = None
+    _AIOFILES_AVAILABLE = False
 
 
 class TextLoader(BaseLoader):
@@ -30,6 +32,13 @@ class TextLoader(BaseLoader):
         Args:
             config: A TextLoaderConfig object with settings for text processing.
         """
+        if not _AIOFILES_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="aiofiles",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="text loader"
+            )
         super().__init__(config)
         self.config: TextLoaderConfig = config
 
@@ -93,11 +102,8 @@ class TextLoader(BaseLoader):
                 )
             self._processed_document_ids.add(document_id)
 
-            if aiofiles:
-                async with aiofiles.open(path, mode="r", encoding=self.config.encoding, errors="ignore") as f:
-                    content = await f.read()
-            else:
-                content = await asyncio.to_thread(path.read_text, self.config.encoding, "ignore")
+            async with aiofiles.open(path, mode="r", encoding=self.config.encoding, errors="ignore") as f:
+                content = await f.read()
 
             if self.config.strip_whitespace:
                 content = content.strip()

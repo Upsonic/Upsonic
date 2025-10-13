@@ -7,6 +7,7 @@ from pathlib import Path
 from .base import BaseChunker, BaseChunkingConfig
 from ..schemas.data_models import Document
 from ..utils.package.exception import ConfigurationError
+from upsonic.utils.printing import warning_log, info_log
 
 
 class ContentType(Enum):
@@ -483,7 +484,7 @@ def _create_final_config(
         else:
             return BaseChunkingConfig(**merged_config)
     elif kwargs:
-        print(f"Warning: Both config object and kwargs provided. Using config object, ignoring kwargs: {list(kwargs.keys())}")
+        warning_log(f"Both config object and kwargs provided. Using config object, ignoring kwargs: {list(kwargs.keys())}", context="TextSplitterFactory")
     
     return config
 
@@ -519,7 +520,7 @@ def create_adaptive_strategy(
     
     optimized_config = _create_optimized_config(content, content_type, strategy_name, **kwargs)
     
-    print(f"Auto-selected {strategy_name} strategy for {content_type.value} content")
+    info_log(f"Auto-selected {strategy_name} strategy for {content_type.value} content", context="TextSplitterFactory")
     
     return create_chunking_strategy(strategy_name, config=optimized_config)
 
@@ -621,19 +622,19 @@ def create_intelligent_splitters(
             )
             
             splitters.append(splitter)
-            print(f"Created {splitter.__class__.__name__} for {source}")
+            info_log(f"Created {splitter.__class__.__name__} for {source}", context="TextSplitterFactory")
             
         except Exception as e:
-            print(f"Warning: Failed to create intelligent splitter for {source}: {e}")
+            warning_log(f"Failed to create intelligent splitter for {source}: {e}", context="TextSplitterFactory")
             try:
                 fallback_config = _create_source_optimized_config(
                     source_str, "", use_case, "fast", **global_config_kwargs
                 )
                 fallback_splitter = create_chunking_strategy("recursive", **fallback_config)
                 splitters.append(fallback_splitter)
-                print(f"Using recursive strategy fallback for {source}")
+                info_log(f"Using recursive strategy fallback for {source}", context="TextSplitterFactory")
             except Exception as fallback_error:
-                print(f"Fallback splitter also failed for {source}: {fallback_error}")
+                warning_log(f"Fallback splitter also failed for {source}: {fallback_error}", context="TextSplitterFactory")
                 raise
     
     return splitters
@@ -739,7 +740,7 @@ def create_semantic_search_strategy(content: str = "", **kwargs) -> BaseChunker:
             error_code = getattr(e, 'error_code', '')
             if (error_code in ['MISSING_EMBEDDING_PROVIDER', 'API_KEY_MISSING', 'DEPENDENCY_MISSING'] or 
                 "OpenAI API key not found" in str(e) or "embedding_provider" in str(e)):
-                print("Warning: No embedding provider available, falling back to recursive strategy")
+                warning_log("No embedding provider available, falling back to recursive strategy", context="TextSplitterFactory")
                 return create_chunking_strategy("recursive", **kwargs)
             else:
                 raise
@@ -766,7 +767,7 @@ def create_quality_strategy(content: str = "", **kwargs) -> BaseChunker:
             except ConfigurationError as e:
                 error_code = getattr(e, 'error_code', '')
                 if error_code == 'MISSING_AGENT' or "agent" in str(e).lower():
-                    print("Warning: No agent available, trying semantic strategy")
+                    warning_log("No agent available, trying semantic strategy", context="TextSplitterFactory")
                 else:
                     raise
         
@@ -777,7 +778,7 @@ def create_quality_strategy(content: str = "", **kwargs) -> BaseChunker:
                 error_code = getattr(e, 'error_code', '')
                 if (error_code in ['MISSING_EMBEDDING_PROVIDER', 'API_KEY_MISSING', 'DEPENDENCY_MISSING'] or 
                     "OpenAI API key not found" in str(e) or "embedding_provider" in str(e)):
-                    print("Warning: No embedding provider available, falling back to recursive strategy")
+                    warning_log("No embedding provider available, falling back to recursive strategy", context="TextSplitterFactory")
                 else:
                     raise
         

@@ -1,7 +1,13 @@
 import re
 import base64
-import requests
 from typing import List
+
+try:
+    import requests
+    _REQUESTS_AVAILABLE = True
+except ImportError:
+    requests = None
+    _REQUESTS_AVAILABLE = False
 
 def extract_image_urls(text: str) -> List[str]:
     """
@@ -31,6 +37,14 @@ def urls_to_base64(image_urls: List[str]) -> List[str]:
         A list of base64 encoded strings. If a URL fails to download,
         it will be skipped.
     """
+    if not _REQUESTS_AVAILABLE:
+        from upsonic.utils.printing import import_error
+        import_error(
+            package_name="requests",
+            install_command='pip install requests',
+            feature_name="image URL downloading"
+        )
+
     base64_images = []
     for url in image_urls:
         try:

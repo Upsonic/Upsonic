@@ -1,17 +1,27 @@
+from __future__ import annotations
+
 import json
 import time
-from typing import Optional, Dict, Any, Type, Union, TypeVar
+from typing import Optional, Dict, Any, Type, Union, TypeVar, TYPE_CHECKING
 
 from pydantic import BaseModel
 
 from upsonic.storage.base import Storage
 from upsonic.storage.session.sessions import InteractionSession, UserProfile
 
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
+    from redis.exceptions import ConnectionError as RedisConnectionError
+
 try:
     from redis.asyncio import Redis
     from redis.exceptions import ConnectionError as RedisConnectionError
+    _REDIS_AVAILABLE = True
 except ImportError:
-    raise ImportError("`redis` is required for async RedisStorage. Please install it using `pip install redis`.")
+    Redis = None  # type: ignore
+    RedisConnectionError = None  # type: ignore
+    _REDIS_AVAILABLE = False
+
 
 T = TypeVar('T', bound=BaseModel)
 
@@ -43,6 +53,14 @@ class RedisStorage(Storage):
             ssl: If True, uses an SSL connection.
             expire: Optional TTL in seconds for all created keys.
         """
+        if not _REDIS_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="redis",
+                install_command='pip install "upsonic[storage]"',
+                feature_name="Redis storage provider"
+            )
+
         super().__init__()
         self.prefix = prefix
         self.expire = expire
@@ -109,7 +127,8 @@ class RedisStorage(Storage):
             data_dict = self._deserialize(data_str)
             return model_type.from_dict(data_dict)
         except (json.JSONDecodeError, TypeError) as e:
-            print(f"Warning: Could not parse key {key}. Error: {e}")
+            from upsonic.utils.printing import warning_log
+            warning_log(f"Could not parse key {key}. Error: {e}", "RedisStorage")
             return None
 
     async def upsert_async(self, data: Union[InteractionSession, UserProfile]) -> None:

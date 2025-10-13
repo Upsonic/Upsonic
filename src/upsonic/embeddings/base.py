@@ -4,7 +4,12 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional, Union, Tuple
 from enum import Enum
 import time
-import numpy as np
+try:
+    import numpy as np
+    _NUMPY_AVAILABLE = True
+except ImportError:
+    np = None
+    _NUMPY_AVAILABLE = False
 from concurrent.futures import ThreadPoolExecutor
 
 from pydantic import BaseModel, Field, ConfigDict
@@ -53,8 +58,6 @@ class EmbeddingConfig(BaseModel):
     enable_adaptive_batching: bool = Field(True, description="Dynamically adjust batch size based on performance")
     enable_compression: bool = Field(False, description="Enable embedding compression for storage efficiency")
     compression_ratio: float = Field(0.5, description="Target compression ratio (0.0-1.0)")
-    
-    extra_settings: Dict[str, Any] = Field(default_factory=dict, description="Additional provider-specific settings")
     
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

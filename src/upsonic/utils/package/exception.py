@@ -1,3 +1,8 @@
+import json
+from typing import Any
+
+from pydantic_core import core_schema
+
 class VectorDBError(Exception):
     """Base exception for all vector database provider errors."""
     pass
@@ -118,3 +123,113 @@ class ModelCapabilityError(UupsonicError):
         full_message = message + suggestion
         error_code = "MODEL_CAPABILITY_MISMATCH"
         super().__init__(message=full_message, error_code=error_code)
+
+class AgentRunError(RuntimeError):
+    """Base class for errors occurring during an agent run."""
+
+    message: str
+    """The error message."""
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class UsageLimitExceeded(AgentRunError):
+    """Error raised when a Model's usage exceeds the specified limits."""
+
+
+class UnexpectedModelBehavior(AgentRunError):
+    """Error caused by unexpected Model behavior, e.g. an unexpected response code."""
+
+    message: str
+    """Description of the unexpected behavior."""
+    body: str | None
+    """The body of the response, if available."""
+
+    def __init__(self, message: str, body: str | None = None):
+        self.message = message
+        if body is None:
+            self.body: str | None = None
+        else:
+            try:
+                self.body = json.dumps(json.loads(body), indent=2)
+            except ValueError:
+                self.body = body
+        super().__init__(message)
+
+    def __str__(self) -> str:
+        if self.body:
+            return f'{self.message}, body:\n{self.body}'
+        else:
+            return self.message
+
+class UserError(RuntimeError):
+    """Error caused by a usage mistake by the application developer — You!"""
+
+    message: str
+    """Description of the mistake."""
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
+
+
+class ModelRetry(Exception):
+    """Exception to raise when a tool function should be retried.
+
+    The agent will return the message to the model and ask it to try calling the function/tool again.
+    """
+
+    message: str
+    """The message to return to the model."""
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
+
+    def __eq__(self, other: Any) -> bool:
+        return isinstance(other, self.__class__) and other.message == self.message
+
+    @classmethod
+    def __get_pydantic_core_schema__(cls, _: Any, __: Any) -> core_schema.CoreSchema:
+        """Pydantic core schema to allow `ModelRetry` to be (de)serialized."""
+        schema = core_schema.typed_dict_schema(
+            {
+                'message': core_schema.typed_dict_field(core_schema.str_schema()),
+                'kind': core_schema.typed_dict_field(core_schema.literal_schema(['model-retry'])),
+            }
+        )
+        return core_schema.no_info_after_validator_function(
+            lambda dct: ModelRetry(dct['message']),
+            schema,
+            serialization=core_schema.plain_serializer_function_ser_schema(
+                lambda x: {'message': x.message, 'kind': 'model-retry'},
+                return_schema=schema,
+            ),
+        )
+
+class ModelHTTPError(AgentRunError):
+    """Raised when an model provider response has a status code of 4xx or 5xx."""
+
+    status_code: int
+    """The HTTP status code returned by the API."""
+
+    model_name: str
+    """The name of the model associated with the error."""
+
+    body: object | None
+    """The body of the response, if available."""
+
+    message: str
+    """The error message with the status code and response body, if available."""
+
+    def __init__(self, status_code: int, model_name: str, body: object | None = None):
+        self.status_code = status_code
+        self.model_name = model_name
+        self.body = body
+        message = f'status_code: {status_code}, model_name: {model_name}, body: {body}'
+        super().__init__(message)

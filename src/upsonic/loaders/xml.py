@@ -4,8 +4,11 @@ from typing import List, Union
 
 try:
     from lxml import etree
+    _LXML_AVAILABLE = True
 except ImportError:
-    raise ImportError("`lxml` is not installed. Please install it with `pip install lxml`.")
+    etree = None
+    _LXML_AVAILABLE = False
+
 
 from upsonic.schemas.data_models import Document
 from upsonic.loaders.base import BaseLoader
@@ -28,6 +31,13 @@ class XMLLoader(BaseLoader):
         Args:
             config: An XMLLoaderConfig object with settings for XML processing.
         """
+        if not _LXML_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="lxml",
+                install_command='pip install "upsonic[loaders]"',
+                feature_name="XML loader"
+            )
         super().__init__(config)
         self.config: XMLLoaderConfig = config
 

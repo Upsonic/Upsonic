@@ -26,8 +26,8 @@ jobs:
 
     - name: Install dependencies
       run: |
-        uv sync --extra rag --extra storage
+        uv sync --all-extras
 
     - name: Run unit tests
       run: |
-        uv run pytest tests
+        uv run pytest tests/unit_tests

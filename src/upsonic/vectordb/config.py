@@ -70,10 +70,11 @@ class CoreConfig(pydantic.BaseModel):
     
     recreate_if_exists: bool = False
 
-    @pydantic.validator('host', 'api_key')
-    def cloud_requirements(cls, v, values):
+    @pydantic.field_validator('host', 'api_key')
+    @classmethod
+    def cloud_requirements(cls, v, info):
         """Validator to ensure cloud mode has the necessary credentials."""
-        if values.get('mode') == Mode.CLOUD and v is None:
+        if hasattr(info, 'data') and info.data.get('mode') == Mode.CLOUD and v is None:
             raise ValueError("host and api_key are required for 'cloud' mode")
         return v
 
@@ -160,13 +161,15 @@ class SearchConfig(pydantic.BaseModel):
     
     filter: Optional[Dict[str, Any]] = None
 
-    @pydantic.validator('default_hybrid_alpha')
+    @pydantic.field_validator('default_hybrid_alpha')
+    @classmethod
     def alpha_in_range(cls, v):
         if v is not None and not (0.0 <= v <= 1.0):
             raise ValueError("alpha must be between 0.0 and 1.0")
         return v
 
-    @pydantic.validator('default_similarity_threshold')
+    @pydantic.field_validator('default_similarity_threshold')
+    @classmethod
     def similarity_threshold_in_range(cls, v):
         if v is not None and not (0.0 <= v <= 1.0):
             raise ValueError("similarity_threshold must be between 0.0 and 1.0")
@@ -214,21 +217,20 @@ class Config(pydantic.BaseModel):
     data_management: DataManagementConfig = DataManagementConfig()
     advanced: AdvancedConfig = AdvancedConfig()
 
-    @pydantic.root_validator(skip_on_failure=True)
-    def cross_config_validation(cls, values):
+    @pydantic.model_validator(mode='after')
+    def cross_config_validation(self):
         """
         Performs high-level validation between different sub-configs.
         This ensures that the entire configuration is cohesive.
         """
-        core_cfg: CoreConfig = values.get('core')
-        indexing_cfg: IndexingConfig = values.get('indexing')
-
+        core_cfg: CoreConfig = self.core
+        indexing_cfg: IndexingConfig = self.indexing
 
         if (core_cfg.distance_metric == DistanceMetric.EUCLIDEAN and 
             core_cfg.provider_name in [ProviderName.CHROMA]):
             pass
 
-        search_cfg: SearchConfig = values.get('search')
+        search_cfg: SearchConfig = self.search
         if search_cfg.default_nprobe and not isinstance(indexing_cfg.index_config, IVFTuningConfig):
             raise ValueError("`default_nprobe` can only be set for IVF_FLAT index types.")
         
@@ -251,4 +253,4 @@ class Config(pydantic.BaseModel):
                             f"'{payload_config.field_name}' is invalid. This index can only be "
                             f"applied to fields of type 'text' or 'keyword'."
                         )
-        return values
+        return self

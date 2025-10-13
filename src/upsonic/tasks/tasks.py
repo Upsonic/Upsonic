@@ -1,19 +1,22 @@
 import base64
 import time
 from pydantic import BaseModel
+from typing import Any, List, Dict, Optional, Type, Union, Callable, Literal, TYPE_CHECKING
 
-
-from typing import Any, List, Dict, Optional, Type, Union, Callable, Literal
-
-
-
-from upsonic.utils.printing import get_price_id_total_cost
-from pydantic_ai import Agent as PydanticAgent, BinaryContent
-
-from upsonic.knowledge_base.knowledge_base import KnowledgeBase
-from upsonic.schemas.data_models import RAGSearchResult
-
-from upsonic.tools.external_tool import ExternalToolCall
+# Heavy imports moved to lazy loading for faster startup
+if TYPE_CHECKING:
+    from upsonic.utils.printing import get_price_id_total_cost
+    from upsonic.messages.messages import BinaryContent
+    from upsonic.schemas.data_models import RAGSearchResult
+    from upsonic.tools import ExternalToolCall
+    from upsonic.embeddings.factory import auto_detect_best_embedding
+else:
+    # Use string annotations to avoid importing heavy modules
+    get_price_id_total_cost = "get_price_id_total_cost"
+    BinaryContent = "BinaryContent"
+    RAGSearchResult = "RAGSearchResult"
+    ExternalToolCall = "ExternalToolCall"
+    auto_detect_best_embedding = "auto_detect_best_embedding"
 
 # Type aliases for better type safety
 CacheMethod = Literal["vector_search", "llm_call"]
@@ -24,24 +27,23 @@ class Task(BaseModel):
     attachments: Optional[List[str]] = None
     tools: list[Any] = None
     response_format: Union[Type[BaseModel], type[str], None] = str
-    response_lang: str = "en"
+    response_lang: Optional[str] = "en"
     _response: Any = None
     context: Any = None
-    _context_formatted: str | None = None
+    _context_formatted: Optional[str] = None
     price_id_: Optional[str] = None
     task_id_: Optional[str] = None
     not_main_task: bool = False
     start_time: Optional[int] = None
     end_time: Optional[int] = None
     agent: Optional[Any] = None
-    response_lang: Optional[str] = None
     enable_thinking_tool: Optional[bool] = None
     enable_reasoning_tool: Optional[bool] = None
     _tool_calls: List[Dict[str, Any]] = None
     guardrail: Optional[Callable] = None
     guardrail_retries: Optional[int] = None
     is_paused: bool = False
-    _tools_awaiting_external_execution: List[ExternalToolCall] = []
+    _tools_awaiting_external_execution: List["ExternalToolCall"] = []
     
     enable_cache: bool = False
     cache_method: Literal["vector_search", "llm_call"] = "vector_search"
@@ -53,7 +55,149 @@ class Task(BaseModel):
     _original_input: Optional[str] = None
     _last_cache_entry: Optional[Dict[str, Any]] = None
 
-
+    @staticmethod
+    def _is_file_path(item: Any) -> bool:
+        """
+        Check if an item is a valid file path.
+        
+        Args:
+            item: Any object to check
+            
+        Returns:
+            bool: True if the item is a string representing an existing file path
+        """
+        if not isinstance(item, str):
+            return False
+        
+        import os
+        
+        # Check if it's a valid file path and the file exists
+        try:
+            return os.path.isfile(item)
+        except (TypeError, ValueError, OSError):
+            return False
+    
+    @staticmethod
+    def _is_folder_path(item: Any) -> bool:
+        """
+        Check if an item is a valid folder/directory path.
+        
+        Args:
+            item: Any object to check
+            
+        Returns:
+            bool: True if the item is a string representing an existing directory
+        """
+        if not isinstance(item, str):
+            return False
+        
+        import os
+        
+        # Check if it's a valid directory path and the directory exists
+        try:
+            return os.path.isdir(item)
+        except (TypeError, ValueError, OSError):
+            return False
+    
+    @staticmethod
+    def _get_files_from_folder(folder_path: str) -> List[str]:
+        """
+        Recursively get all file paths from a folder.
+        
+        Args:
+            folder_path: Path to the folder
+            
+        Returns:
+            List[str]: List of all file paths in the folder and subfolders
+        """
+        import os
+        
+        files = []
+        try:
+            for root, dirs, filenames in os.walk(folder_path):
+                for filename in filenames:
+                    file_path = os.path.join(root, filename)
+                    files.append(file_path)
+        except (OSError, PermissionError):
+            # If we can't access the folder, just skip it
+            pass
+        
+        return files
+    
+    @staticmethod
+    def _extract_files_from_context(context: Any) -> tuple[Any, List[str]]:
+        """
+        Extract file paths from context and return cleaned context and file list.
+        Also handles folders by extracting all files from them recursively.
+        
+        Args:
+            context: The context parameter (can be a list, dict, or any other type)
+            
+        Returns:
+            tuple: (cleaned_context, extracted_files)
+                - cleaned_context: Context with file/folder paths removed
+                - extracted_files: List of file paths found (including files from folders)
+        """
+        extracted_files = []
+        
+        # If context is None or empty, return as is
+        if not context:
+            return context, extracted_files
+        
+        # Handle list context
+        if isinstance(context, list):
+            cleaned_context = []
+            for item in context:
+                if Task._is_file_path(item):
+                    extracted_files.append(item)
+                elif Task._is_folder_path(item):
+                    # Extract all files from the folder
+                    folder_files = Task._get_files_from_folder(item)
+                    extracted_files.extend(folder_files)
+                else:
+                    cleaned_context.append(item)
+            return cleaned_context, extracted_files
+        
+        # Handle dict context - check values
+        elif isinstance(context, dict):
+            cleaned_context = {}
+            for key, value in context.items():
+                if Task._is_file_path(value):
+                    extracted_files.append(value)
+                elif Task._is_folder_path(value):
+                    # Extract all files from the folder
+                    folder_files = Task._get_files_from_folder(value)
+                    extracted_files.extend(folder_files)
+                elif isinstance(value, list):
+                    # Recursively process lists in dict values
+                    cleaned_list = []
+                    for item in value:
+                        if Task._is_file_path(item):
+                            extracted_files.append(item)
+                        elif Task._is_folder_path(item):
+                            # Extract all files from the folder
+                            folder_files = Task._get_files_from_folder(item)
+                            extracted_files.extend(folder_files)
+                        else:
+                            cleaned_list.append(item)
+                    cleaned_context[key] = cleaned_list
+                else:
+                    cleaned_context[key] = value
+            return cleaned_context, extracted_files
+        
+        # Handle single string that might be a file path or folder
+        elif Task._is_file_path(context):
+            extracted_files.append(context)
+            return [], extracted_files
+        elif Task._is_folder_path(context):
+            # Extract all files from the folder
+            folder_files = Task._get_files_from_folder(context)
+            extracted_files.extend(folder_files)
+            return [], extracted_files
+        
+        # For any other type, return as is
+        else:
+            return context, extracted_files
 
     def __init__(
         self, 
@@ -63,7 +207,7 @@ class Task(BaseModel):
         response_format: Union[Type[BaseModel], type[str], None] = str,
         response: Any = None,
         context: Any = None,
-        _context_formatted: str | None = None,
+        _context_formatted: Optional[str] = None,
         price_id_: Optional[str] = None,
         task_id_: Optional[str] = None,
         not_main_task: bool = False,
@@ -76,13 +220,12 @@ class Task(BaseModel):
         guardrail: Optional[Callable] = None,
         guardrail_retries: Optional[int] = None,
         is_paused: bool = False,
-        _tools_awaiting_external_execution: List[ExternalToolCall] = None,
+        _tools_awaiting_external_execution: List["ExternalToolCall"] = None,
         enable_cache: bool = False,
         cache_method: Literal["vector_search", "llm_call"] = "vector_search",
         cache_threshold: float = 0.7,
         cache_embedding_provider: Optional[Any] = None,
         cache_duration_minutes: int = 60,
-        **data
     ):
         if guardrail is not None and not callable(guardrail):
             raise TypeError("The 'guardrail' parameter must be a callable function.")
@@ -93,15 +236,12 @@ class Task(BaseModel):
         if not (0.0 <= cache_threshold <= 1.0):
             raise ValueError("cache_threshold must be between 0.0 and 1.0")
         
-        if cache_method == "vector_search" and cache_embedding_provider is None:
+        if enable_cache and cache_method == "vector_search" and cache_embedding_provider is None:
             try:
                 from upsonic.embeddings.factory import auto_detect_best_embedding
                 cache_embedding_provider = auto_detect_best_embedding()
             except Exception:
                 raise ValueError("cache_embedding_provider is required when cache_method is 'vector_search'")
-        
-        if description is not None:
-            data["description"] = description
             
         if tools is None:
             tools = []
@@ -111,8 +251,17 @@ class Task(BaseModel):
 
         if _tools_awaiting_external_execution is None:
             _tools_awaiting_external_execution = []
+        
+        context, extracted_files = self._extract_files_from_context(context)
+        
+        if attachments is None:
+            attachments = []
+        
+        if extracted_files:
+            attachments.extend(extracted_files)
             
-        data.update({
+        super().__init__(**{
+            "description": description,
             "attachments": attachments,
             "tools": tools,
             "response_format": response_format,
@@ -144,7 +293,6 @@ class Task(BaseModel):
             "_last_cache_entry": None
         })
         
-        super().__init__(**data)
         self.validate_tools()
 
     @property
@@ -171,7 +319,7 @@ class Task(BaseModel):
                         control_result = tool.__control__()
 
     @property
-    def context_formatted(self) -> str | None:
+    def context_formatted(self) -> Optional[str]:
         """
         Provides read-only access to the formatted context string.
         
@@ -182,7 +330,7 @@ class Task(BaseModel):
         return self._context_formatted
 
     @property
-    def tools_awaiting_external_execution(self) -> List[ExternalToolCall]:
+    def tools_awaiting_external_execution(self) -> List["ExternalToolCall"]:
         """
         Get the list of tool calls awaiting external execution.
         When the task is paused, this list should be iterated over,
@@ -191,7 +339,7 @@ class Task(BaseModel):
         return self._tools_awaiting_external_execution
     
     @context_formatted.setter
-    def context_formatted(self, value: str | None):
+    def context_formatted(self, value: Optional[str]):
         """
         Sets the internal `_context_formatted` attribute.
 
@@ -208,37 +356,42 @@ class Task(BaseModel):
         if not self.context:
             return ""
         
+        # Lazy import for heavy modules
+        from upsonic.knowledge_base.knowledge_base import KnowledgeBase
             
         rag_results = []
         for context in self.context:
             
-            if isinstance(context, KnowledgeBase) and context.rag == True:
-                await context.setup_rag()
-                rag_result_objects = await context.query_async(self.description)
-                # Convert RAGSearchResult objects to formatted strings
-                if rag_result_objects:
-                    formatted_results = []
-                    for i, result in enumerate(rag_result_objects, 1):
-                        cleaned_text = result.text.strip()
-                        metadata_str = ""
-                        if result.metadata:
-                            source = result.metadata.get('source', 'Unknown')
-                            page_number = result.metadata.get('page_number')
-                            chunk_id = result.chunk_id or result.metadata.get('chunk_id')
+            # Lazy import KnowledgeBase to avoid heavy imports
+            if hasattr(context, 'rag') and context.rag == True:
+                # Import KnowledgeBase only when needed
+                if isinstance(context, KnowledgeBase):
+                    await context.setup_rag()
+                    rag_result_objects = await context.query_async(self.description)
+                    # Convert RAGSearchResult objects to formatted strings
+                    if rag_result_objects:
+                        formatted_results = []
+                        for i, result in enumerate(rag_result_objects, 1):
+                            cleaned_text = result.text.strip()
+                            metadata_str = ""
+                            if result.metadata:
+                                source = result.metadata.get('source', 'Unknown')
+                                page_number = result.metadata.get('page_number')
+                                chunk_id = result.chunk_id or result.metadata.get('chunk_id')
+                                
+                                metadata_parts = [f"source: {source}"]
+                                if page_number is not None:
+                                    metadata_parts.append(f"page: {page_number}")
+                                if chunk_id:
+                                    metadata_parts.append(f"chunk_id: {chunk_id}")
+                                if result.score is not None:
+                                    metadata_parts.append(f"score: {result.score:.3f}")
+                                
+                                metadata_str = f" [metadata: {', '.join(metadata_parts)}]"
                             
-                            metadata_parts = [f"source: {source}"]
-                            if page_number is not None:
-                                metadata_parts.append(f"page: {page_number}")
-                            if chunk_id:
-                                metadata_parts.append(f"chunk_id: {chunk_id}")
-                            if result.score is not None:
-                                metadata_parts.append(f"score: {result.score:.3f}")
-                            
-                            metadata_str = f" [metadata: {', '.join(metadata_parts)}]"
+                            formatted_results.append(f"[{i}]{metadata_str} {cleaned_text}")
                         
-                        formatted_results.append(f"[{i}]{metadata_str} {cleaned_text}")
-                    
-                    rag_results.extend(formatted_results)
+                        rag_results.extend(formatted_results)
                 
         if rag_results:
             return f"The following is the RAG data: <rag>{' '.join(rag_results)}</rag>"
@@ -246,14 +399,32 @@ class Task(BaseModel):
 
 
     @property
-    def images_base_64(self):
-        if self.images is None:
+    def attachments_base64(self):
+        """
+        Convert all attachment files to base64 encoded strings.
+        
+        Base64 encoding works with any file type (images, PDFs, documents, etc.)
+        and is commonly used for embedding binary data in text-based formats.
+        
+        Returns:
+            List[str]: List of base64 encoded strings, one for each attachment
+            None: If no attachments are present
+        """
+        if self.attachments is None:
             return None
-        base_64_images = []
-        for image in self.images:
-            with open(image, "rb") as image_file:
-                base_64_images.append(base64.b64encode(image_file.read()).decode('utf-8'))
-        return base_64_images
+        base64_attachments = []
+        for attachment_path in self.attachments:
+            try:
+                with open(attachment_path, "rb") as attachment_file:
+                    file_data = attachment_file.read()
+                    base64_encoded = base64.b64encode(file_data).decode('utf-8')
+                    base64_attachments.append(base64_encoded)
+            except Exception as e:
+                # Log the error but continue with other attachments
+                from upsonic.utils.printing import warning_log
+                warning_log(f"Could not encode attachment {attachment_path} to base64: {e}", "TaskProcessor")
+        return base64_attachments
+
 
     @property
     def price_id(self):
@@ -290,6 +461,8 @@ class Task(BaseModel):
     def get_total_cost(self):
         if self.price_id_ is None:
             return None
+        # Lazy import for heavy modules
+        from upsonic.utils.printing import get_price_id_total_cost
         return get_price_id_total_cost(self.price_id)
     
     @property
@@ -403,6 +576,9 @@ class Task(BaseModel):
         """
         Builds the input for the agent, using and then clearing the formatted context.
         """
+        # Lazy import for heavy modules
+        from upsonic.messages.messages import BinaryContent
+        
         final_description = self.description
         if self.context_formatted and isinstance(self.context_formatted, str):
             final_description += "\n" + self.context_formatted
@@ -428,7 +604,8 @@ class Task(BaseModel):
                 input_list.append(BinaryContent(data=attachment_data, media_type=media_type))
                 
             except Exception as e:
-                print(f"Warning: Could not load image {attachment_path}: {e}")
+                from upsonic.utils.printing import warning_log
+                warning_log(f"Could not load image {attachment_path}: {e}", "TaskProcessor")
 
         return input_list
 

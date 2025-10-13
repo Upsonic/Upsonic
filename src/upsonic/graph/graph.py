@@ -16,7 +16,10 @@ from rich.progress import (BarColumn, Progress, SpinnerColumn, TextColumn,
 from rich.table import Table
 
 from ..agent.base import BaseAgent
-from ..storage.base import Storage
+try:
+    from ..storage.base import Storage
+except ImportError:
+    Storage = None
 from ..tasks.tasks import Task
 from ..utils.printing import console, escape_rich_markup, spacing
 
@@ -814,7 +817,7 @@ def create_graph(default_agent: Optional[Any] = None, parallel_execution: bool =
     Creates a new graph with the specified configuration.
     
     Args:
-        default_agent: Default agent to use for tasks (AgentConfiguration or Direct)
+        default_agent: Default agent to use for tasks (AgentConfiguration or Agent)
         parallel_execution: Whether to execute independent tasks in parallel
         show_progress: Whether to display a progress bar during execution
         

@@ -6,12 +6,12 @@ import tracemalloc
 import statistics
 from typing import Union, List, Dict
 
-from upsonic.agent.agent import Direct
+from upsonic.agent.agent import Agent
 from upsonic.graph.graph import Graph
 from upsonic.team.team import Team
 from upsonic.tasks.tasks import Task
 from upsonic.eval.models import PerformanceRunResult, PerformanceEvaluationResult
-from upsonic.utils.printing import console
+from upsonic.utils.printing import console, debug_log
 
 from rich.table import Table
 
@@ -24,13 +24,13 @@ class PerformanceEvaluator:
 
     def __init__(
         self,
-        agent_under_test: Union[Direct, Graph, Team],
+        agent_under_test: Union[Agent, Graph, Team],
         task: Union[Task, List[Task]],
         num_iterations: int = 10,
         warmup_runs: int = 2
     ):
-        if not isinstance(agent_under_test, (Direct, Graph, Team)):
-            raise TypeError("The `agent_under_test` must be an instance of `Direct`, `Graph`, or `Team`.")
+        if not isinstance(agent_under_test, (Agent, Graph, Team)):
+            raise TypeError("The `agent_under_test` must be an instance of `Agent`, `Graph`, or `Team`.")
         if not isinstance(task, (Task, list)):
             raise TypeError("The `task` must be an instance of `Task` or a list of `Task` objects.")
         if not isinstance(num_iterations, int) or num_iterations < 1:
@@ -77,7 +77,7 @@ class PerformanceEvaluator:
 
             tracemalloc.clear_traces()
             start_mem, _ = tracemalloc.get_traced_memory()
-            print(f"start_mem: {start_mem}")
+            debug_log(f"start_mem: {start_mem}", context="PerformanceEvaluator")
             
             start_time = time.perf_counter()
 
@@ -87,7 +87,7 @@ class PerformanceEvaluator:
             latency = end_time - start_time
             
             end_mem, peak_mem = tracemalloc.get_traced_memory()
-            print(f"end_mem: {end_mem}, peak_mem: {peak_mem}")
+            debug_log(f"end_mem: {end_mem}, peak_mem: {peak_mem}", context="PerformanceEvaluator")
             
             run_result = PerformanceRunResult(
                 latency_seconds=latency,
@@ -105,9 +105,9 @@ class PerformanceEvaluator:
         
         return final_result
 
-    async def _execute_component(self, agent: Union[Direct, Graph, Team], task: Union[Task, List[Task]]) -> None:
+    async def _execute_component(self, agent: Union[Agent, Graph, Team], task: Union[Task, List[Task]]) -> None:
         """Internal helper now accepts the components to execute."""
-        if isinstance(agent, Direct):
+        if isinstance(agent, Agent):
             task_to_run = task[0] if isinstance(task, list) else task
             await agent.do_async(task_to_run)
         elif isinstance(agent, Graph):
