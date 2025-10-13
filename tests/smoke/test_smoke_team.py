@@ -1,7 +1,8 @@
 import pytest
 from upsonic import Agent, Task, Team
 from pydantic import BaseModel
-# Sample Pydantic model for testing
+
+#t
 class AnalysisResult(BaseModel):
 	summary: str
 	confidence: float

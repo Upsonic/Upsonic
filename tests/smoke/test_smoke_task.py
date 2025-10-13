@@ -3,6 +3,8 @@ from pydantic import BaseModel
 from upsonic import Task, Agent
 from upsonic.tools import  tool
 
+#t
+
 @tool
 def web_search(query: str) -> str:
     """Searches the web for the given query and returns a short summary."""

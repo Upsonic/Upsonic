@@ -1,17 +1,13 @@
-from upsonic import Task, Agent, Direct
-from upsonic.tools import tool
-from pydantic import BaseModel
-from upsonic.tools import YFinanceTools
+from upsonic import Task, Agent
 
+list_of_models = [
+    "openai/gpt-4o",
+    "anthropic/claude-3-5-sonnet-latest",
+    "gemini/gemini-2.5-pro",
+]
 
+task = Task("What is the capital of France?")
 
-
-
-task = Task(
-	description="Solve this complex problem: If a train travels at 60 mph for 2.5 hours, how far does it go?",
-	enable_thinking_tool=True,
-	enable_reasoning_tool=True
-)
-agent = Agent(name="Reasoning Agent")
-agent.print_do(task)	
-	
+for model in list_of_models:
+    agent = Agent(model=model)
+    result = agent.print_do(task)
