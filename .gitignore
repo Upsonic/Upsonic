@@ -7,6 +7,7 @@ video.mp4
 
 *.db.lock
 
+temp/
 
 KOT-*
 notes.txt
