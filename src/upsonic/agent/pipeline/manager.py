@@ -162,14 +162,20 @@ class PipelineManager:
                     break
             
             if self.debug:
-                from upsonic.utils.printing import pipeline_completed
+                from upsonic.utils.printing import pipeline_completed, pipeline_timeline
                 total_time = sum(r["execution_time"] for r in self._execution_stats["step_results"].values())
                 pipeline_completed(
-                    self._execution_stats['executed_steps'], 
-                    len(self.steps), 
+                    self._execution_stats['executed_steps'],
+                    len(self.steps),
                     total_time
                 )
-            
+
+                # Show timeline of step execution times
+                pipeline_timeline(
+                    self._execution_stats["step_results"],
+                    total_time
+                )
+
             return context
             
         except Exception as e:
@@ -274,11 +280,17 @@ class PipelineManager:
                     break
             
             if self.debug:
-                from upsonic.utils.printing import pipeline_completed
+                from upsonic.utils.printing import pipeline_completed, pipeline_timeline
                 total_time = sum(r["execution_time"] for r in self._execution_stats["step_results"].values())
                 pipeline_completed(
-                    self._execution_stats['executed_steps'], 
-                    len(self.steps), 
+                    self._execution_stats['executed_steps'],
+                    len(self.steps),
+                    total_time
+                )
+
+                # Show timeline of step execution times
+                pipeline_timeline(
+                    self._execution_stats["step_results"],
                     total_time
                 )
             

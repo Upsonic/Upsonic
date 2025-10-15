@@ -1294,159 +1294,136 @@ def connection_info(provider: str, version: str = "unknown") -> None:
 def pipeline_started(total_steps: int) -> None:
     """
     Log pipeline execution start.
-    
+
     Args:
         total_steps: Total number of steps in the pipeline
     """
-    from rich.table import Table
-    from rich.panel import Panel
-    
-    table = Table(show_header=False, box=None, expand=True)
-    table.add_column(style="bold blue", width=20)
-    table.add_column(style="cyan")
-    
-    table.add_row("🚀 PIPELINE", f"[bold blue]INITIALIZING[/bold blue]")
-    table.add_row("📊 STEPS", f"[bold]{total_steps}[/bold] steps to execute")
-    table.add_row("⚡ MODE", "[bold green]EXECUTION[/bold green]")
-    
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+
+    table.add_row("[bold]Pipeline Status:[/bold]", "[blue]Starting[/blue]")
+    table.add_row("[bold]Total Steps:[/bold]", f"[blue]{total_steps}[/blue]")
+
     panel = Panel(
         table,
-        title="[bold blue]🤖 AGENT PIPELINE[/bold blue]",
+        title="[bold blue]Pipeline Started[/bold blue]",
         border_style="blue",
-        padding=(1, 2),
-        expand=True
+        expand=True,
+        width=70
     )
+
     console.print(panel)
+    spacing()
 
 
 def pipeline_step_started(step_name: str, step_description: str = None) -> None:
     """
     Log pipeline step execution start.
-    
+
     Args:
         step_name: Name of the step
         step_description: Optional description of the step
     """
-    from rich.table import Table
-    from rich.panel import Panel
-    
     step_name_esc = escape_rich_markup(step_name)
     step_description_esc = escape_rich_markup(step_description) if step_description else "Processing..."
-    
-    table = Table(show_header=False, box=None, expand=True)
-    table.add_column(style="bold cyan", width=15)
-    table.add_column(style="white")
-    
-    table.add_row("⚡ STEP", f"[bold cyan]{step_name_esc}[/bold cyan]")
-    table.add_row("📝 TASK", step_description_esc)
-    table.add_row("🔄 STATUS", "[bold yellow]RUNNING[/bold yellow]")
-    
+
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+
+    table.add_row("[bold]Step:[/bold]", f"[cyan]{step_name_esc}[/cyan]")
+    table.add_row("[bold]Description:[/bold]", f"{step_description_esc}")
+
     panel = Panel(
         table,
-        title="[bold cyan]⚡ EXECUTING STEP[/bold cyan]",
+        title="[bold cyan]Step Started[/bold cyan]",
         border_style="cyan",
-        padding=(0, 1),
-        expand=True
+        expand=True,
+        width=70
     )
+
     console.print(panel)
+    spacing()
 
 
 def pipeline_step_completed(step_name: str, status: str, execution_time: float, message: str = None) -> None:
     """
     Log pipeline step completion.
-    
+
     Args:
         step_name: Name of the step
         status: Step status (SUCCESS, ERROR, PENDING)
         execution_time: Time taken to execute the step
         message: Optional message from the step
     """
-    from rich.table import Table
-    from rich.panel import Panel
-    
     step_name_esc = escape_rich_markup(step_name)
     message_esc = escape_rich_markup(message) if message else "Completed"
-    
+
     if status == "SUCCESS":
-        status_icon = "✅"
         status_color = "green"
-        status_text = "SUCCESS"
         border_style = "green"
     elif status == "ERROR":
-        status_icon = "❌"
         status_color = "red"
-        status_text = "ERROR"
         border_style = "red"
     elif status == "PENDING":
-        status_icon = "⏸️"
         status_color = "yellow"
-        status_text = "PENDING"
         border_style = "yellow"
     else:
-        status_icon = "❓"
         status_color = "dim"
-        status_text = status
         border_style = "dim"
-    
-    table = Table(show_header=False, box=None, expand=True)
-    table.add_column(style="bold white", width=15)
-    table.add_column(style="white")
-    
-    table.add_row("⚡ STEP", f"[bold]{step_name_esc}[/bold]")
-    table.add_row("📊 STATUS", f"[bold {status_color}]{status_icon} {status_text}[/bold {status_color}]")
-    table.add_row("⏱️ TIME", f"[bold]{execution_time:.3f}s[/bold]")
-    table.add_row("💬 MESSAGE", message_esc)
-    
+
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+
+    table.add_row("[bold]Step:[/bold]", f"[{status_color}]{step_name_esc}[/{status_color}]")
+    table.add_row("[bold]Status:[/bold]", f"[{status_color}]{status}[/{status_color}]")
+    table.add_row("[bold]Time:[/bold]", f"[{status_color}]{execution_time:.3f}s[/{status_color}]")
+    if message:
+        table.add_row("[bold]Message:[/bold]", f"{message_esc}")
+
     panel = Panel(
         table,
-        title=f"[bold {status_color}]{status_icon} STEP COMPLETED[/bold {status_color}]",
+        title=f"[bold {status_color}]Step Completed[/bold {status_color}]",
         border_style=border_style,
-        padding=(0, 1),
-        expand=True
+        expand=True,
+        width=70
     )
+
     console.print(panel)
+    spacing()
 
 
 def pipeline_completed(executed_steps: int, total_steps: int, total_time: float) -> None:
     """
     Log pipeline completion.
-    
+
     Args:
         executed_steps: Number of steps executed
         total_steps: Total number of steps
         total_time: Total execution time
     """
-    from rich.table import Table
-    from rich.panel import Panel
-    
-    # Calculate performance metrics
-    avg_time_per_step = total_time / executed_steps if executed_steps > 0 else 0
-    completion_rate = (executed_steps / total_steps) * 100
-    
-    table = Table(show_header=False, box=None, expand=True)
-    table.add_column(style="bold green", width=20)
-    table.add_column(style="white")
-    
-    table.add_row("🎉 STATUS", "[bold green]PIPELINE COMPLETED[/bold green]")
-    table.add_row("📊 STEPS", f"[bold]{executed_steps}/{total_steps}[/bold] ({completion_rate:.1f}%)")
-    table.add_row("⏱️ TOTAL TIME", f"[bold]{total_time:.3f}s[/bold]")
-    table.add_row("⚡ AVG/STEP", f"[bold]{avg_time_per_step:.3f}s[/bold]")
-    table.add_row("🚀 EFFICIENCY", "[bold green]OPTIMAL[/bold green]" if completion_rate == 100 else "[bold yellow]PARTIAL[/bold yellow]")
-    
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+
+    table.add_row("[bold]Pipeline Status:[/bold]", "[green]Completed[/green]")
+    table.add_row("[bold]Steps Executed:[/bold]", f"[green]{executed_steps}/{total_steps}[/green]")
+    table.add_row("[bold]Total Time:[/bold]", f"[green]{total_time:.3f}s[/green]")
+
     panel = Panel(
         table,
-        title="[bold green]🎉 PIPELINE EXECUTION COMPLETE[/bold green]",
+        title="[bold green]Pipeline Completed[/bold green]",
         border_style="green",
-        padding=(1, 2),
-        expand=True
+        expand=True,
+        width=70
     )
+
     console.print(panel)
+    spacing()
 
 
 def pipeline_failed(error_message: str, executed_steps: int, total_steps: int, failed_step: str = None, step_time: float = None) -> None:
     """
     Log pipeline failure.
-    
+
     Args:
         error_message: Error message
         executed_steps: Number of steps executed before failure
@@ -1454,67 +1431,57 @@ def pipeline_failed(error_message: str, executed_steps: int, total_steps: int, f
         failed_step: Name of the step that failed
         step_time: Time taken by the failed step
     """
-    from rich.table import Table
-    from rich.panel import Panel
-    
     error_esc = escape_rich_markup(error_message)
     failed_step_esc = escape_rich_markup(failed_step) if failed_step else "Unknown"
-    
-    # Calculate failure metrics
-    failure_rate = (executed_steps / total_steps) * 100 if total_steps > 0 else 0
-    
-    table = Table(show_header=False, box=None, expand=True)
-    table.add_column(style="bold red", width=20)
-    table.add_column(style="white")
-    
-    table.add_row("💥 STATUS", "[bold red]PIPELINE FAILED[/bold red]")
-    table.add_row("❌ ERROR", f"[red]{error_esc}[/red]")
-    table.add_row("⚡ FAILED STEP", f"[bold red]{failed_step_esc}[/bold red]")
+
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+
+    table.add_row("[bold]Pipeline Status:[/bold]", "[red]Failed[/red]")
+    table.add_row("[bold]Failed Step:[/bold]", f"[red]{failed_step_esc}[/red]")
+    table.add_row("[bold]Steps Executed:[/bold]", f"[red]{executed_steps}/{total_steps}[/red]")
     if step_time is not None:
-        table.add_row("⏱️ STEP TIME", f"[bold]{step_time:.3f}s[/bold]")
-    table.add_row("📊 PROGRESS", f"[bold]{executed_steps}/{total_steps}[/bold] ({failure_rate:.1f}%)")
-    table.add_row("🔧 RECOVERY", "[bold yellow]CHECK ERROR DETAILS[/bold yellow]")
-    
+        table.add_row("[bold]Step Time:[/bold]", f"[red]{step_time:.3f}s[/red]")
+    table.add_row("[bold]Error:[/bold]", f"[red]{error_esc}[/red]")
+
     panel = Panel(
         table,
-        title="[bold red]💥 PIPELINE EXECUTION FAILED[/bold red]",
+        title="[bold red]Pipeline Failed[/bold red]",
         border_style="red",
-        padding=(1, 2),
-        expand=True
+        expand=True,
+        width=70
     )
+
     console.print(panel)
+    spacing()
 
 
 def pipeline_paused(step_name: str) -> None:
     """
     Log pipeline pause (e.g., for external execution).
-    
+
     Args:
         step_name: Name of the step where pipeline paused
     """
-    from rich.table import Table
-    from rich.panel import Panel
-    
     step_name_esc = escape_rich_markup(step_name)
-    
-    table = Table(show_header=False, box=None, expand=True)
-    table.add_column(style="bold yellow", width=20)
-    table.add_column(style="white")
-    
-    table.add_row("⏸️ STATUS", "[bold yellow]PIPELINE PAUSED[/bold yellow]")
-    table.add_row("⚡ STEP", f"[bold]{step_name_esc}[/bold]")
-    table.add_row("🔄 REASON", "[bold cyan]EXTERNAL EXECUTION[/bold cyan]")
-    table.add_row("⏳ WAITING", "[bold yellow]FOR EXTERNAL TOOL[/bold yellow]")
-    table.add_row("🔧 ACTION", "[bold green]CONTINUE WHEN READY[/bold green]")
-    
+
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+
+    table.add_row("[bold]Pipeline Status:[/bold]", "[yellow]Paused[/yellow]")
+    table.add_row("[bold]Step:[/bold]", f"[yellow]{step_name_esc}[/yellow]")
+    table.add_row("[bold]Reason:[/bold]", "[yellow]External execution[/yellow]")
+
     panel = Panel(
         table,
-        title="[bold yellow]⏸️ PIPELINE PAUSED[/bold yellow]",
+        title="[bold yellow]Pipeline Paused[/bold yellow]",
         border_style="yellow",
-        padding=(1, 2),
-        expand=True
+        expand=True,
+        width=70
     )
+
     console.print(panel)
+    spacing()
 
 
 def compression_fallback(original_strategy: str, fallback_strategy: str, error: str) -> None:
@@ -1629,10 +1596,99 @@ def model_recommendation_error(error_message: str) -> None:
     console.print(panel)
 
 
+def pipeline_timeline(step_results: dict, total_time: float, min_threshold: float = 0.001) -> None:
+    """
+    Print a timeline visualization of pipeline step execution times.
+
+    Args:
+        step_results: Dictionary of step names to their execution stats
+        total_time: Total pipeline execution time
+        min_threshold: Minimum time in seconds to show (default 0.001s = 1ms)
+    """
+    if not step_results:
+        return
+
+    # Sort steps by their execution time (descending)
+    sorted_steps = sorted(
+        step_results.items(),
+        key=lambda x: x[1].get("execution_time", 0),
+        reverse=True
+    )
+
+    # Filter steps above threshold
+    significant_steps = [
+        (name, info) for name, info in sorted_steps
+        if info.get("execution_time", 0) >= min_threshold
+    ]
+
+    # Count filtered steps
+    filtered_count = len(sorted_steps) - len(significant_steps)
+
+    table = Table(show_header=True, expand=True, box=None)
+    table.width = 60
+
+    table.add_column("[bold]Step[/bold]", justify="left", style="cyan")
+    table.add_column("[bold]Time[/bold]", justify="right", style="magenta")
+    table.add_column("[bold]%[/bold]", justify="right", style="yellow")
+    table.add_column("[bold]Bar[/bold]", justify="left", style="blue")
+
+    # Add each significant step
+    for step_name, step_info in significant_steps:
+        step_name_esc = escape_rich_markup(step_name)
+        exec_time = step_info.get("execution_time", 0)
+        time_str = f"{exec_time:.3f}s"
+
+        # Calculate percentage
+        percentage = (exec_time / total_time * 100) if total_time > 0 else 0
+        percentage_str = f"{percentage:.1f}%"
+
+        # Create a visual bar (max 20 characters)
+        bar_length = int(percentage / 5) if percentage > 0 else 0  # 5% = 1 char
+        bar_length = min(bar_length, 20)  # Cap at 20 chars
+        bar = "█" * bar_length
+
+        table.add_row(
+            step_name_esc,
+            time_str,
+            percentage_str,
+            f"[blue]{bar}[/blue]"
+        )
+
+    # Add note about filtered steps
+    if filtered_count > 0:
+        table.add_row("")
+        table.add_row(
+            f"[dim]({filtered_count} steps < {min_threshold*1000:.0f}ms hidden)[/dim]",
+            "",
+            "",
+            ""
+        )
+
+    # Add total row
+    table.add_row("")
+    table.add_row(
+        "[bold]TOTAL[/bold]",
+        f"[bold magenta]{total_time:.3f}s[/bold magenta]",
+        "[bold yellow]100.0%[/bold yellow]",
+        ""
+    )
+
+    panel = Panel(
+        table,
+        title="[bold blue]Pipeline Timeline[/bold blue]",
+        border_style="blue",
+        expand=True,
+        width=70
+    )
+
+    console.print(panel)
+    spacing()
+
+
 def simple_output(message: str) -> None:
     """
     Simple output function for basic console printing.
-    
+
     Args:
         message: Message to print
     """

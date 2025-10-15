@@ -27,19 +27,22 @@ class InitializationStep(Step):
     async def execute(self, context: StepContext) -> StepResult:
         """Initialize agent state."""
         from upsonic.utils.printing import agent_started
-        
+
+        # Start task timing
+        context.task.task_start(context.agent)
+
         agent_started(context.agent.get_agent_id())
-        
+
         context.agent.tool_call_count = 0
         context.agent._tool_call_count = 0
         context.agent.current_task = context.task
-        
+
         # Initialize appropriate result container based on mode
         if context.is_streaming:
             context.agent._stream_run_result.start_new_run()
         else:
             context.agent._run_result.start_new_run()
-        
+
         return StepResult(
             status=StepStatus.SUCCESS,
             message="Agent initialized",
@@ -1181,15 +1184,18 @@ class FinalizationStep(Step):
         # Ensure final_output is set from task response if not already set
         if context.final_output is None and context.task:
             context.final_output = context.task.response
-        
+
         # Set final output in run result
         context.agent._run_result.output = context.final_output
-        
+
+        # End the task to calculate duration
+        context.task.task_end()
+
         # Print summary if needed
         if context.task and not context.task.not_main_task:
             from upsonic.utils.printing import print_price_id_summary
             print_price_id_summary(context.task.price_id, context.task)
-        
+
         return StepResult(
             status=StepStatus.SUCCESS,
             message="Execution finalized",
