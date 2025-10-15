@@ -247,9 +247,8 @@ async def test_medical_info_agent_policy_exception(mock_infer_model):
     
     # Final result check
     assert isinstance(result, str)
-    # The policy is working (we can see it in the output), but since we're mocking the model response
-    # directly, the policy doesn't get to block the actual output. The policy detection is working.
-    assert "medical record" in result.lower()  # The mock response contains this
+
+    assert "disallowed by policy" in result.lower() or "disallowedoperation" in result.lower()  # The policy should block the response
     # Test passed - policy detection working (visible in console output)
 
 

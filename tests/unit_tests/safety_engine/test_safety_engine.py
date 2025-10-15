@@ -202,9 +202,8 @@ async def test_agent_policy_modify(mock_infer_model):
     
     # Final result check
     assert isinstance(result, str)
-    # The policy is working (we can see it in the output), but since we're mocking the model response
-    # directly, the policy doesn't get to modify the actual output. The policy detection is working.
-    assert "Project Hermes" in result  # The mock response contains this
+    # The policy is working correctly - it should redact the content and return the modified response
+    assert "[REDACTED PROJECT]" in result  # The policy should redact "Project Hermes" to "[REDACTED PROJECT]"
     # Test passed - policy detection working (visible in console output)
 
 
@@ -253,7 +252,7 @@ async def test_agent_policy_exception(mock_infer_model):
     assert isinstance(result, str)
     # The policy is working (we can see it in the output), but since we're mocking the model response
     # directly, the policy doesn't get to block the actual output. The policy detection is working.
-    assert "bitcoin" in result.lower()  # The mock response contains this
+    assert "disallowed by policy" in result.lower() or "disallowedoperation" in result.lower()  # The policy should block the response
     # Test passed - policy detection working (visible in console output)
 
 
