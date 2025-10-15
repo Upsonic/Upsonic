@@ -27,13 +27,17 @@ class MockTask:
         self.cache_duration_minutes = 60
         self.cache_embedding_provider = None
         self.attachments = []  # Add attachments attribute
-        
+
+    def task_start(self, agent):
+        """Mock task_start method."""
+        pass
+
     def task_end(self):
         pass
-    
+
     def set_cache_manager(self, manager):
         pass
-    
+
     async def get_cached_response(self, input_text, model):
         return None
 
