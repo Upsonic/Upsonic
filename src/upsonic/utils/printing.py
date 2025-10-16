@@ -1693,3 +1693,88 @@ def simple_output(message: str) -> None:
         message: Message to print
     """
     console.print(message)
+
+
+def deep_agent_todo_completion_check(iteration: int, completed_count: int, total_count: int) -> None:
+    """
+    Print a formatted panel for Deep Agent todo completion check.
+    
+    Args:
+        iteration: Current iteration number
+        completed_count: Number of completed todos
+        total_count: Total number of todos
+    """
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    completion_percentage = (completed_count / total_count * 100) if total_count > 0 else 0
+    
+    table.add_row("[bold]Todo Completion Check:[/bold]", f"[cyan]Iteration {iteration}[/cyan]")
+    table.add_row("[bold]Completed:[/bold]", f"[green]{completed_count}/{total_count}[/green]")
+    table.add_row("[bold]Progress:[/bold]", f"[yellow]{completion_percentage:.1f}%[/yellow]")
+    table.add_row("[bold]Status:[/bold]", "[blue]Continuing to complete remaining todos...[/blue]")
+    
+    panel = Panel(
+        table,
+        title="[bold yellow]⚠️ Deep Agent - Todo Completion Check[/bold yellow]",
+        border_style="yellow",
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
+
+
+def deep_agent_all_todos_completed(total_count: int) -> None:
+    """
+    Print a formatted panel when all Deep Agent todos are completed.
+    
+    Args:
+        total_count: Total number of todos that were completed
+    """
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    table.add_row("[bold]Status:[/bold]", "[green]✅ All todos completed successfully![/green]")
+    table.add_row("[bold]Total Completed:[/bold]", f"[green]{total_count}[/green]")
+    table.add_row("[bold]Result:[/bold]", "[green]Deep Agent task finished[/green]")
+    
+    panel = Panel(
+        table,
+        title="[bold green]✅ Deep Agent - All Todos Completed[/bold green]",
+        border_style="green",
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
+
+
+def deep_agent_max_iterations_warning(max_iterations: int, incomplete_count: int) -> None:
+    """
+    Print a formatted panel when Deep Agent reaches maximum iterations with incomplete todos.
+    
+    Args:
+        max_iterations: Maximum number of iterations allowed
+        incomplete_count: Number of todos still incomplete
+    """
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    table.add_row("[bold]Status:[/bold]", "[red]⚠️ WARNING: Maximum iterations reached[/red]")
+    table.add_row("[bold]Max Iterations:[/bold]", f"[yellow]{max_iterations}[/yellow]")
+    table.add_row("[bold]Incomplete Todos:[/bold]", f"[red]{incomplete_count}[/red]")
+    table.add_row("[bold]Action:[/bold]", "[yellow]Stopping execution[/yellow]")
+    
+    panel = Panel(
+        table,
+        title="[bold red]⚠️ Deep Agent - Max Iterations Warning[/bold red]",
+        border_style="red",
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
