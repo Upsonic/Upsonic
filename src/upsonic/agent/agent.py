@@ -316,6 +316,8 @@ class Agent(BaseAgent):
         self._stream_run_result = StreamRunResult()
         
         self._setup_policy_models()
+
+
     
     def _setup_policy_models(self) -> None:
         """Setup model references for safety policies."""
@@ -334,19 +336,29 @@ class Agent(BaseAgent):
     
     def _apply_reasoning_settings(self) -> None:
         """Apply common reasoning/thinking attributes to model-specific settings."""
-        if not self.model._settings:
+        if not hasattr(self.model, '_settings') or self.model._settings is None:
             self.model._settings = {}
         
-        current_settings = self.model._settings.copy()
+        try:
+            current_settings = self.model._settings.copy()
+        except (AttributeError, TypeError):
+            current_settings = {}
+            
         reasoning_settings = self._get_model_specific_reasoning_settings()
         
-        self.model._settings = {**current_settings, **reasoning_settings}
+        try:
+            self.model._settings = {**current_settings, **reasoning_settings}
+        except TypeError:
+            self.model._settings = current_settings
     
     def _get_model_specific_reasoning_settings(self) -> Dict[str, Any]:
         """Convert common reasoning attributes to model-specific settings."""
         settings = {}
         
-        provider_name = getattr(self.model, 'system', '').lower()
+        try:
+            provider_name = getattr(self.model, 'system', '').lower()
+        except (AttributeError, TypeError):
+            provider_name = ''
         
         # OpenAI/OpenAI-compatible models
         if provider_name in ['openai', 'azure', 'deepseek', 'cerebras', 'fireworks', 'github', 'grok', 'heroku', 'moonshotai', 'openrouter', 'together', 'vercel', 'litellm']:
