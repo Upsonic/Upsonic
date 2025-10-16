@@ -4,7 +4,7 @@ import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, AsyncIterator, Dict, List, Optional, Union, Callable, Literal, TYPE_CHECKING
+from typing import Any, AsyncIterator, Awaitable, Dict, List, Optional, Union, Callable, Literal, TYPE_CHECKING
 
 from upsonic.tasks.tasks import Task
 from upsonic.storage.memory.memory import Memory
@@ -330,14 +330,14 @@ class Chat:
         
         return any(pattern in error_msg for pattern in retryable_patterns)
     
-    async def invoke(
+    def invoke(
         self,
         input_data: Union[str, Task],
         *,
         attachments: Optional[List[str]] = None,
         stream: bool = False,
         **kwargs
-    ) -> Union[str, AsyncIterator[str]]:
+    ) -> Union["Awaitable[str]", AsyncIterator[str]]:
         """
         Send a message to the chat and get a response.
         
@@ -356,7 +356,7 @@ class Chat:
             **kwargs: Additional arguments passed to the agent
             
         Returns:
-            If stream=False: The response string
+            If stream=False: Awaitable that returns the response string
             If stream=True: AsyncIterator yielding response chunks
             
         Raises:
@@ -378,6 +378,20 @@ class Chat:
             response = await chat.invoke("Analyze this", attachments=["data.csv"])
             ```
         """
+        if stream:
+            # Return async iterator directly for streaming
+            return self._invoke_streaming_with_setup(input_data, attachments, **kwargs)
+        else:
+            # Return coroutine for blocking invocation
+            return self._invoke_blocking_with_setup(input_data, attachments, **kwargs)
+    
+    async def _invoke_blocking_with_setup(
+        self,
+        input_data: Union[str, Task],
+        attachments: Optional[List[str]],
+        **kwargs
+    ) -> str:
+        """Handle blocking invocation with setup."""
         # State and concurrency checks
         if not self._session_manager.can_accept_invocation():
             if self._session_manager.state == SessionState.ERROR:
@@ -397,24 +411,58 @@ class Chat:
         )
         self._session_manager.add_message(user_message)
         
-        
         # Update state and activity
         self._session_manager.start_invocation()
-        self._transition_state(SessionState.STREAMING if stream else SessionState.AWAITING_RESPONSE)
+        self._transition_state(SessionState.AWAITING_RESPONSE)
         
         # Start response timer
         response_start_time = self._session_manager.start_response_timer()
         
-        if stream:
-            # For streaming, we need to handle the state transitions differently
-            # since we can't use try/finally with async generators
-            return self._invoke_streaming(task, response_start_time, **kwargs)
-        else:
-            try:
-                return await self._invoke_blocking(task, response_start_time, **kwargs)
-            finally:
-                self._session_manager.end_invocation()
-                self._transition_state(SessionState.IDLE)
+        try:
+            return await self._invoke_blocking(task, response_start_time, **kwargs)
+        finally:
+            self._session_manager.end_invocation()
+            self._transition_state(SessionState.IDLE)
+    
+    def _invoke_streaming_with_setup(
+        self,
+        input_data: Union[str, Task],
+        attachments: Optional[List[str]],
+        **kwargs
+    ) -> AsyncIterator[str]:
+        """Handle streaming invocation with setup - returns async iterator directly."""
+        async def _streaming_generator():
+            # State and concurrency checks
+            if not self._session_manager.can_accept_invocation():
+                if self._session_manager.state == SessionState.ERROR:
+                    raise RuntimeError("Chat is in error state. Reset or create a new chat session.")
+                else:
+                    raise RuntimeError(f"Maximum concurrent invocations exceeded.")
+            
+            # Normalize input
+            task = self._normalize_input(input_data, attachments)
+            
+            # Add user message to history
+            user_message = ChatMessage(
+                content=task.description,
+                role="user",
+                timestamp=time.time(),
+                attachments=task.attachments
+            )
+            self._session_manager.add_message(user_message)
+            
+            # Update state and activity
+            self._session_manager.start_invocation()
+            self._transition_state(SessionState.STREAMING)
+            
+            # Start response timer
+            response_start_time = self._session_manager.start_response_timer()
+            
+            # Stream the response
+            async for chunk in self._invoke_streaming(task, response_start_time, **kwargs):
+                yield chunk
+        
+        return _streaming_generator()
     
     async def _invoke_blocking(self, task: Task, response_start_time: float, **kwargs) -> str:
         """Handle blocking invocation."""
