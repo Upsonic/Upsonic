@@ -1010,7 +1010,8 @@ class Agent(BaseAgent):
             return result['compressed_prompt']
         except Exception as e:
             if self.debug:
-                print(f"LLMLingua compression failed, falling back to simple compression. Error: {e}")
+                from upsonic.utils.printing import compression_fallback
+                compression_fallback("llmlingua", "simple", str(e))
             return self._compress_simple(context)
     
     async def recommend_model_for_task_async(
@@ -1079,40 +1080,15 @@ class Agent(BaseAgent):
             self._model_recommendation = recommendation
             
             if self.debug:
-                from upsonic.utils.printing import info_log
-                info_log(
-                    f"Model Recommendation ({recommendation.selection_method}):",
-                    context="ModelSelector"
-                )
-                info_log(f"  Selected: {recommendation.model_name}", context="ModelSelector")
-                info_log(f"  Reason: {recommendation.reason}", context="ModelSelector")
-                info_log(
-                    f"  Confidence: {recommendation.confidence_score:.2f}",
-                    context="ModelSelector"
-                )
-                info_log(
-                    f"  Cost Tier: {recommendation.estimated_cost_tier}/10",
-                    context="ModelSelector"
-                )
-                info_log(
-                    f"  Speed Tier: {recommendation.estimated_speed_tier}/10",
-                    context="ModelSelector"
-                )
-                if recommendation.alternative_models:
-                    info_log(
-                        f"  Alternatives: {', '.join(recommendation.alternative_models[:3])}",
-                        context="ModelSelector"
-                    )
+                from upsonic.utils.printing import model_recommendation_summary
+                model_recommendation_summary(recommendation)
             
             return recommendation
             
         except Exception as e:
             if self.debug:
-                from upsonic.utils.printing import error_log
-                error_log(
-                    f"Model recommendation failed: {str(e)}",
-                    context="ModelSelector"
-                )
+                from upsonic.utils.printing import model_recommendation_error
+                model_recommendation_error(str(e))
             raise
     
     def recommend_model_for_task(
@@ -1249,7 +1225,11 @@ class Agent(BaseAgent):
         graph_execution_id: Optional[str] = None
     ) -> Any:
         """
-        Execute a task asynchronously with complete framework integration.
+        Execute a task asynchronously using the pipeline architecture.
+        
+        The execution is handled entirely by the pipeline - this method just
+        creates the pipeline, creates the context, executes, and returns the output.
+        All logic is in the pipeline steps.
         
         Args:
             task: Task to execute
@@ -1260,158 +1240,62 @@ class Agent(BaseAgent):
             graph_execution_id: Graph execution identifier
             
         Returns:
-            RunResult: A result object containing:
-                - output: The actual task response
-                - all_messages(): All messages from all runs
-                - new_messages(): Messages from the last run only
+            The task output (any errors are raised immediately)
                 
         Example:
             ```python
             result = await agent.do_async(task)
-            print(result.output)  # Access the response
-            print(result.new_messages())  # Get last run's messages
+            print(result)  # Access the response
             ```
         """
-        from upsonic.utils.printing import agent_started
-        from upsonic.utils.validators import validate_attachments_exist
-        from upsonic.agent.context_managers import MemoryManager, CallManager, TaskManager, ReliabilityManager
-        
-        agent_started(self.get_agent_id())
-        
-        self.tool_call_count = 0
-        self._tool_call_count = 0
-        self.current_task = task
-        
-        self._run_result.start_new_run()
+        from upsonic.agent.pipeline import (
+            PipelineManager, StepContext,
+            InitializationStep, CacheCheckStep, UserPolicyStep,
+            StorageConnectionStep, LLMManagerStep, ModelSelectionStep,
+            ValidationStep, ToolSetupStep,
+            MessageBuildStep, ModelExecutionStep, ResponseProcessingStep,
+            ReflectionStep, CallManagementStep, TaskManagementStep,
+            MemoryMessageTrackingStep,
+            ReliabilityStep, AgentPolicyStep,
+            CacheStorageStep, FinalizationStep
+        )
         
         async with self._managed_storage_connection():
-            processed_task = None
+            pipeline = PipelineManager(
+                steps=[
+                    InitializationStep(),
+                    StorageConnectionStep(),
+                    CacheCheckStep(),
+                    UserPolicyStep(),
+                    LLMManagerStep(),
+                    ModelSelectionStep(),
+                    ValidationStep(),
+                    ToolSetupStep(),
+                    MessageBuildStep(),
+                    ModelExecutionStep(),
+                    ResponseProcessingStep(),
+                    ReflectionStep(),
+                    MemoryMessageTrackingStep(),
+                    CallManagementStep(),
+                    TaskManagementStep(),
+                    ReliabilityStep(),
+                    AgentPolicyStep(),
+                    CacheStorageStep(),
+                    FinalizationStep(),
+                ],
+                debug=debug or self.debug
+            )
             
-            try:
-                if not task.is_paused:
-                    if task.enable_cache:
-                        task.set_cache_manager(self._cache_manager)
-                    
-                    cached_response = await self._handle_cache(task)
-                    if cached_response is not None:
-                        processed_task = task
-                        processed_task._response = cached_response
-                        processed_task.task_end()
-                        self._run_result.output = cached_response
-                        return self._run_result.output
-                    
-                    task, should_continue = await self._apply_user_policy(task)
-                    if not should_continue:
-                        processed_task = task
-                        self._run_result.output = processed_task.response
-                        return self._run_result.output
-                
-                if model:
-                    from upsonic.models import infer_model
-                    current_model = infer_model(model)
-                else:
-                    current_model = self.model
-                
-                validate_attachments_exist(task)
-                
-                self._setup_tools(task)
-                
-                memory_manager = MemoryManager(self.memory)
-                reliability_manager = ReliabilityManager(task, self.reliability_layer, current_model) if self.reliability_layer else None
-                
-                async with memory_manager.manage_memory() as memory_handler:
-                    call_manager = CallManager(current_model, task, debug=debug, show_tool_calls=self.show_tool_calls)
-                    task_manager = TaskManager(task, self)
-                    
-                    async with call_manager.manage_call() as call_handler:
-                        async with task_manager.manage_task() as task_handler:
-                            try:
-                                if task.guardrail:
-                                    final_response = await self._execute_with_guardrail(task, memory_handler, state)
-                                else:
-                                    messages = await self._build_model_request(task, memory_handler, state)
-                                    self._current_messages = messages
-                                    
-                                    model_params = self._build_model_request_parameters(task)
-                                    model_params = current_model.customize_request_parameters(model_params)
-                                    
-                                    response = await current_model.request(
-                                        messages=messages,
-                                        model_settings=current_model.settings,
-                                        model_request_parameters=model_params
-                                    )
-                                    
-                                    final_response = await self._handle_model_response(response, messages)
-                                
-                                if self.reflection_processor and self.reflection:
-                                    output = self._extract_output(final_response, task)
-                                    improved_output = await self.reflection_processor.process_with_reflection(
-                                        self, task, output
-                                    )
-                                    task._response = improved_output
-                                else:
-                                    output = self._extract_output(final_response, task)
-                                    task._response = output
-                                
-                            except ExternalExecutionPause as e:
-                                task_handler.task.is_paused = True
-                                task_handler.task._tools_awaiting_external_execution.append(e.tool_call)
-                                processed_task = task_handler.task
-                                self._run_result.output = processed_task.response
-                                return self._run_result.output
-                            
-                            self._run_result.output = task._response
-                            
-                            history_length = len(memory_handler.get_message_history()) if memory_handler else 0
-                            new_messages_start = history_length
-                            
-                            if new_messages_start < len(messages):
-                                self._run_result.add_messages(messages[new_messages_start:])
-                            self._run_result.add_message(final_response)
-                            
-                            call_handler.process_response(self._run_result)
-                            task_handler.process_response(self._run_result)
-                            
-                            memory_handler.process_response(self._run_result)
-                            processed_task = task_handler.task
-                
-                if reliability_manager:
-                    async with reliability_manager.manage_reliability() as rel_handler:
-                        processed_task = await rel_handler.process_task(processed_task)
-                
-                processed_task = await self._apply_agent_policy(processed_task)
-                
-                if processed_task and processed_task.enable_cache and processed_task.response:
-                    input_text = processed_task._original_input or processed_task.description
-                    await processed_task.store_cache_entry(input_text, processed_task.response)
-                    if self.debug:
-                        from upsonic.utils.printing import cache_stored
-                        cache_stored(
-                            cache_method=processed_task.cache_method,
-                            input_preview=(processed_task._original_input or processed_task.description)[:100] if (processed_task._original_input or processed_task.description) else None,
-                            duration_minutes=processed_task.cache_duration_minutes
-                        )
-                
-            except Exception as e:
-                if self.debug:
-                    print(f"Error in do_async: {e}")
-                
-                if self.mode == "raise":
-                    raise
-                else:
-                    if processed_task:
-                        processed_task._response = False
-                    self._run_result.output = False
-                    return self._run_result.output
-        
-        if processed_task and not processed_task.not_main_task:
-            from upsonic.utils.printing import print_price_id_summary
-            print_price_id_summary(processed_task.price_id, processed_task)
-        
-        if self._run_result.output is None and processed_task:
-            self._run_result.output = processed_task.response
-        
-        return self._run_result.output
+            context = StepContext(
+                task=task,
+                agent=self,
+                model=model,
+                state=state
+            )
+            
+            final_context = await pipeline.execute(context)
+            
+            return self._run_result.output
     
     def _extract_output(self, response: "ModelResponse", task: "Task") -> Any:
         """Extract output from model response based on task response format."""
@@ -1484,7 +1368,8 @@ class Agent(BaseAgent):
             RunResult: The result object (with output printed to console)
         """
         result = self.do(task, model, debug, retry)
-        print(result)
+        from upsonic.utils.printing import success_log
+        success_log(f"Task completed: {result}", "Agent")
         return result
     
     async def print_do_async(
@@ -1501,7 +1386,8 @@ class Agent(BaseAgent):
             RunResult: The result object (with output printed to console)
         """
         result = await self.do_async(task, model, debug, retry)
-        print(result)
+        from upsonic.utils.printing import success_log
+        success_log(f"Task completed: {result}", "Agent")
         return result
     
     async def stream_async(
@@ -1559,32 +1445,17 @@ class Agent(BaseAgent):
     ) -> AsyncIterator[str]:
         """Stream text content from the model response.
         
-        This method handles text extraction and accumulation from streaming events.
+        This method extracts and yields text from streaming events.
+        Note: Event storage and accumulation are already handled by the pipeline.
         """
         from upsonic.messages import FinalResultEvent
         
-        accumulated_text = ""
-        first_token_time = None
-        
+        # The pipeline already handles event storage, text accumulation, and metrics
+        # We just extract and yield text here
         async for event in self._create_stream_iterator(task, model, debug, retry, state, graph_execution_id):
-            if stream_result:
-                stream_result._streaming_events.append(event)
-            
             text_content = self._extract_text_from_stream_event(event)
             if text_content:
-                if first_token_time is None and stream_result:
-                    first_token_time = time.time()
-                    stream_result._first_token_time = first_token_time
-                
-                accumulated_text += text_content
-                if stream_result:
-                    stream_result._accumulated_text = accumulated_text
-                    
                 yield text_content
-            
-            if isinstance(event, FinalResultEvent) and stream_result:
-                stream_result._is_complete = True
-                stream_result._final_output = accumulated_text if accumulated_text else None
     
     async def _stream_events_output(
         self,
@@ -1599,29 +1470,13 @@ class Agent(BaseAgent):
         """Stream raw events from the model response.
         
         This method handles event streaming and text accumulation.
+        Note: Event storage and text accumulation are already handled by the pipeline.
+        This method just yields the events.
         """
-        accumulated_text = ""
-        first_token_time = None
-        
+        # The pipeline already handles event storage, text accumulation, and metrics
+        # We just yield the events here
         async for event in self._create_stream_iterator(task, model, debug, retry, state, graph_execution_id):
-            if stream_result:
-                stream_result._streaming_events.append(event)
-            
-            text_content = self._extract_text_from_stream_event(event)
-            if text_content:
-                if first_token_time is None and stream_result:
-                    first_token_time = time.time()
-                    stream_result._first_token_time = first_token_time
-                
-                accumulated_text += text_content
-                if stream_result:
-                    stream_result._accumulated_text = accumulated_text
-            
             yield event
-            
-            if isinstance(event, FinalResultEvent) and stream_result:
-                stream_result._is_complete = True
-                stream_result._final_output = accumulated_text if accumulated_text else None
     
     def _extract_text_from_stream_event(self, event: "ModelResponseStreamEvent") -> Optional[str]:
         """Extract text content from a streaming event."""
@@ -1642,133 +1497,56 @@ class Agent(BaseAgent):
         state: Optional["State"] = None,
         graph_execution_id: Optional[str] = None
     ) -> AsyncIterator["ModelResponseStreamEvent"]:
-        """Create the actual stream iterator for streaming execution.
+        """Create the actual stream iterator for streaming execution using pipeline architecture.
         
         This iterator yields all streaming events from the model, including the FinalResultEvent
         which now comes at the end of the stream (after all content has been received).
         """
-        from upsonic.utils.printing import agent_started
-        from upsonic.utils.validators import validate_attachments_exist
-        from upsonic.agent.context_managers import MemoryManager
-        from upsonic.messages import PartStartEvent, TextPart, FinalResultEvent, ToolCallPart, ModelRequest
-        
-        agent_started(self.get_agent_id())
-        
-        self.tool_call_count = 0
-        self._tool_call_count = 0
-        
-        current_task = task
-        self.current_task = current_task
-        
-        self._stream_run_result.start_new_run()
+        from upsonic.agent.pipeline import (
+            PipelineManager, StepContext,
+            InitializationStep, CacheCheckStep, UserPolicyStep,
+            StorageConnectionStep, LLMManagerStep, ModelSelectionStep,
+            ValidationStep, ToolSetupStep, MessageBuildStep,
+            StreamModelExecutionStep,
+            AgentPolicyStep, CacheStorageStep,
+            StreamMemoryMessageTrackingStep, StreamFinalizationStep
+        )
         
         async with self._managed_storage_connection():
-            try:
-                if not current_task.is_paused:
-                    if current_task.enable_cache:
-                        current_task.set_cache_manager(self._cache_manager)
-                    
-                    cached_response = await self._handle_cache(current_task)
-                    if cached_response is not None:
-                        yield PartStartEvent(index=0, part=TextPart(content=str(cached_response)))
-                        yield FinalResultEvent(tool_name=None, tool_call_id=None)
-                        
-                        current_task._response = cached_response
-                        current_task.task_end()
-                        return
-                    
-                    current_task, should_continue = await self._apply_user_policy(current_task)
-                    if not should_continue:
-                        yield FinalResultEvent(tool_name=None, tool_call_id=None)
-                        return
+            # Create streaming pipeline with streaming-specific steps
+            pipeline = PipelineManager(
+                steps=[
+                    InitializationStep(),
+                    StorageConnectionStep(),
+                    CacheCheckStep(),
+                    UserPolicyStep(),
+                    LLMManagerStep(),
+                    ModelSelectionStep(),
+                    ValidationStep(),
+                    ToolSetupStep(),
+                    MessageBuildStep(),
+                    StreamModelExecutionStep(),  # Streaming-specific step
+                    StreamMemoryMessageTrackingStep(),  # Streaming-specific memory tracking
+                    AgentPolicyStep(),
+                    CacheStorageStep(),
+                    StreamFinalizationStep(),  # Streaming-specific finalization
+                ],
+                debug=debug or self.debug
+            )
             
-                if model:
-                    from upsonic.models import infer_model
-                    current_model = infer_model(model)
-                else:
-                    current_model = self.model
-                
-                validate_attachments_exist(current_task)
-                
-                self._setup_tools(current_task)
-                
-                memory_manager = MemoryManager(self.memory)
-                
-                async with memory_manager.manage_memory() as memory_handler:
-                    messages = await self._build_model_request(current_task, memory_handler, state)
-                    self._current_messages = messages
-                    
-                    model_params = self._build_model_request_parameters(current_task)
-                    model_params = current_model.customize_request_parameters(model_params)
-                    
-                    final_result_received = False
-                    try:
-                        async with current_model.request_stream(
-                            messages=messages,
-                            model_settings=current_model.settings,
-                            model_request_parameters=model_params
-                        ) as stream:
-                            event_count = 0
-                            async for event in stream:
-                                event_count += 1
-                                yield event
-                                
-                                if isinstance(event, FinalResultEvent):
-                                    final_result_received = True
-                    except Exception as e:
-                        raise
-                        
-                    final_response = stream.get()
-                    
-                    tool_calls = [
-                        part for part in final_response.parts 
-                        if isinstance(part, ToolCallPart)
-                    ]
-                    
-                    if tool_calls:
-                        tool_results = await self._execute_tool_calls(tool_calls)
-                        
-                        messages.append(final_response)
-                        messages.append(ModelRequest(parts=tool_results))
-                        
-                        async with current_model.request_stream(
-                            messages=messages,
-                            model_settings=current_model.settings,
-                            model_request_parameters=model_params
-                        ) as continuation_stream:
-                            async for event in continuation_stream:
-                                yield event
-                                
-                                if isinstance(event, FinalResultEvent):
-                                    final_result_received = True
-                            
-                            final_response = continuation_stream.get()
-                    
-                    output = self._extract_output(final_response, current_task)
-                    current_task._response = output
-                    current_task.task_end()
-                    
-                    self._stream_run_result._final_output = current_task._response
-                    
-                    history_length = len(memory_handler.get_message_history()) if memory_handler else 0
-                    new_messages_start = history_length
-                    
-                    if new_messages_start < len(messages):
-                        self._stream_run_result.add_messages(messages[new_messages_start:])
-                    self._stream_run_result.add_message(final_response)
-                    
-                    memory_handler.process_response(self._stream_run_result)
-                    
-                    await self._apply_agent_policy(current_task)
-                    
-                    if current_task.enable_cache and current_task.response:
-                        input_text = current_task._original_input or current_task.description
-                        await current_task.store_cache_entry(input_text, current_task.response)
-                
-            except Exception as e:
-                if self.debug:
-                    print(f"Error in stream_async: {e}")
-                raise
+            # Create streaming context
+            context = StepContext(
+                task=task,
+                agent=self,
+                model=model,
+                state=state,
+                is_streaming=True,
+                stream_result=self._stream_run_result
+            )
+            
+            # Execute streaming pipeline and yield events
+            async for event in pipeline.execute_stream(context):
+                yield event
     
     def _create_stream_result(
         self,

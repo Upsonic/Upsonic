@@ -15,13 +15,12 @@ class TaskManager:
 
     @asynccontextmanager
     async def manage_task(self):
-        # Start the task
-        self.task.task_start(self.agent)
-        
+        # Task start/end is now managed by pipeline steps (InitializationStep and FinalizationStep)
+        # This context manager now only handles task response processing
+
         try:
             yield self
         finally:
-            # Set task response and end the task if we have a model response
+            # Set task response if we have a model response
             if self.model_response is not None:
-                self.task.task_response(self.model_response)
-                self.task.task_end() 
+                self.task.task_response(self.model_response) 

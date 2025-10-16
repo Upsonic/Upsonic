@@ -2,8 +2,8 @@ import base64
 import time
 from pydantic import BaseModel
 from typing import Any, List, Dict, Optional, Type, Union, Callable, Literal, TYPE_CHECKING
+from upsonic.exceptions import FileNotFoundError
 
-# Heavy imports moved to lazy loading for faster startup
 if TYPE_CHECKING:
     from upsonic.utils.printing import get_price_id_total_cost
     from upsonic.messages.messages import BinaryContent
@@ -18,7 +18,7 @@ else:
     ExternalToolCall = "ExternalToolCall"
     auto_detect_best_embedding = "auto_detect_best_embedding"
 
-# Type aliases for better type safety
+
 CacheMethod = Literal["vector_search", "llm_call"]
 CacheEntry = Dict[str, Any]
 
@@ -65,6 +65,9 @@ class Task(BaseModel):
             
         Returns:
             bool: True if the item is a string representing an existing file path
+            
+        Raises:
+            FileNotFoundError: If the file path exists but cannot be accessed, or if it looks like a file path but doesn't exist
         """
         if not isinstance(item, str):
             return False
@@ -73,8 +76,24 @@ class Task(BaseModel):
         
         # Check if it's a valid file path and the file exists
         try:
-            return os.path.isfile(item)
-        except (TypeError, ValueError, OSError):
+            if os.path.isfile(item):
+                # Additional check to ensure file is readable
+                if not os.access(item, os.R_OK):
+                    raise FileNotFoundError(item, "File exists but is not readable")
+                return True
+            elif os.path.isdir(item):
+                # It's a directory, not a file
+                return False
+            else:
+                # Check if it looks like a file path but doesn't exist
+                if (item.endswith(('.txt', '.pdf', '.docx', '.md', '.py', '.js', '.html', '.css', '.json', '.xml', '.csv')) or 
+                    ('/' in item or '\\' in item) and '.' in item):
+                    raise FileNotFoundError(item, "File does not exist")
+                return False
+        except (TypeError, ValueError, OSError) as e:
+            # If it's a string that looks like a file path but can't be accessed, raise error
+            if isinstance(item, str) and (item.endswith(('.txt', '.pdf', '.docx', '.md', '.py', '.js', '.html', '.css', '.json', '.xml', '.csv')) or '/' in item or '\\' in item):
+                raise FileNotFoundError(item, f"Cannot access file: {str(e)}")
             return False
     
     @staticmethod
@@ -87,6 +106,9 @@ class Task(BaseModel):
             
         Returns:
             bool: True if the item is a string representing an existing directory
+            
+        Raises:
+            FileNotFoundError: If the folder path exists but cannot be accessed, or if it looks like a directory path but doesn't exist
         """
         if not isinstance(item, str):
             return False
@@ -95,8 +117,22 @@ class Task(BaseModel):
         
         # Check if it's a valid directory path and the directory exists
         try:
-            return os.path.isdir(item)
-        except (TypeError, ValueError, OSError):
+            if os.path.isdir(item):
+                # Additional check to ensure directory is readable
+                if not os.access(item, os.R_OK):
+                    raise FileNotFoundError(item, "Directory exists but is not readable")
+                return True
+            else:
+                # Check if it looks like a directory path but doesn't exist
+                # A path looks like a directory if it ends with / or \, or if it contains path separators
+                if (item.endswith('/') or item.endswith('\\') or 
+                    (('/' in item or '\\' in item) and not os.path.isfile(item))):
+                    raise FileNotFoundError(item, "Directory does not exist")
+                return False
+        except (TypeError, ValueError, OSError) as e:
+            # If it's a string that looks like a directory path but can't be accessed, raise error
+            if isinstance(item, str) and (item.endswith('/') or item.endswith('\\') or '/' in item or '\\' in item):
+                raise FileNotFoundError(item, f"Cannot access directory: {str(e)}")
             return False
     
     @staticmethod
@@ -109,6 +145,9 @@ class Task(BaseModel):
             
         Returns:
             List[str]: List of all file paths in the folder and subfolders
+            
+        Raises:
+            FileNotFoundError: If the folder cannot be accessed
         """
         import os
         
@@ -118,9 +157,9 @@ class Task(BaseModel):
                 for filename in filenames:
                     file_path = os.path.join(root, filename)
                     files.append(file_path)
-        except (OSError, PermissionError):
-            # If we can't access the folder, just skip it
-            pass
+        except (OSError, PermissionError) as e:
+            # If we can't access the folder, raise a proper error
+            raise FileNotFoundError(folder_path, f"Cannot access folder: {str(e)}")
         
         return files
     
@@ -137,6 +176,9 @@ class Task(BaseModel):
             tuple: (cleaned_context, extracted_files)
                 - cleaned_context: Context with file/folder paths removed
                 - extracted_files: List of file paths found (including files from folders)
+                
+        Raises:
+            FileNotFoundError: If any file or folder in context cannot be accessed
         """
         extracted_files = []
         
@@ -148,54 +190,68 @@ class Task(BaseModel):
         if isinstance(context, list):
             cleaned_context = []
             for item in context:
-                if Task._is_file_path(item):
-                    extracted_files.append(item)
-                elif Task._is_folder_path(item):
-                    # Extract all files from the folder
-                    folder_files = Task._get_files_from_folder(item)
-                    extracted_files.extend(folder_files)
-                else:
-                    cleaned_context.append(item)
+                try:
+                    if Task._is_file_path(item):
+                        extracted_files.append(item)
+                    elif Task._is_folder_path(item):
+                        # Extract all files from the folder
+                        folder_files = Task._get_files_from_folder(item)
+                        extracted_files.extend(folder_files)
+                    else:
+                        cleaned_context.append(item)
+                except FileNotFoundError:
+                    # Re-raise the exception with context
+                    raise
             return cleaned_context, extracted_files
         
         # Handle dict context - check values
         elif isinstance(context, dict):
             cleaned_context = {}
             for key, value in context.items():
-                if Task._is_file_path(value):
-                    extracted_files.append(value)
-                elif Task._is_folder_path(value):
-                    # Extract all files from the folder
-                    folder_files = Task._get_files_from_folder(value)
-                    extracted_files.extend(folder_files)
-                elif isinstance(value, list):
-                    # Recursively process lists in dict values
-                    cleaned_list = []
-                    for item in value:
-                        if Task._is_file_path(item):
-                            extracted_files.append(item)
-                        elif Task._is_folder_path(item):
-                            # Extract all files from the folder
-                            folder_files = Task._get_files_from_folder(item)
-                            extracted_files.extend(folder_files)
-                        else:
-                            cleaned_list.append(item)
-                    cleaned_context[key] = cleaned_list
-                else:
-                    cleaned_context[key] = value
+                try:
+                    if Task._is_file_path(value):
+                        extracted_files.append(value)
+                    elif Task._is_folder_path(value):
+                        # Extract all files from the folder
+                        folder_files = Task._get_files_from_folder(value)
+                        extracted_files.extend(folder_files)
+                    elif isinstance(value, list):
+                        # Recursively process lists in dict values
+                        cleaned_list = []
+                        for item in value:
+                            try:
+                                if Task._is_file_path(item):
+                                    extracted_files.append(item)
+                                elif Task._is_folder_path(item):
+                                    # Extract all files from the folder
+                                    folder_files = Task._get_files_from_folder(item)
+                                    extracted_files.extend(folder_files)
+                                else:
+                                    cleaned_list.append(item)
+                            except FileNotFoundError:
+                                # Re-raise the exception with context
+                                raise
+                        cleaned_context[key] = cleaned_list
+                    else:
+                        cleaned_context[key] = value
+                except FileNotFoundError:
+                    # Re-raise the exception with context
+                    raise
             return cleaned_context, extracted_files
         
         # Handle single string that might be a file path or folder
-        elif Task._is_file_path(context):
-            extracted_files.append(context)
-            return [], extracted_files
-        elif Task._is_folder_path(context):
-            # Extract all files from the folder
-            folder_files = Task._get_files_from_folder(context)
-            extracted_files.extend(folder_files)
-            return [], extracted_files
+        try:
+            if Task._is_file_path(context):
+                extracted_files.append(context)
+                return [], extracted_files
+            elif Task._is_folder_path(context):
+                # Extract all files from the folder
+                folder_files = Task._get_files_from_folder(context)
+                extracted_files.extend(folder_files)
+                return [], extracted_files
+        except FileNotFoundError:
+            raise
         
-        # For any other type, return as is
         else:
             return context, extracted_files
 
@@ -252,7 +308,10 @@ class Task(BaseModel):
         if _tools_awaiting_external_execution is None:
             _tools_awaiting_external_execution = []
         
-        context, extracted_files = self._extract_files_from_context(context)
+        try:
+            context, extracted_files = self._extract_files_from_context(context)
+        except FileNotFoundError as e:
+            raise FileNotFoundError(e.file_path, f"File specified in context cannot be accessed: {e.reason}")
         
         if attachments is None:
             attachments = []

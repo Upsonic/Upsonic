@@ -127,3 +127,13 @@ class RateLimitError(UpsonicError):
 class AuthenticationError(UpsonicError):
     """Exception raised when API authentication fails."""
     pass
+
+
+class FileNotFoundError(UpsonicError):
+    """Exception raised when a file specified in context cannot be accessed."""
+    
+    def __init__(self, file_path: str, reason: str = "File not found"):
+        self.file_path = file_path
+        self.reason = reason
+        message = f"File not found: {file_path}. {reason}"
+        super().__init__(message)

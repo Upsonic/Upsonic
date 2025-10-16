@@ -247,10 +247,9 @@ async def test_technical_security_agent_policy_exception(mock_infer_model):
     
     # Final result check
     assert isinstance(result, str)
-    # The policy is working (we can see it in the output), but since we're mocking the model response
-    # directly, the policy doesn't get to block the actual output. The policy detection is working.
-    assert "aws access key" in result.lower()  # The mock response contains this
-    # Test passed - policy detection working (visible in console output)
+    # The policy is working correctly - it should block the response and return a policy violation message
+    assert "disallowed by policy" in result.lower() or "disallowedoperation" in result.lower()
+    # Test passed - policy detection working and blocking content correctly
 
 
 @pytest.mark.asyncio

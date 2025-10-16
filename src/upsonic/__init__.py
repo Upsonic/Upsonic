@@ -34,6 +34,12 @@ def _get_KnowledgeBase():
 def _get_Agent():
     return _lazy_import("upsonic.agent.agent", "Agent")()
 
+def _get_DeepAgent():
+    return _lazy_import("upsonic.agent.deep_agent", "DeepAgent")()
+
+def _get_create_deep_agent():
+    return _lazy_import("upsonic.agent.deep_agent", "create_deep_agent")()
+
 def _get_AgentRunResult():
     return _lazy_import("upsonic.agent.run_result", "AgentRunResult")()
 
@@ -167,6 +173,10 @@ def __getattr__(name: str) -> Any:
         return _get_KnowledgeBase()
     elif name == "Agent":
         return _get_Agent()
+    elif name == "DeepAgent":
+        return _get_DeepAgent()
+    elif name == "create_deep_agent":
+        return _get_create_deep_agent()
     elif name == "AgentRunResult":
         return _get_AgentRunResult()
     elif name == "OutputDataT":

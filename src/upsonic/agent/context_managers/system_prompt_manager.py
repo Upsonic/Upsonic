@@ -220,26 +220,26 @@ class SystemPromptManager:
         if self.agent.system_prompt:
             base_prompt = self.agent.system_prompt
         
-        else:
-            has_any_info = False
+        has_any_info = False
 
-            if self.agent.role:
-                base_prompt += f"\nThis is your role: {self.agent.role}"
-                has_any_info = True
-            if self.agent.goal:
-                base_prompt += f"\nThis is your goal: {self.agent.goal}"
-                has_any_info = True
-            if self.agent.instructions:
-                base_prompt += f"\nThis is your instructions to follow: {self.agent.instructions}"
-                has_any_info = True
-            if self.agent.education:
-                base_prompt += f"\nThis is your education: {self.agent.education}"
-                has_any_info = True
-            if self.agent.work_experience:
-                base_prompt += f"\nThis is your work experiences: {self.agent.work_experience}"
-                has_any_info = True
-            if not has_any_info and not is_thinking_enabled:
-                base_prompt = default_prompt().prompt
+        if self.agent.role:
+            base_prompt += f"\nThis is your role: {self.agent.role}"
+            has_any_info = True
+        if self.agent.goal:
+            base_prompt += f"\nThis is your goal: {self.agent.goal}"
+            has_any_info = True
+        if self.agent.instructions:
+            base_prompt += f"\nThis is your instructions to follow: {self.agent.instructions}"
+            has_any_info = True
+        if self.agent.education:
+            base_prompt += f"\nThis is your education: {self.agent.education}"
+            has_any_info = True
+        if self.agent.work_experience:
+            base_prompt += f"\nThis is your work experiences: {self.agent.work_experience}"
+            has_any_info = True
+        
+        if not self.agent.system_prompt and not has_any_info and not is_thinking_enabled:
+            base_prompt = default_prompt().prompt
         
         prompt_parts.append(base_prompt.strip())
 

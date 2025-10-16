@@ -466,14 +466,15 @@ class TestAgentStreaming:
         error_model.settings = None
         error_model.customize_request_parameters = Mock(return_value={})
 
-        agent.model = error_model
+        # Mock the infer_model function to return our error model
+        with patch('upsonic.models.infer_model', return_value=error_model):
+            agent.model = error_model
+            result = await agent.stream_async(simple_task)
 
-        result = await agent.stream_async(simple_task)
-
-        with pytest.raises(Exception, match="Stream error"):
-            async with result:
-                async for chunk in result.stream_output():
-                    pass
+            with pytest.raises(Exception, match="Stream error"):
+                async with result:
+                    async for chunk in result.stream_output():
+                        pass
     
     @pytest.mark.asyncio
     async def test_streaming_with_caching(self, agent, simple_task):
