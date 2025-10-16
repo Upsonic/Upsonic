@@ -45,10 +45,11 @@ class StepContext(BaseModel):
     
     task: Any = Field(description="Task being executed")
     agent: Any = Field(description="Agent instance")
-    
+
     model: Any = Field(default=None, description="Model override for execution")
     state: Any = Field(default=None, description="Graph execution state")
-    
+    debug: bool = Field(default=False, description="Debug mode enabled")
+
     is_streaming: bool = Field(default=False, description="Whether this is streaming execution")
     stream_result: Any = Field(default=None, description="StreamRunResult reference for streaming mode")
     

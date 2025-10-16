@@ -1290,7 +1290,8 @@ class Agent(BaseAgent):
                 task=task,
                 agent=self,
                 model=model,
-                state=state
+                state=state,
+                debug=debug or self.debug
             )
             
             final_context = await pipeline.execute(context)
@@ -1498,7 +1499,7 @@ class Agent(BaseAgent):
         graph_execution_id: Optional[str] = None
     ) -> AsyncIterator["ModelResponseStreamEvent"]:
         """Create the actual stream iterator for streaming execution using pipeline architecture.
-        
+
         This iterator yields all streaming events from the model, including the FinalResultEvent
         which now comes at the end of the stream (after all content has been received).
         """
@@ -1540,6 +1541,7 @@ class Agent(BaseAgent):
                 agent=self,
                 model=model,
                 state=state,
+                debug=debug or self.debug,
                 is_streaming=True,
                 stream_result=self._stream_run_result
             )

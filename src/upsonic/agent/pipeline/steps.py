@@ -31,7 +31,8 @@ class InitializationStep(Step):
         # Start task timing
         context.task.task_start(context.agent)
 
-        agent_started(context.agent.get_agent_id())
+        if context.debug:
+            agent_started(context.agent.get_agent_id())
 
         context.agent.tool_call_count = 0
         context.agent._tool_call_count = 0
