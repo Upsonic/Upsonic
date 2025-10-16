@@ -76,7 +76,8 @@ class SessionManager:
         self,
         session_id: str,
         user_id: str,
-        debug: bool = False
+        debug: bool = False,
+        max_concurrent_invocations: int = 1
     ):
         """
         Initialize SessionManager.
@@ -85,6 +86,7 @@ class SessionManager:
             session_id: Unique session identifier
             user_id: User identifier
             debug: Enable debug logging
+            max_concurrent_invocations: Maximum concurrent invocations allowed
         """
         self.session_id = session_id
         self.user_id = user_id
@@ -93,7 +95,7 @@ class SessionManager:
         # Session state
         self._state = SessionState.IDLE
         self._concurrent_invocations = 0
-        self._max_concurrent_invocations = 1
+        self._max_concurrent_invocations = max_concurrent_invocations
         
         # Message history
         self._message_history: List[ChatMessage] = []

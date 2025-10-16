@@ -917,15 +917,12 @@ class StreamModelExecutionStep(Step):
             # Yield PartStartEvent to begin the text part
             yield PartStartEvent(index=0, part=TextPart(content=""))
             
-            # Stream the cached content character by character with small delays
+            # Stream the cached content character by character
             for i, char in enumerate(cached_content):
                 # Create a delta event for each character
                 from upsonic.messages import PartDeltaEvent, TextPartDelta
                 delta = TextPartDelta(content_delta=char)
                 yield PartDeltaEvent(index=0, delta=delta)
-                
-                # Small delay to simulate streaming (but faster than real API)
-                await asyncio.sleep(0.05)  # 50ms delay per character to make streaming visible
                 
                 # Update stream result if available
                 if context.stream_result:
