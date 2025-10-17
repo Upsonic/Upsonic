@@ -9,7 +9,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import Optional
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from .context import StepContext
 
@@ -26,9 +26,8 @@ class StepResult(BaseModel):
     status: StepStatus = Field(description="Step execution status")
     message: Optional[str] = Field(default=None, description="Optional message")
     execution_time: float = Field(description="Execution time in seconds")
-    
-    class Config:
-        arbitrary_types_allowed = True
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class Step(ABC):

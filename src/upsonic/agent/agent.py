@@ -1437,17 +1437,16 @@ class Agent(BaseAgent):
         task.price_id_ = None
         _ = task.price_id
         task._tool_calls = []
-        
+
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, self.do_async(task, model, debug, retry))
-                    return future.result()
-            else:
-                return loop.run_until_complete(self.do_async(task, model, debug, retry))
+            loop = asyncio.get_running_loop()
+            # If we get here, we're already in an async context with a running loop
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, self.do_async(task, model, debug, retry))
+                return future.result()
         except RuntimeError:
+            # No event loop is running, so we can safely use asyncio.run()
             return asyncio.run(self.do_async(task, model, debug, retry))
     
     def print_do(

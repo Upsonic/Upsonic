@@ -4,7 +4,7 @@ import logging
 from typing import Dict, List, NamedTuple, Optional
 import re
 
-from pydantic import Field
+from pydantic import Field, ConfigDict
 
 from upsonic.text_splitter.base import BaseChunker, BaseChunkingConfig
 from upsonic.schemas.data_models import Chunk, Document
@@ -65,8 +65,7 @@ class MarkdownChunkingConfig(BaseChunkingConfig):
         exclude=True
     )
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 # Rebuild the model to resolve forward references
 MarkdownChunkingConfig.model_rebuild()
