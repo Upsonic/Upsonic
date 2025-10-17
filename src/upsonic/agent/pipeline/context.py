@@ -7,7 +7,7 @@ step and can be modified by steps to communicate state changes.
 """
 
 from typing import Any, Optional, List, Dict, TYPE_CHECKING
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 if TYPE_CHECKING:
     from upsonic.tasks.tasks import Task
@@ -59,7 +59,6 @@ class StepContext(BaseModel):
     
     # Streaming-specific attributes
     streaming_events: List[Any] = Field(default_factory=list, description="Events collected during streaming")
-    
-    class Config:
-        arbitrary_types_allowed = True
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 

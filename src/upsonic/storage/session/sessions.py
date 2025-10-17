@@ -3,7 +3,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 # Import the new, distinct semantic ID types from our types module
 from upsonic.storage.types import SessionId, UserId
@@ -40,9 +40,7 @@ class UserProfile(BaseModel):
         description="The Unix timestamp when the user profile was last updated."
     )
 
-    class Config:
-        """Pydantic model configuration."""
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serializes the user profile model to a dictionary."""

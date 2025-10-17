@@ -6,7 +6,7 @@ from typing import List, Optional, Dict, NamedTuple, TYPE_CHECKING
 if TYPE_CHECKING:
     from upsonic.text_splitter.base import BaseChunker
 
-from pydantic import Field
+from pydantic import Field, ConfigDict
 try:
     from bs4 import BeautifulSoup, NavigableString, Tag
     _BEAUTIFULSOUP_AVAILABLE = True
@@ -110,8 +110,7 @@ class HTMLChunkingConfig(BaseChunkingConfig):
         le=1.0
     )
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 # Rebuild the model to resolve forward references
 HTMLChunkingConfig.model_rebuild()

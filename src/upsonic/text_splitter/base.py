@@ -6,7 +6,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Coroutine, Dict, Generic, List, Optional, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from upsonic.schemas.data_models import Chunk, Document
 
 logger = logging.getLogger(__name__)
@@ -48,8 +48,7 @@ class BaseChunkingConfig(BaseModel):
         description="If True, strips leading and trailing whitespace from each chunk's content. Default is False to preserve content integrity.",
     )
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 ConfigType = TypeVar("ConfigType", bound=BaseChunkingConfig)

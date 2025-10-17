@@ -6,7 +6,7 @@ import re
 from enum import Enum
 from typing import Callable, List
 
-from pydantic import Field, field_validator, ValidationInfo
+from pydantic import Field, field_validator, ValidationInfo, ConfigDict
 try:
     import numpy as np
 except ImportError:
@@ -78,8 +78,7 @@ class SemanticChunkingConfig(BaseChunkingConfig):
         exclude=True
     )
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     @field_validator("breakpoint_threshold_amount")
     @classmethod

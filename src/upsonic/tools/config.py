@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Callable, List, Optional, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class ToolHooks(BaseModel):
@@ -11,8 +11,7 @@ class ToolHooks(BaseModel):
     before: Optional[Callable] = None
     after: Optional[Callable] = None
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class ToolConfig(BaseModel):
