@@ -1,7 +1,8 @@
 import pytest
 import random
 import string
-from upsonic import Task, Agent, Memory
+from upsonic import Task, Agent
+from upsonic.storage import Memory
 from upsonic.storage.providers.sqlite import SqliteStorage
 from upsonic.safety_engine.policies.crypto_policies import CryptoBlockPolicy
 from upsonic.safety_engine.policies.adult_content_policies import AdultContentBlockPolicy
@@ -19,6 +20,7 @@ def test_agent_company_attributes():
     agent = Agent(
         name="Company Agent",
         company_url=f"https://{company_name}.com/",
+        company_name=company_name,
         company_objective=f"{company_name} AI Platform for FinTech Operations",
         company_description="Secure and efficient onboarding and landing steps for FinTech clients"
     )
