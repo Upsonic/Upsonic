@@ -193,3 +193,38 @@ def test_team_with_response_format(capsys):
     for key, value in result.key_metrics.items():
         assert isinstance(value, float), f"Metric {key} should be float, got {TestTeam.AnalysisResult}"
     
+def test_agent_name_verification_with_mock():
+    """Test agent names by verifying agent properties directly"""
+    
+    # Create agents with specific names
+    writer = Agent(model="openai/gpt-4o", name="Writer")
+    editor = Agent(model="openai/gpt-4o", name="Editor")
+    
+    # Verify agent names are set correctly
+    assert writer.name == "Writer", f"Expected writer name to be 'Writer', got '{writer.name}'"
+    assert editor.name == "Editor", f"Expected editor name to be 'Editor', got '{editor.name}'"
+    
+    # Create team with agents
+    team = Team(agents=[writer, editor], mode="sequential")
+    
+    # Verify agents are in the team
+    assert len(team.agents) == 2, f"Expected 2 agents in team, got {len(team.agents)}"
+    assert team.agents[0].name == "Writer", f"Expected first agent to be 'Writer', got '{team.agents[0].name}'"
+    assert team.agents[1].name == "Editor", f"Expected second agent to be 'Editor', got '{team.agents[1].name}'"
+    
+    # Create tasks and explicitly assign agents
+    task1 = Task(description="Write a product description")
+    task1.agent = writer  # Force this task to use writer
+    
+    task2 = Task(description="Edit and polish the description")
+    task2.agent = editor  # Force this task to use editor
+    
+    # Verify task-agent assignments
+    assert task1.agent == writer, "Task1 should be assigned to writer"
+    assert task2.agent == editor, "Task2 should be assigned to editor"
+    
+    # Execute team
+    result = team.do([task1, task2])
+    
+    # Verify the result is not None
+    assert result is not None, "Team execution should return a result"
