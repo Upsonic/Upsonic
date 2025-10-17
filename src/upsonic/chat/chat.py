@@ -159,7 +159,7 @@ class Chat:
             user_profile_schema=user_profile_schema,
             dynamic_user_profile=dynamic_user_profile,
             num_last_messages=num_last_messages,
-            model_provider=agent.model,
+            model=agent.model,
             debug=debug,
             feed_tool_call_results=feed_tool_call_results,
             user_memory_mode=user_memory_mode

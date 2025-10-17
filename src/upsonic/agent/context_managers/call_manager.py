@@ -17,17 +17,17 @@ else:
 
 
 class CallManager:
-    def __init__(self, model_provider: "Model", task, debug=False, show_tool_calls=True):
+    def __init__(self, model: "Model", task, debug=False, show_tool_calls=True):
         """
         Initializes the CallManager.
 
         Args:
-            model_provider: The instantiated model object for this call.
+            model: The instantiated model object for this call.
             task: The task being executed.
             debug: Whether debug mode is enabled.
             show_tool_calls: Whether to show tool calls.
         """
-        self.model_provider = model_provider
+        self.model = model
         self.task = task
         self.show_tool_calls = show_tool_calls
         self.debug = debug
@@ -64,7 +64,7 @@ class CallManager:
                 # Call the end logging
                 call_end(
                     self.model_response.output,
-                    self.model_provider,
+                    self.model,
                     self.task.response_format,
                     self.start_time,
                     self.end_time,

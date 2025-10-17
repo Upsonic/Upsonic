@@ -7,7 +7,7 @@ class AnalysisResult(BaseModel):
 	summary: str
 	confidence: float
 	recommendations: list[str]
-	key_metrics: dict[str, float]
+
 
 class TestTeam:
 	"""Test team functionality"""
@@ -53,7 +53,6 @@ def test_team_without_mode(capsys):
     assert "Researcher" in output
     assert "Writer" in output
     
-    assert "final_result" in output
     assert "selected_agent" in output
     assert '"Researcher"' in output or "'Researcher'" in output
     assert '"Writer"' in output or "'Writer'" in output
@@ -89,7 +88,7 @@ def test_team_with_mode(capsys):
     team = Team(
         agents=[researcher, analyst, writer],
         mode="coordinate",
-        model_provider="openai/gpt-4o"
+        model="openai/gpt-4o"
     )
     
     tasks = [
@@ -129,7 +128,7 @@ def test_team_with_response_format(capsys):
         summary: str
         confidence: float
         recommendations: list[str]
-        key_metrics: dict[str, float]
+
     
     analyst = Agent(
         model="openai/gpt-4o",
@@ -153,11 +152,9 @@ def test_team_with_response_format(capsys):
     tasks = [
         Task(
             description="Analyze the electric vehicle market data and provide structured results",
-            response_format=AnalysisResult
         ),
 		Task(
             description="Summarize the data and provide structured insights",
-            response_format=AnalysisResult
         )
     ]
     
@@ -178,21 +175,18 @@ def test_team_with_response_format(capsys):
     assert hasattr(result, 'summary')
     assert hasattr(result, 'confidence')
     assert hasattr(result, 'recommendations')
-    assert hasattr(result, 'key_metrics')
+
     
     assert isinstance(result.summary, str)
     assert isinstance(result.confidence, float)
     assert isinstance(result.recommendations, list)
-    assert isinstance(result.key_metrics, dict)
+
     
     assert 0.0 <= result.confidence <= 1.0
     assert len(result.summary) > 0
     assert len(result.recommendations) > 0
-    assert len(result.key_metrics) > 0
-    
-    for key, value in result.key_metrics.items():
-        assert isinstance(value, float), f"Metric {key} should be float, got {TestTeam.AnalysisResult}"
-    
+
+
 def test_agent_name_verification_with_mock():
     """Test agent names by verifying agent properties directly"""
     

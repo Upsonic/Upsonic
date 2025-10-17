@@ -9,15 +9,15 @@ from upsonic.agent.agent import Direct
 class ResultCombiner:
     """Handles combining results from multiple tasks into coherent final answers."""
     
-    def __init__(self, model_provider: Optional[Any] = None, debug: bool = False):
+    def __init__(self, model: Optional[Any] = None, debug: bool = False):
         """
         Initialize the result combiner.
         
         Args:
-            model_provider: The model provider to use for combining results
+            model: The model provider to use for combining results
             debug: Whether to enable debug mode
         """
-        self.model_provider = model_provider
+        self.model = model
         self.debug = debug
     
     def should_combine_results(self, results: List[Task]) -> bool:
@@ -83,10 +83,10 @@ class ResultCombiner:
         if not debug_setting and agents and len(agents) > 0:
             debug_setting = agents[-1].debug
         
-        if not self.model_provider:
-             raise ValueError("ResultCombiner requires a model_provider to be initialized.")
+        if not self.model:
+             raise ValueError("ResultCombiner requires a model to be initialized.")
 
-        end_agent = Direct(model=self.model_provider, debug=debug_setting)
+        end_agent = Direct(model=self.model, debug=debug_setting)
         await end_agent.do_async(end_task)
         
         return end_task.response
