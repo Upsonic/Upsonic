@@ -18,6 +18,13 @@ from upsonic.agent.deep_agent.prompts import (
     TASK_SYSTEM_PROMPT,
     BASE_AGENT_PROMPT
 )
+from upsonic.storage.providers.in_memory import InMemoryStorage
+from upsonic.storage.memory.memory import Memory
+from upsonic.utils.printing import (
+    deep_agent_todo_completion_check,
+    deep_agent_all_todos_completed,
+    deep_agent_max_iterations_warning
+)
 
 if TYPE_CHECKING:
     from upsonic.tasks.tasks import Task
@@ -93,8 +100,24 @@ class DeepAgent(Agent):
             instructions or kwargs.get('system_prompt', '')
         )
         kwargs['system_prompt'] = enhanced_system_prompt
+
+        if 'tool_call_limit' not in kwargs:
+            kwargs['tool_call_limit'] = 100
         
-        # Initialize base agent
+        # Create InMemoryStorage-based memory for Deep Agent if no memory provided
+        # This memory persists conversation context across the todo completion loop
+        if 'memory' not in kwargs or kwargs['memory'] is None:
+            storage = InMemoryStorage()
+            
+            import uuid
+            agent_uuid = str(uuid.uuid4())[:8]
+            
+            kwargs['memory'] = Memory(
+                storage=storage,
+                session_id=f"deep_agent_session_{agent_uuid}",
+                user_id=f"deep_agent_user_{agent_uuid}"
+            )
+        
         super().__init__(model, **kwargs)
         
         # Initialize deep agent state
@@ -288,6 +311,180 @@ class DeepAgent(Agent):
             content: Content of the file
         """
         self.deep_agent_state.files[file_path] = content
+    
+    def _check_todos_completion(self) -> tuple[bool, int, int]:
+        """
+        Check if all todos are completed.
+        
+        Returns:
+            Tuple of (all_completed, completed_count, total_count)
+        """
+        todos = self.deep_agent_state.todos
+        if not todos:
+            return True, 0, 0
+        
+        completed = sum(1 for todo in todos if todo.status == "completed")
+        total = len(todos)
+        
+        return completed == total, completed, total
+    
+    def _get_incomplete_todos_summary(self) -> str:
+        """
+        Get a summary of incomplete todos.
+        
+        Returns:
+            String describing incomplete todos
+        """
+        todos = self.deep_agent_state.todos
+        incomplete = [
+            todo for todo in todos 
+            if todo.status in ["pending", "in_progress"]
+        ]
+        
+        if not incomplete:
+            return "All todos are completed!"
+        
+        summary_lines = ["You have incomplete todos that MUST be finished:"]
+        for i, todo in enumerate(incomplete, 1):
+            summary_lines.append(f"{i}. [{todo.status}] {todo.content}")
+        
+        return "\n".join(summary_lines)
+    
+    async def do_async(
+        self, 
+        task: "Task", 
+        model: Optional[Union[str, "Model"]] = None,
+        debug: bool = False,
+        retry: int = 1,
+        state: Optional[Any] = None,
+        *,
+        graph_execution_id: Optional[str] = None
+    ) -> Any:
+        """
+        Execute a task asynchronously with automatic todo completion loop.
+        
+        This overrides the base Agent's do_async to add a completion loop that
+        ensures ALL todos are completed before finishing.
+        
+        The loop will:
+        1. Execute the task normally
+        2. Check if todos were created and if they're all completed
+        3. If incomplete todos exist, create a continuation task
+        4. Repeat until all todos are completed or max iterations reached
+        
+        The Deep Agent uses InMemoryStorage-based memory (created in __init__)
+        to maintain conversation context across iterations automatically,
+        so continuation tasks have full context of previous work.
+        
+        Args:
+            task: Task to execute
+            model: Override model for this execution
+            debug: Enable debug mode
+            retry: Number of retries
+            state: Graph execution state
+            graph_execution_id: Graph execution identifier
+            
+        Returns:
+            The final task output after all todos are completed
+        """
+        from upsonic.tasks.tasks import Task
+        
+        MAX_COMPLETION_ITERATIONS = 10
+        iteration = 0
+        
+        result = await super().do_async(task, model, debug, retry, state, graph_execution_id=graph_execution_id)
+        
+        while iteration < MAX_COMPLETION_ITERATIONS:
+            iteration += 1
+            
+            all_completed, completed_count, total_count = self._check_todos_completion()
+            
+            if all_completed or total_count == 0:
+                if debug or self.debug:
+                    if total_count > 0:
+                        deep_agent_all_todos_completed(total_count)
+                break
+            
+            incomplete_todos_summary = self._get_incomplete_todos_summary()
+            
+            if debug or self.debug:
+                deep_agent_todo_completion_check(iteration, completed_count, total_count)
+            
+            continuation_task = Task(
+                description=f"""
+                {incomplete_todos_summary}
+
+                CRITICAL: You MUST complete ALL remaining todos before stopping.
+
+                Instructions:
+                1. Review your current todo list using the todos you already created
+                2. Continue working on the incomplete todos
+                3. Mark each todo as "in_progress" before working on it
+                4. Mark each todo as "completed" immediately after finishing it
+                5. Create any files or deliverables that were requested
+                6. Do NOT stop until ALL todos show status "completed"
+
+                Continue from where you left off and COMPLETE ALL REMAINING TASKS.
+                """,
+                tools=task.tools
+            )
+            
+            result = await super().do_async(
+                continuation_task, 
+                model, 
+                debug, 
+                retry, 
+                state, 
+                graph_execution_id=graph_execution_id
+            )
+        
+        all_completed, completed_count, total_count = self._check_todos_completion()
+        
+        if not all_completed and total_count > 0:
+            incomplete_count = total_count - completed_count
+            if debug or self.debug:
+                deep_agent_max_iterations_warning(MAX_COMPLETION_ITERATIONS, incomplete_count)
+        
+        return result
+    
+    def do(
+        self,
+        task: "Task",
+        model: Optional[Union[str, "Model"]] = None,
+        debug: bool = False,
+        retry: int = 1
+    ) -> Any:
+        """
+        Execute a task synchronously with automatic todo completion loop.
+        
+        This is the synchronous wrapper for do_async with todo completion.
+        
+        Args:
+            task: Task to execute
+            model: Override model for this execution
+            debug: Enable debug mode
+            retry: Number of retries
+            
+        Returns:
+            The final task output after all todos are completed
+        """
+        import asyncio
+        
+        task.price_id_ = None
+        _ = task.price_id
+        task._tool_calls = []
+        
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, self.do_async(task, model, debug, retry))
+                    return future.result()
+            else:
+                return loop.run_until_complete(self.do_async(task, model, debug, retry))
+        except RuntimeError:
+            return asyncio.run(self.do_async(task, model, debug, retry))
 
 
 # Alias for convenience

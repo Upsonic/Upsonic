@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     )
     from upsonic.graph.graph import State
     from ..db.database import DatabaseBase
+    from upsonic.models.model_selector import ModelRecommendation
 else:
     Model = "Model"
     ModelRequest = "ModelRequest"
@@ -65,6 +66,7 @@ else:
     SystemPromptManager = "SystemPromptManager"
     TaskManager = "TaskManager"
     State = "State"
+    ModelRecommendation = "ModelRecommendation"
 
 RetryMode = Literal["raise", "return_false"]
 
@@ -145,6 +147,13 @@ class Agent(BaseAgent):
         reflection_config: Optional["ReflectionConfig"] = None,
         model_selection_criteria: Optional[Dict[str, Any]] = None,
         use_llm_for_selection: bool = False,
+        # Common reasoning/thinking attributes
+        reasoning_effort: Optional[Literal["low", "medium", "high"]] = None,
+        reasoning_summary: Optional[Literal["concise", "detailed"]] = None,
+        thinking_enabled: Optional[bool] = None,
+        thinking_budget: Optional[int] = None,
+        thinking_include_thoughts: Optional[bool] = None,
+        reasoning_format: Optional[Literal["hidden", "raw", "parsed"]] = None,
     ):
         """
         Initialize the Agent with comprehensive configuration options.
@@ -186,11 +195,27 @@ class Agent(BaseAgent):
             reflection_config: Configuration for reflection and self-evaluation
             model_selection_criteria: Default criteria dictionary for recommend_model_for_task() (see SelectionCriteria)
             use_llm_for_selection: Default flag for whether to use LLM in recommend_model_for_task()
+            
+            # Common reasoning/thinking attributes (mapped to model-specific settings):
+            reasoning_effort: Reasoning effort level for OpenAI models ("low", "medium", "high")
+            reasoning_summary: Reasoning summary type for OpenAI models ("concise", "detailed")
+            thinking_enabled: Enable thinking for Anthropic/Google models (True/False)
+            thinking_budget: Token budget for thinking (Anthropic: budget_tokens, Google: thinking_budget)
+            thinking_include_thoughts: Include thoughts in output (Google models)
+            reasoning_format: Reasoning format for Groq models ("hidden", "raw", "parsed")
         """
         from upsonic.models import infer_model
         self.model = infer_model(model)
         self.name = name
         self.agent_id_ = agent_id_
+        
+        # Common reasoning/thinking attributes
+        self.reasoning_effort = reasoning_effort
+        self.reasoning_summary = reasoning_summary
+        self.thinking_enabled = thinking_enabled
+        self.thinking_budget = thinking_budget
+        self.thinking_include_thoughts = thinking_include_thoughts
+        self.reasoning_format = reasoning_format
         
         self.role = role
         self.goal = goal
@@ -273,6 +298,8 @@ class Agent(BaseAgent):
             self.model._settings = settings
         if profile:
             self.model._profile = profile
+            
+        self._apply_reasoning_settings()
         
         from upsonic.cache import CacheManager
         from upsonic.tools import ToolManager
@@ -289,6 +316,8 @@ class Agent(BaseAgent):
         self._stream_run_result = StreamRunResult()
         
         self._setup_policy_models()
+
+
     
     def _setup_policy_models(self) -> None:
         """Setup model references for safety policies."""
@@ -304,6 +333,71 @@ class Agent(BaseAgent):
                     agent_name="Policy Base Agent",
                     model=self.model
                 )
+    
+    def _apply_reasoning_settings(self) -> None:
+        """Apply common reasoning/thinking attributes to model-specific settings."""
+        if not hasattr(self.model, '_settings') or self.model._settings is None:
+            self.model._settings = {}
+        
+        try:
+            current_settings = self.model._settings.copy()
+        except (AttributeError, TypeError):
+            current_settings = {}
+            
+        reasoning_settings = self._get_model_specific_reasoning_settings()
+        
+        try:
+            self.model._settings = {**current_settings, **reasoning_settings}
+        except TypeError:
+            self.model._settings = current_settings
+    
+    def _get_model_specific_reasoning_settings(self) -> Dict[str, Any]:
+        """Convert common reasoning attributes to model-specific settings."""
+        settings = {}
+        
+        try:
+            provider_name = getattr(self.model, 'system', '').lower()
+        except (AttributeError, TypeError):
+            provider_name = ''
+        
+        # OpenAI/OpenAI-compatible models
+        if provider_name in ['openai', 'azure', 'deepseek', 'cerebras', 'fireworks', 'github', 'grok', 'heroku', 'moonshotai', 'openrouter', 'together', 'vercel', 'litellm']:
+            # Apply reasoning_effort to all OpenAI models
+            if self.reasoning_effort is not None:
+                settings['openai_reasoning_effort'] = self.reasoning_effort
+            
+            # Only apply reasoning_summary to OpenAIResponsesModel
+            if self.reasoning_summary is not None:
+                from upsonic.models.openai import OpenAIResponsesModel
+                if isinstance(self.model, OpenAIResponsesModel):
+                    settings['openai_reasoning_summary'] = self.reasoning_summary
+        
+        # Anthropic models
+        elif provider_name == 'anthropic':
+            if self.thinking_enabled is not None or self.thinking_budget is not None:
+                thinking_config = {}
+                if self.thinking_enabled is not None:
+                    thinking_config['type'] = 'enabled' if self.thinking_enabled else 'disabled'
+                if self.thinking_budget is not None:
+                    thinking_config['budget_tokens'] = self.thinking_budget
+                settings['anthropic_thinking'] = thinking_config
+        
+        # Google models
+        elif provider_name in ['google-gla', 'google-vertex']:
+            if self.thinking_enabled is not None or self.thinking_budget is not None or self.thinking_include_thoughts is not None:
+                thinking_config = {}
+                if self.thinking_enabled is not None:
+                    thinking_config['include_thoughts'] = self.thinking_include_thoughts if self.thinking_include_thoughts is not None else self.thinking_enabled
+                if self.thinking_budget is not None:
+                    thinking_config['thinking_budget'] = self.thinking_budget
+                settings['google_thinking_config'] = thinking_config
+        
+        # Groq models
+        elif provider_name == 'groq':
+            if self.reasoning_format is not None:
+                settings['groq_reasoning_format'] = self.reasoning_format
+        
+        return settings
     
     @property
     def agent_id(self) -> str:

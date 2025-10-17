@@ -584,26 +584,10 @@ class StreamedResponse(ABC):
                 final_result_part_index: int | None = None
                 final_result_info: tuple[str | None, str | None] | None = None  # (tool_name, tool_call_id)
                 current_part_index: int | None = None
-                events_buffer: list[ModelResponseStreamEvent] = []
                 
                 async for event in iterator:
                     # Check if this event identifies the final result part
                     if isinstance(event, PartStartEvent):
-                        # If we have a buffered part that was the final result, emit FinalResultEvent now
-                        if current_part_index is not None and current_part_index == final_result_part_index:
-                            # Yield all buffered events for the previous part
-                            for buffered_event in events_buffer:
-                                yield buffered_event
-                            events_buffer.clear()
-                            
-                            # Now emit the FinalResultEvent
-                            if final_result_info is not None:
-                                tool_name, tool_call_id = final_result_info
-                                final_result_event = FinalResultEvent(tool_name=tool_name, tool_call_id=tool_call_id)
-                                self.final_result_event = final_result_event
-                                yield final_result_event
-                                final_result_part_index = None  # Reset so we don't emit again
-                        
                         # Update current part index
                         current_part_index = event.index
                         
@@ -612,18 +596,10 @@ class StreamedResponse(ABC):
                             final_result_part_index = event.index
                             final_result_info = (result_event.tool_name, result_event.tool_call_id)
                     
-                    # Buffer or yield events
-                    if current_part_index == final_result_part_index:
-                        # Buffer events for the final result part
-                        events_buffer.append(event)
-                    else:
-                        # Yield non-final-result events immediately
-                        yield event
+                    # Always yield events immediately for proper streaming
+                    yield event
                 
-                # Stream ended - yield any buffered events and emit FinalResultEvent if needed
-                for buffered_event in events_buffer:
-                    yield buffered_event
-                
+                # Stream ended - emit FinalResultEvent if needed
                 if final_result_part_index is not None and final_result_info is not None:
                     tool_name, tool_call_id = final_result_info
                     final_result_event = FinalResultEvent(tool_name=tool_name, tool_call_id=tool_call_id)
