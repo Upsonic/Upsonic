@@ -25,7 +25,7 @@ class Team:
     def __init__(self, 
                  agents: list[Any], 
                  tasks: list[Task] | None = None, 
-                 model_provider: Optional[Any] = None,
+                 model: Optional[Any] = None,
                  response_format: Any = str,  
                  ask_other_team_members: bool = False,
                  mode: Literal["sequential", "coordinate", "route"] = "sequential",
@@ -38,13 +38,13 @@ class Team:
             agents: List of Direct agent instances to use as team members.
             tasks: List of tasks to execute (optional).
             response_format: The response format for the end task (optional).
-            model_provider: The model provider instance for any internal agents (leader, router).
+            model: The model provider instance for any internal agents (leader, router).
             ask_other_team_members: A flag to automatically add other agents as tools.
             mode: The operational mode for the team ('sequential', 'coordinate', or 'route').
         """
         self.agents = agents
         self.tasks = tasks if isinstance(tasks, list) else [tasks] if tasks is not None else []
-        self.model_provider = model_provider
+        self.model = model
         self.response_format = response_format
         self.ask_other_team_members = ask_other_team_members
         self.mode = mode
@@ -106,11 +106,11 @@ class Team:
         if self.mode == "sequential":
             context_sharing = ContextSharing()
             task_assignment = TaskAssignment()
-            combiner_model_provider = self.model_provider
-            if not combiner_model_provider and self.agents:
-                combiner_model_provider = self.agents[0].model_provider
+            combiner_model = self.model
+            if not combiner_model and self.agents:
+                combiner_model = self.agents[0].model
 
-            result_combiner = ResultCombiner(model_provider=combiner_model_provider, debug=self.agents[-1].debug if self.agents else False)
+            result_combiner = ResultCombiner(model=combiner_model, debug=self.agents[-1].debug if self.agents else False)
             if not isinstance(tasks, list):
                 tasks = [tasks]
             agents_registry, agent_names = task_assignment.prepare_agents_registry(agent_configurations)
@@ -135,8 +135,8 @@ class Team:
             )
 
         elif self.mode == "coordinate":
-            if not self.model_provider:
-                raise ValueError(f"A `model_provider` must be set on the Team for '{self.mode}' mode.")
+            if not self.model:
+                raise ValueError(f"A `model` must be set on the Team for '{self.mode}' mode.")
             tool_mapping = {}
             for member in self.tasks:
                 if member.tools:
@@ -154,7 +154,7 @@ class Team:
                                         )
             
             self.leader_agent = Direct(
-                model=self.model_provider, 
+                model=self.model, 
                 memory=self.memory
             )
             
@@ -184,13 +184,13 @@ class Team:
             
             return final_response
         elif self.mode == "route":
-            if not self.model_provider:
-                raise ValueError(f"A `model_provider` must be set on the Team for '{self.mode}' mode.")
+            if not self.model:
+                raise ValueError(f"A `model` must be set on the Team for '{self.mode}' mode.")
             
             setup_manager = CoordinatorSetup(self.agents, tasks, mode="route")
             delegation_manager = DelegationManager(self.agents, {})
 
-            self.leader_agent = Direct(model=self.model_provider)
+            self.leader_agent = Direct(model=self.model)
 
             leader_system_prompt = setup_manager.create_leader_prompt()
             self.leader_agent.system_prompt = leader_system_prompt

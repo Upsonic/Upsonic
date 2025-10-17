@@ -71,10 +71,10 @@ class TaskAssignment:
         
         max_attempts = 3
         attempts = 0
-        if not agent_configurations or not hasattr(agent_configurations[0], 'model_provider'):
-            raise ValueError("Cannot perform agent selection: The first agent in the team must have a valid model_provider.")
+        if not agent_configurations or not hasattr(agent_configurations[0], 'model'):
+            raise ValueError("Cannot perform agent selection: The first agent in the team must have a valid model.")
         
-        selection_model_provider = agent_configurations[0].model_provider
+        selection_model = agent_configurations[0].model
 
         while attempts < max_attempts:
             selecting_task = Task(
@@ -84,7 +84,7 @@ class TaskAssignment:
                 context=context
             )
             
-            await Direct(model=selection_model_provider).do_async(selecting_task)
+            await Direct(model=selection_model).do_async(selecting_task)
 
             if not isinstance(selecting_task.response, SelectedAgent):
                 attempts += 1

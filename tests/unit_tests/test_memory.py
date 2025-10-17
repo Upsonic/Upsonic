@@ -119,7 +119,7 @@ class TestMemoryInitialization:
         assert memory.session_id is None
         assert memory.user_id is None
         assert memory.num_last_messages is None
-        assert memory.model_provider is None
+        assert memory.model is None
         assert memory.debug is False
         assert memory.feed_tool_call_results is False
         assert memory.profile_schema_model == UserTraits
@@ -201,17 +201,17 @@ class TestMemoryInitialization:
         assert memory.is_profile_dynamic is True
         assert memory.profile_schema_model is None
     
-    def test_memory_init_with_model_provider(self):
+    def test_memory_init_with_model(self):
         """Test memory initialization with model provider."""
         storage = MockStorage()
         model = MockModel()
         
         memory = Memory(
             storage=storage,
-            model_provider=model
+            model=model
         )
         
-        assert memory.model_provider == model
+        assert memory.model == model
     
     def test_memory_init_with_all_options(self):
         """Test memory initialization with all options."""
@@ -231,7 +231,7 @@ class TestMemoryInitialization:
             user_profile_schema=CustomSchema,
             dynamic_user_profile=False,
             num_last_messages=10,
-            model_provider=model,
+            model=model,
             debug=True,
             feed_tool_call_results=True,
             user_memory_mode='replace'
@@ -245,7 +245,7 @@ class TestMemoryInitialization:
         assert memory.profile_schema_model == CustomSchema
         assert memory.is_profile_dynamic is False
         assert memory.num_last_messages == 10
-        assert memory.model_provider == model
+        assert memory.model == model
         assert memory.debug is True
         assert memory.feed_tool_call_results is True
         assert memory.user_memory_mode == 'replace'
@@ -506,7 +506,7 @@ class TestMemoryUpdateMemories:
             storage=storage,
             session_id="test-session",
             summary_memory=True,
-            model_provider=MockModel()
+            model=MockModel()
         )
         
         with patch('upsonic.agent.agent.Agent') as mock_agent_class:
@@ -528,7 +528,7 @@ class TestMemoryUpdateMemories:
             storage=storage,
             user_id="test-user",
             user_analysis_memory=True,
-            model_provider=MockModel()
+            model=MockModel()
         )
         
         with patch('upsonic.agent.agent.Agent') as mock_agent_class:
@@ -561,7 +561,7 @@ class TestMemoryUpdateMemories:
             storage=storage,
             user_id="test-user",
             user_analysis_memory=True,
-            model_provider=MockModel(),
+            model=MockModel(),
             user_memory_mode='replace'
         )
         
@@ -595,7 +595,7 @@ class TestMemoryUpdateMemories:
             storage=storage,
             user_id="test-user",
             user_analysis_memory=True,
-            model_provider=MockModel(),
+            model=MockModel(),
             user_memory_mode='update'
         )
         
@@ -713,7 +713,7 @@ class TestMemoryUserProfileAnalysis:
             storage=storage,
             user_id="test-user",
             user_analysis_memory=True,
-            model_provider=MockModel()
+            model=MockModel()
         )
     
     def test_extract_user_prompt_content(self, memory):
@@ -749,7 +749,7 @@ class TestMemoryUserProfileAnalysis:
         assert prompts == []
     
     @pytest.mark.asyncio
-    async def test_analyze_interaction_for_traits_no_model_provider(self, storage):
+    async def test_analyze_interaction_for_traits_no_model(self, storage):
         """Test user trait analysis without model provider."""
         memory = Memory(
             storage=storage,
@@ -759,7 +759,7 @@ class TestMemoryUserProfileAnalysis:
         
         mock_result = MockRunResult()
         
-        with pytest.raises(ValueError, match="model_provider must be configured"):
+        with pytest.raises(ValueError, match="model must be configured"):
             await memory._analyze_interaction_for_traits({}, mock_result)
     
     @pytest.mark.asyncio
@@ -819,7 +819,7 @@ class TestMemoryDynamicProfile:
             storage=storage,
             user_id="test-user",
             user_analysis_memory=True,
-            model_provider=MockModel(),
+            model=MockModel(),
             dynamic_user_profile=True
         )
     
@@ -899,7 +899,7 @@ class TestMemoryErrorHandling:
             storage=storage,
             session_id="test-session",
             summary_memory=True,
-            model_provider=MockModel()
+            model=MockModel()
         )
         
         mock_result = MockRunResult()
@@ -919,7 +919,7 @@ class TestMemoryErrorHandling:
             storage=storage,
             user_id="test-user",
             user_analysis_memory=True,
-            model_provider=MockModel()
+            model=MockModel()
         )
         
         mock_result = MockRunResult()
@@ -952,7 +952,7 @@ class TestMemoryIntegration:
             summary_memory=True,
             user_analysis_memory=True,
             num_last_messages=3,
-            model_provider=MockModel(),
+            model=MockModel(),
             debug=True,
             feed_tool_call_results=True
         )

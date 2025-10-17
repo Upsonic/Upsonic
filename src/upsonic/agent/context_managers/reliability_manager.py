@@ -11,18 +11,18 @@ else:
     Model = "Model"
 
 class ReliabilityManager:
-    def __init__(self, task, reliability_layer, model_provider: "Model"):
+    def __init__(self, task, reliability_layer, model: "Model"):
         """
         Initializes the ReliabilityManager.
 
         Args:
             task: The task being executed.
             reliability_layer: The configured reliability layer.
-            model_provider: The instantiated model object.
+            model: The instantiated model object.
         """
         self.task = task
         self.reliability_layer = reliability_layer
-        self.model_provider = model_provider
+        self.model = model
         self.processed_task = None
         
     async def process_task(self, task):
@@ -34,7 +34,7 @@ class ReliabilityManager:
         processed_result = await ReliabilityProcessor.process_task(
             task, 
             self.reliability_layer,
-            self.model_provider
+            self.model
         )
         self.processed_task = processed_result
         return processed_result

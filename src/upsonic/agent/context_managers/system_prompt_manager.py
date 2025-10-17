@@ -237,6 +237,21 @@ class SystemPromptManager:
         if self.agent.work_experience:
             base_prompt += f"\nThis is your work experiences: {self.agent.work_experience}"
             has_any_info = True
+
+        if self.agent.company_name:
+            base_prompt += f"\nYour company name is: {self.agent.company_name}"
+            has_any_info = True
+        if self.agent.company_url:
+            base_prompt += f"\nYour company website is: {self.agent.company_url}"
+            has_any_info = True
+        if self.agent.company_objective:
+            base_prompt += f"\nYour company objective is: {self.agent.company_objective}"
+            has_any_info = True
+        if self.agent.company_description:
+            base_prompt += f"\nYour company description is: {self.agent.company_description}"
+            has_any_info = True
+            
+        
         
         if not self.agent.system_prompt and not has_any_info and not is_thinking_enabled:
             base_prompt = default_prompt().prompt

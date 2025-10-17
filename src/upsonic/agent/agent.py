@@ -121,6 +121,7 @@ class Agent(BaseAgent):
         company_url: Optional[str] = None,
         company_objective: Optional[str] = None,
         company_description: Optional[str] = None,
+        company_name: Optional[str] = None,
         system_prompt: Optional[str] = None,
         reflection: bool = False,
         compression_strategy: Literal["none", "simple", "llmlingua"] = "none",
@@ -227,6 +228,7 @@ class Agent(BaseAgent):
         self.company_url = company_url
         self.company_objective = company_objective
         self.company_description = company_description
+        self.company_name = company_name
         
         self.debug = debug
         self.reflection = reflection

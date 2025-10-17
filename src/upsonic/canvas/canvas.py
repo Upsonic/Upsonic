@@ -5,14 +5,14 @@ from upsonic.models import infer_model, Model
 
 
 class Canvas:
-    def __init__(self, canvas_name: str, model_provider: Optional[Model | str] = None):
+    def __init__(self, canvas_name: str, model: Optional[Model | str] = None):
         """Initializes the Canvas."""
         self.canvas_name = canvas_name
         
-        if model_provider is None:
-            self.model_provider = infer_model("openai/gpt-4o-mini")
+        if model is None:
+            self.model = infer_model("openai/gpt-4o-mini")
         else:
-            self.model_provider = infer_model(model_provider) if isinstance(model_provider, str) else model_provider
+            self.model = infer_model(model) if isinstance(model, str) else model
 
         self._clean_canvas()
     
@@ -49,7 +49,7 @@ class Canvas:
         from upsonic import Task
         from upsonic.agent.agent import Agent
         
-        agent = Agent(model=self.model_provider, name="Canvas Editor")
+        agent = Agent(model=self.model, name="Canvas Editor")
         
         current_canvas = self.get_current_state_of_canvas()
         
