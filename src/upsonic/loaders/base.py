@@ -28,6 +28,7 @@ class BaseLoader(ABC):
         """
         self.config = config
         self._processed_document_ids: set[str] = set()
+        self._logger = get_logger(self.__class__.__module__)  # Instance logger for subclasses
 
 
     @abstractmethod

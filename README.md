@@ -88,14 +88,46 @@ You can access our documentation at [docs.upsonic.ai](https://docs.upsonic.ai/) 
 
 
 
-## Telemetry
+## 📊 Telemetry & Privacy
 
-We use anonymous telemetry to collect usage data. We do this to focus our developments on more accurate points. You can disable it by setting the UPSONIC_TELEMETRY environment variable to false.
+Upsonic uses **anonymous telemetry** to help us understand how the framework is being used and improve our development focus. We are committed to transparency and user privacy.
 
+All telemetry is **anonymous** - we only track a randomly generated system ID to distinguish unique installations.
+
+### Why Collect Telemetry?
+
+Telemetry helps us:
+- 🎯 Focus development on frequently-used features
+- 🐛 Identify and fix common errors and edge cases
+- 📈 Understand performance characteristics at scale
+- 🔧 Improve framework reliability
+
+### How to Disable Telemetry
+
+You can **completely disable** telemetry in multiple ways:
+
+**Option 1: Environment Variable (Recommended)**
+```bash
+export UPSONIC_TELEMETRY=false
+```
+
+**Option 2: In Python Code**
 ```python
 import os
-os.environ["UPSONIC_TELEMETRY"] = "False"
+os.environ["UPSONIC_TELEMETRY"] = "false"
+
+from upsonic import Agent  # Import after setting env var
 ```
+
+**Option 3: .env File**
+```bash
+# .env
+UPSONIC_TELEMETRY=false
+```
+
+Once disabled, **no data** will be sent to our telemetry service.
+
+
 <br>
 <br>
 

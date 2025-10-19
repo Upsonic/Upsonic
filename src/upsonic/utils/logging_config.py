@@ -44,6 +44,7 @@ Kullanım:
 import logging
 import os
 import sys
+import atexit
 from typing import Optional, Dict, Literal
 from pathlib import Path
 from dotenv import load_dotenv
@@ -178,6 +179,18 @@ def setup_sentry() -> None:
         pass  # System ID alınamazsa skip et
 
     _SENTRY_CONFIGURED = True
+
+    # Register atexit handler to flush pending events on program exit
+    # Bu sayede script/CLI kullanımında pending event'ler kaybolmaz
+    if the_dsn:
+        def _flush_sentry():
+            """Flush pending Sentry events before program exit."""
+            try:
+                sentry_sdk.flush(timeout=2.0)
+            except Exception:
+                pass  # Silent failure on exit, don't block program termination
+
+        atexit.register(_flush_sentry)
 
     # Log initialization (sadece DSN varsa)
     if the_dsn:

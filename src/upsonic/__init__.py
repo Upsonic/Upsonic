@@ -1,9 +1,10 @@
-from upsonic.utils.logging_config import *
-
 import warnings
 import importlib
 from typing import Any
+
 from dotenv import load_dotenv
+
+from upsonic.utils.logging_config import *
 
 warnings.filterwarnings("ignore", category=ResourceWarning)
 warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
