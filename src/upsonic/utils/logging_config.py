@@ -162,8 +162,8 @@ def setup_sentry() -> None:
         # Breadcrumb için tüm level'ları yakala, event için INFO+
         integrations=[
             LoggingIntegration(
-                level=None,  # Tüm log level'ları yakala (breadcrumb için)
-                event_level="INFO",  # INFO ve üzeri Sentry event olarak gönder
+                level=logging.INFO,  # INFO+ logları Sentry'e gönder
+                event_level=logging.INFO,  # INFO ve üzeri Sentry event olarak gönder
             ),
         ],
         enable_logs=True,
