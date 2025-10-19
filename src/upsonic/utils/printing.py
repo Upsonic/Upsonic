@@ -11,6 +11,11 @@ from rich.text import Text
 import platform
 from rich.markup import escape
 
+# Setup background logging (console disabled, only file/Sentry)
+from upsonic.utils.logging_config import setup_logging, get_logger, sentry_sdk
+setup_logging(enable_console=False)  # Console kapalı, Rich kullanıyoruz
+_bg_logger = get_logger("upsonic.user")  # Background logger for Sentry/file
+_sentry_logger = get_logger("upsonic.sentry")  # Sentry event logger (INFO+ -> Sentry)
 
 console = Console()
 
@@ -470,6 +475,38 @@ def call_end(result: Any, model: Any, response_format: str, start_time: float, e
     console.print(panel)
     spacing()
 
+    # Sentry logging (kullanıcı model call sonucunu gördü)
+    execution_time = end_time - start_time
+    event_data = {
+        "model": str(model.model_name),
+        "response_format": str(response_format),
+        "execution_time": execution_time,
+        "input_tokens": str(usage.get('input_tokens', 0)),
+        "output_tokens": str(usage.get('output_tokens', 0)),
+        "estimated_cost": str(get_estimated_cost(usage.get('input_tokens', 0), usage.get('output_tokens', 0), model))
+    }
+
+    # Tool kullanıldıysa ekle
+    if tool_usage and len(tool_usage) > 0:
+        event_data["tools_used"] = len(tool_usage)
+        event_data["tool_names"] = [t.get('tool_name', '') for t in tool_usage[:5]]  # İlk 5 tool
+
+    # Breadcrumb + Event olarak gönder
+    sentry_sdk.add_breadcrumb(
+        category="model.call",
+        message=f"Model call completed: {model.model_name} ({len(tool_usage) if tool_usage else 0} tools used)",
+        level="info",
+        data=event_data
+    )
+
+    # Sentry event olarak gönder (LoggingIntegration ile otomatik)
+    _sentry_logger.info(
+        "Task Completed: %s (%.2fs, %d tools)",
+        model.model_name, execution_time, len(tool_usage) if tool_usage else 0,
+        extra=event_data
+    )
+
+
 
 
 def agent_end(result: Any, model: Any, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, tool_count: int, context_count: int, debug: bool = False, price_id:str = None):
@@ -562,6 +599,38 @@ def agent_end(result: Any, model: Any, response_format: str, start_time: float, 
     console.print(panel)
     spacing()
 
+    # Sentry logging (kullanıcı agent sonucunu gördü)
+    execution_time = end_time - start_time
+    event_data = {
+        "model": str(model.model_name),
+        "response_format": response_format,
+        "execution_time": execution_time,
+        "tool_count": tool_count,
+        "context_count": context_count,
+        "input_tokens": usage.get('input_tokens', 0),
+        "output_tokens": usage.get('output_tokens', 0),
+    }
+
+    # Tool kullanıldıysa ekle
+    if tool_usage and len(tool_usage) > 0:
+        event_data["tools_used"] = len(tool_usage)
+        event_data["tool_names"] = [t.get('tool_name', '') for t in tool_usage[:5]]  # İlk 5 tool
+
+    # Breadcrumb + Event olarak gönder
+    sentry_sdk.add_breadcrumb(
+        category="agent",
+        message=f"Agent execution completed: {tool_count} tools, {context_count} contexts in {execution_time:.2f}s",
+        level="info",
+        data=event_data
+    )
+
+    # Sentry event olarak gönder (LoggingIntegration ile otomatik)
+    _sentry_logger.info(
+        "Agent completed: %d tools, %d contexts, %.2fs",
+        tool_count, context_count, execution_time,
+        extra=event_data
+    )
+
 
 def agent_total_cost(total_input_tokens: int, total_output_tokens: int, total_time: float, model: Any):
     table = Table(show_header=False, expand=True, box=None)
@@ -645,12 +714,24 @@ def agent_retry(retry_count: int, max_retries: int):
     console.print(panel)
     spacing()
 
+    # Sentry breadcrumb (kullanıcı retry mesajını gördü)
+    sentry_sdk.add_breadcrumb(
+        category="agent.retry",
+        message=f"Agent retry: Attempt {retry_count + 1}/{max_retries + 1}",
+        level="warning",
+        data={
+            "retry_count": retry_count,
+            "max_retries": max_retries,
+            "attempt": retry_count + 1
+        }
+    )
+
 def call_retry(retry_count: int, max_retries: int):
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
 
     table.add_row("[bold]Retry Status:[/bold]", f"[yellow]Attempt {retry_count + 1} of {max_retries + 1}[/yellow]")
-    
+
     panel = Panel(
         table,
         title="[bold yellow]Upsonic - Call Retry[/bold yellow]",
@@ -661,6 +742,18 @@ def call_retry(retry_count: int, max_retries: int):
 
     console.print(panel)
     spacing()
+
+    # Sentry breadcrumb (kullanıcı retry mesajını gördü)
+    sentry_sdk.add_breadcrumb(
+        category="model.retry",
+        message=f"Model call retry: Attempt {retry_count + 1}/{max_retries + 1}",
+        level="warning",
+        data={
+            "retry_count": retry_count,
+            "max_retries": max_retries,
+            "attempt": retry_count + 1
+        }
+    )
 
 def get_price_id_total_cost(price_id: str):
     """
@@ -956,6 +1049,23 @@ def cache_hit(cache_method: Literal["vector_search", "llm_call"], similarity: Op
     console.print(panel)
     spacing()
 
+    # Sentry breadcrumb (kullanıcı cache hit mesajını gördü)
+    breadcrumb_data = {
+        "cache_method": cache_method,
+        "status": "hit"
+    }
+    if similarity is not None:
+        breadcrumb_data["similarity"] = similarity
+    if input_preview:
+        breadcrumb_data["input_preview"] = input_preview[:100]
+
+    sentry_sdk.add_breadcrumb(
+        category="cache",
+        message=f"Cache HIT ({cache_method})" + (f" - {similarity:.1%} similarity" if similarity else ""),
+        level="info",
+        data=breadcrumb_data
+    )
+
 def cache_miss(cache_method: Literal["vector_search", "llm_call"], input_preview: Optional[str] = None) -> None:
     """
     Prints a formatted panel when a cache miss occurs.
@@ -990,6 +1100,21 @@ def cache_miss(cache_method: Literal["vector_search", "llm_call"], input_preview
     
     console.print(panel)
     spacing()
+
+    # Sentry breadcrumb (kullanıcı cache miss mesajını gördü)
+    breadcrumb_data = {
+        "cache_method": cache_method,
+        "status": "miss"
+    }
+    if input_preview:
+        breadcrumb_data["input_preview"] = input_preview[:100]
+
+    sentry_sdk.add_breadcrumb(
+        category="cache",
+        message=f"Cache MISS ({cache_method}) - Executing task",
+        level="info",
+        data=breadcrumb_data
+    )
 
 def cache_stored(cache_method: Literal["vector_search", "llm_call"], input_preview: Optional[str] = None, duration_minutes: Optional[int] = None) -> None:
     """
@@ -1028,6 +1153,23 @@ def cache_stored(cache_method: Literal["vector_search", "llm_call"], input_previ
     
     console.print(panel)
     spacing()
+
+    # Sentry breadcrumb (kullanıcı cache stored mesajını gördü)
+    breadcrumb_data = {
+        "cache_method": cache_method,
+        "status": "stored"
+    }
+    if duration_minutes is not None:
+        breadcrumb_data["duration_minutes"] = duration_minutes
+    if input_preview:
+        breadcrumb_data["input_preview"] = input_preview[:100]
+
+    sentry_sdk.add_breadcrumb(
+        category="cache",
+        message=f"Cache STORED ({cache_method})" + (f" - {duration_minutes}min" if duration_minutes else ""),
+        level="info",
+        data=breadcrumb_data
+    )
 
 def cache_stats(stats: Dict[str, Any]) -> None:
     """
@@ -1163,61 +1305,112 @@ def agent_started(agent_name: str) -> None:
     console.print(panel)
     spacing()
 
+    # Sentry logging (kullanıcı gördü)
+    # Breadcrumb + Event olarak gönder
+    sentry_sdk.add_breadcrumb(
+        category="agent",
+        message=f"Agent started: {agent_name}",
+        level="info"
+    )
+
+    # Sentry event olarak gönder (LoggingIntegration ile otomatik)
+    _sentry_logger.info("Agent started: %s", agent_name, extra={"agent_name": agent_name})
+
 
 def info_log(message: str, context: str = "Upsonic") -> None:
     """
     Prints an info log message.
-    
+
     Args:
         message: The log message
         context: The context/module name
     """
     message_esc = escape_rich_markup(message)
     context_esc = escape_rich_markup(context)
-    
+
+    # Rich console output (user görür)
     console.print(f"[blue][INFO][/blue] [{context_esc}] {message_esc}")
+
+    # Background logging (Sentry/file'a gider)
+    _bg_logger.info(f"[{context}] {message}")
+
+    # Sentry breadcrumb (kullanıcı gördü)
+    sentry_sdk.add_breadcrumb(
+        category="user.log",
+        message=f"[INFO] [{context}] {message}",
+        level="info"
+    )
 
 
 def warning_log(message: str, context: str = "Upsonic") -> None:
     """
     Prints a warning log message.
-    
+
     Args:
         message: The log message
         context: The context/module name
     """
     message_esc = escape_rich_markup(message)
     context_esc = escape_rich_markup(context)
-    
+
+    # Rich console output (user görür)
     console.print(f"[yellow][WARNING][/yellow] [{context_esc}] {message_esc}")
+
+    # Background logging (Sentry/file'a gider)
+    _bg_logger.warning(f"[{context}] {message}")
+
+    # Sentry breadcrumb (kullanıcı gördü)
+    sentry_sdk.add_breadcrumb(
+        category="user.log",
+        message=f"[WARNING] [{context}] {message}",
+        level="warning"
+    )
 
 
 def error_log(message: str, context: str = "Upsonic") -> None:
     """
     Prints an error log message.
-    
+
     Args:
         message: The log message
         context: The context/module name
     """
     message_esc = escape_rich_markup(message)
     context_esc = escape_rich_markup(context)
-    
+
+    # Rich console output (user görür)
     console.print(f"[red][ERROR][/red] [{context_esc}] {message_esc}")
+
+    # Background logging (Sentry/file'a gider)
+    _bg_logger.error(f"[{context}] {message}")
+
+    # Sentry breadcrumb (kullanıcı gördü)
+    # _bg_logger.error() zaten LoggingIntegration ile Sentry'e event olarak gider
+    sentry_sdk.add_breadcrumb(
+        category="user.log",
+        message=f"[ERROR] [{context}] {message}",
+        level="error"
+    )
 
 
 def debug_log(message: str, context: str = "Upsonic") -> None:
     """
     Prints a debug log message.
-    
+
     Args:
         message: The log message
         context: The context/module name
     """
     message_esc = escape_rich_markup(message)
     context_esc = escape_rich_markup(context)
-    
+
+    # Rich console output (user görür)
     console.print(f"[dim][DEBUG][/dim] [{context_esc}] {message_esc}")
+
+    # Background logging (file'a gider, Sentry'e GİTMEZ - debug log)
+    _bg_logger.debug(f"[{context}] {message}")
+
+    # NOT: Debug loglar Sentry'e gönderilmez, sadece user-facing important loglar gider
     
 def import_error(package_name: str, install_command: str = None, feature_name: str = None) -> None:
     """
@@ -1266,15 +1459,26 @@ def import_error(package_name: str, install_command: str = None, feature_name: s
 def success_log(message: str, context: str = "Upsonic") -> None:
     """
     Prints a success log message.
-    
+
     Args:
         message: The log message
         context: The context/module name
     """
     message_esc = escape_rich_markup(message)
     context_esc = escape_rich_markup(context)
-    
+
+    # Rich console output (user görür)
     console.print(f"[green][SUCCESS][/green] [{context_esc}] {message_esc}")
+
+    # Background logging (Sentry/file'a gider)
+    _bg_logger.info(f"[SUCCESS] [{context}] {message}")
+
+    # Sentry breadcrumb (kullanıcı gördü)
+    sentry_sdk.add_breadcrumb(
+        category="user.log",
+        message=f"[SUCCESS] [{context}] {message}",
+        level="info"
+    )
 
 
 def connection_info(provider: str, version: str = "unknown") -> None:
@@ -1315,6 +1519,20 @@ def pipeline_started(total_steps: int) -> None:
     console.print(panel)
     spacing()
 
+    # Sentry logging (kullanıcı gördü)
+    # Breadcrumb + Event olarak gönder
+    event_data = {"total_steps": total_steps}
+
+    sentry_sdk.add_breadcrumb(
+        category="pipeline",
+        message=f"Pipeline started with {total_steps} steps",
+        level="info",
+        data=event_data
+    )
+
+    # Sentry event olarak gönder (LoggingIntegration ile otomatik)
+    _sentry_logger.info("Pipeline started: %d steps", total_steps, extra=event_data)
+
 
 def pipeline_step_started(step_name: str, step_description: str = None) -> None:
     """
@@ -1343,6 +1561,17 @@ def pipeline_step_started(step_name: str, step_description: str = None) -> None:
 
     console.print(panel)
     spacing()
+
+    # Sentry breadcrumb (kullanıcı gördü)
+    sentry_sdk.add_breadcrumb(
+        category="pipeline.step",
+        message=f"Step started: {step_name}",
+        level="info",
+        data={
+            "step_name": step_name,
+            "step_description": step_description
+        }
+    )
 
 
 def pipeline_step_completed(step_name: str, status: str, execution_time: float, message: str = None) -> None:
@@ -1391,6 +1620,25 @@ def pipeline_step_completed(step_name: str, status: str, execution_time: float, 
     console.print(panel)
     spacing()
 
+    # Sentry breadcrumb (kullanıcı gördü)
+    breadcrumb_level = "info"
+    if status == "ERROR":
+        breadcrumb_level = "error"
+    elif status == "WARNING":
+        breadcrumb_level = "warning"
+
+    sentry_sdk.add_breadcrumb(
+        category="pipeline.step",
+        message=f"Step completed: {step_name} ({status})",
+        level=breadcrumb_level,
+        data={
+            "step_name": step_name,
+            "status": status,
+            "execution_time": execution_time,
+            "message": message
+        }
+    )
+
 
 def pipeline_completed(executed_steps: int, total_steps: int, total_time: float) -> None:
     """
@@ -1418,6 +1666,29 @@ def pipeline_completed(executed_steps: int, total_steps: int, total_time: float)
 
     console.print(panel)
     spacing()
+
+    # Sentry logging (kullanıcı gördü)
+    # Breadcrumb + Event olarak gönder
+    event_data = {
+        "executed_steps": executed_steps,
+        "total_steps": total_steps,
+        "total_time": total_time,
+        "status": "completed"
+    }
+
+    sentry_sdk.add_breadcrumb(
+        category="pipeline",
+        message=f"Pipeline completed: {executed_steps}/{total_steps} steps in {total_time:.3f}s",
+        level="info",
+        data=event_data
+    )
+
+    # Sentry event olarak gönder (LoggingIntegration ile otomatik)
+    _sentry_logger.info(
+        "Pipeline completed: %d/%d steps, %.3fs",
+        executed_steps, total_steps, total_time,
+        extra=event_data
+    )
 
 
 def pipeline_failed(error_message: str, executed_steps: int, total_steps: int, failed_step: str = None, step_time: float = None) -> None:
@@ -1454,6 +1725,31 @@ def pipeline_failed(error_message: str, executed_steps: int, total_steps: int, f
 
     console.print(panel)
     spacing()
+
+    # Sentry logging (kullanıcı gördü, hata!)
+    # Breadcrumb + Event olarak gönder
+    event_data = {
+        "error_message": error_message,
+        "executed_steps": executed_steps,
+        "total_steps": total_steps,
+        "failed_step": failed_step,
+        "step_time": step_time,
+        "status": "failed"
+    }
+
+    sentry_sdk.add_breadcrumb(
+        category="pipeline",
+        message=f"Pipeline failed at step '{failed_step}': {error_message}",
+        level="error",
+        data=event_data
+    )
+
+    # Sentry event olarak gönder (LoggingIntegration ile otomatik)
+    _sentry_logger.error(
+        "Pipeline failed: %s (step: %s)",
+        error_message, failed_step,
+        extra=event_data
+    )
 
 
 def pipeline_paused(step_name: str) -> None:

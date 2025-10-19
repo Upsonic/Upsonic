@@ -1,4 +1,4 @@
-from upsonic.utils.trace import *
+from upsonic.utils.logging_config import *
 
 import warnings
 import importlib

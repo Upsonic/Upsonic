@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import copy
-import logging
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Coroutine, Dict, Generic, List, Optional, TypeVar
 
 from pydantic import BaseModel, Field, ConfigDict
 from upsonic.schemas.data_models import Chunk, Document
+from upsonic.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class BaseChunkingConfig(BaseModel):
     """
