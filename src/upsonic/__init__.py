@@ -1,3 +1,5 @@
+from upsonic.utils.trace import *
+
 import warnings
 import importlib
 from typing import Any

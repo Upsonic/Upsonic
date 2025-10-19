@@ -10,7 +10,7 @@ requires-python = ">=3.10"
 dependencies = [
     "psutil==6.1.1",
     "rich>=13.9.4",
-    "sentry-sdk[opentelemetry]>=2.19.2",
+    "sentry-sdk[opentelemetry]>=2.35.0",
     "toml>=0.10.2",
     "uv>=0.5.20",
     "mcp[cli]==1.9.4",

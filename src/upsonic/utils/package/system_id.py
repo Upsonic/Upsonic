@@ -1,5 +1,5 @@
 import uuid
-from upsonic.utils.package.storage.configuration import Configuration
+from upsonic.utils.package.storage import Configuration
 
 
 def generate_system_id() -> str:
