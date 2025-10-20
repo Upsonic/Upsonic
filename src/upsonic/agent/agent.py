@@ -7,6 +7,7 @@ from typing import Any, AsyncIterator, Dict, List, Literal, Optional, Union, TYP
 
 PromptCompressor = None
 
+from upsonic.utils.logging_config import sentry_sdk
 from upsonic import _utils
 from upsonic.agent.base import BaseAgent
 from upsonic.agent.run_result import RunResult, StreamRunResult
@@ -121,6 +122,7 @@ class Agent(BaseAgent):
         company_url: Optional[str] = None,
         company_objective: Optional[str] = None,
         company_description: Optional[str] = None,
+        company_name: Optional[str] = None,
         system_prompt: Optional[str] = None,
         reflection: bool = False,
         compression_strategy: Literal["none", "simple", "llmlingua"] = "none",
@@ -227,6 +229,7 @@ class Agent(BaseAgent):
         self.company_url = company_url
         self.company_objective = company_objective
         self.company_description = company_description
+        self.company_name = company_name
         
         self.debug = debug
         self.reflection = reflection
@@ -1388,6 +1391,7 @@ class Agent(BaseAgent):
             )
             
             final_context = await pipeline.execute(context)
+            sentry_sdk.flush()
             
             return self._run_result.output
     
@@ -1435,17 +1439,16 @@ class Agent(BaseAgent):
         task.price_id_ = None
         _ = task.price_id
         task._tool_calls = []
-        
+
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, self.do_async(task, model, debug, retry))
-                    return future.result()
-            else:
-                return loop.run_until_complete(self.do_async(task, model, debug, retry))
+            loop = asyncio.get_running_loop()
+            # If we get here, we're already in an async context with a running loop
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, self.do_async(task, model, debug, retry))
+                return future.result()
         except RuntimeError:
+            # No event loop is running, so we can safely use asyncio.run()
             return asyncio.run(self.do_async(task, model, debug, retry))
     
     def print_do(
@@ -1605,6 +1608,7 @@ class Agent(BaseAgent):
             AgentPolicyStep, CacheStorageStep,
             StreamMemoryMessageTrackingStep, StreamFinalizationStep
         )
+        
         
         async with self._managed_storage_connection():
             # Create streaming pipeline with streaming-specific steps

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import logging
 import time
 from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
 
@@ -12,11 +11,12 @@ from upsonic.text_splitter.base import BaseChunker, BaseChunkingConfig
 from upsonic.schemas.data_models import Document, Chunk
 from upsonic.schemas.agentic import PropositionList, TopicAssignmentList, Topic, RefinedTopic
 from upsonic.utils.error_wrapper import upsonic_error_handler
+from upsonic.utils.logging_config import get_logger
 
 if TYPE_CHECKING:
     from upsonic.agent.agent import Agent
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class AgenticChunkingConfig(BaseChunkingConfig):

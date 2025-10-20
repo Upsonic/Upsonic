@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import json
 from typing import Any, Dict, List, Optional
 
@@ -8,8 +7,9 @@ from pydantic import Field
 
 from upsonic.schemas.data_models import Chunk, Document
 from upsonic.text_splitter.base import BaseChunkingConfig, BaseChunker
+from upsonic.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class JSONChunkingConfig(BaseChunkingConfig):
     """

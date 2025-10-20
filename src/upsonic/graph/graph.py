@@ -5,9 +5,9 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Set, Union
-import copy 
+import copy
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from rich.console import Console
 from rich.markup import escape
 from rich.panel import Panel
@@ -35,7 +35,7 @@ class DecisionResponse(BaseModel):
 class DecisionLLM(BaseModel):
     """
     A decision node that uses a language model to evaluate input and determine execution flow.
-    
+
     Attributes:
         description: Human-readable description of the decision
         true_branch: The branch to follow if the LLM decides yes/true
@@ -46,9 +46,8 @@ class DecisionLLM(BaseModel):
     true_branch: Optional[Union['TaskNode', 'TaskChain', 'DecisionFunc', 'DecisionLLM']] = None
     false_branch: Optional[Union['TaskNode', 'TaskChain', 'DecisionFunc', 'DecisionLLM']] = None
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    
-    class Config:
-        arbitrary_types_allowed = True
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     
     def __init__(self, description: str, *, true_branch=None, false_branch=None, id=None, **kwargs):
         """
@@ -149,7 +148,7 @@ Previous node output:
 class DecisionFunc(BaseModel):
     """
     A decision node that evaluates a condition function on task output to determine execution flow.
-    
+
     Attributes:
         description: Human-readable description of the decision
         func: The function that evaluates the condition
@@ -162,9 +161,8 @@ class DecisionFunc(BaseModel):
     true_branch: Optional[Union['TaskNode', 'TaskChain', 'DecisionFunc', 'DecisionLLM']] = None
     false_branch: Optional[Union['TaskNode', 'TaskChain', 'DecisionFunc', 'DecisionLLM']] = None
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    
-    class Config:
-        arbitrary_types_allowed = True
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     
     def __init__(self, description: str, func: Callable, *, true_branch=None, false_branch=None, id=None, **kwargs):
         """
@@ -407,9 +405,8 @@ class Graph(BaseModel):
     state: State = Field(default_factory=State)
 
     storage: Optional[Storage] = None
-    
-    class Config:
-        arbitrary_types_allowed = True
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __init__(self, **data):
         if 'default_agent' in data and data['default_agent'] is not None:

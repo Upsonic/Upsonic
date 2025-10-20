@@ -210,7 +210,7 @@ class ReliabilityProcessor:
     async def process_task(
         task: "Task",
         reliability_layer: Optional[Any] = None,
-        model_provider: Optional[Union[Model, str]] = None,
+        model: Optional[Union[Model, str]] = None,
     ) -> "Task":
         if reliability_layer is None:
             return task
@@ -323,7 +323,7 @@ class ReliabilityProcessor:
                     # Create a specific agent for each validation type
                     agent_name = f"{validation_type.replace('_', ' ').title()} Agent"
                     validator_agents[validation_type] = AgentConfiguration(
-                        model=model_provider,
+                        model=model,
                         name=agent_name,
                     )
                     
@@ -408,7 +408,7 @@ class ReliabilityProcessor:
 
                 if validation_result.any_suspicion:
                     editor_agent = AgentConfiguration(
-                        model=model_provider,
+                        model=model,
                         name="Information Editor Agent"
                     )
                     

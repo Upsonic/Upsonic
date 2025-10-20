@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from enum import Enum
 import re
 
@@ -10,8 +9,9 @@ from pydantic import Field
 
 from upsonic.text_splitter.base import BaseChunkingConfig, BaseChunker
 from upsonic.schemas.data_models import Chunk, Document
+from upsonic.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class Language(str, Enum):
     """

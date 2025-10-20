@@ -3,17 +3,17 @@ from typing import Dict, Type, Optional, List, Union, Any, Tuple, TYPE_CHECKING
 import os
 import json
 from pathlib import Path
-import logging
 from functools import lru_cache
 
+from upsonic.utils.logging_config import get_logger
 from .base import BaseLoader
 from .config import LoaderConfig, LoaderConfigFactory
 
 if TYPE_CHECKING:
     from upsonic.schemas.data_models import Document
     from .config import (
-        TextLoaderConfig, CSVLoaderConfig, PdfLoaderConfig, DOCXLoaderConfig, 
-        JSONLoaderConfig, XMLLoaderConfig, YAMLLoaderConfig, MarkdownLoaderConfig, 
+        TextLoaderConfig, CSVLoaderConfig, PdfLoaderConfig, DOCXLoaderConfig,
+        JSONLoaderConfig, XMLLoaderConfig, YAMLLoaderConfig, MarkdownLoaderConfig,
         HTMLLoaderConfig
     )
     from .text import TextLoader
@@ -26,26 +26,26 @@ if TYPE_CHECKING:
     from .markdown import MarkdownLoader
     from .html import HTMLLoader
 
+logger = get_logger(__name__)
 
 class LoaderFactory:
     """
     A factory class for creating and managing document loaders.
-    
+
     This factory provides intelligent loader creation, configuration management,
     and extension-based loader detection. It supports both synchronous and
     asynchronous operations with proper error handling and fallback mechanisms.
     """
-    
+
     _REQUIRED_METHODS = ['load', 'aload', 'batch', 'abatch', 'get_supported_extensions']
     _URL_PREFIXES = ('http://', 'https://', 'ftp://')
     _CONTENT_PREVIEW_SIZE = 1024
     _LARGE_FILE_THRESHOLD = 100 * 1024 * 1024
-    _PDF_LARGE_THRESHOLD = 50 * 1024 * 1024    
+    _PDF_LARGE_THRESHOLD = 50 * 1024 * 1024
     def __init__(self):
         self._loaders: Dict[str, Type[BaseLoader]] = {}
         self._extensions: Dict[str, str] = {}
         self._configs: Dict[str, Type[LoaderConfig]] = {}
-        self._logger = logging.getLogger(__name__)
         
         self._register_default_loaders()
         self._validate_registration()
@@ -133,10 +133,10 @@ class LoaderFactory:
                 conflicting_extensions.append(ext)
         
         if conflicting_extensions:
-            self._logger.warning(f"Extension conflicts detected for {loader_name}: {conflicting_extensions}")
+            logger.warning(f"Extension conflicts detected for {loader_name}: {conflicting_extensions}")
             for ext in conflicting_extensions:
                 old_loader = self._extensions[ext.lower()]
-                self._logger.info(f"Replacing {old_loader} with {loader_name} for extension {ext}")
+                logger.info(f"Replacing {old_loader} with {loader_name} for extension {ext}")
         
         self._loaders[loader_name] = loader_class
         
@@ -148,7 +148,7 @@ class LoaderFactory:
         if loader_name in config_mapping:
             self._configs[loader_name] = config_mapping[loader_name]
         
-        self._logger.debug(f"Registered loader '{loader_name}' with extensions: {extensions}")
+        logger.debug(f"Registered loader '{loader_name}' with extensions: {extensions}")
     
     @staticmethod
     def _get_config_mapping() -> Dict[str, Type[LoaderConfig]]:
@@ -193,13 +193,13 @@ class LoaderFactory:
         for loader_name, loader_class in self._loaders.items():
             for method in self._REQUIRED_METHODS:
                 if not hasattr(loader_class, method):
-                    self._logger.warning(f"Loader {loader_name} missing required method: {method}")
+                    logger.warning(f"Loader {loader_name} missing required method: {method}")
     
     def _validate_loader_configs(self):
         """Validate that all loaders have config classes."""
         for loader_name in self._loaders:
             if loader_name not in self._configs:
-                self._logger.warning(f"No config class found for loader: {loader_name}")
+                logger.warning(f"No config class found for loader: {loader_name}")
     
     def _check_duplicate_extensions(self):
         """Check for duplicate extensions across loaders."""
@@ -209,7 +209,7 @@ class LoaderFactory:
         
         duplicates = {ext: count for ext, count in extension_counts.items() if count > 1}
         if duplicates:
-            self._logger.warning(f"Duplicate extensions found: {duplicates}")
+            logger.warning(f"Duplicate extensions found: {duplicates}")
     
     def get_loader(self, source: str, loader_type: Optional[str] = None, **config_kwargs) -> BaseLoader:
         """
@@ -252,7 +252,7 @@ class LoaderFactory:
             return loader_class(config)
             
         except Exception as e:
-            self._logger.error(f"Failed to create loader for '{source}': {e}")
+            logger.error(f"Failed to create loader for '{source}': {e}")
             raise
     
     def create_intelligent_loaders(self, sources: List[Union[str, Path]], **global_config_kwargs) -> List[BaseLoader]:
@@ -274,7 +274,7 @@ class LoaderFactory:
         
         for source in sources:
             if isinstance(source, str):
-                self._logger.debug(f"Skipping loader creation for string content: {source[:50]}...")
+                logger.debug(f"Skipping loader creation for string content: {source[:50]}...")
                 continue
                 
             try:
@@ -287,17 +287,17 @@ class LoaderFactory:
                 loader = self.get_loader(source_str, loader_type, **source_config)
                 loaders.append(loader)
                 
-                self._logger.debug(f"Created {loader_type} loader for {source}")
+                logger.debug(f"Created {loader_type} loader for {source}")
                 
             except Exception as e:
-                self._logger.warning(f"Failed to create loader for {source}: {e}")
+                logger.warning(f"Failed to create loader for {source}: {e}")
                 try:
                     fallback_config = self._create_optimized_config(source_str, 'text', **global_config_kwargs)
                     fallback_loader = self.get_loader(source_str, 'text', **fallback_config)
                     loaders.append(fallback_loader)
-                    self._logger.info(f"Using text loader fallback for {source}")
+                    logger.info(f"Using text loader fallback for {source}")
                 except Exception as fallback_error:
-                    self._logger.error(f"Fallback loader also failed for {source}: {fallback_error}")
+                    logger.error(f"Fallback loader also failed for {source}: {fallback_error}")
                     raise
         
         return loaders
@@ -614,7 +614,7 @@ class LoaderFactory:
             else:
                 return self._create_fallback_config(loader_name, config_kwargs)
         except Exception as e:
-            self._logger.warning(f"Failed to create config for '{loader_name}': {e}")
+            logger.warning(f"Failed to create config for '{loader_name}': {e}")
             return self._create_base_config(config_kwargs)
     
     def _create_specific_config(self, loader_name: str, config_kwargs: Dict[str, Any]) -> LoaderConfig:
@@ -647,7 +647,7 @@ class LoaderFactory:
                 invalid_params.append(param_name)
         
         if invalid_params:
-            self._logger.warning(f"Invalid config parameters for {config_class.__name__}: {invalid_params}")
+            logger.warning(f"Invalid config parameters for {config_class.__name__}: {invalid_params}")
             for param in invalid_params:
                 config_kwargs.pop(param, None)
     
@@ -699,7 +699,7 @@ class LoaderFactory:
                 loader = self.get_loader_for_file(str(file_path), **config_kwargs)
                 loaders[str(file_path)] = loader
             except Exception as e:
-                self._logger.warning(f"Could not create loader for {file_path}: {e}")
+                logger.warning(f"Could not create loader for {file_path}: {e}")
                 continue
         
         return loaders
@@ -767,7 +767,7 @@ class LoaderFactory:
     def clear_cache(self):
         """Clear any cached data."""
         self._detect_loader_type.cache_clear()
-        self._logger.debug("Factory cache cleared")
+        logger.debug("Factory cache cleared")
     
     def get_loader_statistics(self) -> Dict[str, Any]:
         """Get statistics about registered loaders."""

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import logging
 from typing import List, Optional, Dict, NamedTuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from upsonic.text_splitter.base import BaseChunker
 
-from pydantic import Field
+from pydantic import Field, ConfigDict
 try:
     from bs4 import BeautifulSoup, NavigableString, Tag
     _BEAUTIFULSOUP_AVAILABLE = True
@@ -22,8 +21,9 @@ except ImportError:
 from upsonic.schemas.data_models import Chunk, Document
 from upsonic.text_splitter.base import BaseChunker, BaseChunkingConfig
 from upsonic.text_splitter.recursive import RecursiveChunker, RecursiveChunkingConfig
+from upsonic.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 def get_default_text_chunker() -> BaseChunker:
     """A factory function to create a default text chunker instance."""
@@ -110,8 +110,7 @@ class HTMLChunkingConfig(BaseChunkingConfig):
         le=1.0
     )
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 # Rebuild the model to resolve forward references
 HTMLChunkingConfig.model_rebuild()

@@ -1,5 +1,5 @@
 from typing import Literal, Dict, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class Todo(BaseModel):
@@ -37,7 +37,6 @@ class DeepAgentState(BaseModel):
         default_factory=dict,
         description="Virtual filesystem mapping file paths to content"
     )
-    
-    class Config:
-        arbitrary_types_allowed = True
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 

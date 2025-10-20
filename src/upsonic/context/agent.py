@@ -12,6 +12,7 @@ def turn_agent_to_string(agent: Agent):
     the_dict["company_url"] = agent.company_url
     the_dict["company_objective"] = agent.company_objective
     the_dict["company_description"] = agent.company_description
+    the_dict["company_name"] = agent.company_name
     the_dict["system_prompt"] = agent.system_prompt
 
     # Turn the dict to string

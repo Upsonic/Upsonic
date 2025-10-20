@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import re
 from enum import Enum
 from typing import Callable, List
 
-from pydantic import Field, field_validator, ValidationInfo
+from pydantic import Field, field_validator, ValidationInfo, ConfigDict
 try:
     import numpy as np
 except ImportError:
@@ -18,8 +17,9 @@ except ImportError:
 from upsonic.schemas.data_models import Chunk, Document
 from upsonic.embeddings.base import EmbeddingProvider
 from upsonic.text_splitter.base import BaseChunkingConfig, BaseChunker
+from upsonic.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class BreakpointThresholdType(str, Enum):
     """
@@ -78,8 +78,7 @@ class SemanticChunkingConfig(BaseChunkingConfig):
         exclude=True
     )
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     @field_validator("breakpoint_threshold_amount")
     @classmethod

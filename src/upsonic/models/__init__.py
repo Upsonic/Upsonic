@@ -1389,7 +1389,7 @@ def infer_model(model: Model | KnownModelName | str) -> Model:  # noqa: C901
         from .openai import OpenAIResponsesModel
 
         return OpenAIResponsesModel(model_name, provider='openai')
-    elif provider in ('google-gla', 'google-vertex'):
+    elif provider in ('google-gla', 'google-vertex', 'gemini'):
         from .google import GoogleModel
 
         return GoogleModel(model_name, provider=provider)

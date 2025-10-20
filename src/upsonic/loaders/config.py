@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Dict, Any, Optional, List, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from abc import ABC, abstractmethod
 
 
@@ -26,9 +26,7 @@ class LoaderConfig(BaseModel, ABC):
         default=True, description="Skip documents with empty content"
     )
 
-    class Config:
-        """Pydantic configuration."""
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class TextLoaderConfig(LoaderConfig):
@@ -49,10 +47,6 @@ class TextLoaderConfig(LoaderConfig):
         description="The minimum character length for a chunk to be kept after cleaning.",
         ge=0
     )
-    
-    class Config(LoaderConfig.Config):
-        """Pydantic configuration."""
-        pass
 
 
 class CSVLoaderConfig(LoaderConfig):
@@ -136,10 +130,6 @@ class PdfLoaderConfig(LoaderConfig):
         description="Password to use for decrypting protected PDF files.",
         min_length=1
     )
-
-    class Config(LoaderConfig.Config):
-        """Pydantic configuration."""
-        pass
 
 
 class PyMuPDFLoaderConfig(LoaderConfig):
@@ -235,10 +225,6 @@ class PyMuPDFLoaderConfig(LoaderConfig):
         description="Format for extracted annotations.",
     )
 
-    class Config(LoaderConfig.Config):
-        """Pydantic configuration."""
-        pass
-
 
 
 class DOCXLoaderConfig(LoaderConfig):
@@ -333,10 +319,6 @@ class XMLLoaderConfig(LoaderConfig):
         description="If True, attempts to parse malformed or broken XML files instead of raising an error.",
     )
 
-    class Config(LoaderConfig.Config):
-        """Pydantic configuration."""
-        pass
-
 
 class YAMLLoaderConfig(LoaderConfig):
     """
@@ -390,10 +372,6 @@ class YAMLLoaderConfig(LoaderConfig):
             "Example: {'author': '.info.authorName', 'title': '.title'}."
         ),
     )
-
-    class Config(LoaderConfig.Config):
-        """Pydantic configuration."""
-        pass
 
 
 class MarkdownLoaderConfig(LoaderConfig):
@@ -578,10 +556,6 @@ class PdfPlumberLoaderConfig(LoaderConfig):
         description="If True, preserves blank characters in extracted text for layout fidelity.",
     )
 
-    class Config(LoaderConfig.Config):
-        """Pydantic configuration."""
-        pass
-
 
 class DoclingLoaderConfig(LoaderConfig):
     """
@@ -717,10 +691,6 @@ class DoclingLoaderConfig(LoaderConfig):
         ge=1,
         le=300
     )
-
-    class Config(LoaderConfig.Config):
-        """Pydantic configuration."""
-        pass
 
 
 class LoaderConfigFactory:

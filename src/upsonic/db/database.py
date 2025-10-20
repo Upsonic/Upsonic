@@ -67,7 +67,7 @@ class SqliteDatabase(DatabaseBase[SqliteStorage]):
         user_profile_schema: Optional[Type[BaseModel]] = None,
         dynamic_user_profile: bool = False,
         num_last_messages: Optional[int] = None,
-        model_provider: Optional[Union[Model, str]] = None,
+        model: Optional[Union[Model, str]] = None,
         debug: bool = False,
         feed_tool_call_results: bool = False,
         user_memory_mode: Literal['update', 'replace'] = 'update'
@@ -90,7 +90,7 @@ class SqliteDatabase(DatabaseBase[SqliteStorage]):
             user_profile_schema=user_profile_schema,
             dynamic_user_profile=dynamic_user_profile,
             num_last_messages=num_last_messages,
-            model_provider=model_provider,
+            model=model,
             debug=debug,
             feed_tool_call_results=feed_tool_call_results,
             user_memory_mode=user_memory_mode
@@ -121,7 +121,7 @@ class PostgresDatabase(DatabaseBase[PostgresStorage]):
         user_profile_schema: Optional[Type[BaseModel]] = None,
         dynamic_user_profile: bool = False,
         num_last_messages: Optional[int] = None,
-        model_provider: Optional[Union[Model, str]] = None,
+        model: Optional[Union[Model, str]] = None,
         debug: bool = False,
         feed_tool_call_results: bool = False,
         user_memory_mode: Literal['update', 'replace'] = 'update'
@@ -145,7 +145,7 @@ class PostgresDatabase(DatabaseBase[PostgresStorage]):
             user_profile_schema=user_profile_schema,
             dynamic_user_profile=dynamic_user_profile,
             num_last_messages=num_last_messages,
-            model_provider=model_provider,
+            model=model,
             debug=debug,
             feed_tool_call_results=feed_tool_call_results,
             user_memory_mode=user_memory_mode
@@ -176,7 +176,7 @@ class MongoDatabase(DatabaseBase[MongoStorage]):
         user_profile_schema: Optional[Type[BaseModel]] = None,
         dynamic_user_profile: bool = False,
         num_last_messages: Optional[int] = None,
-        model_provider: Optional[Union[Model, str]] = None,
+        model: Optional[Union[Model, str]] = None,
         debug: bool = False,
         feed_tool_call_results: bool = False,
         user_memory_mode: Literal['update', 'replace'] = 'update'
@@ -200,7 +200,7 @@ class MongoDatabase(DatabaseBase[MongoStorage]):
             user_profile_schema=user_profile_schema,
             dynamic_user_profile=dynamic_user_profile,
             num_last_messages=num_last_messages,
-            model_provider=model_provider,
+            model=model,
             debug=debug,
             feed_tool_call_results=feed_tool_call_results,
             user_memory_mode=user_memory_mode
@@ -234,7 +234,7 @@ class RedisDatabase(DatabaseBase[RedisStorage]):
         user_profile_schema: Optional[Type[BaseModel]] = None,
         dynamic_user_profile: bool = False,
         num_last_messages: Optional[int] = None,
-        model_provider: Optional[Union[Model, str]] = None,
+        model: Optional[Union[Model, str]] = None,
         debug: bool = False,
         feed_tool_call_results: bool = False,
         user_memory_mode: Literal['update', 'replace'] = 'update'
@@ -261,7 +261,7 @@ class RedisDatabase(DatabaseBase[RedisStorage]):
             user_profile_schema=user_profile_schema,
             dynamic_user_profile=dynamic_user_profile,
             num_last_messages=num_last_messages,
-            model_provider=model_provider,
+            model=model,
             debug=debug,
             feed_tool_call_results=feed_tool_call_results,
             user_memory_mode=user_memory_mode
@@ -290,7 +290,7 @@ class InMemoryDatabase(DatabaseBase[InMemoryStorage]):
         user_profile_schema: Optional[Type[BaseModel]] = None,
         dynamic_user_profile: bool = False,
         num_last_messages: Optional[int] = None,
-        model_provider: Optional[Union[Model, str]] = None,
+        model: Optional[Union[Model, str]] = None,
         debug: bool = False,
         feed_tool_call_results: bool = False,
         user_memory_mode: Literal['update', 'replace'] = 'update'
@@ -312,7 +312,7 @@ class InMemoryDatabase(DatabaseBase[InMemoryStorage]):
             user_profile_schema=user_profile_schema,
             dynamic_user_profile=dynamic_user_profile,
             num_last_messages=num_last_messages,
-            model_provider=model_provider,
+            model=model,
             debug=debug,
             feed_tool_call_results=feed_tool_call_results,
             user_memory_mode=user_memory_mode
@@ -341,7 +341,7 @@ class JSONDatabase(DatabaseBase[JSONStorage]):
         user_profile_schema: Optional[Type[BaseModel]] = None,
         dynamic_user_profile: bool = False,
         num_last_messages: Optional[int] = None,
-        model_provider: Optional[Union[Model, str]] = None,
+        model: Optional[Union[Model, str]] = None,
         debug: bool = False,
         feed_tool_call_results: bool = False,
         user_memory_mode: Literal['update', 'replace'] = 'update'
@@ -363,7 +363,7 @@ class JSONDatabase(DatabaseBase[JSONStorage]):
             user_profile_schema=user_profile_schema,
             dynamic_user_profile=dynamic_user_profile,
             num_last_messages=num_last_messages,
-            model_provider=model_provider,
+            model=model,
             debug=debug,
             feed_tool_call_results=feed_tool_call_results,
             user_memory_mode=user_memory_mode
@@ -401,7 +401,7 @@ class Mem0Database(DatabaseBase[Mem0Storage]):
         user_profile_schema: Optional[Type[BaseModel]] = None,
         dynamic_user_profile: bool = False,
         num_last_messages: Optional[int] = None,
-        model_provider: Optional[Union[Model, str]] = None,
+        model: Optional[Union[Model, str]] = None,
         debug: bool = False,
         feed_tool_call_results: bool = False,
         user_memory_mode: Literal['update', 'replace'] = 'update'
@@ -432,7 +432,7 @@ class Mem0Database(DatabaseBase[Mem0Storage]):
             user_profile_schema=user_profile_schema,
             dynamic_user_profile=dynamic_user_profile,
             num_last_messages=num_last_messages,
-            model_provider=model_provider,
+            model=model,
             debug=debug,
             feed_tool_call_results=feed_tool_call_results,
             user_memory_mode=user_memory_mode

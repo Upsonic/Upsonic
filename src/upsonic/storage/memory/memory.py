@@ -34,7 +34,7 @@ class Memory:
         user_profile_schema: Optional[Type[BaseModel]] = None,
         dynamic_user_profile: bool = False,
         num_last_messages: Optional[int] = None,
-        model_provider: Optional[Union[Model, str]] = None,
+        model: Optional[Union[Model, str]] = None,
         debug: bool = False,
         feed_tool_call_results: bool = False,
         user_memory_mode: Literal['update', 'replace'] = 'update'
@@ -45,7 +45,7 @@ class Memory:
         self.full_session_memory_enabled = full_session_memory
         self.summary_memory_enabled = summary_memory
         self.user_analysis_memory_enabled = user_analysis_memory
-        self.model_provider = model_provider
+        self.model = model
         self.debug = debug
         self.feed_tool_call_results = feed_tool_call_results
 
@@ -269,7 +269,7 @@ class Memory:
         last_turn = to_jsonable_python(model_response.new_messages())
         session = await self.storage.read_async(self.session_id, InteractionSession)
         
-        summarizer = Agent(name="Summarizer", model=self.model_provider, debug=self.debug)
+        summarizer = Agent(name="Summarizer", model=self.model, debug=self.debug)
         
         prompt = f"""Update the conversation summary based on the new interaction.
 
@@ -315,8 +315,8 @@ YOUR TASK: Create a concise summary that captures the key points of the entire c
         from upsonic.agent.agent import Agent
         from upsonic.tasks.tasks import Task
 
-        if not self.model_provider:
-            raise ValueError("A model_provider must be configured on the Memory object to analyze user traits.")
+        if not self.model:
+            raise ValueError("A model must be configured on the Memory object to analyze user traits.")
 
         historical_prompts_content = []
         new_prompts_content = []
@@ -357,7 +357,7 @@ YOUR TASK: Create a concise summary that captures the key points of the entire c
         
         from upsonic.utils.printing import warning_log
         
-        analyzer = Agent(name="User Trait Analyzer", model=self.model_provider, debug=self.debug)
+        analyzer = Agent(name="User Trait Analyzer", model=self.model, debug=self.debug)
 
         if self.is_profile_dynamic:
             from typing import List
