@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
 from contextlib import asynccontextmanager
 from upsonic import Task, Agent
 from upsonic.agent.run_result import RunResult
@@ -53,7 +53,7 @@ class TestTaskStringContextHandling:
         Kontrol: Agent'ın context'e erişebildiğini test etme
         """
         # Mock the model inference
-        mock_model = AsyncMock()
+        mock_model = MagicMock()
         mock_infer_model.return_value = mock_model
         
         # Mock the model request to return a proper ModelResponse
@@ -85,7 +85,7 @@ class TestTaskStringContextHandling:
         Kontrol: Tüm context'lerin agent tarafından erişilebilir olması
         """
         # Mock the model inference
-        mock_model = AsyncMock()
+        mock_model = MagicMock()
         mock_infer_model.return_value = mock_model
         
         # Mock the model request to return a proper ModelResponse
@@ -132,7 +132,7 @@ class TestTaskStringContextHandling:
         Kontrol: Context'in task description'a uygun şekilde kullanılması
         """
         # Mock the model inference
-        mock_model = AsyncMock()
+        mock_model = MagicMock()
         mock_infer_model.return_value = mock_model
         
         # Mock the model request to return a proper ModelResponse
@@ -160,7 +160,7 @@ class TestTaskStringContextHandling:
     @patch('upsonic.models.infer_model')
     def test_context_with_non_string_values(self, mock_infer_model):
         # Mock the model inference
-        mock_model = AsyncMock()
+        mock_model = MagicMock()
         mock_infer_model.return_value = mock_model
         
         # Mock the model request to return a proper ModelResponse
@@ -201,7 +201,7 @@ class TestTaskStringContextHandling:
     def test_task_with_empty_context_list_agent_test(self, mock_infer_model):
         """Test agent behavior with empty context list"""
         # Mock the model inference
-        mock_model = AsyncMock()
+        mock_model = MagicMock()
         mock_infer_model.return_value = mock_model
         
         # Mock the model request to return a proper ModelResponse

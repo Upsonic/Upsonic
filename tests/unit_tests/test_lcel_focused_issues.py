@@ -103,7 +103,7 @@ def test_lambda_truncation_issue():
         print("❌ Lambda truncation is NOT working!")
         print(f"Expected 20 characters, got {len(result)}")
     
-    return len(result) == 20
+    assert len(result) == 20, f"Expected 20 characters, got {len(result)}"
 
 
 # ============================================================================
