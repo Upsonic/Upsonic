@@ -7,6 +7,7 @@ from typing import Any, AsyncIterator, Dict, List, Literal, Optional, Union, TYP
 
 PromptCompressor = None
 
+from upsonic.utils.logging_config import sentry_sdk
 from upsonic import _utils
 from upsonic.agent.base import BaseAgent
 from upsonic.agent.run_result import RunResult, StreamRunResult
@@ -1390,6 +1391,7 @@ class Agent(BaseAgent):
             )
             
             final_context = await pipeline.execute(context)
+            sentry_sdk.flush()
             
             return self._run_result.output
     
@@ -1606,6 +1608,7 @@ class Agent(BaseAgent):
             AgentPolicyStep, CacheStorageStep,
             StreamMemoryMessageTrackingStep, StreamFinalizationStep
         )
+        
         
         async with self._managed_storage_connection():
             # Create streaming pipeline with streaming-specific steps

@@ -1,4 +1,3 @@
-import logging
 import time
 from typing import Any, Dict, List, Optional, Union, Literal, Generator
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -29,8 +28,8 @@ from upsonic.vectordb.config import (
 )
 
 from upsonic.utils.package.exception import(
-    VectorDBConnectionError, 
-    ConfigurationError, 
+    VectorDBConnectionError,
+    ConfigurationError,
     CollectionDoesNotExistError,
     VectorDBError,
     SearchError,
@@ -38,8 +37,9 @@ from upsonic.utils.package.exception import(
 )
 
 from upsonic.schemas.vector_schemas import VectorSearchResult
+from upsonic.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class PineconeProvider(BaseVectorDBProvider):

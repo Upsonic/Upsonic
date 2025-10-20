@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from typing import Dict, List, NamedTuple, Optional, Any
 import ast
 import re
@@ -10,8 +9,9 @@ from pydantic import Field, ConfigDict
 from upsonic.text_splitter.base import BaseChunker, BaseChunkingConfig
 from upsonic.schemas.data_models import Chunk, Document
 from upsonic.text_splitter.recursive import RecursiveChunker, RecursiveChunkingConfig
+from upsonic.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 def get_default_text_chunker() -> BaseChunker:
     """A factory function to create a default text chunker instance."""

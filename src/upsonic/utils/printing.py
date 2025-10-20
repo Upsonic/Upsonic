@@ -11,6 +11,11 @@ from rich.text import Text
 import platform
 from rich.markup import escape
 
+# Setup background logging (console disabled, only file/Sentry)
+from upsonic.utils.logging_config import setup_logging, get_logger
+setup_logging(enable_console=False)  # Console kapalı, Rich kullanıyoruz
+_bg_logger = get_logger("upsonic.user")  # Background logger for Sentry/file
+_sentry_logger = get_logger("upsonic.sentry")  # Sentry event logger (INFO+ -> Sentry)
 
 console = Console()
 
@@ -470,6 +475,30 @@ def call_end(result: Any, model: Any, response_format: str, start_time: float, e
     console.print(panel)
     spacing()
 
+    # Sentry logging (kullanıcı model call sonucunu gördü)
+    execution_time = end_time - start_time
+    event_data = {
+        "model": str(model.model_name),
+        "response_format": str(response_format),
+        "execution_time": execution_time,
+        "input_tokens": str(usage.get('input_tokens', 0)),
+        "output_tokens": str(usage.get('output_tokens', 0)),
+        "estimated_cost": str(get_estimated_cost(usage.get('input_tokens', 0), usage.get('output_tokens', 0), model))
+    }
+
+    # Tool kullanıldıysa ekle
+    if tool_usage and len(tool_usage) > 0:
+        event_data["tools_used"] = len(tool_usage)
+        event_data["tool_names"] = [t.get('tool_name', '') for t in tool_usage[:5]]  # İlk 5 tool
+
+    # Sentry event olarak gönder (LoggingIntegration ile otomatik)
+    _sentry_logger.info(
+        "Model call: %s (%.2fs, %d tools)",
+        model.model_name, execution_time, len(tool_usage) if tool_usage else 0,
+        extra=event_data
+    )
+
+
 
 
 def agent_end(result: Any, model: Any, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, tool_count: int, context_count: int, debug: bool = False, price_id:str = None):
@@ -562,6 +591,30 @@ def agent_end(result: Any, model: Any, response_format: str, start_time: float, 
     console.print(panel)
     spacing()
 
+    # Sentry logging (kullanıcı agent sonucunu gördü)
+    execution_time = end_time - start_time
+    event_data = {
+        "model": str(model.model_name),
+        "response_format": response_format,
+        "execution_time": execution_time,
+        "tool_count": tool_count,
+        "context_count": context_count,
+        "input_tokens": usage.get('input_tokens', 0),
+        "output_tokens": usage.get('output_tokens', 0),
+    }
+
+    # Tool kullanıldıysa ekle
+    if tool_usage and len(tool_usage) > 0:
+        event_data["tools_used"] = len(tool_usage)
+        event_data["tool_names"] = [t.get('tool_name', '') for t in tool_usage[:5]]  # İlk 5 tool
+
+    # Sentry event olarak gönder (LoggingIntegration ile otomatik)
+    _sentry_logger.info(
+        "Agent completed: %d tools, %d contexts, %.2fs",
+        tool_count, context_count, execution_time,
+        extra=event_data
+    )
+
 
 def agent_total_cost(total_input_tokens: int, total_output_tokens: int, total_time: float, model: Any):
     table = Table(show_header=False, expand=True, box=None)
@@ -650,7 +703,7 @@ def call_retry(retry_count: int, max_retries: int):
     table.width = 60
 
     table.add_row("[bold]Retry Status:[/bold]", f"[yellow]Attempt {retry_count + 1} of {max_retries + 1}[/yellow]")
-    
+
     panel = Panel(
         table,
         title="[bold yellow]Upsonic - Call Retry[/bold yellow]",
@@ -1163,61 +1216,83 @@ def agent_started(agent_name: str) -> None:
     console.print(panel)
     spacing()
 
+    # Sentry event olarak gönder (LoggingIntegration ile otomatik)
+    _sentry_logger.info("Agent started: %s", agent_name, extra={"agent_name": agent_name})
+
 
 def info_log(message: str, context: str = "Upsonic") -> None:
     """
     Prints an info log message.
-    
+
     Args:
         message: The log message
         context: The context/module name
     """
     message_esc = escape_rich_markup(message)
     context_esc = escape_rich_markup(context)
-    
+
+    # Rich console output (user görür)
     console.print(f"[blue][INFO][/blue] [{context_esc}] {message_esc}")
+
+    # Background logging (Sentry/file'a gider)
+    _bg_logger.info(f"[{context}] {message}")
 
 
 def warning_log(message: str, context: str = "Upsonic") -> None:
     """
     Prints a warning log message.
-    
+
     Args:
         message: The log message
         context: The context/module name
     """
     message_esc = escape_rich_markup(message)
     context_esc = escape_rich_markup(context)
-    
+
+    # Rich console output (user görür)
     console.print(f"[yellow][WARNING][/yellow] [{context_esc}] {message_esc}")
+
+    # Background logging (Sentry/file'a gider)
+    _bg_logger.warning(f"[{context}] {message}")
 
 
 def error_log(message: str, context: str = "Upsonic") -> None:
     """
     Prints an error log message.
-    
+
     Args:
         message: The log message
         context: The context/module name
     """
     message_esc = escape_rich_markup(message)
     context_esc = escape_rich_markup(context)
-    
+
+    # Rich console output (user görür)
     console.print(f"[red][ERROR][/red] [{context_esc}] {message_esc}")
+
+    # Background logging (Sentry/file'a gider)
+    # _bg_logger.error() zaten LoggingIntegration ile Sentry'e event olarak gider
+    _bg_logger.error(f"[{context}] {message}")
 
 
 def debug_log(message: str, context: str = "Upsonic") -> None:
     """
     Prints a debug log message.
-    
+
     Args:
         message: The log message
         context: The context/module name
     """
     message_esc = escape_rich_markup(message)
     context_esc = escape_rich_markup(context)
-    
+
+    # Rich console output (user görür)
     console.print(f"[dim][DEBUG][/dim] [{context_esc}] {message_esc}")
+
+    # Background logging (file'a gider, Sentry'e GİTMEZ - debug log)
+    _bg_logger.debug(f"[{context}] {message}")
+
+    # NOT: Debug loglar Sentry'e gönderilmez, sadece user-facing important loglar gider
     
 def import_error(package_name: str, install_command: str = None, feature_name: str = None) -> None:
     """
@@ -1266,15 +1341,19 @@ def import_error(package_name: str, install_command: str = None, feature_name: s
 def success_log(message: str, context: str = "Upsonic") -> None:
     """
     Prints a success log message.
-    
+
     Args:
         message: The log message
         context: The context/module name
     """
     message_esc = escape_rich_markup(message)
     context_esc = escape_rich_markup(context)
-    
+
+    # Rich console output (user görür)
     console.print(f"[green][SUCCESS][/green] [{context_esc}] {message_esc}")
+
+    # Background logging (Sentry/file'a gider)
+    _bg_logger.info(f"[SUCCESS] [{context}] {message}")
 
 
 def connection_info(provider: str, version: str = "unknown") -> None:
@@ -1314,6 +1393,10 @@ def pipeline_started(total_steps: int) -> None:
 
     console.print(panel)
     spacing()
+
+    # Sentry event olarak gönder (LoggingIntegration ile otomatik)
+    event_data = {"total_steps": total_steps}
+    _sentry_logger.info("Pipeline started: %d steps", total_steps, extra=event_data)
 
 
 def pipeline_step_started(step_name: str, step_description: str = None) -> None:
@@ -1419,6 +1502,19 @@ def pipeline_completed(executed_steps: int, total_steps: int, total_time: float)
     console.print(panel)
     spacing()
 
+    # Sentry event olarak gönder (LoggingIntegration ile otomatik)
+    event_data = {
+        "executed_steps": executed_steps,
+        "total_steps": total_steps,
+        "total_time": total_time,
+        "status": "completed"
+    }
+    _sentry_logger.info(
+        "Pipeline completed: %d/%d steps, %.3fs",
+        executed_steps, total_steps, total_time,
+        extra=event_data
+    )
+
 
 def pipeline_failed(error_message: str, executed_steps: int, total_steps: int, failed_step: str = None, step_time: float = None) -> None:
     """
@@ -1454,6 +1550,21 @@ def pipeline_failed(error_message: str, executed_steps: int, total_steps: int, f
 
     console.print(panel)
     spacing()
+
+    # Sentry event olarak gönder (LoggingIntegration ile otomatik)
+    event_data = {
+        "error_message": error_message,
+        "executed_steps": executed_steps,
+        "total_steps": total_steps,
+        "failed_step": failed_step,
+        "step_time": step_time,
+        "status": "failed"
+    }
+    _sentry_logger.error(
+        "Pipeline failed: %s (step: %s)",
+        error_message, failed_step,
+        extra=event_data
+    )
 
 
 def pipeline_paused(step_name: str) -> None:

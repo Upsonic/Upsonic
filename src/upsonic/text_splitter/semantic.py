@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import re
 from enum import Enum
 from typing import Callable, List
@@ -18,8 +17,9 @@ except ImportError:
 from upsonic.schemas.data_models import Chunk, Document
 from upsonic.embeddings.base import EmbeddingProvider
 from upsonic.text_splitter.base import BaseChunkingConfig, BaseChunker
+from upsonic.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class BreakpointThresholdType(str, Enum):
     """
