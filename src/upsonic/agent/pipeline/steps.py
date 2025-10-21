@@ -1190,8 +1190,10 @@ class FinalizationStep(Step):
 
         # Print summary if needed
         if context.task and not context.task.not_main_task:
-            from upsonic.utils.printing import print_price_id_summary
-            print_price_id_summary(context.task.price_id, context.task)
+            from upsonic.utils.printing import print_price_id_summary, price_id_summary
+            # Only print summary if price_id exists in summary (i.e., model was called)
+            if context.task.price_id in price_id_summary:
+                print_price_id_summary(context.task.price_id, context.task)
 
         return StepResult(
             status=StepStatus.SUCCESS,
