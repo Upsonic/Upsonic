@@ -13,7 +13,7 @@ class TestDo(unittest.TestCase):
     def test_agent_do_basic(self, mock_infer_model):
         """Test basic functionality of Agent.do with a Task"""
         # Mock the model inference
-        mock_model = AsyncMock()
+        mock_model = MagicMock()
         mock_infer_model.return_value = mock_model
         
         # Mock the model request to return a proper ModelResponse

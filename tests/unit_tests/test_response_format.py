@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
 from contextlib import asynccontextmanager
 from upsonic import Task, Agent
 from upsonic.agent.run_result import RunResult
@@ -51,7 +51,7 @@ class TestTaskResponseFormat:
         3. task.response always matches agent.print_do(task) result
         """
         # Mock the model inference
-        mock_model = AsyncMock()
+        mock_model = MagicMock()
         mock_infer_model.return_value = mock_model
         
         # Case 1 Without response_format -> return str
@@ -117,7 +117,7 @@ class TestTaskResponseFormat:
         Test various Pydantic field types to ensure the system handles different data structures correctly.
         """
         # Mock the model inference
-        mock_model = AsyncMock()
+        mock_model = MagicMock()
         mock_infer_model.return_value = mock_model
         
         agent = Agent(name="Tester", model=mock_model)

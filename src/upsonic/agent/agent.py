@@ -142,8 +142,8 @@ class Agent(BaseAgent):
         tool_call_limit: int = 5,
         enable_thinking_tool: bool = False,
         enable_reasoning_tool: bool = False,
-        user_policy: Optional["Policy"] = None,
-        agent_policy: Optional["Policy"] = None,
+        user_policy: Optional[Union["Policy", List["Policy"]]] = None,
+        agent_policy: Optional[Union["Policy", List["Policy"]]] = None,
         settings: Optional["ModelSettings"] = None,
         profile: Optional["ModelProfile"] = None,
         reflection_config: Optional["ReflectionConfig"] = None,
@@ -190,8 +190,8 @@ class Agent(BaseAgent):
             tool_call_limit: Maximum tool calls per execution
             enable_thinking_tool: Enable orchestrated thinking
             enable_reasoning_tool: Enable reasoning capabilities
-            user_policy: User input safety policy
-            agent_policy: Agent output safety policy
+            user_policy: User input safety policy (single policy or list of policies)
+            agent_policy: Agent output safety policy (single policy or list of policies)
             settings: Model-specific settings
             profile: Model profile configuration
             reflection_config: Configuration for reflection and self-evaluation
@@ -287,6 +287,12 @@ class Agent(BaseAgent):
         
         self.canvas = canvas
         
+        # Initialize policy managers
+        from upsonic.agent.policy_manager import PolicyManager
+        self.user_policy_manager = PolicyManager(policies=user_policy, debug=self.debug)
+        self.agent_policy_manager = PolicyManager(policies=agent_policy, debug=self.debug)
+        
+        # Keep backward compatibility - expose as single policy if only one
         self.user_policy = user_policy
         self.agent_policy = agent_policy
         
@@ -324,18 +330,9 @@ class Agent(BaseAgent):
     
     def _setup_policy_models(self) -> None:
         """Setup model references for safety policies."""
-        policies = [self.user_policy, self.agent_policy]
-        
-        for policy in policies:
-            if policy is None:
-                continue
-            
-            if hasattr(policy, 'base_llm') and policy.base_llm is None:
-                from upsonic.safety_engine.llm.upsonic_llm import UpsonicLLMProvider
-                policy.base_llm = UpsonicLLMProvider(
-                    agent_name="Policy Base Agent",
-                    model=self.model
-                )
+        # Setup models for all policies in both managers
+        self.user_policy_manager.setup_policy_models(self.model)
+        self.agent_policy_manager.setup_policy_models(self.model)
     
     def _apply_reasoning_settings(self) -> None:
         """Apply common reasoning/thinking attributes to model-specific settings."""
@@ -893,53 +890,30 @@ class Agent(BaseAgent):
             return None
     
     async def _apply_user_policy(self, task: "Task") -> tuple[Optional["Task"], bool]:
-        """Apply user policy to task input."""
-        if not (self.user_policy and task.description):
+        """
+        Apply user policy to task input.
+        
+        This method now uses PolicyManager to handle multiple policies.
+        Kept for backward compatibility.
+        """
+        if not self.user_policy_manager.has_policies() or not task.description:
             return task, True
         
-        from upsonic.safety_engine.models import PolicyInput, RuleOutput
-        from upsonic.safety_engine.exceptions import DisallowedOperation
+        from upsonic.safety_engine.models import PolicyInput
         
         policy_input = PolicyInput(input_texts=[task.description])
-        try:
-            rule_output, _action_output, policy_output = await self.user_policy.execute_async(policy_input)
-            action_taken = policy_output.action_output.get("action_taken", "UNKNOWN")
-            
-            if self.debug and rule_output.confidence > 0.0:
-                from upsonic.utils.printing import policy_triggered
-                policy_triggered(
-                    policy_name=self.user_policy.name,
-                    check_type="User Input Check",
-                    action_taken=action_taken,
-                    rule_output=rule_output
-                )
-            
-            if action_taken == "BLOCK":
-                task.task_end()
-                task._response = policy_output.output_texts[0] if policy_output.output_texts else "Content blocked by user policy."
-                return task, False
-            elif action_taken in ["REPLACE", "ANONYMIZE"]:
-                task.description = policy_output.output_texts[0] if policy_output.output_texts else ""
-                return task, True
-                
-        except DisallowedOperation as e:
-            mock_rule_output = RuleOutput(
-                confidence=1.0,
-                content_type="DISALLOWED_OPERATION", 
-                details=str(e)
-            )
-            if self.debug:
-                from upsonic.utils.printing import policy_triggered
-                policy_triggered(
-                    policy_name=self.user_policy.name,
-                    check_type="User Input Check",
-                    action_taken="DISALLOWED_EXCEPTION",
-                    rule_output=mock_rule_output
-                )
-            
+        result = await self.user_policy_manager.execute_policies_async(
+            policy_input,
+            check_type="User Input Check"
+        )
+        
+        if result.should_block():
             task.task_end()
-            task._response = f"Operation disallowed by user policy: {e}"
+            task._response = result.get_final_message()
             return task, False
+        elif result.action_taken in ["REPLACE", "ANONYMIZE"]:
+            task.description = result.final_output or task.description
+            return task, True
         
         return task, True
     
@@ -1241,13 +1215,18 @@ class Agent(BaseAgent):
     
 
     async def _apply_agent_policy(self, task: "Task") -> "Task":
-        """Apply agent policy to task output."""
-        if not (self.agent_policy and task and task.response):
+        """
+        Apply agent policy to task output.
+        
+        This method now uses PolicyManager to handle multiple policies.
+        Kept for backward compatibility.
+        """
+        if not self.agent_policy_manager.has_policies() or not task or not task.response:
             return task
         
-        from upsonic.safety_engine.models import PolicyInput, RuleOutput
-        from upsonic.safety_engine.exceptions import DisallowedOperation
+        from upsonic.safety_engine.models import PolicyInput
         
+        # Convert response to text
         response_text = ""
         if isinstance(task.response, str):
             response_text = task.response
@@ -1258,37 +1237,18 @@ class Agent(BaseAgent):
         
         if response_text:
             agent_policy_input = PolicyInput(input_texts=[response_text])
-            try:
-                rule_output, _action_output, policy_output = await self.agent_policy.execute_async(agent_policy_input)
-                action_taken = policy_output.action_output.get("action_taken", "UNKNOWN")
-                
-                if self.debug and rule_output.confidence > 0.0:
-                    from upsonic.utils.printing import policy_triggered
-                    policy_triggered(
-                        policy_name=self.agent_policy.name,
-                        check_type="Agent Output Check",
-                        action_taken=action_taken,
-                        rule_output=rule_output
-                    )
-                
-                final_output = policy_output.output_texts[0] if policy_output.output_texts else "Response modified by agent policy."
-                task._response = final_output
-                
-            except DisallowedOperation as e:
-                mock_rule_output = RuleOutput(
-                    confidence=1.0,
-                    content_type="DISALLOWED_OPERATION",
-                    details=str(e)
-                )
-                if self.debug:
-                    from upsonic.utils.printing import policy_triggered
-                    policy_triggered(
-                        policy_name=self.agent_policy.name,
-                        check_type="Agent Output Check", 
-                        action_taken="DISALLOWED_EXCEPTION",
-                        rule_output=mock_rule_output
-                    )
-                task._response = f"Agent response disallowed by policy: {e}"
+            result = await self.agent_policy_manager.execute_policies_async(
+                agent_policy_input,
+                check_type="Agent Output Check"
+            )
+            
+            # Apply the result
+            if result.should_block():
+                task._response = result.get_final_message()
+            elif result.action_taken in ["REPLACE", "ANONYMIZE"]:
+                task._response = result.final_output or "Response modified by agent policy."
+            elif result.final_output:
+                task._response = result.final_output
         
         return task
     

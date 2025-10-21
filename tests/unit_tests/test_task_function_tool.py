@@ -1,5 +1,5 @@
 from unittest import TestCase
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
 from contextlib import asynccontextmanager
 from upsonic import Agent, Task
 from upsonic.agent.run_result import RunResult
@@ -38,7 +38,7 @@ class AgentToolTestCase(TestCase):
         expected_result = num_a + num_b
 
         # Mock the model inference
-        mock_model = AsyncMock()
+        mock_model = MagicMock()
         mock_infer_model.return_value = mock_model
 
         tracker = CallTracker()
@@ -73,7 +73,7 @@ class AgentToolTestCase(TestCase):
         )
         
         # Mock the model to return tool call first, then final response
-        mock_model.request.side_effect = [tool_call_response, final_response]
+        mock_model.request = AsyncMock(side_effect=[tool_call_response, final_response])
 
         task = Task(f"What is the sum of {num_a} and {num_b}? Use Tool", tools=[tracker])
         agent = Agent(name="Sum Agent", model=mock_model)

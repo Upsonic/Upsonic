@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
 from contextlib import asynccontextmanager
 from PIL import Image
 import tempfile
@@ -30,7 +30,7 @@ class TestTaskImageContextHandling:
             img2.save(img2_path)
             
             # Mock the model inference
-            mock_model = AsyncMock()
+            mock_model = MagicMock()
             mock_infer_model.return_value = mock_model
             
             # Mock the model request to return a proper ModelResponse with structured output

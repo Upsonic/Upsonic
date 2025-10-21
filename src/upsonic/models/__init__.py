@@ -23,10 +23,12 @@ import httpx
 from typing_extensions import TypeAliasType, TypedDict
 
 from upsonic import _utils
+from upsonic.messages.messages import ToolReturnPart
 from upsonic.output import OutputObjectDefinition
 from upsonic._parts_manager import ModelResponsePartsManager
 from upsonic.tools.builtin_tools import AbstractBuiltinTool
 from upsonic.utils.package.exception import UserError
+from upsonic.lcel.runnable import Runnable
 from upsonic.messages import (
     FileUrl,
     FinalResultEvent,
@@ -393,11 +395,55 @@ class ModelRequestParameters:
     __repr__ = _utils.dataclasses_no_defaults_repr
 
 
-class Model(ABC):
-    """Abstract class for a model."""
+class Model(Runnable[Any, Any]):
+    """Abstract class for a model.
+    
+    Model inherits from Runnable, making it compatible with LCEL.
+    This allows models to be used in chains with the pipe operator (|) for powerful composition:
+    
+    Example:
+        ```python
+        from upsonic.lcel import ChatPromptTemplate, StrOutputParser
+        from upsonic import infer_model
+        
+        prompt = ChatPromptTemplate.from_template("Tell me about {topic}")
+        model = infer_model("openai/gpt-4o")
+        
+        # Chain components together with the pipe operator
+        chain = prompt | model | StrOutputParser()
+        result = await chain.invoke({"topic": "AI"})
+        ```
+    
+    The Model class can also be configured with memory and tools:
+        ```python
+        # Add memory for conversation history
+        model_with_memory = model.add_memory(history=True)
+        
+        # Bind tools for function calling
+        model_with_tools = model.bind_tools([my_tool])
+        
+        # Configure structured output
+        model_with_structure = model.with_structured_output(MyPydanticModel)
+        
+        # Chain all features together
+        configured = model.add_memory(history=True).bind_tools([tool]).with_structured_output(Schema)
+        
+        # Use in chains
+        chain = prompt | configured | StrOutputParser()
+        ```
+    """
 
     _profile: ModelProfileSpec | None = None
     _settings: ModelSettings | None = None
+    
+    # LCEL integration attributes
+    _memory: Any = None  # Memory instance for chat history
+    _tools: list[Any] | None = None  # List of tools to bind
+    _tool_manager: Any = None  # ToolManager instance
+    _tool_context: Any = None  # ToolContext for tool execution
+    _response_format: Any = None  # Pydantic model for structured output
+    _tool_call_limit: int = 5  # Maximum tool calls per invocation
+    _tool_call_count: int = 0  # Current tool call count
 
     def __init__(
         self,
@@ -473,6 +519,572 @@ class Model(ABC):
                 )
 
         return model_request_parameters
+    
+    
+    def add_memory(
+        self, 
+        history: bool = False, 
+        memory: Any = None
+    ) -> "Model":
+        """Add memory/chat history to the model for LCEL chains.
+        
+        This enables the model to maintain conversation context across multiple invocations.
+        
+        Args:
+            history: If True, creates an in-memory storage for chat history
+            memory: Optional Memory instance to use for chat history management
+            
+        Returns:
+            Self for method chaining
+        """
+        if memory is not None:
+            self._memory = memory
+        elif history:
+            from upsonic.storage.memory import Memory
+            from upsonic.storage.providers.in_memory import InMemoryStorage
+            import uuid
+
+            session_id = str(uuid.uuid4())
+            storage = InMemoryStorage()
+            self._memory = Memory(storage=storage, session_id=session_id, full_session_memory=True)
+        
+        return self
+    
+    def bind_tools(self, tools: list[Any], *, tool_call_limit: int | None = None) -> "Model":
+        """Bind tools to the model for LCEL chains.
+        
+        This enables the model to call tools during execution.
+        
+        Args:
+            tools: List of tools (can be functions, Tool instances, or ToolConfig instances)
+            tool_call_limit: Optional maximum number of tool calls per invocation (default: 5)
+            
+        Returns:
+            Self for method chaining
+        """
+        self._tools = tools if tools else []
+        if tool_call_limit is not None:
+            self._tool_call_limit = tool_call_limit
+        return self
+    
+    def with_structured_output(self, schema: Any) -> "Model":
+        """Configure the model to return structured output in a Pydantic model format.
+        
+        This enables the model to return responses that conform to a specific schema,
+        ensuring type-safe and validated outputs.
+        
+        Args:
+            schema: A Pydantic model class that defines the output structure
+            
+        Returns:
+            Self for method chaining
+        """
+        from pydantic import BaseModel
+        
+        if not (isinstance(schema, type) and issubclass(schema, BaseModel)):
+            raise ValueError(
+                f"schema must be a Pydantic BaseModel class, got {type(schema)}"
+            )
+        
+        self._response_format = schema
+        return self
+    
+    def invoke(
+        self,
+        input: str | "ModelRequest" | list["ModelMessage"],
+        config: dict[str, Any] | None = None
+    ) -> Any:
+        """Execute the model synchronously for LCEL compatibility.
+        
+        This is the synchronous version of invoke for LCEL chains.
+        It runs the async version in an event loop.
+        """
+        import asyncio
+        
+        try:
+            loop = asyncio.get_running_loop()
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, self.ainvoke(input, config))
+                return future.result()
+        except RuntimeError:
+            return asyncio.run(self.ainvoke(input, config))
+    
+    async def ainvoke(
+        self,
+        input: str | "ModelRequest" | list["ModelMessage"],
+        config: dict[str, Any] | None = None
+    ) -> Any:
+        """Execute the model with the configured memory and tools.
+        
+        This is the main entry point for LCEL execution. It handles:
+        - Converting input to proper message format
+        - Loading chat history from memory (if configured)
+        - Setting up and executing tools (if configured)
+        - Handling tool calls in model responses
+        - Saving conversation to memory (if configured)
+        
+        Args:
+            input: Can be a string, ModelRequest, or list of ModelMessages
+            config: Optional configuration dictionary
+            
+        Returns:
+            The model's response (extracted output)
+        """
+        
+        self._tool_call_count = 0
+        
+        messages = self._prepare_messages_for_invoke(input)
+        
+        if self._memory:
+            messages = await self._build_messages_with_memory(messages)
+        
+        if self._tools:
+            self._setup_tools_for_invoke()
+        
+        task = self._build_task_for_invoke(messages)
+
+        task.price_id_ = None
+        _ = task.price_id
+        task._tool_calls = []
+        
+        model_params = self._build_parameters_for_invoke()
+        model_params = self.customize_request_parameters(model_params)
+        
+        response = await self.request(
+            messages=messages,
+            model_settings=self.settings,
+            model_request_parameters=model_params
+        )
+        
+        if self._tools:
+            response = await self._handle_response_with_tools(response, messages, model_params)
+        
+        output = self._extract_output_for_invoke(response)
+        
+        try:
+            from upsonic.agent.context_managers import CallManager
+            from upsonic.agent.run_result import RunResult
+            
+            run_result = RunResult(output=output)
+            call_manager = CallManager(
+                self,  # model
+                task,
+                debug=False,
+                show_tool_calls=True
+            )
+            
+            async with call_manager.manage_call() as call_handler:
+                call_handler.process_response(run_result)
+        except Exception:
+            pass
+        
+        try:
+            from upsonic.agent.context_managers import TaskManager
+            from upsonic.agent.run_result import RunResult
+            
+            run_result_tm = RunResult(output=output)
+            task_manager = TaskManager(task, None)
+            async with task_manager.manage_task() as task_handler:
+                task_handler.process_response(run_result_tm)
+        except Exception:
+            pass
+        
+        if self._memory:
+            await self._save_to_memory(messages, response)
+        
+        return output
+    
+    def _prepare_messages_for_invoke(
+        self, 
+        input: str | "ModelRequest" | list["ModelMessage"]
+    ) -> list["ModelMessage"]:
+        """Convert input to list[ModelMessage] format.
+        
+        Args:
+            input: String, ModelRequest, or list of ModelMessages
+            
+        Returns:
+            List of ModelMessages ready for model request
+        """
+        from upsonic.messages import ModelRequest, UserPromptPart, ModelMessage
+        
+        if isinstance(input, str):
+            user_part = UserPromptPart(content=input)
+            request = ModelRequest(parts=[user_part])
+            return [request]
+        elif isinstance(input, ModelRequest):
+            return [input]
+        elif isinstance(input, list):
+            return input
+        else:
+            raise ValueError(f"Unsupported input type: {type(input)}")
+    
+    async def _build_messages_with_memory(
+        self, 
+        messages: list["ModelMessage"]
+    ) -> list["ModelMessage"]:
+        """Build messages including chat history from memory.
+        
+        Ensures that only the very first SystemPromptPart is kept in the
+        final message list, removing any duplicate system prompts that might
+        appear in later messages by directly modifying the parts attribute.
+        
+        Args:
+            messages: Current messages to send
+            
+        Returns:
+            Messages with history prepended and system prompts deduplicated
+        """
+        from upsonic.agent.context_managers import MemoryManager
+        from upsonic.messages import ModelRequest, SystemPromptPart
+        
+        memory_manager = MemoryManager(self._memory)
+        async with memory_manager.manage_memory() as memory_handler:
+            message_history = memory_handler.get_message_history()
+            
+            combined_messages = message_history + list(messages)
+            
+            if not combined_messages:
+                return combined_messages
+            
+            has_system_prompt_in_first = False
+            if combined_messages and isinstance(combined_messages[0], ModelRequest):
+                has_system_prompt_in_first = any(
+                    isinstance(part, SystemPromptPart) 
+                    for part in combined_messages[0].parts
+                )
+            
+            if not has_system_prompt_in_first:
+                return combined_messages
+            
+
+            for i, msg in enumerate(combined_messages[1:], start=1):
+                if isinstance(msg, ModelRequest):
+                    has_system_prompts = any(
+                        isinstance(part, SystemPromptPart) 
+                        for part in msg.parts
+                    )
+                    
+                    if has_system_prompts:
+                        filtered_parts = [
+                            part for part in msg.parts 
+                            if not isinstance(part, SystemPromptPart)
+                        ]
+                        
+                        from dataclasses import replace
+                        combined_messages[i] = replace(msg, parts=filtered_parts)
+            
+            return combined_messages
+    
+    def _setup_tools_for_invoke(self) -> None:
+        """Setup ToolManager and register tools for invocation."""
+        from upsonic.tools import ToolManager, ToolContext
+        
+        if not self._tool_manager:
+            self._tool_manager = ToolManager()
+        
+        if not self._tool_context:
+            self._tool_context = ToolContext(
+                deps=None,
+                agent_id="lcel_model",
+                max_retries=1,
+                tool_call_limit=5
+            )
+        
+        self._tool_manager.register_tools(
+            tools=self._tools,
+            context=self._tool_context,
+            task=None,
+            agent_instance=None
+        )
+    
+    def _build_parameters_for_invoke(self) -> ModelRequestParameters:
+        """Build model request parameters including tools and structured output.
+        
+        Returns:
+            ModelRequestParameters with tool definitions and output configuration
+        """
+        from pydantic import BaseModel
+        from upsonic.output import OutputObjectDefinition
+        
+        tool_definitions = []
+        builtin_tools = []
+        
+        if self._tools and self._tool_manager:
+            tool_definitions = self._tool_manager.get_tool_definitions()
+            builtin_tools = self._tool_manager.processor.extract_builtin_tools(self._tools)
+        
+        output_mode = 'text'
+        output_object = None
+        allow_text_output = True
+        
+        if self._response_format and self._response_format != str and self._response_format is not str:
+            if isinstance(self._response_format, type) and issubclass(self._response_format, BaseModel):
+                output_mode = 'native'
+                allow_text_output = False
+                
+                schema = self._response_format.model_json_schema()
+                output_object = OutputObjectDefinition(
+                    json_schema=schema,
+                    name=self._response_format.__name__,
+                    description=self._response_format.__doc__,
+                    strict=True
+                )
+        
+        return ModelRequestParameters(
+            function_tools=tool_definitions,
+            builtin_tools=builtin_tools,
+            output_mode=output_mode,
+            output_object=output_object,
+            allow_text_output=allow_text_output
+        )
+
+    def _build_task_for_invoke(self, messages: list["ModelMessage"]) -> Any:
+        """Create a Task object based on the latest user input and current configuration.
+        
+        Extracts the user's prompt from the last ModelRequest and builds a Task with
+        description, tools, and response_format set appropriately.
+        """
+        try:
+            from upsonic.tasks.tasks import Task
+            from upsonic.messages import ModelRequest, UserPromptPart
+            
+            last_request = None
+            for msg in reversed(messages):
+                if isinstance(msg, ModelRequest):
+                    last_request = msg
+                    break
+            
+            description = ""
+            if last_request is not None:
+                for part in last_request.parts:
+                    if isinstance(part, UserPromptPart):
+                        description = str(part.content)
+                        break
+            
+            task = Task(
+                description=description,
+                tools=list(self._tools or []),
+                response_format=self._response_format if self._response_format is not None else str,
+            )
+            return task
+        except Exception:
+            # In case Task is unavailable or something goes wrong, return a minimal shim
+            class _ShimTask:
+                def __init__(self, description: str):
+                    self.description = description
+                    self.response = None
+            
+            desc = ""
+            try:
+                from upsonic.messages import ModelRequest, UserPromptPart
+                for msg in reversed(messages):
+                    if isinstance(msg, ModelRequest):
+                        for part in msg.parts:
+                            if isinstance(part, UserPromptPart):
+                                desc = str(part.content)
+                                raise StopIteration
+            except StopIteration:
+                pass
+            return _ShimTask(desc)
+    
+    async def _handle_response_with_tools(
+        self,
+        response: "ModelResponse",
+        messages: list["ModelMessage"],
+        model_params: ModelRequestParameters
+    ) -> "ModelResponse":
+        """Handle tool calls in model response and execute them.
+        
+        Args:
+            response: Initial model response
+            messages: Current message history
+            model_params: Model request parameters
+            
+        Returns:
+            Final model response after tool execution
+        """
+        from upsonic.messages import ToolCallPart, ToolReturnPart, ModelRequest, TextPart
+        import asyncio
+        
+        tool_calls = [
+            part for part in response.parts 
+            if isinstance(part, ToolCallPart)
+        ]
+        
+        if not tool_calls:
+            return response
+        
+        tool_results = await self._execute_tool_calls_for_invoke(tool_calls)
+        
+        messages.append(response)
+        tool_request = ModelRequest(parts=tool_results)
+        messages.append(tool_request)
+        
+        follow_up_response = await self.request(
+            messages=messages,
+            model_settings=self.settings,
+            model_request_parameters=model_params
+        )
+        
+        return await self._handle_response_with_tools(follow_up_response, messages, model_params)
+    
+    async def _execute_tool_calls_for_invoke(
+        self, 
+        tool_calls: list["ToolCallPart"]
+    ) -> list["ToolReturnPart"]:
+        """Execute tool calls and return results.
+        
+        Respects the tool call limit configured via bind_tools().
+        
+        Args:
+            tool_calls: List of tool calls from model
+            
+        Returns:
+            List of tool return parts
+        """
+        from upsonic.messages import ToolReturnPart
+        from upsonic._utils import now_utc
+        import asyncio
+        
+        if not tool_calls or not self._tool_manager:
+            return []
+        
+        if self._tool_call_count >= self._tool_call_limit:
+            error_results = []
+            for tool_call in tool_calls:
+                error_results.append(ToolReturnPart(
+                    tool_name=tool_call.tool_name,
+                    content=f"Tool call limit of {self._tool_call_limit} reached. Cannot execute more tools.",
+                    tool_call_id=tool_call.tool_call_id,
+                    timestamp=now_utc()
+                ))
+            return error_results
+        
+        if self._tool_call_count + len(tool_calls) > self._tool_call_limit:
+            allowed_count = self._tool_call_limit - self._tool_call_count
+            tool_calls_to_execute = tool_calls[:allowed_count]
+            tool_calls_to_skip = tool_calls[allowed_count:]
+            
+            # Create error messages for skipped calls
+            skipped_results = [
+                ToolReturnPart(
+                    tool_name=tc.tool_name,
+                    content=f"Tool call limit of {self._tool_call_limit} would be exceeded. Tool call skipped.",
+                    tool_call_id=tc.tool_call_id,
+                    timestamp=now_utc()
+                )
+                for tc in tool_calls_to_skip
+            ]
+        else:
+            tool_calls_to_execute = tool_calls
+            skipped_results = []
+        
+        async def execute_single_tool(tool_call: "ToolCallPart") -> "ToolReturnPart":
+            """Execute a single tool call."""
+            try:
+                result = await self._tool_manager.execute_tool(
+                    tool_name=tool_call.tool_name,
+                    args=tool_call.args_as_dict(),
+                    context=self._tool_context,
+                    tool_call_id=tool_call.tool_call_id
+                )
+                
+                return ToolReturnPart(
+                    tool_name=result.tool_name,
+                    content=result.content,
+                    tool_call_id=result.tool_call_id,
+                    timestamp=now_utc()
+                )
+            except Exception as e:
+                return ToolReturnPart(
+                    tool_name=tool_call.tool_name,
+                    content=f"Error executing tool: {str(e)}",
+                    tool_call_id=tool_call.tool_call_id,
+                    timestamp=now_utc()
+                )
+        
+        # Execute allowed tool calls in parallel
+        executed_results = await asyncio.gather(
+            *[execute_single_tool(tc) for tc in tool_calls_to_execute],
+            return_exceptions=False
+        )
+        
+        self._tool_call_count += len(tool_calls_to_execute)
+        
+        # Combine executed and skipped results
+        return list(executed_results) + skipped_results
+    
+    def _extract_output_for_invoke(self, response: "ModelResponse") -> Any:
+        """Extract output from model response.
+        
+        Handles both plain text output and structured Pydantic model output.
+        
+        Args:
+            response: Model response
+            
+        Returns:
+            Extracted output (string or Pydantic model instance)
+        """
+        from upsonic.messages import TextPart
+        
+        text_parts = [
+            part.content for part in response.parts 
+            if isinstance(part, TextPart)
+        ]
+        
+        if self._response_format == str or self._response_format is str:
+            return "".join(text_parts)
+        
+        text_content = "".join(text_parts)
+        
+        if self._response_format and text_content:
+            try:
+                import json
+                parsed = json.loads(text_content)
+                if hasattr(self._response_format, 'model_validate'):
+                    return self._response_format.model_validate(parsed)
+                return parsed
+            except Exception:
+                # If parsing fails, return as text
+                pass
+        
+        # Default: return as string
+        return text_content
+    
+    async def _save_to_memory(
+        self, 
+        messages: list["ModelMessage"],
+        response: "ModelResponse"
+    ) -> None:
+        """Save messages and response to memory.
+        
+        Args:
+            messages: Messages that were sent
+            response: Model response to save
+        """
+        from upsonic.agent.context_managers import MemoryManager
+        from upsonic.agent.run_result import RunResult
+        
+        if not self._memory:
+            return
+        
+        memory_manager = MemoryManager(self._memory)
+        async with memory_manager.manage_memory() as memory_handler:
+            run_result = RunResult(output=None)
+            
+            # Add messages to run result
+            # Note: We only add new messages (those not already in history)
+            # The messages list already includes history, so we need to identify new ones
+            history_length = len(memory_handler.get_message_history())
+            if len(messages) > history_length:
+                new_messages = messages[history_length:]
+                run_result.add_messages(new_messages)
+            
+            run_result.add_message(response)
+            
+            memory_handler.process_response(run_result)
 
     @property
     @abstractmethod

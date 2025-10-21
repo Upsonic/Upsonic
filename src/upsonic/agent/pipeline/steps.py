@@ -146,7 +146,7 @@ class UserPolicyStep(Step):
     
     async def execute(self, context: StepContext) -> StepResult:
         """Apply user policy to task input."""
-        if not context.agent.user_policy or not context.task.description or context.task.is_paused:
+        if not context.agent.user_policy_manager.has_policies() or not context.task.description or context.task.is_paused:
             return StepResult(
                 status=StepStatus.SUCCESS,
                 message="No user policy or task paused",
@@ -161,74 +161,42 @@ class UserPolicyStep(Step):
                 execution_time=0.0
             )
         
-        from upsonic.safety_engine.models import PolicyInput, RuleOutput
-        from upsonic.safety_engine.exceptions import DisallowedOperation
+        from upsonic.safety_engine.models import PolicyInput
         
         policy_input = PolicyInput(input_texts=[context.task.description])
         
-        try:
-            rule_output, _action_output, policy_output = await context.agent.user_policy.execute_async(policy_input)
-            action_taken = policy_output.action_output.get("action_taken", "UNKNOWN")
-            
-            if context.agent.debug and rule_output.confidence > 0.0:
-                from upsonic.utils.printing import policy_triggered
-                policy_triggered(
-                    policy_name=context.agent.user_policy.name,
-                    check_type="User Input Check",
-                    action_taken=action_taken,
-                    rule_output=rule_output
-                )
-            
-            if action_taken == "BLOCK":
-                context.task.task_end()
-                context.task._response = policy_output.output_texts[0] if policy_output.output_texts else "Content blocked by user policy."
-                context.final_output = context.task._response
-                context.agent._run_result.output = context.final_output
-                context.task._policy_blocked = True
-                
-                return StepResult(
-                    status=StepStatus.SUCCESS,
-                    message="User input blocked by policy",
-                    execution_time=0.0
-                )
-            elif action_taken in ["REPLACE", "ANONYMIZE"]:
-                context.task.description = policy_output.output_texts[0] if policy_output.output_texts else ""
-                return StepResult(
-                    status=StepStatus.SUCCESS,
-                    message=f"User input {action_taken.lower()}d by policy",
-                    execution_time=0.0
-                )
-                
-        except DisallowedOperation as e:
-            mock_rule_output = RuleOutput(
-                confidence=1.0,
-                content_type="DISALLOWED_OPERATION",
-                details=str(e)
-            )
-            if context.agent.debug:
-                from upsonic.utils.printing import policy_triggered
-                policy_triggered(
-                    policy_name=context.agent.user_policy.name,
-                    check_type="User Input Check",
-                    action_taken="DISALLOWED_EXCEPTION",
-                    rule_output=mock_rule_output
-                )
-            
+        # Execute all user policies through the manager
+        result = await context.agent.user_policy_manager.execute_policies_async(
+            policy_input,
+            check_type="User Input Check"
+        )
+        
+        # Handle the aggregated result
+        if result.should_block():
             context.task.task_end()
-            context.task._response = f"Operation disallowed by user policy: {e}"
+            context.task._response = result.get_final_message()
             context.final_output = context.task._response
             context.agent._run_result.output = context.final_output
             context.task._policy_blocked = True
             
+            policies_triggered = ", ".join(result.triggered_policies) if result.triggered_policies else "policy"
             return StepResult(
                 status=StepStatus.SUCCESS,
-                message="Operation disallowed",
+                message=f"User input blocked by {policies_triggered}",
+                execution_time=0.0
+            )
+        elif result.action_taken in ["REPLACE", "ANONYMIZE"]:
+            context.task.description = result.final_output or context.task.description
+            policies_triggered = len(result.triggered_policies)
+            return StepResult(
+                status=StepStatus.SUCCESS,
+                message=f"User input {result.action_taken.lower()}d by {policies_triggered} policy(ies)",
                 execution_time=0.0
             )
         
         return StepResult(
             status=StepStatus.SUCCESS,
-            message="User policy passed",
+            message="User policies passed",
             execution_time=0.0
         )
 
@@ -797,7 +765,7 @@ class AgentPolicyStep(Step):
     
     async def execute(self, context: StepContext) -> StepResult:
         """Apply agent policy to output."""
-        if not (context.agent.agent_policy and context.task.response):
+        if not context.agent.agent_policy_manager.has_policies() or not context.task.response:
             return StepResult(
                 status=StepStatus.SUCCESS,
                 message="No agent policy or no response",
@@ -824,7 +792,7 @@ class AgentPolicyStep(Step):
         
         return StepResult(
             status=StepStatus.SUCCESS,
-            message="Agent policy applied",
+            message="Agent policies applied",
             execution_time=0.0
         )
 
@@ -1190,8 +1158,10 @@ class FinalizationStep(Step):
 
         # Print summary if needed
         if context.task and not context.task.not_main_task:
-            from upsonic.utils.printing import print_price_id_summary
-            print_price_id_summary(context.task.price_id, context.task)
+            from upsonic.utils.printing import print_price_id_summary, price_id_summary
+            # Only print summary if price_id exists in summary (i.e., model was called)
+            if context.task.price_id in price_id_summary:
+                print_price_id_summary(context.task.price_id, context.task)
 
         return StepResult(
             status=StepStatus.SUCCESS,
