@@ -389,7 +389,7 @@ def task(
 ) -> Union[TaskFunction[T], Callable[[Callable[..., T]], TaskFunction[T]]]:
     """Decorator to create a durable task.
     
-    Tasks are units of work that LangGraph tracks individually. They support:
+    Tasks are units of work that Upsonic tracks individually. They support:
     - Automatic retry on failures
     - Result caching to avoid re-execution
     - Idempotent execution for durability

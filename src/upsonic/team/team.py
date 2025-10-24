@@ -1,8 +1,7 @@
 from upsonic.tasks.tasks import Task
-from upsonic.agent.agent import Direct
 from typing import Any, List, Dict, Optional, Type, Union, Literal
 
-from upsonic.agent.agent import Direct as Agent
+from upsonic.agent.agent import Agent
 from upsonic.context.task import turn_task_to_string
 
 
@@ -35,7 +34,7 @@ class Team:
         Initialize the Team with agents and optionally tasks.
         
         Args:
-            agents: List of Direct agent instances to use as team members.
+            agents: List of Agent instances to use as team members.
             tasks: List of tasks to execute (optional).
             response_format: The response format for the end task (optional).
             model: The model provider instance for any internal agents (leader, router).
@@ -153,7 +152,7 @@ class Team:
                                         session_id="team_coordinator_session",
                                         )
             
-            self.leader_agent = Direct(
+            self.leader_agent = Agent(
                 model=self.model, 
                 memory=self.memory
             )
@@ -190,7 +189,7 @@ class Team:
             setup_manager = CoordinatorSetup(self.agents, tasks, mode="route")
             delegation_manager = DelegationManager(self.agents, {})
 
-            self.leader_agent = Direct(model=self.model)
+            self.leader_agent = Agent(model=self.model)
 
             leader_system_prompt = setup_manager.create_leader_prompt()
             self.leader_agent.system_prompt = leader_system_prompt

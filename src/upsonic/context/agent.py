@@ -3,7 +3,7 @@ import json
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from upsonic.agent.agent import Direct as Agent
+    from upsonic.agent.agent import Agent
 
 def turn_agent_to_string(agent: Agent):
     the_dict = {}

@@ -1,10 +1,3 @@
-"""
-LangGraph-style stateful graph implementation for Upsonic.
-
-This module provides a powerful framework for building stateful, multi-step 
-applications with LLMs using a graph-based approach.
-"""
-
 from upsonic.graphv2.state_graph import StateGraph, START, END
 from upsonic.graphv2.checkpoint import (
     BaseCheckpointer,

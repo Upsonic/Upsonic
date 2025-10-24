@@ -5,11 +5,11 @@ import pytest
 from upsonic.text_splitter.agentic import AgenticChunker, AgenticChunkingConfig
 from upsonic.schemas.data_models import Document, Chunk
 from upsonic.schemas.agentic import PropositionList, TopicAssignmentList, Topic, RefinedTopic
-from upsonic.agent.agent import Direct
+from upsonic.agent.agent import Agent
 
 
-class MockDirect(Direct):
-    """Mock Direct agent for testing agentic chunking without external dependencies."""
+class MockDirect(Agent):
+    """Mock agent for testing agentic chunking without external dependencies."""
     
     def __init__(self):
         # Initialize with minimal required parameters to avoid complex dependency setup

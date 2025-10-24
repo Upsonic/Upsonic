@@ -1752,6 +1752,3 @@ class Agent(BaseAgent):
         
         return await self.do_async(task, model, debug, retry, state, graph_execution_id=graph_execution_id)
 
-
-# Legacy alias for backwards compatibility
-Direct = Agent
