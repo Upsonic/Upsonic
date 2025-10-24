@@ -4,7 +4,7 @@ Result combiner module for combining results from multiple tasks into final answ
 
 from typing import List, Any, Optional
 from upsonic.tasks.tasks import Task
-from upsonic.agent.agent import Direct
+from upsonic.agent.agent import Agent
 
 class ResultCombiner:
     """Handles combining results from multiple tasks into coherent final answers."""
@@ -86,7 +86,7 @@ class ResultCombiner:
         if not self.model:
              raise ValueError("ResultCombiner requires a model to be initialized.")
 
-        end_agent = Direct(model=self.model, debug=debug_setting)
+        end_agent = Agent(model=self.model, debug=debug_setting)
         await end_agent.do_async(end_task)
         
         return end_task.response

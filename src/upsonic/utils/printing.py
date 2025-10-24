@@ -1889,3 +1889,311 @@ def deep_agent_max_iterations_warning(max_iterations: int, incomplete_count: int
     
     console.print(panel)
     spacing()
+
+
+def direct_started(model_name: str, task_description: str, response_format: str = "str") -> None:
+    """
+    Print a formatted panel when Direct class starts execution.
+    
+    Args:
+        model_name: Name of the model being used
+        task_description: Description of the task
+        response_format: Expected response format
+    """
+    model_name_esc = escape_rich_markup(model_name)
+    response_format_esc = escape_rich_markup(response_format)
+    
+    # Truncate task description if too long
+    task_preview = task_description[:150] + "..." if len(task_description) > 150 else task_description
+    task_preview_esc = escape_rich_markup(task_preview)
+    
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    table.add_row("[bold]Status:[/bold]", "[blue]⚡ Direct Execution Started[/blue]")
+    table.add_row("[bold]Model:[/bold]", f"[cyan]{model_name_esc}[/cyan]")
+    table.add_row("[bold]Response Format:[/bold]", f"[yellow]{response_format_esc}[/yellow]")
+    table.add_row("")  # Spacing
+    table.add_row("[bold]Task:[/bold]")
+    table.add_row(f"[dim]{task_preview_esc}[/dim]")
+    
+    panel = Panel(
+        table,
+        title="[bold blue]⚡ Upsonic Direct - Execution Started[/bold blue]",
+        border_style="blue",
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
+    
+    # Sentry logging
+    _sentry_logger.info(
+        "Direct execution started: %s",
+        model_name,
+        extra={
+            "model": model_name,
+            "response_format": response_format,
+            "task_preview": task_description[:100]
+        }
+    )
+
+
+def direct_completed(
+    result: Any, 
+    model: Any, 
+    response_format: str, 
+    start_time: float, 
+    end_time: float, 
+    usage: dict,
+    debug: bool = False,
+    task_description: str = None
+) -> None:
+    """
+    Print a formatted panel when Direct class completes execution.
+    Shows comprehensive metrics including cost, time, and token usage.
+    
+    Args:
+        result: The result from Direct execution
+        model: Model instance
+        response_format: Response format used
+        start_time: Start timestamp
+        end_time: End timestamp
+        usage: Dictionary with input_tokens and output_tokens
+        debug: Whether to show full result
+        task_description: Optional task description preview
+    """
+    execution_time = end_time - start_time
+    
+    display_model_name = escape_rich_markup(model.model_name)
+    response_format_esc = escape_rich_markup(response_format)
+    
+    # Calculate cost
+    estimated_cost = get_estimated_cost(
+        usage.get('input_tokens', 0), 
+        usage.get('output_tokens', 0), 
+        model
+    )
+    
+    # Format result
+    result_str = str(result)
+    if not debug:
+        result_str = result_str[:370]
+    if len(result_str) < len(str(result)):
+        result_str += "..."
+    result_esc = escape_rich_markup(result_str)
+    
+    # Create main table
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    table.add_row("[bold]Status:[/bold]", "[green]✅ Execution Completed[/green]")
+    table.add_row("[bold]Model:[/bold]", f"[cyan]{display_model_name}[/cyan]")
+    table.add_row("[bold]Response Format:[/bold]", f"[yellow]{response_format_esc}[/yellow]")
+    table.add_row("")  # Spacing
+    
+    # Show task preview if provided
+    if task_description:
+        task_preview = task_description[:100] + "..." if len(task_description) > 100 else task_description
+        task_preview_esc = escape_rich_markup(task_preview)
+        table.add_row("[bold]Task:[/bold]")
+        table.add_row(f"[dim]{task_preview_esc}[/dim]")
+        table.add_row("")  # Spacing
+    
+    # Show result
+    table.add_row("[bold]Result:[/bold]")
+    table.add_row(f"[green]{result_esc}[/green]")
+    table.add_row("")  # Spacing
+    
+    # Performance metrics section
+    table.add_row("[bold cyan]📊 Performance Metrics[/bold cyan]", "")
+    table.add_row("├─ [bold]Execution Time:[/bold]", f"[magenta]{execution_time:.3f}s[/magenta]")
+    table.add_row("├─ [bold]Input Tokens:[/bold]", f"[blue]{usage.get('input_tokens', 0):,}[/blue]")
+    table.add_row("├─ [bold]Output Tokens:[/bold]", f"[blue]{usage.get('output_tokens', 0):,}[/blue]")
+    table.add_row("└─ [bold]Estimated Cost:[/bold]", f"[yellow]{estimated_cost}[/yellow]")
+    
+    panel = Panel(
+        table,
+        title="[bold green]⚡ Upsonic Direct - Execution Complete[/bold green]",
+        border_style="green",
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
+    
+    # Sentry logging
+    _sentry_logger.info(
+        "Direct execution completed: %s (%.2fs)",
+        model.model_name, execution_time,
+        extra={
+            "model": str(model.model_name),
+            "response_format": response_format,
+            "execution_time": execution_time,
+            "input_tokens": usage.get('input_tokens', 0),
+            "output_tokens": usage.get('output_tokens', 0),
+            "estimated_cost": str(estimated_cost)
+        }
+    )
+
+
+def direct_error(
+    error_message: str, 
+    model_name: str = None,
+    task_description: str = None,
+    execution_time: float = None
+) -> None:
+    """
+    Print a formatted panel when Direct class encounters an error.
+    
+    Args:
+        error_message: The error message
+        model_name: Optional model name
+        task_description: Optional task description
+        execution_time: Optional execution time before error
+    """
+    error_esc = escape_rich_markup(str(error_message))
+    
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    table.add_row("[bold]Status:[/bold]", "[red]❌ Execution Failed[/red]")
+    
+    if model_name:
+        model_name_esc = escape_rich_markup(model_name)
+        table.add_row("[bold]Model:[/bold]", f"[cyan]{model_name_esc}[/cyan]")
+    
+    if task_description:
+        task_preview = task_description[:100] + "..." if len(task_description) > 100 else task_description
+        task_preview_esc = escape_rich_markup(task_preview)
+        table.add_row("[bold]Task:[/bold]", f"[dim]{task_preview_esc}[/dim]")
+    
+    table.add_row("")  # Spacing
+    table.add_row("[bold]Error Details:[/bold]")
+    table.add_row(f"[red]{error_esc}[/red]")
+    
+    if execution_time is not None:
+        table.add_row("")  # Spacing
+        table.add_row("[bold]Time Before Error:[/bold]", f"[yellow]{execution_time:.3f}s[/yellow]")
+    
+    panel = Panel(
+        table,
+        title="[bold red]⚡ Upsonic Direct - Execution Error[/bold red]",
+        border_style="red",
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
+    
+    # Sentry logging
+    _sentry_logger.error(
+        "Direct execution failed: %s",
+        error_message,
+        extra={
+            "error": str(error_message),
+            "model": model_name,
+            "execution_time": execution_time
+        }
+    )
+
+
+def direct_metrics_summary(
+    total_calls: int,
+    total_time: float,
+    total_input_tokens: int,
+    total_output_tokens: int,
+    total_cost: float,
+    model_name: str,
+    avg_time: float = None
+) -> None:
+    """
+    Print a formatted panel with summary metrics for multiple Direct calls.
+    
+    Args:
+        total_calls: Total number of Direct calls
+        total_time: Total execution time
+        total_input_tokens: Total input tokens used
+        total_output_tokens: Total output tokens used
+        total_cost: Total estimated cost
+        model_name: Model name used
+        avg_time: Optional average execution time per call
+    """
+    model_name_esc = escape_rich_markup(model_name)
+    
+    if avg_time is None:
+        avg_time = total_time / total_calls if total_calls > 0 else 0
+    
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    table.add_row("[bold cyan]📊 Direct Execution Summary[/bold cyan]", "")
+    table.add_row("├─ [bold]Model:[/bold]", f"[cyan]{model_name_esc}[/cyan]")
+    table.add_row("├─ [bold]Total Calls:[/bold]", f"[blue]{total_calls}[/blue]")
+    table.add_row("├─ [bold]Total Time:[/bold]", f"[magenta]{total_time:.3f}s[/magenta]")
+    table.add_row("├─ [bold]Avg Time/Call:[/bold]", f"[magenta]{avg_time:.3f}s[/magenta]")
+    table.add_row("")  # Spacing
+    table.add_row("[bold yellow]💰 Token & Cost Metrics[/bold yellow]", "")
+    table.add_row("├─ [bold]Input Tokens:[/bold]", f"[blue]{total_input_tokens:,}[/blue]")
+    table.add_row("├─ [bold]Output Tokens:[/bold]", f"[blue]{total_output_tokens:,}[/blue]")
+    table.add_row("├─ [bold]Total Tokens:[/bold]", f"[blue]{(total_input_tokens + total_output_tokens):,}[/blue]")
+    table.add_row("└─ [bold]Total Cost:[/bold]", f"[yellow]~${total_cost:.4f}[/yellow]")
+    
+    panel = Panel(
+        table,
+        title="[bold magenta]⚡ Upsonic Direct - Session Summary[/bold magenta]",
+        border_style="magenta",
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
+
+
+def direct_configuration(
+    model_name: str,
+    settings: dict = None,
+    provider: str = None
+) -> None:
+    """
+    Print a formatted panel showing Direct configuration.
+    
+    Args:
+        model_name: Model name
+        settings: Optional model settings dictionary
+        provider: Optional provider name
+    """
+    model_name_esc = escape_rich_markup(model_name)
+    
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    table.add_row("[bold]Configuration:[/bold]", "[cyan]⚙️ Direct Instance[/cyan]")
+    table.add_row("[bold]Model:[/bold]", f"[cyan]{model_name_esc}[/cyan]")
+    
+    if provider:
+        provider_esc = escape_rich_markup(provider)
+        table.add_row("[bold]Provider:[/bold]", f"[yellow]{provider_esc}[/yellow]")
+    
+    if settings:
+        table.add_row("")  # Spacing
+        table.add_row("[bold]Settings:[/bold]", "")
+        for key, value in settings.items():
+            key_esc = escape_rich_markup(str(key))
+            value_esc = escape_rich_markup(str(value))
+            table.add_row(f"  ├─ [bold]{key_esc}:[/bold]", f"[blue]{value_esc}[/blue]")
+    
+    panel = Panel(
+        table,
+        title="[bold cyan]⚡ Upsonic Direct - Configuration[/bold cyan]",
+        border_style="cyan",
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
