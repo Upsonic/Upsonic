@@ -51,13 +51,13 @@ agent.print_do(task)
 See our guides to jumpstart your AI agent within minutes. We design them to onboard the new users to the framework.
 
 
-1. [Create an Agent](https://docs.upsonic.ai/guides/1_create_a_task)
-2. [Create a Task](https://docs.upsonic.ai/guides/2_create_an_agent)
-3. [Add a Safety Engine](https://docs.upsonic.ai/guides/3_add_a_safety_engine)
-4. [Add a Tool](https://docs.upsonic.ai/guides/4_add_a_tool)
-5. [Add an MCP](https://docs.upsonic.ai/guides/5_add_an_mcp)
-6. [Integrate a Memory](https://docs.upsonic.ai/guides/6_integrate_a_memory)
-7. [Creating a Team of Agents](https://docs.upsonic.ai/guides/7_creating_a_team_of_agents)
+1. [Create an Agent](https://docs.upsonic.ai/guides/1-create-a-task)
+2. [Create a Task](https://docs.upsonic.ai/guides/2-create-an-agent)
+3. [Add a Safety Engine](https://docs.upsonic.ai/guides/3-add-a-safety-engine)
+4. [Add a Tool](https://docs.upsonic.ai/guides/4-add-a-tool)
+5. [Add an MCP](https://docs.upsonic.ai/guides/5-add-an-mcp)
+6. [Integrate a Memory](https://docs.upsonic.ai/guides/6-integrate-a-memory)
+7. [Creating a Team of Agents](https://docs.upsonic.ai/guides/7-creating-a-team-of-agents)
 
 <br>
 
