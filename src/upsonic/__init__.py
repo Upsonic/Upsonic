@@ -82,6 +82,29 @@ def _get_Chat():
 def _get_Direct():
     return _lazy_import("upsonic.direct", "Direct")()
 
+def _get_OCR():
+    return _lazy_import("upsonic.ocr.ocr", "OCR")()
+
+def _get_durable_execution_components():
+    """Lazy import of durable execution components."""
+    from upsonic.durable import (
+        DurableExecution,
+        DurableExecutionStorage,
+        InMemoryDurableStorage,
+        FileDurableStorage,
+        SQLiteDurableStorage,
+        RedisDurableStorage
+    )
+    
+    return {
+        "DurableExecution": DurableExecution,
+        "DurableExecutionStorage": DurableExecutionStorage,
+        "InMemoryDurableStorage": InMemoryDurableStorage,
+        "FileDurableStorage": FileDurableStorage,
+        "SQLiteDurableStorage": SQLiteDurableStorage,
+        "RedisDurableStorage": RedisDurableStorage,
+    }
+
 def _get_database_components():
     """Lazy import of database components."""
     try:
@@ -209,10 +232,16 @@ def __getattr__(name: str) -> Any:
         return _get_Chat()
     elif name == "Direct":
         return _get_Direct()
+    elif name == "OCR":
+        return _get_OCR()
     
     database_components = _get_database_components()
     if name in database_components:
         return database_components[name]
+    
+    durable_components = _get_durable_execution_components()
+    if name in durable_components:
+        return durable_components[name]
     
     safety_components = _get_safety_engine_components()
     if name in safety_components:
@@ -245,6 +274,7 @@ __all__ = [
     "Team",
     "Chat",
     "Direct",
+    "OCR",
     "UupsonicError",
     "AgentExecutionError", 
     "ModelConnectionError", 
@@ -284,4 +314,10 @@ __all__ = [
     "InMemoryDatabase",
     "JSONDatabase",
     "Mem0Database",
+    "DurableExecution",
+    "DurableExecutionStorage",
+    "InMemoryDurableStorage",
+    "FileDurableStorage",
+    "SQLiteDurableStorage",
+    "RedisDurableStorage",
 ]

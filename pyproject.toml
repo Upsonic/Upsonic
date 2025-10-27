@@ -120,6 +120,15 @@ web = [
     "python-multipart>=0.0.20",
     "uvicorn>=0.35.0",
 ]
+ocr = [
+    "easyocr>=1.7.2",
+    "paddleocr>=2.10.0",
+    "pytesseract>=0.3.13",
+    "rapidocr-onnxruntime>=1.4.4",
+]
+ocr-gpu = [
+    "vllm ; sys_platform != 'darwin'",
+]
 
 [build-system]
 requires = ["hatchling"]
