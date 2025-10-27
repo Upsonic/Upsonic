@@ -126,9 +126,7 @@ ocr = [
     "pytesseract>=0.3.13",
     "rapidocr-onnxruntime>=1.4.4",
 ]
-ocr-gpu = [
-    "vllm ; sys_platform != 'darwin'",
-]
+ocr-gpu = []
 
 [build-system]
 requires = ["hatchling"]

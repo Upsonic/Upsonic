@@ -7475,7 +7475,7 @@ requires-dist = [
     { name = "weaviate-client", marker = "extra == 'rag'", specifier = ">=4.16.9" },
     { name = "yfinance", marker = "extra == 'tools'", specifier = ">=0.2.66" },
 ]
-provides-extras = ["rag", "storage", "models", "embeddings", "loaders", "tools", "web", "ocr"]
+provides-extras = ["rag", "storage", "models", "embeddings", "loaders", "tools", "web", "ocr", "ocr-gpu"]
 
 [package.metadata.requires-dev]
 dev = [
