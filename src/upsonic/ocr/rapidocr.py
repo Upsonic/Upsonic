@@ -66,8 +66,29 @@ class RapidOCR(OCRProvider):
     def _get_engine(self):
         """Get or create RapidOCR engine instance."""
         if self._engine is None:
+            from upsonic.utils.printing import ocr_language_not_supported, ocr_loading, ocr_initialized
+            
+            unsupported_langs = [lang for lang in self.config.languages if lang not in self.supported_languages]
+            if unsupported_langs:
+                ocr_language_not_supported(
+                    provider_name="RapidOCR",
+                    unsupported_langs=unsupported_langs,
+                    supported_langs=self.supported_languages,
+                    help_url=None
+                )
+                raise OCRProviderError(
+                    f"Language(s) not supported by RapidOCR: {', '.join(unsupported_langs)}",
+                    error_code="UNSUPPORTED_LANGUAGE"
+                )
+            
+            extra_info = {
+                "Note": "Primarily supports Chinese and English"
+            }
+            ocr_loading("RapidOCR", self.config.languages, extra_info)
+            
             try:
                 self._engine = RapidOCREngine()
+                ocr_initialized("RapidOCR")
             except Exception as e:
                 raise OCRProviderError(
                     f"Failed to initialize RapidOCR engine: {str(e)}",

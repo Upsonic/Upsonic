@@ -123,6 +123,8 @@ web = [
 ocr = [
     "easyocr>=1.7.2",
     "paddleocr>=2.10.0",
+    "pdf2image>=1.17.0",
+    "pillow>=11.3.0",
     "pytesseract>=0.3.13",
     "rapidocr-onnxruntime>=1.4.4",
 ]

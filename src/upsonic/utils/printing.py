@@ -2197,3 +2197,123 @@ def direct_configuration(
     
     console.print(panel)
     spacing()
+
+
+# OCR-specific printing functions
+
+def ocr_loading(provider_name: str, languages: list = None, extra_info: dict = None) -> None:
+    """
+    Print a formatted message when OCR provider is loading/initializing.
+    
+    Args:
+        provider_name: Name of the OCR provider
+        languages: List of languages to load
+        extra_info: Optional dictionary with additional info (gpu, version, features, etc.)
+    """
+    provider_esc = escape_rich_markup(provider_name)
+    
+    # Simple one-line output for better UX
+    lang_str = ", ".join(languages) if languages else "default"
+    lang_esc = escape_rich_markup(lang_str)
+    
+    console.print(f"[blue]🔄 Initializing {provider_esc}[/blue] [dim](languages: {lang_esc})[/dim]")
+    
+    if extra_info:
+        for key, value in extra_info.items():
+            key_esc = escape_rich_markup(str(key))
+            value_esc = escape_rich_markup(str(value))
+            console.print(f"   [dim]• {key_esc}: {value_esc}[/dim]")
+    
+    # Background logging
+    _bg_logger.info(f"[OCR] Initializing {provider_name} with languages: {lang_str}")
+
+
+def ocr_initialized(provider_name: str) -> None:
+    """
+    Print a success message when OCR provider is initialized.
+    
+    Args:
+        provider_name: Name of the OCR provider
+    """
+    provider_esc = escape_rich_markup(provider_name)
+    console.print(f"   [green]✓ {provider_esc} initialized successfully[/green]")
+    
+    # Background logging
+    _bg_logger.info(f"[OCR] {provider_name} initialized successfully")
+
+
+def ocr_language_not_supported(
+    provider_name: str, 
+    unsupported_langs: list, 
+    supported_langs: list = None,
+    help_url: str = None
+) -> None:
+    """
+    Print error message when requested language is not supported.
+    
+    Args:
+        provider_name: Name of the OCR provider
+        unsupported_langs: List of unsupported language codes
+        supported_langs: Optional list of supported languages (shows sample)
+        help_url: Optional URL for more information
+    """
+    provider_esc = escape_rich_markup(provider_name)
+    unsupported_esc = escape_rich_markup(", ".join(unsupported_langs))
+    
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    table.add_row("[bold]Provider:[/bold]", f"[red]{provider_esc}[/red]")
+    table.add_row("[bold]Unsupported Languages:[/bold]", f"[red]{unsupported_esc}[/red]")
+    
+    if supported_langs:
+        # Show a sample of supported languages
+        sample_size = min(30, len(supported_langs))
+        sample_langs = ", ".join(supported_langs[:sample_size])
+        if len(supported_langs) > sample_size:
+            sample_langs += "..."
+        sample_esc = escape_rich_markup(sample_langs)
+        table.add_row("")
+        table.add_row("[bold]Available Languages:[/bold]")
+        table.add_row(f"[dim]{sample_esc}[/dim]")
+    
+    if help_url:
+        help_url_esc = escape_rich_markup(help_url)
+        table.add_row("")
+        table.add_row("[bold]More Info:[/bold]", f"[blue]{help_url_esc}[/blue]")
+    
+    panel = Panel(
+        table,
+        title=f"[bold red]❌ OCR Language Not Supported[/bold red]",
+        border_style="red",
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
+    
+    # Background logging
+    _bg_logger.error(f"[OCR] {provider_name}: Unsupported languages: {', '.join(unsupported_langs)}")
+
+
+def ocr_language_warning(provider_name: str, warning_langs: list, best_supported: list = None) -> None:
+    """
+    Print warning message when requested language has limited support.
+    
+    Args:
+        provider_name: Name of the OCR provider
+        warning_langs: List of languages with limited support
+        best_supported: Optional list of best supported languages
+    """
+    provider_esc = escape_rich_markup(provider_name)
+    warning_esc = escape_rich_markup(", ".join(warning_langs))
+    
+    console.print(f"[yellow]⚠️  Warning: {provider_esc}[/yellow] [dim]- Language(s) may have limited support: {warning_esc}[/dim]")
+    
+    if best_supported:
+        best_esc = escape_rich_markup(", ".join(best_supported))
+        console.print(f"   [dim]• Best supported: {best_esc}[/dim]")
+    
+    # Background logging
+    _bg_logger.warning(f"[OCR] {provider_name}: Limited support for languages: {', '.join(warning_langs)}")

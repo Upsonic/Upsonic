@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import List, Optional, Dict, Any
-import re
 
 from upsonic.ocr.base import OCRProvider, OCRConfig, OCRResult, OCRTextBlock, BoundingBox
 from upsonic.ocr.exceptions import OCRProviderError, OCRProcessingError
@@ -79,9 +78,12 @@ class TesseractOCR(OCRProvider):
                 feature_name="Tesseract OCR provider"
             )
         
-        # Check if tesseract is installed on system
+        from upsonic.utils.printing import ocr_language_not_supported, ocr_loading, ocr_initialized, warning_log
+        
         try:
-            pytesseract.get_tesseract_version()
+            version = pytesseract.get_tesseract_version()
+            extra_info = {"Version": version.public}
+            ocr_loading("Tesseract OCR", self.config.languages, extra_info)
         except Exception as e:
             raise OCRProviderError(
                 "Tesseract is not installed or not in PATH. "
@@ -92,6 +94,26 @@ class TesseractOCR(OCRProvider):
                 error_code="TESSERACT_NOT_INSTALLED",
                 original_error=e
             )
+        
+        try:
+            available_langs = pytesseract.get_languages(config='')
+            unsupported_langs = [lang for lang in self.config.languages if lang not in available_langs]
+            if unsupported_langs:
+                ocr_language_not_supported(
+                    provider_name="Tesseract OCR",
+                    unsupported_langs=unsupported_langs,
+                    supported_langs=available_langs,
+                    help_url="https://tesseract-ocr.github.io/tessdoc/Data-Files-in-different-versions.html"
+                )
+                raise OCRProviderError(
+                    f"Language pack(s) not installed for Tesseract: {', '.join(unsupported_langs)}",
+                    error_code="UNSUPPORTED_LANGUAGE"
+                )
+            ocr_initialized("Tesseract OCR")
+        except OCRProviderError:
+            raise
+        except Exception:
+            warning_log("Could not verify language pack availability", "Tesseract OCR")
     
     def _get_tesseract_config(self, **kwargs) -> str:
         """Build Tesseract configuration string.

@@ -551,12 +551,32 @@ class PaddleOCRProvider(BasePaddleOCRProvider):
         """Initialize the PaddleOCR instance with all parameters."""
         try:
             from paddleocr import PaddleOCR
+            from upsonic.utils.printing import ocr_language_warning, ocr_loading, ocr_initialized
+            
+            # Check language support
+            lang = getattr(self.config, 'lang', 'en')
+            if lang and lang not in self.supported_languages:
+                ocr_language_warning(
+                    provider_name="PaddleOCR",
+                    warning_langs=[lang],
+                    best_supported=self.supported_languages[:30]
+                )
+            
+            # Show loading message
+            ocr_version = getattr(self.config, 'ocr_version', 'PP-OCRv5')
+            extra_info = {
+                "Version": ocr_version,
+                "Note": "First run will download models (~10-50MB per model)"
+            }
+            ocr_loading(f"PaddleOCR ({ocr_version})", [lang], extra_info)
             
             # Build parameters
             paddle_params = self._build_paddle_params(self.config, **self._paddle_kwargs)
             
             # Initialize PaddleOCR
             self._paddle_instance = PaddleOCR(**paddle_params)
+            
+            ocr_initialized(f"PaddleOCR ({ocr_version})")
             
         except Exception as e:
             raise OCRError(
@@ -730,10 +750,30 @@ class PPStructureV3Provider(BasePaddleOCRProvider):
         """Initialize the PP-StructureV3 instance."""
         try:
             from paddleocr import PPStructureV3
+            from upsonic.utils.printing import ocr_loading, ocr_initialized
+            
+            # Show loading message
+            features = []
+            if getattr(self.config, 'use_table_recognition', None):
+                features.append("table recognition")
+            if getattr(self.config, 'use_formula_recognition', None):
+                features.append("formula recognition")
+            if getattr(self.config, 'use_seal_recognition', None):
+                features.append("seal recognition")
+            if getattr(self.config, 'use_chart_recognition', None):
+                features.append("chart recognition")
+            
+            extra_info = {
+                "Features": ", ".join(features) if features else "basic",
+                "Note": "First run will download multiple specialized models"
+            }
+            ocr_loading("PP-StructureV3", [getattr(self.config, 'lang', 'en')], extra_info)
             
             paddle_params = self._build_paddle_params(self.config, **self._paddle_kwargs)
             
             self._paddle_instance = PPStructureV3(**paddle_params)
+            
+            ocr_initialized("PP-StructureV3")
             
         except Exception as e:
             raise OCRError(
@@ -897,10 +937,27 @@ class PPChatOCRv4Provider(BasePaddleOCRProvider):
         """Initialize the PP-ChatOCRv4 instance."""
         try:
             from paddleocr import PPChatOCRv4Doc
+            from upsonic.utils.printing import ocr_loading, ocr_initialized
+            
+            # Show loading message
+            features = []
+            if getattr(self.config, 'use_table_recognition', None):
+                features.append("table recognition")
+            if getattr(self.config, 'use_seal_recognition', None):
+                features.append("seal recognition")
+            
+            extra_info = {
+                "Features": ", ".join(features) if features else "basic",
+                "Capabilities": "Information extraction, Q&A, key-value pairs",
+                "Note": "First run will download OCR and multimodal LLM models"
+            }
+            ocr_loading("PP-ChatOCRv4", [getattr(self.config, 'lang', 'en')], extra_info)
             
             paddle_params = self._build_paddle_params(self.config, **self._paddle_kwargs)
             
             self._paddle_instance = PPChatOCRv4Doc(**paddle_params)
+            
+            ocr_initialized("PP-ChatOCRv4")
             
         except Exception as e:
             raise OCRError(
@@ -1327,10 +1384,31 @@ class PaddleOCRVLProvider(BasePaddleOCRProvider):
         """Initialize the PaddleOCR-VL instance."""
         try:
             from paddleocr import PaddleOCRVL
+            from upsonic.utils.printing import ocr_loading, ocr_initialized
+            
+            # Show loading message
+            backend = getattr(self.config, 'vl_rec_backend', 'local')
+            
+            features = []
+            if getattr(self.config, 'use_layout_detection', None):
+                features.append("layout detection")
+            if getattr(self.config, 'use_chart_recognition', None):
+                features.append("chart recognition")
+            if getattr(self.config, 'format_block_content', None):
+                features.append("markdown formatting")
+            
+            extra_info = {
+                "Backend": backend,
+                "Features": ", ".join(features) if features else "basic",
+                "Note": "First run will download vision-language models (may be large)"
+            }
+            ocr_loading("PaddleOCR-VL", [getattr(self.config, 'lang', 'en')], extra_info)
             
             paddle_params = self._build_paddle_params(self.config, **self._paddle_kwargs)
             
             self._paddle_instance = PaddleOCRVL(**paddle_params)
+            
+            ocr_initialized("PaddleOCR-VL")
             
         except Exception as e:
             raise OCRError(

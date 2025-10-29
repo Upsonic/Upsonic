@@ -102,7 +102,6 @@ class DeepSeekOCR(OCRProvider):
                 feature_name="DeepSeek OCR provider"
             )
         
-        # Check for additional required dependencies
         missing_deps = []
         try:
             import addict
@@ -131,6 +130,24 @@ class DeepSeekOCR(OCRProvider):
                     error_code="VLLM_NOT_AVAILABLE"
                 )
             
+            from upsonic.utils.printing import ocr_language_warning, ocr_loading, ocr_initialized
+            
+            unsupported_langs = [lang for lang in self.config.languages if lang not in self.supported_languages]
+            if unsupported_langs:
+                ocr_language_warning(
+                    provider_name="DeepSeek-OCR",
+                    warning_langs=unsupported_langs,
+                    best_supported=self.supported_languages
+                )
+            
+            extra_info = {
+                "Model": self.model_name,
+                "Temperature": str(self.temperature),
+                "Max tokens": str(self.max_tokens),
+                "Note": "This may take a few minutes on first run"
+            }
+            ocr_loading("DeepSeek-OCR", self.config.languages, extra_info)
+            
             try:
                 llm_kwargs = {
                     'model': self.model_name,
@@ -143,6 +160,7 @@ class DeepSeekOCR(OCRProvider):
                     llm_kwargs['logits_processors'] = [NGramPerReqLogitsProcessor]
                 
                 self._llm = LLM(**llm_kwargs)
+                ocr_initialized("DeepSeek-OCR")
             except Exception as e:
                 error_msg = str(e)
                 

@@ -20,7 +20,7 @@ def chain(func: F) -> Runnable:
     
     Example:
         ```python
-        from upsonic.lcel import chain, ChatPromptTemplate, StrOutputParser
+        from upsonic.lcel import chain, ChatPromptTemplate
         from upsonic.models import infer_model
         
         prompt1 = ChatPromptTemplate.from_template("Tell me a joke about {topic}")
@@ -31,11 +31,10 @@ def chain(func: F) -> Runnable:
             # Use runnables inside the function
             prompt_val1 = prompt1.invoke({"topic": text})
             output1 = infer_model("gpt-4o").invoke(prompt_val1)
-            parsed_output1 = StrOutputParser().invoke(output1)
             
             # Create and return a chain
-            chain2 = prompt2 | infer_model("gpt-4o") | StrOutputParser()
-            return chain2.invoke({"joke": parsed_output1})
+            chain2 = prompt2 | infer_model("gpt-4o")
+            return chain2.invoke({"joke": output1})
         
         # Use the chain
         result = custom_chain.invoke("bears")
@@ -46,9 +45,9 @@ def chain(func: F) -> Runnable:
         @chain
         def dynamic_chain(input_: dict) -> Runnable:
             if input_.get("use_complex"):
-                return complex_prompt | model | parser
+                return complex_prompt | model
             else:
-                return simple_prompt | model | parser
+                return simple_prompt | model
         
         # The returned Runnable is automatically invoked
         result = dynamic_chain.invoke({"use_complex": True, "text": "hello"})

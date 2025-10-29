@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import List, Tuple, Union
-from io import BytesIO
 
 from upsonic.ocr.exceptions import (
     OCRFileNotFoundError,
@@ -26,6 +24,9 @@ try:
 except ImportError:
     pdf2image = None
     _PDF2IMAGE_AVAILABLE = False
+
+# Track if we need to check for poppler
+_POPPLER_CHECKED = False
 
 
 SUPPORTED_IMAGE_FORMATS = {'.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.tif', '.webp'}
@@ -53,6 +54,62 @@ def check_pdf_dependencies():
             install_command='pip install pdf2image',
             feature_name="PDF OCR processing"
         )
+
+
+def check_poppler_installed():
+    """Check if poppler is installed and provide helpful installation instructions."""
+    from upsonic.utils.printing import error_message
+    import platform
+    
+    system = platform.system()
+    
+    if system == "Darwin":  # macOS
+        install_cmd = "brew install poppler"
+        detail = (
+            "Poppler is not installed or not in PATH.\n\n"
+            "Poppler is required for PDF processing.\n\n"
+            "Installation instructions for macOS:\n"
+            f"  {install_cmd}\n\n"
+            "After installation, restart your terminal or IDE."
+        )
+    elif system == "Linux":
+        install_cmd = "sudo apt-get install poppler-utils"
+        detail = (
+            "Poppler is not installed or not in PATH.\n\n"
+            "Poppler is required for PDF processing.\n\n"
+            "Installation instructions for Linux:\n"
+            f"  Ubuntu/Debian: {install_cmd}\n"
+            "  Fedora/RHEL: sudo dnf install poppler-utils\n"
+            "  Arch: sudo pacman -S poppler\n\n"
+            "After installation, restart your terminal or IDE."
+        )
+    elif system == "Windows":
+        detail = (
+            "Poppler is not installed or not in PATH.\n\n"
+            "Poppler is required for PDF processing.\n\n"
+            "Installation instructions for Windows:\n"
+            "  1. Download poppler from: https://github.com/oschwartz10612/poppler-windows/releases/\n"
+            "  2. Extract the archive to a location (e.g., C:\\Program Files\\poppler)\n"
+            "  3. Add the 'bin' folder to your system PATH:\n"
+            "     - Search 'Environment Variables' in Windows\n"
+            "     - Edit 'Path' in System Variables\n"
+            "     - Add the path to poppler's bin folder\n"
+            "  4. Restart your terminal or IDE\n\n"
+            "Alternative: Install via conda:\n"
+            "  conda install -c conda-forge poppler"
+        )
+    else:
+        detail = (
+            "Poppler is not installed or not in PATH.\n\n"
+            "Poppler is required for PDF processing.\n\n"
+            "Please install poppler-utils for your operating system.\n"
+            "Visit: https://poppler.freedesktop.org/"
+        )
+    
+    error_message(
+        error_type="Poppler Not Installed",
+        detail=detail
+    )
 
 
 def validate_file_path(file_path: Union[str, Path]) -> Path:
@@ -192,6 +249,8 @@ def pdf_to_images(file_path: Union[str, Path], dpi: int = 300) -> List[Image.Ima
     check_pdf_dependencies()
     check_dependencies()
     
+    global _POPPLER_CHECKED
+    
     try:
         path = validate_file_path(file_path)
         images = pdf2image.convert_from_path(str(path), dpi=dpi)
@@ -199,6 +258,27 @@ def pdf_to_images(file_path: Union[str, Path], dpi: int = 300) -> List[Image.Ima
     except Exception as e:
         if isinstance(e, (OCRFileNotFoundError, OCRUnsupportedFormatError)):
             raise
+        
+        # Check if this is a poppler installation error
+        error_str = str(e).lower()
+        if ('poppler' in error_str or 
+            'pdftoppm' in error_str or 
+            'pdfinfo' in error_str or
+            'unable to get page count' in error_str or
+            type(e).__name__ == 'PDFInfoNotInstalledError'):
+            
+            # Show helpful poppler installation message
+            if not _POPPLER_CHECKED:
+                _POPPLER_CHECKED = True
+                check_poppler_installed()
+            
+            raise OCRProcessingError(
+                "Poppler is required for PDF processing but is not installed or not in PATH. "
+                "Please see the installation instructions above.",
+                error_code="POPPLER_NOT_INSTALLED",
+                original_error=e
+            )
+        
         raise OCRProcessingError(
             f"Failed to convert PDF to images: {file_path}",
             error_code="PDF_CONVERSION_FAILED",
