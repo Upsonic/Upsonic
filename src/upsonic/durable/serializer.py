@@ -1,6 +1,6 @@
 import json
 from typing import Any, Dict, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic_core import to_jsonable_python
 
 
@@ -399,7 +399,7 @@ class DurableStateSerializer:
         """
         return {
             "version": "1.0",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "task": DurableStateSerializer.serialize_task(task),
             "context": DurableStateSerializer.serialize_context(context),
             "step_index": step_index,

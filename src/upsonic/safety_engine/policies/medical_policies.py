@@ -81,7 +81,7 @@ class MedicalInfoRule(RuleBase):
         # Medical keywords and phrases
         self.medical_keywords = [
             # Patient information
-            "patient name", "patient id", "patient identifier", "patient number", "patient record",
+            "patient", "patient name", "patient id", "patient identifier", "patient number", "patient record",
             "medical record", "health record", "clinical record", "patient chart", "medical chart",
             "patient history", "medical history", "health history", "family history",
             
@@ -89,6 +89,10 @@ class MedicalInfoRule(RuleBase):
             "diagnosis", "diagnoses", "condition", "disease", "illness", "symptom", "symptoms",
             "medical condition", "health condition", "chronic condition", "acute condition",
             "allergy", "allergies", "allergic reaction", "adverse reaction", "side effect",
+            # Common medical conditions
+            "diabetes", "hypertension", "cancer", "heart disease", "stroke", "asthma", "copd",
+            "arthritis", "depression", "anxiety", "migraine", "epilepsy", "alzheimer", "dementia",
+            "pneumonia", "bronchitis", "flu", "covid", "coronavirus", "infection", "fever",
             "medical emergency", "emergency room", "er visit", "hospitalization", "admission",
             
             # Medications and treatments
@@ -199,10 +203,11 @@ class MedicalInfoRule(RuleBase):
             sensitive_matches = re.findall(pattern, combined_text, re.IGNORECASE)
             triggered_items.extend([f"SENSITIVE_MEDICAL:{sensitive}" for sensitive in sensitive_matches])
         
-        # Check medical keywords
-        combined_text_lower = combined_text.lower()
+        # Check medical keywords with word boundary matching
         for keyword in self.medical_keywords:
-            if keyword.lower() in combined_text_lower:
+            # Use word boundary pattern for better accuracy
+            pattern = r'\b' + re.escape(keyword.lower()) + r'(?:s|es|ies|ed|ing)?\b'
+            if re.search(pattern, combined_text, re.IGNORECASE):
                 triggered_items.append(f"MEDICAL_KEYWORD:{keyword}")
         
         # Calculate confidence based on number and type of matches

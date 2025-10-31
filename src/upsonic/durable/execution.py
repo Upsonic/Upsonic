@@ -1,6 +1,6 @@
 import uuid
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .storage import DurableExecutionStorage, ExecutionState
 from .serializer import DurableStateSerializer
@@ -80,7 +80,7 @@ class DurableExecution:
         Returns:
             Unique execution ID string
         """
-        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
         unique_id = str(uuid.uuid4())[:8]
         return f"{timestamp}-{unique_id}"
     
@@ -345,6 +345,25 @@ class DurableExecution:
             List of execution metadata dictionaries
         """
         return storage.list_executions(status=status, limit=limit)
+    
+    @staticmethod
+    async def list_all_executions_async(
+        storage: DurableExecutionStorage,
+        status: Optional[str] = None,
+        limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        List all executions in storage asynchronously.
+        
+        Args:
+            storage: Storage backend to query
+            status: Filter by status
+            limit: Maximum number to return
+            
+        Returns:
+            List of execution metadata dictionaries
+        """
+        return await storage.list_executions_async(status=status, limit=limit)
     
     @staticmethod
     async def load_by_id_async(

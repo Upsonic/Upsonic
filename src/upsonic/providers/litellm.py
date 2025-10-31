@@ -114,7 +114,7 @@ class LiteLLMProvider(Provider[AsyncOpenAI]):
                 feature_name="openai provider"
             )
 
-                """Initialize a LiteLLM provider.
+        """Initialize a LiteLLM provider.
 
         Args:
             api_key: API key for the model provider. If None, LiteLLM will try to get it from environment variables.

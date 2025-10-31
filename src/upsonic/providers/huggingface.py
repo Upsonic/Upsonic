@@ -87,7 +87,7 @@ class HuggingFaceProvider(Provider[AsyncInferenceClient]):
                 feature_name="HuggingFace provider"
             )
 
-                """Create a new Hugging Face provider.
+        """Create a new Hugging Face provider.
 
         Args:
             base_url: The base url for the Hugging Face requests.

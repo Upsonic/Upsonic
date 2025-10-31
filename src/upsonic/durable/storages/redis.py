@@ -1,6 +1,6 @@
 import json
 from typing import Optional, Dict, Any, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from ..storage import DurableExecutionStorage, ExecutionState
 
 
@@ -99,7 +99,7 @@ class RedisDurableStorage(DurableExecutionStorage):
         import asyncio
         
         # Add metadata
-        state["saved_at"] = datetime.utcnow().isoformat()
+        state["saved_at"] = datetime.now(timezone.utc).isoformat()
         state["execution_id"] = execution_id
         
         # Serialize state to JSON
@@ -280,7 +280,7 @@ class RedisDurableStorage(DurableExecutionStorage):
         """
         import asyncio
         
-        cutoff_date = datetime.utcnow() - timedelta(days=older_than_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=older_than_days)
         deleted_count = 0
         
         for status in ["completed", "failed"]:
@@ -296,7 +296,13 @@ class RedisDurableStorage(DurableExecutionStorage):
                     continue
                 
                 try:
-                    timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                    # Parse timestamp and ensure it's timezone-aware
+                    timestamp_str_fixed = timestamp_str.replace('Z', '+00:00')
+                    timestamp = datetime.fromisoformat(timestamp_str_fixed)
+                    # If timestamp is naive, assume it's UTC
+                    if timestamp.tzinfo is None:
+                        timestamp = timestamp.replace(tzinfo=timezone.utc)
+                    
                     if timestamp < cutoff_date:
                         deleted = await self.delete_state_async(execution_id)
                         if deleted:

@@ -15,7 +15,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional, Tuple, Type, TypeVar, Union, get_args, get_origin
 
-from upsonic.lcel.runnable import Runnable
+from upsonic.uel.runnable import Runnable
 from upsonic.graphv2.checkpoint import (
     BaseCheckpointer,
     Checkpoint,
@@ -90,7 +90,7 @@ class StateGraph(Runnable[Dict[str, Any], Dict[str, Any]]):
     - Interrupts enable human-in-the-loop workflows
     - Checkpointing provides durability and time travel
     
-    The graph inherits from Runnable, making it compatible with LCEL chains.
+    The graph inherits from Runnable, making it compatible with uel chains.
     
     Example:
         ```python

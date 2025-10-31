@@ -1,22 +1,22 @@
 """
-Focused tests for specific LCEL issues.
+Focused tests for specific uel issues.
 
 1. Test 6: Lambda function truncation issue
 2. Test 10: Other graph visualization methods
 """
 
-from upsonic.lcel import (
+from upsonic.uel import (
     ChatPromptTemplate,
     RunnablePassthrough,
 )
-from upsonic.lcel.lambda_runnable import coerce_to_runnable
+from upsonic.uel.lambda_runnable import coerce_to_runnable
 
 
 # ============================================================================
 # MOCK COMPONENTS
 # ============================================================================
 
-from upsonic.lcel.runnable import Runnable
+from upsonic.uel.runnable import Runnable
 
 class MockModel(Runnable):
     """Mock model that returns formatted responses for testing."""
@@ -169,7 +169,7 @@ def test_other_graph_visualization_methods():
 def run_focused_tests():
     """Run focused tests for specific issues."""
     print("\n" + "="*80)
-    print("FOCUSED LCEL TESTS")
+    print("FOCUSED UEL TESTS")
     print("="*80)
     print("\nTesting specific issues:")
     print("1. Lambda function truncation")

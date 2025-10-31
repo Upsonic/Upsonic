@@ -97,7 +97,7 @@ class GroqProvider(Provider[AsyncGroq]):
                 feature_name="Groq provider"
             )
 
-                """Create a new Groq provider.
+        """Create a new Groq provider.
 
         Args:
             api_key: The API key to use for authentication, if not provided, the `GROQ_API_KEY` environment variable

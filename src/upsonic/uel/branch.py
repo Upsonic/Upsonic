@@ -1,7 +1,7 @@
 from typing import Any, Callable, List, Tuple, Union
 
-from upsonic.lcel.runnable import Runnable, Input, Output
-from upsonic.lcel.lambda_runnable import coerce_to_runnable
+from upsonic.uel.runnable import Runnable, Input, Output
+from upsonic.uel.lambda_runnable import coerce_to_runnable
 
 
 class RunnableBranch(Runnable[Input, Output]):
@@ -13,7 +13,7 @@ class RunnableBranch(Runnable[Input, Output]):
     
     Example:
         ```python
-        from upsonic.lcel import RunnableBranch, ChatPromptTemplate
+        from upsonic.uel import RunnableBranch, ChatPromptTemplate
         from upsonic.models import infer_model
         
         model = infer_model("gpt-4o")

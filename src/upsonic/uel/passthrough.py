@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Optional, Dict, Union, Callable
 
-from upsonic.lcel.runnable import Runnable
+from upsonic.uel.runnable import Runnable
 
 
 class RunnablePassthrough(Runnable[Any, Any]):
@@ -16,7 +16,7 @@ class RunnablePassthrough(Runnable[Any, Any]):
     Example:
         ```python
         from operator import itemgetter
-        from upsonic.lcel import RunnablePassthrough
+        from upsonic.uel import RunnablePassthrough
         
         # Pass through unchanged
         chain = RunnablePassthrough() | model
@@ -67,7 +67,7 @@ class RunnablePassthrough(Runnable[Any, Any]):
         # Process each assignment
         for key, runnable in self.assignments.items():
             # Convert to runnable if needed
-            from upsonic.lcel.lambda_runnable import coerce_to_runnable
+            from upsonic.uel.lambda_runnable import coerce_to_runnable
             runnable = coerce_to_runnable(runnable)
             
             # Invoke the runnable with the original input
@@ -105,7 +105,7 @@ class RunnablePassthrough(Runnable[Any, Any]):
         
         for key, runnable in self.assignments.items():
             # Convert to runnable if needed
-            from upsonic.lcel.lambda_runnable import coerce_to_runnable
+            from upsonic.uel.lambda_runnable import coerce_to_runnable
             runnable = coerce_to_runnable(runnable)
             
             # Create task for each assignment

@@ -34,6 +34,11 @@ class StepContext(BaseModel):
         is_streaming: Whether this is a streaming execution
         stream_result: StreamRunResult reference for streaming mode
         
+        # Continuation mode (for resuming from external execution pause)
+        is_continuation: Whether this is continuing from a paused state
+        continuation_messages: Messages to restore when continuing
+        continuation_tool_results: Tool results to inject when continuing
+        
         # Step outputs
         messages: Built messages for model request
         response: Model response
@@ -51,6 +56,12 @@ class StepContext(BaseModel):
     
     is_streaming: bool = Field(default=False, description="Whether this is streaming execution")
     stream_result: Any = Field(default=None, description="StreamRunResult reference for streaming mode")
+    
+    # Continuation-specific attributes
+    is_continuation: bool = Field(default=False, description="Whether this is continuing from a paused state")
+    continuation_messages: List[Any] = Field(default_factory=list, description="Messages to restore when continuing")
+    continuation_tool_results: List[Any] = Field(default_factory=list, description="Tool results to inject when continuing")
+    continuation_response_with_tool_calls: Any = Field(default=None, description="Response with tool_calls that triggered the pause")
     
     # Step outputs and intermediate state
     messages: List[Any] = Field(default_factory=list, description="Model request messages")

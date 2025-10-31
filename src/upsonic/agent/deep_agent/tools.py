@@ -10,7 +10,7 @@ These tools work with the DeepAgent state that is stored in the agent instance.
 The state is accessed through the agent reference that will be injected during setup.
 """
 
-from typing import List, Any, Dict
+from typing import List, Any
 from upsonic.tools.config import tool
 from upsonic.agent.deep_agent.state import Todo
 from upsonic.agent.deep_agent.prompts import (
@@ -43,7 +43,8 @@ def get_current_deep_agent():
 @tool(
     sequential=False,
     show_result=False,
-    docstring_format='google'
+    docstring_format='google',
+    timeout=60.0
 )
 def write_todos(todos: List[Todo]) -> str:
     """
@@ -85,7 +86,8 @@ write_todos.__doc__ = WRITE_TODOS_TOOL_DESCRIPTION
 @tool(
     sequential=False,
     show_result=False,
-    docstring_format='google'
+    docstring_format='google',
+    timeout=60.0
 )
 def ls() -> List[str]:
     """
@@ -113,7 +115,8 @@ ls.__doc__ = LIST_FILES_TOOL_DESCRIPTION
 @tool(
     sequential=False,
     show_result=False,
-    docstring_format='google'
+    docstring_format='google',
+    timeout=60.0
 )
 def read_file(
     file_path: str,
@@ -187,7 +190,8 @@ read_file.__doc__ = READ_FILE_TOOL_DESCRIPTION
 @tool(
     sequential=False,
     show_result=False,
-    docstring_format='google'
+    docstring_format='google',
+    timeout=60.0
 )
 def write_file(
     file_path: str,
@@ -224,7 +228,8 @@ write_file.__doc__ = WRITE_FILE_TOOL_DESCRIPTION
 @tool(
     sequential=False,
     show_result=False,
-    docstring_format='google'
+    docstring_format='google',
+    timeout=60.0
 )
 def edit_file(
     file_path: str,
@@ -318,7 +323,8 @@ def create_task_tool(
     @tool(
         sequential=False,
         show_result=False,
-        docstring_format='google'
+        docstring_format='google',
+        timeout=60.0
     )
     async def task(
         description: str,

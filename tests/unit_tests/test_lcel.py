@@ -1,7 +1,7 @@
 import pytest
 from operator import itemgetter
 
-from upsonic.lcel import (
+from upsonic.uel import (
     Runnable,
     RunnableSequence,
     RunnableParallel,
@@ -602,7 +602,7 @@ def test_complex_nested_parallel():
     }
     
     # Coerce to runnable
-    from upsonic.lcel.lambda_runnable import coerce_to_runnable
+    from upsonic.uel.lambda_runnable import coerce_to_runnable
     runnable_chain = coerce_to_runnable(chain)
     
     # Test invocation
@@ -662,7 +662,7 @@ async def test_async_execution():
 def run_all_tests():
     """Run all tests manually (for debugging)."""
     print("\n" + "="*80)
-    print("COMPREHENSIVE LCEL TESTS")
+    print("COMPREHENSIVE UEL TESTS")
     print("="*80)
     print("(Excluding AI model features and output parsers)")
     
@@ -682,7 +682,7 @@ def run_all_tests():
         print("\n" + "="*80)
         print("✅ ALL TESTS PASSED!")
         print("="*80)
-        print("\nYour LCEL implementation is working correctly!")
+        print("\nYour UEL implementation is working correctly!")
         
     except Exception as e:
         print(f"\n❌ TEST FAILED: {e}")

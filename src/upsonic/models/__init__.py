@@ -28,7 +28,7 @@ from upsonic.output import OutputObjectDefinition
 from upsonic._parts_manager import ModelResponsePartsManager
 from upsonic.tools.builtin_tools import AbstractBuiltinTool
 from upsonic.utils.package.exception import UserError
-from upsonic.lcel.runnable import Runnable
+from upsonic.uel.runnable import Runnable
 from upsonic.messages import (
     FileUrl,
     FinalResultEvent,
@@ -398,12 +398,12 @@ class ModelRequestParameters:
 class Model(Runnable[Any, Any]):
     """Abstract class for a model.
     
-    Model inherits from Runnable, making it compatible with LCEL.
+    Model inherits from Runnable, making it compatible with UEL.
     This allows models to be used in chains with the pipe operator (|) for powerful composition:
     
     Example:
         ```python
-        from upsonic.lcel import ChatPromptTemplate
+        from upsonic.uel import ChatPromptTemplate
         from upsonic import infer_model
         
         prompt = ChatPromptTemplate.from_template("Tell me about {topic}")
@@ -436,7 +436,7 @@ class Model(Runnable[Any, Any]):
     _profile: ModelProfileSpec | None = None
     _settings: ModelSettings | None = None
     
-    # LCEL integration attributes
+    # UEL integration attributes
     _memory: Any = None  # Memory instance for chat history
     _tools: list[Any] | None = None  # List of tools to bind
     _tool_manager: Any = None  # ToolManager instance
@@ -526,7 +526,7 @@ class Model(Runnable[Any, Any]):
         history: bool = False, 
         memory: Any = None
     ) -> "Model":
-        """Add memory/chat history to the model for LCEL chains.
+        """Add memory/chat history to the model for UEL chains.
         
         This enables the model to maintain conversation context across multiple invocations.
         
@@ -551,7 +551,7 @@ class Model(Runnable[Any, Any]):
         return self
     
     def bind_tools(self, tools: list[Any], *, tool_call_limit: int | None = None) -> "Model":
-        """Bind tools to the model for LCEL chains.
+        """Bind tools to the model for UEL chains.
         
         This enables the model to call tools during execution.
         
@@ -594,9 +594,9 @@ class Model(Runnable[Any, Any]):
         input: str | "ModelRequest" | list["ModelMessage"],
         config: dict[str, Any] | None = None
     ) -> Any:
-        """Execute the model synchronously for LCEL compatibility.
+        """Execute the model synchronously for UEL compatibility.
         
-        This is the synchronous version of invoke for LCEL chains.
+        This is the synchronous version of invoke for UEL chains.
         It runs the async version in an event loop.
         """
         import asyncio
@@ -617,7 +617,7 @@ class Model(Runnable[Any, Any]):
     ) -> Any:
         """Execute the model with the configured memory and tools.
         
-        This is the main entry point for LCEL execution. It handles:
+        This is the main entry point for UEL execution. It handles:
         - Converting input to proper message format
         - Loading chat history from memory (if configured)
         - Setting up and executing tools (if configured)
@@ -787,7 +787,7 @@ class Model(Runnable[Any, Any]):
         if not self._tool_context:
             self._tool_context = ToolContext(
                 deps=None,
-                agent_id="lcel_model",
+                agent_id="uel_model",
                 max_retries=1,
                 tool_call_limit=5
             )

@@ -8,9 +8,9 @@ Output = TypeVar('Output')
 
 
 class Runnable(ABC, Generic[Input, Output]):
-    """Base class for all LCEL components.
+    """Base class for all UEL components.
     
-    The Runnable protocol is the foundation of LCEL. It provides a unified interface
+    The Runnable protocol is the foundation of UEL. It provides a unified interface
     for all components (prompts, models, parsers, chains) allowing them to be composed
     and executed in a consistent way.
     
@@ -64,8 +64,8 @@ class Runnable(ABC, Generic[Input, Output]):
         Returns:
             A new RunnableSequence that chains this runnable with other
         """
-        from upsonic.lcel.sequence import RunnableSequence
-        from upsonic.lcel.lambda_runnable import coerce_to_runnable
+        from upsonic.uel.sequence import RunnableSequence
+        from upsonic.uel.lambda_runnable import coerce_to_runnable
         
         # Coerce to runnable
         other_runnable = coerce_to_runnable(other)
@@ -82,8 +82,8 @@ class Runnable(ABC, Generic[Input, Output]):
         
         This allows syntax like: `dict | runnable`
         """
-        from upsonic.lcel.sequence import RunnableSequence
-        from upsonic.lcel.lambda_runnable import coerce_to_runnable
+        from upsonic.uel.sequence import RunnableSequence
+        from upsonic.uel.lambda_runnable import coerce_to_runnable
         
         # Coerce to runnable
         other_runnable = coerce_to_runnable(other)

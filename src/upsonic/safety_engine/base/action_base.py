@@ -233,12 +233,14 @@ class ActionBase(ABC):
         for text in original_content:
             transformed_text = text
             for keyword in triggered_keywords:
+                # Support typed keywords like "CREDIT_CARD:xxxx" by stripping the type prefix
+                target = keyword.split(":", 1)[1] if ":" in keyword else keyword
                 # Case-insensitive replacement using regex
-                pattern = re.compile(re.escape(keyword), re.IGNORECASE)
+                pattern = re.compile(re.escape(target), re.IGNORECASE)
                 # Store mapping for fixed replacement
                 self.transformation_index += 1
                 self.transformation_map[self.transformation_index] = {
-                    "original": keyword,
+                    "original": target,
                     "anonymous": replacement
                 }
                 transformed_text = pattern.sub(replacement, transformed_text)
@@ -293,9 +295,13 @@ class ActionBase(ABC):
         for text in original_content:
             transformed_text = text
             for keyword in triggered_keywords:
+                # Support typed keywords like "CREDIT_CARD:xxxx" by stripping the type prefix
+                target = keyword.split(":", 1)[1] if ":" in keyword else keyword
                 # Generate unique replacement maintaining character types
-                replacement = self._generate_unique_replacement(keyword)
-                transformed_text = transformed_text.replace(keyword, replacement)
+                replacement = self._generate_unique_replacement(target)
+                # Case-insensitive replacement using regex for robustness
+                pattern = re.compile(re.escape(target), re.IGNORECASE)
+                transformed_text = pattern.sub(replacement, transformed_text)
             transformed_content.append(transformed_text)
         
         # Apply translation if needed

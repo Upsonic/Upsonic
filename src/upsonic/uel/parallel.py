@@ -1,7 +1,7 @@
 import asyncio
 from typing import Any, Dict, List, Tuple, Union, Callable, Awaitable
 
-from upsonic.lcel.runnable import Runnable, Input, Output
+from upsonic.uel.runnable import Runnable, Input, Output
 
 
 class RunnableParallel(Runnable[Input, Dict[str, Any]]):
@@ -14,7 +14,7 @@ class RunnableParallel(Runnable[Input, Dict[str, Any]]):
     
     Example:
         ```python
-        from upsonic.lcel import ChatPromptTemplate, RunnableParallel
+        from upsonic.uel import ChatPromptTemplate, RunnableParallel
         from upsonic.models import infer_model
         
         model = infer_model("gpt-4o")
@@ -53,7 +53,7 @@ class RunnableParallel(Runnable[Input, Dict[str, Any]]):
                 self.steps[name] = RunnableParallel.from_dict(runnable)
             elif callable(runnable):
                 # Wrap callable in RunnableLambda
-                from upsonic.lcel.lambda_runnable import RunnableLambda
+                from upsonic.uel.lambda_runnable import RunnableLambda
                 self.steps[name] = RunnableLambda(runnable)
             else:
                 raise TypeError(
@@ -137,11 +137,11 @@ class RunnableParallel(Runnable[Input, Dict[str, Any]]):
         When chaining after RunnableParallel, the next runnable receives
         the dictionary output.
         """
-        from upsonic.lcel.sequence import RunnableSequence
+        from upsonic.uel.sequence import RunnableSequence
         if isinstance(other, Runnable):
             return RunnableSequence(steps=[self, other])
         elif callable(other):
-            from upsonic.lcel.lambda_runnable import RunnableLambda
+            from upsonic.uel.lambda_runnable import RunnableLambda
             return RunnableSequence(steps=[self, RunnableLambda(other)])
         else:
             raise TypeError(f"Unsupported operand type for |: {type(other)}")

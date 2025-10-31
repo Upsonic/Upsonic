@@ -131,7 +131,6 @@ class PolicyManager:
                     result.rule_outputs.append(rule_output)
                     result.triggered_policies.append(policy.name)
                 
-                # Log if debug enabled
                 if self.debug and rule_output.confidence > 0.0:
                     from upsonic.utils.printing import policy_triggered
                     policy_triggered(

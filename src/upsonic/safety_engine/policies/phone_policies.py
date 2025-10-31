@@ -81,7 +81,6 @@ class AnonymizePhoneNumberAction(ActionBase):
     description = "Anonymizes phone numbers"
     language = "en"  # Default language for this action
 
-
     def action(self, rule_result: RuleOutput) -> PolicyOutput:
         """Execute phone number anonymization based on rule confidence"""
         if rule_result.confidence >= 0.8:

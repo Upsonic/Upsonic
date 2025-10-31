@@ -1,5 +1,5 @@
 from typing import Optional, Dict, Any, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from ..storage import DurableExecutionStorage, ExecutionState
 
 
@@ -53,7 +53,7 @@ class InMemoryDurableStorage(DurableExecutionStorage):
         """
         self._ensure_lock()
         
-        state["saved_at"] = datetime.utcnow().isoformat()
+        state["saved_at"] = datetime.now(timezone.utc).isoformat()
         
         if hasattr(self._lock, '__aenter__'):
             async with self._lock:
@@ -182,7 +182,7 @@ class InMemoryDurableStorage(DurableExecutionStorage):
         """
         self._ensure_lock()
         
-        cutoff_date = datetime.utcnow() - timedelta(days=older_than_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=older_than_days)
         to_delete = []
         
         if hasattr(self._lock, '__aenter__'):
@@ -211,7 +211,13 @@ class InMemoryDurableStorage(DurableExecutionStorage):
                 continue
             
             try:
-                timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                # Parse timestamp and ensure it's timezone-aware
+                timestamp_str_fixed = timestamp_str.replace('Z', '+00:00')
+                timestamp = datetime.fromisoformat(timestamp_str_fixed)
+                # If timestamp is naive, assume it's UTC
+                if timestamp.tzinfo is None:
+                    timestamp = timestamp.replace(tzinfo=timezone.utc)
+                
                 if timestamp < cutoff_date:
                     to_delete.append(execution_id)
             except (ValueError, AttributeError):

@@ -2,7 +2,7 @@ import json
 import sqlite3
 import asyncio
 from typing import Optional, Dict, Any, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from ..storage import DurableExecutionStorage, ExecutionState
 
@@ -103,7 +103,7 @@ class SQLiteDurableStorage(DurableExecutionStorage):
         self._ensure_lock()
         
         # Add metadata
-        state["saved_at"] = datetime.utcnow().isoformat()
+        state["saved_at"] = datetime.now(timezone.utc).isoformat()
         state["execution_id"] = execution_id
         
         # Serialize state to JSON
@@ -145,7 +145,7 @@ class SQLiteDurableStorage(DurableExecutionStorage):
                 state.get("status", "running"),
                 state.get("step_index", 0),
                 state.get("step_name", "unknown"),
-                state.get("timestamp", datetime.utcnow().isoformat()),
+                state.get("timestamp", datetime.now(timezone.utc).isoformat()),
                 state.get("saved_at"),
                 state.get("error"),
                 state_json
@@ -325,7 +325,7 @@ class SQLiteDurableStorage(DurableExecutionStorage):
         """
         self._ensure_lock()
         
-        cutoff_date = datetime.utcnow() - timedelta(days=older_than_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=older_than_days)
         cutoff_str = cutoff_date.isoformat()
         
         if hasattr(self._lock, '__aenter__'):

@@ -1,5 +1,7 @@
+from __future__ import annotations
 import functools
 from dataclasses import KW_ONLY, dataclass
+import warnings
 
 import anyio
 import anyio.to_thread
@@ -11,12 +13,15 @@ from upsonic.tools import tool
 try:
     try:
         from ddgs import DDGS
-    except ImportError:  # Fallback for older versions of ddgs
+        _DDGS_PROVIDER = "ddgs"
+    except ImportError:  # Fallback for older versions / alt package name
         from duckduckgo_search import DDGS
+        _DDGS_PROVIDER = "duckduckgo_search"
     _DDGS_AVAILABLE = True
 except ImportError:
     DDGS = None
     _DDGS_AVAILABLE = False
+    _DDGS_PROVIDER = None
 
 
 __all__ = ('duckduckgo_search_tool',)
@@ -77,8 +82,22 @@ def duckduckgo_search_tool(duckduckgo_client: DDGS | None = None, max_results: i
             feature_name="DuckDuckGo search tool"
         )
 
-    # Create the tool instance
-    ddg_tool = DuckDuckGoSearchTool(client=duckduckgo_client or DDGS(), max_results=max_results)
+    # Prepare client and create the tool instance, suppressing rename warnings if needed
+    if duckduckgo_client is None:
+        if _DDGS_PROVIDER == "duckduckgo_search":
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    category=RuntimeWarning,
+                    module=r"duckduckgo_search(\..*)?$",
+                )
+                client = DDGS()
+        else:
+            client = DDGS()
+    else:
+        client = duckduckgo_client
+
+    ddg_tool = DuckDuckGoSearchTool(client=client, max_results=max_results)
     
     # Create a wrapper function instead of decorating the bound method directly
     @tool

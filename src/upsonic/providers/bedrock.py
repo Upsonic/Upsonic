@@ -149,7 +149,7 @@ class BedrockProvider(Provider[BaseClient]):
                 feature_name="Bedrock provider"
             )
 
-                """Initialize the Bedrock provider.
+        """Initialize the Bedrock provider.
 
         Args:
             bedrock_client: A boto3 client for Bedrock Runtime. If provided, other arguments are ignored.

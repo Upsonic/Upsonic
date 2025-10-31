@@ -133,8 +133,7 @@ class PipelineManager:
         # Using 'with' ensures transaction is set in scope and spans are attached
         with sentry_sdk.start_transaction(
             op="agent.pipeline.execute",
-            name=f"Agent Pipeline ({len(self.steps)} steps)",
-            description=f"Execute agent pipeline with {len(self.steps)} steps"
+            name=f"Agent Pipeline ({len(self.steps)} steps)"
         ) as transaction:
             # Add pipeline metadata
             transaction.set_tag("pipeline.total_steps", len(self.steps))
@@ -171,7 +170,7 @@ class PipelineManager:
                     # Start span for each step
                     with sentry_sdk.start_span(
                         op=f"pipeline.step.{step.name}",
-                        description=step.description
+                        name=step.description
                     ) as span:
                         # Add step metadata
                         span.set_tag("step.name", step.name)
@@ -279,10 +278,11 @@ class PipelineManager:
                         f"❌ ERROR at step {failed_step_index} ({failed_step.name if failed_step else 'unknown'}): {str(e)[:100]}",
                         "PipelineManager"
                     )
-                    warning_log(
-                        f"💾 Saving checkpoint at step {failed_step_index} ({failed_step.name if failed_step else 'N/A'}) with status='failed'",
-                        "PipelineManager"
-                    )
+                    if context.task.durable_checkpoint_enabled:
+                        warning_log(
+                            f"💾 Saving checkpoint at step {failed_step_index} ({failed_step.name if failed_step else 'N/A'}) with status='failed'",
+                            "PipelineManager"
+                        )
                 
                 # Save checkpoint with failed status at the failed step
                 await self._save_durable_checkpoint(

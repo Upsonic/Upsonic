@@ -31,6 +31,11 @@ class ExternalToolCall:
     
     metadata: Dict[str, Any] = field(default_factory=dict)
     """Additional metadata."""
+    
+    @property
+    def args(self) -> Dict[str, Any]:
+        """Backward compatibility alias for tool_args."""
+        return self.tool_args
 
 
 @dataclass
