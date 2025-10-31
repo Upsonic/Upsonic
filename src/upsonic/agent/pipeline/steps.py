@@ -929,103 +929,19 @@ class StreamModelExecutionStep(Step):
         model_params = context.agent._build_model_request_parameters(context.task)
         model_params = context.model.customize_request_parameters(model_params)
         
-        # Stream the model response
+        # Stream the model response with recursive tool call handling
         final_result_received = False
         try:
-            async with context.model.request_stream(
-                messages=context.messages,
-                model_settings=context.model.settings,
-                model_request_parameters=model_params
-            ) as stream:
-                async for event in stream:
-                    # Store event in context
-                    context.streaming_events.append(event)
-                    
-                    # Update stream result if available
-                    if context.stream_result:
-                        context.stream_result._streaming_events.append(event)
-                        
-                        # Track text accumulation and timing
-                        text_content = None
-                        if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
-                            text_content = event.part.content
-                        elif isinstance(event, PartDeltaEvent) and hasattr(event.delta, 'content_delta'):
-                            text_content = event.delta.content_delta
-                        
-                        if text_content:
-                            if first_token_time is None:
-                                first_token_time = time.time()
-                                context.stream_result._first_token_time = first_token_time
-                            
-                            accumulated_text += text_content
-                            context.stream_result._accumulated_text = accumulated_text
-                    
-                    # Yield the event
-                    yield event
-                    
-                    if isinstance(event, FinalResultEvent):
-                        final_result_received = True
-            
-            # Get the final response from the stream
-            final_response = stream.get()
-            
-            # Check for tool calls
-            tool_calls = [
-                part for part in final_response.parts 
-                if isinstance(part, ToolCallPart)
-            ]
-            
-            if tool_calls:
-                # Execute tool calls
-                tool_results = await context.agent._execute_tool_calls(tool_calls)
-                
-                # Add tool calls and results to messages
-                context.messages.append(final_response)
-                context.messages.append(ModelRequest(parts=tool_results))
-                
-                # Continue streaming with tool results
-                async with context.model.request_stream(
-                    messages=context.messages,
-                    model_settings=context.model.settings,
-                    model_request_parameters=model_params
-                ) as continuation_stream:
-                    async for event in continuation_stream:
-                        # Store event
-                        context.streaming_events.append(event)
-                        
-                        # Update stream result if available
-                        if context.stream_result:
-                            context.stream_result._streaming_events.append(event)
-                            
-                            # Track text accumulation and timing
-                            text_content = None
-                            if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
-                                text_content = event.part.content
-                            elif isinstance(event, PartDeltaEvent) and hasattr(event.delta, 'content_delta'):
-                                text_content = event.delta.content_delta
-                            
-                            if text_content:
-                                if first_token_time is None:
-                                    first_token_time = time.time()
-                                    context.stream_result._first_token_time = first_token_time
-                                
-                                accumulated_text += text_content
-                                context.stream_result._accumulated_text = accumulated_text
-                        
-                        # Yield the event
-                        yield event
-                        
-                        if isinstance(event, FinalResultEvent):
-                            final_result_received = True
-                    
-                    # Update final response
-                    final_response = continuation_stream.get()
+            # Use recursive helper method to handle tool calls properly
+            async for event in self._stream_with_tool_calls(context, model_params, accumulated_text, first_token_time):
+                yield event
+                if isinstance(event, FinalResultEvent):
+                    final_result_received = True
             
             # Extract output and update context
-            output = context.agent._extract_output(final_response, context.task)
+            output = context.agent._extract_output(context.response, context.task)
             context.task._response = output
             context.final_output = output
-            context.response = final_response
             
             # Update stream result if available
             if context.stream_result:
@@ -1046,6 +962,131 @@ class StreamModelExecutionStep(Step):
                 execution_time=time.time() - start_time
             )
             raise
+
+    async def _stream_with_tool_calls(self, context: StepContext, model_params, accumulated_text: str, first_token_time) -> AsyncIterator[Any]:
+        """Recursively handle streaming with tool calls, similar to non-streaming _handle_model_response."""
+        from upsonic.messages import PartStartEvent, PartDeltaEvent, TextPart, FinalResultEvent, ToolCallPart, ModelRequest
+        
+        # Check if we've reached tool call limit
+        if hasattr(context.agent, '_tool_limit_reached') and context.agent._tool_limit_reached:
+            yield FinalResultEvent(tool_name=None, tool_call_id=None)
+            return
+        
+        # Stream the model response
+        async with context.model.request_stream(
+            messages=context.messages,
+            model_settings=context.model.settings,
+            model_request_parameters=model_params
+        ) as stream:
+            async for event in stream:
+                # Store event in context
+                context.streaming_events.append(event)
+                
+                # Update stream result if available
+                if context.stream_result:
+                    context.stream_result._streaming_events.append(event)
+                    
+                    # Track text accumulation and timing
+                    text_content = None
+                    if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
+                        text_content = event.part.content
+                    elif isinstance(event, PartDeltaEvent) and hasattr(event.delta, 'content_delta'):
+                        text_content = event.delta.content_delta
+                    
+                    if text_content:
+                        if first_token_time is None:
+                            first_token_time = time.time()
+                            context.stream_result._first_token_time = first_token_time
+                        
+                        accumulated_text += text_content
+                        context.stream_result._accumulated_text = accumulated_text
+                
+                # Yield the event
+                yield event
+                
+                if isinstance(event, FinalResultEvent):
+                    break
+        
+        # Get the final response from the stream
+        final_response = stream.get()
+        context.response = final_response
+        
+        # Check for tool calls
+        tool_calls = [
+            part for part in final_response.parts 
+            if isinstance(part, ToolCallPart)
+        ]
+        
+        if tool_calls:
+            # Execute tool calls
+            tool_results = await context.agent._execute_tool_calls(tool_calls)
+            
+            # Check for tool limit reached
+            if hasattr(context.agent, '_tool_limit_reached') and context.agent._tool_limit_reached:
+                # Add tool calls and results to messages
+                context.messages.append(final_response)
+                context.messages.append(ModelRequest(parts=tool_results))
+                
+                # Add limit notification
+                from upsonic.messages import UserPromptPart
+                limit_notification = UserPromptPart(
+                    content=f"[SYSTEM] Tool call limit of {context.agent.tool_call_limit} has been reached. "
+                    f"No more tools are available. Please provide a final response based on the information you have."
+                )
+                limit_message = ModelRequest(parts=[limit_notification])
+                context.messages.append(limit_message)
+                
+                # Continue streaming with limit notification
+                async for event in self._stream_with_tool_calls(context, model_params, accumulated_text, first_token_time):
+                    yield event
+                return
+            
+            # Check for stop execution flag
+            should_stop = False
+            for tool_result in tool_results:
+                if hasattr(tool_result, 'content') and isinstance(tool_result.content, dict):
+                    if tool_result.content.get('_stop_execution'):
+                        should_stop = True
+                        tool_result.content.pop('_stop_execution', None)
+            
+            if should_stop:
+                # Create stop response
+                final_text = ""
+                for tool_result in tool_results:
+                    if hasattr(tool_result, 'content'):
+                        if isinstance(tool_result.content, dict):
+                            final_text = str(tool_result.content.get('func', tool_result.content))
+                        else:
+                            final_text = str(tool_result.content)
+                
+                from upsonic.messages import TextPart, ModelResponse
+                from upsonic._utils import now_utc
+                from upsonic.usage import RequestUsage
+                
+                stop_response = ModelResponse(
+                    parts=[TextPart(content=final_text)],
+                    model_name=final_response.model_name,
+                    timestamp=now_utc(),
+                    usage=RequestUsage(),
+                    provider_name=final_response.provider_name,
+                    provider_response_id=final_response.provider_response_id,
+                    provider_details=final_response.provider_details,
+                    finish_reason="stop"
+                )
+                context.response = stop_response
+                yield FinalResultEvent(tool_name=None, tool_call_id=None)
+                return
+            
+            # Add tool calls and results to messages
+            context.messages.append(final_response)
+            context.messages.append(ModelRequest(parts=tool_results))
+            
+            # Recursively continue streaming with tool results
+            async for event in self._stream_with_tool_calls(context, model_params, accumulated_text, first_token_time):
+                yield event
+        else:
+            # No tool calls, we're done
+            yield FinalResultEvent(tool_name=None, tool_call_id=None)
 
 
 class StreamMemoryMessageTrackingStep(Step):

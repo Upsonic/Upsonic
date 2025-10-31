@@ -6,6 +6,7 @@ in order, managing the context flow, and handling the overall execution.
 """
 
 from typing import List, Optional, Dict, Any, AsyncIterator
+from upsonic.agent.pipeline.step import Step
 from .step import Step, StepResult, StepStatus
 from .context import StepContext
 
@@ -162,7 +163,11 @@ class PipelineManager:
                 pipeline_started(len(self.steps))
 
             try:
-                for step in self.steps:
+                for step_index, step in enumerate[Step](self.steps):
+                    # Track current step for error handling  
+                    self._current_step_index = step_index
+                    self._current_step = step
+                    
                     # Start span for each step
                     with sentry_sdk.start_span(
                         op=f"pipeline.step.{step.name}",
@@ -201,9 +206,16 @@ class PipelineManager:
                                 result.execution_time,
                                 result.message
                             )
+                        
+                        # Save durable execution checkpoint after successful step
+                        if result.status == StepStatus.SUCCESS:
+                            await self._save_durable_checkpoint(context, step, self._execution_stats["executed_steps"] - 1, status="success")
 
                         # Handle PENDING status (like external execution pause)
                         if result.status == StepStatus.PENDING:
+                            # Save checkpoint for pending state too
+                            await self._save_durable_checkpoint(context, step, self._execution_stats["executed_steps"] - 1, status="paused")
+                            
                             if self.debug:
                                 from upsonic.utils.printing import pipeline_paused
                                 pipeline_paused(step.name)
@@ -212,6 +224,9 @@ class PipelineManager:
 
                 # Pipeline completed successfully
                 total_time = sum(r["execution_time"] for r in self._execution_stats["step_results"].values())
+                
+                # Mark durable execution as completed
+                await self._mark_durable_completed(context)
 
                 # Add final metrics to transaction
                 transaction.set_tag("pipeline.status", "success")
@@ -250,6 +265,36 @@ class PipelineManager:
                 return context
 
             except Exception as e:
+                # Save checkpoint at the FAILED step (not the previous successful one)
+                # This way the checkpoint accurately reflects which step failed
+                failed_step_index = getattr(self, '_current_step_index', max(0, self._execution_stats["executed_steps"] - 1))
+                failed_step = getattr(self, '_current_step', None)
+                if failed_step is None and failed_step_index < len(self.steps):
+                    failed_step = self.steps[failed_step_index]
+                
+                # Debug: Show which step failed and where we're saving checkpoint
+                if self.debug:
+                    from upsonic.utils.printing import warning_log
+                    warning_log(
+                        f"❌ ERROR at step {failed_step_index} ({failed_step.name if failed_step else 'unknown'}): {str(e)[:100]}",
+                        "PipelineManager"
+                    )
+                    warning_log(
+                        f"💾 Saving checkpoint at step {failed_step_index} ({failed_step.name if failed_step else 'N/A'}) with status='failed'",
+                        "PipelineManager"
+                    )
+                
+                # Save checkpoint with failed status at the failed step
+                await self._save_durable_checkpoint(
+                    context,
+                    failed_step,
+                    failed_step_index,
+                    status="failed"
+                )
+                
+                # Mark durable execution as failed
+                await self._mark_durable_failed(context, str(e))
+                
                 # Mark transaction as failed
                 transaction.set_tag("pipeline.status", "error")
                 transaction.set_data("error.message", str(e))
@@ -407,6 +452,93 @@ class PipelineManager:
             Dict containing execution statistics
         """
         return self._execution_stats.copy()
+    
+    async def _save_durable_checkpoint(
+        self, 
+        context: StepContext, 
+        step: Step, 
+        step_index: int,
+        status: str = "running"
+    ) -> None:
+        """
+        Save a durable execution checkpoint after a step completes.
+        
+        Args:
+            context: The current step context
+            step: The step that just completed
+            step_index: Index of the completed step
+            status: Execution status ('running', 'paused', etc.)
+        """
+        # Check if task has durable execution enabled
+        if not hasattr(context, 'task') or not context.task:
+            return
+        
+        if not hasattr(context.task, 'durable_execution') or not context.task.durable_execution:
+            return
+        
+        if not context.task.durable_checkpoint_enabled:
+            return
+        
+        try:
+            agent_state = {}
+            if hasattr(context, 'agent') and context.agent:
+                agent_state = {
+                    'tool_call_count': getattr(context.agent, '_tool_call_count', 0),
+                    'tool_limit_reached': getattr(context.agent, '_tool_limit_reached', False),
+                }
+            
+            await context.task.durable_execution.save_checkpoint_async(
+                task=context.task,
+                context=context,
+                step_index=step_index,
+                step_name=step.name,
+                status=status,
+                agent_state=agent_state
+            )
+        except Exception as e:
+            if self.debug:
+                from upsonic.utils.printing import warning_log
+                warning_log(
+                    f"Failed to save durable checkpoint: {str(e)}",
+                    "PipelineManager"
+                )
+    
+    async def _mark_durable_completed(self, context: StepContext) -> None:
+        """Mark durable execution as completed."""
+        if not hasattr(context, 'task') or not context.task:
+            return
+        
+        if not hasattr(context.task, 'durable_execution') or not context.task.durable_execution:
+            return
+        
+        try:
+            await context.task.durable_execution.mark_completed_async()
+        except Exception as e:
+            if self.debug:
+                from upsonic.utils.printing import warning_log
+                warning_log(
+                    f"Failed to mark durable execution as completed: {str(e)}",
+                    "PipelineManager"
+                )
+    
+    async def _mark_durable_failed(self, context: StepContext, error: str) -> None:
+        """Mark durable execution as failed."""
+        if not hasattr(context, 'task') or not context.task:
+            return
+        
+        if not hasattr(context.task, 'durable_execution') or not context.task.durable_execution:
+            return
+        
+        try:
+            await context.task.durable_execution.mark_failed_async(error)
+        except Exception as e:
+            # Log error but don't fail
+            if self.debug:
+                from upsonic.utils.printing import warning_log
+                warning_log(
+                    f"Failed to mark durable execution as failed: {str(e)}",
+                    "PipelineManager"
+                )
     
     def __repr__(self) -> str:
         """String representation of the pipeline."""

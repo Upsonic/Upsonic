@@ -1751,7 +1751,252 @@ class Agent(BaseAgent):
             task.set_cache_manager(self._cache_manager)
         
         return await self.do_async(task, model, debug, retry, state, graph_execution_id=graph_execution_id)
+    
+    async def continue_durable_async(
+        self,
+        durable_execution_id: str,
+        storage: Optional[Any] = None,
+        model: Optional[Union[str, "Model"]] = None,
+        debug: bool = False,
+        retry: int = 1
+    ) -> Any:
+        """
+        Continue execution from a durable execution checkpoint asynchronously.
+        
+        This method loads the saved execution state and resumes from the last
+        successful checkpoint. It's used to recover from failures or interruptions.
+        
+        Args:
+            durable_execution_id: The execution ID to resume
+            storage: Storage backend (if different from the original)
+            model: Override model for resumption
+            debug: Enable debug mode
+            retry: Number of retries
+            
+        Returns:
+            The task output
+            
+        Raises:
+            ValueError: If execution ID not found or state is invalid
+            
+        Example:
+            ```python
+            # After an error, resume from checkpoint
+            result = await agent.continue_durable_async(task.durable_execution_id)
+            ```
+        """
+        from upsonic.durable import DurableExecution
+        from upsonic.agent.pipeline import PipelineManager, StepContext
+        
+        # Load the durable execution
+        if storage is None:
+            raise ValueError("Storage backend is required to continue durable execution")
+        
+        durable = await DurableExecution.load_by_id_async(durable_execution_id, storage)
+        if durable is None:
+            raise ValueError(f"Durable execution not found: {durable_execution_id}")
+        
+        checkpoint = await durable.load_checkpoint_async()
+        if checkpoint is None:
+            raise ValueError(f"No checkpoint found for execution: {durable_execution_id}")
+        
+        # Extract state from checkpoint
+        task = checkpoint['task']
+        context_data = checkpoint['context_data']  # Serialized context data
+        step_index = checkpoint['step_index']
+        step_name = checkpoint['step_name']
+        agent_state = checkpoint.get('agent_state', {})
+        
+        from upsonic.utils.printing import info_log, warning_log
+        checkpoint_status = checkpoint.get('status', 'unknown')
+        
+        info_log(
+            f"🔄 RESUMING from checkpoint: {durable_execution_id}",
+            "DurableRecovery"
+        )
+        
+        if self.debug or debug:
+            if checkpoint_status == "failed":
+                info_log(
+                    f"📍 Failed at step: {step_index} ({step_name})",
+                    "DurableRecovery"
+                )
+                info_log(
+                    f"🔄 Will RETRY step: {step_index} ({step_name})",
+                    "DurableRecovery"
+                )
+            else:
+                info_log(
+                    f"📍 Last completed step: {step_index} ({step_name})",
+                    "DurableRecovery"
+                )
+                info_log(
+                    f"⏭️  Will resume from step: {step_index + 1}",
+                    "DurableRecovery"
+                )
+        
+        if agent_state:
+            self._tool_call_count = agent_state.get('tool_call_count', 0)
+            self._tool_limit_reached = agent_state.get('tool_limit_reached', False)
+        
+        if model:
+            from upsonic.models import infer_model
+            current_model = infer_model(model)
+        else:
+            current_model = self.model
+        
+        # Reconstruct context with current agent and model
+        from upsonic.durable.serializer import DurableStateSerializer
+        context = DurableStateSerializer.reconstruct_context(
+            context_data,
+            task=task,
+            agent=self,
+            model=current_model
+        )
+        
+        from upsonic.agent.pipeline import (
+            InitializationStep, CacheCheckStep, UserPolicyStep,
+            StorageConnectionStep, LLMManagerStep, ModelSelectionStep,
+            ValidationStep, ToolSetupStep, MessageBuildStep,
+            ModelExecutionStep, ResponseProcessingStep,
+            ReflectionStep, CallManagementStep, TaskManagementStep,
+            MemoryMessageTrackingStep, ReliabilityStep, AgentPolicyStep,
+            CacheStorageStep, FinalizationStep
+        )
+        
+        all_steps = [
+            InitializationStep(),
+            StorageConnectionStep(),
+            CacheCheckStep(),
+            UserPolicyStep(),
+            LLMManagerStep(),
+            ModelSelectionStep(),
+            ValidationStep(),
+            ToolSetupStep(),
+            MessageBuildStep(),
+            ModelExecutionStep(),
+            ResponseProcessingStep(),
+            ReflectionStep(),
+            MemoryMessageTrackingStep(),
+            CallManagementStep(),
+            TaskManagementStep(),
+            ReliabilityStep(),
+            AgentPolicyStep(),
+            CacheStorageStep(),
+            FinalizationStep(),
+        ]
+        
+        # Determine resume point based on checkpoint status
+        if checkpoint_status == "failed":
+            # Retry the failed step
+            resume_from_index = step_index
+            completed_count = step_index
+        else:
+            # Continue from next step after successful checkpoint
+            resume_from_index = step_index + 1
+            completed_count = resume_from_index
+        
+        remaining_steps = all_steps[resume_from_index:]
+        
+        if self.debug or debug:
+            info_log(
+                f"📋 Total pipeline steps: {len(all_steps)}",
+                "DurableRecovery"
+            )
+            info_log(
+                f"⏳ Remaining to execute: {len(remaining_steps)} steps",
+                "DurableRecovery"
+            )
+            
+        if self.debug or debug:
+            if remaining_steps:
+                step_names = [s.name for s in remaining_steps[:5]]
+                if len(remaining_steps) > 5:
+                    step_names.append(f"... and {len(remaining_steps) - 5} more")
+                info_log(
+                    f"🎯 Steps to execute: {', '.join(step_names)}",
+                    "DurableRecovery"
+                )
+        
+        if not remaining_steps:
+            if self.debug or debug:
+                from upsonic.utils.printing import info_log
+                info_log(
+                    f"Execution {durable_execution_id} was already complete at checkpoint",
+                    "Agent"
+                )
+            return task.response
+        
+        # Create pipeline with remaining steps
+        async with self._managed_storage_connection():
+            pipeline = PipelineManager(
+                steps=remaining_steps,
+                debug=debug or self.debug
+            )
+            
+            final_context = await pipeline.execute(context)
+            sentry_sdk.flush()
+            
+            return self._run_result.output
+    
+    def continue_durable(
+        self,
+        durable_execution_id: str,
+        storage: Optional[Any] = None,
+        model: Optional[Union[str, "Model"]] = None,
+        debug: bool = False,
+        retry: int = 1
+    ) -> Any:
+        """
+        Continue execution from a durable execution checkpoint synchronously.
+        
+        This method loads the saved execution state and resumes from the last
+        successful checkpoint. It's used to recover from failures or interruptions.
+        
+        Args:
+            durable_execution_id: The execution ID to resume
+            storage: Storage backend (if different from the original)
+            model: Override model for resumption
+            debug: Enable debug mode
+            retry: Number of retries
+            
+        Returns:
+            The task output
+            
+        Raises:
+            ValueError: If execution ID not found or state is invalid
+            
+        Example:
+            ```python
+            from upsonic import Agent
+            from upsonic.durable import FileDurableStorage
+            
+            storage = FileDurableStorage("./durable_state")
+            agent = Agent("openai/gpt-4o")
+            
+            # Resume from checkpoint
+            result = agent.continue_durable(
+                durable_execution_id="20250127-abc123",
+                storage=storage
+            )
+            ```
+        """
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        asyncio.run,
+                        self.continue_durable_async(durable_execution_id, storage, model, debug, retry)
+                    )
+                    return future.result()
+            else:
+                return loop.run_until_complete(
+                    self.continue_durable_async(durable_execution_id, storage, model, debug, retry)
+                )
+        except RuntimeError:
+            return asyncio.run(
+                self.continue_durable_async(durable_execution_id, storage, model, debug, retry)
+            )
 
-
-# Legacy alias for backwards compatibility
-Direct = Agent

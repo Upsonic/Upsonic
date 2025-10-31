@@ -403,14 +403,14 @@ class Model(Runnable[Any, Any]):
     
     Example:
         ```python
-        from upsonic.lcel import ChatPromptTemplate, StrOutputParser
+        from upsonic.lcel import ChatPromptTemplate
         from upsonic import infer_model
         
         prompt = ChatPromptTemplate.from_template("Tell me about {topic}")
         model = infer_model("openai/gpt-4o")
         
         # Chain components together with the pipe operator
-        chain = prompt | model | StrOutputParser()
+        chain = prompt | model
         result = await chain.invoke({"topic": "AI"})
         ```
     
@@ -429,7 +429,7 @@ class Model(Runnable[Any, Any]):
         configured = model.add_memory(history=True).bind_tools([tool]).with_structured_output(Schema)
         
         # Use in chains
-        chain = prompt | configured | StrOutputParser()
+        chain = prompt | configured
         ```
     """
 

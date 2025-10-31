@@ -115,7 +115,9 @@ class DeepAgent(Agent):
             kwargs['memory'] = Memory(
                 storage=storage,
                 session_id=f"deep_agent_session_{agent_uuid}",
-                user_id=f"deep_agent_user_{agent_uuid}"
+                user_id=f"deep_agent_user_{agent_uuid}",
+                full_session_memory=True,
+                feed_tool_call_results=True,
             )
         
         super().__init__(model, **kwargs)

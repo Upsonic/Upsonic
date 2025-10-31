@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, List, Callable, Optional, Dict, Any, Union, Ty
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from upsonic.agent.agent import Direct as Agent
+    from upsonic.agent.agent import Agent
     from upsonic.storage.memory.memory import Memory
     
 from upsonic.tasks.tasks import Task

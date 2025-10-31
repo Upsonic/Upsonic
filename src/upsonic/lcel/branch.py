@@ -13,7 +13,7 @@ class RunnableBranch(Runnable[Input, Output]):
     
     Example:
         ```python
-        from upsonic.lcel import RunnableBranch, ChatPromptTemplate, StrOutputParser
+        from upsonic.lcel import RunnableBranch, ChatPromptTemplate
         from upsonic.models import infer_model
         
         model = infer_model("gpt-4o")
@@ -22,19 +22,16 @@ class RunnableBranch(Runnable[Input, Output]):
         langchain_chain = (
             ChatPromptTemplate.from_template("Expert response about LangChain: {question}")
             | model
-            | StrOutputParser()
         )
         
         anthropic_chain = (
             ChatPromptTemplate.from_template("Expert response about Anthropic: {question}")
             | model
-            | StrOutputParser()
         )
         
         general_chain = (
             ChatPromptTemplate.from_template("General response: {question}")
             | model
-            | StrOutputParser()
         )
         
         # Create branch with conditions

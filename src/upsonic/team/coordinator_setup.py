@@ -3,7 +3,7 @@ import inspect
 from typing import TYPE_CHECKING, List, Any, Callable, Literal
 
 if TYPE_CHECKING:
-    from upsonic.agent.agent import Direct as Agent
+    from upsonic.agent.agent import Agent
     from upsonic.tasks.tasks import Task
     from upsonic.knowledge_base.knowledge_base import KnowledgeBase
 

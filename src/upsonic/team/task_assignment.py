@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import List, Any, Optional, Dict
 from upsonic.tasks.tasks import Task
 
-from upsonic.agent.agent import Direct
+from upsonic.agent.agent import Agent
 
 
 class TaskAssignment:
@@ -84,7 +84,7 @@ class TaskAssignment:
                 context=context
             )
             
-            await Direct(model=selection_model).do_async(selecting_task)
+            await Agent(model=selection_model).do_async(selecting_task)
 
             if not isinstance(selecting_task.response, SelectedAgent):
                 attempts += 1

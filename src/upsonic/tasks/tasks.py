@@ -54,6 +54,10 @@ class Task(BaseModel):
     _cache_hit: bool = False
     _original_input: Optional[str] = None
     _last_cache_entry: Optional[Dict[str, Any]] = None
+    
+    # Durable execution support
+    durable_execution: Optional[Any] = None  # DurableExecution instance
+    durable_checkpoint_enabled: bool = False
 
     @staticmethod
     def _is_file_path(item: Any) -> bool:
@@ -282,6 +286,7 @@ class Task(BaseModel):
         cache_threshold: float = 0.7,
         cache_embedding_provider: Optional[Any] = None,
         cache_duration_minutes: int = 60,
+        durable_execution: Optional[Any] = None,
     ):
         if guardrail is not None and not callable(guardrail):
             raise TypeError("The 'guardrail' parameter must be a callable function.")
@@ -349,7 +354,9 @@ class Task(BaseModel):
             "_cache_manager": None,  # Will be set by Agent
             "_cache_hit": False,
             "_original_input": description,
-            "_last_cache_entry": None
+            "_last_cache_entry": None,
+            "durable_execution": durable_execution,
+            "durable_checkpoint_enabled": durable_execution is not None,
         })
         
         self.validate_tools()
@@ -396,6 +403,18 @@ class Task(BaseModel):
         the tools executed, and the 'result' attribute of each item set.
         """
         return self._tools_awaiting_external_execution
+    
+    @property
+    def durable_execution_id(self) -> Optional[str]:
+        """
+        Get the durable execution ID for this task.
+        
+        Returns:
+            The execution ID if durable execution is enabled, None otherwise
+        """
+        if self.durable_execution:
+            return self.durable_execution.execution_id
+        return None
     
     @context_formatted.setter
     def context_formatted(self, value: Optional[str]):
