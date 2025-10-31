@@ -62,7 +62,11 @@ class DeepSeekOCR(OCRProvider):
         
         Args:
             config: OCRConfig object
-            model_name: Model name/path (default: deepseek-ai/DeepSeek-OCR)
+            model_name: Model name or path to custom model. Can be:
+                - HuggingFace model identifier (e.g., "deepseek-ai/DeepSeek-OCR")
+                - Local path to a model directory
+                - Any model identifier supported by vLLM
+                Default: "deepseek-ai/DeepSeek-OCR"
             prompt: OCR prompt template (default: "<image>\nFree OCR.")
             temperature: Sampling temperature (default: 0.0 for deterministic output)
             max_tokens: Maximum tokens to generate (default: 8192)

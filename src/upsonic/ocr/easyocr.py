@@ -26,15 +26,27 @@ class EasyOCR(OCRProvider):
         >>> text = ocr.get_text('document.pdf')
     """
     
-    def __init__(self, config: Optional[OCRConfig] = None, gpu: bool = False, **kwargs):
+    def __init__(
+        self, 
+        config: Optional[OCRConfig] = None, 
+        gpu: bool = False,
+        model_storage_directory: Optional[str] = None,
+        download_enabled: bool = True,
+        **kwargs
+    ):
         """Initialize EasyOCR provider.
         
         Args:
             config: OCRConfig object
             gpu: Whether to use GPU acceleration
+            model_storage_directory: Path to directory where models are stored/downloaded.
+                If None, uses EasyOCR's default location (~/.EasyOCR/model)
+            download_enabled: Whether to allow automatic model downloads (default: True)
             **kwargs: Additional configuration arguments
         """
         self.gpu = gpu
+        self.model_storage_directory = model_storage_directory
+        self.download_enabled = download_enabled
         self._reader = None
         super().__init__(config, **kwargs)
     
@@ -102,10 +114,20 @@ class EasyOCR(OCRProvider):
                     # Temporarily disable SSL verification for model download
                     ssl._create_default_https_context = ssl._create_unverified_context
                     
+                    # Build Reader arguments
+                    reader_kwargs = {
+                        'gpu': self.gpu,
+                        'verbose': False,
+                        'download_enabled': self.download_enabled
+                    }
+                    
+                    # Add custom model storage directory if provided
+                    if self.model_storage_directory:
+                        reader_kwargs['model_storage_directory'] = self.model_storage_directory
+                    
                     self._reader = easyocr.Reader(
                         self.config.languages,
-                        gpu=self.gpu,
-                        verbose=False
+                        **reader_kwargs
                     )
                     
                     ocr_initialized("EasyOCR")

@@ -503,17 +503,18 @@ class PaddleOCRProvider(BasePaddleOCRProvider):
     def __init__(
         self,
         config: Optional[Union[OCRConfig, PaddleOCRConfig]] = None,
-        # Model configurations
+        # Model configurations - Use model_dir to specify custom model directory paths
+        # Use model_name to specify model identifier, or leave None to use defaults
         doc_orientation_classify_model_name: Optional[str] = None,
         doc_orientation_classify_model_dir: Optional[str] = None,
         doc_unwarping_model_name: Optional[str] = None,
         doc_unwarping_model_dir: Optional[str] = None,
         text_detection_model_name: Optional[str] = None,
-        text_detection_model_dir: Optional[str] = None,
+        text_detection_model_dir: Optional[str] = None,  # Path to custom text detection model directory
         textline_orientation_model_name: Optional[str] = None,
         textline_orientation_model_dir: Optional[str] = None,
         text_recognition_model_name: Optional[str] = None,
-        text_recognition_model_dir: Optional[str] = None,
+        text_recognition_model_dir: Optional[str] = None,  # Path to custom text recognition model directory
         # Batch sizes
         textline_orientation_batch_size: Optional[int] = None,
         text_recognition_batch_size: Optional[int] = None,
