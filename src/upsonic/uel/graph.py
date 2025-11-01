@@ -1,7 +1,7 @@
 from typing import Any, List, Tuple, Set, Dict, Optional
 import io
 
-from upsonic.lcel.runnable import Runnable
+from upsonic.uel.runnable import Runnable
 
 
 class RunnableNode:
@@ -66,8 +66,8 @@ class RunnableGraph:
         Returns:
             The node ID of the processed runnable (entry point)
         """
-        from upsonic.lcel.sequence import RunnableSequence
-        from upsonic.lcel.parallel import RunnableParallel
+        from upsonic.uel.sequence import RunnableSequence
+        from upsonic.uel.parallel import RunnableParallel
         
         # If it's a RunnableSequence, expand it to show the chain
         if isinstance(runnable, RunnableSequence):

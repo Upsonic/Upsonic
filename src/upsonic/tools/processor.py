@@ -36,9 +36,8 @@ class ToolValidationError(Exception):
 
 class ExternalExecutionPause(Exception):
     """Exception for pausing agent execution for external tool execution."""
-    def __init__(self, tool_call: ToolCall):
-        self.tool_call = tool_call
-        super().__init__(f"Agent paused for external execution of tool: {tool_call.tool_name}")
+    def __init__(self):
+        super().__init__(f"Agent paused for external execution of a tool.")
 
 
 class ToolProcessor:
@@ -252,11 +251,8 @@ class ToolProcessor:
             
             # External execution
             if config.external_execution:
-                tool_call = ToolCall(
-                    tool_name=tool.name,
-                    args=kwargs
-                )
-                raise ExternalExecutionPause(tool_call)
+                # Don't create ToolCall here - ToolManager will create ExternalToolCall with ID
+                raise ExternalExecutionPause()
             
             # Caching
             cache_key = None

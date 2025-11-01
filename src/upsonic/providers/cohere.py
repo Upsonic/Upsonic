@@ -53,7 +53,7 @@ class CohereProvider(Provider[AsyncClientV2]):
                 feature_name="Cohere provider"
             )
 
-                """Create a new Cohere provider.
+        """Create a new Cohere provider.
 
         Args:
             api_key: The API key to use for authentication, if not provided, the `CO_API_KEY` environment variable

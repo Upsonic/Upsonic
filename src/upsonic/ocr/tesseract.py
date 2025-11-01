@@ -34,6 +34,7 @@ class TesseractOCR(OCRProvider):
         self,
         config: Optional[OCRConfig] = None,
         tesseract_cmd: Optional[str] = None,
+        tessdata_dir: Optional[str] = None,
         **kwargs
     ):
         """Initialize Tesseract OCR provider.
@@ -41,14 +42,23 @@ class TesseractOCR(OCRProvider):
         Args:
             config: OCRConfig object
             tesseract_cmd: Path to tesseract executable (optional)
+            tessdata_dir: Path to custom tessdata directory containing trained data files.
+                If None, uses Tesseract's default location or TESSDATA_PREFIX environment variable
             **kwargs: Additional configuration arguments
         """
         self.tesseract_cmd = tesseract_cmd
+        self.tessdata_dir = tessdata_dir
         super().__init__(config, **kwargs)
         
         # Set tesseract command if provided
         if self.tesseract_cmd and _PYTESSERACT_AVAILABLE:
             pytesseract.pytesseract.tesseract_cmd = self.tesseract_cmd
+        
+        # Set tessdata directory if provided
+        if self.tessdata_dir and _PYTESSERACT_AVAILABLE:
+            import os
+            # Set environment variable for tessdata path
+            os.environ['TESSDATA_PREFIX'] = self.tessdata_dir
     
     @property
     def name(self) -> str:
@@ -133,6 +143,10 @@ class TesseractOCR(OCRProvider):
         # OCR Engine Mode (OEM)
         oem = kwargs.get('oem', 3)  # Default: 3 = Both legacy and LSTM engines
         config_parts.append(f'--oem {oem}')
+        
+        # Add tessdata directory if provided
+        if self.tessdata_dir:
+            config_parts.append(f'--tessdata-dir "{self.tessdata_dir}"')
         
         # Additional custom config
         custom_config = kwargs.get('custom_config', '')

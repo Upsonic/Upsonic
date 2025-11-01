@@ -27,6 +27,7 @@ class PIIRule(RuleBase):
             r'\+?1?[-.\s]?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}',  # US format
             r'\+?[0-9]{1,4}[-.\s]?[0-9]{3,4}[-.\s]?[0-9]{3,4}[-.\s]?[0-9]{3,4}',  # International
             r'\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}',  # US without country code
+            r'\b[0-9]{3}[-.\s]?[0-9]{4}\b',
         ]
         
         # Social Security Number patterns (US)
@@ -317,7 +318,85 @@ class PIIAnonymizeAction(ActionBase):
         if rule_result.confidence < 0.3:
             return self.allow_content()
         
-        return self.anonymize_triggered_keywords()
+        return self._anonymize_pii_with_specific_format()
+    
+    def _anonymize_pii_with_specific_format(self) -> PolicyOutput:
+        """Anonymize PII with specific format: email -> xxxx@xxxxxxx.xxx, phone -> XXX-XXXX"""
+        original_content = self.original_content or []
+        triggered_keywords = self.rule_result.triggered_keywords if self.rule_result else []
+        
+        transformed_content = []
+        for text in original_content:
+            transformed_text = text
+            
+            for keyword in triggered_keywords:
+                if keyword.startswith("EMAIL:"):
+                    # Extract the actual email from "EMAIL:john@example.com"
+                    email = keyword.split(":", 1)[1]
+                    transformed_text = transformed_text.replace(email, "xxxx@xxxxxxx.xxx")
+                    
+                elif keyword.startswith("PHONE:"):
+                    # Extract the actual phone from "PHONE:555-0123"
+                    phone = keyword.split(":", 1)[1]
+                    transformed_text = transformed_text.replace(phone, "XXX-XXXX")
+                    
+                elif keyword.startswith("SSN:"):
+                    # Extract the actual SSN from "SSN:123-45-6789"
+                    ssn = keyword.split(":", 1)[1]
+                    transformed_text = transformed_text.replace(ssn, "XXX-XX-XXXX")
+                    
+                elif keyword.startswith("CREDIT_CARD:"):
+                    # Extract the actual credit card from "CREDIT_CARD:1234-5678-9012-3456"
+                    cc = keyword.split(":", 1)[1]
+                    transformed_text = transformed_text.replace(cc, "XXXX-XXXX-XXXX-XXXX")
+                    
+                elif keyword.startswith("ADDRESS:"):
+                    # Extract the actual address from "ADDRESS:123 Main St"
+                    address = keyword.split(":", 1)[1]
+                    transformed_text = transformed_text.replace(address, "[ADDRESS_REDACTED]")
+                    
+                elif keyword.startswith("DOB:"):
+                    # Extract the actual DOB from "DOB:01/01/1990"
+                    dob = keyword.split(":", 1)[1]
+                    transformed_text = transformed_text.replace(dob, "XX/XX/XXXX")
+                    
+                elif keyword.startswith("DRIVERS_LICENSE:"):
+                    # Extract the actual DL from "DRIVERS_LICENSE:ABC123456"
+                    dl = keyword.split(":", 1)[1]
+                    transformed_text = transformed_text.replace(dl, "XXX-XXXXXX")
+                    
+                elif keyword.startswith("PASSPORT:"):
+                    # Extract the actual passport from "PASSPORT:AB1234567"
+                    passport = keyword.split(":", 1)[1]
+                    transformed_text = transformed_text.replace(passport, "XX-XXXXXXX")
+                    
+                elif keyword.startswith("IP_ADDRESS:"):
+                    # Extract the actual IP from "IP_ADDRESS:192.168.1.1"
+                    ip = keyword.split(":", 1)[1]
+                    transformed_text = transformed_text.replace(ip, "XXX.XXX.XXX.XXX")
+                    
+                elif keyword.startswith("MAC_ADDRESS:"):
+                    # Extract the actual MAC from "MAC_ADDRESS:AA:BB:CC:DD:EE:FF"
+                    mac = keyword.split(":", 1)[1]
+                    transformed_text = transformed_text.replace(mac, "XX:XX:XX:XX:XX:XX")
+                    
+                elif keyword.startswith("PII_KEYWORD:"):
+                    # For PII keywords, we don't need to replace anything as they're just indicators
+                    pass
+            
+            transformed_content.append(transformed_text)
+        
+        translated_message = self._translate("PII anonymized with specific format", self.detected_language)
+        
+        return PolicyOutput(
+            output_texts=transformed_content,
+            action_output={
+                "action_taken": "ANONYMIZE",
+                "success": True,
+                "message": translated_message
+            },
+            transformation_map=self.transformation_map.copy()
+        )
 
 
 class PIIReplaceAction(ActionBase):

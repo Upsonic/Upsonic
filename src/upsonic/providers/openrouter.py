@@ -96,7 +96,7 @@ class OpenRouterProvider(Provider[AsyncOpenAI]):
                 feature_name="openai provider"
             )
 
-                api_key = api_key or os.getenv('OPENROUTER_API_KEY')
+        api_key = api_key or os.getenv('OPENROUTER_API_KEY')
         if not api_key and openai_client is None:
             raise UserError(
                 'Set the `OPENROUTER_API_KEY` environment variable or pass it via `OpenRouterProvider(api_key=...)`'

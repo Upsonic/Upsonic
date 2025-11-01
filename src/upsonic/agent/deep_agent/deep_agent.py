@@ -71,6 +71,9 @@ class DeepAgent(Agent):
     Attributes:
         deep_agent_state: State containing todos and virtual filesystem
         subagents: List of Agent instances to use as subagents
+        model: Model identifier or Model instance
+        instructions: Additional instructions to append to system prompt
+        **kwargs: Additional arguments passed to base Agent
     """
     
     def __init__(

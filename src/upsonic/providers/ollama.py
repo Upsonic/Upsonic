@@ -76,7 +76,7 @@ class OllamaProvider(Provider[AsyncOpenAI]):
                 feature_name="openai provider"
             )
 
-                """Create a new Ollama provider.
+        """Create a new Ollama provider.
 
         Args:
             base_url: The base url for the Ollama requests. If not provided, the `OLLAMA_BASE_URL` environment variable

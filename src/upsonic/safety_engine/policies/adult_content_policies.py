@@ -99,7 +99,8 @@ class AdultContentRule(RuleBase):
         # Find explicit content
         triggered_explicit = []
         for keyword in self.explicit_keywords:
-            pattern = r'\b' + re.escape(keyword.lower()) + r'\b'
+            # Use word boundary pattern that handles plurals and variations
+            pattern = r'\b' + re.escape(keyword.lower()) + r'(?:s|es|ies|ed|ing)?\b'
             if re.search(pattern, combined_text):
                 triggered_explicit.append(keyword)
         
@@ -112,14 +113,16 @@ class AdultContentRule(RuleBase):
         # Find suggestive content
         triggered_suggestive = []
         for keyword in self.suggestive_keywords:
-            pattern = r'\b' + re.escape(keyword.lower()) + r'\b'
+            # Use word boundary pattern that handles plurals and variations
+            pattern = r'\b' + re.escape(keyword.lower()) + r'(?:s|es|ies|ed|ing)?\b'
             if re.search(pattern, combined_text):
                 triggered_suggestive.append(keyword)
         
         # Find age verification terms
         triggered_age_verification = []
         for keyword in self.age_verification_keywords:
-            pattern = r'\b' + re.escape(keyword.lower()) + r'\b'
+            # Use word boundary pattern that handles plurals and variations
+            pattern = r'\b' + re.escape(keyword.lower()) + r'(?:s|es|ies|ed|ing)?\b'
             if re.search(pattern, combined_text):
                 triggered_age_verification.append(keyword)
         

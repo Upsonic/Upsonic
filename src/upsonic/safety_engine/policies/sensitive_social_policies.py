@@ -34,7 +34,7 @@ class SensitiveSocialRule(RuleBase):
             
             # Gender-based discrimination
             "stupid woman", "dumb blonde", "kitchen woman", "sandwich maker",
-            "gold digger", "slut", "whore", "b*tch", "c*nt",
+            "gold digger", "slut", "whore", "b*tch", "c*nt", "fuck",
             
             # General discriminatory terms
             "subhuman", "inferior race", "master race", "genetic superiority",
@@ -86,9 +86,9 @@ class SensitiveSocialRule(RuleBase):
         # Find matching hate speech keywords
         triggered_hate_speech = []
         for keyword in self.hate_speech_keywords:
-            # Use word boundaries to avoid false positives, handle asterisks
+            # Use word boundaries to avoid false positives, handle asterisks and plurals
             clean_keyword = keyword.replace("*", ".")
-            pattern = r'\b' + re.escape(keyword.lower()).replace(r'\*', r'[a-z*]') + r'\b'
+            pattern = r'\b' + re.escape(keyword.lower()).replace(r'\*', r'[a-z*]') + r'(?:s|es|ies|ed|ing)?\b'
             if re.search(pattern, combined_text, re.IGNORECASE):
                 triggered_hate_speech.append(keyword)
         
@@ -101,7 +101,8 @@ class SensitiveSocialRule(RuleBase):
         # Find discriminatory keywords
         triggered_discriminatory = []
         for keyword in self.discriminatory_keywords:
-            pattern = r'\b' + re.escape(keyword.lower()) + r'\b'
+            # Use word boundary pattern that handles plurals and variations
+            pattern = r'\b' + re.escape(keyword.lower()) + r'(?:s|es|ies|ed|ing)?\b'
             if re.search(pattern, combined_text):
                 triggered_discriminatory.append(keyword)
         

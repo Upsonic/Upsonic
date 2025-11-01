@@ -908,6 +908,10 @@ class Agent(BaseAgent):
         )
         
         if result.should_block():
+            # Re-raise DisallowedOperation if it was caught by PolicyManager
+            if result.disallowed_exception:
+                raise result.disallowed_exception
+            
             task.task_end()
             task._response = result.get_final_message()
             return task, False
@@ -1244,6 +1248,10 @@ class Agent(BaseAgent):
             
             # Apply the result
             if result.should_block():
+                # Re-raise DisallowedOperation if it was caught by PolicyManager
+                if result.disallowed_exception:
+                    raise result.disallowed_exception
+                
                 task._response = result.get_final_message()
             elif result.action_taken in ["REPLACE", "ANONYMIZE"]:
                 task._response = result.final_output or "Response modified by agent policy."
@@ -1317,6 +1325,11 @@ class Agent(BaseAgent):
             CacheStorageStep, FinalizationStep
         )
         
+        # Update policy managers debug flag if debug is enabled
+        if debug:
+            self.user_policy_manager.debug = True
+            self.agent_policy_manager.debug = True
+        
         async with self._managed_storage_connection():
             pipeline = PipelineManager(
                 steps=[
@@ -1333,10 +1346,10 @@ class Agent(BaseAgent):
                     ResponseProcessingStep(),
                     ReflectionStep(),
                     MemoryMessageTrackingStep(),
+                    AgentPolicyStep(),  # Move before CallManagementStep
                     CallManagementStep(),
                     TaskManagementStep(),
                     ReliabilityStep(),
-                    AgentPolicyStep(),
                     CacheStorageStep(),
                     FinalizationStep(),
                 ],
@@ -1738,19 +1751,113 @@ class Agent(BaseAgent):
         if not task.is_paused or not task.tools_awaiting_external_execution:
             raise ValueError("The 'continue_async' method can only be called on a task that is currently paused for external execution.")
         
-        tool_results_prompt = "\nThe following external tools were executed. Use their results to continue the task:\n"
-        for tool_call in task.tools_awaiting_external_execution:
-            tool_results_prompt += f"\n- Tool '{tool_call.tool_name}' was executed with arguments {tool_call.args}.\n"
-            tool_results_prompt += f"  Result: {tool_call.result}\n"
+        from upsonic.agent.pipeline import (
+            PipelineManager, StepContext,
+            MessageBuildStep, ModelExecutionStep, ResponseProcessingStep,
+            ReflectionStep, CallManagementStep, TaskManagementStep,
+            MemoryMessageTrackingStep, ReliabilityStep, AgentPolicyStep,
+            CacheStorageStep, FinalizationStep
+        )
+        from upsonic.messages import ToolReturnPart
+        from upsonic._utils import now_utc
         
+        # Convert external tool results to ToolReturnPart messages
+        tool_return_parts = []
+        for tool_call in task.tools_awaiting_external_execution:
+            # Handle both ExternalToolCall (with tool_call_id) and ToolCall objects
+            tool_call_id = None
+            if hasattr(tool_call, 'tool_call_id'):
+                tool_call_id = tool_call.tool_call_id
+            
+            # Get the result - ExternalToolCall uses 'result', ToolCall also uses 'result'
+            result = getattr(tool_call, 'result', None)
+            
+            tool_return = ToolReturnPart(
+                tool_name=tool_call.tool_name,
+                content=result,
+                tool_call_id=tool_call_id,
+                timestamp=now_utc()
+            )
+            tool_return_parts.append(tool_return)
+        
+        # Get continuation state
+        continuation_messages = []
+        response_with_tool_calls = None
+        if hasattr(task, '_continuation_state') and task._continuation_state:
+            continuation_messages = task._continuation_state.get('messages', [])
+            response_with_tool_calls = task._continuation_state.get('response_with_tool_calls')
+        
+        # Clear paused state
         task.is_paused = False
-        task.description += tool_results_prompt
         task._tools_awaiting_external_execution = []
         
         if task.enable_cache:
             task.set_cache_manager(self._cache_manager)
         
-        return await self.do_async(task, model, debug, retry, state, graph_execution_id=graph_execution_id)
+        # Restore agent state from continuation
+        if hasattr(task, '_continuation_state') and task._continuation_state:
+            saved_state = task._continuation_state
+            self._tool_call_count = saved_state.get('tool_call_count', 0)
+            self.tool_call_count = saved_state.get('tool_call_count', 0)
+            self._tool_limit_reached = saved_state.get('tool_limit_reached', False)
+            self._current_messages = saved_state.get('current_messages', [])
+        
+        # Set current task (needed for pipeline steps)
+        self.current_task = task
+        
+        # Determine model to use
+        if model:
+            from upsonic.models import infer_model
+            current_model = infer_model(model)
+        else:
+            current_model = self.model
+        
+        async with self._managed_storage_connection():
+            # Create a continuation pipeline - SKIP ALL STEPS UNTIL MessageBuildStep
+            # 
+            # The continuation flow:
+            # 1. MessageBuildStep - restores saved messages
+            # 2. ModelExecutionStep - injects response_with_tool_calls + tool_results, calls model
+            # 3. All subsequent steps run normally
+            #
+            # We skip: InitializationStep, StorageConnectionStep, CacheCheckStep, UserPolicyStep,
+            #          LLMManagerStep, ModelSelectionStep, ValidationStep, ToolSetupStep
+            # 
+            # These are already done in the initial run and state is preserved in continuation context
+            
+            pipeline = PipelineManager(
+                steps=[
+                    MessageBuildStep(),  # Restores saved messages
+                    ModelExecutionStep(),  # Injects tool results and continues
+                    ResponseProcessingStep(),
+                    ReflectionStep(),
+                    MemoryMessageTrackingStep(),
+                    CallManagementStep(),
+                    TaskManagementStep(),
+                    ReliabilityStep(),
+                    AgentPolicyStep(),
+                    CacheStorageStep(),
+                    FinalizationStep(),
+                ],
+                debug=debug or self.debug
+            )
+            
+            # Create continuation context with all saved state
+            context = StepContext(
+                task=task,
+                agent=self,
+                model=current_model,
+                state=state,
+                is_continuation=True,  # This is the key flag
+                continuation_messages=continuation_messages,
+                continuation_tool_results=tool_return_parts,
+                continuation_response_with_tool_calls=response_with_tool_calls  # The response that triggered pause
+            )
+            
+            final_context = await pipeline.execute(context)
+            sentry_sdk.flush()
+            
+            return self._run_result.output
     
     async def continue_durable_async(
         self,
@@ -1878,10 +1985,10 @@ class Agent(BaseAgent):
             ResponseProcessingStep(),
             ReflectionStep(),
             MemoryMessageTrackingStep(),
+            AgentPolicyStep(),  # Move before CallManagementStep
             CallManagementStep(),
             TaskManagementStep(),
             ReliabilityStep(),
-            AgentPolicyStep(),
             CacheStorageStep(),
             FinalizationStep(),
         ]

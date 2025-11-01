@@ -2,19 +2,19 @@ import asyncio
 import inspect
 from typing import Any, Callable, Union, Coroutine, TypeVar, Awaitable
 
-from upsonic.lcel.runnable import Runnable, Input, Output
+from upsonic.uel.runnable import Runnable, Input, Output
 
 
 class RunnableLambda(Runnable[Input, Output]):
     """
     A Runnable that wraps a Python function or coroutine.
     
-    RunnableLambda allows you to use any Python function in an LCEL chain
+    RunnableLambda allows you to use any Python function in an UEL chain
     by wrapping it in the Runnable interface.
     
     Example:
         ```python
-        from upsonic.lcel import RunnableLambda
+        from upsonic.uel import RunnableLambda
         
         def length_function(text):
             return len(text)
@@ -101,7 +101,7 @@ def coerce_to_runnable(thing: Union[Runnable, Callable, dict]) -> Runnable:
     if isinstance(thing, Runnable):
         return thing
     elif isinstance(thing, dict):
-        from upsonic.lcel.parallel import RunnableParallel
+        from upsonic.uel.parallel import RunnableParallel
         return RunnableParallel.from_dict(thing)
     elif callable(thing):
         return RunnableLambda(thing)

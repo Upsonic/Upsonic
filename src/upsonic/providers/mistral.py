@@ -60,7 +60,7 @@ class MistralProvider(Provider[Mistral]):
                 feature_name="Mistral provider"
             )
 
-                """Create a new Mistral provider.
+        """Create a new Mistral provider.
 
         Args:
             api_key: The API key to use for authentication, if not provided, the `MISTRAL_API_KEY` environment variable

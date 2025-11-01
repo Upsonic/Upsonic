@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from upsonic.lcel.runnable import Runnable
+from upsonic.uel.runnable import Runnable
 
 
 class RunnableSequence(Runnable[Any, Any]):
@@ -75,7 +75,7 @@ class RunnableSequence(Runnable[Any, Any]):
         Returns:
             A new RunnableSequence with the additional step
         """
-        from upsonic.lcel.lambda_runnable import coerce_to_runnable
+        from upsonic.uel.lambda_runnable import coerce_to_runnable
         
         # Coerce to runnable (handles functions, dicts, etc.)
         other_runnable = coerce_to_runnable(other)
@@ -88,7 +88,7 @@ class RunnableSequence(Runnable[Any, Any]):
         Returns:
             A RunnableGraph object that can be visualized
         """
-        from upsonic.lcel.graph import RunnableGraph
+        from upsonic.uel.graph import RunnableGraph
         return RunnableGraph(self)
     
     def get_prompts(self):
@@ -97,7 +97,7 @@ class RunnableSequence(Runnable[Any, Any]):
         Returns:
             List of ChatPromptTemplate instances found in the sequence
         """
-        from upsonic.lcel.prompt import ChatPromptTemplate
+        from upsonic.uel.prompt import ChatPromptTemplate
         
         prompts = []
         

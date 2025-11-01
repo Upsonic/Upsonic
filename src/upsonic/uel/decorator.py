@@ -2,8 +2,8 @@ import functools
 import inspect
 from typing import Any, Callable, TypeVar, Union
 
-from upsonic.lcel.runnable import Runnable, Input, Output
-from upsonic.lcel.lambda_runnable import RunnableLambda, coerce_to_runnable
+from upsonic.uel.runnable import Runnable, Input, Output
+from upsonic.uel.lambda_runnable import RunnableLambda, coerce_to_runnable
 
 
 F = TypeVar('F', bound=Callable[..., Any])
@@ -20,7 +20,7 @@ def chain(func: F) -> Runnable:
     
     Example:
         ```python
-        from upsonic.lcel import chain, ChatPromptTemplate
+        from upsonic.uel import chain, ChatPromptTemplate
         from upsonic.models import infer_model
         
         prompt1 = ChatPromptTemplate.from_template("Tell me a joke about {topic}")

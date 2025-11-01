@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any, Optional, List, Tuple, Union, Literal, Dict
 
-from upsonic.lcel.runnable import Runnable
+from upsonic.uel.runnable import Runnable
 from upsonic.messages import ModelRequest, SystemPromptPart, UserPromptPart, ModelResponse
 
 

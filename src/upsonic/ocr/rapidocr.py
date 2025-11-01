@@ -30,13 +30,26 @@ class RapidOCR(OCRProvider):
         >>> text = ocr.get_text('document.png')
     """
     
-    def __init__(self, config: Optional[OCRConfig] = None, **kwargs):
+    def __init__(
+        self, 
+        config: Optional[OCRConfig] = None,
+        det_model_path: Optional[str] = None,
+        rec_model_path: Optional[str] = None,
+        cls_model_path: Optional[str] = None,
+        **kwargs
+    ):
         """Initialize RapidOCR provider.
         
         Args:
             config: OCRConfig object
+            det_model_path: Path to custom text detection model file (ONNX format)
+            rec_model_path: Path to custom text recognition model file (ONNX format)
+            cls_model_path: Path to custom text direction classifier model file (ONNX format)
             **kwargs: Additional configuration arguments
         """
+        self.det_model_path = det_model_path
+        self.rec_model_path = rec_model_path
+        self.cls_model_path = cls_model_path
         self._engine = None
         super().__init__(config, **kwargs)
     
@@ -84,10 +97,33 @@ class RapidOCR(OCRProvider):
             extra_info = {
                 "Note": "Primarily supports Chinese and English"
             }
+            
+            # Add model path info if custom models are provided
+            if self.det_model_path or self.rec_model_path or self.cls_model_path:
+                model_info = []
+                if self.det_model_path:
+                    model_info.append(f"det={self.det_model_path}")
+                if self.rec_model_path:
+                    model_info.append(f"rec={self.rec_model_path}")
+                if self.cls_model_path:
+                    model_info.append(f"cls={self.cls_model_path}")
+                extra_info["Custom Models"] = ", ".join(model_info)
+            
             ocr_loading("RapidOCR", self.config.languages, extra_info)
             
             try:
-                self._engine = RapidOCREngine()
+                # Build engine initialization arguments
+                engine_kwargs = {}
+                
+                # Add custom model paths if provided
+                if self.det_model_path:
+                    engine_kwargs['Det.model_path'] = self.det_model_path
+                if self.rec_model_path:
+                    engine_kwargs['CLs.model_path'] = self.rec_model_path
+                if self.cls_model_path:
+                    engine_kwargs['Rec.model_path'] = self.cls_model_path
+                
+                self._engine = RapidOCREngine(**engine_kwargs) if engine_kwargs else RapidOCREngine()
                 ocr_initialized("RapidOCR")
             except Exception as e:
                 raise OCRProviderError(
