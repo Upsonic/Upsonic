@@ -8,7 +8,7 @@ import unittest
 import logging
 import os
 import tempfile
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch
 from pathlib import Path
 
 # Import the module under test
@@ -89,13 +89,14 @@ class TestLoggingConfig(unittest.TestCase):
         logger = get_logger("test.autoconfigure")
         self.assertIsInstance(logger, logging.Logger)
 
-    @patch('upsonic.utils.logging_config.sentry_sdk')
+    @patch("upsonic.utils.logging_config.sentry_sdk")
     def test_setup_sentry_disabled(self, mock_sentry):
         """Test setup_sentry when telemetry is disabled."""
         os.environ["UPSONIC_TELEMETRY"] = "false"
 
         # Force reconfiguration
         from upsonic.utils import logging_config
+
         logging_config._SENTRY_CONFIGURED = False
 
         setup_sentry()
@@ -103,16 +104,17 @@ class TestLoggingConfig(unittest.TestCase):
         # Sentry should be initialized with empty DSN
         mock_sentry.init.assert_called_once()
         call_kwargs = mock_sentry.init.call_args[1]
-        self.assertEqual(call_kwargs['dsn'], "")
+        self.assertEqual(call_kwargs["dsn"], "")
 
-    @patch('upsonic.utils.logging_config.sentry_sdk')
-    @patch('upsonic.utils.logging_config.atexit.register')
+    @patch("upsonic.utils.logging_config.sentry_sdk")
+    @patch("upsonic.utils.logging_config.atexit.register")
     def test_setup_sentry_enabled(self, mock_atexit, mock_sentry):
         """Test setup_sentry when telemetry is enabled."""
         os.environ["UPSONIC_TELEMETRY"] = "https://test@sentry.io/123"
 
         # Force reconfiguration
         from upsonic.utils import logging_config
+
         logging_config._SENTRY_CONFIGURED = False
 
         setup_sentry()
@@ -120,7 +122,7 @@ class TestLoggingConfig(unittest.TestCase):
         # Sentry should be initialized with DSN
         mock_sentry.init.assert_called_once()
         call_kwargs = mock_sentry.init.call_args[1]
-        self.assertEqual(call_kwargs['dsn'], "https://test@sentry.io/123")
+        self.assertEqual(call_kwargs["dsn"], "https://test@sentry.io/123")
 
         # atexit handler should be registered
         mock_atexit.assert_called_once()
@@ -134,7 +136,7 @@ class TestLoggingConfig(unittest.TestCase):
                 level="DEBUG",
                 log_file=str(log_file),
                 force_reconfigure=True,
-                enable_console=False
+                enable_console=False,
             )
 
             logger = get_logger("upsonic.test.basic")  # Use upsonic namespace
@@ -150,7 +152,7 @@ class TestLoggingConfig(unittest.TestCase):
             self.assertTrue(log_file.exists())
 
             # Check log content
-            with open(log_file, 'r') as f:
+            with open(log_file, "r") as f:
                 content = f.read()
                 self.assertIn("Test message", content)
 
@@ -162,19 +164,19 @@ class TestLoggingConfig(unittest.TestCase):
 
         logger = logging.getLogger("upsonic")
         # Should have NullHandler
-        self.assertTrue(any(isinstance(h, logging.NullHandler) for h in logger.handlers))
+        self.assertTrue(
+            any(isinstance(h, logging.NullHandler) for h in logger.handlers)
+        )
 
     def test_setup_logging_console_disabled(self):
         """Test setup_logging with console disabled."""
-        setup_logging(
-            level="INFO",
-            enable_console=False,
-            force_reconfigure=True
-        )
+        setup_logging(level="INFO", enable_console=False, force_reconfigure=True)
 
         logger = logging.getLogger("upsonic")
         # Should not have StreamHandler
-        self.assertFalse(any(isinstance(h, logging.StreamHandler) for h in logger.handlers))
+        self.assertFalse(
+            any(isinstance(h, logging.StreamHandler) for h in logger.handlers)
+        )
 
     def test_set_module_log_level(self):
         """Test setting log level for specific module."""
@@ -202,7 +204,9 @@ class TestLoggingConfig(unittest.TestCase):
 
         logger = logging.getLogger("upsonic")
         # Should have NullHandler
-        self.assertTrue(any(isinstance(h, logging.NullHandler) for h in logger.handlers))
+        self.assertTrue(
+            any(isinstance(h, logging.NullHandler) for h in logger.handlers)
+        )
         # Should be at CRITICAL+1 (effectively disabled)
         self.assertGreater(logger.level, logging.CRITICAL)
 
@@ -230,7 +234,7 @@ class TestLoggingConfig(unittest.TestCase):
                         log_format=fmt,
                         log_file=str(log_file),
                         force_reconfigure=True,
-                        enable_console=False
+                        enable_console=False,
                     )
 
                     logger = get_logger("test.format")
@@ -246,7 +250,7 @@ class TestLoggingConfig(unittest.TestCase):
             level="INFO",
             log_file="/invalid/path/test.log",
             force_reconfigure=True,
-            enable_console=False
+            enable_console=False,
         )
 
         # Should not raise exception, just skip file handler
@@ -259,7 +263,7 @@ class TestLoggingConfig(unittest.TestCase):
 
         # Child logger should inherit level
         child_logger = get_logger("upsonic.agent.test")
-        parent_logger = logging.getLogger("upsonic")
+        logging.getLogger("upsonic")
 
         # Child should propagate to parent
         self.assertTrue(child_logger.propagate)
@@ -277,28 +281,30 @@ class TestSentryIntegration(unittest.TestCase):
         os.environ.clear()
         os.environ.update(self.original_env)
 
-    @patch('upsonic.utils.logging_config.sentry_sdk')
+    @patch("upsonic.utils.logging_config.sentry_sdk")
     def test_sentry_environment_config(self, mock_sentry):
         """Test Sentry environment configuration."""
         os.environ["UPSONIC_ENVIRONMENT"] = "development"
         os.environ["UPSONIC_SENTRY_SAMPLE_RATE"] = "0.5"
 
         from upsonic.utils import logging_config
+
         logging_config._SENTRY_CONFIGURED = False
 
         setup_sentry()
 
         call_kwargs = mock_sentry.init.call_args[1]
-        self.assertEqual(call_kwargs['environment'], "development")
-        self.assertEqual(call_kwargs['traces_sample_rate'], 0.5)
+        self.assertEqual(call_kwargs["environment"], "development")
+        self.assertEqual(call_kwargs["traces_sample_rate"], 0.5)
 
-    @patch('upsonic.utils.logging_config.sentry_sdk')
-    @patch('upsonic.utils.package.system_id.get_system_id')
+    @patch("upsonic.utils.logging_config.sentry_sdk")
+    @patch("upsonic.utils.package.system_id.get_system_id")
     def test_sentry_user_id_tracking(self, mock_get_system_id, mock_sentry):
         """Test Sentry user ID tracking."""
         mock_get_system_id.return_value = "test-system-id-123"
 
         from upsonic.utils import logging_config
+
         logging_config._SENTRY_CONFIGURED = False
 
         setup_sentry()
@@ -306,13 +312,14 @@ class TestSentryIntegration(unittest.TestCase):
         # Should set user ID
         mock_sentry.set_user.assert_called_once_with({"id": "test-system-id-123"})
 
-    @patch('upsonic.utils.logging_config.sentry_sdk')
-    @patch('upsonic.utils.package.system_id.get_system_id')
+    @patch("upsonic.utils.logging_config.sentry_sdk")
+    @patch("upsonic.utils.package.system_id.get_system_id")
     def test_sentry_user_id_failure_graceful(self, mock_get_system_id, mock_sentry):
         """Test Sentry handles system ID failure gracefully."""
         mock_get_system_id.side_effect = Exception("System ID error")
 
         from upsonic.utils import logging_config
+
         logging_config._SENTRY_CONFIGURED = False
 
         # Should not raise exception
@@ -322,5 +329,5 @@ class TestSentryIntegration(unittest.TestCase):
         mock_sentry.init.assert_called_once()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

@@ -4,7 +4,6 @@ import os
 from pathlib import Path
 from upsonic.loaders.pymupdf import PyMuPDFLoader
 from upsonic.loaders.config import PyMuPDFLoaderConfig
-from upsonic.schemas.data_models import Document
 
 
 class TestPyMuPDFLoaderSimple(unittest.TestCase):
@@ -18,6 +17,7 @@ class TestPyMuPDFLoaderSimple(unittest.TestCase):
         """Clean up test environment."""
         if os.path.exists(self.temp_dir):
             import shutil
+
             shutil.rmtree(self.temp_dir)
 
     def test_pymupdf_loader_initialization(self):
@@ -27,7 +27,7 @@ class TestPyMuPDFLoaderSimple(unittest.TestCase):
         loader = PyMuPDFLoader(config)
         self.assertIsNotNone(loader)
         self.assertEqual(loader.config.extraction_mode, "hybrid")
-        
+
         # Test with custom config
         custom_config = PyMuPDFLoaderConfig(
             extraction_mode="hybrid",
@@ -36,7 +36,7 @@ class TestPyMuPDFLoaderSimple(unittest.TestCase):
             end_page=10,
             text_extraction_method="dict",
             include_images=True,
-            extract_annotations=True
+            extract_annotations=True,
         )
         loader_custom = PyMuPDFLoader(custom_config)
         self.assertEqual(loader_custom.config.extraction_mode, "hybrid")
@@ -55,11 +55,11 @@ class TestPyMuPDFLoaderSimple(unittest.TestCase):
         """Test handling of empty or invalid sources."""
         config = PyMuPDFLoaderConfig()
         loader = PyMuPDFLoader(config)
-        
+
         # Test with empty list
         result = loader.load([])
         self.assertEqual(len(result), 0)
-        
+
         # Test with non-existent file
         result = loader.load("/path/that/does/not/exist.pdf")
         self.assertEqual(len(result), 0)
@@ -71,13 +71,13 @@ class TestPyMuPDFLoaderSimple(unittest.TestCase):
         for mode in valid_modes:
             config = PyMuPDFLoaderConfig(extraction_mode=mode)
             self.assertEqual(config.extraction_mode, mode)
-        
+
         # Test valid text extraction methods
         valid_methods = ["text", "dict", "html", "xml"]
         for method in valid_methods:
             config = PyMuPDFLoaderConfig(text_extraction_method=method)
             self.assertEqual(config.text_extraction_method, method)
-        
+
         # Test valid annotation formats
         valid_formats = ["text", "json"]
         for format_type in valid_formats:
@@ -88,7 +88,7 @@ class TestPyMuPDFLoaderSimple(unittest.TestCase):
         """Test the batch loading interface."""
         config = PyMuPDFLoaderConfig()
         loader = PyMuPDFLoader(config)
-        
+
         # Test batch method with empty list
         result = loader.batch([])
         self.assertEqual(len(result), 0)
@@ -99,7 +99,7 @@ class TestPyMuPDFLoaderSimple(unittest.TestCase):
         config_raise = PyMuPDFLoaderConfig(error_handling="raise")
         loader_raise = PyMuPDFLoader(config_raise)
         self.assertEqual(loader_raise.config.error_handling, "raise")
-        
+
         # Test with warn error handling
         config_warn = PyMuPDFLoaderConfig(error_handling="warn")
         loader_warn = PyMuPDFLoader(config_warn)
@@ -120,12 +120,10 @@ class TestPyMuPDFLoaderSimple(unittest.TestCase):
     def test_page_range_configuration(self):
         """Test page range configuration options."""
         config = PyMuPDFLoaderConfig(
-            start_page=2,
-            end_page=5,
-            extraction_mode="text_only"
+            start_page=2, end_page=5, extraction_mode="text_only"
         )
         loader = PyMuPDFLoader(config)
-        
+
         self.assertEqual(loader.config.start_page, 2)
         self.assertEqual(loader.config.end_page, 5)
 
@@ -134,10 +132,10 @@ class TestPyMuPDFLoaderSimple(unittest.TestCase):
         config = PyMuPDFLoaderConfig(
             extra_whitespace_removal=True,
             clean_page_numbers=True,
-            skip_empty_content=True
+            skip_empty_content=True,
         )
         loader = PyMuPDFLoader(config)
-        
+
         self.assertTrue(loader.config.extra_whitespace_removal)
         self.assertTrue(loader.config.clean_page_numbers)
         self.assertTrue(loader.config.skip_empty_content)
@@ -150,10 +148,10 @@ class TestPyMuPDFLoaderSimple(unittest.TestCase):
             image_dpi=200,
             preserve_layout=True,
             extract_annotations=True,
-            annotation_format="json"
+            annotation_format="json",
         )
         loader = PyMuPDFLoader(config)
-        
+
         self.assertEqual(loader.config.text_extraction_method, "dict")
         self.assertTrue(loader.config.include_images)
         self.assertEqual(loader.config.image_dpi, 200)
@@ -167,12 +165,12 @@ class TestPyMuPDFLoaderSimple(unittest.TestCase):
         config = PyMuPDFLoaderConfig(image_dpi=150)
         loader = PyMuPDFLoader(config)
         self.assertEqual(loader.config.image_dpi, 150)
-        
+
         # Test minimum DPI
         config = PyMuPDFLoaderConfig(image_dpi=72)
         loader = PyMuPDFLoader(config)
         self.assertEqual(loader.config.image_dpi, 72)
-        
+
         # Test maximum DPI
         config = PyMuPDFLoaderConfig(image_dpi=600)
         loader = PyMuPDFLoader(config)
@@ -183,32 +181,28 @@ class TestPyMuPDFLoaderSimple(unittest.TestCase):
         config = PyMuPDFLoaderConfig(
             clean_page_numbers=True,
             page_num_start_format="<page {page_nr}>",
-            page_num_end_format="</page {page_nr}>"
+            page_num_end_format="</page {page_nr}>",
         )
         loader = PyMuPDFLoader(config)
-        
+
         self.assertTrue(loader.config.clean_page_numbers)
         self.assertEqual(loader.config.page_num_start_format, "<page {page_nr}>")
         self.assertEqual(loader.config.page_num_end_format, "</page {page_nr}>")
 
     def test_password_configuration(self):
         """Test password configuration for encrypted PDFs."""
-        config = PyMuPDFLoaderConfig(
-            pdf_password="test_password"
-        )
+        config = PyMuPDFLoaderConfig(pdf_password="test_password")
         loader = PyMuPDFLoader(config)
-        
+
         self.assertEqual(loader.config.pdf_password, "test_password")
 
     def test_metadata_configuration(self):
         """Test metadata configuration options."""
         config = PyMuPDFLoaderConfig(
-            include_metadata=True,
-            include_images=True,
-            extract_annotations=True
+            include_metadata=True, include_images=True, extract_annotations=True
         )
         loader = PyMuPDFLoader(config)
-        
+
         self.assertTrue(loader.config.include_metadata)
         self.assertTrue(loader.config.include_images)
         self.assertTrue(loader.config.extract_annotations)
@@ -217,17 +211,17 @@ class TestPyMuPDFLoaderSimple(unittest.TestCase):
         """Test the can_load method."""
         config = PyMuPDFLoaderConfig()
         loader = PyMuPDFLoader(config)
-        
+
         # Test with PDF file
         pdf_path = Path(self.temp_dir) / "test.pdf"
         pdf_path.touch()
         self.assertTrue(loader.can_load(pdf_path))
-        
+
         # Test with non-PDF file
         txt_path = Path(self.temp_dir) / "test.txt"
         txt_path.touch()
         self.assertFalse(loader.can_load(txt_path))
-        
+
         # Test with non-existent file
         non_existent = Path(self.temp_dir) / "non_existent.pdf"
         self.assertFalse(loader.can_load(non_existent))

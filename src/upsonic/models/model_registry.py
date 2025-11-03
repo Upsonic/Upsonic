@@ -1,10 +1,11 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Literal
+from typing import Dict, List, Optional
 from enum import Enum
 
 
 class ModelCapability(str, Enum):
     """Categories of model capabilities."""
+
     REASONING = "reasoning"
     CODE_GENERATION = "code_generation"
     MATHEMATICS = "mathematics"
@@ -25,6 +26,7 @@ class ModelCapability(str, Enum):
 
 class ModelTier(str, Enum):
     """Model performance tiers."""
+
     FLAGSHIP = "flagship"  # Top-tier, most capable models
     ADVANCED = "advanced"  # High performance, balanced cost
     STANDARD = "standard"  # Good performance, cost-effective
@@ -35,95 +37,97 @@ class ModelTier(str, Enum):
 @dataclass
 class BenchmarkScores:
     """Performance metrics from standard AI benchmarks."""
-    
+
     # General knowledge and reasoning
     mmlu: Optional[float] = None  # Massive Multitask Language Understanding (0-100)
     gpqa: Optional[float] = None  # Graduate-level questions (0-100)
-    
+
     # Mathematics and problem solving
     math: Optional[float] = None  # MATH benchmark (0-100)
     gsm8k: Optional[float] = None  # Grade school math (0-100)
-    aime: Optional[float] = None  # American Invitational Mathematics Examination (0-100)
-    
+    aime: Optional[float] = (
+        None  # American Invitational Mathematics Examination (0-100)
+    )
+
     # Coding capabilities
     humaneval: Optional[float] = None  # Python code generation (0-100)
     mbpp: Optional[float] = None  # Mostly Basic Python Problems (0-100)
-    
+
     # Reading comprehension
     drop: Optional[float] = None  # Discrete Reasoning Over Paragraphs (0-100)
-    
+
     # Multilingual
     mgsm: Optional[float] = None  # Multilingual Grade School Math (0-100)
-    
+
     # Reasoning
     arc_challenge: Optional[float] = None  # AI2 Reasoning Challenge (0-100)
-    
+
     def overall_score(self) -> float:
         """Calculate a weighted overall score."""
         scores = []
         weights = []
-        
+
         if self.mmlu is not None:
             scores.append(self.mmlu)
             weights.append(2.0)  # Higher weight for MMLU
-        
+
         if self.humaneval is not None:
             scores.append(self.humaneval)
             weights.append(1.5)
-        
+
         if self.math is not None:
             scores.append(self.math)
             weights.append(1.5)
-        
+
         if self.gpqa is not None:
             scores.append(self.gpqa)
             weights.append(1.0)
-        
+
         if self.gsm8k is not None:
             scores.append(self.gsm8k)
             weights.append(1.0)
-        
+
         if self.drop is not None:
             scores.append(self.drop)
             weights.append(1.0)
-        
+
         if not scores:
             return 0.0
-        
+
         return sum(s * w for s, w in zip(scores, weights)) / sum(weights)
 
 
 @dataclass
 class ModelMetadata:
     """Complete metadata for an AI model."""
-    
+
     name: str
     provider: str
     tier: ModelTier
     release_date: str
-    
+
     # Capabilities
     capabilities: List[ModelCapability] = field(default_factory=list)
-    
+
     # Context window (in tokens)
     context_window: int = 8192
-    
+
     # Performance benchmarks
     benchmarks: Optional[BenchmarkScores] = None
-    
+
     # Strengths and ideal use cases
     strengths: List[str] = field(default_factory=list)
     ideal_for: List[str] = field(default_factory=list)
-    
+
     # Limitations
     limitations: List[str] = field(default_factory=list)
-    
+
     # Cost indicators (relative scale: 1-10, where 1 is cheapest)
     cost_tier: int = 5
-    
+
     # Speed indicators (relative scale: 1-10, where 10 is fastest)
     speed_tier: int = 5
-    
+
     # Additional notes
     notes: str = ""
 
@@ -925,7 +929,6 @@ MODEL_REGISTRY: Dict[str, ModelMetadata] = {
     "o1-pro": O1_PRO,
     "openai/o1-mini": O1_MINI,
     "o1-mini": O1_MINI,
-    
     # Anthropic
     "anthropic/claude-4-opus-20250514": CLAUDE_4_OPUS,
     "claude-4-opus-20250514": CLAUDE_4_OPUS,
@@ -933,33 +936,26 @@ MODEL_REGISTRY: Dict[str, ModelMetadata] = {
     "claude-3-7-sonnet-20250219": CLAUDE_3_7_SONNET,
     "anthropic/claude-3-5-haiku-20241022": CLAUDE_3_5_HAIKU,
     "claude-3-5-haiku-20241022": CLAUDE_3_5_HAIKU,
-    
     # Google
     "google-gla/gemini-2.5-pro": GEMINI_2_5_PRO,
     "google-vertex/gemini-2.5-pro": GEMINI_2_5_PRO,
     "google-gla/gemini-2.5-flash": GEMINI_2_5_FLASH,
     "google-vertex/gemini-2.5-flash": GEMINI_2_5_FLASH,
-    
     # Meta Llama
     "groq/llama-3.3-70b-versatile": LLAMA_3_3_70B,
     "huggingface/meta-llama/Llama-3.3-70B-Instruct": LLAMA_3_3_70B,
-    
     # DeepSeek
     "deepseek/deepseek-reasoner": DEEPSEEK_R1,
     "deepseek/deepseek-chat": DEEPSEEK_CHAT,
-    
     # Qwen
     "huggingface/Qwen/Qwen3-235B-A22B": QWEN_3_235B,
     "cerebras/qwen-3-235b-a22b-instruct-2507": QWEN_3_235B,
-    
     # Mistral
     "mistral/mistral-large-latest": MISTRAL_LARGE,
     "mistral/mistral-small-latest": MISTRAL_SMALL,
-    
     # Cohere
     "cohere/command-r-plus": COHERE_COMMAND_R_PLUS,
     "cohere/command-r-plus-08-2024": COHERE_COMMAND_R_PLUS,
-    
     # Grok
     "grok/grok-4": GROK_4,
 }
@@ -968,10 +964,10 @@ MODEL_REGISTRY: Dict[str, ModelMetadata] = {
 def get_model_metadata(model_name: str) -> Optional[ModelMetadata]:
     """
     Get metadata for a specific model.
-    
+
     Args:
         model_name: The model name (with or without provider prefix)
-    
+
     Returns:
         ModelMetadata if found, None otherwise
     """
@@ -981,52 +977,50 @@ def get_model_metadata(model_name: str) -> Optional[ModelMetadata]:
 def get_models_by_capability(capability: ModelCapability) -> List[ModelMetadata]:
     """
     Get all models that have a specific capability.
-    
+
     Args:
         capability: The capability to filter by
-    
+
     Returns:
         List of ModelMetadata objects with the capability
     """
     return [
-        model for model in MODEL_REGISTRY.values()
-        if capability in model.capabilities
+        model for model in MODEL_REGISTRY.values() if capability in model.capabilities
     ]
 
 
 def get_models_by_tier(tier: ModelTier) -> List[ModelMetadata]:
     """
     Get all models in a specific tier.
-    
+
     Args:
         tier: The tier to filter by
-    
+
     Returns:
         List of ModelMetadata objects in the tier
     """
-    return [
-        model for model in MODEL_REGISTRY.values()
-        if model.tier == tier
-    ]
+    return [model for model in MODEL_REGISTRY.values() if model.tier == tier]
 
 
-def get_top_models(n: int = 10, by_benchmark: Optional[str] = None) -> List[ModelMetadata]:
+def get_top_models(
+    n: int = 10, by_benchmark: Optional[str] = None
+) -> List[ModelMetadata]:
     """
     Get the top N models by overall score or specific benchmark.
-    
+
     Args:
         n: Number of top models to return
         by_benchmark: Specific benchmark to sort by (e.g., 'mmlu', 'humaneval')
-    
+
     Returns:
         List of top ModelMetadata objects
     """
     models_with_scores = []
-    
+
     for model in MODEL_REGISTRY.values():
         if model.benchmarks is None:
             continue
-        
+
         if by_benchmark:
             score = getattr(model.benchmarks, by_benchmark, None)
             if score is not None:
@@ -1035,9 +1029,8 @@ def get_top_models(n: int = 10, by_benchmark: Optional[str] = None) -> List[Mode
             score = model.benchmarks.overall_score()
             if score > 0:
                 models_with_scores.append((model, score))
-    
+
     # Sort by score descending
     models_with_scores.sort(key=lambda x: x[1], reverse=True)
-    
-    return [model for model, _ in models_with_scores[:n]]
 
+    return [model for model, _ in models_with_scores[:n]]

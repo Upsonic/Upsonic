@@ -44,7 +44,9 @@ class ModelResponsePartsManager:
 
     _parts: list[ManagedPart] = field(default_factory=list, init=False)
     """List of parts making up the current response state."""
-    _vendor_id_to_part_index: dict[VendorId, int] = field(default_factory=dict, init=False)
+    _vendor_id_to_part_index: dict[VendorId, int] = field(
+        default_factory=dict, init=False
+    )
     """Maps vendor part ID to index in _parts."""
 
     def get_parts(self) -> list[ModelResponsePart]:
@@ -93,15 +95,19 @@ class ModelResponsePartsManager:
                         self._vendor_id_to_part_index.pop(vendor_part_id)
                         return None
                     else:
-                        return self.handle_thinking_delta(vendor_part_id=vendor_part_id, content=content)
+                        return self.handle_thinking_delta(
+                            vendor_part_id=vendor_part_id, content=content
+                        )
                 elif isinstance(existing_part, TextPart):
                     existing_text_part_and_index = existing_part, part_index
                 else:
-                    raise UnexpectedModelBehavior(f'Cannot apply a text delta to {existing_part=}')
+                    raise UnexpectedModelBehavior(
+                        f"Cannot apply a text delta to {existing_part=}"
+                    )
 
         if thinking_tags and content == thinking_tags[0]:
             self._vendor_id_to_part_index.pop(vendor_part_id, None)
-            return self.handle_thinking_delta(vendor_part_id=vendor_part_id, content='')
+            return self.handle_thinking_delta(vendor_part_id=vendor_part_id, content="")
 
         if existing_text_part_and_index is None:
             if ignore_leading_whitespace and (len(content) == 0 or content.isspace()):
@@ -156,29 +162,42 @@ class ModelResponsePartsManager:
             if part_index is not None:
                 existing_part = self._parts[part_index]
                 if not isinstance(existing_part, ThinkingPart):
-                    raise UnexpectedModelBehavior(f'Cannot apply a thinking delta to {existing_part=}')
+                    raise UnexpectedModelBehavior(
+                        f"Cannot apply a thinking delta to {existing_part=}"
+                    )
                 existing_thinking_part_and_index = existing_part, part_index
 
         if existing_thinking_part_and_index is None:
             if content is not None or signature is not None:
                 new_part_index = len(self._parts)
-                part = ThinkingPart(content=content or '', id=id, signature=signature, provider_name=provider_name)
+                part = ThinkingPart(
+                    content=content or "",
+                    id=id,
+                    signature=signature,
+                    provider_name=provider_name,
+                )
                 if vendor_part_id is not None:
                     self._vendor_id_to_part_index[vendor_part_id] = new_part_index
                 self._parts.append(part)
                 return PartStartEvent(index=new_part_index, part=part)
             else:
-                raise UnexpectedModelBehavior('Cannot create a ThinkingPart with no content or signature')
+                raise UnexpectedModelBehavior(
+                    "Cannot create a ThinkingPart with no content or signature"
+                )
         else:
             if content is not None or signature is not None:
                 existing_thinking_part, part_index = existing_thinking_part_and_index
                 part_delta = ThinkingPartDelta(
-                    content_delta=content, signature_delta=signature, provider_name=provider_name
+                    content_delta=content,
+                    signature_delta=signature,
+                    provider_name=provider_name,
                 )
                 self._parts[part_index] = part_delta.apply(existing_thinking_part)
                 return PartDeltaEvent(index=part_index, delta=part_delta)
             else:
-                raise UnexpectedModelBehavior('Cannot update a ThinkingPart with no content or signature')
+                raise UnexpectedModelBehavior(
+                    "Cannot update a ThinkingPart with no content or signature"
+                )
 
     def handle_tool_call_delta(
         self,
@@ -202,26 +221,35 @@ class ModelResponsePartsManager:
         Raises:
             UnexpectedModelBehavior: If applying tool call delta to incompatible part.
         """
-        existing_matching_part_and_index: tuple[ToolCallPartDelta | ToolCallPart | BuiltinToolCallPart, int] | None = (
-            None
-        )
+        existing_matching_part_and_index: (
+            tuple[ToolCallPartDelta | ToolCallPart | BuiltinToolCallPart, int] | None
+        ) = None
 
         if vendor_part_id is None:
             if tool_name is None and self._parts:
                 part_index = len(self._parts) - 1
                 latest_part = self._parts[part_index]
-                if isinstance(latest_part, ToolCallPart | BuiltinToolCallPart | ToolCallPartDelta):
+                if isinstance(
+                    latest_part, ToolCallPart | BuiltinToolCallPart | ToolCallPartDelta
+                ):
                     existing_matching_part_and_index = latest_part, part_index
         else:
             part_index = self._vendor_id_to_part_index.get(vendor_part_id)
             if part_index is not None:
                 existing_part = self._parts[part_index]
-                if not isinstance(existing_part, ToolCallPartDelta | ToolCallPart | BuiltinToolCallPart):
-                    raise UnexpectedModelBehavior(f'Cannot apply a tool call delta to {existing_part=}')
+                if not isinstance(
+                    existing_part,
+                    ToolCallPartDelta | ToolCallPart | BuiltinToolCallPart,
+                ):
+                    raise UnexpectedModelBehavior(
+                        f"Cannot apply a tool call delta to {existing_part=}"
+                    )
                 existing_matching_part_and_index = existing_part, part_index
 
         if existing_matching_part_and_index is None:
-            delta = ToolCallPartDelta(tool_name_delta=tool_name, args_delta=args, tool_call_id=tool_call_id)
+            delta = ToolCallPartDelta(
+                tool_name_delta=tool_name, args_delta=args, tool_call_id=tool_call_id
+            )
             part = delta.as_part() or delta
             if vendor_part_id is not None:
                 self._vendor_id_to_part_index[vendor_part_id] = len(self._parts)
@@ -231,7 +259,9 @@ class ModelResponsePartsManager:
                 return PartStartEvent(index=new_part_index, part=part)
         else:
             existing_part, part_index = existing_matching_part_and_index
-            delta = ToolCallPartDelta(tool_name_delta=tool_name, args_delta=args, tool_call_id=tool_call_id)
+            delta = ToolCallPartDelta(
+                tool_name_delta=tool_name, args_delta=args, tool_call_id=tool_call_id
+            )
             updated_part = delta.apply(existing_part)
             self._parts[part_index] = updated_part
             if isinstance(updated_part, ToolCallPart | BuiltinToolCallPart):
@@ -271,7 +301,9 @@ class ModelResponsePartsManager:
             self._parts.append(new_part)
         else:
             maybe_part_index = self._vendor_id_to_part_index.get(vendor_part_id)
-            if maybe_part_index is not None and isinstance(self._parts[maybe_part_index], ToolCallPart):
+            if maybe_part_index is not None and isinstance(
+                self._parts[maybe_part_index], ToolCallPart
+            ):
                 new_part_index = maybe_part_index
                 self._parts[new_part_index] = new_part
             else:
@@ -300,7 +332,9 @@ class ModelResponsePartsManager:
             self._parts.append(part)
         else:
             maybe_part_index = self._vendor_id_to_part_index.get(vendor_part_id)
-            if maybe_part_index is not None and isinstance(self._parts[maybe_part_index], BuiltinToolCallPart):
+            if maybe_part_index is not None and isinstance(
+                self._parts[maybe_part_index], BuiltinToolCallPart
+            ):
                 new_part_index = maybe_part_index
                 self._parts[new_part_index] = part
             else:
@@ -329,7 +363,9 @@ class ModelResponsePartsManager:
             self._parts.append(part)
         else:
             maybe_part_index = self._vendor_id_to_part_index.get(vendor_part_id)
-            if maybe_part_index is not None and isinstance(self._parts[maybe_part_index], BuiltinToolReturnPart):
+            if maybe_part_index is not None and isinstance(
+                self._parts[maybe_part_index], BuiltinToolReturnPart
+            ):
                 new_part_index = maybe_part_index
                 self._parts[new_part_index] = part
             else:

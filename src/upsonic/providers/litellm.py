@@ -15,17 +15,21 @@ from upsonic.profiles.grok import grok_model_profile
 from upsonic.profiles.groq import groq_model_profile
 from upsonic.profiles.meta import meta_model_profile
 from upsonic.profiles.mistral import mistral_model_profile
-from upsonic.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIModelProfile, openai_model_profile
+from upsonic.profiles.openai import (
+    OpenAIJsonSchemaTransformer,
+    OpenAIModelProfile,
+    openai_model_profile,
+)
 from upsonic.profiles.qwen import qwen_model_profile
 from upsonic.providers import Provider
 
 try:
     from openai import AsyncOpenAI
+
     _OPENAI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     AsyncOpenAI = None
     _OPENAI_AVAILABLE = False
-
 
 
 class LiteLLMProvider(Provider[AsyncOpenAI]):
@@ -33,7 +37,7 @@ class LiteLLMProvider(Provider[AsyncOpenAI]):
 
     @property
     def name(self) -> str:
-        return 'litellm'
+        return "litellm"
 
     @property
     def base_url(self) -> str:
@@ -46,27 +50,27 @@ class LiteLLMProvider(Provider[AsyncOpenAI]):
     def model_profile(self, model_name: str) -> ModelProfile | None:
         # Map provider prefixes to their profile functions
         provider_to_profile = {
-            'anthropic': anthropic_model_profile,
-            'openai': openai_model_profile,
-            'google': google_model_profile,
-            'mistralai': mistral_model_profile,
-            'mistral': mistral_model_profile,
-            'cohere': cohere_model_profile,
-            'amazon': amazon_model_profile,
-            'bedrock': amazon_model_profile,
-            'meta-llama': meta_model_profile,
-            'meta': meta_model_profile,
-            'groq': groq_model_profile,
-            'deepseek': deepseek_model_profile,
-            'x-ai': grok_model_profile,
-            'qwen': qwen_model_profile,
+            "anthropic": anthropic_model_profile,
+            "openai": openai_model_profile,
+            "google": google_model_profile,
+            "mistralai": mistral_model_profile,
+            "mistral": mistral_model_profile,
+            "cohere": cohere_model_profile,
+            "amazon": amazon_model_profile,
+            "bedrock": amazon_model_profile,
+            "meta-llama": meta_model_profile,
+            "meta": meta_model_profile,
+            "groq": groq_model_profile,
+            "deepseek": deepseek_model_profile,
+            "x-ai": grok_model_profile,
+            "qwen": qwen_model_profile,
         }
 
         profile = None
 
         # Check if model name contains a provider prefix (e.g., "anthropic/claude-3")
-        if '/' in model_name:
-            provider_prefix, model_suffix = model_name.split('/', 1)
+        if "/" in model_name:
+            provider_prefix, model_suffix = model_name.split("/", 1)
             if provider_prefix in provider_to_profile:
                 profile = provider_to_profile[provider_prefix](model_suffix)
 
@@ -76,7 +80,9 @@ class LiteLLMProvider(Provider[AsyncOpenAI]):
 
         # As LiteLLMProvider is used with OpenAIModel, which uses OpenAIJsonSchemaTransformer,
         # we maintain that behavior
-        return OpenAIModelProfile(json_schema_transformer=OpenAIJsonSchemaTransformer).update(profile)
+        return OpenAIModelProfile(
+            json_schema_transformer=OpenAIJsonSchemaTransformer
+        ).update(profile)
 
     @overload
     def __init__(
@@ -108,10 +114,11 @@ class LiteLLMProvider(Provider[AsyncOpenAI]):
     ) -> None:
         if not _OPENAI_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="openai",
-                install_command='pip install openai',
-                feature_name="openai provider"
+                install_command="pip install openai",
+                feature_name="openai provider",
             )
 
         """Initialize a LiteLLM provider.
@@ -130,10 +137,14 @@ class LiteLLMProvider(Provider[AsyncOpenAI]):
         # The actual API calls will be intercepted and routed through LiteLLM
         if http_client is not None:
             self._client = AsyncOpenAI(
-                base_url=api_base, api_key=api_key or 'litellm-placeholder', http_client=http_client
+                base_url=api_base,
+                api_key=api_key or "litellm-placeholder",
+                http_client=http_client,
             )
         else:
-            http_client = cached_async_http_client(provider='litellm')
+            http_client = cached_async_http_client(provider="litellm")
             self._client = AsyncOpenAI(
-                base_url=api_base, api_key=api_key or 'litellm-placeholder', http_client=http_client
+                base_url=api_base,
+                api_key=api_key or "litellm-placeholder",
+                http_client=http_client,
             )

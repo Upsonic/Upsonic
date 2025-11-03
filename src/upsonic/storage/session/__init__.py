@@ -1,9 +1,3 @@
-from .sessions import (
-    UserProfile,
-    InteractionSession
-)
+from .sessions import UserProfile, InteractionSession
 
-__all__ = [
-    "UserProfile",
-    "InteractionSession"
-]
+__all__ = ["UserProfile", "InteractionSession"]

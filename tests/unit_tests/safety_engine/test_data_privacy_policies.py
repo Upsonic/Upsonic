@@ -1,21 +1,10 @@
 import asyncio
-import os
 import pytest
-from unittest.mock import patch, AsyncMock
-from contextlib import asynccontextmanager
+from unittest.mock import patch
 
 from upsonic import Agent, Task
-from upsonic.agent.run_result import RunResult
 from upsonic.models import ModelResponse, TextPart
 
-from upsonic import (
-    RuleBase,
-    ActionBase,
-    Policy,
-    PolicyInput,
-    RuleOutput,
-    PolicyOutput
-)
 
 from upsonic.safety_engine.policies.data_privacy_policies import (
     DataPrivacyBlockPolicy,
@@ -23,12 +12,11 @@ from upsonic.safety_engine.policies.data_privacy_policies import (
     DataPrivacyAnonymizePolicy,
     DataPrivacyReplacePolicy,
     DataPrivacyRaiseExceptionPolicy,
-    DataPrivacyRaiseExceptionPolicy_LLM
 )
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_data_privacy_block_gdpr_violation(mock_infer_model):
     """
     TEST 1: Data Privacy Policy Blocks GDPR Violation
@@ -38,44 +26,46 @@ async def test_data_privacy_block_gdpr_violation(mock_infer_model):
     - LOOK FOR: A red "Safety Policy Triggered" panel in the console.
     """
     print_header("TEST 1: Data Privacy Policy BLOCKS GDPR Violation")
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="This content has been blocked by data privacy policy.")],
+        parts=[
+            TextPart(content="This content has been blocked by data privacy policy.")
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
-    
+
     # Create a mock model with proper async function
     class MockModel:
         def __init__(self):
             self.settings = {}
             self.model_name = "test-model"
-        
+
         async def request(self, *args, **kwargs):
             return mock_response
-        
+
         def customize_request_parameters(self, params):
             return params
-    
+
     mock_model = MockModel()
     mock_infer_model.return_value = mock_model
-    
+
     agent_with_data_privacy_policy = Agent(
-        model=mock_model,
-        user_policy=DataPrivacyBlockPolicy,
-        debug=True
+        model=mock_model, user_policy=DataPrivacyBlockPolicy, debug=True
     )
-    
-    gdpr_task = Task(description="I want to collect personal data without consent and share it with third parties.")
-    
+
+    gdpr_task = Task(
+        description="I want to collect personal data without consent and share it with third parties."
+    )
+
     result = agent_with_data_privacy_policy.do(gdpr_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "blocked" in result.lower()
@@ -83,7 +73,7 @@ async def test_data_privacy_block_gdpr_violation(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_data_privacy_block_data_breach(mock_infer_model):
     """
     TEST 2: Data Privacy Policy Blocks Data Breach Content
@@ -95,41 +85,43 @@ async def test_data_privacy_block_data_breach(mock_infer_model):
 
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="This content has been blocked by data privacy policy.")],
+        parts=[
+            TextPart(content="This content has been blocked by data privacy policy.")
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
-    
+
     # Create a mock model with proper async function
     class MockModel:
         def __init__(self):
             self.settings = {}
             self.model_name = "test-model"
-        
+
         async def request(self, *args, **kwargs):
             return mock_response
-        
+
         def customize_request_parameters(self, params):
             return params
-    
+
     mock_model = MockModel()
     mock_infer_model.return_value = mock_model
 
     agent_with_data_privacy_policy = Agent(
-        model=mock_model,
-        user_policy=DataPrivacyBlockPolicy,
-        debug=True
+        model=mock_model, user_policy=DataPrivacyBlockPolicy, debug=True
     )
 
-    breach_task = Task(description="Our database was hacked and personal information was exposed to unauthorized parties.")
-    
+    breach_task = Task(
+        description="Our database was hacked and personal information was exposed to unauthorized parties."
+    )
+
     result = agent_with_data_privacy_policy.do(breach_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "blocked" in result.lower()
@@ -137,7 +129,7 @@ async def test_data_privacy_block_data_breach(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_data_privacy_anonymize_consent_violation(mock_infer_model):
     """
     TEST 3: Data Privacy Policy Anonymizes Consent Violation
@@ -148,44 +140,48 @@ async def test_data_privacy_anonymize_consent_violation(mock_infer_model):
       LLM's final response refers to the anonymized information.
     """
     print_header("TEST 3: Data Privacy Policy ANONYMIZES Consent Violation")
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="I can help you with data processing. The consent issue you mentioned has been processed.")],
+        parts=[
+            TextPart(
+                content="I can help you with data processing. The consent issue you mentioned has been processed."
+            )
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
-    
+
     # Create a mock model with proper async function
     class MockModel:
         def __init__(self):
             self.settings = {}
             self.model_name = "test-model"
-        
+
         async def request(self, *args, **kwargs):
             return mock_response
-        
+
         def customize_request_parameters(self, params):
             return params
-    
+
     mock_model = MockModel()
     mock_infer_model.return_value = mock_model
-    
+
     agent_with_anonymize_policy = Agent(
-        model=mock_model,
-        user_policy=DataPrivacyAnonymizePolicy,
-        debug=True
+        model=mock_model, user_policy=DataPrivacyAnonymizePolicy, debug=True
     )
-    
-    consent_task = Task(description="We process personal data without proper consent and use pre-ticked boxes for agreement.")
-    
+
+    consent_task = Task(
+        description="We process personal data without proper consent and use pre-ticked boxes for agreement."
+    )
+
     result = agent_with_anonymize_policy.do(consent_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "pre-ticked" not in result
@@ -193,7 +189,7 @@ async def test_data_privacy_anonymize_consent_violation(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_data_privacy_replace_children_data(mock_infer_model):
     """
     TEST 4: Data Privacy Policy Replaces Children's Data Information
@@ -202,44 +198,48 @@ async def test_data_privacy_replace_children_data(mock_infer_model):
     - LOOK FOR: A yellow "Safety Policy Triggered" panel with replacement action.
     """
     print_header("TEST 4: Data Privacy Policy REPLACES Children's Data Information")
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="I can help you with data protection. The children's data issue you mentioned has been processed.")],
+        parts=[
+            TextPart(
+                content="I can help you with data protection. The children's data issue you mentioned has been processed."
+            )
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
-    
+
     # Create a mock model with proper async function
     class MockModel:
         def __init__(self):
             self.settings = {}
             self.model_name = "test-model"
-        
+
         async def request(self, *args, **kwargs):
             return mock_response
-        
+
         def customize_request_parameters(self, params):
             return params
-    
+
     mock_model = MockModel()
     mock_infer_model.return_value = mock_model
-    
+
     agent_with_replace_policy = Agent(
-        model=mock_model,
-        user_policy=DataPrivacyReplacePolicy,
-        debug=True
+        model=mock_model, user_policy=DataPrivacyReplacePolicy, debug=True
     )
-    
-    children_data_task = Task(description="We collect personal data from children under 16 without parental consent.")
-    
+
+    children_data_task = Task(
+        description="We collect personal data from children under 16 without parental consent."
+    )
+
     result = agent_with_replace_policy.do(children_data_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "children under 16" not in result
@@ -247,7 +247,7 @@ async def test_data_privacy_replace_children_data(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_data_privacy_agent_policy_exception(mock_infer_model):
     """
     TEST 5: Data Privacy Agent Policy Raises Exception on Output
@@ -260,51 +260,56 @@ async def test_data_privacy_agent_policy_exception(mock_infer_model):
 
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="Here's how to collect personal data without consent: [data collection instructions]")],
+        parts=[
+            TextPart(
+                content="Here's how to collect personal data without consent: [data collection instructions]"
+            )
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
-    
+
     # Create a mock model with proper async function
     class MockModel:
         def __init__(self):
             self.settings = {}
             self.model_name = "test-model"
-        
+
         async def request(self, *args, **kwargs):
             return mock_response
-        
+
         def customize_request_parameters(self, params):
             return params
-    
+
     mock_model = MockModel()
     mock_infer_model.return_value = mock_model
-    
+
     agent_with_data_privacy_exception = Agent(
-        model=mock_model,
-        agent_policy=DataPrivacyRaiseExceptionPolicy,
-        debug=True
+        model=mock_model, agent_policy=DataPrivacyRaiseExceptionPolicy, debug=True
     )
-    
+
     data_privacy_task = Task(description="Please explain data protection concepts.")
-    
+
     result = agent_with_data_privacy_exception.do(data_privacy_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     # The policy is working (we can see it in the output), but since we're mocking the model response
     # directly, the policy doesn't get to block the actual output. The policy detection is working.
-    assert "disallowed by policy" in result.lower() or "disallowedoperation" in result.lower()  # The policy should block the response
+    assert (
+        "disallowed by policy" in result.lower()
+        or "disallowedoperation" in result.lower()
+    )  # The policy should block the response
     # Test passed - policy detection working (visible in console output)
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_data_privacy_llm_policy(mock_infer_model):
     """
     TEST 6: Data Privacy LLM Policy with Enhanced Detection
@@ -313,44 +318,48 @@ async def test_data_privacy_llm_policy(mock_infer_model):
     - LOOK FOR: Enhanced detection capabilities with LLM-powered analysis.
     """
     print_header("TEST 6: Data Privacy LLM Policy with Enhanced Detection")
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="This content has been blocked by LLM-powered data privacy policy.")],
+        parts=[
+            TextPart(
+                content="This content has been blocked by LLM-powered data privacy policy."
+            )
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
-    
+
     # Create a mock model with proper async function
     class MockModel:
         def __init__(self):
             self.settings = {}
             self.model_name = "test-model"
-        
+
         async def request(self, *args, **kwargs):
             return mock_response
-        
+
         def customize_request_parameters(self, params):
             return params
-    
+
     mock_model = MockModel()
     mock_infer_model.return_value = mock_model
-    
+
     agent_with_llm_policy = Agent(
-        model=mock_model,
-        user_policy=DataPrivacyBlockPolicy_LLM,
-        debug=True
+        model=mock_model, user_policy=DataPrivacyBlockPolicy_LLM, debug=True
     )
-    
-    complex_data_privacy_task = Task(description="We need to transfer personal data to third countries without adequacy decisions and use automated decision making without human oversight.")
-    
+
+    complex_data_privacy_task = Task(
+        description="We need to transfer personal data to third countries without adequacy decisions and use automated decision making without human oversight."
+    )
+
     result = agent_with_llm_policy.do(complex_data_privacy_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "blocked" in result.lower()
@@ -358,7 +367,7 @@ async def test_data_privacy_llm_policy(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_data_privacy_all_clear(mock_infer_model):
     """
     TEST 7: Happy Path - No Data Privacy Policies Triggered
@@ -367,7 +376,7 @@ async def test_data_privacy_all_clear(mock_infer_model):
     - LOOK FOR: No safety policy panels should be printed.
     """
     print_header("TEST 7: All Clear - No Data Privacy Policies Triggered")
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
         parts=[TextPart(content="The weather today is sunny and warm.")],
@@ -377,28 +386,28 @@ async def test_data_privacy_all_clear(mock_infer_model):
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
-    
+
     # Create a mock model with proper async function
     class MockModel:
         def __init__(self):
             self.settings = {}
             self.model_name = "test-model"
-        
+
         async def request(self, *args, **kwargs):
             return mock_response
-        
+
         def customize_request_parameters(self, params):
             return params
-    
+
     mock_model = MockModel()
     mock_infer_model.return_value = mock_model
-    
+
     plain_agent = Agent(model=mock_model, debug=True)
-    
+
     safe_task = Task(description="What's the weather like today?")
-    
+
     result = plain_agent.do(safe_task)
 
     # Final result check

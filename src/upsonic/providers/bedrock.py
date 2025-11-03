@@ -21,6 +21,7 @@ try:
     from botocore.client import BaseClient
     from botocore.config import Config
     from botocore.exceptions import NoRegionError
+
     _BOTO3_AVAILABLE = True
 except ImportError:
     boto3 = None
@@ -28,7 +29,6 @@ except ImportError:
     Config = None
     NoRegionError = None
     _BOTO3_AVAILABLE = False
-
 
 
 @dataclass(kw_only=True)
@@ -39,14 +39,14 @@ class BedrockModelProfile(ModelProfile):
     """
 
     bedrock_supports_tool_choice: bool = False
-    bedrock_tool_result_format: Literal['text', 'json'] = 'text'
+    bedrock_tool_result_format: Literal["text", "json"] = "text"
     bedrock_send_back_thinking_parts: bool = False
 
 
 def bedrock_amazon_model_profile(model_name: str) -> ModelProfile | None:
     """Get the model profile for an Amazon model used via Bedrock."""
     profile = amazon_model_profile(model_name)
-    if 'nova' in model_name:
+    if "nova" in model_name:
         return BedrockModelProfile(bedrock_supports_tool_choice=True).update(profile)
     return profile
 
@@ -54,8 +54,10 @@ def bedrock_amazon_model_profile(model_name: str) -> ModelProfile | None:
 def bedrock_deepseek_model_profile(model_name: str) -> ModelProfile | None:
     """Get the model profile for a DeepSeek model used via Bedrock."""
     profile = deepseek_model_profile(model_name)
-    if 'r1' in model_name:
-        return BedrockModelProfile(bedrock_send_back_thinking_parts=True).update(profile)
+    if "r1" in model_name:
+        return BedrockModelProfile(bedrock_send_back_thinking_parts=True).update(
+            profile
+        )
     return profile  # pragma: no cover
 
 
@@ -64,7 +66,7 @@ class BedrockProvider(Provider[BaseClient]):
 
     @property
     def name(self) -> str:
-        return 'bedrock'
+        return "bedrock"
 
     @property
     def base_url(self) -> str:
@@ -76,20 +78,20 @@ class BedrockProvider(Provider[BaseClient]):
 
     def model_profile(self, model_name: str) -> ModelProfile | None:
         provider_to_profile: dict[str, Callable[[str], ModelProfile | None]] = {
-            'anthropic': lambda model_name: BedrockModelProfile(
+            "anthropic": lambda model_name: BedrockModelProfile(
                 bedrock_supports_tool_choice=True, bedrock_send_back_thinking_parts=True
             ).update(anthropic_model_profile(model_name)),
-            'mistral': lambda model_name: BedrockModelProfile(bedrock_tool_result_format='json').update(
-                mistral_model_profile(model_name)
-            ),
-            'cohere': cohere_model_profile,
-            'amazon': bedrock_amazon_model_profile,
-            'meta': meta_model_profile,
-            'deepseek': bedrock_deepseek_model_profile,
+            "mistral": lambda model_name: BedrockModelProfile(
+                bedrock_tool_result_format="json"
+            ).update(mistral_model_profile(model_name)),
+            "cohere": cohere_model_profile,
+            "amazon": bedrock_amazon_model_profile,
+            "meta": meta_model_profile,
+            "deepseek": bedrock_deepseek_model_profile,
         }
 
         # Split the model name into parts
-        parts = model_name.split('.', 2)
+        parts = model_name.split(".", 2)
 
         # Handle regional prefixes (e.g. "us.")
         if len(parts) > 2 and len(parts[0]) == 2:
@@ -102,7 +104,7 @@ class BedrockProvider(Provider[BaseClient]):
         model_name_with_version = parts[1]
 
         # Remove version suffix if it matches the format (e.g. "-v1:0" or "-v14")
-        version_match = re.match(r'(.+)-v\d+(?::\d+)?$', model_name_with_version)
+        version_match = re.match(r"(.+)-v\d+(?::\d+)?$", model_name_with_version)
         if version_match:
             model_name = version_match.group(1)
         else:
@@ -143,10 +145,11 @@ class BedrockProvider(Provider[BaseClient]):
     ) -> None:
         if not _BOTO3_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="boto3",
                 install_command='pip install "upsonic[bedrock]"',
-                feature_name="Bedrock provider"
+                feature_name="Bedrock provider",
             )
 
         """Initialize the Bedrock provider.
@@ -165,8 +168,12 @@ class BedrockProvider(Provider[BaseClient]):
             self._client = bedrock_client
         else:
             try:
-                read_timeout = aws_read_timeout or float(os.getenv('AWS_READ_TIMEOUT', 300))
-                connect_timeout = aws_connect_timeout or float(os.getenv('AWS_CONNECT_TIMEOUT', 60))
+                read_timeout = aws_read_timeout or float(
+                    os.getenv("AWS_READ_TIMEOUT", 300)
+                )
+                connect_timeout = aws_connect_timeout or float(
+                    os.getenv("AWS_CONNECT_TIMEOUT", 60)
+                )
                 session = boto3.Session(
                     aws_access_key_id=aws_access_key_id,
                     aws_secret_access_key=aws_secret_access_key,
@@ -175,8 +182,12 @@ class BedrockProvider(Provider[BaseClient]):
                     profile_name=profile_name,
                 )
                 self._client = session.client(  # type: ignore[reportUnknownMemberType]
-                    'bedrock-runtime',
-                    config=Config(read_timeout=read_timeout, connect_timeout=connect_timeout),
+                    "bedrock-runtime",
+                    config=Config(
+                        read_timeout=read_timeout, connect_timeout=connect_timeout
+                    ),
                 )
             except NoRegionError as exc:  # pragma: no cover
-                raise UserError('You must provide a `region_name` or a boto3 client for Bedrock Runtime.') from exc
+                raise UserError(
+                    "You must provide a `region_name` or a boto3 client for Bedrock Runtime."
+                ) from exc

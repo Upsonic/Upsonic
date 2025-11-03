@@ -1,7 +1,7 @@
 from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
-import asyncio # This import is crucial for the 'finally' block
+import asyncio  # This import is crucial for the 'finally' block
 
 
 if TYPE_CHECKING:
@@ -31,7 +31,7 @@ class MemoryManager:
         self._prepared_inputs: Dict[str, Any] = {
             "message_history": [],
             "context_injection": "",
-            "system_prompt_injection": ""
+            "system_prompt_injection": "",
         }
         self._model_response: Optional[Any] = None
 
@@ -73,10 +73,12 @@ class MemoryManager:
 
         if self.memory:
             self._prepared_inputs = await self.memory.prepare_inputs_for_task()
-        
+
         try:
             yield self
         finally:
             if self.memory and self._model_response:
-                task = asyncio.create_task(self.memory.update_memories_after_task(self._model_response))
+                task = asyncio.create_task(
+                    self.memory.update_memories_after_task(self._model_response)
+                )
                 await task

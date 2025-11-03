@@ -165,7 +165,9 @@ class ModelSettings(TypedDict, total=False):
     """
 
 
-def merge_model_settings(base: ModelSettings | None, overrides: ModelSettings | None) -> ModelSettings | None:
+def merge_model_settings(
+    base: ModelSettings | None, overrides: ModelSettings | None
+) -> ModelSettings | None:
     """Merge two sets of model settings, preferring the overrides.
 
     A common use case is: merge_model_settings(<agent settings>, <run settings>)

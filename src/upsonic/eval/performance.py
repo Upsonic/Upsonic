@@ -1,5 +1,4 @@
 from __future__ import annotations
-import asyncio
 import copy
 import time
 import tracemalloc
@@ -27,12 +26,16 @@ class PerformanceEvaluator:
         agent_under_test: Union[Agent, Graph, Team],
         task: Union[Task, List[Task]],
         num_iterations: int = 10,
-        warmup_runs: int = 2
+        warmup_runs: int = 2,
     ):
         if not isinstance(agent_under_test, (Agent, Graph, Team)):
-            raise TypeError("The `agent_under_test` must be an instance of `Agent`, `Graph`, or `Team`.")
+            raise TypeError(
+                "The `agent_under_test` must be an instance of `Agent`, `Graph`, or `Team`."
+            )
         if not isinstance(task, (Task, list)):
-            raise TypeError("The `task` must be an instance of `Task` or a list of `Task` objects.")
+            raise TypeError(
+                "The `task` must be an instance of `Task` or a list of `Task` objects."
+            )
         if not isinstance(num_iterations, int) or num_iterations < 1:
             raise ValueError("`num_iterations` must be a positive integer.")
         if not isinstance(warmup_runs, int) or warmup_runs < 0:
@@ -63,14 +66,18 @@ class PerformanceEvaluator:
         tracemalloc.start()
 
         if self.warmup_runs > 0:
-            console.print(f"[bold dim]Running {self.warmup_runs} warmup iteration(s)...[/bold dim]")
+            console.print(
+                f"[bold dim]Running {self.warmup_runs} warmup iteration(s)...[/bold dim]"
+            )
             for _ in range(self.warmup_runs):
                 agent_for_this_run = copy.deepcopy(self.agent_under_test)
                 task_for_this_run = copy.deepcopy(self.task)
                 await self._execute_component(agent_for_this_run, task_for_this_run)
 
         all_run_results: List[PerformanceRunResult] = []
-        console.print(f"[bold blue]Running {self.num_iterations} measurement iteration(s)...[/bold blue]")
+        console.print(
+            f"[bold blue]Running {self.num_iterations} measurement iteration(s)...[/bold blue]"
+        )
         for _ in range(self.num_iterations):
             agent_for_this_run = copy.deepcopy(self.agent_under_test)
             task_for_this_run = copy.deepcopy(self.task)
@@ -78,21 +85,24 @@ class PerformanceEvaluator:
             tracemalloc.clear_traces()
             start_mem, _ = tracemalloc.get_traced_memory()
             debug_log(f"start_mem: {start_mem}", context="PerformanceEvaluator")
-            
+
             start_time = time.perf_counter()
 
             await self._execute_component(agent_for_this_run, task_for_this_run)
 
             end_time = time.perf_counter()
             latency = end_time - start_time
-            
+
             end_mem, peak_mem = tracemalloc.get_traced_memory()
-            debug_log(f"end_mem: {end_mem}, peak_mem: {peak_mem}", context="PerformanceEvaluator")
-            
+            debug_log(
+                f"end_mem: {end_mem}, peak_mem: {peak_mem}",
+                context="PerformanceEvaluator",
+            )
+
             run_result = PerformanceRunResult(
                 latency_seconds=latency,
                 memory_increase_bytes=end_mem - start_mem,
-                memory_peak_bytes=peak_mem - start_mem
+                memory_peak_bytes=peak_mem - start_mem,
             )
             all_run_results.append(run_result)
 
@@ -102,10 +112,12 @@ class PerformanceEvaluator:
 
         if print_results:
             self._print_formatted_results(final_result)
-        
+
         return final_result
 
-    async def _execute_component(self, agent: Union[Agent, Graph, Team], task: Union[Task, List[Task]]) -> None:
+    async def _execute_component(
+        self, agent: Union[Agent, Graph, Team], task: Union[Task, List[Task]]
+    ) -> None:
         """Internal helper now accepts the components to execute."""
         if isinstance(agent, Agent):
             task_to_run = task[0] if isinstance(task, list) else task
@@ -130,7 +142,9 @@ class PerformanceEvaluator:
             "std_dev": statistics.stdev(data) if len(data) > 1 else 0.0,
         }
 
-    def _aggregate_results(self, run_results: List[PerformanceRunResult]) -> PerformanceEvaluationResult:
+    def _aggregate_results(
+        self, run_results: List[PerformanceRunResult]
+    ) -> PerformanceEvaluationResult:
         """Aggregates raw run data into the final result object."""
         latencies = [r.latency_seconds for r in run_results]
         mem_increases = [float(r.memory_increase_bytes) for r in run_results]
@@ -147,7 +161,9 @@ class PerformanceEvaluator:
 
     def _print_formatted_results(self, result: PerformanceEvaluationResult) -> None:
         """Prints a rich, formatted table of the performance results."""
-        table = Table(title=f"[bold]Performance Evaluation Results[/bold]\n({result.num_iterations} iterations, {result.warmup_runs} warmups)")
+        table = Table(
+            title=f"[bold]Performance Evaluation Results[/bold]\n({result.num_iterations} iterations, {result.warmup_runs} warmups)"
+        )
         table.add_column("Metric", style="cyan", no_wrap=True)
         table.add_column("Average", style="magenta")
         table.add_column("Median", style="green")
@@ -176,21 +192,21 @@ class PerformanceEvaluator:
         mis = result.memory_increase_stats
         table.add_row(
             "Memory Increase",
-            format_mem(mis['average']),
-            format_mem(mis['median']),
-            format_mem(mis['min']),
-            format_mem(mis['max']),
-            format_mem(mis['std_dev']),
+            format_mem(mis["average"]),
+            format_mem(mis["median"]),
+            format_mem(mis["min"]),
+            format_mem(mis["max"]),
+            format_mem(mis["std_dev"]),
         )
 
         mps = result.memory_peak_stats
         table.add_row(
             "Memory Peak",
-            format_mem(mps['average']),
-            format_mem(mps['median']),
-            format_mem(mps['min']),
-            format_mem(mps['max']),
-            format_mem(mps['std_dev']),
+            format_mem(mps["average"]),
+            format_mem(mps["median"]),
+            format_mem(mps["min"]),
+            format_mem(mps["max"]),
+            format_mem(mps["std_dev"]),
         )
 
         console.print(table)

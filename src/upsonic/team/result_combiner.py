@@ -6,60 +6,58 @@ from typing import List, Any, Optional
 from upsonic.tasks.tasks import Task
 from upsonic.agent.agent import Agent
 
+
 class ResultCombiner:
     """Handles combining results from multiple tasks into coherent final answers."""
-    
+
     def __init__(self, model: Optional[Any] = None, debug: bool = False):
         """
         Initialize the result combiner.
-        
+
         Args:
             model: The model provider to use for combining results
             debug: Whether to enable debug mode
         """
         self.model = model
         self.debug = debug
-    
+
     def should_combine_results(self, results: List[Task]) -> bool:
         """
         Determine if results need to be combined or if single result should be returned.
-        
+
         Args:
             results: List of completed tasks with results
-            
+
         Returns:
             True if results should be combined, False if single result should be returned
         """
         return len(results) > 1
-    
+
     def get_single_result(self, results: List[Task]) -> Any:
         """
         Get the result from a single task.
-        
+
         Args:
             results: List containing one completed task
-            
+
         Returns:
             The response from the single task
         """
         if not results:
             return None
         return results[0].response
-    
+
     async def combine_results(
-        self, 
-        results: List[Task], 
-        response_format: Any = str, 
-        agents: List[Any] = None
+        self, results: List[Task], response_format: Any = str, agents: List[Any] = None
     ) -> Any:
         """
         Combine multiple task results into a coherent final answer.
-        
+
         Args:
             results: List of completed tasks with results
             response_format: The desired format for the final response
             agents: List of agents (used for fallback debug setting)
-            
+
         Returns:
             Combined final response
         """
@@ -76,17 +74,17 @@ class ResultCombiner:
                 "but with an summary of all of them."
             ),
             context=results,
-            response_format=response_format
+            response_format=response_format,
         )
-        
+
         debug_setting = self.debug
         if not debug_setting and agents and len(agents) > 0:
             debug_setting = agents[-1].debug
-        
+
         if not self.model:
-             raise ValueError("ResultCombiner requires a model to be initialized.")
+            raise ValueError("ResultCombiner requires a model to be initialized.")
 
         end_agent = Agent(model=self.model, debug=debug_setting)
         await end_agent.do_async(end_task)
-        
+
         return end_task.response

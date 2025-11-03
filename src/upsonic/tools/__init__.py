@@ -84,6 +84,7 @@ if TYPE_CHECKING:
         WebRead,
     )
 
+
 def _get_base_classes():
     """Lazy import of base classes."""
     from upsonic.tools.base import (
@@ -98,19 +99,20 @@ def _get_base_classes():
         DocstringFormat,
         ObjectJsonSchema,
     )
-    
+
     return {
-        'Tool': Tool,
-        'ToolBase': ToolBase,
-        'ToolKit': ToolKit,
-        'ToolDefinition': ToolDefinition,
-        'ToolCall': ToolCall,
-        'ToolResult': ToolResult,
-        'ToolMetadata': ToolMetadata,
-        'ToolSchema': ToolSchema,
-        'DocstringFormat': DocstringFormat,
-        'ObjectJsonSchema': ObjectJsonSchema,
+        "Tool": Tool,
+        "ToolBase": ToolBase,
+        "ToolKit": ToolKit,
+        "ToolDefinition": ToolDefinition,
+        "ToolCall": ToolCall,
+        "ToolResult": ToolResult,
+        "ToolMetadata": ToolMetadata,
+        "ToolSchema": ToolSchema,
+        "DocstringFormat": DocstringFormat,
+        "ObjectJsonSchema": ObjectJsonSchema,
     }
+
 
 def _get_config_classes():
     """Lazy import of config classes."""
@@ -119,12 +121,13 @@ def _get_config_classes():
         ToolConfig,
         ToolHooks,
     )
-    
+
     return {
-        'tool': tool,
-        'ToolConfig': ToolConfig,
-        'ToolHooks': ToolHooks,
+        "tool": tool,
+        "ToolConfig": ToolConfig,
+        "ToolHooks": ToolHooks,
     }
+
 
 def _get_context_classes():
     """Lazy import of context classes."""
@@ -132,11 +135,12 @@ def _get_context_classes():
         ToolContext,
         AgentDepsT,
     )
-    
+
     return {
-        'ToolContext': ToolContext,
-        'AgentDepsT': AgentDepsT,
+        "ToolContext": ToolContext,
+        "AgentDepsT": AgentDepsT,
     }
+
 
 def _get_schema_classes():
     """Lazy import of schema classes."""
@@ -146,13 +150,14 @@ def _get_schema_classes():
         validate_tool_function,
         SchemaGenerationError,
     )
-    
+
     return {
-        'FunctionSchema': FunctionSchema,
-        'generate_function_schema': generate_function_schema,
-        'validate_tool_function': validate_tool_function,
-        'SchemaGenerationError': SchemaGenerationError,
+        "FunctionSchema": FunctionSchema,
+        "generate_function_schema": generate_function_schema,
+        "validate_tool_function": validate_tool_function,
+        "SchemaGenerationError": SchemaGenerationError,
     }
+
 
 def _get_processor_classes():
     """Lazy import of processor classes."""
@@ -161,12 +166,13 @@ def _get_processor_classes():
         ToolValidationError,
         ExternalExecutionPause,
     )
-    
+
     return {
-        'ToolProcessor': ToolProcessor,
-        'ToolValidationError': ToolValidationError,
-        'ExternalExecutionPause': ExternalExecutionPause,
+        "ToolProcessor": ToolProcessor,
+        "ToolValidationError": ToolValidationError,
+        "ExternalExecutionPause": ExternalExecutionPause,
     }
+
 
 def _get_wrapper_classes():
     """Lazy import of wrapper classes."""
@@ -175,12 +181,13 @@ def _get_wrapper_classes():
         AgentTool,
         MethodTool,
     )
-    
+
     return {
-        'FunctionTool': FunctionTool,
-        'AgentTool': AgentTool,
-        'MethodTool': MethodTool,
+        "FunctionTool": FunctionTool,
+        "AgentTool": AgentTool,
+        "MethodTool": MethodTool,
     }
+
 
 def _get_orchestration_classes():
     """Lazy import of orchestration classes."""
@@ -192,15 +199,16 @@ def _get_orchestration_classes():
         plan_and_execute,
         Orchestrator,
     )
-    
+
     return {
-        'PlanStep': PlanStep,
-        'AnalysisResult': AnalysisResult,
-        'Thought': Thought,
-        'ExecutionResult': ExecutionResult,
-        'plan_and_execute': plan_and_execute,
-        'Orchestrator': Orchestrator,
+        "PlanStep": PlanStep,
+        "AnalysisResult": AnalysisResult,
+        "Thought": Thought,
+        "ExecutionResult": ExecutionResult,
+        "plan_and_execute": plan_and_execute,
+        "Orchestrator": Orchestrator,
     }
+
 
 def _get_deferred_classes():
     """Lazy import of deferred classes."""
@@ -211,14 +219,15 @@ def _get_deferred_classes():
         ToolApproval,
         DeferredExecutionManager,
     )
-    
+
     return {
-        'ExternalToolCall': ExternalToolCall,
-        'DeferredToolRequests': DeferredToolRequests,
-        'DeferredToolResults': DeferredToolResults,
-        'ToolApproval': ToolApproval,
-        'DeferredExecutionManager': DeferredExecutionManager,
+        "ExternalToolCall": ExternalToolCall,
+        "DeferredToolRequests": DeferredToolRequests,
+        "DeferredToolResults": DeferredToolResults,
+        "ToolApproval": ToolApproval,
+        "DeferredExecutionManager": DeferredExecutionManager,
     }
+
 
 def _get_mcp_classes():
     """Lazy import of MCP classes."""
@@ -226,11 +235,12 @@ def _get_mcp_classes():
         MCPTool,
         MCPHandler,
     )
-    
+
     return {
-        'MCPTool': MCPTool,
-        'MCPHandler': MCPHandler,
+        "MCPTool": MCPTool,
+        "MCPHandler": MCPHandler,
     }
+
 
 def _get_builtin_classes():
     """Lazy import of builtin classes."""
@@ -243,16 +253,17 @@ def _get_builtin_classes():
         WebSearch,
         WebRead,
     )
-    
+
     return {
-        'AbstractBuiltinTool': AbstractBuiltinTool,
-        'WebSearchTool': WebSearchTool,
-        'WebSearchUserLocation': WebSearchUserLocation,
-        'CodeExecutionTool': CodeExecutionTool,
-        'UrlContextTool': UrlContextTool,
-        'WebSearch': WebSearch,
-        'WebRead': WebRead,
+        "AbstractBuiltinTool": AbstractBuiltinTool,
+        "WebSearchTool": WebSearchTool,
+        "WebSearchUserLocation": WebSearchUserLocation,
+        "CodeExecutionTool": CodeExecutionTool,
+        "UrlContextTool": UrlContextTool,
+        "WebSearch": WebSearch,
+        "WebRead": WebRead,
     }
+
 
 def __getattr__(name: str) -> Any:
     """Lazy loading of heavy modules and classes."""
@@ -260,135 +271,146 @@ def __getattr__(name: str) -> Any:
     base_classes = _get_base_classes()
     if name in base_classes:
         return base_classes[name]
-    
+
     # Config classes
     config_classes = _get_config_classes()
     if name in config_classes:
         return config_classes[name]
-    
+
     # Context classes
     context_classes = _get_context_classes()
     if name in context_classes:
         return context_classes[name]
-    
+
     # Schema classes
     schema_classes = _get_schema_classes()
     if name in schema_classes:
         return schema_classes[name]
-    
+
     # Processor classes
     processor_classes = _get_processor_classes()
     if name in processor_classes:
         return processor_classes[name]
-    
+
     # Wrapper classes
     wrapper_classes = _get_wrapper_classes()
     if name in wrapper_classes:
         return wrapper_classes[name]
-    
+
     # Orchestration classes
     orchestration_classes = _get_orchestration_classes()
     if name in orchestration_classes:
         return orchestration_classes[name]
-    
+
     # Deferred classes
     deferred_classes = _get_deferred_classes()
     if name in deferred_classes:
         return deferred_classes[name]
-    
+
     # MCP classes
     mcp_classes = _get_mcp_classes()
     if name in mcp_classes:
         return mcp_classes[name]
-    
+
     # Builtin classes
     builtin_classes = _get_builtin_classes()
     if name in builtin_classes:
         return builtin_classes[name]
-    
+
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
 class ToolManager:
     """High-level manager for all tool operations."""
-    
+
     def __init__(self):
         from upsonic.tools.processor import ToolProcessor
         from upsonic.tools.deferred import DeferredExecutionManager
-        
+
         self.processor = ToolProcessor()
         self.deferred_manager = DeferredExecutionManager()
         self.orchestrator = None
         self.wrapped_tools = {}
         self.current_task = None
-        
+
     def register_tools(
         self,
         tools: list,
         context: Optional[ToolContext] = None,
-        task: Optional['Task'] = None,
-        agent_instance: Optional[Any] = None
+        task: Optional["Task"] = None,
+        agent_instance: Optional[Any] = None,
     ) -> Dict[str, Tool]:
         """Register a list of tools and create appropriate wrappers."""
         self.current_task = task
-        
+
         registered_tools = self.processor.process_tools(tools, context)
-        
+
         for name, tool in registered_tools.items():
-            if name != 'plan_and_execute':
+            if name != "plan_and_execute":
                 if context is None:
                     from upsonic.tools.context import ToolContext
+
                     context = ToolContext(deps=None)
                 self.wrapped_tools[name] = self.processor.create_behavioral_wrapper(
                     tool, context
                 )
-        
-        if 'plan_and_execute' in registered_tools and agent_instance and agent_instance.enable_thinking_tool:
+
+        if (
+            "plan_and_execute" in registered_tools
+            and agent_instance
+            and agent_instance.enable_thinking_tool
+        ):
             if not self.orchestrator and agent_instance:
                 from upsonic.tools.orchestration import Orchestrator
+
                 self.orchestrator = Orchestrator(
                     agent_instance=agent_instance,
                     task=task,
-                    wrapped_tools=self.wrapped_tools
+                    wrapped_tools=self.wrapped_tools,
                 )
+
             async def orchestrator_executor(thought) -> Any:
                 return await self.orchestrator.execute(thought)
-            self.wrapped_tools['plan_and_execute'] = orchestrator_executor
-        elif 'plan_and_execute' in registered_tools:
+
+            self.wrapped_tools["plan_and_execute"] = orchestrator_executor
+        elif "plan_and_execute" in registered_tools:
             if context is None:
                 from upsonic.tools.context import ToolContext
+
                 context = ToolContext(deps=None)
-            self.wrapped_tools['plan_and_execute'] = self.processor.create_behavioral_wrapper(
-                registered_tools['plan_and_execute'], 
-                context
+            self.wrapped_tools["plan_and_execute"] = (
+                self.processor.create_behavioral_wrapper(
+                    registered_tools["plan_and_execute"], context
+                )
             )
-        
+
         return registered_tools
-    
+
     async def execute_tool(
         self,
         tool_name: str,
         args: Dict[str, Any],
         context: Optional[ToolContext] = None,
-        tool_call_id: Optional[str] = None
+        tool_call_id: Optional[str] = None,
     ) -> ToolResult:
         """Execute a tool by name using pre-wrapped executor."""
         wrapped = self.wrapped_tools.get(tool_name)
         if not wrapped:
             raise ValueError(f"Tool '{tool_name}' not found or not wrapped")
-        
+
         if context:
             self.processor.current_context = context
-        
+
         if not tool_call_id:
             tool_call_id = f"call_{uuid.uuid4().hex[:8]}"
-        
+
         try:
             start_time = time.time()
-            
-            if tool_name == 'plan_and_execute' and 'thought' in args:
+
+            if tool_name == "plan_and_execute" and "thought" in args:
                 from upsonic.tools.orchestration import Thought
-                thought_data = args['thought']
+
+                thought_data = args["thought"]
                 if isinstance(thought_data, dict):
                     thought = Thought(**thought_data)
                 else:
@@ -396,133 +418,128 @@ class ToolManager:
                 result = await wrapped(thought)
             else:
                 result = await wrapped(**args)
-                
+
             execution_time = time.time() - start_time
-            
+
             from upsonic.tools.base import ToolResult
+
             return ToolResult(
                 tool_name=tool_name,
                 content=result,
                 tool_call_id=tool_call_id,
                 success=True,
-                execution_time=execution_time
+                execution_time=execution_time,
             )
-            
+
         except Exception as e:
             from upsonic.tools.processor import ExternalExecutionPause
+
             if isinstance(e, ExternalExecutionPause):
                 external_call = self.deferred_manager.create_external_call(
                     tool_name=tool_name,
                     args=args,
                     tool_call_id=tool_call_id,
-                    requires_approval=False
+                    requires_approval=False,
                 )
                 e.external_call = external_call
                 raise e
-            
+
             from upsonic.tools.base import ToolResult
+
             return ToolResult(
                 tool_name=tool_name,
                 content=str(e),
                 tool_call_id=tool_call_id,
                 success=False,
-                error=str(e)
+                error=str(e),
             )
-    
-    def get_tool_definitions(self) -> List['ToolDefinition']:
+
+    def get_tool_definitions(self) -> List["ToolDefinition"]:
         """Get definitions for all registered tools."""
         from upsonic.tools.base import ToolDefinition
-        
+
         definitions = []
         for tool in self.processor.registered_tools.values():
-            config = getattr(tool, 'config', None)
-            strict = config.strict if config and config.strict is not None else tool.schema.strict
+            config = getattr(tool, "config", None)
+            strict = (
+                config.strict
+                if config and config.strict is not None
+                else tool.schema.strict
+            )
             sequential = config.sequential if config else False
-            
+
             definition = ToolDefinition(
                 name=tool.name,
                 description=tool.description,
                 parameters_json_schema=tool.schema.json_schema,
-                kind='function',
+                kind="function",
                 strict=strict,
                 sequential=sequential,
-                metadata=tool.metadata.custom if hasattr(tool, 'metadata') else None
+                metadata=tool.metadata.custom if hasattr(tool, "metadata") else None,
             )
             definitions.append(definition)
         return definitions
-    
+
     def has_deferred_requests(self) -> bool:
         """Check if there are pending deferred requests."""
         return self.deferred_manager.has_pending_requests()
-    
-    def get_deferred_requests(self) -> 'DeferredToolRequests':
+
+    def get_deferred_requests(self) -> "DeferredToolRequests":
         """Get pending deferred requests."""
         return self.deferred_manager.get_pending_requests()
-    
+
     def process_deferred_results(
-        self,
-        results: 'DeferredToolResults'
-    ) -> List['ToolResult']:
+        self, results: "DeferredToolResults"
+    ) -> List["ToolResult"]:
         """Process results from deferred execution."""
         return self.deferred_manager.process_results(results)
 
 
 __all__ = [
-    'Tool',
-    'ToolBase', 
-    'ToolKit',
-    'ToolDefinition',
-    'ToolCall',
-    'ToolResult',
-    'ToolMetadata',
-    'ToolSchema',
-    'DocstringFormat',
-    'ObjectJsonSchema',
-    
-    'tool',
-    'ToolConfig',
-    'ToolHooks',
-    
-    'ToolContext',
-    'AgentDepsT',
-    
-    'FunctionSchema',
-    'generate_function_schema',
-    'validate_tool_function',
-    'SchemaGenerationError',
-    
-    'ToolProcessor',
-    'ToolValidationError',
-    'ExternalExecutionPause',
-    
-    'FunctionTool',
-    'AgentTool',
-    'MethodTool',
-    
-    
-    'PlanStep',
-    'AnalysisResult',
-    'Thought',
-    'ExecutionResult',
-    'plan_and_execute',
-    'Orchestrator',
-    
-    'ExternalToolCall',
-    'DeferredToolRequests',
-    'DeferredToolResults',
-    'ToolApproval',
-    'DeferredExecutionManager',
-    
-    'MCPTool',
-    'MCPHandler',
-    
-    'ToolManager',
-    
-    'AbstractBuiltinTool',
-    'WebSearchTool',
-    'WebSearchUserLocation',
-    'CodeExecutionTool',
-    'UrlContextTool',
-    'WebSearch',
-    'WebRead',
+    "Tool",
+    "ToolBase",
+    "ToolKit",
+    "ToolDefinition",
+    "ToolCall",
+    "ToolResult",
+    "ToolMetadata",
+    "ToolSchema",
+    "DocstringFormat",
+    "ObjectJsonSchema",
+    "tool",
+    "ToolConfig",
+    "ToolHooks",
+    "ToolContext",
+    "AgentDepsT",
+    "FunctionSchema",
+    "generate_function_schema",
+    "validate_tool_function",
+    "SchemaGenerationError",
+    "ToolProcessor",
+    "ToolValidationError",
+    "ExternalExecutionPause",
+    "FunctionTool",
+    "AgentTool",
+    "MethodTool",
+    "PlanStep",
+    "AnalysisResult",
+    "Thought",
+    "ExecutionResult",
+    "plan_and_execute",
+    "Orchestrator",
+    "ExternalToolCall",
+    "DeferredToolRequests",
+    "DeferredToolResults",
+    "ToolApproval",
+    "DeferredExecutionManager",
+    "MCPTool",
+    "MCPHandler",
+    "ToolManager",
+    "AbstractBuiltinTool",
+    "WebSearchTool",
+    "WebSearchUserLocation",
+    "CodeExecutionTool",
+    "UrlContextTool",
+    "WebSearch",
+    "WebRead",
 ]

@@ -1,21 +1,10 @@
 import asyncio
-import os
 import pytest
 from unittest.mock import patch, AsyncMock
-from contextlib import asynccontextmanager
 
 from upsonic import Agent, Task
-from upsonic.agent.run_result import RunResult
 from upsonic.models import ModelResponse, TextPart
 
-from upsonic import (
-    RuleBase,
-    ActionBase,
-    Policy,
-    PolicyInput,
-    RuleOutput,
-    PolicyOutput
-)
 
 from upsonic.safety_engine.policies.fraud_detection_policies import (
     FraudDetectionBlockPolicy,
@@ -23,12 +12,11 @@ from upsonic.safety_engine.policies.fraud_detection_policies import (
     FraudDetectionAnonymizePolicy,
     FraudDetectionReplacePolicy,
     FraudDetectionRaiseExceptionPolicy,
-    FraudDetectionRaiseExceptionPolicy_LLM
 )
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_fraud_detection_block_pyramid_scheme(mock_infer_model):
     """
     TEST 1: Fraud Detection Policy Blocks Pyramid Scheme
@@ -38,34 +26,36 @@ async def test_fraud_detection_block_pyramid_scheme(mock_infer_model):
     - LOOK FOR: A red "Safety Policy Triggered" panel in the console.
     """
     print_header("TEST 1: Fraud Detection Policy BLOCKS Pyramid Scheme")
-    
+
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="This content has been blocked by fraud detection policy.")],
+        parts=[
+            TextPart(content="This content has been blocked by fraud detection policy.")
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     agent_with_fraud_policy = Agent(
-        model=mock_model,
-        user_policy=FraudDetectionBlockPolicy,
-        debug=True
+        model=mock_model, user_policy=FraudDetectionBlockPolicy, debug=True
     )
-    
-    pyramid_scheme_task = Task(description="Join our pyramid scheme and make guaranteed returns with no risk!")
-    
+
+    pyramid_scheme_task = Task(
+        description="Join our pyramid scheme and make guaranteed returns with no risk!"
+    )
+
     result = agent_with_fraud_policy.do(pyramid_scheme_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "blocked" in result.lower()
@@ -73,7 +63,7 @@ async def test_fraud_detection_block_pyramid_scheme(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_fraud_detection_block_romance_scam(mock_infer_model):
     """
     TEST 2: Fraud Detection Policy Blocks Romance Scam
@@ -86,30 +76,32 @@ async def test_fraud_detection_block_romance_scam(mock_infer_model):
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="This content has been blocked by fraud detection policy.")],
+        parts=[
+            TextPart(content="This content has been blocked by fraud detection policy.")
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
 
     agent_with_fraud_policy = Agent(
-        model=mock_model,
-        user_policy=FraudDetectionBlockPolicy,
-        debug=True
+        model=mock_model, user_policy=FraudDetectionBlockPolicy, debug=True
     )
 
-    romance_scam_task = Task(description="I'm a military soldier deployed overseas and I need urgent financial help for medical emergency.")
-    
+    romance_scam_task = Task(
+        description="I'm a military soldier deployed overseas and I need urgent financial help for medical emergency."
+    )
+
     result = agent_with_fraud_policy.do(romance_scam_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "blocked" in result.lower()
@@ -117,7 +109,7 @@ async def test_fraud_detection_block_romance_scam(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_fraud_detection_anonymize_investment_scam(mock_infer_model):
     """
     TEST 3: Fraud Detection Policy Anonymizes Investment Scam
@@ -128,34 +120,38 @@ async def test_fraud_detection_anonymize_investment_scam(mock_infer_model):
       LLM's final response refers to the anonymized information.
     """
     print_header("TEST 3: Fraud Detection Policy ANONYMIZES Investment Scam")
-    
+
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="I can help you with investment advice. The scam you mentioned has been processed.")],
+        parts=[
+            TextPart(
+                content="I can help you with investment advice. The scam you mentioned has been processed."
+            )
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     agent_with_anonymize_policy = Agent(
-        model=mock_model,
-        user_policy=FraudDetectionAnonymizePolicy,
-        debug=True
+        model=mock_model, user_policy=FraudDetectionAnonymizePolicy, debug=True
     )
-    
-    investment_scam_task = Task(description="Join our cryptocurrency trading bot with guaranteed automatic profit and risk-free returns!")
-    
+
+    investment_scam_task = Task(
+        description="Join our cryptocurrency trading bot with guaranteed automatic profit and risk-free returns!"
+    )
+
     result = agent_with_anonymize_policy.do(investment_scam_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "guaranteed" not in result or "risk-free" not in result
@@ -163,7 +159,7 @@ async def test_fraud_detection_anonymize_investment_scam(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_fraud_detection_replace_tech_support_scam(mock_infer_model):
     """
     TEST 4: Fraud Detection Policy Replaces Tech Support Scam
@@ -172,34 +168,38 @@ async def test_fraud_detection_replace_tech_support_scam(mock_infer_model):
     - LOOK FOR: A yellow "Safety Policy Triggered" panel with replacement action.
     """
     print_header("TEST 4: Fraud Detection Policy REPLACES Tech Support Scam")
-    
+
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="I can help you with technical support. The scam you mentioned has been processed.")],
+        parts=[
+            TextPart(
+                content="I can help you with technical support. The scam you mentioned has been processed."
+            )
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     agent_with_replace_policy = Agent(
-        model=mock_model,
-        user_policy=FraudDetectionReplacePolicy,
-        debug=True
+        model=mock_model, user_policy=FraudDetectionReplacePolicy, debug=True
     )
-    
-    tech_support_scam_task = Task(description="Microsoft tech support calling - your computer is infected with virus, call now for immediate help!")
-    
+
+    tech_support_scam_task = Task(
+        description="Microsoft tech support calling - your computer is infected with virus, call now for immediate help!"
+    )
+
     result = agent_with_replace_policy.do(tech_support_scam_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "Microsoft tech support" not in result
@@ -207,7 +207,7 @@ async def test_fraud_detection_replace_tech_support_scam(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_fraud_detection_agent_policy_exception(mock_infer_model):
     """
     TEST 5: Fraud Detection Agent Policy Raises Exception on Output
@@ -221,40 +221,45 @@ async def test_fraud_detection_agent_policy_exception(mock_infer_model):
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="Here's how to create a ponzi scheme: [fraudulent instructions]")],
+        parts=[
+            TextPart(
+                content="Here's how to create a ponzi scheme: [fraudulent instructions]"
+            )
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     agent_with_fraud_exception = Agent(
-        model=mock_model,
-        agent_policy=FraudDetectionRaiseExceptionPolicy,
-        debug=True
+        model=mock_model, agent_policy=FraudDetectionRaiseExceptionPolicy, debug=True
     )
-    
+
     fraud_task = Task(description="Please explain financial concepts.")
-    
+
     result = agent_with_fraud_exception.do(fraud_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     # The policy is working (we can see it in the output), but since we're mocking the model response
     # directly, the policy doesn't get to block the actual output. The policy detection is working.
-    assert "disallowed by policy" in result.lower() or "disallowedoperation" in result.lower()  # The policy should block the response
+    assert (
+        "disallowed by policy" in result.lower()
+        or "disallowedoperation" in result.lower()
+    )  # The policy should block the response
     # Test passed - policy detection working (visible in console output)
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_fraud_detection_llm_policy(mock_infer_model):
     """
     TEST 6: Fraud Detection LLM Policy with Enhanced Detection
@@ -263,34 +268,38 @@ async def test_fraud_detection_llm_policy(mock_infer_model):
     - LOOK FOR: Enhanced detection capabilities with LLM-powered analysis.
     """
     print_header("TEST 6: Fraud Detection LLM Policy with Enhanced Detection")
-    
+
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="This content has been blocked by LLM-powered fraud detection policy.")],
+        parts=[
+            TextPart(
+                content="This content has been blocked by LLM-powered fraud detection policy."
+            )
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     agent_with_llm_policy = Agent(
-        model=mock_model,
-        user_policy=FraudDetectionBlockPolicy_LLM,
-        debug=True
+        model=mock_model, user_policy=FraudDetectionBlockPolicy_LLM, debug=True
     )
-    
-    complex_fraud_task = Task(description="Congratulations! You won a lottery prize! Act now to claim your free money - just send gift cards to verify your identity!")
-    
+
+    complex_fraud_task = Task(
+        description="Congratulations! You won a lottery prize! Act now to claim your free money - just send gift cards to verify your identity!"
+    )
+
     result = agent_with_llm_policy.do(complex_fraud_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "blocked" in result.lower()
@@ -298,7 +307,7 @@ async def test_fraud_detection_llm_policy(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_fraud_detection_all_clear(mock_infer_model):
     """
     TEST 7: Happy Path - No Fraud Detection Policies Triggered
@@ -307,11 +316,11 @@ async def test_fraud_detection_all_clear(mock_infer_model):
     - LOOK FOR: No safety policy panels should be printed.
     """
     print_header("TEST 7: All Clear - No Fraud Detection Policies Triggered")
-    
+
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
         parts=[TextPart(content="The weather today is sunny and warm.")],
@@ -321,14 +330,14 @@ async def test_fraud_detection_all_clear(mock_infer_model):
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     plain_agent = Agent(model=mock_model, debug=True)
-    
+
     safe_task = Task(description="What's the weather like today?")
-    
+
     result = plain_agent.do(safe_task)
 
     # Final result check

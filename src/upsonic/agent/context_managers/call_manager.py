@@ -34,27 +34,27 @@ class CallManager:
         self.start_time = None
         self.end_time = None
         self.model_response = None
-        
+
     def process_response(self, model_response):
         self.model_response = model_response
         return self.model_response
-    
+
     @asynccontextmanager
     async def manage_call(self):
         self.start_time = time.time()
-        
+
         try:
             yield self
         finally:
             self.end_time = time.time()
-            
+
             # Only call call_end if we have a model response
             if self.model_response is not None:
                 # Lazy import for heavy modules
                 from upsonic.utils.llm_usage import llm_usage
                 from upsonic.utils.tool_usage import tool_usage
                 from upsonic.utils.printing import call_end
-                
+
                 # Calculate usage and tool usage
                 usage = llm_usage(self.model_response)
                 if self.show_tool_calls:
@@ -71,5 +71,5 @@ class CallManager:
                     usage,
                     tool_usage_result,
                     self.debug,
-                    self.task.price_id
+                    self.task.price_id,
                 )

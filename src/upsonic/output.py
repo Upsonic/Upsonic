@@ -12,41 +12,43 @@ from typing_extensions import TypeAliasType, TypeVar
 from upsonic import _utils
 from upsonic.tools import ToolContext as RunContext, ObjectJsonSchema
 
-DEFAULT_OUTPUT_TOOL_NAME = 'structured_output'
+DEFAULT_OUTPUT_TOOL_NAME = "structured_output"
 """Default name for the output tool used in structured outputs."""
 
 __all__ = (
     # classes
-    'ToolOutput',
-    'NativeOutput',
-    'PromptedOutput',
-    'TextOutput',
-    'StructuredDict',
+    "ToolOutput",
+    "NativeOutput",
+    "PromptedOutput",
+    "TextOutput",
+    "StructuredDict",
     # types
-    'OutputDataT',
-    'OutputMode',
-    'StructuredOutputMode',
-    'OutputSpec',
-    'OutputTypeOrFunction',
-    'TextOutputFunc',
+    "OutputDataT",
+    "OutputMode",
+    "StructuredOutputMode",
+    "OutputSpec",
+    "OutputTypeOrFunction",
+    "TextOutputFunc",
     # constants
-    'DEFAULT_OUTPUT_TOOL_NAME',
+    "DEFAULT_OUTPUT_TOOL_NAME",
 )
 
-T = TypeVar('T')
-T_co = TypeVar('T_co', covariant=True)
+T = TypeVar("T")
+T_co = TypeVar("T_co", covariant=True)
 
-OutputDataT = TypeVar('OutputDataT', default=str, covariant=True)
+OutputDataT = TypeVar("OutputDataT", default=str, covariant=True)
 """Covariant type variable for the output data type of a run."""
 
-OutputMode = Literal['text', 'tool', 'native', 'prompted', 'tool_or_text']
+OutputMode = Literal["text", "tool", "native", "prompted", "tool_or_text"]
 """All output modes."""
-StructuredOutputMode = Literal['tool', 'native', 'prompted']
+StructuredOutputMode = Literal["tool", "native", "prompted"]
 """Output modes that can be used for structured output. Used by ModelProfile.default_structured_output_mode"""
 
 
 OutputTypeOrFunction = TypeAliasType(
-    'OutputTypeOrFunction', type[T_co] | Callable[..., Awaitable[T_co] | T_co], type_params=(T_co,)
+    "OutputTypeOrFunction",
+    type[T_co] | Callable[..., Awaitable[T_co] | T_co],
+    type_params=(T_co,),
 )
 """Definition of an output type or function.
 
@@ -57,8 +59,9 @@ See [output docs](../output.md) for more information.
 
 
 TextOutputFunc = TypeAliasType(
-    'TextOutputFunc',
-    Callable[[RunContext, str], Awaitable[T_co] | T_co] | Callable[[str], Awaitable[T_co] | T_co],
+    "TextOutputFunc",
+    Callable[[RunContext, str], Awaitable[T_co] | T_co]
+    | Callable[[str], Awaitable[T_co] | T_co],
     type_params=(T_co,),
 )
 """Definition of a function that will be called to process the model's plain text output. The function must take a single string argument.
@@ -67,6 +70,7 @@ You should not need to import or use this type directly.
 
 See [text output docs](../output.md#text-output) for more information.
 """
+
 
 @dataclass
 class OutputObjectDefinition:
@@ -161,7 +165,9 @@ class NativeOutput(Generic[OutputDataT]):
     ```
     """
 
-    outputs: OutputTypeOrFunction[OutputDataT] | Sequence[OutputTypeOrFunction[OutputDataT]]
+    outputs: (
+        OutputTypeOrFunction[OutputDataT] | Sequence[OutputTypeOrFunction[OutputDataT]]
+    )
     """The output types or functions."""
     name: str | None
     """The name of the structured output that will be passed to the model. If not specified and only one output is provided, the name of the output type or function will be used."""
@@ -172,7 +178,8 @@ class NativeOutput(Generic[OutputDataT]):
 
     def __init__(
         self,
-        outputs: OutputTypeOrFunction[OutputDataT] | Sequence[OutputTypeOrFunction[OutputDataT]],
+        outputs: OutputTypeOrFunction[OutputDataT]
+        | Sequence[OutputTypeOrFunction[OutputDataT]],
         *,
         name: str | None = None,
         description: str | None = None,
@@ -227,7 +234,9 @@ class PromptedOutput(Generic[OutputDataT]):
     ```
     """
 
-    outputs: OutputTypeOrFunction[OutputDataT] | Sequence[OutputTypeOrFunction[OutputDataT]]
+    outputs: (
+        OutputTypeOrFunction[OutputDataT] | Sequence[OutputTypeOrFunction[OutputDataT]]
+    )
     """The output types or functions."""
     name: str | None
     """The name of the structured output that will be passed to the model. If not specified and only one output is provided, the name of the output type or function will be used."""
@@ -241,7 +250,8 @@ class PromptedOutput(Generic[OutputDataT]):
 
     def __init__(
         self,
-        outputs: OutputTypeOrFunction[OutputDataT] | Sequence[OutputTypeOrFunction[OutputDataT]],
+        outputs: OutputTypeOrFunction[OutputDataT]
+        | Sequence[OutputTypeOrFunction[OutputDataT]],
         *,
         name: str | None = None,
         description: str | None = None,
@@ -281,7 +291,9 @@ class TextOutput(Generic[OutputDataT]):
 
 
 def StructuredDict(
-    json_schema: JsonSchemaValue, name: str | None = None, description: str | None = None
+    json_schema: JsonSchemaValue,
+    name: str | None = None,
+    description: str | None = None,
 ) -> type[JsonSchemaValue]:
     """Returns a `dict[str, Any]` subclass with a JSON schema attached that will be used for structured output.
 
@@ -312,10 +324,10 @@ def StructuredDict(
     json_schema = _utils.check_object_json_schema(json_schema)
 
     if name:
-        json_schema['title'] = name
+        json_schema["title"] = name
 
     if description:
-        json_schema['description'] = description
+        json_schema["description"] = description
 
     class _StructuredDict(JsonSchemaValue):
         __is_model_like__ = True
@@ -339,14 +351,18 @@ def StructuredDict(
 
 
 _OutputSpecItem = TypeAliasType(
-    '_OutputSpecItem',
-    OutputTypeOrFunction[T_co] | ToolOutput[T_co] | NativeOutput[T_co] | PromptedOutput[T_co] | TextOutput[T_co],
+    "_OutputSpecItem",
+    OutputTypeOrFunction[T_co]
+    | ToolOutput[T_co]
+    | NativeOutput[T_co]
+    | PromptedOutput[T_co]
+    | TextOutput[T_co],
     type_params=(T_co,),
 )
 
 OutputSpec = TypeAliasType(
-    'OutputSpec',
-    _OutputSpecItem[T_co] | Sequence['OutputSpec[T_co]'],
+    "OutputSpec",
+    _OutputSpecItem[T_co] | Sequence["OutputSpec[T_co]"],
     type_params=(T_co,),
 )
 """Specification of the agent's output data.

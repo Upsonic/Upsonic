@@ -3,6 +3,7 @@ import uuid
 from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
 
+
 class Document(BaseModel):
     """
     Represents a single, discrete source of information, such as a file or a web page,
@@ -12,18 +13,19 @@ class Document(BaseModel):
     that every piece of knowledge entering the pipeline is tagged with its origin
     and can be uniquely identified.
     """
+
     content: str = Field(
-        ...,
-        description="The full, raw text content extracted from the source."
+        ..., description="The full, raw text content extracted from the source."
     )
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
-        description="A flexible dictionary to store metadata about the source, e.g., {'source': 'resume1.pdf', 'author': 'John Doe'}."
+        description="A flexible dictionary to store metadata about the source, e.g., {'source': 'resume1.pdf', 'author': 'John Doe'}.",
     )
     document_id: str = Field(
         ...,
-        description="A unique, deterministic identifier for the source, typically an MD5 hash of its absolute path or URL."
+        description="A unique, deterministic identifier for the source, typically an MD5 hash of its absolute path or URL.",
     )
+
 
 class Chunk(BaseModel):
     """
@@ -35,56 +37,47 @@ class Chunk(BaseModel):
     This rich, inherited metadata is the key to enabling advanced retrieval strategies,
     such as filtering by source or providing citations.
     """
+
     text_content: str = Field(
-        ...,
-        description="The actual text content of this specific chunk."
+        ..., description="The actual text content of this specific chunk."
     )
     metadata: Dict[str, Any] = Field(
         ...,
-        description="Metadata inherited from the parent Document and potentially augmented with chunk-specific info, e.g., {'source': 'resume1.pdf', 'page_number': 3}."
+        description="Metadata inherited from the parent Document and potentially augmented with chunk-specific info, e.g., {'source': 'resume1.pdf', 'page_number': 3}.",
     )
-    document_id: str = Field(
-        ...,
-        description="Document ID"
-    )
+    document_id: str = Field(..., description="Document ID")
     chunk_id: str = Field(
         default_factory=lambda: str(uuid.uuid4()),
-        description="A unique identifier for this specific chunk."
+        description="A unique identifier for this specific chunk.",
     )
 
     start_index: Optional[int] = Field(
         default=None,
-        description="The start index of the chunk in the original document."
+        description="The start index of the chunk in the original document.",
     )
 
     end_index: Optional[int] = Field(
-        default=None,
-        description="The end index of the chunk in the original document."
+        default=None, description="The end index of the chunk in the original document."
     )
-
 
 
 class RAGSearchResult(BaseModel):
     """
     Represents a single search result from a RAG query with both text content and metadata.
-    
+
     This model provides a structured way to return search results that include
     both the retrieved text content and its associated metadata, enabling
     better context formatting and citation capabilities.
     """
-    text: str = Field(
-        ...,
-        description="The text content retrieved from the search."
-    )
+
+    text: str = Field(..., description="The text content retrieved from the search.")
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
-        description="Metadata associated with this search result, including source information, scores, etc."
+        description="Metadata associated with this search result, including source information, scores, etc.",
     )
     score: Optional[float] = Field(
-        default=None,
-        description="The similarity score for this search result."
+        default=None, description="The similarity score for this search result."
     )
     chunk_id: Optional[str] = Field(
-        default=None,
-        description="The unique identifier for this chunk."
+        default=None, description="The unique identifier for this chunk."
     )

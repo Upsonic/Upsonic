@@ -13,9 +13,11 @@ from upsonic.tools import tool
 try:
     try:
         from ddgs import DDGS
+
         _DDGS_PROVIDER = "ddgs"
     except ImportError:  # Fallback for older versions / alt package name
         from duckduckgo_search import DDGS
+
         _DDGS_PROVIDER = "duckduckgo_search"
     _DDGS_AVAILABLE = True
 except ImportError:
@@ -24,7 +26,7 @@ except ImportError:
     _DDGS_PROVIDER = None
 
 
-__all__ = ('duckduckgo_search_tool',)
+__all__ = ("duckduckgo_search_tool",)
 
 
 class DuckDuckGoResult(TypedDict):
@@ -67,7 +69,9 @@ class DuckDuckGoSearchTool:
         return duckduckgo_ta.validate_python(results)
 
 
-def duckduckgo_search_tool(duckduckgo_client: DDGS | None = None, max_results: int | None = None):
+def duckduckgo_search_tool(
+    duckduckgo_client: DDGS | None = None, max_results: int | None = None
+):
     """Creates a DuckDuckGo search tool.
 
     Args:
@@ -76,10 +80,11 @@ def duckduckgo_search_tool(duckduckgo_client: DDGS | None = None, max_results: i
     """
     if not _DDGS_AVAILABLE:
         from upsonic.utils.printing import import_error
+
         import_error(
             package_name="duckduckgo-search",
             install_command='pip install "upsonic[tools]"',
-            feature_name="DuckDuckGo search tool"
+            feature_name="DuckDuckGo search tool",
         )
 
     # Prepare client and create the tool instance, suppressing rename warnings if needed
@@ -98,7 +103,7 @@ def duckduckgo_search_tool(duckduckgo_client: DDGS | None = None, max_results: i
         client = duckduckgo_client
 
     ddg_tool = DuckDuckGoSearchTool(client=client, max_results=max_results)
-    
+
     # Create a wrapper function instead of decorating the bound method directly
     @tool
     async def duckduckgo_search(query: str) -> list[DuckDuckGoResult]:
@@ -111,5 +116,5 @@ def duckduckgo_search_tool(duckduckgo_client: DDGS | None = None, max_results: i
             The search results.
         """
         return await ddg_tool(query)
-    
+
     return duckduckgo_search

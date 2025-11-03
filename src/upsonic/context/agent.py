@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from upsonic.agent.agent import Agent
 
+
 def turn_agent_to_string(agent: Agent):
     the_dict = {}
     the_dict["id"] = agent.agent_id

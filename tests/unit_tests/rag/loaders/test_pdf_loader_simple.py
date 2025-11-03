@@ -1,10 +1,8 @@
 import unittest
 import tempfile
 import os
-from pathlib import Path
 from upsonic.loaders.pdf import PdfLoader
 from upsonic.loaders.config import PdfLoaderConfig
-from upsonic.schemas.data_models import Document
 
 
 class TestPdfLoaderSimple(unittest.TestCase):
@@ -18,6 +16,7 @@ class TestPdfLoaderSimple(unittest.TestCase):
         """Clean up test environment."""
         if os.path.exists(self.temp_dir):
             import shutil
+
             shutil.rmtree(self.temp_dir)
 
     def test_pdf_loader_initialization(self):
@@ -27,13 +26,10 @@ class TestPdfLoaderSimple(unittest.TestCase):
         loader = PdfLoader(config)
         self.assertIsNotNone(loader)
         self.assertEqual(loader.config.extraction_mode, "hybrid")
-        
+
         # Test with custom config
         custom_config = PdfLoaderConfig(
-            extraction_mode="hybrid",
-            max_file_size=5000000,
-            start_page=1,
-            end_page=10
+            extraction_mode="hybrid", max_file_size=5000000, start_page=1, end_page=10
         )
         loader_custom = PdfLoader(custom_config)
         self.assertEqual(loader_custom.config.extraction_mode, "hybrid")
@@ -49,11 +45,11 @@ class TestPdfLoaderSimple(unittest.TestCase):
         """Test handling of empty or invalid sources."""
         config = PdfLoaderConfig()
         loader = PdfLoader(config)
-        
+
         # Test with empty list
         result = loader.load([])
         self.assertEqual(len(result), 0)
-        
+
         # Test with non-existent file
         result = loader.load("/path/that/does/not/exist.pdf")
         self.assertEqual(len(result), 0)
@@ -70,7 +66,7 @@ class TestPdfLoaderSimple(unittest.TestCase):
         """Test the batch loading interface."""
         config = PdfLoaderConfig()
         loader = PdfLoader(config)
-        
+
         # Test batch method with empty list
         result = loader.batch([])
         self.assertEqual(len(result), 0)
@@ -81,7 +77,7 @@ class TestPdfLoaderSimple(unittest.TestCase):
         config_raise = PdfLoaderConfig(error_handling="raise")
         loader_raise = PdfLoader(config_raise)
         self.assertEqual(loader_raise.config.error_handling, "raise")
-        
+
         # Test with warn error handling
         config_warn = PdfLoaderConfig(error_handling="warn")
         loader_warn = PdfLoader(config_warn)
@@ -101,13 +97,9 @@ class TestPdfLoaderSimple(unittest.TestCase):
 
     def test_page_range_configuration(self):
         """Test page range configuration options."""
-        config = PdfLoaderConfig(
-            start_page=2,
-            end_page=5,
-            extraction_mode="text_only"
-        )
+        config = PdfLoaderConfig(start_page=2, end_page=5, extraction_mode="text_only")
         loader = PdfLoader(config)
-        
+
         self.assertEqual(loader.config.start_page, 2)
         self.assertEqual(loader.config.end_page, 5)
 
@@ -116,10 +108,10 @@ class TestPdfLoaderSimple(unittest.TestCase):
         config = PdfLoaderConfig(
             extra_whitespace_removal=True,
             clean_page_numbers=True,
-            skip_empty_content=True
+            skip_empty_content=True,
         )
         loader = PdfLoader(config)
-        
+
         self.assertTrue(loader.config.extra_whitespace_removal)
         self.assertTrue(loader.config.clean_page_numbers)
         self.assertTrue(loader.config.skip_empty_content)

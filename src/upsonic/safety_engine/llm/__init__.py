@@ -6,5 +6,5 @@ from .upsonic_llm import UpsonicLLMProvider
 
 
 __all__ = [
-    "UpsonicLLMProvider", 
+    "UpsonicLLMProvider",
 ]

@@ -38,7 +38,7 @@ class TestLoggingSmoke(unittest.TestCase):
                 level="INFO",
                 log_file=str(log_file),
                 force_reconfigure=True,
-                enable_console=False
+                enable_console=False,
             )
 
             # Get logger and write messages (use upsonic namespace)
@@ -49,13 +49,14 @@ class TestLoggingSmoke(unittest.TestCase):
 
             # Flush handlers to ensure write
             import logging
+
             for handler in logging.getLogger("upsonic").handlers:
                 handler.flush()
 
             # Verify log file exists and contains messages
             self.assertTrue(log_file.exists())
 
-            with open(log_file, 'r') as f:
+            with open(log_file, "r") as f:
                 content = f.read()
                 self.assertIn("Test info message", content)
                 self.assertIn("Test warning message", content)
@@ -71,7 +72,7 @@ class TestLoggingSmoke(unittest.TestCase):
                 level="INFO",
                 log_file=str(log_file),
                 force_reconfigure=True,
-                enable_console=False
+                enable_console=False,
             )
 
             # Create and execute simple agent task
@@ -96,7 +97,9 @@ class TestLoggingSmoke(unittest.TestCase):
 
             except Exception as e:
                 # If agent creation fails, that's ok - we're testing logging
-                self.assertTrue(log_file.exists(), f"Log file should exist even if agent fails: {e}")
+                self.assertTrue(
+                    log_file.exists(), f"Log file should exist even if agent fails: {e}"
+                )
 
     def test_module_specific_log_levels(self):
         """Test module-specific log level configuration."""
@@ -108,9 +111,7 @@ class TestLoggingSmoke(unittest.TestCase):
             os.environ["UPSONIC_LOG_LEVEL_AGENT"] = "DEBUG"
 
             setup_logging(
-                log_file=str(log_file),
-                force_reconfigure=True,
-                enable_console=False
+                log_file=str(log_file), force_reconfigure=True, enable_console=False
             )
 
             # Get current levels
@@ -145,10 +146,11 @@ class TestLoggingSmoke(unittest.TestCase):
                 level="INFO",
                 log_file=str(log_file),
                 force_reconfigure=True,
-                enable_console=False
+                enable_console=False,
             )
 
             import logging
+
             logger = get_logger("upsonic.test.toggle")
             logger.info("Message 1")
             for handler in logging.getLogger("upsonic").handlers:
@@ -164,7 +166,7 @@ class TestLoggingSmoke(unittest.TestCase):
                 level="INFO",
                 log_file=str(log_file),
                 force_reconfigure=True,
-                enable_console=False
+                enable_console=False,
             )
 
             logger = get_logger("upsonic.test.toggle")
@@ -173,7 +175,7 @@ class TestLoggingSmoke(unittest.TestCase):
                 handler.flush()
 
             # Check log content
-            with open(log_file, 'r') as f:
+            with open(log_file, "r") as f:
                 content = f.read()
                 self.assertIn("Message 1", content)
                 self.assertNotIn("Message 2", content)
@@ -188,14 +190,11 @@ class TestLoggingSmoke(unittest.TestCase):
                 level="INFO",
                 log_file=str(log_file),
                 force_reconfigure=True,
-                enable_console=False
+                enable_console=False,
             )
 
             # Create multiple loggers
-            loggers = [
-                get_logger(f"upsonic.test.concurrent.{i}")
-                for i in range(5)
-            ]
+            loggers = [get_logger(f"upsonic.test.concurrent.{i}") for i in range(5)]
 
             # Log from each
             for i, logger in enumerate(loggers):
@@ -203,11 +202,12 @@ class TestLoggingSmoke(unittest.TestCase):
 
             # Flush handlers to ensure write
             import logging
+
             for handler in logging.getLogger("upsonic").handlers:
                 handler.flush()
 
             # Verify all messages present
-            with open(log_file, 'r') as f:
+            with open(log_file, "r") as f:
                 content = f.read()
                 for i in range(5):
                     self.assertIn(f"Message from logger {i}", content)
@@ -221,7 +221,7 @@ class TestLoggingSmoke(unittest.TestCase):
                 level="INFO",
                 log_file=str(log_file),
                 force_reconfigure=True,
-                enable_console=False
+                enable_console=False,
             )
 
             logger = get_logger("upsonic.test.large")
@@ -232,6 +232,7 @@ class TestLoggingSmoke(unittest.TestCase):
 
             # Flush handlers to ensure write
             import logging
+
             for handler in logging.getLogger("upsonic").handlers:
                 handler.flush()
 
@@ -251,7 +252,7 @@ class TestLoggingSmoke(unittest.TestCase):
                         log_format=log_format,
                         log_file=str(log_file),
                         force_reconfigure=True,
-                        enable_console=False
+                        enable_console=False,
                     )
 
                     logger = get_logger("upsonic.test.format")
@@ -259,6 +260,7 @@ class TestLoggingSmoke(unittest.TestCase):
 
                     # Flush handlers to ensure write
                     import logging
+
                     for handler in logging.getLogger("upsonic").handlers:
                         handler.flush()
 
@@ -267,7 +269,7 @@ class TestLoggingSmoke(unittest.TestCase):
                     self.assertGreater(log_file.stat().st_size, 0)
 
                     # Check format-specific content
-                    with open(log_file, 'r') as f:
+                    with open(log_file, "r") as f:
                         content = f.read()
                         self.assertIn("Test format message", content)
 
@@ -319,7 +321,9 @@ class TestTelemetrySmoke(unittest.TestCase):
                 try:
                     setup_logging(force_reconfigure=True, enable_console=False)
                 except Exception as e:
-                    self.fail(f"setup_logging raised exception with UPSONIC_TELEMETRY={env_value}: {e}")
+                    self.fail(
+                        f"setup_logging raised exception with UPSONIC_TELEMETRY={env_value}: {e}"
+                    )
 
 
 class TestLoggingPerformance(unittest.TestCase):
@@ -338,7 +342,7 @@ class TestLoggingPerformance(unittest.TestCase):
                 level="INFO",
                 log_file=str(log_file),
                 force_reconfigure=True,
-                enable_console=False
+                enable_console=False,
             )
 
             logger = get_logger("test.perf")
@@ -352,7 +356,9 @@ class TestLoggingPerformance(unittest.TestCase):
             elapsed = time.time() - start_time
 
             # Should complete in reasonable time (< 1 second for 1000 messages)
-            self.assertLess(elapsed, 1.0, f"Logging 1000 messages took {elapsed}s, too slow!")
+            self.assertLess(
+                elapsed, 1.0, f"Logging 1000 messages took {elapsed}s, too slow!"
+            )
 
     def test_get_logger_caching(self):
         """Test that get_logger caches logger instances."""
@@ -363,6 +369,6 @@ class TestLoggingPerformance(unittest.TestCase):
         self.assertIs(logger1, logger2)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Run with verbose output
     unittest.main(verbosity=2)

@@ -135,11 +135,13 @@ def setup_sentry() -> None:
     # Get configuration from environment
     the_dsn = os.getenv(
         "UPSONIC_TELEMETRY",
-        "https://f9b529d9b67a30fae4d5b6462256ee9e@o4508336623583232.ingest.us.sentry.io/4510211809542144"
+        "https://f9b529d9b67a30fae4d5b6462256ee9e@o4508336623583232.ingest.us.sentry.io/4510211809542144",
     )
     the_environment = os.getenv("UPSONIC_ENVIRONMENT", "production")
     the_sample_rate = float(os.getenv("UPSONIC_SENTRY_SAMPLE_RATE", "1.0"))
-    the_profile_session_sample_rate = float(os.getenv("UPSONIC_SENTRY_PROFILE_SESSION_SAMPLE_RATE", "1.0"))
+    the_profile_session_sample_rate = float(
+        os.getenv("UPSONIC_SENTRY_PROFILE_SESSION_SAMPLE_RATE", "1.0")
+    )
 
     # "false" değeri varsa Sentry'yi devre dışı bırak
     if the_dsn.lower() == "false":
@@ -148,6 +150,7 @@ def setup_sentry() -> None:
     # Get version for release tag
     try:
         from upsonic.utils.package.get_version import get_library_version
+
         the_release = f"upsonic@{get_library_version()}"
     except Exception:
         the_release = "upsonic@unknown"
@@ -174,6 +177,7 @@ def setup_sentry() -> None:
     # Set user ID for tracking
     try:
         from upsonic.utils.package.system_id import get_system_id
+
         sentry_sdk.set_user({"id": get_system_id()})
     except Exception:
         pass  # System ID alınamazsa skip et
@@ -183,6 +187,7 @@ def setup_sentry() -> None:
     # Register atexit handler to flush pending events on program exit
     # Bu sayede script/CLI kullanımında pending event'ler kaybolmaz
     if the_dsn:
+
         def _flush_sentry():
             """Flush pending Sentry events before program exit."""
             try:
@@ -289,13 +294,15 @@ def setup_logging(
             file_path = Path(log_file_path)
             file_path.parent.mkdir(parents=True, exist_ok=True)
 
-            file_handler = logging.FileHandler(file_path, mode='a', encoding='utf-8')
+            file_handler = logging.FileHandler(file_path, mode="a", encoding="utf-8")
             file_handler.setLevel(main_level)
             file_handler.setFormatter(formatter)
             upsonic_logger.addHandler(file_handler)
         except Exception as e:
             # File handler eklenemezse sadece uyar, devam et
-            upsonic_logger.warning(f"Could not setup file logging to {log_file_path}: {e}")
+            upsonic_logger.warning(
+                f"Could not setup file logging to {log_file_path}: {e}"
+            )
 
     # Modül bazlı log seviyelerini ayarla
     _configure_module_log_levels()
@@ -307,7 +314,9 @@ def setup_logging(
     _LOGGING_CONFIGURED = True
 
     # Debug mesajı (sadece DEBUG modunda görünür)
-    upsonic_logger.debug(f"Upsonic logging configured: level={logging.getLevelName(main_level)}, format={format_key}")
+    upsonic_logger.debug(
+        f"Upsonic logging configured: level={logging.getLevelName(main_level)}, format={format_key}"
+    )
 
 
 def _configure_module_log_levels() -> None:
@@ -426,8 +435,6 @@ def get_current_log_levels() -> Dict[str, str]:
             levels[module_pattern] = logging.getLevelName(logger.level)
 
     return levels
-
-
 
 
 # Library import edildiğinde otomatik konfigüre et

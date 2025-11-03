@@ -18,11 +18,11 @@ from upsonic.providers import Provider
 
 try:
     from openai import AsyncOpenAI
+
     _OPENAI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     AsyncOpenAI = None
     _OPENAI_AVAILABLE = False
-
 
 
 class OllamaProvider(Provider[AsyncOpenAI]):
@@ -30,7 +30,7 @@ class OllamaProvider(Provider[AsyncOpenAI]):
 
     @property
     def name(self) -> str:
-        return 'ollama'
+        return "ollama"
 
     @property
     def base_url(self) -> str:
@@ -42,13 +42,13 @@ class OllamaProvider(Provider[AsyncOpenAI]):
 
     def model_profile(self, model_name: str) -> ModelProfile | None:
         prefix_to_profile = {
-            'llama': meta_model_profile,
-            'gemma': google_model_profile,
-            'qwen': qwen_model_profile,
-            'qwq': qwen_model_profile,
-            'deepseek': deepseek_model_profile,
-            'mistral': mistral_model_profile,
-            'command': cohere_model_profile,
+            "llama": meta_model_profile,
+            "gemma": google_model_profile,
+            "qwen": qwen_model_profile,
+            "qwq": qwen_model_profile,
+            "deepseek": deepseek_model_profile,
+            "mistral": mistral_model_profile,
+            "command": cohere_model_profile,
         }
 
         profile = None
@@ -59,7 +59,9 @@ class OllamaProvider(Provider[AsyncOpenAI]):
 
         # As OllamaProvider is always used with OpenAIChatModel, which used to unconditionally use OpenAIJsonSchemaTransformer,
         # we need to maintain that behavior unless json_schema_transformer is set explicitly
-        return OpenAIModelProfile(json_schema_transformer=OpenAIJsonSchemaTransformer).update(profile)
+        return OpenAIModelProfile(
+            json_schema_transformer=OpenAIJsonSchemaTransformer
+        ).update(profile)
 
     def __init__(
         self,
@@ -70,10 +72,11 @@ class OllamaProvider(Provider[AsyncOpenAI]):
     ) -> None:
         if not _OPENAI_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="openai",
-                install_command='pip install openai',
-                feature_name="openai provider"
+                install_command="pip install openai",
+                feature_name="openai provider",
             )
 
         """Create a new Ollama provider.
@@ -89,24 +92,32 @@ class OllamaProvider(Provider[AsyncOpenAI]):
             http_client: An existing `httpx.AsyncClient` to use for making HTTP requests.
         """
         if openai_client is not None:
-            assert base_url is None, 'Cannot provide both `openai_client` and `base_url`'
-            assert http_client is None, 'Cannot provide both `openai_client` and `http_client`'
-            assert api_key is None, 'Cannot provide both `openai_client` and `api_key`'
+            assert base_url is None, (
+                "Cannot provide both `openai_client` and `base_url`"
+            )
+            assert http_client is None, (
+                "Cannot provide both `openai_client` and `http_client`"
+            )
+            assert api_key is None, "Cannot provide both `openai_client` and `api_key`"
             self._client = openai_client
         else:
-            base_url = base_url or os.getenv('OLLAMA_BASE_URL')
+            base_url = base_url or os.getenv("OLLAMA_BASE_URL")
             if not base_url:
                 raise UserError(
-                    'Set the `OLLAMA_BASE_URL` environment variable or pass it via `OllamaProvider(base_url=...)`'
-                    'to use the Ollama provider.'
+                    "Set the `OLLAMA_BASE_URL` environment variable or pass it via `OllamaProvider(base_url=...)`"
+                    "to use the Ollama provider."
                 )
 
             # This is a workaround for the OpenAI client requiring an API key, whilst locally served,
             # openai compatible models do not always need an API key, but a placeholder (non-empty) key is required.
-            api_key = api_key or os.getenv('OLLAMA_API_KEY') or 'api-key-not-set'
+            api_key = api_key or os.getenv("OLLAMA_API_KEY") or "api-key-not-set"
 
             if http_client is not None:
-                self._client = AsyncOpenAI(base_url=base_url, api_key=api_key, http_client=http_client)
+                self._client = AsyncOpenAI(
+                    base_url=base_url, api_key=api_key, http_client=http_client
+                )
             else:
-                http_client = cached_async_http_client(provider='ollama')
-                self._client = AsyncOpenAI(base_url=base_url, api_key=api_key, http_client=http_client)
+                http_client = cached_async_http_client(provider="ollama")
+                self._client = AsyncOpenAI(
+                    base_url=base_url, api_key=api_key, http_client=http_client
+                )

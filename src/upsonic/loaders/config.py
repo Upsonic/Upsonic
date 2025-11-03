@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Dict, Any, Optional, List, Literal
 from pydantic import BaseModel, Field, ConfigDict
-from abc import ABC, abstractmethod
+from abc import ABC
 
 
 class LoaderConfig(BaseModel, ABC):
@@ -37,7 +37,6 @@ class TextLoaderConfig(LoaderConfig):
     and to perform basic cleaning operations.
     """
 
-
     strip_whitespace: bool = Field(
         default=True,
         description="If True, removes leading/trailing whitespace from each chunk.",
@@ -45,7 +44,7 @@ class TextLoaderConfig(LoaderConfig):
     min_chunk_length: int = Field(
         default=1,
         description="The minimum character length for a chunk to be kept after cleaning.",
-        ge=0
+        ge=0,
     )
 
 
@@ -58,12 +57,12 @@ class CSVLoaderConfig(LoaderConfig):
     )
     split_mode: Literal["single_document", "per_row", "per_chunk"] = Field(
         default="single_document",
-        description="How to split CSV into documents: 'single_document' (all rows in one), 'per_row' (each row as document), 'per_chunk' (groups of rows)"
+        description="How to split CSV into documents: 'single_document' (all rows in one), 'per_row' (each row as document), 'per_chunk' (groups of rows)",
     )
     rows_per_chunk: int = Field(
         default=100,
         description="Number of rows per document when split_mode='per_chunk'",
-        gt=0
+        gt=0,
     )
     include_columns: Optional[List[str]] = Field(
         default=None, description="Only include these columns"
@@ -98,12 +97,12 @@ class PdfLoaderConfig(LoaderConfig):
     start_page: Optional[int] = Field(
         default=None,
         description="The first page number to process (1-indexed). If None, starts from the beginning.",
-        ge=1
+        ge=1,
     )
     end_page: Optional[int] = Field(
         default=None,
         description="The last page number to process (inclusive). If None, processes to the end.",
-        ge=1
+        ge=1,
     )
 
     clean_page_numbers: bool = Field(
@@ -113,12 +112,12 @@ class PdfLoaderConfig(LoaderConfig):
     page_num_start_format: Optional[str] = Field(
         default=None,
         description="A Python f-string to prepend to each page's content if page numbers are cleaned. "
-                    "Example: '<start page {page_nr}>'. If None, nothing is prepended."
+        "Example: '<start page {page_nr}>'. If None, nothing is prepended.",
     )
     page_num_end_format: Optional[str] = Field(
         default=None,
         description="A Python f-string to append to each page's content if page numbers are cleaned. "
-                    "Example: '<end page {page_nr}>'. If None, nothing is appended."
+        "Example: '<end page {page_nr}>'. If None, nothing is appended.",
     )
     extra_whitespace_removal: bool = Field(
         default=True,
@@ -128,7 +127,7 @@ class PdfLoaderConfig(LoaderConfig):
     pdf_password: Optional[str] = Field(
         default=None,
         description="Password to use for decrypting protected PDF files.",
-        min_length=1
+        min_length=1,
     )
 
 
@@ -153,12 +152,12 @@ class PyMuPDFLoaderConfig(LoaderConfig):
     start_page: Optional[int] = Field(
         default=None,
         description="The first page number to process (1-indexed). If None, starts from the beginning.",
-        ge=1
+        ge=1,
     )
     end_page: Optional[int] = Field(
         default=None,
         description="The last page number to process (inclusive). If None, processes to the end.",
-        ge=1
+        ge=1,
     )
 
     clean_page_numbers: bool = Field(
@@ -168,12 +167,12 @@ class PyMuPDFLoaderConfig(LoaderConfig):
     page_num_start_format: Optional[str] = Field(
         default=None,
         description="A Python f-string to prepend to each page's content if page numbers are cleaned. "
-                    "Example: '<start page {page_nr}>'. If None, nothing is prepended."
+        "Example: '<start page {page_nr}>'. If None, nothing is prepended.",
     )
     page_num_end_format: Optional[str] = Field(
         default=None,
         description="A Python f-string to append to each page's content if page numbers are cleaned. "
-                    "Example: '<end page {page_nr}>'. If None, nothing is appended."
+        "Example: '<end page {page_nr}>'. If None, nothing is appended.",
     )
     extra_whitespace_removal: bool = Field(
         default=True,
@@ -183,7 +182,7 @@ class PyMuPDFLoaderConfig(LoaderConfig):
     pdf_password: Optional[str] = Field(
         default=None,
         description="Password to use for decrypting protected PDF files.",
-        min_length=1
+        min_length=1,
     )
 
     # PyMuPDF-specific configurations
@@ -207,7 +206,7 @@ class PyMuPDFLoaderConfig(LoaderConfig):
         default=150,
         description="DPI for image rendering when performing OCR.",
         ge=72,
-        le=600
+        le=600,
     )
 
     preserve_layout: bool = Field(
@@ -226,7 +225,6 @@ class PyMuPDFLoaderConfig(LoaderConfig):
     )
 
 
-
 class DOCXLoaderConfig(LoaderConfig):
     """Configuration for DOCX file loading."""
 
@@ -234,8 +232,7 @@ class DOCXLoaderConfig(LoaderConfig):
     include_headers: bool = Field(default=True, description="Include header content")
     include_footers: bool = Field(default=True, description="Include footer content")
     table_format: Literal["text", "markdown", "html"] = Field(
-        default="text",
-        description="How to format tables"
+        default="text", description="How to format tables"
     )
 
 
@@ -243,29 +240,30 @@ class JSONLoaderConfig(LoaderConfig):
     """
     Advanced configuration for loading and mapping structured JSON and JSONL files.
     """
+
     mode: Literal["single", "multi"] = Field(
         default="single",
-        description="Processing mode: 'single' for one document per file, 'multi' to extract multiple documents from records within a file."
+        description="Processing mode: 'single' for one document per file, 'multi' to extract multiple documents from records within a file.",
     )
     record_selector: Optional[str] = Field(
         default=None,
-        description="A JQ query to select a list of records from the JSON object (e.g., '.articles[]'). Required for 'multi' mode."
+        description="A JQ query to select a list of records from the JSON object (e.g., '.articles[]'). Required for 'multi' mode.",
     )
     content_mapper: str = Field(
         default=".",
-        description="A JQ query to extract the content from a single record. The default '.' uses the entire record."
+        description="A JQ query to extract the content from a single record. The default '.' uses the entire record.",
     )
     metadata_mapper: Optional[Dict[str, str]] = Field(
         default=None,
-        description="A dictionary mapping metadata keys to JQ queries for extracting metadata from each record."
+        description="A dictionary mapping metadata keys to JQ queries for extracting metadata from each record.",
     )
     content_synthesis_mode: Literal["json", "text"] = Field(
         default="json",
-        description="How to format the extracted content: 'json' for a compact JSON string, 'text' for the raw text value."
+        description="How to format the extracted content: 'json' for a compact JSON string, 'text' for the raw text value.",
     )
     json_lines: bool = Field(
         default=False,
-        description="Set to True if the file is in JSON Lines format (.jsonl), where each line is a separate JSON object."
+        description="Set to True if the file is in JSON Lines format (.jsonl), where each line is a separate JSON object.",
     )
 
 
@@ -349,9 +347,9 @@ class YAMLLoaderConfig(LoaderConfig):
         ),
     )
     yaml_indent: int = Field(
-        default=2, 
+        default=2,
         description="The indentation level to use when `content_synthesis_mode` is 'canonical_yaml'.",
-        ge=1
+        ge=1,
     )
     json_indent: Optional[int] = Field(
         default=2,
@@ -376,45 +374,68 @@ class YAMLLoaderConfig(LoaderConfig):
 
 class MarkdownLoaderConfig(LoaderConfig):
     """Configuration for Markdown file loading."""
-    parse_front_matter: bool = Field(default=True, description="Parse YAML front matter from the top of the file.")
-    include_code_blocks: bool = Field(default=True, description="Include code block content in the document.")
-    code_block_language_metadata: bool = Field(default=True, description="Add code block language as metadata.")
-    heading_metadata: bool = Field(default=True, description="Extract headings and add them to the metadata.")
+
+    parse_front_matter: bool = Field(
+        default=True, description="Parse YAML front matter from the top of the file."
+    )
+    include_code_blocks: bool = Field(
+        default=True, description="Include code block content in the document."
+    )
+    code_block_language_metadata: bool = Field(
+        default=True, description="Add code block language as metadata."
+    )
+    heading_metadata: bool = Field(
+        default=True, description="Extract headings and add them to the metadata."
+    )
     split_by_heading: Optional[Literal["h1", "h2", "h3"]] = Field(
-        default=None, description="If set, splits the file into multiple documents based on the specified heading level."
+        default=None,
+        description="If set, splits the file into multiple documents based on the specified heading level.",
     )
 
 
 class HTMLLoaderConfig(LoaderConfig):
     """Configuration for HTML file and URL loading."""
 
-    extract_text: bool = Field(default=True, description="Extract text content from HTML")
-    preserve_structure: bool = Field(default=True, description="Preserve document structure in output")
-    include_links: bool = Field(default=True, description="Include links in extracted content")
+    extract_text: bool = Field(
+        default=True, description="Extract text content from HTML"
+    )
+    preserve_structure: bool = Field(
+        default=True, description="Preserve document structure in output"
+    )
+    include_links: bool = Field(
+        default=True, description="Include links in extracted content"
+    )
     include_images: bool = Field(default=False, description="Include image information")
     remove_scripts: bool = Field(default=True, description="Remove script tags")
     remove_styles: bool = Field(default=True, description="Remove style tags")
-    extract_metadata: bool = Field(default=True, description="Extract metadata from HTML head")
-    clean_whitespace: bool = Field(default=True, description="Clean up whitespace in output")
+    extract_metadata: bool = Field(
+        default=True, description="Extract metadata from HTML head"
+    )
+    clean_whitespace: bool = Field(
+        default=True, description="Clean up whitespace in output"
+    )
 
     extract_headers: bool = Field(default=True, description="Extract heading elements")
-    extract_paragraphs: bool = Field(default=True, description="Extract paragraph content")
+    extract_paragraphs: bool = Field(
+        default=True, description="Extract paragraph content"
+    )
     extract_lists: bool = Field(default=True, description="Extract list content")
     extract_tables: bool = Field(default=True, description="Extract table content")
 
     table_format: Literal["text", "markdown", "html"] = Field(
-        default="text",
-        description="How to format extracted tables"
+        default="text", description="How to format extracted tables"
     )
 
-    user_agent: str = Field(default="Upsonic HTML Loader 1.0", description="User agent for web requests")
+    user_agent: str = Field(
+        default="Upsonic HTML Loader 1.0", description="User agent for web requests"
+    )
 
 
 class PdfPlumberLoaderConfig(LoaderConfig):
     """
     Advanced configuration for pdfplumber-based PDF document loading.
-    
-    pdfplumber provides superior table extraction, layout preservation, and 
+
+    pdfplumber provides superior table extraction, layout preservation, and
     character-level text analysis. It excels at structured document processing
     and complex layout handling for AI agent frameworks requiring high-quality
     extraction from PDFs with tables, forms, and complex formatting.
@@ -433,12 +454,12 @@ class PdfPlumberLoaderConfig(LoaderConfig):
     start_page: Optional[int] = Field(
         default=None,
         description="The first page number to process (1-indexed). If None, starts from the beginning.",
-        ge=1
+        ge=1,
     )
     end_page: Optional[int] = Field(
         default=None,
         description="The last page number to process (inclusive). If None, processes to the end.",
-        ge=1
+        ge=1,
     )
 
     clean_page_numbers: bool = Field(
@@ -448,12 +469,12 @@ class PdfPlumberLoaderConfig(LoaderConfig):
     page_num_start_format: Optional[str] = Field(
         default=None,
         description="A Python f-string to prepend to each page's content if page numbers are cleaned. "
-                    "Example: '<start page {page_nr}>'. If None, nothing is prepended."
+        "Example: '<start page {page_nr}>'. If None, nothing is prepended.",
     )
     page_num_end_format: Optional[str] = Field(
         default=None,
         description="A Python f-string to append to each page's content if page numbers are cleaned. "
-                    "Example: '<end page {page_nr}>'. If None, nothing is appended."
+        "Example: '<end page {page_nr}>'. If None, nothing is appended.",
     )
     extra_whitespace_removal: bool = Field(
         default=True,
@@ -463,7 +484,7 @@ class PdfPlumberLoaderConfig(LoaderConfig):
     pdf_password: Optional[str] = Field(
         default=None,
         description="Password to use for decrypting protected PDF files.",
-        min_length=1
+        min_length=1,
     )
 
     # pdfplumber-specific configurations
@@ -471,7 +492,7 @@ class PdfPlumberLoaderConfig(LoaderConfig):
         default=True,
         description="If True, extracts tables and includes them in the content. pdfplumber excels at table extraction.",
     )
-    
+
     table_format: Literal["text", "markdown", "csv", "grid"] = Field(
         default="markdown",
         description=(
@@ -482,7 +503,7 @@ class PdfPlumberLoaderConfig(LoaderConfig):
             "'grid': Grid-style ASCII table."
         ),
     )
-    
+
     table_settings: Dict[str, Any] = Field(
         default_factory=lambda: {
             "vertical_strategy": "lines",
@@ -521,19 +542,17 @@ class PdfPlumberLoaderConfig(LoaderConfig):
     char_margin: float = Field(
         default=3.0,
         description="The minimum distance between characters for them to be considered separate words.",
-        ge=0.0
+        ge=0.0,
     )
 
     line_margin: float = Field(
         default=0.5,
         description="The minimum distance between lines for them to be considered separate.",
-        ge=0.0
+        ge=0.0,
     )
 
     word_margin: float = Field(
-        default=0.1,
-        description="The minimum distance between words.",
-        ge=0.0
+        default=0.1, description="The minimum distance between words.", ge=0.0
     )
 
     extract_page_dimensions: bool = Field(
@@ -560,7 +579,7 @@ class PdfPlumberLoaderConfig(LoaderConfig):
 class DoclingLoaderConfig(LoaderConfig):
     """
     Advanced configuration for Docling-based document loading.
-    
+
     Docling provides enterprise-grade document processing with support for
     PDF, DOCX, XLSX, PPTX, HTML, Markdown, AsciiDoc, CSV, and various image formats.
     It leverages advanced ML models for layout understanding and content extraction.
@@ -628,7 +647,7 @@ class DoclingLoaderConfig(LoaderConfig):
         default=0.5,
         description="Minimum confidence score for OCR text (0.0-1.0). Lower values include more uncertain text.",
         ge=0.0,
-        le=1.0
+        le=1.0,
     )
 
     # Table Structure Detection
@@ -646,7 +665,7 @@ class DoclingLoaderConfig(LoaderConfig):
     max_pages: Optional[int] = Field(
         default=None,
         description="Maximum number of pages to process per document. None means no limit.",
-        ge=1
+        ge=1,
     )
 
     page_range: Optional[tuple[int, int]] = Field(
@@ -663,7 +682,7 @@ class DoclingLoaderConfig(LoaderConfig):
         default=10,
         description="Number of documents to process in parallel during batch operations.",
         ge=1,
-        le=100
+        le=100,
     )
 
     # Metadata extraction
@@ -676,7 +695,7 @@ class DoclingLoaderConfig(LoaderConfig):
         default=0.5,
         description="Minimum confidence score for extracted chunks (0.0-1.0).",
         ge=0.0,
-        le=1.0
+        le=1.0,
     )
 
     # URL handling
@@ -686,48 +705,41 @@ class DoclingLoaderConfig(LoaderConfig):
     )
 
     url_timeout: int = Field(
-        default=30,
-        description="Timeout in seconds for URL downloads.",
-        ge=1,
-        le=300
+        default=30, description="Timeout in seconds for URL downloads.", ge=1, le=300
     )
 
 
 class LoaderConfigFactory:
     """Factory for creating loader configurations."""
-    
+
     _config_map: Dict[str, type] = {
-        'text': TextLoaderConfig,
-        'csv': CSVLoaderConfig,
-        'pdf': PdfLoaderConfig,
-        'pymupdf': PyMuPDFLoaderConfig,
-        'pdfplumber': PdfPlumberLoaderConfig,
-        'docx': DOCXLoaderConfig,
-        'json': JSONLoaderConfig,
-        'jsonl': JSONLoaderConfig,
-        'xml': XMLLoaderConfig,
-        'yaml': YAMLLoaderConfig,
-        'yml': YAMLLoaderConfig,
-        'markdown': MarkdownLoaderConfig,
-        'md': MarkdownLoaderConfig,
-        'html': HTMLLoaderConfig,
-        'htm': HTMLLoaderConfig,
-        'docling': DoclingLoaderConfig,
+        "text": TextLoaderConfig,
+        "csv": CSVLoaderConfig,
+        "pdf": PdfLoaderConfig,
+        "pymupdf": PyMuPDFLoaderConfig,
+        "pdfplumber": PdfPlumberLoaderConfig,
+        "docx": DOCXLoaderConfig,
+        "json": JSONLoaderConfig,
+        "jsonl": JSONLoaderConfig,
+        "xml": XMLLoaderConfig,
+        "yaml": YAMLLoaderConfig,
+        "yml": YAMLLoaderConfig,
+        "markdown": MarkdownLoaderConfig,
+        "md": MarkdownLoaderConfig,
+        "html": HTMLLoaderConfig,
+        "htm": HTMLLoaderConfig,
+        "docling": DoclingLoaderConfig,
     }
-    
+
     @classmethod
-    def create_config(
-        cls, 
-        loader_type: str, 
-        **kwargs
-    ) -> LoaderConfig:
+    def create_config(cls, loader_type: str, **kwargs) -> LoaderConfig:
         """Create a configuration for the specified loader type."""
         config_class = cls._config_map.get(loader_type.lower())
         if not config_class:
             raise ValueError(f"Unknown loader type: {loader_type}")
-        
+
         return config_class(**kwargs)
-    
+
     @classmethod
     def get_supported_types(cls) -> List[str]:
         """Get list of supported loader types."""

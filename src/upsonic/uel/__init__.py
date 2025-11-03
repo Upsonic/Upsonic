@@ -8,12 +8,12 @@ from upsonic.uel.branch import RunnableBranch
 from upsonic.uel.decorator import chain
 
 __all__ = [
-    'Runnable',
-    'RunnableSequence', 
-    'RunnableParallel',
-    'RunnableLambda',
-    'RunnableBranch',
-    'ChatPromptTemplate',
-    'RunnablePassthrough',
-    'chain',
+    "Runnable",
+    "RunnableSequence",
+    "RunnableParallel",
+    "RunnableLambda",
+    "RunnableBranch",
+    "ChatPromptTemplate",
+    "RunnablePassthrough",
+    "chain",
 ]

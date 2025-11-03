@@ -12,11 +12,11 @@ from upsonic.providers import Provider
 
 try:
     from openai import AsyncOpenAI
+
     _OPENAI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     AsyncOpenAI = None
     _OPENAI_AVAILABLE = False
-
 
 
 class OpenAIProvider(Provider[AsyncOpenAI]):
@@ -24,7 +24,7 @@ class OpenAIProvider(Provider[AsyncOpenAI]):
 
     @property
     def name(self) -> str:
-        return 'openai'
+        return "openai"
 
     @property
     def base_url(self) -> str:
@@ -70,23 +70,37 @@ class OpenAIProvider(Provider[AsyncOpenAI]):
         """
         if not _OPENAI_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="openai",
                 install_command='pip install "upsonic[openai]"',
-                feature_name="OpenAI provider"
+                feature_name="OpenAI provider",
             )
         # This is a workaround for the OpenAI client requiring an API key, whilst locally served,
         # openai compatible models do not always need an API key, but a placeholder (non-empty) key is required.
-        if api_key is None and 'OPENAI_API_KEY' not in os.environ and base_url is not None and openai_client is None:
-            api_key = 'api-key-not-set'
+        if (
+            api_key is None
+            and "OPENAI_API_KEY" not in os.environ
+            and base_url is not None
+            and openai_client is None
+        ):
+            api_key = "api-key-not-set"
 
         if openai_client is not None:
-            assert base_url is None, 'Cannot provide both `openai_client` and `base_url`'
-            assert http_client is None, 'Cannot provide both `openai_client` and `http_client`'
-            assert api_key is None, 'Cannot provide both `openai_client` and `api_key`'
+            assert base_url is None, (
+                "Cannot provide both `openai_client` and `base_url`"
+            )
+            assert http_client is None, (
+                "Cannot provide both `openai_client` and `http_client`"
+            )
+            assert api_key is None, "Cannot provide both `openai_client` and `api_key`"
             self._client = openai_client
         elif http_client is not None:
-            self._client = AsyncOpenAI(base_url=base_url, api_key=api_key, http_client=http_client)
+            self._client = AsyncOpenAI(
+                base_url=base_url, api_key=api_key, http_client=http_client
+            )
         else:
-            http_client = cached_async_http_client(provider='openai')
-            self._client = AsyncOpenAI(base_url=base_url, api_key=api_key, http_client=http_client)
+            http_client = cached_async_http_client(provider="openai")
+            self._client = AsyncOpenAI(
+                base_url=base_url, api_key=api_key, http_client=http_client
+            )

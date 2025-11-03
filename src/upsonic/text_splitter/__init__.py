@@ -1,10 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
-from .base import (
-    BaseChunker,
-    BaseChunkingConfig
-)
+from .base import BaseChunker, BaseChunkingConfig
 
 if TYPE_CHECKING:
     from .character import CharacterChunker, CharacterChunkingConfig
@@ -28,8 +25,9 @@ if TYPE_CHECKING:
         detect_content_type,
         recommend_strategy_for_content,
         ContentType,
-        ChunkingUseCase
+        ChunkingUseCase,
     )
+
 
 def _get_chunker_classes():
     """Lazy import of chunker classes."""
@@ -40,31 +38,32 @@ def _get_chunker_classes():
     from .python import PythonChunker, PythonChunkingConfig
     from .semantic import SemanticChunker, SemanticChunkingConfig
     from .agentic import AgenticChunker, AgenticChunkingConfig
-    
+
     try:
         from .html_chunker import HTMLChunker, HTMLChunkingConfig
     except ImportError:
         HTMLChunker = None
         HTMLChunkingConfig = None
-    
+
     return {
-        'CharacterChunker': CharacterChunker,
-        'CharacterChunkingConfig': CharacterChunkingConfig,
-        'RecursiveChunker': RecursiveChunker,
-        'RecursiveChunkingConfig': RecursiveChunkingConfig,
-        'HTMLChunker': HTMLChunker,
-        'HTMLChunkingConfig': HTMLChunkingConfig,
-        'JSONChunker': JSONChunker,
-        'JSONChunkingConfig': JSONChunkingConfig,
-        'MarkdownChunker': MarkdownChunker,
-        'MarkdownChunkingConfig': MarkdownChunkingConfig,
-        'PythonChunker': PythonChunker,
-        'PythonChunkingConfig': PythonChunkingConfig,
-        'SemanticChunker': SemanticChunker,
-        'SemanticChunkingConfig': SemanticChunkingConfig,
-        'AgenticChunker': AgenticChunker,
-        'AgenticChunkingConfig': AgenticChunkingConfig,
+        "CharacterChunker": CharacterChunker,
+        "CharacterChunkingConfig": CharacterChunkingConfig,
+        "RecursiveChunker": RecursiveChunker,
+        "RecursiveChunkingConfig": RecursiveChunkingConfig,
+        "HTMLChunker": HTMLChunker,
+        "HTMLChunkingConfig": HTMLChunkingConfig,
+        "JSONChunker": JSONChunker,
+        "JSONChunkingConfig": JSONChunkingConfig,
+        "MarkdownChunker": MarkdownChunker,
+        "MarkdownChunkingConfig": MarkdownChunkingConfig,
+        "PythonChunker": PythonChunker,
+        "PythonChunkingConfig": PythonChunkingConfig,
+        "SemanticChunker": SemanticChunker,
+        "SemanticChunkingConfig": SemanticChunkingConfig,
+        "AgenticChunker": AgenticChunker,
+        "AgenticChunkingConfig": AgenticChunkingConfig,
     }
+
 
 def _get_factory_functions():
     """Lazy import of factory functions."""
@@ -81,36 +80,38 @@ def _get_factory_functions():
         detect_content_type,
         recommend_strategy_for_content,
         ContentType,
-        ChunkingUseCase
+        ChunkingUseCase,
     )
-    
+
     return {
-        'create_chunking_strategy': create_chunking_strategy,
-        'create_adaptive_strategy': create_adaptive_strategy,
-        'create_rag_strategy': create_rag_strategy,
-        'create_semantic_search_strategy': create_semantic_search_strategy,
-        'create_fast_strategy': create_fast_strategy,
-        'create_quality_strategy': create_quality_strategy,
-        'create_intelligent_splitters': create_intelligent_splitters,
-        'list_available_strategies': list_available_strategies,
-        'get_strategy_info': get_strategy_info,
-        'detect_content_type': detect_content_type,
-        'recommend_strategy_for_content': recommend_strategy_for_content,
-        'ContentType': ContentType,
-        'ChunkingUseCase': ChunkingUseCase,
+        "create_chunking_strategy": create_chunking_strategy,
+        "create_adaptive_strategy": create_adaptive_strategy,
+        "create_rag_strategy": create_rag_strategy,
+        "create_semantic_search_strategy": create_semantic_search_strategy,
+        "create_fast_strategy": create_fast_strategy,
+        "create_quality_strategy": create_quality_strategy,
+        "create_intelligent_splitters": create_intelligent_splitters,
+        "list_available_strategies": list_available_strategies,
+        "get_strategy_info": get_strategy_info,
+        "detect_content_type": detect_content_type,
+        "recommend_strategy_for_content": recommend_strategy_for_content,
+        "ContentType": ContentType,
+        "ChunkingUseCase": ChunkingUseCase,
     }
+
 
 def __getattr__(name: str) -> Any:
     """Lazy loading of heavy modules and classes."""
     chunker_classes = _get_chunker_classes()
     if name in chunker_classes:
         return chunker_classes[name]
-    
+
     factory_functions = _get_factory_functions()
     if name in factory_functions:
         return factory_functions[name]
-    
+
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
 
 __all__ = [
     "BaseChunker",

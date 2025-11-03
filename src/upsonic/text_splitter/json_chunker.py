@@ -11,6 +11,7 @@ from upsonic.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+
 class JSONChunkingConfig(BaseChunkingConfig):
     """
     A specialized configuration model for the path-aware JSON Chunker strategy.
@@ -19,13 +20,14 @@ class JSONChunkingConfig(BaseChunkingConfig):
     granular control over how a JSON data graph is traversed, segmented, and
     serialized.
     """
+
     convert_lists_to_dicts: bool = Field(
         default=True,
         description=(
             "If True, recursively converts lists into dictionary-like objects "
             "(e.g., `['a', 'b']` becomes `{'0': 'a', '1': 'b'}`). This is essential "
             "for enabling the chunker to split long lists across multiple chunks."
-        )
+        ),
     )
     max_depth: Optional[int] = Field(
         default=50,
@@ -42,8 +44,9 @@ class JSONChunkingConfig(BaseChunkingConfig):
             "A dictionary of options to be passed directly to the `json.dumps` "
             "function when serializing the final chunks into text strings. Allows "
             "control over formatting like `indent` or `ensure_ascii`."
-        )
+        ),
     )
+
 
 # Rebuild the model to resolve forward references
 JSONChunkingConfig.model_rebuild()
@@ -78,7 +81,9 @@ class JSONChunker(BaseChunker[JSONChunkingConfig]):
         try:
             json_data = json.loads(document.content)
         except json.JSONDecodeError as e:
-            logger.warning(f"Failed to parse JSON for document {document.document_id}: {e}. Falling back to text chunking.")
+            logger.warning(
+                f"Failed to parse JSON for document {document.document_id}: {e}. Falling back to text chunking."
+            )
             return self._fallback_to_text_chunking(document)
 
         min_chunk_size = self._get_effective_min_chunk_size()
@@ -88,21 +93,23 @@ class JSONChunker(BaseChunker[JSONChunkingConfig]):
             processed_data = self._preprocess_lists(processed_data)
 
         chunk_builders: List[Dict[str, Any]] = [{"content": {}, "paths": []}]
-        
+
         self._recursive_walk(
             data=processed_data,
             current_path=[],
             chunk_builders=chunk_builders,
             depth=0,
-            min_chunk_size=min_chunk_size
+            min_chunk_size=min_chunk_size,
         )
         final_chunks: List[Chunk] = []
         for builder in chunk_builders:
             if not builder["content"]:
                 continue
 
-            text_content = json.dumps(builder["content"], **self.config.json_encoder_options)
-            
+            text_content = json.dumps(
+                builder["content"], **self.config.json_encoder_options
+            )
+
             final_chunks.append(
                 self._create_chunk(
                     parent_document=document,
@@ -130,7 +137,9 @@ class JSONChunker(BaseChunker[JSONChunkingConfig]):
         if isinstance(data, dict):
             for key, value in data.items():
                 new_path = current_path + [str(key)]
-                self._recursive_walk(value, new_path, chunk_builders, depth + 1, min_chunk_size)
+                self._recursive_walk(
+                    value, new_path, chunk_builders, depth + 1, min_chunk_size
+                )
         else:
             self._add_to_chunk(data, current_path, chunk_builders, min_chunk_size)
 
@@ -147,7 +156,7 @@ class JSONChunker(BaseChunker[JSONChunkingConfig]):
 
         current_chunk_builder = chunk_builders[-1]
         current_chunk_size = self._json_size(current_chunk_builder["content"])
-        
+
         if current_chunk_size + item_size > self.config.chunk_size:
             if current_chunk_size >= min_chunk_size:
                 chunk_builders.append({"content": {}, "paths": []})
@@ -155,7 +164,6 @@ class JSONChunker(BaseChunker[JSONChunkingConfig]):
 
         self._set_nested_dict(current_chunk_builder["content"], path, value)
         current_chunk_builder["paths"].append(".".join(path))
-
 
     def _json_size(self, data: Dict) -> int:
         return len(json.dumps(data, **self.config.json_encoder_options))
@@ -173,18 +181,20 @@ class JSONChunker(BaseChunker[JSONChunkingConfig]):
         d[path[-1]] = value
 
     def _fallback_to_text_chunking(self, document: Document) -> List[Chunk]:
-        from upsonic.text_splitter.recursive import RecursiveChunker, RecursiveChunkingConfig
-        
+        from upsonic.text_splitter.recursive import (
+            RecursiveChunker,
+            RecursiveChunkingConfig,
+        )
+
         fallback_config = RecursiveChunkingConfig(
-            chunk_size=self.config.chunk_size,
-            chunk_overlap=self.config.chunk_overlap
+            chunk_size=self.config.chunk_size, chunk_overlap=self.config.chunk_overlap
         )
         fallback_chunker = RecursiveChunker(fallback_config)
-        
+
         chunks = fallback_chunker.chunk([document])
-        
+
         for chunk in chunks:
             chunk.metadata["chunking_fallback"] = "json_to_text"
             chunk.metadata["original_strategy"] = "json"
-        
+
         return chunks

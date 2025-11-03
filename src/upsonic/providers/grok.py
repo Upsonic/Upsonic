@@ -14,6 +14,7 @@ from upsonic.providers import Provider
 
 try:
     from openai import AsyncOpenAI
+
     _OPENAI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     AsyncOpenAI = None
@@ -22,14 +23,14 @@ except ImportError:  # pragma: no cover
 
 # https://docs.x.ai/docs/models
 GrokModelName = Literal[
-    'grok-4',
-    'grok-4-0709',
-    'grok-3',
-    'grok-3-mini',
-    'grok-3-fast',
-    'grok-3-mini-fast',
-    'grok-2-vision-1212',
-    'grok-2-image-1212',
+    "grok-4",
+    "grok-4-0709",
+    "grok-3",
+    "grok-3-mini",
+    "grok-3-fast",
+    "grok-3-mini-fast",
+    "grok-2-vision-1212",
+    "grok-2-image-1212",
 ]
 
 
@@ -38,11 +39,11 @@ class GrokProvider(Provider[AsyncOpenAI]):
 
     @property
     def name(self) -> str:
-        return 'grok'
+        return "grok"
 
     @property
     def base_url(self) -> str:
-        return 'https://api.x.ai/v1'
+        return "https://api.x.ai/v1"
 
     @property
     def client(self) -> AsyncOpenAI:
@@ -55,7 +56,8 @@ class GrokProvider(Provider[AsyncOpenAI]):
         # unless json_schema_transformer is set explicitly.
         # Also, Grok does not support strict tool definitions
         return OpenAIModelProfile(
-            json_schema_transformer=OpenAIJsonSchemaTransformer, openai_supports_strict_tool_definition=False
+            json_schema_transformer=OpenAIJsonSchemaTransformer,
+            openai_supports_strict_tool_definition=False,
         ).update(profile)
 
     @overload
@@ -79,23 +81,28 @@ class GrokProvider(Provider[AsyncOpenAI]):
     ) -> None:
         if not _OPENAI_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="openai",
-                install_command='pip install openai',
-                feature_name="openai provider"
+                install_command="pip install openai",
+                feature_name="openai provider",
             )
 
-        api_key = api_key or os.getenv('GROK_API_KEY')
+        api_key = api_key or os.getenv("GROK_API_KEY")
         if not api_key and openai_client is None:
             raise UserError(
-                'Set the `GROK_API_KEY` environment variable or pass it via `GrokProvider(api_key=...)`'
-                'to use the Grok provider.'
+                "Set the `GROK_API_KEY` environment variable or pass it via `GrokProvider(api_key=...)`"
+                "to use the Grok provider."
             )
 
         if openai_client is not None:
             self._client = openai_client
         elif http_client is not None:
-            self._client = AsyncOpenAI(base_url=self.base_url, api_key=api_key, http_client=http_client)
+            self._client = AsyncOpenAI(
+                base_url=self.base_url, api_key=api_key, http_client=http_client
+            )
         else:
-            http_client = cached_async_http_client(provider='grok')
-            self._client = AsyncOpenAI(base_url=self.base_url, api_key=api_key, http_client=http_client)
+            http_client = cached_async_http_client(provider="grok")
+            self._client = AsyncOpenAI(
+                base_url=self.base_url, api_key=api_key, http_client=http_client
+            )

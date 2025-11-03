@@ -1,6 +1,6 @@
 from typing import NewType
 
-SessionId = NewType('SessionId', str)
+SessionId = NewType("SessionId", str)
 """
 A distinct type representing the unique identifier for an InteractionSession.
 
@@ -9,7 +9,7 @@ differentiate it from other string-based IDs, enabling type-safe
 function overloading.
 """
 
-UserId = NewType('UserId', str)
+UserId = NewType("UserId", str)
 """
 A distinct type representing the unique identifier for a UserProfile.
 

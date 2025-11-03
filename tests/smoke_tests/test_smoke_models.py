@@ -1,6 +1,6 @@
-import pytest
 from upsonic import Task, Agent
-#t
+# t
+
 
 def test_models(capsys):
     list_of_models = [

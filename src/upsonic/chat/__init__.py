@@ -11,5 +11,5 @@ __all__ = [
     "ChatMessage",
     "CostTracker",
     "format_cost",
-    "format_tokens"
+    "format_tokens",
 ]

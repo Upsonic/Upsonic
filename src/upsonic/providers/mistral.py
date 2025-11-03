@@ -13,11 +13,11 @@ from upsonic.providers import Provider
 
 try:
     from mistralai import Mistral
+
     _MISTRALAI_AVAILABLE = True
 except ImportError:
     Mistral = None
     _MISTRALAI_AVAILABLE = False
-
 
 
 class MistralProvider(Provider[Mistral]):
@@ -25,7 +25,7 @@ class MistralProvider(Provider[Mistral]):
 
     @property
     def name(self) -> str:
-        return 'mistral'
+        return "mistral"
 
     @property
     def base_url(self) -> str:
@@ -42,7 +42,12 @@ class MistralProvider(Provider[Mistral]):
     def __init__(self, *, mistral_client: Mistral | None = None) -> None: ...
 
     @overload
-    def __init__(self, *, api_key: str | None = None, http_client: httpx.AsyncClient | None = None) -> None: ...
+    def __init__(
+        self,
+        *,
+        api_key: str | None = None,
+        http_client: httpx.AsyncClient | None = None,
+    ) -> None: ...
 
     def __init__(
         self,
@@ -54,10 +59,11 @@ class MistralProvider(Provider[Mistral]):
     ) -> None:
         if not _MISTRALAI_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="mistralai",
-                install_command='pip install mistralai',
-                feature_name="Mistral provider"
+                install_command="pip install mistralai",
+                feature_name="Mistral provider",
             )
 
         """Create a new Mistral provider.
@@ -70,20 +76,28 @@ class MistralProvider(Provider[Mistral]):
             http_client: An existing async client to use for making HTTP requests.
         """
         if mistral_client is not None:
-            assert http_client is None, 'Cannot provide both `mistral_client` and `http_client`'
-            assert api_key is None, 'Cannot provide both `mistral_client` and `api_key`'
-            assert base_url is None, 'Cannot provide both `mistral_client` and `base_url`'
+            assert http_client is None, (
+                "Cannot provide both `mistral_client` and `http_client`"
+            )
+            assert api_key is None, "Cannot provide both `mistral_client` and `api_key`"
+            assert base_url is None, (
+                "Cannot provide both `mistral_client` and `base_url`"
+            )
             self._client = mistral_client
         else:
-            api_key = api_key or os.getenv('MISTRAL_API_KEY')
+            api_key = api_key or os.getenv("MISTRAL_API_KEY")
 
             if not api_key:
                 raise UserError(
-                    'Set the `MISTRAL_API_KEY` environment variable or pass it via `MistralProvider(api_key=...)`'
-                    'to use the Mistral provider.'
+                    "Set the `MISTRAL_API_KEY` environment variable or pass it via `MistralProvider(api_key=...)`"
+                    "to use the Mistral provider."
                 )
             elif http_client is not None:
-                self._client = Mistral(api_key=api_key, async_client=http_client, server_url=base_url)
+                self._client = Mistral(
+                    api_key=api_key, async_client=http_client, server_url=base_url
+                )
             else:
-                http_client = cached_async_http_client(provider='mistral')
-                self._client = Mistral(api_key=api_key, async_client=http_client, server_url=base_url)
+                http_client = cached_async_http_client(provider="mistral")
+                self._client = Mistral(
+                    api_key=api_key, async_client=http_client, server_url=base_url
+                )

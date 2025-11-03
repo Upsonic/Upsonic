@@ -22,10 +22,10 @@ Install the package using pip or your preferred package manager.
 
 ## Usage
 How to use the package in your projects.""",
-            metadata={'source': 'simple', 'type': 'documentation'},
-            document_id=str(uuid.uuid4())
+            metadata={"source": "simple", "type": "documentation"},
+            document_id=str(uuid.uuid4()),
         )
-        
+
         # Nested headers document
         self.nested_doc = Document(
             content="""# Main Title
@@ -45,10 +45,10 @@ Content for subsection 1.2.
 
 ## Section 2
 Content for section 2.""",
-            metadata={'source': 'nested', 'type': 'hierarchical'},
-            document_id=str(uuid.uuid4())
+            metadata={"source": "nested", "type": "hierarchical"},
+            document_id=str(uuid.uuid4()),
         )
-        
+
         # Mixed content document
         self.mixed_doc = Document(
             content="""# Project Overview
@@ -85,8 +85,8 @@ def calculate_metrics(data):
 | Authentication | Complete | High |
 | Data Processing | In Progress | Medium |
 | Analytics | Pending | Low |""",
-            metadata={'source': 'mixed', 'type': 'project_docs'},
-            document_id=str(uuid.uuid4())
+            metadata={"source": "mixed", "type": "project_docs"},
+            document_id=str(uuid.uuid4()),
         )
 
     def test_basic_markdown_header_chunking(self):
@@ -94,11 +94,11 @@ def calculate_metrics(data):
         config = MarkdownChunkingConfig()
         chunker = MarkdownChunker(config)
         chunks = chunker.chunk([self.simple_doc])
-        
+
         self.assertGreater(len(chunks), 0)
         self.assertTrue(all(isinstance(chunk, Chunk) for chunk in chunks))
         self.assertTrue(all(chunk.text_content for chunk in chunks))
-        
+
         # Check that header metadata is present
         for chunk in chunks:
             # The current implementation may not always include header metadata
@@ -110,9 +110,9 @@ def calculate_metrics(data):
         config = MarkdownChunkingConfig()
         chunker = MarkdownChunker(config)
         chunks = chunker.chunk([self.nested_doc])
-        
+
         self.assertGreater(len(chunks), 0)
-        
+
         # Verify that content is preserved
         all_content = " ".join(chunk.text_content for chunk in chunks)
         self.assertIn("Main Title", all_content)
@@ -125,25 +125,27 @@ def calculate_metrics(data):
         config_strip = MarkdownChunkingConfig(strip_elements=True)
         chunker_strip = MarkdownChunker(config_strip)
         chunks_strip = chunker_strip.chunk([self.simple_doc])
-        
+
         self.assertGreater(len(chunks_strip), 0)
-        
+
         # Headers should be stripped from content
         for chunk in chunks_strip:
-            self.assertNotIn('# Introduction', chunk.text_content)
-            self.assertNotIn('## Getting Started', chunk.text_content)
-        
+            self.assertNotIn("# Introduction", chunk.text_content)
+            self.assertNotIn("## Getting Started", chunk.text_content)
+
         # Test with strip_headers=False
         config_preserve = MarkdownChunkingConfig(strip_elements=False)
         chunker_preserve = MarkdownChunker(config_preserve)
         chunks_preserve = chunker_preserve.chunk([self.simple_doc])
-        
+
         self.assertGreater(len(chunks_preserve), 0)
-        
+
         # At least some chunks should contain headers
-        has_header_content = any('# Introduction' in chunk.text_content or 
-                              '## Getting Started' in chunk.text_content 
-                              for chunk in chunks_preserve)
+        any(
+            "# Introduction" in chunk.text_content
+            or "## Getting Started" in chunk.text_content
+            for chunk in chunks_preserve
+        )
         # This might not always be true depending on implementation, so we'll check flexibly
         self.assertTrue(len(chunks_preserve) > 0)
 
@@ -154,9 +156,9 @@ def calculate_metrics(data):
         config = MarkdownChunkingConfig(split_on_elements=custom_elements)
         chunker = MarkdownChunker(config)
         chunks = chunker.chunk([self.nested_doc])
-        
+
         self.assertGreater(len(chunks), 0)
-        
+
         # Check that chunks are created properly
         for chunk in chunks:
             self.assertIsInstance(chunk.metadata, dict)
@@ -167,9 +169,9 @@ def calculate_metrics(data):
         config = MarkdownChunkingConfig()
         chunker = MarkdownChunker(config)
         chunks = chunker.chunk([self.mixed_doc])
-        
+
         self.assertGreater(len(chunks), 0)
-        
+
         # Verify that different content types are preserved
         all_content = " ".join(chunk.text_content for chunk in chunks)
         self.assertIn("calculate_metrics", all_content)  # Code block
@@ -178,12 +180,16 @@ def calculate_metrics(data):
 
     def test_empty_content_handling(self):
         """Test handling of empty markdown content."""
-        empty_doc = Document(content="", metadata={'source': 'empty', 'type': 'edge_case'}, document_id=str(uuid.uuid4()))
-        
+        empty_doc = Document(
+            content="",
+            metadata={"source": "empty", "type": "edge_case"},
+            document_id=str(uuid.uuid4()),
+        )
+
         config = MarkdownChunkingConfig()
         chunker = MarkdownChunker(config)
         chunks = chunker.chunk([empty_doc])
-        
+
         self.assertEqual(len(chunks), 0)
 
     def test_content_without_headers(self):
@@ -191,32 +197,32 @@ def calculate_metrics(data):
         no_headers_content = """This is content without any headers.
 Just plain text spread across multiple lines.
 No markdown headers anywhere in this content."""
-        no_headers_doc = Document(content=no_headers_content, metadata={'type': 'plain'}, document_id=str(uuid.uuid4()))
-        
+        no_headers_doc = Document(
+            content=no_headers_content,
+            metadata={"type": "plain"},
+            document_id=str(uuid.uuid4()),
+        )
+
         config = MarkdownChunkingConfig()
         chunker = MarkdownChunker(config)
         chunks = chunker.chunk([no_headers_doc])
-        
+
         self.assertEqual(len(chunks), 1)
         self.assertEqual(chunks[0].text_content, no_headers_content)
-        self.assertEqual(chunks[0].metadata['type'], 'plain')
+        self.assertEqual(chunks[0].metadata["type"], "plain")
 
     def test_batch_processing(self):
         """Test batch processing of multiple markdown documents."""
-        documents = [
-            self.simple_doc,
-            self.nested_doc,
-            self.mixed_doc
-        ]
-        
+        documents = [self.simple_doc, self.nested_doc, self.mixed_doc]
+
         config = MarkdownChunkingConfig()
         chunker = MarkdownChunker(config)
-        
+
         batch_results = chunker.chunk(documents)
-        
+
         self.assertGreater(len(batch_results), 0)
         self.assertTrue(all(isinstance(chunk, Chunk) for chunk in batch_results))
-        
+
         # Verify content from different documents is present
         all_text = " ".join(chunk.text_content for chunk in batch_results)
         self.assertIn("Introduction", all_text)

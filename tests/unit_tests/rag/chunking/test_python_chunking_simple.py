@@ -1,6 +1,4 @@
 import unittest
-import uuid
-from typing import Dict, Any, List
 from upsonic.text_splitter.python import PythonChunker, PythonChunkingConfig
 from upsonic.schemas.data_models import Document, Chunk
 
@@ -33,10 +31,10 @@ if __name__ == "__main__":
     obj = SimpleClass("test")
     result = simple_function(5)
     print(f"Name: {obj.get_name()}, Result: {result}")''',
-            metadata={'source': 'simple.py', 'language': 'python', 'type': 'basic'},
-            document_id='simple-doc-id'
+            metadata={"source": "simple.py", "language": "python", "type": "basic"},
+            document_id="simple-doc-id",
         )
-        
+
         # Class-based document
         self.class_doc = Document(
             content='''class DataProcessor:
@@ -68,10 +66,14 @@ if __name__ == "__main__":
             results['min_value'] = min(values)
         
         return results''',
-            metadata={'source': 'classes.py', 'language': 'python', 'type': 'class_based'},
-            document_id='class-doc-id'
+            metadata={
+                "source": "classes.py",
+                "language": "python",
+                "type": "class_based",
+            },
+            document_id="class-doc-id",
         )
-        
+
         # Function-heavy document
         self.function_doc = Document(
             content='''def calculate_fibonacci(n: int) -> int:
@@ -103,8 +105,12 @@ def prime_generator(limit: int):
     for num in range(2, limit + 1):
         if is_prime(num):
             yield num''',
-            metadata={'source': 'functions.py', 'language': 'python', 'type': 'function_heavy'},
-            document_id='function-doc-id'
+            metadata={
+                "source": "functions.py",
+                "language": "python",
+                "type": "function_heavy",
+            },
+            document_id="function-doc-id",
         )
 
     def test_basic_python_chunking(self):
@@ -112,11 +118,11 @@ def prime_generator(limit: int):
         config = PythonChunkingConfig()
         chunker = PythonChunker(config)
         chunks = chunker.chunk([self.simple_doc])
-        
+
         self.assertGreater(len(chunks), 0)
         self.assertTrue(all(isinstance(chunk, Chunk) for chunk in chunks))
         self.assertTrue(all(chunk.text_content for chunk in chunks))
-        
+
         # Check Python-specific content preservation
         all_content = " ".join(chunk.text_content for chunk in chunks)
         self.assertIn("class SimpleClass", all_content)
@@ -127,9 +133,9 @@ def prime_generator(limit: int):
         config = PythonChunkingConfig()
         chunker = PythonChunker(config)
         chunks = chunker.chunk([self.class_doc])
-        
+
         self.assertGreater(len(chunks), 0)
-        
+
         # Verify class content is preserved
         all_content = " ".join(chunk.text_content for chunk in chunks)
         self.assertIn("class DataProcessor", all_content)
@@ -141,9 +147,9 @@ def prime_generator(limit: int):
         config = PythonChunkingConfig()
         chunker = PythonChunker(config)
         chunks = chunker.chunk([self.function_doc])
-        
+
         self.assertGreater(len(chunks), 0)
-        
+
         # Verify function content is preserved
         all_content = " ".join(chunk.text_content for chunk in chunks)
         self.assertIn("def calculate_fibonacci", all_content)
@@ -155,9 +161,9 @@ def prime_generator(limit: int):
         config = PythonChunkingConfig(include_docstrings=True)
         chunker = PythonChunker(config)
         chunks = chunker.chunk([self.simple_doc])
-        
+
         self.assertGreater(len(chunks), 0)
-        
+
         # Verify docstrings are preserved
         all_content = " ".join(chunk.text_content for chunk in chunks)
         self.assertIn("A simple class for demonstration", all_content)
@@ -168,9 +174,9 @@ def prime_generator(limit: int):
         config = PythonChunkingConfig()
         chunker = PythonChunker(config)
         chunks = chunker.chunk([self.simple_doc])
-        
+
         self.assertGreater(len(chunks), 0)
-        
+
         # The current implementation doesn't preserve imports by default
         # Just verify that we have chunks with Python code
         all_content = " ".join(chunk.text_content for chunk in chunks)
@@ -179,43 +185,47 @@ def prime_generator(limit: int):
 
     def test_empty_content_handling(self):
         """Test handling of empty Python content."""
-        empty_doc = Document(content="", metadata={'source': 'empty.py', 'language': 'python', 'type': 'edge_case'}, document_id='empty-doc-id')
-        
+        empty_doc = Document(
+            content="",
+            metadata={"source": "empty.py", "language": "python", "type": "edge_case"},
+            document_id="empty-doc-id",
+        )
+
         config = PythonChunkingConfig()
         chunker = PythonChunker(config)
         chunks = chunker.chunk([empty_doc])
-        
+
         self.assertEqual(len(chunks), 0)
 
     def test_single_line_code(self):
         """Test handling of single line Python code."""
         single_line_content = "print('Hello, World!')"
-        single_line_doc = Document(content=single_line_content, metadata={'type': 'single_line'}, document_id='single-line-doc-id')
-        
+        single_line_doc = Document(
+            content=single_line_content,
+            metadata={"type": "single_line"},
+            document_id="single-line-doc-id",
+        )
+
         config = PythonChunkingConfig()
         chunker = PythonChunker(config)
         chunks = chunker.chunk([single_line_doc])
-        
+
         # The current implementation may not create chunks for single line code
         # that doesn't have a class or function definition
         self.assertGreaterEqual(len(chunks), 0)
 
     def test_batch_processing(self):
         """Test batch processing of multiple Python documents."""
-        documents = [
-            self.simple_doc,
-            self.class_doc,
-            self.function_doc
-        ]
-        
+        documents = [self.simple_doc, self.class_doc, self.function_doc]
+
         config = PythonChunkingConfig()
         chunker = PythonChunker(config)
-        
+
         batch_results = chunker.chunk(documents)
-        
+
         self.assertGreater(len(batch_results), 0)
         self.assertTrue(all(isinstance(chunk, Chunk) for chunk in batch_results))
-        
+
         # Verify content from different documents is present
         all_text = " ".join(chunk.text_content for chunk in batch_results)
         self.assertIn("class SimpleClass", all_text)

@@ -1,18 +1,14 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import List, Optional, Type, TypeVar, Union, overload
+from typing import Optional, Type, TypeVar, Union, overload
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from upsonic.utils.async_utils import AsyncExecutionMixin
-from upsonic.storage.session.sessions import (
-    InteractionSession,
-    UserProfile
-)
+from upsonic.storage.session.sessions import InteractionSession, UserProfile
 from upsonic.storage.types import SessionId, UserId
 
-T = TypeVar('T', bound=BaseModel)
-
+T = TypeVar("T", bound=BaseModel)
 
 
 class Storage(AsyncExecutionMixin, ABC):
@@ -35,8 +31,6 @@ class Storage(AsyncExecutionMixin, ABC):
         """Initializes the storage provider's state."""
         self._connected = False
 
-
-
     @abstractmethod
     def is_connected(self) -> bool:
         raise NotImplementedError
@@ -54,9 +48,13 @@ class Storage(AsyncExecutionMixin, ABC):
         raise NotImplementedError
 
     @overload
-    def read(self, object_id: SessionId, model_type: Type[InteractionSession]) -> Optional[InteractionSession]: ...
+    def read(
+        self, object_id: SessionId, model_type: Type[InteractionSession]
+    ) -> Optional[InteractionSession]: ...
     @overload
-    def read(self, object_id: UserId, model_type: Type[UserProfile]) -> Optional[UserProfile]: ...
+    def read(
+        self, object_id: UserId, model_type: Type[UserProfile]
+    ) -> Optional[UserProfile]: ...
     @abstractmethod
     def read(self, object_id: str, model_type: Type[T]) -> Optional[T]:
         raise NotImplementedError
@@ -70,7 +68,9 @@ class Storage(AsyncExecutionMixin, ABC):
         raise NotImplementedError
 
     @overload
-    def delete(self, object_id: SessionId, model_type: Type[InteractionSession]) -> None: ...
+    def delete(
+        self, object_id: SessionId, model_type: Type[InteractionSession]
+    ) -> None: ...
     @overload
     def delete(self, object_id: UserId, model_type: Type[UserProfile]) -> None: ...
     @abstractmethod
@@ -80,8 +80,6 @@ class Storage(AsyncExecutionMixin, ABC):
     @abstractmethod
     def drop(self) -> None:
         raise NotImplementedError
-
-
 
     @abstractmethod
     async def is_connected_async(self) -> bool:
@@ -100,9 +98,13 @@ class Storage(AsyncExecutionMixin, ABC):
         raise NotImplementedError
 
     @overload
-    async def read_async(self, object_id: SessionId, model_type: Type[InteractionSession]) -> Optional[InteractionSession]: ...
+    async def read_async(
+        self, object_id: SessionId, model_type: Type[InteractionSession]
+    ) -> Optional[InteractionSession]: ...
     @overload
-    async def read_async(self, object_id: UserId, model_type: Type[UserProfile]) -> Optional[UserProfile]: ...
+    async def read_async(
+        self, object_id: UserId, model_type: Type[UserProfile]
+    ) -> Optional[UserProfile]: ...
     @abstractmethod
     async def read_async(self, object_id: str, model_type: Type[T]) -> Optional[T]:
         raise NotImplementedError
@@ -116,9 +118,13 @@ class Storage(AsyncExecutionMixin, ABC):
         raise NotImplementedError
 
     @overload
-    async def delete_async(self, object_id: SessionId, model_type: Type[InteractionSession]) -> None: ...
+    async def delete_async(
+        self, object_id: SessionId, model_type: Type[InteractionSession]
+    ) -> None: ...
     @overload
-    async def delete_async(self, object_id: UserId, model_type: Type[UserProfile]) -> None: ...
+    async def delete_async(
+        self, object_id: UserId, model_type: Type[UserProfile]
+    ) -> None: ...
     @abstractmethod
     async def delete_async(self, object_id: str, model_type: Type[BaseModel]) -> None:
         raise NotImplementedError

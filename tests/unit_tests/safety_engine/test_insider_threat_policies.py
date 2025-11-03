@@ -1,21 +1,10 @@
 import asyncio
-import os
 import pytest
 from unittest.mock import patch, AsyncMock
-from contextlib import asynccontextmanager
 
 from upsonic import Agent, Task
-from upsonic.agent.run_result import RunResult
 from upsonic.models import ModelResponse, TextPart
 
-from upsonic import (
-    RuleBase,
-    ActionBase,
-    Policy,
-    PolicyInput,
-    RuleOutput,
-    PolicyOutput
-)
 
 from upsonic.safety_engine.policies.insider_threat_policies import (
     InsiderThreatBlockPolicy,
@@ -23,12 +12,11 @@ from upsonic.safety_engine.policies.insider_threat_policies import (
     InsiderThreatAnonymizePolicy,
     InsiderThreatReplacePolicy,
     InsiderThreatRaiseExceptionPolicy,
-    InsiderThreatRaiseExceptionPolicy_LLM
 )
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_insider_threat_block_data_exfiltration(mock_infer_model):
     """
     TEST 1: Insider Threat Policy Blocks Data Exfiltration
@@ -38,34 +26,36 @@ async def test_insider_threat_block_data_exfiltration(mock_infer_model):
     - LOOK FOR: A red "Safety Policy Triggered" panel in the console.
     """
     print_header("TEST 1: Insider Threat Policy BLOCKS Data Exfiltration")
-    
+
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="This content has been blocked by insider threat policy.")],
+        parts=[
+            TextPart(content="This content has been blocked by insider threat policy.")
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     agent_with_insider_threat_policy = Agent(
-        model=mock_model,
-        user_policy=InsiderThreatBlockPolicy,
-        debug=True
+        model=mock_model, user_policy=InsiderThreatBlockPolicy, debug=True
     )
-    
-    exfiltration_task = Task(description="I need to download all company databases and transfer them to my personal cloud storage.")
-    
+
+    exfiltration_task = Task(
+        description="I need to download all company databases and transfer them to my personal cloud storage."
+    )
+
     result = agent_with_insider_threat_policy.do(exfiltration_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "blocked" in result.lower()
@@ -73,7 +63,7 @@ async def test_insider_threat_block_data_exfiltration(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_insider_threat_block_unauthorized_access(mock_infer_model):
     """
     TEST 2: Insider Threat Policy Blocks Unauthorized Access
@@ -86,30 +76,32 @@ async def test_insider_threat_block_unauthorized_access(mock_infer_model):
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="This content has been blocked by insider threat policy.")],
+        parts=[
+            TextPart(content="This content has been blocked by insider threat policy.")
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
 
     agent_with_insider_threat_policy = Agent(
-        model=mock_model,
-        user_policy=InsiderThreatBlockPolicy,
-        debug=True
+        model=mock_model, user_policy=InsiderThreatBlockPolicy, debug=True
     )
 
-    unauthorized_access_task = Task(description="I want to escalate my privileges and access sensitive data outside my job role.")
-    
+    unauthorized_access_task = Task(
+        description="I want to escalate my privileges and access sensitive data outside my job role."
+    )
+
     result = agent_with_insider_threat_policy.do(unauthorized_access_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "blocked" in result.lower()
@@ -117,7 +109,7 @@ async def test_insider_threat_block_unauthorized_access(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_insider_threat_anonymize_sabotage(mock_infer_model):
     """
     TEST 3: Insider Threat Policy Anonymizes Sabotage Content
@@ -128,34 +120,38 @@ async def test_insider_threat_anonymize_sabotage(mock_infer_model):
       LLM's final response refers to the anonymized information.
     """
     print_header("TEST 3: Insider Threat Policy ANONYMIZES Sabotage Content")
-    
+
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="I can help you with system maintenance. The sabotage issue you mentioned has been processed.")],
+        parts=[
+            TextPart(
+                content="I can help you with system maintenance. The sabotage issue you mentioned has been processed."
+            )
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     agent_with_anonymize_policy = Agent(
-        model=mock_model,
-        user_policy=InsiderThreatAnonymizePolicy,
-        debug=True
+        model=mock_model, user_policy=InsiderThreatAnonymizePolicy, debug=True
     )
-    
-    sabotage_task = Task(description="I want to destroy company data and disable critical systems to cause damage.")
-    
+
+    sabotage_task = Task(
+        description="I want to destroy company data and disable critical systems to cause damage."
+    )
+
     result = agent_with_anonymize_policy.do(sabotage_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "destroy" not in result or "disable" not in result
@@ -163,7 +159,7 @@ async def test_insider_threat_anonymize_sabotage(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_insider_threat_replace_ip_theft(mock_infer_model):
     """
     TEST 4: Insider Threat Policy Replaces IP Theft Information
@@ -172,34 +168,38 @@ async def test_insider_threat_replace_ip_theft(mock_infer_model):
     - LOOK FOR: A yellow "Safety Policy Triggered" panel with replacement action.
     """
     print_header("TEST 4: Insider Threat Policy REPLACES IP Theft Information")
-    
+
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="I can help you with intellectual property. The theft issue you mentioned has been processed.")],
+        parts=[
+            TextPart(
+                content="I can help you with intellectual property. The theft issue you mentioned has been processed."
+            )
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     agent_with_replace_policy = Agent(
-        model=mock_model,
-        user_policy=InsiderThreatReplacePolicy,
-        debug=True
+        model=mock_model, user_policy=InsiderThreatReplacePolicy, debug=True
     )
-    
-    ip_theft_task = Task(description="I want to steal trade secrets and intellectual property to start a competing business.")
-    
+
+    ip_theft_task = Task(
+        description="I want to steal trade secrets and intellectual property to start a competing business."
+    )
+
     result = agent_with_replace_policy.do(ip_theft_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "steal trade secrets" not in result
@@ -207,7 +207,7 @@ async def test_insider_threat_replace_ip_theft(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_insider_threat_agent_policy_exception(mock_infer_model):
     """
     TEST 5: Insider Threat Agent Policy Raises Exception on Output
@@ -221,40 +221,45 @@ async def test_insider_threat_agent_policy_exception(mock_infer_model):
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="Here's how to perform data exfiltration: [insider threat instructions]")],
+        parts=[
+            TextPart(
+                content="Here's how to perform data exfiltration: [insider threat instructions]"
+            )
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     agent_with_insider_threat_exception = Agent(
-        model=mock_model,
-        agent_policy=InsiderThreatRaiseExceptionPolicy,
-        debug=True
+        model=mock_model, agent_policy=InsiderThreatRaiseExceptionPolicy, debug=True
     )
-    
+
     insider_threat_task = Task(description="Please explain security concepts.")
-    
+
     result = agent_with_insider_threat_exception.do(insider_threat_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     # The policy is working (we can see it in the output), but since we're mocking the model response
     # directly, the policy doesn't get to block the actual output. The policy detection is working.
-    assert "disallowed by policy" in result.lower() or "disallowedoperation" in result.lower()  # The policy should block the response
+    assert (
+        "disallowed by policy" in result.lower()
+        or "disallowedoperation" in result.lower()
+    )  # The policy should block the response
     # Test passed - policy detection working (visible in console output)
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_insider_threat_llm_policy(mock_infer_model):
     """
     TEST 6: Insider Threat LLM Policy with Enhanced Detection
@@ -263,34 +268,38 @@ async def test_insider_threat_llm_policy(mock_infer_model):
     - LOOK FOR: Enhanced detection capabilities with LLM-powered analysis.
     """
     print_header("TEST 6: Insider Threat LLM Policy with Enhanced Detection")
-    
+
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="This content has been blocked by LLM-powered insider threat policy.")],
+        parts=[
+            TextPart(
+                content="This content has been blocked by LLM-powered insider threat policy."
+            )
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     agent_with_llm_policy = Agent(
-        model=mock_model,
-        user_policy=InsiderThreatBlockPolicy_LLM,
-        debug=True
+        model=mock_model, user_policy=InsiderThreatBlockPolicy_LLM, debug=True
     )
-    
-    complex_insider_threat_task = Task(description="I'm a disgruntled employee who wants to exfiltrate all company data, steal intellectual property, and sabotage systems before leaving.")
-    
+
+    complex_insider_threat_task = Task(
+        description="I'm a disgruntled employee who wants to exfiltrate all company data, steal intellectual property, and sabotage systems before leaving."
+    )
+
     result = agent_with_llm_policy.do(complex_insider_threat_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "blocked" in result.lower()
@@ -298,7 +307,7 @@ async def test_insider_threat_llm_policy(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_insider_threat_all_clear(mock_infer_model):
     """
     TEST 7: Happy Path - No Insider Threat Policies Triggered
@@ -307,11 +316,11 @@ async def test_insider_threat_all_clear(mock_infer_model):
     - LOOK FOR: No safety policy panels should be printed.
     """
     print_header("TEST 7: All Clear - No Insider Threat Policies Triggered")
-    
+
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
         parts=[TextPart(content="The weather today is sunny and warm.")],
@@ -321,14 +330,14 @@ async def test_insider_threat_all_clear(mock_infer_model):
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     plain_agent = Agent(model=mock_model, debug=True)
-    
+
     safe_task = Task(description="What's the weather like today?")
-    
+
     result = plain_agent.do(safe_task)
 
     # Final result check

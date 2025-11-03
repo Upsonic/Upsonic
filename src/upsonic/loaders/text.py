@@ -1,5 +1,4 @@
 import asyncio
-import re
 from pathlib import Path
 from typing import List, Union
 
@@ -9,6 +8,7 @@ from upsonic.loaders.config import TextLoaderConfig
 
 try:
     import aiofiles
+
     _AIOFILES_AVAILABLE = True
 except ImportError:
     aiofiles = None
@@ -34,22 +34,36 @@ class TextLoader(BaseLoader):
         """
         if not _AIOFILES_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="aiofiles",
                 install_command='pip install "upsonic[loaders]"',
-                feature_name="text loader"
+                feature_name="text loader",
             )
         super().__init__(config)
         self.config: TextLoaderConfig = config
-
 
     @classmethod
     def get_supported_extensions(cls) -> List[str]:
         """Gets a list of file extensions supported by this loader."""
         return [
-            ".txt", ".rst", ".log", ".py", ".js", ".ts", ".java",
-            ".c", ".cpp", ".h", ".cs", ".go", ".rs", ".php", ".rb",
-            ".css", ".ini"
+            ".txt",
+            ".rst",
+            ".log",
+            ".py",
+            ".js",
+            ".ts",
+            ".java",
+            ".c",
+            ".cpp",
+            ".h",
+            ".cs",
+            ".go",
+            ".rs",
+            ".php",
+            ".rb",
+            ".css",
+            ".ini",
         ]
 
     def load(self, source: Union[str, Path, List[Union[str, Path]]]) -> List[Document]:
@@ -59,15 +73,18 @@ class TextLoader(BaseLoader):
         This is a convenience wrapper around the async `aload` method.
         """
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             import concurrent.futures
+
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(asyncio.run, self.aload(source))
                 return future.result()
         except RuntimeError:
             return asyncio.run(self.aload(source))
 
-    async def aload(self, source: Union[str, Path, List[Union[str, Path]]]) -> List[Document]:
+    async def aload(
+        self, source: Union[str, Path, List[Union[str, Path]]]
+    ) -> List[Document]:
         """
         Loads all text documents from the given source asynchronously and concurrently.
         """
@@ -88,8 +105,6 @@ class TextLoader(BaseLoader):
         """Loads documents from a list of sources asynchronously, leveraging `aload`."""
         return await self.aload(sources)
 
- 
-
     async def _process_single_file(self, path: Path) -> List[Document]:
         """
         Processes a single text file, loading its entire content into one Document.
@@ -102,7 +117,9 @@ class TextLoader(BaseLoader):
                 )
             self._processed_document_ids.add(document_id)
 
-            async with aiofiles.open(path, mode="r", encoding=self.config.encoding, errors="ignore") as f:
+            async with aiofiles.open(
+                path, mode="r", encoding=self.config.encoding, errors="ignore"
+            ) as f:
                 content = await f.read()
 
             if self.config.strip_whitespace:
@@ -110,13 +127,15 @@ class TextLoader(BaseLoader):
 
             if self.config.skip_empty_content and not content:
                 return []
-            
+
             if len(content) < self.config.min_chunk_length:
                 return []
 
             metadata = self._create_metadata(path)
-            
-            return [Document(document_id=document_id, content=content, metadata=metadata)]
+
+            return [
+                Document(document_id=document_id, content=content, metadata=metadata)
+            ]
 
         except Exception as e:
             return self._handle_loading_error(str(path), e)

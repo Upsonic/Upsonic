@@ -8,6 +8,7 @@ class VectorSearchResult:
     A standardized data structure for a single search result.
     All provider implementations must return a list of these objects.
     """
+
     id: Union[str, int]
     score: float
     payload: Optional[Dict[str, Any]] = None

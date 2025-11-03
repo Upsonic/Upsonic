@@ -15,6 +15,7 @@ try:
     from google.auth.credentials import Credentials
     from google.genai import Client
     from google.genai.types import HttpOptionsDict
+
     _GOOGLE_GENAI_AVAILABLE = True
 except ImportError:
     Credentials = None
@@ -23,13 +24,12 @@ except ImportError:
     _GOOGLE_GENAI_AVAILABLE = False
 
 
-
 class GoogleProvider(Provider[Client]):
     """Provider for Google."""
 
     @property
     def name(self) -> str:
-        return 'google-vertex' if self._client._api_client.vertexai else 'google-gla'  # type: ignore[reportPrivateUsage]
+        return "google-vertex" if self._client._api_client.vertexai else "google-gla"  # type: ignore[reportPrivateUsage]
 
     @property
     def base_url(self) -> str:
@@ -51,7 +51,7 @@ class GoogleProvider(Provider[Client]):
         *,
         credentials: Credentials | None = None,
         project: str | None = None,
-        location: VertexAILocation | Literal['global'] | None = None,
+        location: VertexAILocation | Literal["global"] | None = None,
     ) -> None: ...
 
     @overload
@@ -66,16 +66,17 @@ class GoogleProvider(Provider[Client]):
         api_key: str | None = None,
         credentials: Credentials | None = None,
         project: str | None = None,
-        location: VertexAILocation | Literal['global'] | None = None,
+        location: VertexAILocation | Literal["global"] | None = None,
         client: Client | None = None,
         vertexai: bool | None = None,
     ) -> None:
         if not _GOOGLE_GENAI_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="google-genai",
                 install_command='pip install "upsonic[google]"',
-                feature_name="Google provider"
+                feature_name="Google provider",
             )
 
         """
@@ -98,31 +99,37 @@ class GoogleProvider(Provider[Client]):
         """
         if client is None:
             # NOTE: We are keeping GEMINI_API_KEY for backwards compatibility.
-            api_key = api_key or os.getenv('GOOGLE_API_KEY') or os.getenv('GEMINI_API_KEY')
+            api_key = (
+                api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+            )
 
             if vertexai is None:
                 vertexai = bool(location or project or credentials)
 
             http_options: HttpOptionsDict = {
-                'headers': {'User-Agent': get_user_agent()},
-                'async_client_args': {'transport': httpx.AsyncHTTPTransport()},
+                "headers": {"User-Agent": get_user_agent()},
+                "async_client_args": {"transport": httpx.AsyncHTTPTransport()},
             }
             if not vertexai:
                 if api_key is None:
                     raise UserError(  # pragma: no cover
-                        'Set the `GOOGLE_API_KEY` environment variable or pass it via `GoogleProvider(api_key=...)`'
-                        'to use the Google Generative Language API.'
+                        "Set the `GOOGLE_API_KEY` environment variable or pass it via `GoogleProvider(api_key=...)`"
+                        "to use the Google Generative Language API."
                     )
-                self._client = Client(vertexai=vertexai, api_key=api_key, http_options=http_options)
+                self._client = Client(
+                    vertexai=vertexai, api_key=api_key, http_options=http_options
+                )
             else:
                 self._client = Client(
                     vertexai=vertexai,
-                    project=project or os.getenv('GOOGLE_CLOUD_PROJECT'),
+                    project=project or os.getenv("GOOGLE_CLOUD_PROJECT"),
                     # Currently `us-central1` supports the most models by far of any region including `global`, but not
                     # all of them. `us-central1` has all google models but is missing some Anthropic partner models,
                     # which use `us-east5` instead. `global` has fewer models but higher availability.
                     # For more details, check: https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#available-regions
-                    location=location or os.getenv('GOOGLE_CLOUD_LOCATION') or 'us-central1',
+                    location=location
+                    or os.getenv("GOOGLE_CLOUD_LOCATION")
+                    or "us-central1",
                     credentials=credentials,
                     http_options=http_options,
                 )
@@ -131,35 +138,35 @@ class GoogleProvider(Provider[Client]):
 
 
 VertexAILocation = Literal[
-    'asia-east1',
-    'asia-east2',
-    'asia-northeast1',
-    'asia-northeast3',
-    'asia-south1',
-    'asia-southeast1',
-    'australia-southeast1',
-    'europe-central2',
-    'europe-north1',
-    'europe-southwest1',
-    'europe-west1',
-    'europe-west2',
-    'europe-west3',
-    'europe-west4',
-    'europe-west6',
-    'europe-west8',
-    'europe-west9',
-    'me-central1',
-    'me-central2',
-    'me-west1',
-    'northamerica-northeast1',
-    'southamerica-east1',
-    'us-central1',
-    'us-east1',
-    'us-east4',
-    'us-east5',
-    'us-south1',
-    'us-west1',
-    'us-west4',
+    "asia-east1",
+    "asia-east2",
+    "asia-northeast1",
+    "asia-northeast3",
+    "asia-south1",
+    "asia-southeast1",
+    "australia-southeast1",
+    "europe-central2",
+    "europe-north1",
+    "europe-southwest1",
+    "europe-west1",
+    "europe-west2",
+    "europe-west3",
+    "europe-west4",
+    "europe-west6",
+    "europe-west8",
+    "europe-west9",
+    "me-central1",
+    "me-central2",
+    "me-west1",
+    "northamerica-northeast1",
+    "southamerica-east1",
+    "us-central1",
+    "us-east1",
+    "us-east4",
+    "us-east5",
+    "us-south1",
+    "us-west1",
+    "us-west4",
 ]
 """Regions available for Vertex AI.
 More details [here](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#genai-locations).

@@ -16,6 +16,7 @@ try:
         AsyncIOMotorDatabase,
         AsyncIOMotorCollection,
     )
+
     _MOTOR_AVAILABLE = True
 except ImportError:
     AsyncIOMotorClient = None  # type: ignore
@@ -57,10 +58,11 @@ class MongoStorage(Storage):
         """
         if not _MOTOR_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="motor",
                 install_command='pip install "upsonic[storage]"',
-                feature_name="MongoDB storage provider"
+                feature_name="MongoDB storage provider",
             )
 
         super().__init__()
@@ -71,8 +73,6 @@ class MongoStorage(Storage):
 
         self._client: Optional[AsyncIOMotorClient] = None
         self._db: Optional[AsyncIOMotorDatabase] = None
-
-
 
     def is_connected(self) -> bool:
         return self._run_async_from_sync(self.is_connected_async())
@@ -97,8 +97,6 @@ class MongoStorage(Storage):
 
     def drop(self) -> None:
         return self._run_async_from_sync(self.drop_async())
-
-
 
     async def connect_async(self) -> None:
         if await self.is_connected_async():
@@ -169,7 +167,9 @@ class MongoStorage(Storage):
         except Exception:
             pass
 
-    async def read_sessions_for_user_async(self, user_id: str) -> List[InteractionSession]:
+    async def read_sessions_for_user_async(
+        self, user_id: str
+    ) -> List[InteractionSession]:
         """
         Retrieves all interaction sessions associated with a specific user ID,
         leveraging the secondary index on the `user_id` field for high performance.
@@ -185,14 +185,12 @@ class MongoStorage(Storage):
         cursor = collection.find({"user_id": user_id})
         sessions = []
         id_field_name = self._get_id_field(InteractionSession)
-        
+
         async for doc in cursor:
             doc[id_field_name] = doc.pop("_id")
             sessions.append(InteractionSession.model_validate(doc))
-            
+
         return sessions
-
-
 
     def _get_collection_for_model(
         self, model_type: Type[BaseModel]

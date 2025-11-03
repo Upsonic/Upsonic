@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
 try:
     import aiosqlite
+
     _AIOSQLITE_AVAILABLE = True
 except ImportError:
     aiosqlite = None  # type: ignore
@@ -21,7 +22,8 @@ from pydantic import BaseModel
 from upsonic.storage.base import Storage
 from upsonic.storage.session.sessions import InteractionSession, UserProfile
 
-T = TypeVar('T', bound=BaseModel)
+T = TypeVar("T", bound=BaseModel)
+
 
 class SqliteStorage(Storage):
     """
@@ -45,10 +47,11 @@ class SqliteStorage(Storage):
         """
         if not _AIOSQLITE_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="aiosqlite",
                 install_command='pip install "upsonic[storage]"',
-                feature_name="SQLite storage provider"
+                feature_name="SQLite storage provider",
             )
 
         super().__init__()
@@ -57,23 +60,34 @@ class SqliteStorage(Storage):
             db_path_obj = Path(db_file).resolve()
             db_path_obj.parent.mkdir(parents=True, exist_ok=True)
             self.db_path = str(db_path_obj)
-        
+
         self.sessions_table_name = sessions_table_name
         self.profiles_table_name = profiles_table_name
         self._db: Optional[aiosqlite.Connection] = None
 
+    def is_connected(self) -> bool:
+        return self._run_async_from_sync(self.is_connected_async())
 
-    
-    def is_connected(self) -> bool: return self._run_async_from_sync(self.is_connected_async())
-    def connect(self) -> None: return self._run_async_from_sync(self.connect_async())
-    def disconnect(self) -> None: return self._run_async_from_sync(self.disconnect_async())
-    def create(self) -> None: return self._run_async_from_sync(self.create_async())
-    def read(self, object_id: str, model_type: Type[T]) -> Optional[T]: return self._run_async_from_sync(self.read_async(object_id, model_type))
-    def upsert(self, data: Union[InteractionSession, UserProfile]) -> None: return self._run_async_from_sync(self.upsert_async(data))
-    def delete(self, object_id: str, model_type: Type[BaseModel]) -> None: return self._run_async_from_sync(self.delete_async(object_id, model_type))
-    def drop(self) -> None: return self._run_async_from_sync(self.drop_async())
+    def connect(self) -> None:
+        return self._run_async_from_sync(self.connect_async())
 
+    def disconnect(self) -> None:
+        return self._run_async_from_sync(self.disconnect_async())
 
+    def create(self) -> None:
+        return self._run_async_from_sync(self.create_async())
+
+    def read(self, object_id: str, model_type: Type[T]) -> Optional[T]:
+        return self._run_async_from_sync(self.read_async(object_id, model_type))
+
+    def upsert(self, data: Union[InteractionSession, UserProfile]) -> None:
+        return self._run_async_from_sync(self.upsert_async(data))
+
+    def delete(self, object_id: str, model_type: Type[BaseModel]) -> None:
+        return self._run_async_from_sync(self.delete_async(object_id, model_type))
+
+    def drop(self) -> None:
+        return self._run_async_from_sync(self.drop_async())
 
     async def is_connected_async(self) -> bool:
         return self._db is not None
@@ -82,7 +96,7 @@ class SqliteStorage(Storage):
         if await self.is_connected_async():
             return
         self._db = await aiosqlite.connect(self.db_path)
-        self._db.row_factory = aiosqlite.Row # Important for dict-like access
+        self._db.row_factory = aiosqlite.Row  # Important for dict-like access
         await self.create_async()
         self._connected = True
 
@@ -116,9 +130,12 @@ class SqliteStorage(Storage):
         await db.commit()
 
     async def read_async(self, object_id: str, model_type: Type[T]) -> Optional[T]:
-        if model_type is InteractionSession: table, key_col = self.sessions_table_name, "session_id"
-        elif model_type is UserProfile: table, key_col = self.profiles_table_name, "user_id"
-        else: return None
+        if model_type is InteractionSession:
+            table, key_col = self.sessions_table_name, "session_id"
+        elif model_type is UserProfile:
+            table, key_col = self.profiles_table_name, "user_id"
+        else:
+            return None
 
         db = await self._get_connection()
         sql = f"SELECT * FROM {table} WHERE {key_col} = ?"
@@ -127,14 +144,19 @@ class SqliteStorage(Storage):
             if row:
                 data = dict(row)
                 for key, value in data.items():
-                    if key in ['chat_history', 'session_data', 'extra_data', 'profile_data'] and isinstance(value, str):
+                    if key in [
+                        "chat_history",
+                        "session_data",
+                        "extra_data",
+                        "profile_data",
+                    ] and isinstance(value, str):
                         data[key] = json.loads(value)
                 return model_type.from_dict(data)
         return None
 
     async def upsert_async(self, data: Union[InteractionSession, UserProfile]) -> None:
         data.updated_at = time.time()
-        
+
         if isinstance(data, InteractionSession):
             table = self.sessions_table_name
             sql = f"""
@@ -146,9 +168,16 @@ class SqliteStorage(Storage):
                     extra_data=excluded.extra_data, updated_at=excluded.updated_at
             """
             params = (
-                data.session_id, data.user_id, data.agent_id, data.team_session_id,
-                json.dumps(data.chat_history), data.summary, json.dumps(data.session_data),
-                json.dumps(data.extra_data), data.created_at, data.updated_at
+                data.session_id,
+                data.user_id,
+                data.agent_id,
+                data.team_session_id,
+                json.dumps(data.chat_history),
+                data.summary,
+                json.dumps(data.session_data),
+                json.dumps(data.extra_data),
+                data.created_at,
+                data.updated_at,
             )
         elif isinstance(data, UserProfile):
             table = self.profiles_table_name
@@ -158,7 +187,12 @@ class SqliteStorage(Storage):
                 ON CONFLICT(user_id) DO UPDATE SET
                     profile_data=excluded.profile_data, updated_at=excluded.updated_at
             """
-            params = (data.user_id, json.dumps(data.profile_data), data.created_at, data.updated_at)
+            params = (
+                data.user_id,
+                json.dumps(data.profile_data),
+                data.created_at,
+                data.updated_at,
+            )
         else:
             raise TypeError(f"Unsupported data type for upsert: {type(data).__name__}")
 
@@ -167,9 +201,12 @@ class SqliteStorage(Storage):
         await db.commit()
 
     async def delete_async(self, object_id: str, model_type: Type[BaseModel]) -> None:
-        if model_type is InteractionSession: table, key_col = self.sessions_table_name, "session_id"
-        elif model_type is UserProfile: table, key_col = self.profiles_table_name, "user_id"
-        else: return
+        if model_type is InteractionSession:
+            table, key_col = self.sessions_table_name, "session_id"
+        elif model_type is UserProfile:
+            table, key_col = self.profiles_table_name, "user_id"
+        else:
+            return
 
         db = await self._get_connection()
         sql = f"DELETE FROM {table} WHERE {key_col} = ?"

@@ -4,7 +4,12 @@ from __future__ import annotations
 class OCRError(Exception):
     """Base exception for all OCR-related errors."""
 
-    def __init__(self, message: str, error_code: str | None = None, original_error: Exception | None = None):
+    def __init__(
+        self,
+        message: str,
+        error_code: str | None = None,
+        original_error: Exception | None = None,
+    ):
         super().__init__(message)
         self.message = message
         self.error_code = error_code
@@ -41,4 +46,3 @@ class OCRProcessingError(OCRError):
     """Exception raised when OCR processing fails."""
 
     pass
-

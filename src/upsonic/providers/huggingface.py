@@ -16,12 +16,11 @@ from upsonic.providers import Provider
 
 try:
     from huggingface_hub import AsyncInferenceClient
+
     _HUGGINGFACE_HUB_AVAILABLE = True
 except ImportError:
     AsyncInferenceClient = None
     _HUGGINGFACE_HUB_AVAILABLE = False
-
-
 
 
 class HuggingFaceProvider(Provider[AsyncInferenceClient]):
@@ -29,7 +28,7 @@ class HuggingFaceProvider(Provider[AsyncInferenceClient]):
 
     @property
     def name(self) -> str:
-        return 'huggingface'
+        return "huggingface"
 
     @property
     def base_url(self) -> str:
@@ -41,18 +40,18 @@ class HuggingFaceProvider(Provider[AsyncInferenceClient]):
 
     def model_profile(self, model_name: str) -> ModelProfile | None:
         provider_to_profile = {
-            'deepseek-ai': deepseek_model_profile,
-            'google': google_model_profile,
-            'qwen': qwen_model_profile,
-            'meta-llama': meta_model_profile,
-            'mistralai': mistral_model_profile,
+            "deepseek-ai": deepseek_model_profile,
+            "google": google_model_profile,
+            "qwen": qwen_model_profile,
+            "meta-llama": meta_model_profile,
+            "mistralai": mistral_model_profile,
         }
 
-        if '/' not in model_name:
+        if "/" not in model_name:
             return None
 
         model_name = model_name.lower()
-        provider, model_name = model_name.split('/', 1)
+        provider, model_name = model_name.split("/", 1)
         if provider in provider_to_profile:
             return provider_to_profile[provider](model_name)
 
@@ -63,11 +62,25 @@ class HuggingFaceProvider(Provider[AsyncInferenceClient]):
     @overload
     def __init__(self, *, provider_name: str, api_key: str | None = None) -> None: ...
     @overload
-    def __init__(self, *, hf_client: AsyncInferenceClient, api_key: str | None = None) -> None: ...
+    def __init__(
+        self, *, hf_client: AsyncInferenceClient, api_key: str | None = None
+    ) -> None: ...
     @overload
-    def __init__(self, *, hf_client: AsyncInferenceClient, base_url: str, api_key: str | None = None) -> None: ...
+    def __init__(
+        self,
+        *,
+        hf_client: AsyncInferenceClient,
+        base_url: str,
+        api_key: str | None = None,
+    ) -> None: ...
     @overload
-    def __init__(self, *, hf_client: AsyncInferenceClient, provider_name: str, api_key: str | None = None) -> None: ...
+    def __init__(
+        self,
+        *,
+        hf_client: AsyncInferenceClient,
+        provider_name: str,
+        api_key: str | None = None,
+    ) -> None: ...
     @overload
     def __init__(self, *, api_key: str | None = None) -> None: ...
 
@@ -81,10 +94,11 @@ class HuggingFaceProvider(Provider[AsyncInferenceClient]):
     ) -> None:
         if not _HUGGINGFACE_HUB_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="huggingface_hub",
-                install_command='pip install huggingface_hub',
-                feature_name="HuggingFace provider"
+                install_command="pip install huggingface_hub",
+                feature_name="HuggingFace provider",
             )
 
         """Create a new Hugging Face provider.
@@ -101,21 +115,25 @@ class HuggingFaceProvider(Provider[AsyncInferenceClient]):
                 defaults to "auto", which will select the first available provider for the model, the first of the providers available for the model, sorted by the user's order in https://hf.co/settings/inference-providers.
                 If `base_url` is passed, then `provider_name` is not used.
         """
-        api_key = api_key or os.getenv('HF_TOKEN')
+        api_key = api_key or os.getenv("HF_TOKEN")
 
         if api_key is None:
             raise UserError(
-                'Set the `HF_TOKEN` environment variable or pass it via `HuggingFaceProvider(api_key=...)`'
-                'to use the HuggingFace provider.'
+                "Set the `HF_TOKEN` environment variable or pass it via `HuggingFaceProvider(api_key=...)`"
+                "to use the HuggingFace provider."
             )
 
         if http_client is not None:
-            raise ValueError('`http_client` is ignored for HuggingFace provider, please use `hf_client` instead.')
+            raise ValueError(
+                "`http_client` is ignored for HuggingFace provider, please use `hf_client` instead."
+            )
 
         if base_url is not None and provider_name is not None:
-            raise ValueError('Cannot provide both `base_url` and `provider_name`.')
+            raise ValueError("Cannot provide both `base_url` and `provider_name`.")
 
         if hf_client is None:
-            self._client = AsyncInferenceClient(api_key=api_key, provider=provider_name, base_url=base_url)  # type: ignore
+            self._client = AsyncInferenceClient(
+                api_key=api_key, provider=provider_name, base_url=base_url
+            )  # type: ignore
         else:
             self._client = hf_client

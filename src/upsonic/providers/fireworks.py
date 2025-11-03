@@ -18,11 +18,11 @@ from upsonic.providers import Provider
 
 try:
     from openai import AsyncOpenAI
+
     _OPENAI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     AsyncOpenAI = None
     _OPENAI_AVAILABLE = False
-
 
 
 class FireworksProvider(Provider[AsyncOpenAI]):
@@ -30,11 +30,11 @@ class FireworksProvider(Provider[AsyncOpenAI]):
 
     @property
     def name(self) -> str:
-        return 'fireworks'
+        return "fireworks"
 
     @property
     def base_url(self) -> str:
-        return 'https://api.fireworks.ai/inference/v1'
+        return "https://api.fireworks.ai/inference/v1"
 
     @property
     def client(self) -> AsyncOpenAI:
@@ -42,14 +42,14 @@ class FireworksProvider(Provider[AsyncOpenAI]):
 
     def model_profile(self, model_name: str) -> ModelProfile | None:
         prefix_to_profile = {
-            'llama': meta_model_profile,
-            'qwen': qwen_model_profile,
-            'deepseek': deepseek_model_profile,
-            'mistral': mistral_model_profile,
-            'gemma': google_model_profile,
+            "llama": meta_model_profile,
+            "qwen": qwen_model_profile,
+            "deepseek": deepseek_model_profile,
+            "mistral": mistral_model_profile,
+            "gemma": google_model_profile,
         }
 
-        prefix = 'accounts/fireworks/models/'
+        prefix = "accounts/fireworks/models/"
 
         profile = None
         if model_name.startswith(prefix):
@@ -61,7 +61,9 @@ class FireworksProvider(Provider[AsyncOpenAI]):
 
         # As the Fireworks API is OpenAI-compatible, let's assume we also need OpenAIJsonSchemaTransformer,
         # unless json_schema_transformer is set explicitly
-        return OpenAIModelProfile(json_schema_transformer=OpenAIJsonSchemaTransformer).update(profile)
+        return OpenAIModelProfile(
+            json_schema_transformer=OpenAIJsonSchemaTransformer
+        ).update(profile)
 
     @overload
     def __init__(self) -> None: ...
@@ -84,22 +86,27 @@ class FireworksProvider(Provider[AsyncOpenAI]):
     ) -> None:
         if not _OPENAI_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="openai",
-                install_command='pip install openai',
-                feature_name="openai provider"
+                install_command="pip install openai",
+                feature_name="openai provider",
             )
-        api_key = api_key or os.getenv('FIREWORKS_API_KEY')
+        api_key = api_key or os.getenv("FIREWORKS_API_KEY")
         if not api_key and openai_client is None:
             raise UserError(
-                'Set the `FIREWORKS_API_KEY` environment variable or pass it via `FireworksProvider(api_key=...)`'
-                'to use the Fireworks AI provider.'
+                "Set the `FIREWORKS_API_KEY` environment variable or pass it via `FireworksProvider(api_key=...)`"
+                "to use the Fireworks AI provider."
             )
 
         if openai_client is not None:
             self._client = openai_client
         elif http_client is not None:
-            self._client = AsyncOpenAI(base_url=self.base_url, api_key=api_key, http_client=http_client)
+            self._client = AsyncOpenAI(
+                base_url=self.base_url, api_key=api_key, http_client=http_client
+            )
         else:
-            http_client = cached_async_http_client(provider='fireworks')
-            self._client = AsyncOpenAI(base_url=self.base_url, api_key=api_key, http_client=http_client)
+            http_client = cached_async_http_client(provider="fireworks")
+            self._client = AsyncOpenAI(
+                base_url=self.base_url, api_key=api_key, http_client=http_client
+            )

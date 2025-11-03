@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Union, Literal
 
-from upsonic.vectordb.config import Config 
+from upsonic.vectordb.config import Config
 from upsonic.schemas.vector_schemas import VectorSearchResult
 from upsonic.utils.printing import info_log
 
@@ -32,13 +32,16 @@ class BaseVectorDBProvider(ABC):
         self._config = config
         self._client: Any = None
         self._is_connected: bool = False
-        info_log(f"Initializing {self.__class__.__name__} with provider '{self._config.core.provider_name.value}'.", context="BaseVectorDBProvider")
+        info_log(
+            f"Initializing {self.__class__.__name__} with provider '{self._config.core.provider_name.value}'.",
+            context="BaseVectorDBProvider",
+        )
 
     @abstractmethod
     def connect(self) -> None:
         """
         Establishes a connection to the vector database.
-        
+
         This method uses the connection parameters from `self._config.core`
         to initialize the database client and verify the connection.
 
@@ -102,13 +105,15 @@ class BaseVectorDBProvider(ABC):
         pass
 
     @abstractmethod
-    def upsert(self, 
-                vectors: List[List[float]], 
-                payloads: List[Dict[str, Any]], 
-                ids: List[Union[str, int]],
-                chunks: Optional[List[str]] = None,
-                sparse_vectors: Optional[List[Dict[str, Any]]] = None,  
-                **kwargs) -> None:
+    def upsert(
+        self,
+        vectors: List[List[float]],
+        payloads: List[Dict[str, Any]],
+        ids: List[Union[str, int]],
+        chunks: Optional[List[str]] = None,
+        sparse_vectors: Optional[List[Dict[str, Any]]] = None,
+        **kwargs,
+    ) -> None:
         """
         Adds new data or updates existing data in the collection.
 
@@ -141,12 +146,12 @@ class BaseVectorDBProvider(ABC):
         Args:
             ids: A list of specific IDs to remove.
             **kwargs: Provider-specific options.
-        
+
         Raises:
             VectorDBError: If the deletion fails.
         """
         pass
-    
+
     @abstractmethod
     def fetch(self, ids: List[Union[str, int]], **kwargs) -> List[VectorSearchResult]:
         """
@@ -162,7 +167,17 @@ class BaseVectorDBProvider(ABC):
         pass
 
     @abstractmethod
-    def search(self, top_k: Optional[int] = None, query_vector: Optional[List[float]] = None, query_text: Optional[str] = None, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
+    def search(
+        self,
+        top_k: Optional[int] = None,
+        query_vector: Optional[List[float]] = None,
+        query_text: Optional[str] = None,
+        filter: Optional[Dict[str, Any]] = None,
+        alpha: Optional[float] = None,
+        fusion_method: Optional[Literal["rrf", "weighted"]] = None,
+        similarity_threshold: Optional[float] = None,
+        **kwargs,
+    ) -> List[VectorSearchResult]:
         """
         A master search method that dispatches to the appropriate specialized
         search function based on the provided arguments and the provider's
@@ -188,8 +203,15 @@ class BaseVectorDBProvider(ABC):
         pass
 
     @abstractmethod
-    def dense_search(self, query_vector: List[float], top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
-        """ 
+    def dense_search(
+        self,
+        query_vector: List[float],
+        top_k: int,
+        filter: Optional[Dict[str, Any]] = None,
+        similarity_threshold: Optional[float] = None,
+        **kwargs,
+    ) -> List[VectorSearchResult]:
+        """
         Performs a pure vector similarity search.
 
         Args:
@@ -204,7 +226,14 @@ class BaseVectorDBProvider(ABC):
         pass
 
     @abstractmethod
-    def full_text_search(self, query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
+    def full_text_search(
+        self,
+        query_text: str,
+        top_k: int,
+        filter: Optional[Dict[str, Any]] = None,
+        similarity_threshold: Optional[float] = None,
+        **kwargs,
+    ) -> List[VectorSearchResult]:
         """
         Performs a full-text search if the provider supports it.
 
@@ -220,7 +249,17 @@ class BaseVectorDBProvider(ABC):
         pass
 
     @abstractmethod
-    def hybrid_search(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
+    def hybrid_search(
+        self,
+        query_vector: List[float],
+        query_text: str,
+        top_k: int,
+        filter: Optional[Dict[str, Any]] = None,
+        alpha: Optional[float] = None,
+        fusion_method: Optional[Literal["rrf", "weighted"]] = None,
+        similarity_threshold: Optional[float] = None,
+        **kwargs,
+    ) -> List[VectorSearchResult]:
         """
         Combines dense and sparse/keyword search results.
 

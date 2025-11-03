@@ -1,4 +1,3 @@
-import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, List, Union
@@ -9,6 +8,7 @@ from upsonic.loaders.config import LoaderConfig
 from upsonic.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
+
 
 class BaseLoader(ABC):
     """
@@ -28,8 +28,9 @@ class BaseLoader(ABC):
         """
         self.config = config
         self._processed_document_ids: set[str] = set()
-        self._logger = get_logger(self.__class__.__module__)  # Instance logger for subclasses
-
+        self._logger = get_logger(
+            self.__class__.__module__
+        )  # Instance logger for subclasses
 
     @abstractmethod
     def load(self, source: Union[str, Path, List[Union[str, Path]]]) -> List[Document]:
@@ -37,7 +38,9 @@ class BaseLoader(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def aload(self, source: Union[str, Path, List[Union[str, Path]]]) -> List[Document]:
+    async def aload(
+        self, source: Union[str, Path, List[Union[str, Path]]]
+    ) -> List[Document]:
         """Loads all documents from the given source asynchronously."""
         raise NotImplementedError
 
@@ -59,8 +62,6 @@ class BaseLoader(ABC):
         Extensions should be lowercase and include the leading dot (e.g., '.csv').
         """
         raise NotImplementedError
-
-
 
     @classmethod
     def can_load(cls, source: Union[str, Path]) -> bool:
@@ -130,16 +131,16 @@ class BaseLoader(ABC):
     def _check_file_size(self, file_path: Path) -> bool:
         """
         Check if a file size is within the configured limits.
-        
+
         Args:
             file_path: Path to the file to check
-            
+
         Returns:
             True if file size is acceptable, False if it should be skipped
         """
         if self.config.max_file_size is None:
             return True
-            
+
         try:
             file_size = file_path.stat().st_size
             if file_size > self.config.max_file_size:
@@ -175,7 +176,7 @@ class BaseLoader(ABC):
 
         resolved_files: List[Path] = []
         added_paths: set[Path] = set()  # Track added paths to prevent duplicates
-        
+
         for item in source_list:
             path_item = Path(item)
             if not path_item.exists():
@@ -201,40 +202,36 @@ class BaseLoader(ABC):
     def _detect_content_type(self, source_path: Path) -> str:
         """Detects content type based on file extension for RAG optimization."""
         extension = source_path.suffix.lower()
-        
+
         content_type_map = {
-            '.pdf': 'document',
-            '.docx': 'document', 
-            '.doc': 'document',
-            '.odt': 'document',
-            
-            '.md': 'markdown',
-            '.markdown': 'markdown',
-            '.html': 'web_content',
-            '.htm': 'web_content',
-            '.xml': 'structured_data',
-            
-            '.json': 'structured_data',
-            '.jsonl': 'structured_data',
-            '.csv': 'tabular_data',
-            '.tsv': 'tabular_data',
-            '.yaml': 'configuration',
-            '.yml': 'configuration',
-            
-            '.py': 'code',
-            '.js': 'code',
-            '.ts': 'code',
-            '.java': 'code',
-            '.cpp': 'code',
-            '.c': 'code',
-            '.go': 'code',
-            '.rs': 'code',
-            '.php': 'code',
-            '.rb': 'code',
-            
-            '.txt': 'plain_text',
-            '.log': 'plain_text',
-            '.rst': 'plain_text',
+            ".pdf": "document",
+            ".docx": "document",
+            ".doc": "document",
+            ".odt": "document",
+            ".md": "markdown",
+            ".markdown": "markdown",
+            ".html": "web_content",
+            ".htm": "web_content",
+            ".xml": "structured_data",
+            ".json": "structured_data",
+            ".jsonl": "structured_data",
+            ".csv": "tabular_data",
+            ".tsv": "tabular_data",
+            ".yaml": "configuration",
+            ".yml": "configuration",
+            ".py": "code",
+            ".js": "code",
+            ".ts": "code",
+            ".java": "code",
+            ".cpp": "code",
+            ".c": "code",
+            ".go": "code",
+            ".rs": "code",
+            ".php": "code",
+            ".rb": "code",
+            ".txt": "plain_text",
+            ".log": "plain_text",
+            ".rst": "plain_text",
         }
-        
-        return content_type_map.get(extension, 'unknown')
+
+        return content_type_map.get(extension, "unknown")

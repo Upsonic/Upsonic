@@ -4,7 +4,7 @@ Deep Agent Module
 This module provides Deep Agent functionality for handling complex, multi-step tasks
 with advanced capabilities including:
 - Todo management for task planning
-- Virtual filesystem for file operations  
+- Virtual filesystem for file operations
 - Subagent spawning for context isolation
 
 Main exports:
@@ -21,23 +21,21 @@ from upsonic.agent.deep_agent.tools import (
     read_file,
     write_file,
     edit_file,
-    create_task_tool
+    create_task_tool,
 )
 
 __all__ = [
     # Main classes
-    'DeepAgent',
-    'create_deep_agent',
-    
+    "DeepAgent",
+    "create_deep_agent",
     # State management
-    'DeepAgentState',
-    'Todo',
-    
+    "DeepAgentState",
+    "Todo",
     # Tools
-    'write_todos',
-    'ls',
-    'read_file',
-    'write_file',
-    'edit_file',
-    'create_task_tool',
+    "write_todos",
+    "ls",
+    "read_file",
+    "write_file",
+    "edit_file",
+    "create_task_tool",
 ]

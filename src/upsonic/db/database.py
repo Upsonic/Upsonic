@@ -11,37 +11,33 @@ from ..storage.providers import (
     PostgresStorage,
     RedisStorage,
     SqliteStorage,
-    MongoStorage
+    MongoStorage,
 )
 from ..models import Model
 
 # Generic type variable for storage providers
-StorageType = TypeVar('StorageType', bound=Storage)
+StorageType = TypeVar("StorageType", bound=Storage)
 
 
 class DatabaseBase(Generic[StorageType]):
     """
     Base class for all database classes that combine storage providers with memory.
-    
+
     This class provides a common interface and type safety for all database implementations.
     It uses generic types to ensure type safety while allowing different storage backends.
     """
-    
-    def __init__(
-        self,
-        storage: StorageType,
-        memory: Memory
-    ):
+
+    def __init__(self, storage: StorageType, memory: Memory):
         """
         Initialize the database with storage and memory components.
-        
+
         Args:
             storage: The storage provider instance
             memory: The memory instance
         """
         self.storage = storage
         self.memory = memory
-    
+
     def __repr__(self) -> str:
         """String representation of the database instance."""
         return f"{self.__class__.__name__}(storage={type(self.storage).__name__}, memory={type(self.memory).__name__})"
@@ -51,7 +47,7 @@ class SqliteDatabase(DatabaseBase[SqliteStorage]):
     """
     Database class combining SqliteStorage and Memory attributes.
     """
-    
+
     def __init__(
         self,
         # SqliteStorage attributes
@@ -70,15 +66,15 @@ class SqliteDatabase(DatabaseBase[SqliteStorage]):
         model: Optional[Union[Model, str]] = None,
         debug: bool = False,
         feed_tool_call_results: bool = False,
-        user_memory_mode: Literal['update', 'replace'] = 'update'
+        user_memory_mode: Literal["update", "replace"] = "update",
     ):
         # Initialize storage
         storage = SqliteStorage(
             sessions_table_name=sessions_table_name,
             profiles_table_name=profiles_table_name,
-            db_file=db_file
+            db_file=db_file,
         )
-        
+
         # Initialize memory
         memory = Memory(
             storage=storage,
@@ -93,9 +89,9 @@ class SqliteDatabase(DatabaseBase[SqliteStorage]):
             model=model,
             debug=debug,
             feed_tool_call_results=feed_tool_call_results,
-            user_memory_mode=user_memory_mode
+            user_memory_mode=user_memory_mode,
         )
-        
+
         # Call parent constructor
         super().__init__(storage=storage, memory=memory)
 
@@ -104,7 +100,7 @@ class PostgresDatabase(DatabaseBase[PostgresStorage]):
     """
     Database class combining PostgresStorage and Memory attributes.
     """
-    
+
     def __init__(
         self,
         # PostgresStorage attributes
@@ -124,16 +120,16 @@ class PostgresDatabase(DatabaseBase[PostgresStorage]):
         model: Optional[Union[Model, str]] = None,
         debug: bool = False,
         feed_tool_call_results: bool = False,
-        user_memory_mode: Literal['update', 'replace'] = 'update'
+        user_memory_mode: Literal["update", "replace"] = "update",
     ):
         # Initialize storage
         storage = PostgresStorage(
             sessions_table_name=sessions_table_name,
             profiles_table_name=profiles_table_name,
             db_url=db_url,
-            schema=schema
+            schema=schema,
         )
-        
+
         # Initialize memory
         memory = Memory(
             storage=storage,
@@ -148,9 +144,9 @@ class PostgresDatabase(DatabaseBase[PostgresStorage]):
             model=model,
             debug=debug,
             feed_tool_call_results=feed_tool_call_results,
-            user_memory_mode=user_memory_mode
+            user_memory_mode=user_memory_mode,
         )
-        
+
         # Call parent constructor
         super().__init__(storage=storage, memory=memory)
 
@@ -159,7 +155,7 @@ class MongoDatabase(DatabaseBase[MongoStorage]):
     """
     Database class combining MongoStorage and Memory attributes.
     """
-    
+
     def __init__(
         self,
         # MongoStorage attributes
@@ -179,16 +175,16 @@ class MongoDatabase(DatabaseBase[MongoStorage]):
         model: Optional[Union[Model, str]] = None,
         debug: bool = False,
         feed_tool_call_results: bool = False,
-        user_memory_mode: Literal['update', 'replace'] = 'update'
+        user_memory_mode: Literal["update", "replace"] = "update",
     ):
         # Initialize storage
         storage = MongoStorage(
             db_url=db_url,
             database_name=database_name,
             sessions_collection_name=sessions_collection_name,
-            profiles_collection_name=profiles_collection_name
+            profiles_collection_name=profiles_collection_name,
         )
-        
+
         # Initialize memory
         memory = Memory(
             storage=storage,
@@ -203,9 +199,9 @@ class MongoDatabase(DatabaseBase[MongoStorage]):
             model=model,
             debug=debug,
             feed_tool_call_results=feed_tool_call_results,
-            user_memory_mode=user_memory_mode
+            user_memory_mode=user_memory_mode,
         )
-        
+
         # Call parent constructor
         super().__init__(storage=storage, memory=memory)
 
@@ -214,7 +210,7 @@ class RedisDatabase(DatabaseBase[RedisStorage]):
     """
     Database class combining RedisStorage and Memory attributes.
     """
-    
+
     def __init__(
         self,
         # RedisStorage attributes
@@ -237,7 +233,7 @@ class RedisDatabase(DatabaseBase[RedisStorage]):
         model: Optional[Union[Model, str]] = None,
         debug: bool = False,
         feed_tool_call_results: bool = False,
-        user_memory_mode: Literal['update', 'replace'] = 'update'
+        user_memory_mode: Literal["update", "replace"] = "update",
     ):
         # Initialize storage
         storage = RedisStorage(
@@ -247,9 +243,9 @@ class RedisDatabase(DatabaseBase[RedisStorage]):
             db=db,
             password=password,
             ssl=ssl,
-            expire=expire
+            expire=expire,
         )
-        
+
         # Initialize memory
         memory = Memory(
             storage=storage,
@@ -264,9 +260,9 @@ class RedisDatabase(DatabaseBase[RedisStorage]):
             model=model,
             debug=debug,
             feed_tool_call_results=feed_tool_call_results,
-            user_memory_mode=user_memory_mode
+            user_memory_mode=user_memory_mode,
         )
-        
+
         # Call parent constructor
         super().__init__(storage=storage, memory=memory)
 
@@ -275,7 +271,7 @@ class InMemoryDatabase(DatabaseBase[InMemoryStorage]):
     """
     Database class combining InMemoryStorage and Memory attributes.
     """
-    
+
     def __init__(
         self,
         # InMemoryStorage attributes
@@ -293,14 +289,11 @@ class InMemoryDatabase(DatabaseBase[InMemoryStorage]):
         model: Optional[Union[Model, str]] = None,
         debug: bool = False,
         feed_tool_call_results: bool = False,
-        user_memory_mode: Literal['update', 'replace'] = 'update'
+        user_memory_mode: Literal["update", "replace"] = "update",
     ):
         # Initialize storage
-        storage = InMemoryStorage(
-            max_sessions=max_sessions,
-            max_profiles=max_profiles
-        )
-        
+        storage = InMemoryStorage(max_sessions=max_sessions, max_profiles=max_profiles)
+
         # Initialize memory
         memory = Memory(
             storage=storage,
@@ -315,9 +308,9 @@ class InMemoryDatabase(DatabaseBase[InMemoryStorage]):
             model=model,
             debug=debug,
             feed_tool_call_results=feed_tool_call_results,
-            user_memory_mode=user_memory_mode
+            user_memory_mode=user_memory_mode,
         )
-        
+
         # Call parent constructor
         super().__init__(storage=storage, memory=memory)
 
@@ -326,7 +319,7 @@ class JSONDatabase(DatabaseBase[JSONStorage]):
     """
     Database class combining JSONStorage and Memory attributes.
     """
-    
+
     def __init__(
         self,
         # JSONStorage attributes
@@ -344,14 +337,11 @@ class JSONDatabase(DatabaseBase[JSONStorage]):
         model: Optional[Union[Model, str]] = None,
         debug: bool = False,
         feed_tool_call_results: bool = False,
-        user_memory_mode: Literal['update', 'replace'] = 'update'
+        user_memory_mode: Literal["update", "replace"] = "update",
     ):
         # Initialize storage
-        storage = JSONStorage(
-            directory_path=directory_path,
-            pretty_print=pretty_print
-        )
-        
+        storage = JSONStorage(directory_path=directory_path, pretty_print=pretty_print)
+
         # Initialize memory
         memory = Memory(
             storage=storage,
@@ -366,9 +356,9 @@ class JSONDatabase(DatabaseBase[JSONStorage]):
             model=model,
             debug=debug,
             feed_tool_call_results=feed_tool_call_results,
-            user_memory_mode=user_memory_mode
+            user_memory_mode=user_memory_mode,
         )
-        
+
         # Call parent constructor
         super().__init__(storage=storage, memory=memory)
 
@@ -377,7 +367,7 @@ class Mem0Database(DatabaseBase[Mem0Storage]):
     """
     Database class combining Mem0Storage and Memory attributes.
     """
-    
+
     def __init__(
         self,
         # Mem0Storage attributes
@@ -404,7 +394,7 @@ class Mem0Database(DatabaseBase[Mem0Storage]):
         model: Optional[Union[Model, str]] = None,
         debug: bool = False,
         feed_tool_call_results: bool = False,
-        user_memory_mode: Literal['update', 'replace'] = 'update'
+        user_memory_mode: Literal["update", "replace"] = "update",
     ):
         # Initialize storage
         storage = Mem0Storage(
@@ -418,9 +408,9 @@ class Mem0Database(DatabaseBase[Mem0Storage]):
             enable_caching=enable_caching,
             cache_ttl=cache_ttl,
             output_format=output_format,
-            version=version
+            version=version,
         )
-        
+
         # Initialize memory
         memory = Memory(
             storage=storage,
@@ -435,8 +425,8 @@ class Mem0Database(DatabaseBase[Mem0Storage]):
             model=model,
             debug=debug,
             feed_tool_call_results=feed_tool_call_results,
-            user_memory_mode=user_memory_mode
+            user_memory_mode=user_memory_mode,
         )
-        
+
         # Call parent constructor
         super().__init__(storage=storage, memory=memory)

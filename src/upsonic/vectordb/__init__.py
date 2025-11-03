@@ -20,52 +20,60 @@ if TYPE_CHECKING:
     from .providers.weaviate import WeaviateProvider
     from .providers.pgvector import PgvectorProvider
 
+
 def _get_provider_classes():
     """Get provider classes with lazy importing."""
     providers = {}
-    
+
     try:
         from .providers.chroma import ChromaProvider
-        providers['ChromaProvider'] = ChromaProvider
+
+        providers["ChromaProvider"] = ChromaProvider
     except ImportError:
         pass
-    
+
     try:
         from .providers.faiss import FaissProvider
-        providers['FaissProvider'] = FaissProvider
+
+        providers["FaissProvider"] = FaissProvider
     except ImportError:
         pass
-    
+
     try:
         from .providers.pinecone import PineconeProvider
-        providers['PineconeProvider'] = PineconeProvider
+
+        providers["PineconeProvider"] = PineconeProvider
     except ImportError:
         pass
-    
+
     try:
         from .providers.qdrant import QdrantProvider
-        providers['QdrantProvider'] = QdrantProvider
+
+        providers["QdrantProvider"] = QdrantProvider
     except ImportError:
         pass
-    
+
     try:
         from .providers.milvus import MilvusProvider
-        providers['MilvusProvider'] = MilvusProvider
+
+        providers["MilvusProvider"] = MilvusProvider
     except ImportError:
         pass
-    
+
     try:
         from .providers.weaviate import WeaviateProvider
-        providers['WeaviateProvider'] = WeaviateProvider
+
+        providers["WeaviateProvider"] = WeaviateProvider
     except ImportError:
         pass
-    
+
     try:
         from .providers.pgvector import PgvectorProvider
-        providers['PgvectorProvider'] = PgvectorProvider
+
+        providers["PgvectorProvider"] = PgvectorProvider
     except ImportError:
         pass
-    
+
     return providers
 
 
@@ -78,13 +86,11 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
-    'ChromaProvider',
-    'FaissProvider',
-    'PineconeProvider',
-    'QdrantProvider',
-    'MilvusProvider',
-    'WeaviateProvider',
-    'PgvectorProvider',
+    "ChromaProvider",
+    "FaissProvider",
+    "PineconeProvider",
+    "QdrantProvider",
+    "MilvusProvider",
+    "WeaviateProvider",
+    "PgvectorProvider",
 ]
-
-

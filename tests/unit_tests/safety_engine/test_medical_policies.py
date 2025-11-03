@@ -1,21 +1,10 @@
 import asyncio
-import os
 import pytest
 from unittest.mock import patch, AsyncMock
-from contextlib import asynccontextmanager
 
 from upsonic import Agent, Task
-from upsonic.agent.run_result import RunResult
 from upsonic.models import ModelResponse, TextPart
 
-from upsonic import (
-    RuleBase,
-    ActionBase,
-    Policy,
-    PolicyInput,
-    RuleOutput,
-    PolicyOutput
-)
 
 from upsonic.safety_engine.policies.medical_policies import (
     MedicalInfoBlockPolicy,
@@ -23,12 +12,11 @@ from upsonic.safety_engine.policies.medical_policies import (
     MedicalInfoAnonymizePolicy,
     MedicalInfoReplacePolicy,
     MedicalInfoRaiseExceptionPolicy,
-    MedicalInfoRaiseExceptionPolicy_LLM
 )
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_medical_info_block_phi(mock_infer_model):
     """
     TEST 1: Medical Policy Blocks PHI Information
@@ -38,11 +26,11 @@ async def test_medical_info_block_phi(mock_infer_model):
     - LOOK FOR: A red "Safety Policy Triggered" panel in the console.
     """
     print_header("TEST 1: Medical Policy BLOCKS PHI Input")
-    
+
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
         parts=[TextPart(content="This content has been blocked by safety policy.")],
@@ -52,20 +40,20 @@ async def test_medical_info_block_phi(mock_infer_model):
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     agent_with_medical_policy = Agent(
-        model=mock_model,
-        user_policy=MedicalInfoBlockPolicy,
-        debug=True
+        model=mock_model, user_policy=MedicalInfoBlockPolicy, debug=True
     )
-    
-    phi_task = Task(description="Patient John Doe, medical record number MR123456, has a diagnosis of diabetes. Please review his health information.")
-    
+
+    phi_task = Task(
+        description="Patient John Doe, medical record number MR123456, has a diagnosis of diabetes. Please review his health information."
+    )
+
     result = agent_with_medical_policy.do(phi_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "blocked" in result.lower()
@@ -73,7 +61,7 @@ async def test_medical_info_block_phi(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_medical_info_block_insurance(mock_infer_model):
     """
     TEST 2: Medical Policy Blocks Insurance Information
@@ -86,7 +74,7 @@ async def test_medical_info_block_insurance(mock_infer_model):
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
         parts=[TextPart(content="This content has been blocked by safety policy.")],
@@ -96,20 +84,20 @@ async def test_medical_info_block_insurance(mock_infer_model):
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
 
     agent_with_medical_policy = Agent(
-        model=mock_model,
-        user_policy=MedicalInfoBlockPolicy,
-        debug=True
+        model=mock_model, user_policy=MedicalInfoBlockPolicy, debug=True
     )
 
-    insurance_task = Task(description="My health insurance policy number is INS123456789 and my Medicare number is 123-45-6789A.")
-    
+    insurance_task = Task(
+        description="My health insurance policy number is INS123456789 and my Medicare number is 123-45-6789A."
+    )
+
     result = agent_with_medical_policy.do(insurance_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "blocked" in result.lower()
@@ -117,7 +105,7 @@ async def test_medical_info_block_insurance(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_medical_info_anonymize_prescription(mock_infer_model):
     """
     TEST 3: Medical Policy Anonymizes Prescription Information
@@ -128,34 +116,38 @@ async def test_medical_info_anonymize_prescription(mock_infer_model):
       LLM's final response refers to the anonymized information.
     """
     print_header("TEST 3: Medical Policy ANONYMIZES Prescription Input")
-    
+
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="I can help you with your prescription inquiry. The medication information you provided has been processed.")],
+        parts=[
+            TextPart(
+                content="I can help you with your prescription inquiry. The medication information you provided has been processed."
+            )
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     agent_with_anonymize_policy = Agent(
-        model=mock_model,
-        user_policy=MedicalInfoAnonymizePolicy,
-        debug=True
+        model=mock_model, user_policy=MedicalInfoAnonymizePolicy, debug=True
     )
-    
-    prescription_task = Task(description="Prescription number RX123456789 for medication XYZ. Can you help me with dosage information?")
-    
+
+    prescription_task = Task(
+        description="Prescription number RX123456789 for medication XYZ. Can you help me with dosage information?"
+    )
+
     result = agent_with_anonymize_policy.do(prescription_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "RX123456789" not in result
@@ -163,7 +155,7 @@ async def test_medical_info_anonymize_prescription(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_medical_info_replace_lab_results(mock_infer_model):
     """
     TEST 4: Medical Policy Replaces Lab Results Information
@@ -172,34 +164,38 @@ async def test_medical_info_replace_lab_results(mock_infer_model):
     - LOOK FOR: A yellow "Safety Policy Triggered" panel with replacement action.
     """
     print_header("TEST 4: Medical Policy REPLACES Lab Results Input")
-    
+
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="I can help you with your lab results inquiry. The test information you mentioned has been processed.")],
+        parts=[
+            TextPart(
+                content="I can help you with your lab results inquiry. The test information you mentioned has been processed."
+            )
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     agent_with_replace_policy = Agent(
-        model=mock_model,
-        user_policy=MedicalInfoReplacePolicy,
-        debug=True
+        model=mock_model, user_policy=MedicalInfoReplacePolicy, debug=True
     )
-    
-    lab_results_task = Task(description="Lab order number LAB123456 shows blood test results. Can you help me interpret them?")
-    
+
+    lab_results_task = Task(
+        description="Lab order number LAB123456 shows blood test results. Can you help me interpret them?"
+    )
+
     result = agent_with_replace_policy.do(lab_results_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "LAB123456" not in result
@@ -207,7 +203,7 @@ async def test_medical_info_replace_lab_results(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_medical_info_agent_policy_exception(mock_infer_model):
     """
     TEST 5: Medical Agent Policy Raises Exception on Output
@@ -221,39 +217,46 @@ async def test_medical_info_agent_policy_exception(mock_infer_model):
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="The patient's medical record MR789012 shows a diagnosis of hypertension with medication prescribed.")],
+        parts=[
+            TextPart(
+                content="The patient's medical record MR789012 shows a diagnosis of hypertension with medication prescribed."
+            )
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     agent_with_medical_exception = Agent(
-        model=mock_model,
-        agent_policy=MedicalInfoRaiseExceptionPolicy,
-        debug=True
+        model=mock_model, agent_policy=MedicalInfoRaiseExceptionPolicy, debug=True
     )
-    
-    medical_task = Task(description="Please provide an update on the patient's medical condition.")
-    
+
+    medical_task = Task(
+        description="Please provide an update on the patient's medical condition."
+    )
+
     result = agent_with_medical_exception.do(medical_task)
-    
+
     # Final result check
     assert isinstance(result, str)
 
-    assert "disallowed by policy" in result.lower() or "disallowedoperation" in result.lower()  # The policy should block the response
+    assert (
+        "disallowed by policy" in result.lower()
+        or "disallowedoperation" in result.lower()
+    )  # The policy should block the response
     # Test passed - policy detection working (visible in console output)
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_medical_info_llm_policy(mock_infer_model):
     """
     TEST 6: Medical LLM Policy with Enhanced Detection
@@ -262,34 +265,38 @@ async def test_medical_info_llm_policy(mock_infer_model):
     - LOOK FOR: Enhanced detection capabilities with LLM-powered analysis.
     """
     print_header("TEST 6: Medical LLM Policy with Enhanced Detection")
-    
+
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="This content has been blocked by LLM-powered safety policy.")],
+        parts=[
+            TextPart(
+                content="This content has been blocked by LLM-powered safety policy."
+            )
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     agent_with_llm_policy = Agent(
-        model=mock_model,
-        user_policy=MedicalInfoBlockPolicy_LLM,
-        debug=True
+        model=mock_model, user_policy=MedicalInfoBlockPolicy_LLM, debug=True
     )
-    
-    complex_medical_task = Task(description="I need help with my patient's mental health condition and psychiatric evaluation. This involves sensitive medical information.")
-    
+
+    complex_medical_task = Task(
+        description="I need help with my patient's mental health condition and psychiatric evaluation. This involves sensitive medical information."
+    )
+
     result = agent_with_llm_policy.do(complex_medical_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "blocked" in result.lower()
@@ -297,7 +304,7 @@ async def test_medical_info_llm_policy(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_medical_info_all_clear(mock_infer_model):
     """
     TEST 7: Happy Path - No Medical Policies Triggered
@@ -306,11 +313,11 @@ async def test_medical_info_all_clear(mock_infer_model):
     - LOOK FOR: No safety policy panels should be printed.
     """
     print_header("TEST 7: All Clear - No Medical Policies Triggered")
-    
+
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
         parts=[TextPart(content="The weather today is sunny and warm.")],
@@ -320,14 +327,14 @@ async def test_medical_info_all_clear(mock_infer_model):
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     plain_agent = Agent(model=mock_model, debug=True)
-    
+
     safe_task = Task(description="What's the weather like today?")
-    
+
     result = plain_agent.do(safe_task)
 
     # Final result check

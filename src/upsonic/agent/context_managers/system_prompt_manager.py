@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Dict, Any, Optional
+from typing import TYPE_CHECKING, Optional
 import json
 
 # Heavy imports moved to lazy loading for faster startup
@@ -37,9 +37,9 @@ class SystemPromptManager:
         from upsonic.tools import Thought, AnalysisResult
         from upsonic.context.agent import turn_agent_to_string
         from upsonic.context.default_prompt import default_prompt
-        
+
         prompt_parts = []
-    
+
         is_thinking_enabled = self.agent.enable_thinking_tool
         if self.task.enable_thinking_tool is not None:
             is_thinking_enabled = self.task.enable_thinking_tool
@@ -47,12 +47,14 @@ class SystemPromptManager:
         is_reasoning_enabled = self.agent.enable_reasoning_tool
         if self.task.enable_reasoning_tool is not None:
             is_reasoning_enabled = self.task.enable_reasoning_tool
-        
+
         if is_thinking_enabled:
             thought_schema_str = json.dumps(Thought.model_json_schema(), indent=2)
 
             if is_reasoning_enabled:
-                analysis_result_schema_str = json.dumps(AnalysisResult.model_json_schema(), indent=2)
+                analysis_result_schema_str = json.dumps(
+                    AnalysisResult.model_json_schema(), indent=2
+                )
 
                 reflective_instructions = f"""---
                 ### MISSION BRIEFING: OPERATION DELIBERATE THOUGHT ###
@@ -219,7 +221,7 @@ class SystemPromptManager:
 
         if self.agent.system_prompt:
             base_prompt = self.agent.system_prompt
-        
+
         has_any_info = False
 
         if self.agent.role:
@@ -229,13 +231,17 @@ class SystemPromptManager:
             base_prompt += f"\nThis is your goal: {self.agent.goal}"
             has_any_info = True
         if self.agent.instructions:
-            base_prompt += f"\nThis is your instructions to follow: {self.agent.instructions}"
+            base_prompt += (
+                f"\nThis is your instructions to follow: {self.agent.instructions}"
+            )
             has_any_info = True
         if self.agent.education:
             base_prompt += f"\nThis is your education: {self.agent.education}"
             has_any_info = True
         if self.agent.work_experience:
-            base_prompt += f"\nThis is your work experiences: {self.agent.work_experience}"
+            base_prompt += (
+                f"\nThis is your work experiences: {self.agent.work_experience}"
+            )
             has_any_info = True
 
         if self.agent.company_name:
@@ -245,17 +251,23 @@ class SystemPromptManager:
             base_prompt += f"\nYour company website is: {self.agent.company_url}"
             has_any_info = True
         if self.agent.company_objective:
-            base_prompt += f"\nYour company objective is: {self.agent.company_objective}"
+            base_prompt += (
+                f"\nYour company objective is: {self.agent.company_objective}"
+            )
             has_any_info = True
         if self.agent.company_description:
-            base_prompt += f"\nYour company description is: {self.agent.company_description}"
+            base_prompt += (
+                f"\nYour company description is: {self.agent.company_description}"
+            )
             has_any_info = True
-            
-        
-        
-        if not self.agent.system_prompt and not has_any_info and not is_thinking_enabled:
+
+        if (
+            not self.agent.system_prompt
+            and not has_any_info
+            and not is_thinking_enabled
+        ):
             base_prompt = default_prompt().prompt
-        
+
         prompt_parts.append(base_prompt.strip())
 
         agent_context_str = "<YourCharacter>"
@@ -266,12 +278,12 @@ class SystemPromptManager:
                 if isinstance(item, type(self.agent)):
                     agent_context_str += f"\nAgent ID ({item.get_agent_id()}): {turn_agent_to_string(item)}"
                     found_agent_context = True
-        
+
         if found_agent_context:
             agent_context_str += "\n</YourCharacter>"
             prompt_parts.append(agent_context_str)
         return "\n\n".join(prompt_parts)
-    
+
     def get_system_prompt(self) -> str:
         """
         Public getter to retrieve the constructed system prompt.
@@ -285,7 +297,9 @@ class SystemPromptManager:
         return self.system_prompt
 
     @asynccontextmanager
-    async def manage_system_prompt(self, memory_handler: Optional["MemoryManager"] = None):
+    async def manage_system_prompt(
+        self, memory_handler: Optional["MemoryManager"] = None
+    ):
         """
         The asynchronous context manager for building the system prompt.
 
@@ -293,7 +307,7 @@ class SystemPromptManager:
         system prompt and makes it available via the `get_system_prompt` method.
         """
         self.system_prompt = self._build_system_prompt(memory_handler)
-            
+
         try:
             yield self
         finally:

@@ -13,7 +13,7 @@ class TestMarkdownLoaderSimple(unittest.TestCase):
     def setUp(self):
         """Set up test environment with sample Markdown files."""
         self.temp_dir = tempfile.mkdtemp()
-        
+
         # Create a simple Markdown file
         self.simple_md = Path(self.temp_dir) / "simple.md"
         self.simple_md.write_text("""# Main Title
@@ -45,6 +45,7 @@ This is a subsection with additional details.""")
         """Clean up test environment."""
         if os.path.exists(self.temp_dir):
             import shutil
+
             shutil.rmtree(self.temp_dir)
 
     def test_markdown_loader_initialization(self):
@@ -63,18 +64,18 @@ This is a subsection with additional details.""")
         """Test loading a simple Markdown file."""
         config = MarkdownLoaderConfig()
         loader = MarkdownLoader(config)
-        
+
         documents = loader.load(str(self.simple_md))
-        
+
         self.assertGreater(len(documents), 0)
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
-        self.assertTrue(all(hasattr(doc, 'document_id') for doc in documents))
+        self.assertTrue(all(hasattr(doc, "document_id") for doc in documents))
 
     def test_empty_source_handling(self):
         """Test handling of empty or invalid sources."""
         config = MarkdownLoaderConfig()
         loader = MarkdownLoader(config)
-        
+
         result = loader.load([])
         self.assertEqual(len(result), 0)
 
@@ -82,10 +83,10 @@ This is a subsection with additional details.""")
         """Test batch loading multiple Markdown files."""
         config = MarkdownLoaderConfig()
         loader = MarkdownLoader(config)
-        
+
         files = [str(self.simple_md)]
         documents = loader.batch(files)
-        
+
         self.assertGreater(len(documents), 0)
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
 
@@ -96,10 +97,10 @@ This is a subsection with additional details.""")
             include_code_blocks=True,
             code_block_language_metadata=True,
             heading_metadata=True,
-            split_by_heading="h2"
+            split_by_heading="h2",
         )
         loader = MarkdownLoader(config)
-        
+
         self.assertTrue(loader.config.parse_front_matter)
         self.assertTrue(loader.config.include_code_blocks)
         self.assertTrue(loader.config.code_block_language_metadata)
@@ -118,13 +119,13 @@ This is a subsection with additional details.""")
         """Test Markdown metadata inclusion."""
         config = MarkdownLoaderConfig(include_metadata=True)
         loader = MarkdownLoader(config)
-        
+
         documents = loader.load(str(self.simple_md))
-        
+
         self.assertGreater(len(documents), 0)
         for doc in documents:
             self.assertIsInstance(doc.metadata, dict)
-            self.assertIn('source', doc.metadata)
+            self.assertIn("source", doc.metadata)
 
 
 if __name__ == "__main__":

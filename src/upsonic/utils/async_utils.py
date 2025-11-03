@@ -2,7 +2,8 @@ import asyncio
 import concurrent.futures
 from typing import Awaitable, TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
+
 
 class AsyncExecutionMixin:
     """

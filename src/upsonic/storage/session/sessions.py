@@ -20,24 +20,25 @@ class UserProfile(BaseModel):
     identified and queried by its `user_id`, which is of the semantic
     type `UserId`.
     """
+
     user_id: UserId = Field(
         ...,
         description="The unique identifier for the user, of type UserId. This is the primary key.",
-        index=True
+        index=True,
     )
 
     profile_data: Dict[str, Any] = Field(
         default_factory=dict,
-        description="A flexible key-value store for persistent user metadata."
+        description="A flexible key-value store for persistent user metadata.",
     )
 
     created_at: float = Field(
         default_factory=time.time,
-        description="The Unix timestamp when the user profile was first created."
+        description="The Unix timestamp when the user profile was first created.",
     )
     updated_at: float = Field(
         default_factory=time.time,
-        description="The Unix timestamp when the user profile was last updated."
+        description="The Unix timestamp when the user profile was last updated.",
     )
 
     model_config = ConfigDict(from_attributes=True)
@@ -61,56 +62,58 @@ class InteractionSession(BaseModel):
     (via `chat_history`) and "Summary Memory" (via `summary`). Its identifier
     is of the semantic type `SessionId`.
     """
+
     session_id: SessionId = Field(
         # Note: We cast the uuid to our new SessionId type.
         default_factory=lambda: SessionId(str(uuid.uuid4())),
-        description="The unique identifier for the session, of type SessionId. This is the primary key."
+        description="The unique identifier for the session, of type SessionId. This is the primary key.",
     )
     user_id: Optional[UserId] = Field(
         None,
         description="The ID of the user associated with this session, linking it to a UserProfile.",
-        index=True
+        index=True,
     )
     agent_id: Optional[str] = Field(
         None,
         description="The unique identifier of the agent entity involved in the session.",
-        index=True
+        index=True,
     )
     team_session_id: Optional[str] = Field(
         None,
         description="An optional foreign key linking this session to a parent team session.",
-        index=True
+        index=True,
     )
 
     chat_history: List[Any] = Field(
         default_factory=list,
-        description="The complete, ordered list of messages for the session ('Full Session Memory')."
+        description="The complete, ordered list of messages for the session ('Full Session Memory').",
     )
     summary: Optional[str] = Field(
         None,
-        description="An evolving, high-level summary of the session's content ('Summary Memory')."
+        description="An evolving, high-level summary of the session's content ('Summary Memory').",
     )
-    
+
     session_data: Dict[str, Any] = Field(
         default_factory=dict,
-        description="A flexible key-value store for structured data relevant to the session's immediate state."
+        description="A flexible key-value store for structured data relevant to the session's immediate state.",
     )
     extra_data: Dict[str, Any] = Field(
         default_factory=dict,
-        description="A flexible key-value store for any other custom metadata, tags, or IDs."
+        description="A flexible key-value store for any other custom metadata, tags, or IDs.",
     )
 
     created_at: float = Field(
         default_factory=time.time,
-        description="The Unix timestamp when the session was created."
+        description="The Unix timestamp when the session was created.",
     )
     updated_at: float = Field(
         default_factory=time.time,
-        description="The Unix timestamp when the session was last updated."
+        description="The Unix timestamp when the session was last updated.",
     )
 
     class Config:
         """Pydantic model configuration."""
+
         from_attributes = True
 
     def to_dict(self) -> Dict[str, Any]:

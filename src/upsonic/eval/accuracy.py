@@ -7,10 +7,11 @@ from rich.text import Text
 
 from upsonic.agent.agent import Agent
 from upsonic.graph.graph import Graph
-from upsonic.team.team import Team 
+from upsonic.team.team import Team
 from upsonic.tasks.tasks import Task
 from upsonic.eval.models import EvaluationScore, AccuracyEvaluationResult
 from upsonic.utils.printing import console
+
 
 class AccuracyEvaluator:
     """
@@ -25,12 +26,16 @@ class AccuracyEvaluator:
         query: str,
         expected_output: str,
         additional_guidelines: Optional[str] = None,
-        num_iterations: int = 1
+        num_iterations: int = 1,
     ):
         if not isinstance(judge_agent, Agent):
-            raise TypeError("The `judge_agent` must be an instance of the `Agent` agent class.")
+            raise TypeError(
+                "The `judge_agent` must be an instance of the `Agent` agent class."
+            )
         if not isinstance(agent_under_test, (Agent, Graph, Team)):
-            raise TypeError("The `agent_under_test` must be an instance of `Agent`, `Graph`, or `Team`.")
+            raise TypeError(
+                "The `agent_under_test` must be an instance of `Agent`, `Graph`, or `Team`."
+            )
         if not isinstance(num_iterations, int) or num_iterations < 1:
             raise ValueError("`num_iterations` must be a positive integer.")
 
@@ -38,17 +43,21 @@ class AccuracyEvaluator:
         self.agent_under_test = agent_under_test
         self.query = query
         self.expected_output = expected_output
-        self.additional_guidelines = additional_guidelines or "No additional guidelines provided."
+        self.additional_guidelines = (
+            additional_guidelines or "No additional guidelines provided."
+        )
         self.num_iterations = num_iterations
         self._results: List[EvaluationScore] = []
-    
+
     async def run(self, print_results: bool = True) -> AccuracyEvaluationResult:
         self._results = []
         last_generated_output = ""
 
         for i in range(self.num_iterations):
             if self.num_iterations > 1:
-                console.print(f"[bold blue]--- Running Evaluation: Iteration {i + 1} of {self.num_iterations} ---[/bold blue]")
+                console.print(
+                    f"[bold blue]--- Running Evaluation: Iteration {i + 1} of {self.num_iterations} ---[/bold blue]"
+                )
 
             generated_output_obj = None
             task = Task(description=self.query)
@@ -60,24 +69,32 @@ class AccuracyEvaluator:
                 state = await self.agent_under_test.run_async(verbose=False)
                 generated_output_obj = state.get_latest_output()
             elif isinstance(self.agent_under_test, Team):
-                generated_output_obj = await asyncio.to_thread(self.agent_under_test.complete, task)
-            
+                generated_output_obj = await asyncio.to_thread(
+                    self.agent_under_test.complete, task
+                )
+
             if generated_output_obj is None:
-                raise ValueError("The agent under test produced a None output, cannot proceed with evaluation.")
-            
+                raise ValueError(
+                    "The agent under test produced a None output, cannot proceed with evaluation."
+                )
+
             last_generated_output = str(generated_output_obj)
-            
+
             score_object = await self._get_judge_score(last_generated_output)
             self._results.append(score_object)
-        
+
         return self._aggregate_and_present_results(last_generated_output, print_results)
 
-    async def run_with_output(self, output: str, print_results: bool = True) -> AccuracyEvaluationResult:
-        self._results = [] 
-        
+    async def run_with_output(
+        self, output: str, print_results: bool = True
+    ) -> AccuracyEvaluationResult:
+        self._results = []
+
         for i in range(self.num_iterations):
             if self.num_iterations > 1:
-                console.print(f"[bold blue]--- Scoring Pre-existing Output: Iteration {i + 1} of {self.num_iterations} ---[/bold blue]")
+                console.print(
+                    f"[bold blue]--- Scoring Pre-existing Output: Iteration {i + 1} of {self.num_iterations} ---[/bold blue]"
+                )
 
             score_object = await self._get_judge_score(output)
             self._results.append(score_object)
@@ -86,27 +103,27 @@ class AccuracyEvaluator:
 
     async def _get_judge_score(self, generated_output: str) -> EvaluationScore:
         judge_prompt = self._construct_judge_prompt(generated_output)
-        
+
         judge_task = Task(
             description=judge_prompt,
             response_format=EvaluationScore,
-            not_main_task=True
+            not_main_task=True,
         )
         await self.judge_agent.do_async(judge_task)
         score_object = judge_task.response
 
         if not isinstance(score_object, EvaluationScore):
-            raise TypeError(f"Judge agent failed to return a valid EvaluationScore object. Received: {type(score_object)}")
-            
+            raise TypeError(
+                f"Judge agent failed to return a valid EvaluationScore object. Received: {type(score_object)}"
+            )
+
         return score_object
 
     def _aggregate_and_present_results(
-        self, 
-        final_generated_output: str, 
-        print_results: bool
+        self, final_generated_output: str, print_results: bool
     ) -> AccuracyEvaluationResult:
         if not self._results:
-             raise RuntimeError("Evaluation finished without producing any results.")
+            raise RuntimeError("Evaluation finished without producing any results.")
 
         average_score = sum(score.score for score in self._results) / len(self._results)
 
@@ -155,7 +172,7 @@ class AccuracyEvaluator:
 
     def _print_formatted_results(self, result: AccuracyEvaluationResult) -> None:
         last_score = result.evaluation_scores[-1]
-        
+
         if result.average_score >= 8:
             color, title = "green", "[bold green]✅ Evaluation Passed[/bold green]"
         elif result.average_score >= 5:
@@ -164,8 +181,10 @@ class AccuracyEvaluator:
             color, title = "red", "[bold red]❌ Evaluation Failed[/bold red]"
 
         summary_text = Text()
-        summary_text.append(f"Average Score: ", style="bold")
-        summary_text.append(f"{result.average_score:.2f} / 10.0\n\n", style=f"bold {color}")
+        summary_text.append("Average Score: ", style="bold")
+        summary_text.append(
+            f"{result.average_score:.2f} / 10.0\n\n", style=f"bold {color}"
+        )
         summary_text.append("--- Last Run Details ---\n", style="dim")
         summary_text.append("User Query: ", style="bold")
         summary_text.append(f"{result.user_query}\n")
@@ -176,4 +195,6 @@ class AccuracyEvaluator:
         summary_text.append("Judge's Critique: ", style="bold")
         summary_text.append(f"{last_score.critique}")
 
-        console.print(Panel(summary_text, title=title, border_style=color, expand=False))
+        console.print(
+            Panel(summary_text, title=title, border_style=color, expand=False)
+        )

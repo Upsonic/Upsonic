@@ -4,10 +4,12 @@ from typing import List
 
 try:
     import requests
+
     _REQUESTS_AVAILABLE = True
 except ImportError:
     requests = None
     _REQUESTS_AVAILABLE = False
+
 
 def extract_image_urls(text: str) -> List[str]:
     """
@@ -25,6 +27,7 @@ def extract_image_urls(text: str) -> List[str]:
     urls = re.findall(markdown_image_regex, text)
     return urls
 
+
 def urls_to_base64(image_urls: List[str]) -> List[str]:
     """
     Takes a list of image URLs, downloads each image, and converts it to a
@@ -39,10 +42,11 @@ def urls_to_base64(image_urls: List[str]) -> List[str]:
     """
     if not _REQUESTS_AVAILABLE:
         from upsonic.utils.printing import import_error
+
         import_error(
             package_name="requests",
-            install_command='pip install requests',
-            feature_name="image URL downloading"
+            install_command="pip install requests",
+            feature_name="image URL downloading",
         )
 
     base64_images = []
@@ -50,16 +54,17 @@ def urls_to_base64(image_urls: List[str]) -> List[str]:
         try:
             response = requests.get(url, timeout=10)
             response.raise_for_status()
-            
+
             image_bytes = response.content
-            
-            b64_string = base64.b64encode(image_bytes).decode('utf-8')
+
+            b64_string = base64.b64encode(image_bytes).decode("utf-8")
             base64_images.append(b64_string)
-        except requests.exceptions.RequestException as e:
+        except requests.exceptions.RequestException:
             pass  # Failed to download image
             continue
-            
+
     return base64_images
+
 
 def save_base64_image(b64_string: str, file_name: str, ext: str) -> None:
     """
@@ -70,15 +75,15 @@ def save_base64_image(b64_string: str, file_name: str, ext: str) -> None:
         file_name: The desired name of the file, without the extension.
         ext: The file extension (e.g., "png", "jpg").
     """
-    if ext.startswith('.'):
+    if ext.startswith("."):
         ext = ext[1:]
 
     full_filename = f"{file_name}.{ext}"
-    
+
     try:
         image_data = base64.b64decode(b64_string)
-        with open(full_filename, 'wb') as f:
+        with open(full_filename, "wb") as f:
             f.write(image_data)
         pass  # Image saved successfully
-    except (base64.binascii.Error, TypeError) as e:
+    except (base64.binascii.Error, TypeError):
         pass  # Failed to decode base64 string

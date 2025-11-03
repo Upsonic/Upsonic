@@ -12,11 +12,11 @@ from upsonic.providers import Provider
 
 try:
     from cohere import AsyncClientV2
+
     _COHERE_AVAILABLE = True
 except ImportError:
     AsyncClientV2 = None
     _COHERE_AVAILABLE = False
-
 
 
 class CohereProvider(Provider[AsyncClientV2]):
@@ -24,7 +24,7 @@ class CohereProvider(Provider[AsyncClientV2]):
 
     @property
     def name(self) -> str:
-        return 'cohere'
+        return "cohere"
 
     @property
     def base_url(self) -> str:
@@ -47,10 +47,11 @@ class CohereProvider(Provider[AsyncClientV2]):
     ) -> None:
         if not _COHERE_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="cohere",
-                install_command='pip install cohere',
-                feature_name="Cohere provider"
+                install_command="pip install cohere",
+                feature_name="Cohere provider",
             )
 
         """Create a new Cohere provider.
@@ -64,20 +65,26 @@ class CohereProvider(Provider[AsyncClientV2]):
             http_client: An existing `httpx.AsyncClient` to use for making HTTP requests.
         """
         if cohere_client is not None:
-            assert http_client is None, 'Cannot provide both `cohere_client` and `http_client`'
-            assert api_key is None, 'Cannot provide both `cohere_client` and `api_key`'
+            assert http_client is None, (
+                "Cannot provide both `cohere_client` and `http_client`"
+            )
+            assert api_key is None, "Cannot provide both `cohere_client` and `api_key`"
             self._client = cohere_client
         else:
-            api_key = api_key or os.getenv('CO_API_KEY')
+            api_key = api_key or os.getenv("CO_API_KEY")
             if not api_key:
                 raise UserError(
-                    'Set the `CO_API_KEY` environment variable or pass it via `CohereProvider(api_key=...)`'
-                    'to use the Cohere provider.'
+                    "Set the `CO_API_KEY` environment variable or pass it via `CohereProvider(api_key=...)`"
+                    "to use the Cohere provider."
                 )
 
-            base_url = os.getenv('CO_BASE_URL')
+            base_url = os.getenv("CO_BASE_URL")
             if http_client is not None:
-                self._client = AsyncClientV2(api_key=api_key, httpx_client=http_client, base_url=base_url)
+                self._client = AsyncClientV2(
+                    api_key=api_key, httpx_client=http_client, base_url=base_url
+                )
             else:
-                http_client = cached_async_http_client(provider='cohere')
-                self._client = AsyncClientV2(api_key=api_key, httpx_client=http_client, base_url=base_url)
+                http_client = cached_async_http_client(provider="cohere")
+                self._client = AsyncClientV2(
+                    api_key=api_key, httpx_client=http_client, base_url=base_url
+                )

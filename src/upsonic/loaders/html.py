@@ -6,6 +6,7 @@ import hashlib
 
 try:
     import aiohttp
+
     _AIOHTTP_AVAILABLE = True
 except ImportError:
     aiohttp = None
@@ -14,6 +15,7 @@ except ImportError:
 
 try:
     import requests
+
     _REQUESTS_AVAILABLE = True
 except ImportError:
     requests = None
@@ -22,6 +24,7 @@ except ImportError:
 
 try:
     from bs4 import BeautifulSoup, Tag
+
     _BS4_AVAILABLE = True
 except ImportError:
     BeautifulSoup = None
@@ -47,24 +50,27 @@ class HTMLLoader(BaseLoader):
         """Initializes the HTMLLoader with its specific configuration."""
         if not _AIOHTTP_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="aiohttp",
                 install_command='pip install "upsonic[loaders]"',
-                feature_name="HTML loader"
+                feature_name="HTML loader",
             )
         if not _REQUESTS_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="requests",
                 install_command='pip install "upsonic[loaders]"',
-                feature_name="HTML loader"
+                feature_name="HTML loader",
             )
         if not _BS4_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="beautifulsoup4",
                 install_command='pip install "upsonic[loaders]"',
-                feature_name="HTML loader"
+                feature_name="HTML loader",
             )
         super().__init__(config)
         self.config: HTMLLoaderConfig = config
@@ -77,7 +83,7 @@ class HTMLLoader(BaseLoader):
     def get_supported_extensions(cls) -> List[str]:
         """Gets the list of supported file extensions for local files."""
         return [".html", ".htm", ".xhtml"]
-    
+
     @classmethod
     def can_load(cls, source: Union[str, Path]) -> bool:
         """Checks if this loader can handle a file path or a URL."""
@@ -90,23 +96,28 @@ class HTMLLoader(BaseLoader):
         """Formats a BeautifulSoup table object into a string."""
         if self.config.table_format == "html":
             return str(table)
-        
+
         if self.config.table_format == "markdown":
             markdown = []
-            header_row = table.find('tr')
+            header_row = table.find("tr")
             if header_row:
-                headers = [cell.get_text(strip=True) for cell in header_row.find_all(['th', 'td'])]
+                headers = [
+                    cell.get_text(strip=True)
+                    for cell in header_row.find_all(["th", "td"])
+                ]
                 markdown.append("| " + " | ".join(headers) + " |")
                 markdown.append("| " + " | ".join(["---"] * len(headers)) + " |")
-            
-            for row in table.find_all('tr')[1:]:
-                row_text = [cell.get_text(strip=True) for cell in row.find_all('td')]
+
+            for row in table.find_all("tr")[1:]:
+                row_text = [cell.get_text(strip=True) for cell in row.find_all("td")]
                 markdown.append("| " + " | ".join(row_text) + " |")
             return "\n".join(markdown)
 
         text = []
-        for row in table.find_all('tr'):
-            row_text = [cell.get_text(strip=True) for cell in row.find_all(['th', 'td'])]
+        for row in table.find_all("tr"):
+            row_text = [
+                cell.get_text(strip=True) for cell in row.find_all(["th", "td"])
+            ]
             text.append("\t".join(row_text))
         return "\n".join(text)
 
@@ -125,7 +136,7 @@ class HTMLLoader(BaseLoader):
     def _extract_structured_content(self, soup: BeautifulSoup) -> str:
         """Extracts and structures content based on config."""
         content_parts = []
-        
+
         main_content = soup.find("main") or soup.find("article") or soup.body or soup
 
         element_selectors = []
@@ -143,28 +154,39 @@ class HTMLLoader(BaseLoader):
                 level = int(element.name[1])
                 content_parts.append(f"{'#' * level} {element.get_text(strip=True)}")
             elif element.name in ["ul", "ol"]:
-                items = [f"- {li.get_text(strip=True)}" for li in element.find_all("li", recursive=False)]
+                items = [
+                    f"- {li.get_text(strip=True)}"
+                    for li in element.find_all("li", recursive=False)
+                ]
                 content_parts.append("\n".join(items))
             elif element.name == "table":
                 content_parts.append(self._format_table(element))
             else:
                 content_parts.append(element.get_text(strip=True))
-        
+
         full_text = "\n\n".join(part for part in content_parts if part.strip())
 
         if self.config.include_links:
-            links = [f"- [{a.get_text(strip=True)}]: {a.get('href', '')}" for a in soup.find_all("a", href=True)]
+            links = [
+                f"- [{a.get_text(strip=True)}]: {a.get('href', '')}"
+                for a in soup.find_all("a", href=True)
+            ]
             if links:
                 full_text += "\n\n--- Links ---\n" + "\n".join(links)
-        
+
         if self.config.include_images:
-            images = [f"- Alt: '{img.get('alt', '')}', Src: {img.get('src', '')}" for img in soup.find_all("img", src=True)]
+            images = [
+                f"- Alt: '{img.get('alt', '')}', Src: {img.get('src', '')}"
+                for img in soup.find_all("img", src=True)
+            ]
             if images:
                 full_text += "\n\n--- Images ---\n" + "\n".join(images)
-        
+
         return full_text
 
-    def _parse_html(self, html_content: str, base_metadata: Dict[str, Any], document_id: str) -> List[Document]:
+    def _parse_html(
+        self, html_content: str, base_metadata: Dict[str, Any], document_id: str
+    ) -> List[Document]:
         """The central parsing engine for HTML content."""
         soup = BeautifulSoup(html_content, "html.parser")
 
@@ -183,7 +205,7 @@ class HTMLLoader(BaseLoader):
             content = self._extract_structured_content(soup)
         else:
             content = str(soup)
-        
+
         if self.config.clean_whitespace:
             content = re.sub(r"\s+\n", "\n", content)
             content = re.sub(r"\n\n+", "\n\n", content).strip()
@@ -195,7 +217,7 @@ class HTMLLoader(BaseLoader):
         else:
             doc = Document(document_id=document_id, content=content)
         return [doc]
-    
+
     def _load_from_file(self, file_path: Path) -> List[Document]:
         """Loads and parses a single local HTML file."""
         if not self._check_file_size(file_path):
@@ -204,22 +226,24 @@ class HTMLLoader(BaseLoader):
             source_identifier = str(file_path.resolve())
             document_id = self._generate_document_id(source_identifier)
             if document_id in self._processed_document_ids:
-                raise FileExistsError(f"Source file '{source_identifier}' has already been processed.")
+                raise FileExistsError(
+                    f"Source file '{source_identifier}' has already been processed."
+                )
             self._processed_document_ids.add(document_id)
-            
+
             with open(file_path, "r", encoding=self.config.encoding or "utf-8") as f:
                 html_content = f.read()
             metadata = self._create_metadata(file_path)
             return self._parse_html(html_content, metadata, document_id)
         except Exception as e:
             return self._handle_loading_error(str(file_path), e)
-        
+
     def _load_from_url(self, url: str) -> List[Document]:
         """Fetches and parses a single URL."""
         try:
             if not url.startswith(("http://", "https://")):
                 raise ValueError(f"Invalid URL scheme: {url}")
-            
+
             document_id = self._generate_document_id(url)
             if document_id in self._processed_document_ids:
                 raise FileExistsError(f"Source URL '{url}' has already been processed.")
@@ -229,7 +253,9 @@ class HTMLLoader(BaseLoader):
             response = requests.get(url, headers=headers, timeout=20)
             response.raise_for_status()
             metadata = {
-                "source": url, "final_url": response.url, "status_code": response.status_code
+                "source": url,
+                "final_url": response.url,
+                "status_code": response.status_code,
             }
             return self._parse_html(response.text, metadata, document_id)
         except Exception as e:
@@ -238,31 +264,37 @@ class HTMLLoader(BaseLoader):
     def load(self, source: Union[str, Path, List[Union[str, Path]]]) -> List[Document]:
         """Loads HTML from file paths, directories, or URLs."""
         sources = [source] if not isinstance(source, list) else source
-        
-        urls_to_process = [s for s in sources if isinstance(s, str) and s.startswith(("http:", "https:"))]
+
+        urls_to_process = [
+            s
+            for s in sources
+            if isinstance(s, str) and s.startswith(("http:", "https:"))
+        ]
         paths_to_process = [s for s in sources if s not in urls_to_process]
-        
+
         all_documents = []
         if paths_to_process:
             resolved_files = self._resolve_sources(paths_to_process)
             for file_path in resolved_files:
                 all_documents.extend(self._load_from_file(file_path))
-        
+
         for url in urls_to_process:
             all_documents.extend(self._load_from_url(url))
-            
+
         return all_documents
-    
+
     async def _aload_from_file(self, file_path: Path) -> List[Document]:
         """Async: Loads and parses a single local HTML file."""
         return await asyncio.to_thread(self._load_from_file, file_path)
 
-    async def _aload_from_url(self, url: str, session: aiohttp.ClientSession) -> List[Document]:
+    async def _aload_from_url(
+        self, url: str, session: aiohttp.ClientSession
+    ) -> List[Document]:
         """Async: Fetches and parses a single URL."""
         try:
             if not url.startswith(("http://", "https://")):
                 raise ValueError(f"Invalid URL scheme: {url}")
-            
+
             document_id = self._generate_document_id(url)
             if document_id in self._processed_document_ids:
                 raise FileExistsError(f"Source URL '{url}' has already been processed.")
@@ -272,31 +304,41 @@ class HTMLLoader(BaseLoader):
                 response.raise_for_status()
                 html_content = await response.text()
                 metadata = {
-                    "source": url, "final_url": str(response.url), "status_code": response.status
+                    "source": url,
+                    "final_url": str(response.url),
+                    "status_code": response.status,
                 }
-                return await asyncio.to_thread(self._parse_html, html_content, metadata, document_id)
+                return await asyncio.to_thread(
+                    self._parse_html, html_content, metadata, document_id
+                )
         except Exception as e:
             return self._handle_loading_error(url, e)
 
-    async def aload(self, source: Union[str, Path, List[Union[str, Path]]]) -> List[Document]:
+    async def aload(
+        self, source: Union[str, Path, List[Union[str, Path]]]
+    ) -> List[Document]:
         """Async: Loads HTML from file paths, directories, or URLs."""
         sources = [source] if not isinstance(source, list) else source
-        
-        urls = [s for s in sources if isinstance(s, str) and s.startswith(("http:", "https:"))]
+
+        urls = [
+            s
+            for s in sources
+            if isinstance(s, str) and s.startswith(("http:", "https:"))
+        ]
         paths = [s for s in sources if s not in urls]
-        
+
         tasks = []
         if paths:
             resolved_files = await asyncio.to_thread(self._resolve_sources, paths)
             for file_path in resolved_files:
                 tasks.append(self._aload_from_file(file_path))
-        
+
         if urls:
             headers = {"User-Agent": self.config.user_agent}
             async with aiohttp.ClientSession(headers=headers) as session:
                 for url in urls:
                     tasks.append(self._aload_from_url(url, session))
-        
+
         results = await asyncio.gather(*tasks)
         return [doc for sublist in results for doc in sublist]
 

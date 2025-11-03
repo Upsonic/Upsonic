@@ -12,7 +12,10 @@ from typing_extensions import assert_never
 from upsonic.utils.package.exception import ModelHTTPError, UnexpectedModelBehavior
 from upsonic import _utils, usage
 from upsonic.models._thinking_part import split_content_into_text_and_thinking
-from upsonic._utils import guard_tool_call_id as _guard_tool_call_id, now_utc as _now_utc
+from upsonic._utils import (
+    guard_tool_call_id as _guard_tool_call_id,
+    now_utc as _now_utc,
+)
 from upsonic.utils.package.exception import UserError
 from upsonic.messages import (
     AudioUrl,
@@ -71,22 +74,22 @@ except ImportError:
     pass
 
 __all__ = (
-    'HuggingFaceModel',
-    'HuggingFaceModelSettings',
+    "HuggingFaceModel",
+    "HuggingFaceModelSettings",
 )
 
 
-HFSystemPromptRole = Literal['system', 'user']
+HFSystemPromptRole = Literal["system", "user"]
 
 LatestHuggingFaceModelNames = Literal[
-    'deepseek-ai/DeepSeek-R1',
-    'meta-llama/Llama-3.3-70B-Instruct',
-    'meta-llama/Llama-4-Maverick-17B-128E-Instruct',
-    'meta-llama/Llama-4-Scout-17B-16E-Instruct',
-    'Qwen/QwQ-32B',
-    'Qwen/Qwen2.5-72B-Instruct',
-    'Qwen/Qwen3-235B-A22B',
-    'Qwen/Qwen3-32B',
+    "deepseek-ai/DeepSeek-R1",
+    "meta-llama/Llama-3.3-70B-Instruct",
+    "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
+    "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+    "Qwen/QwQ-32B",
+    "Qwen/Qwen2.5-72B-Instruct",
+    "Qwen/Qwen3-235B-A22B",
+    "Qwen/Qwen3-32B",
 ]
 """Latest Hugging Face models."""
 
@@ -98,9 +101,9 @@ You can browse available models [here](https://huggingface.co/models?pipeline_ta
 """
 
 _FINISH_REASON_MAP: dict[TextGenerationOutputFinishReason, FinishReason] = {
-    'length': 'length',
-    'eos_token': 'stop',
-    'stop_sequence': 'stop',
+    "length": "length",
+    "eos_token": "stop",
+    "stop_sequence": "stop",
 }
 
 
@@ -129,7 +132,8 @@ class HuggingFaceModel(Model):
         self,
         model_name: str,
         *,
-        provider: Literal['huggingface'] | Provider[AsyncInferenceClient] = 'huggingface',
+        provider: Literal["huggingface"]
+        | Provider[AsyncInferenceClient] = "huggingface",
         profile: ModelProfileSpec | None = None,
         settings: ModelSettings | None = None,
     ):
@@ -145,10 +149,11 @@ class HuggingFaceModel(Model):
 
         if not _HUGGINGFACE_HUB_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="huggingface_hub",
-                install_command='pip install huggingface_hub',
-                feature_name="Huggingface_Hub model"
+                install_command="pip install huggingface_hub",
+                feature_name="Huggingface_Hub model",
             )
 
         self._model_name = model_name
@@ -177,7 +182,10 @@ class HuggingFaceModel(Model):
     ) -> ModelResponse:
         check_allow_model_requests()
         response = await self._completions_create(
-            messages, False, cast(HuggingFaceModelSettings, model_settings or {}), model_request_parameters
+            messages,
+            False,
+            cast(HuggingFaceModelSettings, model_settings or {}),
+            model_request_parameters,
         )
         model_response = self._process_response(response)
         return model_response
@@ -191,7 +199,10 @@ class HuggingFaceModel(Model):
     ) -> AsyncIterator[StreamedResponse]:
         check_allow_model_requests()
         response = await self._completions_create(
-            messages, True, cast(HuggingFaceModelSettings, model_settings or {}), model_request_parameters
+            messages,
+            True,
+            cast(HuggingFaceModelSettings, model_settings or {}),
+            model_request_parameters,
         )
         yield await self._process_streamed_response(response, model_request_parameters)
 
@@ -223,14 +234,14 @@ class HuggingFaceModel(Model):
         tools = self._get_tools(model_request_parameters)
 
         if not tools:
-            tool_choice: Literal['none', 'required', 'auto'] | None = None
+            tool_choice: Literal["none", "required", "auto"] | None = None
         elif not model_request_parameters.allow_text_output:
-            tool_choice = 'required'
+            tool_choice = "required"
         else:
-            tool_choice = 'auto'
+            tool_choice = "auto"
 
         if model_request_parameters.builtin_tools:
-            raise UserError('HuggingFace does not support built-in tools')
+            raise UserError("HuggingFace does not support built-in tools")
 
         hf_messages = await self._map_messages(messages)
 
@@ -241,16 +252,16 @@ class HuggingFaceModel(Model):
                 tools=tools,
                 tool_choice=tool_choice or None,
                 stream=stream,
-                stop=model_settings.get('stop_sequences', None),
-                temperature=model_settings.get('temperature', None),
-                top_p=model_settings.get('top_p', None),
-                seed=model_settings.get('seed', None),
-                presence_penalty=model_settings.get('presence_penalty', None),
-                frequency_penalty=model_settings.get('frequency_penalty', None),
-                logit_bias=model_settings.get('logit_bias', None),  # type: ignore
-                logprobs=model_settings.get('logprobs', None),
-                top_logprobs=model_settings.get('top_logprobs', None),
-                extra_body=model_settings.get('extra_body'),  # type: ignore
+                stop=model_settings.get("stop_sequences", None),
+                temperature=model_settings.get("temperature", None),
+                top_p=model_settings.get("top_p", None),
+                seed=model_settings.get("seed", None),
+                presence_penalty=model_settings.get("presence_penalty", None),
+                frequency_penalty=model_settings.get("frequency_penalty", None),
+                logit_bias=model_settings.get("logit_bias", None),  # type: ignore
+                logprobs=model_settings.get("logprobs", None),
+                top_logprobs=model_settings.get("top_logprobs", None),
+                extra_body=model_settings.get("extra_body"),  # type: ignore
             )
         except aiohttp.ClientResponseError as e:
             raise ModelHTTPError(
@@ -279,14 +290,24 @@ class HuggingFaceModel(Model):
         items: list[ModelResponsePart] = []
 
         if content is not None:
-            items.extend(split_content_into_text_and_thinking(content, self.profile.thinking_tags))
+            items.extend(
+                split_content_into_text_and_thinking(
+                    content, self.profile.thinking_tags
+                )
+            )
         if tool_calls is not None:
             for c in tool_calls:
-                items.append(ToolCallPart(c.function.name, c.function.arguments, tool_call_id=c.id))
+                items.append(
+                    ToolCallPart(
+                        c.function.name, c.function.arguments, tool_call_id=c.id
+                    )
+                )
 
         raw_finish_reason = choice.finish_reason
-        provider_details = {'finish_reason': raw_finish_reason}
-        finish_reason = _FINISH_REASON_MAP.get(cast(TextGenerationOutputFinishReason, raw_finish_reason), None)
+        provider_details = {"finish_reason": raw_finish_reason}
+        finish_reason = _FINISH_REASON_MAP.get(
+            cast(TextGenerationOutputFinishReason, raw_finish_reason), None
+        )
 
         return ModelResponse(
             parts=items,
@@ -300,14 +321,16 @@ class HuggingFaceModel(Model):
         )
 
     async def _process_streamed_response(
-        self, response: AsyncIterable[ChatCompletionStreamOutput], model_request_parameters: ModelRequestParameters
+        self,
+        response: AsyncIterable[ChatCompletionStreamOutput],
+        model_request_parameters: ModelRequestParameters,
     ) -> StreamedResponse:
         """Process a streamed response, and prepare a streaming response to return."""
         peekable_response = _utils.PeekableAsyncStream(response)
         first_chunk = await peekable_response.peek()
         if isinstance(first_chunk, _utils.Unset):
             raise UnexpectedModelBehavior(  # pragma: no cover
-                'Streamed response ended without content or tool calls'
+                "Streamed response ended without content or tool calls"
             )
 
         return HuggingFaceStreamedResponse(
@@ -319,8 +342,13 @@ class HuggingFaceModel(Model):
             _provider_name=self._provider.name,
         )
 
-    def _get_tools(self, model_request_parameters: ModelRequestParameters) -> list[ChatCompletionInputTool]:
-        return [self._map_tool_definition(r) for r in model_request_parameters.tool_defs.values()]
+    def _get_tools(
+        self, model_request_parameters: ModelRequestParameters
+    ) -> list[ChatCompletionInputTool]:
+        return [
+            self._map_tool_definition(r)
+            for r in model_request_parameters.tool_defs.values()
+        ]
 
     async def _map_messages(
         self, messages: list[ModelMessage]
@@ -340,53 +368,59 @@ class HuggingFaceModel(Model):
                         tool_calls.append(self._map_tool_call(item))
                     elif isinstance(item, ThinkingPart):
                         start_tag, end_tag = self.profile.thinking_tags
-                        texts.append('\n'.join([start_tag, item.content, end_tag]))
-                    elif isinstance(item, BuiltinToolCallPart | BuiltinToolReturnPart):  # pragma: no cover
+                        texts.append("\n".join([start_tag, item.content, end_tag]))
+                    elif isinstance(
+                        item, BuiltinToolCallPart | BuiltinToolReturnPart
+                    ):  # pragma: no cover
                         # This is currently never returned from huggingface
                         pass
                     else:
                         assert_never(item)
-                message_param = ChatCompletionInputMessage(role='assistant')  # type: ignore
+                message_param = ChatCompletionInputMessage(role="assistant")  # type: ignore
                 if texts:
                     # Note: model responses from this model should only have one text item, so the following
                     # shouldn't merge multiple texts into one unless you switch models between runs:
-                    message_param['content'] = '\n\n'.join(texts)
+                    message_param["content"] = "\n\n".join(texts)
                 if tool_calls:
-                    message_param['tool_calls'] = tool_calls
+                    message_param["tool_calls"] = tool_calls
                 hf_messages.append(message_param)
             else:
                 assert_never(message)
         if instructions := self._get_instructions(messages):
-            hf_messages.insert(0, ChatCompletionInputMessage(content=instructions, role='system'))  # type: ignore
+            hf_messages.insert(
+                0, ChatCompletionInputMessage(content=instructions, role="system")
+            )  # type: ignore
         return hf_messages
 
     @staticmethod
     def _map_tool_call(t: ToolCallPart) -> ChatCompletionInputToolCall:
         return ChatCompletionInputToolCall.parse_obj_as_instance(  # type: ignore
             {
-                'id': _guard_tool_call_id(t=t),
-                'type': 'function',
-                'function': {
-                    'name': t.tool_name,
-                    'arguments': t.args_as_json_str(),
+                "id": _guard_tool_call_id(t=t),
+                "type": "function",
+                "function": {
+                    "name": t.tool_name,
+                    "arguments": t.args_as_json_str(),
                 },
             }
         )
 
     @staticmethod
     def _map_tool_definition(f: ToolDefinition) -> ChatCompletionInputTool:
-        tool_param: ChatCompletionInputTool = ChatCompletionInputTool.parse_obj_as_instance(  # type: ignore
-            {
-                'type': 'function',
-                'function': {
-                    'name': f.name,
-                    'description': f.description,
-                    'parameters': f.parameters_json_schema,
-                },
-            }
+        tool_param: ChatCompletionInputTool = (
+            ChatCompletionInputTool.parse_obj_as_instance(  # type: ignore
+                {
+                    "type": "function",
+                    "function": {
+                        "name": f.name,
+                        "description": f.description,
+                        "parameters": f.parameters_json_schema,
+                    },
+                }
+            )
         )
         if f.strict is not None:
-            tool_param['function']['strict'] = f.strict
+            tool_param["function"]["strict"] = f.strict
         return tool_param
 
     async def _map_user_message(
@@ -394,28 +428,30 @@ class HuggingFaceModel(Model):
     ) -> AsyncIterable[ChatCompletionInputMessage | ChatCompletionOutputMessage]:
         for part in message.parts:
             if isinstance(part, SystemPromptPart):
-                yield ChatCompletionInputMessage.parse_obj_as_instance({'role': 'system', 'content': part.content})  # type: ignore
+                yield ChatCompletionInputMessage.parse_obj_as_instance(
+                    {"role": "system", "content": part.content}
+                )  # type: ignore
             elif isinstance(part, UserPromptPart):
                 yield await self._map_user_prompt(part)
             elif isinstance(part, ToolReturnPart):
                 yield ChatCompletionOutputMessage.parse_obj_as_instance(  # type: ignore
                     {
-                        'role': 'tool',
-                        'tool_call_id': _guard_tool_call_id(t=part),
-                        'content': part.model_response_str(),
+                        "role": "tool",
+                        "tool_call_id": _guard_tool_call_id(t=part),
+                        "content": part.model_response_str(),
                     }
                 )
             elif isinstance(part, RetryPromptPart):
                 if part.tool_name is None:
                     yield ChatCompletionInputMessage.parse_obj_as_instance(  # type: ignore
-                        {'role': 'user', 'content': part.model_response()}
+                        {"role": "user", "content": part.model_response()}
                     )
                 else:
                     yield ChatCompletionInputMessage.parse_obj_as_instance(  # type: ignore
                         {
-                            'role': 'tool',
-                            'tool_call_id': _guard_tool_call_id(t=part),
-                            'content': part.model_response(),
+                            "role": "tool",
+                            "tool_call_id": _guard_tool_call_id(t=part),
+                            "content": part.model_response(),
                         }
                     )
             else:
@@ -430,26 +466,44 @@ class HuggingFaceModel(Model):
             content = []
             for item in part.content:
                 if isinstance(item, str):
-                    content.append(ChatCompletionInputMessageChunk(type='text', text=item))  # type: ignore
+                    content.append(
+                        ChatCompletionInputMessageChunk(type="text", text=item)
+                    )  # type: ignore
                 elif isinstance(item, ImageUrl):
                     url = ChatCompletionInputURL(url=item.url)  # type: ignore
-                    content.append(ChatCompletionInputMessageChunk(type='image_url', image_url=url))  # type: ignore
+                    content.append(
+                        ChatCompletionInputMessageChunk(type="image_url", image_url=url)
+                    )  # type: ignore
                 elif isinstance(item, BinaryContent):
-                    base64_encoded = base64.b64encode(item.data).decode('utf-8')
+                    base64_encoded = base64.b64encode(item.data).decode("utf-8")
                     if item.is_image:
-                        url = ChatCompletionInputURL(url=f'data:{item.media_type};base64,{base64_encoded}')  # type: ignore
-                        content.append(ChatCompletionInputMessageChunk(type='image_url', image_url=url))  # type: ignore
+                        url = ChatCompletionInputURL(
+                            url=f"data:{item.media_type};base64,{base64_encoded}"
+                        )  # type: ignore
+                        content.append(
+                            ChatCompletionInputMessageChunk(
+                                type="image_url", image_url=url
+                            )
+                        )  # type: ignore
                     else:  # pragma: no cover
-                        raise RuntimeError(f'Unsupported binary content type: {item.media_type}')
+                        raise RuntimeError(
+                            f"Unsupported binary content type: {item.media_type}"
+                        )
                 elif isinstance(item, AudioUrl):
-                    raise NotImplementedError('AudioUrl is not supported for Hugging Face')
+                    raise NotImplementedError(
+                        "AudioUrl is not supported for Hugging Face"
+                    )
                 elif isinstance(item, DocumentUrl):
-                    raise NotImplementedError('DocumentUrl is not supported for Hugging Face')
+                    raise NotImplementedError(
+                        "DocumentUrl is not supported for Hugging Face"
+                    )
                 elif isinstance(item, VideoUrl):
-                    raise NotImplementedError('VideoUrl is not supported for Hugging Face')
+                    raise NotImplementedError(
+                        "VideoUrl is not supported for Hugging Face"
+                    )
                 else:
                     assert_never(item)
-        return ChatCompletionInputMessage(role='user', content=content)  # type: ignore
+        return ChatCompletionInputMessage(role="user", content=content)  # type: ignore
 
 
 @dataclass
@@ -475,7 +529,7 @@ class HuggingFaceStreamedResponse(StreamedResponse):
                 continue
 
             if raw_finish_reason := choice.finish_reason:
-                self.provider_details = {'finish_reason': raw_finish_reason}
+                self.provider_details = {"finish_reason": raw_finish_reason}
                 self.finish_reason = _FINISH_REASON_MAP.get(
                     cast(TextGenerationOutputFinishReason, raw_finish_reason), None
                 )
@@ -484,7 +538,7 @@ class HuggingFaceStreamedResponse(StreamedResponse):
             content = choice.delta.content
             if content is not None:
                 maybe_event = self._parts_manager.handle_text_delta(
-                    vendor_part_id='content',
+                    vendor_part_id="content",
                     content=content,
                     thinking_tags=self._model_profile.thinking_tags,
                     ignore_leading_whitespace=self._model_profile.ignore_streamed_leading_whitespace,
@@ -518,7 +572,9 @@ class HuggingFaceStreamedResponse(StreamedResponse):
         return self._timestamp
 
 
-def _map_usage(response: ChatCompletionOutput | ChatCompletionStreamOutput) -> usage.RequestUsage:
+def _map_usage(
+    response: ChatCompletionOutput | ChatCompletionStreamOutput,
+) -> usage.RequestUsage:
     response_usage = response.usage
     if response_usage is None:
         return usage.RequestUsage()

@@ -13,7 +13,7 @@ class TestXMLLoaderSimple(unittest.TestCase):
     def setUp(self):
         """Set up test environment with sample XML files."""
         self.temp_dir = tempfile.mkdtemp()
-        
+
         # Create a simple XML file
         self.simple_xml = Path(self.temp_dir) / "simple.xml"
         self.simple_xml.write_text("""<?xml version="1.0" encoding="UTF-8"?>
@@ -34,6 +34,7 @@ class TestXMLLoaderSimple(unittest.TestCase):
         """Clean up test environment."""
         if os.path.exists(self.temp_dir):
             import shutil
+
             shutil.rmtree(self.temp_dir)
 
     def test_xml_loader_initialization(self):
@@ -52,18 +53,18 @@ class TestXMLLoaderSimple(unittest.TestCase):
         """Test loading a simple XML file."""
         config = XMLLoaderConfig()
         loader = XMLLoader(config)
-        
+
         documents = loader.load(str(self.simple_xml))
-        
+
         self.assertGreater(len(documents), 0)
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
-        self.assertTrue(all(hasattr(doc, 'document_id') for doc in documents))
+        self.assertTrue(all(hasattr(doc, "document_id") for doc in documents))
 
     def test_empty_source_handling(self):
         """Test handling of empty or invalid sources."""
         config = XMLLoaderConfig()
         loader = XMLLoader(config)
-        
+
         result = loader.load([])
         self.assertEqual(len(result), 0)
 
@@ -71,10 +72,10 @@ class TestXMLLoaderSimple(unittest.TestCase):
         """Test batch loading multiple XML files."""
         config = XMLLoaderConfig()
         loader = XMLLoader(config)
-        
+
         files = [str(self.simple_xml)]
         documents = loader.batch(files)
-        
+
         self.assertGreater(len(documents), 0)
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
 
@@ -86,10 +87,10 @@ class TestXMLLoaderSimple(unittest.TestCase):
             content_synthesis_mode="smart_text",
             include_attributes=True,
             strip_namespaces=True,
-            recover_mode=False
+            recover_mode=False,
         )
         loader = XMLLoader(config)
-        
+
         self.assertEqual(loader.config.split_by_xpath, "//person")
         self.assertEqual(loader.config.content_xpath, "./name")
         self.assertEqual(loader.config.content_synthesis_mode, "smart_text")
@@ -109,13 +110,13 @@ class TestXMLLoaderSimple(unittest.TestCase):
         """Test XML metadata inclusion."""
         config = XMLLoaderConfig(include_metadata=True)
         loader = XMLLoader(config)
-        
+
         documents = loader.load(str(self.simple_xml))
-        
+
         self.assertGreater(len(documents), 0)
         for doc in documents:
             self.assertIsInstance(doc.metadata, dict)
-            self.assertIn('source', doc.metadata)
+            self.assertIn("source", doc.metadata)
 
 
 if __name__ == "__main__":

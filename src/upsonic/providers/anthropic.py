@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 try:
     from anthropic import AsyncAnthropic, AsyncAnthropicBedrock
+
     _ANTHROPIC_AVAILABLE = True
 except ImportError:
     AsyncAnthropic = None  # type: ignore
@@ -34,7 +35,7 @@ class AnthropicProvider(Provider[AsyncAnthropicClient]):
 
     @property
     def name(self) -> str:
-        return 'anthropic'
+        return "anthropic"
 
     @property
     def base_url(self) -> str:
@@ -48,11 +49,17 @@ class AnthropicProvider(Provider[AsyncAnthropicClient]):
         return anthropic_model_profile(model_name)
 
     @overload
-    def __init__(self, *, anthropic_client: AsyncAnthropicClient | None = None) -> None: ...
+    def __init__(
+        self, *, anthropic_client: AsyncAnthropicClient | None = None
+    ) -> None: ...
 
     @overload
     def __init__(
-        self, *, api_key: str | None = None, base_url: str | None = None, http_client: httpx.AsyncClient | None = None
+        self,
+        *,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        http_client: httpx.AsyncClient | None = None,
     ) -> None: ...
 
     def __init__(
@@ -75,25 +82,34 @@ class AnthropicProvider(Provider[AsyncAnthropicClient]):
         """
         if not _ANTHROPIC_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="anthropic",
-                install_command='pip install anthropic',
-                feature_name="Anthropic provider"
+                install_command="pip install anthropic",
+                feature_name="Anthropic provider",
             )
 
         if anthropic_client is not None:
-            assert http_client is None, 'Cannot provide both `anthropic_client` and `http_client`'
-            assert api_key is None, 'Cannot provide both `anthropic_client` and `api_key`'
+            assert http_client is None, (
+                "Cannot provide both `anthropic_client` and `http_client`"
+            )
+            assert api_key is None, (
+                "Cannot provide both `anthropic_client` and `api_key`"
+            )
             self._client = anthropic_client
         else:
-            api_key = api_key or os.getenv('ANTHROPIC_API_KEY')
+            api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
             if not api_key:
                 raise UserError(
-                    'Set the `ANTHROPIC_API_KEY` environment variable or pass it via `AnthropicProvider(api_key=...)`'
-                    'to use the Anthropic provider.'
+                    "Set the `ANTHROPIC_API_KEY` environment variable or pass it via `AnthropicProvider(api_key=...)`"
+                    "to use the Anthropic provider."
                 )
             if http_client is not None:
-                self._client = AsyncAnthropic(api_key=api_key, base_url=base_url, http_client=http_client)
+                self._client = AsyncAnthropic(
+                    api_key=api_key, base_url=base_url, http_client=http_client
+                )
             else:
-                http_client = cached_async_http_client(provider='anthropic')
-                self._client = AsyncAnthropic(api_key=api_key, base_url=base_url, http_client=http_client)
+                http_client = cached_async_http_client(provider="anthropic")
+                self._client = AsyncAnthropic(
+                    api_key=api_key, base_url=base_url, http_client=http_client
+                )

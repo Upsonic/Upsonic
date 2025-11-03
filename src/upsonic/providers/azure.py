@@ -13,17 +13,21 @@ from upsonic.profiles.deepseek import deepseek_model_profile
 from upsonic.profiles.grok import grok_model_profile
 from upsonic.profiles.meta import meta_model_profile
 from upsonic.profiles.mistral import mistral_model_profile
-from upsonic.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIModelProfile, openai_model_profile
+from upsonic.profiles.openai import (
+    OpenAIJsonSchemaTransformer,
+    OpenAIModelProfile,
+    openai_model_profile,
+)
 from upsonic.providers import Provider
 
 try:
     from openai import AsyncOpenAI, AsyncAzureOpenAI
+
     _OPENAI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     AsyncOpenAI = None
     AsyncAzureOpenAI = None
     _OPENAI_AVAILABLE = False
-
 
 
 class AzureProvider(Provider[AsyncOpenAI]):
@@ -34,7 +38,7 @@ class AzureProvider(Provider[AsyncOpenAI]):
 
     @property
     def name(self) -> str:
-        return 'azure'
+        return "azure"
 
     @property
     def base_url(self) -> str:
@@ -49,25 +53,27 @@ class AzureProvider(Provider[AsyncOpenAI]):
         model_name = model_name.lower()
 
         prefix_to_profile = {
-            'llama': meta_model_profile,
-            'meta-': meta_model_profile,
-            'deepseek': deepseek_model_profile,
-            'mistralai-': mistral_model_profile,
-            'mistral': mistral_model_profile,
-            'cohere-': cohere_model_profile,
-            'grok': grok_model_profile,
+            "llama": meta_model_profile,
+            "meta-": meta_model_profile,
+            "deepseek": deepseek_model_profile,
+            "mistralai-": mistral_model_profile,
+            "mistral": mistral_model_profile,
+            "cohere-": cohere_model_profile,
+            "grok": grok_model_profile,
         }
 
         for prefix, profile_func in prefix_to_profile.items():
             if model_name.startswith(prefix):
-                if prefix.endswith('-'):
+                if prefix.endswith("-"):
                     model_name = model_name[len(prefix) :]
 
                 profile = profile_func(model_name)
 
                 # As AzureProvider is always used with OpenAIChatModel, which used to unconditionally use OpenAIJsonSchemaTransformer,
                 # we need to maintain that behavior unless json_schema_transformer is set explicitly
-                return OpenAIModelProfile(json_schema_transformer=OpenAIJsonSchemaTransformer).update(profile)
+                return OpenAIModelProfile(
+                    json_schema_transformer=OpenAIJsonSchemaTransformer
+                ).update(profile)
 
         # OpenAI models are unprefixed
         return openai_model_profile(model_name)
@@ -110,37 +116,46 @@ class AzureProvider(Provider[AsyncOpenAI]):
         """
         if not _OPENAI_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="openai",
                 install_command='pip install "upsonic[openai]"',
-                feature_name="Azure provider"
+                feature_name="Azure provider",
             )
         if openai_client is not None:
-            assert azure_endpoint is None, 'Cannot provide both `openai_client` and `azure_endpoint`'
-            assert http_client is None, 'Cannot provide both `openai_client` and `http_client`'
-            assert api_key is None, 'Cannot provide both `openai_client` and `api_key`'
+            assert azure_endpoint is None, (
+                "Cannot provide both `openai_client` and `azure_endpoint`"
+            )
+            assert http_client is None, (
+                "Cannot provide both `openai_client` and `http_client`"
+            )
+            assert api_key is None, "Cannot provide both `openai_client` and `api_key`"
             self._base_url = str(openai_client.base_url)
             self._client = openai_client
         else:
-            azure_endpoint = azure_endpoint or os.getenv('AZURE_OPENAI_ENDPOINT')
-            api_version = api_version or os.getenv('OPENAI_API_VERSION') or os.getenv('AZURE_OPENAI_API_VERSION')
-            api_key = api_key or os.getenv('AZURE_OPENAI_API_KEY')
+            azure_endpoint = azure_endpoint or os.getenv("AZURE_OPENAI_ENDPOINT")
+            api_version = (
+                api_version
+                or os.getenv("OPENAI_API_VERSION")
+                or os.getenv("AZURE_OPENAI_API_VERSION")
+            )
+            api_key = api_key or os.getenv("AZURE_OPENAI_API_KEY")
             if not azure_endpoint:
                 raise UserError(
-                    'Must provide one of the `azure_endpoint` argument or the `AZURE_OPENAI_ENDPOINT` environment variable'
+                    "Must provide one of the `azure_endpoint` argument or the `AZURE_OPENAI_ENDPOINT` environment variable"
                 )
 
             if not api_key:  # pragma: no cover
                 raise UserError(
-                    'Must provide one of the `api_key` argument or the `AZURE_OPENAI_API_KEY` environment variable'
+                    "Must provide one of the `api_key` argument or the `AZURE_OPENAI_API_KEY` environment variable"
                 )
 
             if not api_version:  # pragma: no cover
                 raise UserError(
-                    'Must provide one of the `api_version` argument or the `OPENAI_API_VERSION` environment variable'
+                    "Must provide one of the `api_version` argument or the `OPENAI_API_VERSION` environment variable"
                 )
 
-            http_client = http_client or cached_async_http_client(provider='azure')
+            http_client = http_client or cached_async_http_client(provider="azure")
             self._client = AsyncAzureOpenAI(
                 azure_endpoint=azure_endpoint,
                 api_key=api_key,

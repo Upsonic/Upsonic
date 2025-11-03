@@ -6,7 +6,7 @@ from upsonic.profiles import InlineDefsJsonSchemaTransformer, ModelProfile
 
 def qwen_model_profile(model_name: str) -> ModelProfile | None:
     """Get the model profile for a Qwen model."""
-    if model_name.startswith('qwen-3-coder'):
+    if model_name.startswith("qwen-3-coder"):
         return OpenAIModelProfile(
             json_schema_transformer=InlineDefsJsonSchemaTransformer,
             openai_supports_tool_choice_required=False,

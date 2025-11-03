@@ -10,7 +10,10 @@ from upsonic.utils.package.exception import UserError
 
 from upsonic import usage
 from upsonic.utils.package.exception import ModelHTTPError
-from upsonic._utils import generate_tool_call_id as _generate_tool_call_id, guard_tool_call_id as _guard_tool_call_id
+from upsonic._utils import (
+    generate_tool_call_id as _generate_tool_call_id,
+    guard_tool_call_id as _guard_tool_call_id,
+)
 from upsonic.messages import (
     BuiltinToolCallPart,
     BuiltinToolReturnPart,
@@ -53,6 +56,7 @@ try:
     )
     from cohere.core.api_error import ApiError
     from cohere.v2.client import OMIT
+
     _COHERE_AVAILABLE = True
 except ImportError:
     # Optional imports for Cohere model
@@ -61,19 +65,19 @@ except ImportError:
     pass
 
 LatestCohereModelNames = Literal[
-    'c4ai-aya-expanse-32b',
-    'c4ai-aya-expanse-8b',
-    'command',
-    'command-light',
-    'command-light-nightly',
-    'command-nightly',
-    'command-r',
-    'command-r-03-2024',
-    'command-r-08-2024',
-    'command-r-plus',
-    'command-r-plus-04-2024',
-    'command-r-plus-08-2024',
-    'command-r7b-12-2024',
+    "c4ai-aya-expanse-32b",
+    "c4ai-aya-expanse-8b",
+    "command",
+    "command-light",
+    "command-light-nightly",
+    "command-nightly",
+    "command-r",
+    "command-r-03-2024",
+    "command-r-08-2024",
+    "command-r-plus",
+    "command-r-plus-04-2024",
+    "command-r-plus-08-2024",
+    "command-r7b-12-2024",
 ]
 """Latest Cohere models."""
 
@@ -86,11 +90,11 @@ See [Cohere's docs](https://docs.cohere.com/v2/docs/models) for a list of all av
 """
 
 _FINISH_REASON_MAP: dict[ChatFinishReason, FinishReason] = {
-    'COMPLETE': 'stop',
-    'STOP_SEQUENCE': 'stop',
-    'MAX_TOKENS': 'length',
-    'TOOL_CALL': 'tool_call',
-    'ERROR': 'error',
+    "COMPLETE": "stop",
+    "STOP_SEQUENCE": "stop",
+    "MAX_TOKENS": "length",
+    "TOOL_CALL": "tool_call",
+    "ERROR": "error",
 }
 
 
@@ -121,7 +125,7 @@ class CohereModel(Model):
         self,
         model_name: CohereModelName,
         *,
-        provider: Literal['cohere'] | Provider[AsyncClientV2] = 'cohere',
+        provider: Literal["cohere"] | Provider[AsyncClientV2] = "cohere",
         profile: ModelProfileSpec | None = None,
         settings: ModelSettings | None = None,
     ):
@@ -138,10 +142,11 @@ class CohereModel(Model):
         """
         if not _COHERE_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="cohere",
-                install_command='pip install cohere',
-                feature_name="Cohere model"
+                install_command="pip install cohere",
+                feature_name="Cohere model",
             )
 
         self._model_name = model_name
@@ -175,7 +180,11 @@ class CohereModel(Model):
         model_request_parameters: ModelRequestParameters,
     ) -> ModelResponse:
         check_allow_model_requests()
-        response = await self._chat(messages, cast(CohereModelSettings, model_settings or {}), model_request_parameters)
+        response = await self._chat(
+            messages,
+            cast(CohereModelSettings, model_settings or {}),
+            model_request_parameters,
+        )
         model_response = self._process_response(response)
         return model_response
 
@@ -188,7 +197,7 @@ class CohereModel(Model):
         tools = self._get_tools(model_request_parameters)
 
         if model_request_parameters.builtin_tools:
-            raise UserError('Cohere does not support built-in tools')
+            raise UserError("Cohere does not support built-in tools")
 
         cohere_messages = self._map_messages(messages)
         try:
@@ -196,17 +205,19 @@ class CohereModel(Model):
                 model=self._model_name,
                 messages=cohere_messages,
                 tools=tools or OMIT,
-                max_tokens=model_settings.get('max_tokens', OMIT),
-                stop_sequences=model_settings.get('stop_sequences', OMIT),
-                temperature=model_settings.get('temperature', OMIT),
-                p=model_settings.get('top_p', OMIT),
-                seed=model_settings.get('seed', OMIT),
-                presence_penalty=model_settings.get('presence_penalty', OMIT),
-                frequency_penalty=model_settings.get('frequency_penalty', OMIT),
+                max_tokens=model_settings.get("max_tokens", OMIT),
+                stop_sequences=model_settings.get("stop_sequences", OMIT),
+                temperature=model_settings.get("temperature", OMIT),
+                p=model_settings.get("top_p", OMIT),
+                seed=model_settings.get("seed", OMIT),
+                presence_penalty=model_settings.get("presence_penalty", OMIT),
+                frequency_penalty=model_settings.get("frequency_penalty", OMIT),
             )
         except ApiError as e:
             if (status_code := e.status_code) and status_code >= 400:
-                raise ModelHTTPError(status_code=status_code, model_name=self.model_name, body=e.body) from e
+                raise ModelHTTPError(
+                    status_code=status_code, model_name=self.model_name, body=e.body
+                ) from e
             raise  # pragma: lax no cover
 
     def _process_response(self, response: V2ChatResponse) -> ModelResponse:
@@ -214,12 +225,14 @@ class CohereModel(Model):
         parts: list[ModelResponsePart] = []
         if response.message.content is not None:
             for content in response.message.content:
-                if content.type == 'text':
+                if content.type == "text":
                     parts.append(TextPart(content=content.text))
-                elif content.type == 'thinking':  # pragma: no branch
+                elif content.type == "thinking":  # pragma: no branch
                     parts.append(ThinkingPart(content=content.thinking))
         for c in response.message.tool_calls or []:
-            if c.function and c.function.name and c.function.arguments:  # pragma: no branch
+            if (
+                c.function and c.function.name and c.function.arguments
+            ):  # pragma: no branch
                 parts.append(
                     ToolCallPart(
                         tool_name=c.function.name,
@@ -229,7 +242,7 @@ class CohereModel(Model):
                 )
 
         raw_finish_reason = response.finish_reason
-        provider_details = {'finish_reason': raw_finish_reason}
+        provider_details = {"finish_reason": raw_finish_reason}
         finish_reason = _FINISH_REASON_MAP.get(raw_finish_reason)
 
         return ModelResponse(
@@ -258,19 +271,27 @@ class CohereModel(Model):
                         thinking.append(item.content)
                     elif isinstance(item, ToolCallPart):
                         tool_calls.append(self._map_tool_call(item))
-                    elif isinstance(item, BuiltinToolCallPart | BuiltinToolReturnPart):  # pragma: no cover
+                    elif isinstance(
+                        item, BuiltinToolCallPart | BuiltinToolReturnPart
+                    ):  # pragma: no cover
                         # This is currently never returned from cohere
                         pass
                     else:
                         assert_never(item)
 
-                message_param = AssistantChatMessageV2(role='assistant')
+                message_param = AssistantChatMessageV2(role="assistant")
                 if texts or thinking:
                     contents: list[AssistantMessageV2ContentItem] = []
                     if thinking:
-                        contents.append(ThinkingAssistantMessageV2ContentItem(thinking='\n\n'.join(thinking)))
+                        contents.append(
+                            ThinkingAssistantMessageV2ContentItem(
+                                thinking="\n\n".join(thinking)
+                            )
+                        )
                     if texts:  # pragma: no branch
-                        contents.append(TextAssistantMessageV2ContentItem(text='\n\n'.join(texts)))
+                        contents.append(
+                            TextAssistantMessageV2ContentItem(text="\n\n".join(texts))
+                        )
                     message_param.content = contents
                 if tool_calls:
                     message_param.tool_calls = tool_calls
@@ -278,17 +299,24 @@ class CohereModel(Model):
             else:
                 assert_never(message)
         if instructions := self._get_instructions(messages):
-            cohere_messages.insert(0, SystemChatMessageV2(role='system', content=instructions))
+            cohere_messages.insert(
+                0, SystemChatMessageV2(role="system", content=instructions)
+            )
         return cohere_messages
 
-    def _get_tools(self, model_request_parameters: ModelRequestParameters) -> list[ToolV2]:
-        return [self._map_tool_definition(r) for r in model_request_parameters.tool_defs.values()]
+    def _get_tools(
+        self, model_request_parameters: ModelRequestParameters
+    ) -> list[ToolV2]:
+        return [
+            self._map_tool_definition(r)
+            for r in model_request_parameters.tool_defs.values()
+        ]
 
     @staticmethod
     def _map_tool_call(t: ToolCallPart) -> ToolCallV2:
         return ToolCallV2(
             id=_guard_tool_call_id(t=t),
-            type='function',
+            type="function",
             function=ToolCallV2Function(
                 name=t.tool_name,
                 arguments=t.args_as_json_str(),
@@ -298,7 +326,7 @@ class CohereModel(Model):
     @staticmethod
     def _map_tool_definition(f: ToolDefinition) -> ToolV2:
         return ToolV2(
-            type='function',
+            type="function",
             function=ToolV2Function(
                 name=f.name,
                 description=f.description,
@@ -310,24 +338,28 @@ class CohereModel(Model):
     def _map_user_message(cls, message: ModelRequest) -> Iterable[ChatMessageV2]:
         for part in message.parts:
             if isinstance(part, SystemPromptPart):
-                yield SystemChatMessageV2(role='system', content=part.content)
+                yield SystemChatMessageV2(role="system", content=part.content)
             elif isinstance(part, UserPromptPart):
                 if isinstance(part.content, str):
-                    yield UserChatMessageV2(role='user', content=part.content)
+                    yield UserChatMessageV2(role="user", content=part.content)
                 else:
-                    raise RuntimeError('Cohere does not yet support multi-modal inputs.')
+                    raise RuntimeError(
+                        "Cohere does not yet support multi-modal inputs."
+                    )
             elif isinstance(part, ToolReturnPart):
                 yield ToolChatMessageV2(
-                    role='tool',
+                    role="tool",
                     tool_call_id=_guard_tool_call_id(t=part),
                     content=part.model_response_str(),
                 )
             elif isinstance(part, RetryPromptPart):
                 if part.tool_name is None:
-                    yield UserChatMessageV2(role='user', content=part.model_response())  # pragma: no cover
+                    yield UserChatMessageV2(
+                        role="user", content=part.model_response()
+                    )  # pragma: no cover
                 else:
                     yield ToolChatMessageV2(
-                        role='tool',
+                        role="tool",
                         tool_call_id=_guard_tool_call_id(t=part),
                         content=part.model_response(),
                     )
@@ -343,16 +375,20 @@ def _map_usage(response: V2ChatResponse) -> usage.RequestUsage:
         details: dict[str, int] = {}
         if u.billed_units is not None:
             if u.billed_units.input_tokens:  # pragma: no branch
-                details['input_tokens'] = int(u.billed_units.input_tokens)
+                details["input_tokens"] = int(u.billed_units.input_tokens)
             if u.billed_units.output_tokens:
-                details['output_tokens'] = int(u.billed_units.output_tokens)
+                details["output_tokens"] = int(u.billed_units.output_tokens)
             if u.billed_units.search_units:  # pragma: no cover
-                details['search_units'] = int(u.billed_units.search_units)
+                details["search_units"] = int(u.billed_units.search_units)
             if u.billed_units.classifications:  # pragma: no cover
-                details['classifications'] = int(u.billed_units.classifications)
+                details["classifications"] = int(u.billed_units.classifications)
 
-        request_tokens = int(u.tokens.input_tokens) if u.tokens and u.tokens.input_tokens else 0
-        response_tokens = int(u.tokens.output_tokens) if u.tokens and u.tokens.output_tokens else 0
+        request_tokens = (
+            int(u.tokens.input_tokens) if u.tokens and u.tokens.input_tokens else 0
+        )
+        response_tokens = (
+            int(u.tokens.output_tokens) if u.tokens and u.tokens.output_tokens else 0
+        )
         return usage.RequestUsage(
             input_tokens=request_tokens,
             output_tokens=response_tokens,

@@ -19,5 +19,5 @@ class GroqModelProfile(ModelProfile):
 def groq_model_profile(model_name: str) -> ModelProfile:
     """Get the model profile for a Groq model."""
     return GroqModelProfile(
-        groq_always_has_web_search_builtin_tool=model_name.startswith('compound-'),
+        groq_always_has_web_search_builtin_tool=model_name.startswith("compound-"),
     )

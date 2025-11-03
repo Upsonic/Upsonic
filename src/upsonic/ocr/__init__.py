@@ -29,6 +29,7 @@ try:
         PPChatOCRv4,
         PaddleOCRVL,
     )
+
     _PADDLEOCR_AVAILABLE = True
 except ImportError:
     _PADDLEOCR_AVAILABLE = False
@@ -50,15 +51,16 @@ __all__ = [
 ]
 
 if _PADDLEOCR_AVAILABLE:
-    __all__.extend([
-        "PaddleOCRConfig",
-        "PaddleOCRProvider",
-        "PPStructureV3Provider",
-        "PPChatOCRv4Provider",
-        "PaddleOCRVLProvider",
-        "PaddleOCR",
-        "PPStructureV3",
-        "PPChatOCRv4",
-        "PaddleOCRVL",
-    ])
-
+    __all__.extend(
+        [
+            "PaddleOCRConfig",
+            "PaddleOCRProvider",
+            "PPStructureV3Provider",
+            "PPChatOCRv4Provider",
+            "PaddleOCRVLProvider",
+            "PaddleOCR",
+            "PPStructureV3",
+            "PPChatOCRv4",
+            "PaddleOCRVL",
+        ]
+    )

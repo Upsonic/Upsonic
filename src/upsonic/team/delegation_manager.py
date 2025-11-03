@@ -5,8 +5,9 @@ from pydantic import BaseModel
 if TYPE_CHECKING:
     from upsonic.agent.agent import Agent
     from upsonic.storage.memory.memory import Memory
-    
+
 from upsonic.tasks.tasks import Task
+
 
 class DelegationManager:
     """
@@ -15,6 +16,7 @@ class DelegationManager:
     This class is responsible for generating the 'delegate_task' tool and handling
     the stateful execution of sub-tasks within a shared memory context.
     """
+
     def __init__(self, members: List[Agent], tool_mapping: Dict[str, Callable]):
         """
         Initializes the DelegationManager.
@@ -30,25 +32,26 @@ class DelegationManager:
     def get_delegation_tool(self, session_memory: Memory) -> Callable:
         """
         Dynamically generates the 'delegate_task' tool for the Team Leader.
-        
+
         This tool allows the leader to delegate a specific task to a member agent.
         It ensures that the conversational context is maintained by temporarily
         assigning a shared memory object to the member agent for the duration
         of the sub-task.
-        
+
         Args:
             session_memory: The shared Memory object for the coordination session.
 
         Returns:
             An asynchronous callable function that serves as the delegation tool.
         """
+
         async def delegate_task(
-            member_id: str, 
-            description: str, 
-            tools: Optional[List[str]] = None, 
-            context: Any = None, 
+            member_id: str,
+            description: str,
+            tools: Optional[List[str]] = None,
+            context: Any = None,
             attachments: Optional[List[str]] = None,
-            expected_output: Union[Type[BaseModel], type[str], None] = str
+            expected_output: Union[Type[BaseModel], type[str], None] = str,
         ) -> str:
             """
             Delegates a task to a specific team member using detailed parameters.
@@ -69,10 +72,10 @@ class DelegationManager:
                 if agent.get_agent_id() == member_id:
                     member_agent = agent
                     break
-            
+
             if not member_agent:
                 return f"Error: Team member with ID '{member_id}' not found. Please use a valid member ID."
-            
+
             sub_task_tools = []
             if tools:
                 for tool_name in tools:
@@ -84,7 +87,7 @@ class DelegationManager:
                 tools=sub_task_tools,
                 context=context,
                 attachments=attachments,
-                response_format=expected_output
+                response_format=expected_output,
             )
             original_memory = member_agent.memory
             try:
@@ -97,12 +100,13 @@ class DelegationManager:
                 member_agent.memory = original_memory
 
         return delegate_task
-    
+
     def get_routing_tool(self) -> Callable:
         """
         Generates the 'route_request_to_member' tool for the 'route' mode.
         This tool is simpler; its only job is to select an agent.
         """
+
         async def route_request_to_member(member_id: str) -> str:
             """
             Selects the single best agent to handle the user's entire request and ends the routing process.
@@ -118,9 +122,10 @@ class DelegationManager:
                 if agent.get_agent_id() == member_id:
                     chosen_agent = agent
                     break
-            
+
             if not chosen_agent:
                 return f"Error: Could not route to member with ID '{member_id}'. The ID is invalid. Please choose a valid ID from your team roster."
             self.routed_agent = chosen_agent
             return f"Request successfully routed to member '{member_id}'. Handoff complete."
+
         return route_request_to_member

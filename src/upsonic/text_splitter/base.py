@@ -11,6 +11,7 @@ from upsonic.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+
 class BaseChunkingConfig(BaseModel):
     """
     The base configuration for all chunking strategies.
@@ -19,6 +20,7 @@ class BaseChunkingConfig(BaseModel):
     applicable to most chunking methods. Specific chunkers can extend this
     class to add their own unique configuration options.
     """
+
     chunk_size: int = Field(
         default=1024,
         description="The target size of each chunk.",
@@ -54,8 +56,6 @@ class BaseChunkingConfig(BaseModel):
 ConfigType = TypeVar("ConfigType", bound=BaseChunkingConfig)
 
 
-
-
 class BaseChunker(ABC, Generic[ConfigType]):
     """
     Abstract Base Class for all chunking strategies.
@@ -79,7 +79,9 @@ class BaseChunker(ABC, Generic[ConfigType]):
                     If None, a default configuration will be instantiated.
         """
 
-        self.config: ConfigType = config if config is not None else self._get_default_config()
+        self.config: ConfigType = (
+            config if config is not None else self._get_default_config()
+        )
 
         if self.config.chunk_overlap >= self.config.chunk_size:
             logger.warning(
@@ -89,13 +91,13 @@ class BaseChunker(ABC, Generic[ConfigType]):
     def _get_effective_min_chunk_size(self) -> int:
         """
         Get the effective minimum chunk size, deriving from chunk_size if not explicitly set.
-        
+
         Returns:
             The minimum chunk size to use for chunking decisions.
         """
         if self.config.min_chunk_size is not None:
             return self.config.min_chunk_size
-        
+
         return max(int(self.config.chunk_size * 0.8), 50)
 
     @classmethod
@@ -107,8 +109,6 @@ class BaseChunker(ABC, Generic[ConfigType]):
 
         config_class = cls.__orig_bases__[0].__args__[0]
         return config_class()
-
-
 
     def chunk(self, documents: List[Document]) -> List[Chunk]:
         """
@@ -127,12 +127,14 @@ class BaseChunker(ABC, Generic[ConfigType]):
         for doc in documents:
             try:
                 if not doc.content or not doc.content.strip():
-                    logger.info(f"Document {doc.document_id} has empty content, skipping chunking")
+                    logger.info(
+                        f"Document {doc.document_id} has empty content, skipping chunking"
+                    )
                     continue
-                
+
                 chunks = self._chunk_document(doc)
                 all_chunks.extend(chunks)
-                
+
             except Exception as e:
                 logger.error(f"Error chunking document {doc.document_id}: {e}")
                 error_chunk = self._create_chunk(
@@ -140,10 +142,10 @@ class BaseChunker(ABC, Generic[ConfigType]):
                     text_content=f"[CHUNKING ERROR: {str(e)}]",
                     start_index=0,
                     end_index=len(doc.content),
-                    extra_metadata={"chunking_error": True, "error_message": str(e)}
+                    extra_metadata={"chunking_error": True, "error_message": str(e)},
                 )
                 all_chunks.append(error_chunk)
-        
+
         return all_chunks
 
     async def achunk(self, documents: List[Document]) -> List[Chunk]:
@@ -163,12 +165,14 @@ class BaseChunker(ABC, Generic[ConfigType]):
         for doc in documents:
             try:
                 if not doc.content or not doc.content.strip():
-                    logger.info(f"Document {doc.document_id} has empty content, skipping chunking")
+                    logger.info(
+                        f"Document {doc.document_id} has empty content, skipping chunking"
+                    )
                     continue
-                
+
                 chunks = await self._achunk_document(doc)
                 all_chunks.extend(chunks)
-                
+
             except Exception as e:
                 logger.error(f"Error chunking document {doc.document_id}: {e}")
                 error_chunk = self._create_chunk(
@@ -176,10 +180,10 @@ class BaseChunker(ABC, Generic[ConfigType]):
                     text_content=f"[CHUNKING ERROR: {str(e)}]",
                     start_index=0,
                     end_index=len(doc.content),
-                    extra_metadata={"chunking_error": True, "error_message": str(e)}
+                    extra_metadata={"chunking_error": True, "error_message": str(e)},
                 )
                 all_chunks.append(error_chunk)
-        
+
         return all_chunks
 
     def batch(self, documents: List[Document], **kwargs: Any) -> List[Chunk]:
@@ -212,7 +216,6 @@ class BaseChunker(ABC, Generic[ConfigType]):
 
         return [chunk for sublist in list_of_chunk_lists for chunk in sublist]
 
-
     @abstractmethod
     def _chunk_document(self, document: Document) -> List[Chunk]:
         """
@@ -225,7 +228,9 @@ class BaseChunker(ABC, Generic[ConfigType]):
         Returns:
             A list of `Chunk` objects derived from the document.
         """
-        raise NotImplementedError("Subclasses must implement the _chunk_document method.")
+        raise NotImplementedError(
+            "Subclasses must implement the _chunk_document method."
+        )
 
     async def _achunk_document(self, document: Document) -> List[Chunk]:
         """
@@ -244,7 +249,6 @@ class BaseChunker(ABC, Generic[ConfigType]):
         """
 
         return self._chunk_document(document)
-
 
     def _create_chunk(
         self,
@@ -270,13 +274,15 @@ class BaseChunker(ABC, Generic[ConfigType]):
         Returns:
             A fully-formed `Chunk` object.
         """
-        final_text = text_content.strip() if self.config.strip_whitespace else text_content
-        
+        final_text = (
+            text_content.strip() if self.config.strip_whitespace else text_content
+        )
+
         chunk_metadata = copy.deepcopy(parent_document.metadata)
-        
+
         if extra_metadata:
             chunk_metadata.update(extra_metadata)
-            
+
         return Chunk(
             text_content=final_text,
             metadata=chunk_metadata,

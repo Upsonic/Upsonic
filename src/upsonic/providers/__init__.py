@@ -10,7 +10,7 @@ from typing import Any, Generic, TypeVar
 
 from upsonic.profiles import ModelProfile
 
-InterfaceClient = TypeVar('InterfaceClient')
+InterfaceClient = TypeVar("InterfaceClient")
 
 
 class Provider(ABC, Generic[InterfaceClient]):
@@ -48,83 +48,83 @@ class Provider(ABC, Generic[InterfaceClient]):
         return None  # pragma: no cover
 
     def __repr__(self) -> str:
-        return f'{self.__class__.__name__}(name={self.name}, base_url={self.base_url})'  # pragma: lax no cover
+        return f"{self.__class__.__name__}(name={self.name}, base_url={self.base_url})"  # pragma: lax no cover
 
 
 def infer_provider_class(provider: str) -> type[Provider[Any]]:  # noqa: C901
     """Infers the provider class from the provider name."""
-    if provider == 'openai':
+    if provider == "openai":
         from .openai import OpenAIProvider
 
         return OpenAIProvider
-    elif provider == 'deepseek':
+    elif provider == "deepseek":
         from .deepseek import DeepSeekProvider
 
         return DeepSeekProvider
-    elif provider == 'openrouter':
+    elif provider == "openrouter":
         from .openrouter import OpenRouterProvider
 
         return OpenRouterProvider
 
-    elif provider == 'azure':
+    elif provider == "azure":
         from .azure import AzureProvider
 
         return AzureProvider
 
-    elif provider == 'google':
+    elif provider == "google":
         from .google import GoogleProvider
 
         return GoogleProvider
 
-    elif provider == 'bedrock':
+    elif provider == "bedrock":
         from .bedrock import BedrockProvider
 
         return BedrockProvider
-    elif provider == 'groq':
+    elif provider == "groq":
         from .groq import GroqProvider
 
         return GroqProvider
-    elif provider == 'anthropic':
+    elif provider == "anthropic":
         from .anthropic import AnthropicProvider
 
         return AnthropicProvider
-    elif provider == 'mistral':
+    elif provider == "mistral":
         from .mistral import MistralProvider
 
         return MistralProvider
 
-    elif provider == 'cohere':
+    elif provider == "cohere":
         from .cohere import CohereProvider
 
         return CohereProvider
-    elif provider == 'grok':
+    elif provider == "grok":
         from .grok import GrokProvider
 
         return GrokProvider
 
-    elif provider == 'fireworks':
+    elif provider == "fireworks":
         from .fireworks import FireworksProvider
 
         return FireworksProvider
 
-    elif provider == 'huggingface':
+    elif provider == "huggingface":
         from .huggingface import HuggingFaceProvider
 
         return HuggingFaceProvider
-    elif provider == 'ollama':
+    elif provider == "ollama":
         from .ollama import OllamaProvider
 
         return OllamaProvider
-    elif provider == 'github':
+    elif provider == "github":
         from .github import GitHubProvider
 
         return GitHubProvider
-    elif provider == 'litellm':
+    elif provider == "litellm":
         from .litellm import LiteLLMProvider
 
         return LiteLLMProvider
     else:  # pragma: no cover
-        raise ValueError(f'Unknown provider: {provider}')
+        raise ValueError(f"Unknown provider: {provider}")
 
 
 def infer_provider(provider: str) -> Provider[Any]:

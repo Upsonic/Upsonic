@@ -1,7 +1,6 @@
 import unittest
 import tempfile
 import os
-import uuid
 from pathlib import Path
 from upsonic.loaders.yaml import YAMLLoader
 from upsonic.loaders.config import YAMLLoaderConfig
@@ -14,7 +13,7 @@ class TestYAMLLoaderSimple(unittest.TestCase):
     def setUp(self):
         """Set up test environment with sample YAML files."""
         self.temp_dir = tempfile.mkdtemp()
-        
+
         # Create a simple YAML file
         self.simple_yaml = Path(self.temp_dir) / "simple.yaml"
         self.simple_yaml.write_text("""
@@ -63,6 +62,7 @@ company:
         """Clean up test environment."""
         if os.path.exists(self.temp_dir):
             import shutil
+
             shutil.rmtree(self.temp_dir)
 
     def test_yaml_loader_initialization(self):
@@ -71,11 +71,10 @@ company:
         config = YAMLLoaderConfig()
         loader = YAMLLoader(config)
         self.assertIsNotNone(loader)
-        
+
         # Test with custom config
         custom_config = YAMLLoaderConfig(
-            split_by_jq_query=".employees[]",
-            content_synthesis_mode="json"
+            split_by_jq_query=".employees[]", content_synthesis_mode="json"
         )
         loader_custom = YAMLLoader(custom_config)
         self.assertEqual(loader_custom.config.split_by_jq_query, ".employees[]")
@@ -91,34 +90,32 @@ company:
         """Test loading a simple YAML file."""
         config = YAMLLoaderConfig()
         loader = YAMLLoader(config)
-        
+
         documents = loader.load(str(self.simple_yaml))
-        
+
         self.assertGreater(len(documents), 0)
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
-        self.assertTrue(all(hasattr(doc, 'document_id') for doc in documents))
+        self.assertTrue(all(hasattr(doc, "document_id") for doc in documents))
         self.assertTrue(all(doc.content.strip() for doc in documents))
 
     def test_multi_document_yaml_loading(self):
         """Test loading multi-document YAML files."""
         config = YAMLLoaderConfig()
         loader = YAMLLoader(config)
-        
+
         documents = loader.load(str(self.multi_yaml))
-        
+
         self.assertGreater(len(documents), 0)
         # Should handle multiple YAML documents
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
 
     def test_jq_query_extraction(self):
         """Test JQ query-based content extraction."""
-        config = YAMLLoaderConfig(
-            split_by_jq_query=".company.employees[]"
-        )
+        config = YAMLLoaderConfig(split_by_jq_query=".company.employees[]")
         loader = YAMLLoader(config)
-        
+
         documents = loader.load(str(self.nested_yaml))
-        
+
         self.assertGreater(len(documents), 0)
         # Each employee should become a separate document
         for doc in documents:
@@ -131,12 +128,12 @@ company:
         config_json = YAMLLoaderConfig(content_synthesis_mode="json")
         loader_json = YAMLLoader(config_json)
         docs_json = loader_json.load(str(self.simple_yaml))
-        
+
         # Test YAML serialization
         config_yaml = YAMLLoaderConfig(content_synthesis_mode="canonical_yaml")
         loader_yaml = YAMLLoader(config_yaml)
         docs_yaml = loader_yaml.load(str(self.simple_yaml))
-        
+
         self.assertGreater(len(docs_json), 0)
         self.assertGreater(len(docs_yaml), 0)
 
@@ -144,11 +141,11 @@ company:
         """Test handling of empty or invalid sources."""
         config = YAMLLoaderConfig()
         loader = YAMLLoader(config)
-        
+
         # Test with empty list
         result = loader.load([])
         self.assertEqual(len(result), 0)
-        
+
         # Test with non-existent file
         result = loader.load("/path/that/does/not/exist.yaml")
         self.assertEqual(len(result), 0)
@@ -157,37 +154,35 @@ company:
         """Test batch loading multiple YAML files."""
         config = YAMLLoaderConfig()
         loader = YAMLLoader(config)
-        
+
         files = [str(self.simple_yaml), str(self.multi_yaml)]
         documents = loader.batch(files)
-        
+
         self.assertGreater(len(documents), 0)
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
 
     def test_metadata_extraction(self):
         """Test metadata extraction and inclusion."""
-        config = YAMLLoaderConfig(
-            include_metadata=True
-        )
+        config = YAMLLoaderConfig(include_metadata=True)
         loader = YAMLLoader(config)
-        
+
         documents = loader.load(str(self.simple_yaml))
-        
+
         self.assertGreater(len(documents), 0)
         for doc in documents:
             self.assertIsInstance(doc.metadata, dict)
             # Should include file metadata
-            self.assertIn('source', doc.metadata)
+            self.assertIn("source", doc.metadata)
 
     def test_error_handling(self):
         """Test error handling for invalid YAML."""
         # Create invalid YAML file
         invalid_yaml = Path(self.temp_dir) / "invalid.yaml"
         invalid_yaml.write_text("invalid: yaml: content: [unclosed")
-        
+
         config = YAMLLoaderConfig(error_handling="warn")
         loader = YAMLLoader(config)
-        
+
         # Should handle error gracefully
         documents = loader.load(str(invalid_yaml))
         self.assertEqual(len(documents), 0)

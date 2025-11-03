@@ -11,7 +11,7 @@ from typing_extensions import deprecated, overload
 from upsonic import _utils
 from upsonic.utils.package.exception import UsageLimitExceeded
 
-__all__ = 'RequestUsage', 'RunUsage', 'Usage', 'UsageLimits'
+__all__ = "RequestUsage", "RunUsage", "Usage", "UsageLimits"
 
 
 @dataclass(repr=False, kw_only=True)
@@ -19,7 +19,7 @@ class UsageBase:
     input_tokens: Annotated[
         int,
         # `request_tokens` is deprecated, but we still want to support deserializing model responses stored in a DB before the name was changed
-        Field(validation_alias=AliasChoices('input_tokens', 'request_tokens')),
+        Field(validation_alias=AliasChoices("input_tokens", "request_tokens")),
     ] = 0
     """Number of input/prompt tokens."""
 
@@ -31,7 +31,7 @@ class UsageBase:
     output_tokens: Annotated[
         int,
         # `response_tokens` is deprecated, but we still want to support deserializing model responses stored in a DB before the name was changed
-        Field(validation_alias=AliasChoices('output_tokens', 'response_tokens')),
+        Field(validation_alias=AliasChoices("output_tokens", "response_tokens")),
     ] = 0
     """Number of output/completion tokens."""
 
@@ -50,12 +50,12 @@ class UsageBase:
     """Any extra details returned by the model."""
 
     @property
-    @deprecated('`request_tokens` is deprecated, use `input_tokens` instead')
+    @deprecated("`request_tokens` is deprecated, use `input_tokens` instead")
     def request_tokens(self) -> int:
         return self.input_tokens
 
     @property
-    @deprecated('`response_tokens` is deprecated, use `output_tokens` instead')
+    @deprecated("`response_tokens` is deprecated, use `output_tokens` instead")
     def response_tokens(self) -> int:
         return self.output_tokens
 
@@ -68,12 +68,12 @@ class UsageBase:
         """Get the token usage values as OpenTelemetry attributes."""
         result: dict[str, int] = {}
         if self.input_tokens:
-            result['gen_ai.usage.input_tokens'] = self.input_tokens
+            result["gen_ai.usage.input_tokens"] = self.input_tokens
         if self.output_tokens:
-            result['gen_ai.usage.output_tokens'] = self.output_tokens
+            result["gen_ai.usage.output_tokens"] = self.output_tokens
         details = self.details
         if details:
-            prefix = 'gen_ai.usage.details.'
+            prefix = "gen_ai.usage.details."
             for key, value in details.items():
                 # Skipping check for value since spec implies all detail values are relevant
                 if value:
@@ -81,8 +81,12 @@ class UsageBase:
         return result
 
     def __repr__(self):
-        kv_pairs = (f'{f.name}={value!r}' for f in fields(self) if (value := getattr(self, f.name)))
-        return f'{self.__class__.__qualname__}({", ".join(kv_pairs)})'
+        kv_pairs = (
+            f"{f.name}={value!r}"
+            for f in fields(self)
+            if (value := getattr(self, f.name))
+        )
+        return f"{self.__class__.__qualname__}({', '.join(kv_pairs)})"
 
     def has_values(self) -> bool:
         """Whether any values are set and non-zero."""
@@ -176,7 +180,9 @@ class RunUsage(UsageBase):
         return new_usage
 
 
-def _incr_usage_tokens(slf: RunUsage | RequestUsage, incr_usage: RunUsage | RequestUsage) -> None:
+def _incr_usage_tokens(
+    slf: RunUsage | RequestUsage, incr_usage: RunUsage | RequestUsage
+) -> None:
     """Increment the usage in place.
 
     Args:
@@ -195,7 +201,7 @@ def _incr_usage_tokens(slf: RunUsage | RequestUsage, incr_usage: RunUsage | Requ
 
 
 @dataclass(repr=False, kw_only=True)
-@deprecated('`Usage` is deprecated, use `RunUsage` instead')
+@deprecated("`Usage` is deprecated, use `RunUsage` instead")
 class Usage(RunUsage):
     """Deprecated alias for `RunUsage`."""
 
@@ -226,12 +232,16 @@ class UsageLimits:
     (from calling the model's `count_tokens` API before making the actual request) and is disabled by default."""
 
     @property
-    @deprecated('`request_tokens_limit` is deprecated, use `input_tokens_limit` instead')
+    @deprecated(
+        "`request_tokens_limit` is deprecated, use `input_tokens_limit` instead"
+    )
     def request_tokens_limit(self) -> int | None:
         return self.input_tokens_limit
 
     @property
-    @deprecated('`response_tokens_limit` is deprecated, use `output_tokens_limit` instead')
+    @deprecated(
+        "`response_tokens_limit` is deprecated, use `output_tokens_limit` instead"
+    )
     def response_tokens_limit(self) -> int | None:
         return self.output_tokens_limit
 
@@ -255,7 +265,7 @@ class UsageLimits:
 
     @overload
     @deprecated(
-        'Use `input_tokens_limit` instead of `request_tokens_limit` and `output_tokens_limit` and `total_tokens_limit`'
+        "Use `input_tokens_limit` instead of `request_tokens_limit` and `output_tokens_limit` and `total_tokens_limit`"
     )
     def __init__(
         self,
@@ -303,49 +313,75 @@ class UsageLimits:
         If there are no limits, we can skip that processing in the streaming response iterator.
         """
         return any(
-            limit is not None for limit in (self.input_tokens_limit, self.output_tokens_limit, self.total_tokens_limit)
+            limit is not None
+            for limit in (
+                self.input_tokens_limit,
+                self.output_tokens_limit,
+                self.total_tokens_limit,
+            )
         )
 
     def check_before_request(self, usage: RunUsage) -> None:
         """Raises a `UsageLimitExceeded` exception if the next request would exceed any of the limits."""
         request_limit = self.request_limit
         if request_limit is not None and usage.requests >= request_limit:
-            raise UsageLimitExceeded(f'The next request would exceed the request_limit of {request_limit}')
+            raise UsageLimitExceeded(
+                f"The next request would exceed the request_limit of {request_limit}"
+            )
 
         input_tokens = usage.input_tokens
-        if self.input_tokens_limit is not None and input_tokens > self.input_tokens_limit:
+        if (
+            self.input_tokens_limit is not None
+            and input_tokens > self.input_tokens_limit
+        ):
             raise UsageLimitExceeded(
-                f'The next request would exceed the input_tokens_limit of {self.input_tokens_limit} ({input_tokens=})'
+                f"The next request would exceed the input_tokens_limit of {self.input_tokens_limit} ({input_tokens=})"
             )
 
         total_tokens = usage.total_tokens
-        if self.total_tokens_limit is not None and total_tokens > self.total_tokens_limit:
+        if (
+            self.total_tokens_limit is not None
+            and total_tokens > self.total_tokens_limit
+        ):
             raise UsageLimitExceeded(  # pragma: lax no cover
-                f'The next request would exceed the total_tokens_limit of {self.total_tokens_limit} ({total_tokens=})'
+                f"The next request would exceed the total_tokens_limit of {self.total_tokens_limit} ({total_tokens=})"
             )
 
     def check_tokens(self, usage: RunUsage) -> None:
         """Raises a `UsageLimitExceeded` exception if the usage exceeds any of the token limits."""
         input_tokens = usage.input_tokens
-        if self.input_tokens_limit is not None and input_tokens > self.input_tokens_limit:
-            raise UsageLimitExceeded(f'Exceeded the input_tokens_limit of {self.input_tokens_limit} ({input_tokens=})')
+        if (
+            self.input_tokens_limit is not None
+            and input_tokens > self.input_tokens_limit
+        ):
+            raise UsageLimitExceeded(
+                f"Exceeded the input_tokens_limit of {self.input_tokens_limit} ({input_tokens=})"
+            )
 
         output_tokens = usage.output_tokens
-        if self.output_tokens_limit is not None and output_tokens > self.output_tokens_limit:
+        if (
+            self.output_tokens_limit is not None
+            and output_tokens > self.output_tokens_limit
+        ):
             raise UsageLimitExceeded(
-                f'Exceeded the output_tokens_limit of {self.output_tokens_limit} ({output_tokens=})'
+                f"Exceeded the output_tokens_limit of {self.output_tokens_limit} ({output_tokens=})"
             )
 
         total_tokens = usage.total_tokens
-        if self.total_tokens_limit is not None and total_tokens > self.total_tokens_limit:
-            raise UsageLimitExceeded(f'Exceeded the total_tokens_limit of {self.total_tokens_limit} ({total_tokens=})')
+        if (
+            self.total_tokens_limit is not None
+            and total_tokens > self.total_tokens_limit
+        ):
+            raise UsageLimitExceeded(
+                f"Exceeded the total_tokens_limit of {self.total_tokens_limit} ({total_tokens=})"
+            )
 
     def check_before_tool_call(self, usage: RunUsage) -> None:
         """Raises a `UsageLimitExceeded` exception if the next tool call would exceed the tool call limit."""
         tool_calls_limit = self.tool_calls_limit
         if tool_calls_limit is not None and usage.tool_calls >= tool_calls_limit:
             raise UsageLimitExceeded(
-                f'The next tool call would exceed the tool_calls_limit of {tool_calls_limit} (tool_calls={usage.tool_calls})'
+                f"The next tool call would exceed the tool_calls_limit of {tool_calls_limit} (tool_calls={usage.tool_calls})"
             )
 
     __repr__ = _utils.dataclasses_no_defaults_repr

@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Union
 
 try:
     import jq
+
     _JQ_AVAILABLE = True
 except ImportError:
     jq = None
@@ -28,15 +29,18 @@ class JSONLoader(BaseLoader):
         """Initializes the JSONLoader with its specific configuration."""
         if not _JQ_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="jq",
                 install_command='pip install "upsonic[loaders]"',
-                feature_name="JSON loader"
+                feature_name="JSON loader",
             )
         super().__init__(config)
         self.config: JSONLoaderConfig = config
         if self.config.mode == "multi" and not self.config.record_selector:
-            raise ValueError("`record_selector` must be provided when using 'multi' mode.")
+            raise ValueError(
+                "`record_selector` must be provided when using 'multi' mode."
+            )
 
     @classmethod
     def get_supported_extensions(cls) -> List[str]:
@@ -50,16 +54,21 @@ class JSONLoader(BaseLoader):
         except Exception as e:
             raise ValueError(f"Error executing JQ query '{query}': {e}")
 
-
-    def _create_document_from_record(self, record: Any, base_metadata: Dict[str, Any], document_id: str) -> Document:
+    def _create_document_from_record(
+        self, record: Any, base_metadata: Dict[str, Any], document_id: str
+    ) -> Document:
         """Creates a single Document from a JSON record using config mappers."""
         content_data = self._execute_jq_query(self.config.content_mapper, record)
         if content_data:
             content_data = content_data[0]
 
         if self.config.content_synthesis_mode == "text":
-            content = str(content_data) if not isinstance(content_data, (dict, list)) else json.dumps(content_data)
-        else: # "json"
+            content = (
+                str(content_data)
+                if not isinstance(content_data, (dict, list))
+                else json.dumps(content_data)
+            )
+        else:  # "json"
             content = json.dumps(content_data)
 
         extracted_metadata = {}
@@ -67,21 +76,25 @@ class JSONLoader(BaseLoader):
             for key, query in self.config.metadata_mapper.items():
                 meta_value = self._execute_jq_query(query, record)
                 if meta_value:
-                    extracted_metadata[key] = meta_value[0] # Take the first result
+                    extracted_metadata[key] = meta_value[0]  # Take the first result
 
         final_metadata = {**base_metadata, **extracted_metadata}
         if self.config.include_metadata:
-            return Document(document_id=document_id, content=content, metadata=final_metadata)
+            return Document(
+                document_id=document_id, content=content, metadata=final_metadata
+            )
         else:
             return Document(document_id=document_id, content=content)
 
-    def _process_json_object(self, data: Any, file_path: Path, document_id: str) -> List[Document]:
+    def _process_json_object(
+        self, data: Any, file_path: Path, document_id: str
+    ) -> List[Document]:
         """Processes a parsed JSON object based on the configured mode."""
         base_metadata = self._create_metadata(file_path)
-        
+
         if self.config.mode == "single":
             return [self._create_document_from_record(data, base_metadata, document_id)]
-        
+
         records = self._execute_jq_query(self.config.record_selector, data)
         documents = []
         for record in records:
@@ -94,7 +107,7 @@ class JSONLoader(BaseLoader):
         """Loads and processes a single JSON or JSONL file."""
         if not self._check_file_size(file_path):
             return []
-        
+
         try:
             document_id = self._generate_document_id(file_path)
             if document_id in self._processed_document_ids:
@@ -110,7 +123,11 @@ class JSONLoader(BaseLoader):
                         if line.strip():
                             data = json.loads(line)
                             line_document_id = f"{document_id}_line_{line_num}"
-                            all_documents.extend(self._process_json_object(data, file_path, line_document_id))
+                            all_documents.extend(
+                                self._process_json_object(
+                                    data, file_path, line_document_id
+                                )
+                            )
                     return all_documents
                 else:
                     data = json.load(f)
@@ -130,7 +147,9 @@ class JSONLoader(BaseLoader):
         """Async: Loads and processes a single JSON or JSONL file."""
         return await asyncio.to_thread(self._load_single_file, file_path)
 
-    async def aload(self, source: Union[str, Path, List[Union[str, Path]]]) -> List[Document]:
+    async def aload(
+        self, source: Union[str, Path, List[Union[str, Path]]]
+    ) -> List[Document]:
         """Loads documents from the given JSON source(s) asynchronously."""
         files_to_process = await asyncio.to_thread(self._resolve_sources, source)
         tasks = [self._aload_single_file(file) for file in files_to_process]

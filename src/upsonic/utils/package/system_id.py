@@ -10,7 +10,7 @@ def generate_system_id() -> str:
         The generated unique system ID as a string.
     """
     system_id = str(uuid.uuid4())
-    return system_id 
+    return system_id
 
 
 def get_system_id() -> str:

@@ -10,11 +10,11 @@ from upsonic.output import StructuredOutputMode
 from ._json_schema import InlineDefsJsonSchemaTransformer, JsonSchemaTransformer
 
 __all__ = [
-    'ModelProfile',
-    'ModelProfileSpec',
-    'DEFAULT_PROFILE',
-    'InlineDefsJsonSchemaTransformer',
-    'JsonSchemaTransformer',
+    "ModelProfile",
+    "ModelProfileSpec",
+    "DEFAULT_PROFILE",
+    "InlineDefsJsonSchemaTransformer",
+    "JsonSchemaTransformer",
 ]
 
 
@@ -28,7 +28,7 @@ class ModelProfile:
     """Whether the model supports JSON schema output."""
     supports_json_object_output: bool = False
     """Whether the model supports JSON object output."""
-    default_structured_output_mode: StructuredOutputMode = 'tool'
+    default_structured_output_mode: StructuredOutputMode = "tool"
     """The default structured output mode to use for the model."""
     prompted_output_template: str = dedent(
         """
@@ -43,7 +43,7 @@ class ModelProfile:
     json_schema_transformer: type[JsonSchemaTransformer] | None = None
     """The transformer to use to make JSON schemas for tools and structured output compatible with the model."""
 
-    thinking_tags: tuple[str, str] = ('<think>', '</think>')
+    thinking_tags: tuple[str, str] = ("<think>", "</think>")
     """The tags used to indicate thinking parts in the model's output. Defaults to ('<think>', '</think>')."""
 
     ignore_streamed_leading_whitespace: bool = False

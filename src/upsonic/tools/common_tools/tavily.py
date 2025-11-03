@@ -8,13 +8,14 @@ from upsonic.tools import tool
 
 try:
     from tavily import AsyncTavilyClient
+
     _TAVILY_AVAILABLE = True
 except ImportError:
     AsyncTavilyClient = None
     _TAVILY_AVAILABLE = False
 
 
-__all__ = ('tavily_search_tool',)
+__all__ = ("tavily_search_tool",)
 
 
 class TavilySearchResult(TypedDict):
@@ -47,9 +48,10 @@ class TavilySearchTool:
     async def __call__(
         self,
         query: str,
-        search_deep: Literal['basic', 'advanced'] = 'basic',
-        topic: Literal['general', 'news'] = 'general',
-        time_range: Literal['day', 'week', 'month', 'year', 'd', 'w', 'm', 'y'] | None = None,
+        search_deep: Literal["basic", "advanced"] = "basic",
+        topic: Literal["general", "news"] = "general",
+        time_range: Literal["day", "week", "month", "year", "d", "w", "m", "y"]
+        | None = None,
     ):
         """Searches Tavily for the given query and returns the results.
 
@@ -62,8 +64,10 @@ class TavilySearchTool:
         Returns:
             The search results.
         """
-        results = await self.client.search(query, search_depth=search_deep, topic=topic, time_range=time_range)  # type: ignore[reportUnknownMemberType]
-        return tavily_search_ta.validate_python(results['results'])
+        results = await self.client.search(
+            query, search_depth=search_deep, topic=topic, time_range=time_range
+        )  # type: ignore[reportUnknownMemberType]
+        return tavily_search_ta.validate_python(results["results"])
 
 
 def tavily_search_tool(api_key: str):
@@ -76,22 +80,24 @@ def tavily_search_tool(api_key: str):
     """
     if not _TAVILY_AVAILABLE:
         from upsonic.utils.printing import import_error
+
         import_error(
             package_name="tavily-python",
             install_command='pip install "upsonic[tools]"',
-            feature_name="Tavily search tool"
+            feature_name="Tavily search tool",
         )
 
     # Create the tool instance
     tavily_tool = TavilySearchTool(client=AsyncTavilyClient(api_key))
-    
+
     # Create a wrapper function instead of decorating the bound method directly
     @tool
     async def tavily_search(
         query: str,
-        search_deep: Literal['basic', 'advanced'] = 'basic',
-        topic: Literal['general', 'news'] = 'general',
-        time_range: Literal['day', 'week', 'month', 'year', 'd', 'w', 'm', 'y'] | None = None,
+        search_deep: Literal["basic", "advanced"] = "basic",
+        topic: Literal["general", "news"] = "general",
+        time_range: Literal["day", "week", "month", "year", "d", "w", "m", "y"]
+        | None = None,
     ) -> list[TavilySearchResult]:
         """Searches Tavily for the given query and returns the results.
 
@@ -105,5 +111,5 @@ def tavily_search_tool(api_key: str):
             The search results.
         """
         return await tavily_tool(query, search_deep, topic, time_range)
-    
+
     return tavily_search

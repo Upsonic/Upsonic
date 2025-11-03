@@ -1,5 +1,6 @@
 import os
 
+
 def get_clean_extension(attachment_path: str) -> str | None:
     """
     Extracts a clean, lowercase file extension from a given file path.
@@ -25,6 +26,6 @@ def get_clean_extension(attachment_path: str) -> str | None:
     _root, extension = os.path.splitext(attachment_path)
 
     if extension:
-        return extension.lstrip('.').lower()
+        return extension.lstrip(".").lower()
     else:
         return None

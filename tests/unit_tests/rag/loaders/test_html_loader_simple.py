@@ -13,7 +13,7 @@ class TestHTMLLoaderSimple(unittest.TestCase):
     def setUp(self):
         """Set up test environment with sample HTML files."""
         self.temp_dir = tempfile.mkdtemp()
-        
+
         # Create a simple HTML file
         self.simple_html = Path(self.temp_dir) / "simple.html"
         self.simple_html.write_text("""
@@ -98,6 +98,7 @@ class TestHTMLLoaderSimple(unittest.TestCase):
         """Clean up test environment."""
         if os.path.exists(self.temp_dir):
             import shutil
+
             shutil.rmtree(self.temp_dir)
 
     def test_html_loader_initialization(self):
@@ -105,12 +106,9 @@ class TestHTMLLoaderSimple(unittest.TestCase):
         config = HTMLLoaderConfig()
         loader = HTMLLoader(config)
         self.assertIsNotNone(loader)
-        
+
         # Test with custom config
-        custom_config = HTMLLoaderConfig(
-            extract_text=True,
-            preserve_structure=False
-        )
+        custom_config = HTMLLoaderConfig(extract_text=True, preserve_structure=False)
         loader_custom = HTMLLoader(custom_config)
         self.assertTrue(loader_custom.config.extract_text)
 
@@ -126,35 +124,35 @@ class TestHTMLLoaderSimple(unittest.TestCase):
         """Test loading a simple HTML file."""
         config = HTMLLoaderConfig()
         loader = HTMLLoader(config)
-        
+
         documents = loader.load(str(self.simple_html))
-        
+
         self.assertGreater(len(documents), 0)
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
-        self.assertTrue(all(hasattr(doc, 'document_id') for doc in documents))
+        self.assertTrue(all(hasattr(doc, "document_id") for doc in documents))
         self.assertTrue(all(doc.content.strip() for doc in documents))
 
     def test_text_extraction_only(self):
         """Test extracting text content only."""
         config = HTMLLoaderConfig(extract_text=True)
         loader = HTMLLoader(config)
-        
+
         documents = loader.load(str(self.simple_html))
-        
+
         self.assertGreater(len(documents), 0)
         for doc in documents:
             self.assertIsInstance(doc, Document)
             # Text should not contain HTML tags
-            self.assertNotIn('<', doc.content)
-            self.assertNotIn('>', doc.content)
+            self.assertNotIn("<", doc.content)
+            self.assertNotIn(">", doc.content)
 
     def test_preserve_structure(self):
         """Test preserving HTML structure."""
         config = HTMLLoaderConfig(preserve_structure=True)
         loader = HTMLLoader(config)
-        
+
         documents = loader.load(str(self.simple_html))
-        
+
         self.assertGreater(len(documents), 0)
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
 
@@ -165,12 +163,12 @@ class TestHTMLLoaderSimple(unittest.TestCase):
             extract_headers=True,
             extract_paragraphs=True,
             extract_lists=True,
-            extract_tables=True
+            extract_tables=True,
         )
         loader = HTMLLoader(config)
-        
+
         documents = loader.load(str(self.sectioned_html))
-        
+
         self.assertGreater(len(documents), 0)
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
 
@@ -178,9 +176,9 @@ class TestHTMLLoaderSimple(unittest.TestCase):
         """Test loading HTML with multiple sections."""
         config = HTMLLoaderConfig(preserve_structure=True)
         loader = HTMLLoader(config)
-        
+
         documents = loader.load(str(self.sectioned_html))
-        
+
         self.assertGreater(len(documents), 0)
         # May create multiple documents for different sections
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
@@ -191,12 +189,12 @@ class TestHTMLLoaderSimple(unittest.TestCase):
             extract_text=True,
             extract_tables=True,
             table_format="markdown",
-            include_images=False
+            include_images=False,
         )
         loader = HTMLLoader(config)
-        
+
         documents = loader.load(str(self.table_html))
-        
+
         self.assertGreater(len(documents), 0)
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
 
@@ -204,11 +202,11 @@ class TestHTMLLoaderSimple(unittest.TestCase):
         """Test handling of empty or invalid sources."""
         config = HTMLLoaderConfig()
         loader = HTMLLoader(config)
-        
+
         # Test with empty list
         result = loader.load([])
         self.assertEqual(len(result), 0)
-        
+
         # Test with non-existent file
         result = loader.load("/path/that/does/not/exist.html")
         self.assertEqual(len(result), 0)
@@ -217,10 +215,10 @@ class TestHTMLLoaderSimple(unittest.TestCase):
         """Test batch loading multiple HTML files."""
         config = HTMLLoaderConfig()
         loader = HTMLLoader(config)
-        
+
         files = [str(self.simple_html), str(self.sectioned_html)]
         documents = loader.batch(files)
-        
+
         self.assertGreater(len(documents), 0)
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
 
@@ -228,11 +226,13 @@ class TestHTMLLoaderSimple(unittest.TestCase):
         """Test error handling for invalid HTML."""
         # Create invalid HTML file
         invalid_html = Path(self.temp_dir) / "invalid.html"
-        invalid_html.write_text('<html><body><p>Unclosed paragraph<div>Nested incorrectly</p></div></body>')
-        
+        invalid_html.write_text(
+            "<html><body><p>Unclosed paragraph<div>Nested incorrectly</p></div></body>"
+        )
+
         config = HTMLLoaderConfig(error_handling="warn")
         loader = HTMLLoader(config)
-        
+
         # Should handle error gracefully
         documents = loader.load(str(invalid_html))
         # HTML parsers are usually tolerant, so this might still succeed
@@ -242,13 +242,13 @@ class TestHTMLLoaderSimple(unittest.TestCase):
         """Test HTML metadata inclusion."""
         config = HTMLLoaderConfig(include_metadata=True)
         loader = HTMLLoader(config)
-        
+
         documents = loader.load(str(self.simple_html))
-        
+
         self.assertGreater(len(documents), 0)
         for doc in documents:
             self.assertIsInstance(doc.metadata, dict)
-            self.assertIn('source', doc.metadata)
+            self.assertIn("source", doc.metadata)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 class PolicyInput(BaseModel):
     """Input data for policy processing"""
+
     input_texts: Optional[List[str]] = None
     input_images: Optional[List[str]] = None
     input_videos: Optional[List[str]] = None
@@ -16,18 +17,18 @@ class PolicyInput(BaseModel):
     extra_data: Optional[Dict[str, Any]] = None
 
 
-
 class RuleOutput(BaseModel):
     """Result from rule processing"""
+
     confidence: float
     content_type: str
     details: str
     triggered_keywords: Optional[List[str]] = None
 
 
-
 class PolicyOutput(BaseModel):
     """Result from policy execution"""
+
     output_texts: Optional[List[str]] = None
     output_images: Optional[List[str]] = None
     output_videos: Optional[List[str]] = None

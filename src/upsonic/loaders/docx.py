@@ -7,6 +7,7 @@ try:
     from docx.document import Document as DocxDocument
     from docx.table import Table as DocxTable
     from docx.text.paragraph import Paragraph as DocxParagraph
+
     _DOCX_AVAILABLE = True
 except ImportError:
     docx = None
@@ -33,10 +34,11 @@ class DOCXLoader(BaseLoader):
         """Initializes the DOCXLoader with its specific configuration."""
         if not _DOCX_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="python-docx",
                 install_command='pip install "upsonic[loaders]"',
-                feature_name="DOCX loader"
+                feature_name="DOCX loader",
             )
         super().__init__(config)
         self.config: DOCXLoaderConfig = config
@@ -67,7 +69,7 @@ class DOCXLoader(BaseLoader):
                 row_text = [cell.text.replace("\n", " ") for cell in row.cells]
                 markdown.append("| " + " | ".join(row_text) + " |")
             return "\n".join(markdown)
-        
+
         text = []
         for row in table.rows:
             row_text = [cell.text for cell in row.cells]
@@ -89,7 +91,11 @@ class DOCXLoader(BaseLoader):
 
             if self.config.include_headers:
                 for section in doc.sections:
-                    for header in [section.header, section.first_page_header, section.even_page_header]:
+                    for header in [
+                        section.header,
+                        section.first_page_header,
+                        section.even_page_header,
+                    ]:
                         if header:
                             for paragraph in header.paragraphs:
                                 content_parts.append(paragraph.text)
@@ -97,19 +103,25 @@ class DOCXLoader(BaseLoader):
             for paragraph in doc.paragraphs:
                 if paragraph.text.strip():
                     content_parts.append(paragraph.text)
-            
+
             if self.config.include_tables:
                 for table in doc.tables:
                     content_parts.append(self._format_table(table))
-            
+
             if self.config.include_footers:
                 for section in doc.sections:
-                    for footer in [section.footer, section.first_page_footer, section.even_page_footer]:
+                    for footer in [
+                        section.footer,
+                        section.first_page_footer,
+                        section.even_page_footer,
+                    ]:
                         if footer:
                             for paragraph in footer.paragraphs:
                                 content_parts.append(paragraph.text)
-            
-            full_content = "\n\n".join(part for part in content_parts if part and part.strip())
+
+            full_content = "\n\n".join(
+                part for part in content_parts if part and part.strip()
+            )
 
             if self.config.skip_empty_content and not full_content.strip():
                 return []
@@ -117,17 +129,21 @@ class DOCXLoader(BaseLoader):
             metadata = self._create_metadata(file_path)
             core_props = doc.core_properties
             if self.config.include_metadata:
-                metadata.update({
-                    "author": core_props.author,
-                    "category": core_props.category,
-                    "comments": core_props.comments,
-                    "title": core_props.title,
-                    "subject": core_props.subject,
-                    "created": core_props.created,
-                    "modified": core_props.modified,
-                })
-            
-            doc_obj = Document(document_id=document_id, content=full_content, metadata=metadata)
+                metadata.update(
+                    {
+                        "author": core_props.author,
+                        "category": core_props.category,
+                        "comments": core_props.comments,
+                        "title": core_props.title,
+                        "subject": core_props.subject,
+                        "created": core_props.created,
+                        "modified": core_props.modified,
+                    }
+                )
+
+            doc_obj = Document(
+                document_id=document_id, content=full_content, metadata=metadata
+            )
             return [doc_obj]
 
         except Exception as e:
@@ -143,19 +159,23 @@ class DOCXLoader(BaseLoader):
             all_documents.extend(self._load_single_file(file_path))
         return all_documents
 
-    async def aload(self, source: Union[str, Path, List[Union[str, Path]]]) -> List[Document]:
+    async def aload(
+        self, source: Union[str, Path, List[Union[str, Path]]]
+    ) -> List[Document]:
         """
         Loads documents from the given .docx source(s) asynchronously.
         """
         files_to_process = self._resolve_sources(source)
-        
+
         valid_files = []
         for file_path in files_to_process:
             if not self._check_file_size(file_path):
                 continue
             valid_files.append(file_path)
 
-        tasks = [asyncio.to_thread(self._load_single_file, file) for file in valid_files]
+        tasks = [
+            asyncio.to_thread(self._load_single_file, file) for file in valid_files
+        ]
         results = await asyncio.gather(*tasks)
         return [doc for sublist in results for doc in sublist]
 

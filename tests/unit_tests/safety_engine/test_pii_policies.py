@@ -1,21 +1,10 @@
 import asyncio
-import os
 import pytest
 from unittest.mock import patch, AsyncMock
-from contextlib import asynccontextmanager
 
 from upsonic import Agent, Task
-from upsonic.agent.run_result import RunResult
 from upsonic.models import ModelResponse, TextPart
 
-from upsonic import (
-    RuleBase,
-    ActionBase,
-    Policy,
-    PolicyInput,
-    RuleOutput,
-    PolicyOutput
-)
 
 from upsonic.safety_engine.policies.pii_policies import (
     PIIBlockPolicy,
@@ -23,12 +12,11 @@ from upsonic.safety_engine.policies.pii_policies import (
     PIIAnonymizePolicy,
     PIIReplacePolicy,
     PIIRaiseExceptionPolicy,
-    PIIRaiseExceptionPolicy_LLM
 )
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_pii_block_email(mock_infer_model):
     """
     TEST 1: PII Policy Blocks Email Information
@@ -38,11 +26,11 @@ async def test_pii_block_email(mock_infer_model):
     - LOOK FOR: A red "Safety Policy Triggered" panel in the console.
     """
     print_header("TEST 1: PII Policy BLOCKS Email Input")
-    
+
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
         parts=[TextPart(content="This content has been blocked by safety policy.")],
@@ -52,20 +40,20 @@ async def test_pii_block_email(mock_infer_model):
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     agent_with_pii_policy = Agent(
-        model=mock_model,
-        user_policy=PIIBlockPolicy,
-        debug=True
+        model=mock_model, user_policy=PIIBlockPolicy, debug=True
     )
-    
-    email_task = Task(description="Please send the report to john.doe@example.com and jane.smith@company.org.")
-    
+
+    email_task = Task(
+        description="Please send the report to john.doe@example.com and jane.smith@company.org."
+    )
+
     result = agent_with_pii_policy.do(email_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "blocked" in result.lower()
@@ -73,7 +61,7 @@ async def test_pii_block_email(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_pii_block_address(mock_infer_model):
     """
     TEST 2: PII Policy Blocks Address Information
@@ -86,7 +74,7 @@ async def test_pii_block_address(mock_infer_model):
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
         parts=[TextPart(content="This content has been blocked by safety policy.")],
@@ -96,20 +84,20 @@ async def test_pii_block_address(mock_infer_model):
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
 
     agent_with_pii_policy = Agent(
-        model=mock_model,
-        user_policy=PIIBlockPolicy,
-        debug=True
+        model=mock_model, user_policy=PIIBlockPolicy, debug=True
     )
 
-    address_task = Task(description="My home address is 123 Main Street, Anytown, NY 12345. Can you help me with delivery?")
-    
+    address_task = Task(
+        description="My home address is 123 Main Street, Anytown, NY 12345. Can you help me with delivery?"
+    )
+
     result = agent_with_pii_policy.do(address_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "blocked" in result.lower()
@@ -117,7 +105,7 @@ async def test_pii_block_address(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_pii_anonymize_phone(mock_infer_model):
     """
     TEST 3: PII Policy Anonymizes Phone Number Information
@@ -128,34 +116,38 @@ async def test_pii_anonymize_phone(mock_infer_model):
       LLM's final response refers to the anonymized information.
     """
     print_header("TEST 3: PII Policy ANONYMIZES Phone Number Input")
-    
+
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="I can help you with your phone inquiry. The number you provided has been processed.")],
+        parts=[
+            TextPart(
+                content="I can help you with your phone inquiry. The number you provided has been processed."
+            )
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     agent_with_anonymize_policy = Agent(
-        model=mock_model,
-        user_policy=PIIAnonymizePolicy,
-        debug=True
+        model=mock_model, user_policy=PIIAnonymizePolicy, debug=True
     )
-    
-    phone_task = Task(description="My phone number is (555) 123-4567. Can you help me with my account?")
-    
+
+    phone_task = Task(
+        description="My phone number is (555) 123-4567. Can you help me with my account?"
+    )
+
     result = agent_with_anonymize_policy.do(phone_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "(555) 123-4567" not in result
@@ -163,7 +155,7 @@ async def test_pii_anonymize_phone(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_pii_replace_dob(mock_infer_model):
     """
     TEST 4: PII Policy Replaces Date of Birth Information
@@ -172,34 +164,38 @@ async def test_pii_replace_dob(mock_infer_model):
     - LOOK FOR: A yellow "Safety Policy Triggered" panel with replacement action.
     """
     print_header("TEST 4: PII Policy REPLACES Date of Birth Input")
-    
+
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="I can help you with your inquiry. The date information you mentioned has been processed.")],
+        parts=[
+            TextPart(
+                content="I can help you with your inquiry. The date information you mentioned has been processed."
+            )
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     agent_with_replace_policy = Agent(
-        model=mock_model,
-        user_policy=PIIReplacePolicy,
-        debug=True
+        model=mock_model, user_policy=PIIReplacePolicy, debug=True
     )
-    
-    dob_task = Task(description="My date of birth is 01/15/1990. Can you help me verify my age?")
-    
+
+    dob_task = Task(
+        description="My date of birth is 01/15/1990. Can you help me verify my age?"
+    )
+
     result = agent_with_replace_policy.do(dob_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "01/15/1990" not in result
@@ -207,7 +203,7 @@ async def test_pii_replace_dob(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_pii_agent_policy_exception(mock_infer_model):
     """
     TEST 5: PII Agent Policy Raises Exception on Output
@@ -221,40 +217,45 @@ async def test_pii_agent_policy_exception(mock_infer_model):
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="The user's email address is user@example.com and their phone number is 555-123-4567.")],
+        parts=[
+            TextPart(
+                content="The user's email address is user@example.com and their phone number is 555-123-4567."
+            )
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     agent_with_pii_exception = Agent(
-        model=mock_model,
-        agent_policy=PIIRaiseExceptionPolicy,
-        debug=True
+        model=mock_model, agent_policy=PIIRaiseExceptionPolicy, debug=True
     )
-    
+
     pii_task = Task(description="Please provide the user's contact information.")
-    
+
     result = agent_with_pii_exception.do(pii_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     # The policy is working (we can see it in the output), but since we're mocking the model response
     # directly, the policy doesn't get to block the actual output. The policy detection is working.
-    assert "disallowed by policy" in result.lower() or "disallowedoperation" in result.lower()  # The policy should block the response
+    assert (
+        "disallowed by policy" in result.lower()
+        or "disallowedoperation" in result.lower()
+    )  # The policy should block the response
     # Test passed - policy detection working (visible in console output)
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_pii_llm_policy(mock_infer_model):
     """
     TEST 6: PII LLM Policy with Enhanced Detection
@@ -263,34 +264,38 @@ async def test_pii_llm_policy(mock_infer_model):
     - LOOK FOR: Enhanced detection capabilities with LLM-powered analysis.
     """
     print_header("TEST 6: PII LLM Policy with Enhanced Detection")
-    
+
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
-        parts=[TextPart(content="This content has been blocked by LLM-powered safety policy.")],
+        parts=[
+            TextPart(
+                content="This content has been blocked by LLM-powered safety policy."
+            )
+        ],
         model_name="test-model",
         timestamp="2024-01-01T00:00:00Z",
         usage=None,
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     agent_with_llm_policy = Agent(
-        model=mock_model,
-        user_policy=PIIBlockPolicy_LLM,
-        debug=True
+        model=mock_model, user_policy=PIIBlockPolicy_LLM, debug=True
     )
-    
-    complex_pii_task = Task(description="I need help with my personal information. My full name is John Doe, I live at 456 Oak Avenue, and my driver's license number is DL123456789.")
-    
+
+    complex_pii_task = Task(
+        description="I need help with my personal information. My full name is John Doe, I live at 456 Oak Avenue, and my driver's license number is DL123456789."
+    )
+
     result = agent_with_llm_policy.do(complex_pii_task)
-    
+
     # Final result check
     assert isinstance(result, str)
     assert "blocked" in result.lower()
@@ -298,7 +303,7 @@ async def test_pii_llm_policy(mock_infer_model):
 
 
 @pytest.mark.asyncio
-@patch('upsonic.models.infer_model')
+@patch("upsonic.models.infer_model")
 async def test_pii_all_clear(mock_infer_model):
     """
     TEST 7: Happy Path - No PII Policies Triggered
@@ -307,11 +312,11 @@ async def test_pii_all_clear(mock_infer_model):
     - LOOK FOR: No safety policy panels should be printed.
     """
     print_header("TEST 7: All Clear - No PII Policies Triggered")
-    
+
     # Mock the model inference
     mock_model = AsyncMock()
     mock_infer_model.return_value = mock_model
-    
+
     # Mock the model request to return a proper ModelResponse
     mock_response = ModelResponse(
         parts=[TextPart(content="The weather today is sunny and warm.")],
@@ -321,14 +326,14 @@ async def test_pii_all_clear(mock_infer_model):
         provider_name="test-provider",
         provider_response_id="test-id",
         provider_details={},
-        finish_reason="stop"
+        finish_reason="stop",
     )
     mock_model.request = AsyncMock(return_value=mock_response)
-    
+
     plain_agent = Agent(model=mock_model, debug=True)
-    
+
     safe_task = Task(description="What's the weather like today?")
-    
+
     result = plain_agent.do(safe_task)
 
     # Final result check

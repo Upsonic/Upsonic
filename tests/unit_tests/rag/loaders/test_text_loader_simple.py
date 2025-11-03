@@ -13,7 +13,7 @@ class TestTextLoaderSimple(unittest.TestCase):
     def setUp(self):
         """Set up test environment with sample text files."""
         self.temp_dir = tempfile.mkdtemp()
-        
+
         # Create a simple text file
         self.simple_txt = Path(self.temp_dir) / "simple.txt"
         self.simple_txt.write_text("""This is the first paragraph of the text file.
@@ -29,6 +29,7 @@ It concludes the document content.""")
         """Clean up test environment."""
         if os.path.exists(self.temp_dir):
             import shutil
+
             shutil.rmtree(self.temp_dir)
 
     def test_text_loader_initialization(self):
@@ -47,18 +48,18 @@ It concludes the document content.""")
         """Test loading a simple text file."""
         config = TextLoaderConfig()
         loader = TextLoader(config)
-        
+
         documents = loader.load(str(self.simple_txt))
-        
+
         self.assertGreater(len(documents), 0)
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
-        self.assertTrue(all(hasattr(doc, 'document_id') for doc in documents))
+        self.assertTrue(all(hasattr(doc, "document_id") for doc in documents))
 
     def test_empty_source_handling(self):
         """Test handling of empty or invalid sources."""
         config = TextLoaderConfig()
         loader = TextLoader(config)
-        
+
         result = loader.load([])
         self.assertEqual(len(result), 0)
 
@@ -66,22 +67,20 @@ It concludes the document content.""")
         """Test batch loading multiple text files."""
         config = TextLoaderConfig()
         loader = TextLoader(config)
-        
+
         files = [str(self.simple_txt)]
         documents = loader.batch(files)
-        
+
         self.assertGreater(len(documents), 0)
         self.assertTrue(all(isinstance(doc, Document) for doc in documents))
 
     def test_text_config_options(self):
         """Test text loader configuration options."""
         config = TextLoaderConfig(
-            strip_whitespace=True,
-            min_chunk_length=10,
-            skip_empty_content=True
+            strip_whitespace=True, min_chunk_length=10, skip_empty_content=True
         )
         loader = TextLoader(config)
-        
+
         self.assertTrue(loader.config.strip_whitespace)
         self.assertEqual(loader.config.min_chunk_length, 10)
         self.assertTrue(loader.config.skip_empty_content)
@@ -90,13 +89,13 @@ It concludes the document content.""")
         """Test text metadata inclusion."""
         config = TextLoaderConfig(include_metadata=True)
         loader = TextLoader(config)
-        
+
         documents = loader.load(str(self.simple_txt))
-        
+
         self.assertGreater(len(documents), 0)
         for doc in documents:
             self.assertIsInstance(doc.metadata, dict)
-            self.assertIn('source', doc.metadata)
+            self.assertIn("source", doc.metadata)
 
 
 if __name__ == "__main__":

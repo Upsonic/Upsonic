@@ -1,5 +1,4 @@
 import json
-import os
 from pathlib import Path
 from typing import Any, Optional
 
@@ -29,7 +28,7 @@ class Configuration:
 
         if cls._config_file.exists():
             try:
-                with open(cls._config_file, 'r') as f:
+                with open(cls._config_file, "r") as f:
                     cls._cache = json.load(f)
                     return cls._cache
             except (json.JSONDecodeError, IOError):
@@ -45,7 +44,7 @@ class Configuration:
         cls._ensure_config_dir()
 
         try:
-            with open(cls._config_file, 'w') as f:
+            with open(cls._config_file, "w") as f:
                 json.dump(config, f, indent=2)
             cls._cache = config
         except IOError as e:

@@ -157,6 +157,33 @@ publish-url = "https://upload.pypi.org/legacy/"
 
 [[tool.uv.index]]
 name = "testpypi"
-url = "https://test.pypi.org/simple/"
+url = "https://tes	t.pypi.org/simple/"
 publish-url = "https://test.pypi.org/legacy/"
 
+
+# Rule sets enabled
+select = [
+  "E",  # pycodestyle errors (style)
+  "W",  # pycodestyle warnings
+  "F",  # pyflakes (undefined names, unused imports)
+  "I",  # isort (import order and grouping)
+  "B",  # flake8-bugbear (common logic errors)
+  "UP", # pyupgrade (modern Python syntax suggestions)
+]
+
+# Rules intentionally ignored
+ignore = [
+  "E501",  # Line length (handled by formatter)
+  "B008",  # Function default argument warning (too strict for ML/AI use)
+]
+
+# Automatically fix issues where possible
+fix = true
+
+# Exclude generated or external files
+exclude = [
+  ".venv",
+  "build",
+  "dist",
+  "__pycache__",
+]

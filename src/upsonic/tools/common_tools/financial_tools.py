@@ -7,6 +7,7 @@ from typing import List
 
 try:
     import pandas as pd
+
     _PANDAS_AVAILABLE = True
 except ImportError:
     pd = None
@@ -15,11 +16,11 @@ except ImportError:
 
 try:
     import yfinance as yf
+
     _YFINANCE_AVAILABLE = True
 except ImportError:
     yf = None
     _YFINANCE_AVAILABLE = False
-
 
 
 class YFinanceTools:
@@ -44,18 +45,20 @@ class YFinanceTools:
         """
         if not _PANDAS_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="pandas",
                 install_command='pip install "upsonic[tools]"',
-                feature_name="financial tools"
+                feature_name="financial tools",
             )
 
         if not _YFINANCE_AVAILABLE:
             from upsonic.utils.printing import import_error
+
             import_error(
                 package_name="yfinance",
                 install_command='pip install "upsonic[tools]"',
-                feature_name="financial tools"
+                feature_name="financial tools",
             )
 
         self._tools = []
@@ -80,7 +83,11 @@ class YFinanceTools:
         try:
             stock = yf.Ticker(symbol)
             price = stock.info.get("regularMarketPrice", stock.info.get("currentPrice"))
-            return f"{price:.4f}" if price else f"Could not fetch current price for {symbol}"
+            return (
+                f"{price:.4f}"
+                if price
+                else f"Could not fetch current price for {symbol}"
+            )
         except Exception as e:
             return f"Error fetching current price for {symbol}: {e}"
 
@@ -114,7 +121,9 @@ class YFinanceTools:
             recs = yf.Ticker(symbol).recommendations
             if recs is not None and isinstance(recs, (pd.DataFrame, pd.Series)):
                 result = recs.to_json(orient="index")
-                return result if result is not None else f"No recommendations for {symbol}"
+                return (
+                    result if result is not None else f"No recommendations for {symbol}"
+                )
             elif recs is not None:
                 return json.dumps(recs, indent=2)
             else:
@@ -185,7 +194,11 @@ class YFinanceTools:
             financials = stock.financials
             if isinstance(financials, (pd.DataFrame, pd.Series)):
                 result = financials.to_json(orient="index")
-                return result if result is not None else f"No income statements for {symbol}"
+                return (
+                    result
+                    if result is not None
+                    else f"No income statements for {symbol}"
+                )
             elif financials is not None:
                 return json.dumps(financials, indent=2)
             else:
@@ -209,7 +222,9 @@ class YFinanceTools:
         except Exception as e:
             return f"Error fetching key financial ratios for {symbol}: {e}"
 
-    def get_historical_stock_prices(self, symbol: str, period: str = "1mo", interval: str = "1d") -> str:
+    def get_historical_stock_prices(
+        self, symbol: str, period: str = "1mo", interval: str = "1d"
+    ) -> str:
         """Get historical stock price data.
 
         Args:
@@ -225,7 +240,11 @@ class YFinanceTools:
             historical_price = stock.history(period=period, interval=interval)
             if isinstance(historical_price, (pd.DataFrame, pd.Series)):
                 result = historical_price.to_json(orient="index")
-                return result if result is not None else f"No historical prices for {symbol}"
+                return (
+                    result
+                    if result is not None
+                    else f"No historical prices for {symbol}"
+                )
             elif historical_price is not None:
                 return json.dumps(historical_price, indent=2)
             else:
@@ -247,7 +266,11 @@ class YFinanceTools:
             indicators = yf.Ticker(symbol).history(period=period)
             if isinstance(indicators, (pd.DataFrame, pd.Series)):
                 result = indicators.to_json(orient="index")
-                return result if result is not None else f"No technical indicators for {symbol}"
+                return (
+                    result
+                    if result is not None
+                    else f"No technical indicators for {symbol}"
+                )
             elif indicators is not None:
                 return json.dumps(indicators, indent=2)
             else:

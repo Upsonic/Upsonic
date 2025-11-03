@@ -1,10 +1,8 @@
 import unittest
 import tempfile
 import os
-from pathlib import Path
 from upsonic.loaders.docx import DOCXLoader
 from upsonic.loaders.config import DOCXLoaderConfig
-from upsonic.schemas.data_models import Document
 
 
 class TestDOCXLoaderSimple(unittest.TestCase):
@@ -18,6 +16,7 @@ class TestDOCXLoaderSimple(unittest.TestCase):
         """Clean up test environment."""
         if os.path.exists(self.temp_dir):
             import shutil
+
             shutil.rmtree(self.temp_dir)
 
     def test_docx_loader_initialization(self):
@@ -36,10 +35,10 @@ class TestDOCXLoaderSimple(unittest.TestCase):
         """Test handling of empty or invalid sources."""
         config = DOCXLoaderConfig()
         loader = DOCXLoader(config)
-        
+
         result = loader.load([])
         self.assertEqual(len(result), 0)
-        
+
         # Test with non-existent file
         result = loader.load("/path/that/does/not/exist.docx")
         self.assertEqual(len(result), 0)
@@ -48,7 +47,7 @@ class TestDOCXLoaderSimple(unittest.TestCase):
         """Test the batch loading interface."""
         config = DOCXLoaderConfig()
         loader = DOCXLoader(config)
-        
+
         # Test batch method with empty list
         result = loader.batch([])
         self.assertEqual(len(result), 0)
@@ -59,10 +58,10 @@ class TestDOCXLoaderSimple(unittest.TestCase):
             include_tables=True,
             include_headers=True,
             include_footers=True,
-            table_format="markdown"
+            table_format="markdown",
         )
         loader = DOCXLoader(config)
-        
+
         self.assertTrue(loader.config.include_tables)
         self.assertTrue(loader.config.include_headers)
         self.assertTrue(loader.config.include_footers)
