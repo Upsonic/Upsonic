@@ -6,9 +6,9 @@ if TYPE_CHECKING:
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.align import Align
-from rich.text import Text
+# Align and Text imports removed - not currently used
 import platform
+import sys
 from rich.markup import escape
 
 # Setup background logging (console disabled, only file/Sentry)
@@ -17,7 +17,24 @@ setup_logging(enable_console=False)  # Console kapalı, Rich kullanıyoruz
 _bg_logger = get_logger("upsonic.user")  # Background logger for Sentry/file
 _sentry_logger = get_logger("upsonic.sentry")  # Sentry event logger (INFO+ -> Sentry)
 
-console = Console()
+# Initialize Console with Windows encoding compatibility
+# Handle Unicode encoding errors gracefully on Windows
+try:
+    if platform.system() == "Windows":
+        # On Windows, try to set UTF-8 encoding for stdout if possible
+        try:
+            # Python 3.7+ supports reconfigure
+            if hasattr(sys.stdout, 'reconfigure'):
+                sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+            # Note: We don't try to wrap stdout buffer as it can break Rich Console
+            # Rich handles encoding internally, we just configure stdout if supported
+        except (AttributeError, OSError, ValueError):
+            # If encoding setup fails, continue with default
+            pass
+    console = Console()
+except (AttributeError, OSError, ValueError):  # noqa: BLE001
+    # Fallback to default console if initialization fails
+    console = Console()
 
 def get_estimated_cost(input_tokens: int, output_tokens: int, model: Union["Model", str]) -> str:
     """
@@ -1650,25 +1667,35 @@ def model_recommendation_summary(recommendation) -> None:
     cost_bar = "█" * recommendation.estimated_cost_tier + "░" * (10 - recommendation.estimated_cost_tier)
     speed_bar = "█" * recommendation.estimated_speed_tier + "░" * (10 - recommendation.estimated_speed_tier)
     
+    # Use safe characters for Windows compatibility
+    is_windows = platform.system() == "Windows"
+    model_char = "🤖" if not is_windows else "[MODEL]"
+    method_char = "🧠" if not is_windows else "[METHOD]"
+    reason_char = "💭" if not is_windows else "[REASON]"
+    confidence_char = "🎯" if not is_windows else ">>"
+    cost_char = "💰" if not is_windows else "$$"
+    speed_char = "⚡" if not is_windows else ">>"
+    alternatives_char = "🔄" if not is_windows else "[ALT]"
+    
     table = Table(show_header=False, box=None, expand=True)
     table.add_column(style="bold blue", width=20)
     table.add_column(style="white")
     
-    table.add_row("🤖 MODEL", f"[bold cyan]{model_esc}[/bold cyan]")
-    table.add_row("🧠 METHOD", f"[bold]{method_esc}[/bold]")
-    table.add_row("💭 REASON", reason_esc)
-    table.add_row("🎯 CONFIDENCE", f"[bold green]{confidence_esc}[/bold green]")
-    table.add_row("💰 COST", f"[bold]{recommendation.estimated_cost_tier}/10[/bold] [{cost_bar}]")
-    table.add_row("⚡ SPEED", f"[bold]{recommendation.estimated_speed_tier}/10[/bold] [{speed_bar}]")
+    table.add_row(f"{model_char} MODEL", f"[bold cyan]{model_esc}[/bold cyan]")
+    table.add_row(f"{method_char} METHOD", f"[bold]{method_esc}[/bold]")
+    table.add_row(f"{reason_char} REASON", reason_esc)
+    table.add_row(f"{confidence_char} CONFIDENCE", f"[bold green]{confidence_esc}[/bold green]")
+    table.add_row(f"{cost_char} COST", f"[bold]{recommendation.estimated_cost_tier}/10[/bold] [{cost_bar}]")
+    table.add_row(f"{speed_char} SPEED", f"[bold]{recommendation.estimated_speed_tier}/10[/bold] [{speed_bar}]")
     
     if recommendation.alternative_models:
         alternatives = ", ".join(recommendation.alternative_models[:3])
         alternatives_esc = escape_rich_markup(alternatives)
-        table.add_row("🔄 ALTERNATIVES", alternatives_esc)
+        table.add_row(f"{alternatives_char} ALTERNATIVES", alternatives_esc)
     
     panel = Panel(
         table,
-        title="[bold blue]🤖 MODEL RECOMMENDATION[/bold blue]",
+        title=f"[bold blue]{model_char} MODEL RECOMMENDATION[/bold blue]",
         border_style="blue",
         padding=(1, 2),
         expand=True
@@ -1910,7 +1937,10 @@ def direct_started(model_name: str, task_description: str, response_format: str 
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
     
-    table.add_row("[bold]Status:[/bold]", "[blue]⚡ Direct Execution Started[/blue]")
+    # Use safe character for Windows compatibility
+    lightning_char = "⚡" if platform.system() != "Windows" else "►"
+    
+    table.add_row("[bold]Status:[/bold]", f"[blue]{lightning_char} Direct Execution Started[/blue]")
     table.add_row("[bold]Model:[/bold]", f"[cyan]{model_name_esc}[/cyan]")
     table.add_row("[bold]Response Format:[/bold]", f"[yellow]{response_format_esc}[/yellow]")
     table.add_row("")  # Spacing
@@ -1919,7 +1949,7 @@ def direct_started(model_name: str, task_description: str, response_format: str 
     
     panel = Panel(
         table,
-        title="[bold blue]⚡ Upsonic Direct - Execution Started[/bold blue]",
+        title=f"[bold blue]{lightning_char} Upsonic Direct - Execution Started[/bold blue]",
         border_style="blue",
         expand=True,
         width=70
@@ -2013,9 +2043,12 @@ def direct_completed(
     table.add_row("├─ [bold]Output Tokens:[/bold]", f"[blue]{usage.get('output_tokens', 0):,}[/blue]")
     table.add_row("└─ [bold]Estimated Cost:[/bold]", f"[yellow]{estimated_cost}[/yellow]")
     
+    # Use safe character for Windows compatibility
+    lightning_char = "⚡" if platform.system() != "Windows" else "►"
+    
     panel = Panel(
         table,
-        title="[bold green]⚡ Upsonic Direct - Execution Complete[/bold green]",
+        title=f"[bold green]{lightning_char} Upsonic Direct - Execution Complete[/bold green]",
         border_style="green",
         expand=True,
         width=70
@@ -2078,9 +2111,12 @@ def direct_error(
         table.add_row("")  # Spacing
         table.add_row("[bold]Time Before Error:[/bold]", f"[yellow]{execution_time:.3f}s[/yellow]")
     
+    # Use safe character for Windows compatibility
+    lightning_char = "⚡" if platform.system() != "Windows" else "►"
+    
     panel = Panel(
         table,
-        title="[bold red]⚡ Upsonic Direct - Execution Error[/bold red]",
+        title=f"[bold red]{lightning_char} Upsonic Direct - Execution Error[/bold red]",
         border_style="red",
         expand=True,
         width=70
@@ -2142,9 +2178,12 @@ def direct_metrics_summary(
     table.add_row("├─ [bold]Total Tokens:[/bold]", f"[blue]{(total_input_tokens + total_output_tokens):,}[/blue]")
     table.add_row("└─ [bold]Total Cost:[/bold]", f"[yellow]~${total_cost:.4f}[/yellow]")
     
+    # Use safe character for Windows compatibility
+    lightning_char = "⚡" if platform.system() != "Windows" else "►"
+    
     panel = Panel(
         table,
-        title="[bold magenta]⚡ Upsonic Direct - Session Summary[/bold magenta]",
+        title=f"[bold magenta]{lightning_char} Upsonic Direct - Session Summary[/bold magenta]",
         border_style="magenta",
         expand=True,
         width=70
@@ -2187,9 +2226,12 @@ def direct_configuration(
             value_esc = escape_rich_markup(str(value))
             table.add_row(f"  ├─ [bold]{key_esc}:[/bold]", f"[blue]{value_esc}[/blue]")
     
+    # Use safe character for Windows compatibility
+    lightning_char = "⚡" if platform.system() != "Windows" else "►"
+    
     panel = Panel(
         table,
-        title="[bold cyan]⚡ Upsonic Direct - Configuration[/bold cyan]",
+        title=f"[bold cyan]{lightning_char} Upsonic Direct - Configuration[/bold cyan]",
         border_style="cyan",
         expand=True,
         width=70

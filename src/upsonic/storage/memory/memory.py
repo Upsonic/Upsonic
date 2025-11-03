@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Dict, List, Optional, Type, Tuple, Literal, Union
+from typing import Any, Dict, List, Optional, Type, Literal, Union
 import json
 import copy
 
@@ -148,11 +148,15 @@ class Memory:
             session.chat_history.extend(all_messages_as_dicts)  # Store as a list of messages
 
         if self.summary_memory_enabled:
-            try:
-                session.summary = await self._generate_new_summary(session.summary, model_response)
-            except Exception as e:
+            if not self.model:
                 from upsonic.utils.printing import warning_log
-                warning_log(f"Failed to generate session summary: {e}", "MemoryStorage")
+                warning_log("Summary memory is enabled but no model is configured. Skipping summary generation. Set a model on the Memory object to enable summary generation.", "MemoryStorage")
+            else:
+                try:
+                    session.summary = await self._generate_new_summary(session.summary, model_response)
+                except Exception as e:
+                    from upsonic.utils.printing import warning_log
+                    warning_log(f"Failed to generate session summary: {e}", "MemoryStorage")
         
         await self.storage.upsert_async(session)
 
@@ -167,21 +171,25 @@ class Memory:
             profile = UserProfile(user_id=self.user_id)
 
         if self.user_analysis_memory_enabled:
-            try:
-                updated_traits = await self._analyze_interaction_for_traits(profile.profile_data, model_response)
-                
-                if self.debug:
-                    info_log(f"Extracted traits: {updated_traits}", "Memory")
-                
-                if self.user_memory_mode == 'replace':
-                    profile.profile_data = updated_traits
-                elif self.user_memory_mode == 'update':
-                    profile.profile_data.update(updated_traits)
-                else:
-                    raise ValueError(f"Unexpected update mode: {self.user_memory_mode}")
-            except Exception as e:
+            if not self.model:
                 from upsonic.utils.printing import warning_log
-                warning_log(f"Failed to analyze user profile: {e}", "MemoryStorage")
+                warning_log("User analysis memory is enabled but no model is configured. Skipping user profile analysis. Set a model on the Memory object to enable user trait analysis.", "MemoryStorage")
+            else:
+                try:
+                    updated_traits = await self._analyze_interaction_for_traits(profile.profile_data, model_response)
+                    
+                    if self.debug:
+                        info_log(f"Extracted traits: {updated_traits}", "Memory")
+                    
+                    if self.user_memory_mode == 'replace':
+                        profile.profile_data = updated_traits
+                    elif self.user_memory_mode == 'update':
+                        profile.profile_data.update(updated_traits)
+                    else:
+                        raise ValueError(f"Unexpected update mode: {self.user_memory_mode}")
+                except Exception as e:
+                    from upsonic.utils.printing import warning_log
+                    warning_log(f"Failed to analyze user profile: {e}", "MemoryStorage")
 
         await self.storage.upsert_async(profile)
 
@@ -261,19 +269,23 @@ class Memory:
         return final_history
         
 
-    async def _generate_new_summary(self, previous_summary: str, model_response) -> str:
+    async def _generate_new_summary(self, previous_summary: Optional[str], model_response) -> str:
         from upsonic.agent.agent import Agent
         from upsonic.tasks.tasks import Task
         from pydantic_core import to_jsonable_python
+
+        if not self.model:
+            raise ValueError("A model must be configured on the Memory object to generate session summaries.")
 
         last_turn = to_jsonable_python(model_response.new_messages())
         session = await self.storage.read_async(self.session_id, InteractionSession)
         
         summarizer = Agent(name="Summarizer", model=self.model, debug=self.debug)
         
+        previous_summary_str = previous_summary if previous_summary is not None else 'None (this is the first interaction)'
         prompt = f"""Update the conversation summary based on the new interaction.
 
-Previous Summary: {previous_summary or 'None (this is the first interaction)'}
+Previous Summary: {previous_summary_str}
 
 New Conversation Turn:
 {json.dumps(last_turn, indent=2)}
@@ -316,7 +328,7 @@ YOUR TASK: Create a concise summary that captures the key points of the entire c
         from upsonic.tasks.tasks import Task
 
         if not self.model:
-            raise ValueError("A model must be configured on the Memory object to analyze user traits.")
+            raise ValueError("model must be configured for user trait analysis")
 
         historical_prompts_content = []
         new_prompts_content = []
@@ -360,8 +372,6 @@ YOUR TASK: Create a concise summary that captures the key points of the entire c
         analyzer = Agent(name="User Trait Analyzer", model=self.model, debug=self.debug)
 
         if self.is_profile_dynamic:
-            from typing import List
-            
             class FieldDefinition(BaseModel):
                 """A single field definition"""
                 name: str = Field(..., description="Snake_case field name")

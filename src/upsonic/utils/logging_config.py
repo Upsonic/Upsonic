@@ -126,7 +126,7 @@ def setup_sentry() -> None:
     3. Release bilgisi ekler
     4. Logging integration'ı aktif eder (WARNING+ loglar Sentry'e gider)
     """
-    global _SENTRY_CONFIGURED
+    global _SENTRY_CONFIGURED  # noqa: PLW0603
 
     # Eğer daha önce konfigüre edildiyse, skip et
     if _SENTRY_CONFIGURED:
@@ -149,7 +149,7 @@ def setup_sentry() -> None:
     try:
         from upsonic.utils.package.get_version import get_library_version
         the_release = f"upsonic@{get_library_version()}"
-    except Exception:
+    except (ImportError, AttributeError, ValueError):
         the_release = "upsonic@unknown"
 
     # Initialize Sentry SDK
@@ -167,7 +167,6 @@ def setup_sentry() -> None:
                 event_level=logging.INFO,  # INFO ve üzeri Sentry event olarak gönder
             ),
         ],
-        enable_logs=True,
         profile_session_sample_rate=the_profile_session_sample_rate,
     )
 
@@ -187,7 +186,7 @@ def setup_sentry() -> None:
             """Flush pending Sentry events before program exit."""
             try:
                 sentry_sdk.flush(timeout=2.0)
-            except Exception:
+            except (RuntimeError, TimeoutError, OSError):
                 pass  # Silent failure on exit, don't block program termination
 
         atexit.register(_flush_sentry)
@@ -203,7 +202,7 @@ def setup_logging(
     log_format: Literal["simple", "detailed", "json"] = "simple",
     log_file: Optional[str] = None,
     force_reconfigure: bool = False,
-    disable_existing_loggers: bool = False,
+    disable_existing_loggers: bool = False,  # noqa: ARG001
     enable_console: bool = True,
 ) -> None:
     """
@@ -235,7 +234,7 @@ def setup_logging(
         # User-facing app (console kapalı, sadece file/Sentry)
         setup_logging(level="INFO", log_file="/var/log/upsonic.log", enable_console=False)
     """
-    global _LOGGING_CONFIGURED
+    global _LOGGING_CONFIGURED  # noqa: PLW0603
 
     # Eğer daha önce konfigüre edildiyse ve force değilse, skip et
     if _LOGGING_CONFIGURED and not force_reconfigure:
@@ -293,9 +292,9 @@ def setup_logging(
             file_handler.setLevel(main_level)
             file_handler.setFormatter(formatter)
             upsonic_logger.addHandler(file_handler)
-        except Exception as e:
+        except (OSError, PermissionError, ValueError) as e:
             # File handler eklenemezse sadece uyar, devam et
-            upsonic_logger.warning(f"Could not setup file logging to {log_file_path}: {e}")
+            upsonic_logger.warning("Could not setup file logging to %s: %s", log_file_path, e)
 
     # Modül bazlı log seviyelerini ayarla
     _configure_module_log_levels()
@@ -307,7 +306,11 @@ def setup_logging(
     _LOGGING_CONFIGURED = True
 
     # Debug mesajı (sadece DEBUG modunda görünür)
-    upsonic_logger.debug(f"Upsonic logging configured: level={logging.getLevelName(main_level)}, format={format_key}")
+    upsonic_logger.debug(
+        "Upsonic logging configured: level=%s, format=%s",
+        logging.getLevelName(main_level),
+        format_key
+    )
 
 
 def _configure_module_log_levels() -> None:
@@ -420,7 +423,7 @@ def get_current_log_levels() -> Dict[str, str]:
     levels["upsonic"] = logging.getLevelName(upsonic_logger.level)
 
     # Modül logger'ları
-    for module_key, module_pattern in MODULE_PATTERNS.items():
+    for _module_key, module_pattern in MODULE_PATTERNS.items():
         logger = logging.getLogger(module_pattern)
         if logger.level != logging.NOTSET:  # Sadece explicitly set edilmişleri göster
             levels[module_pattern] = logging.getLevelName(logger.level)

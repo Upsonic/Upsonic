@@ -3,12 +3,30 @@ Upsonic custom exceptions for better error handling and user experience.
 """
 
 import platform
+import sys
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.markup import escape
 
-console = Console()
+# Initialize Console with Windows encoding compatibility
+# Handle Unicode encoding errors gracefully on Windows
+try:
+    if platform.system() == "Windows":
+        # On Windows, try to set UTF-8 encoding for stdout if possible
+        try:
+            # Python 3.7+ supports reconfigure
+            if hasattr(sys.stdout, 'reconfigure'):
+                sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+            # Note: We don't try to wrap stdout buffer as it can break Rich Console
+            # Rich handles encoding internally, we just configure stdout if supported
+        except (AttributeError, OSError, ValueError):
+            # If encoding setup fails, continue with default
+            pass
+    console = Console()
+except (AttributeError, OSError, ValueError):  # noqa: BLE001
+    # Fallback to default console if initialization fails
+    console = Console()
 
 
 class UpsonicError(Exception):
@@ -61,8 +79,11 @@ class APIKeyMissingError(UpsonicError):
         else:
             content = f"[bold red]Missing API Key for {tool_name}[/bold red]\n\n[bold white]The {env_var_name} environment variable is not set.[/bold white]\n\n{env_description}"
         
+        # Use safe character for Windows compatibility
+        key_char = "🔑" if platform.system() != "Windows" else "[KEY]"
+        
         # Create and print the panel
-        panel = Panel(content, title="[bold yellow]🔑 API Key Required[/bold yellow]", border_style="yellow", expand=False)
+        panel = Panel(content, title=f"[bold yellow]{key_char} API Key Required[/bold yellow]", border_style="yellow", expand=False)
         console.print(panel)
 
 

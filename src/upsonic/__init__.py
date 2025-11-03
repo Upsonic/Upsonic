@@ -85,6 +85,9 @@ def _get_Direct():
 def _get_OCR():
     return _lazy_import("upsonic.ocr.ocr", "OCR")()
 
+def _get_Memory():
+    return _lazy_import("upsonic.storage.memory.memory", "Memory")()
+
 def _get_durable_execution_components():
     """Lazy import of durable execution components."""
     from upsonic.durable import (
@@ -234,6 +237,8 @@ def __getattr__(name: str) -> Any:
         return _get_Direct()
     elif name == "OCR":
         return _get_OCR()
+    elif name == "Memory":
+        return _get_Memory()
     
     database_components = _get_database_components()
     if name in database_components:
@@ -275,6 +280,7 @@ __all__ = [
     "Chat",
     "Direct",
     "OCR",
+    "Memory",
     "UupsonicError",
     "AgentExecutionError", 
     "ModelConnectionError", 
