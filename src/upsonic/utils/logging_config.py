@@ -174,7 +174,7 @@ def setup_sentry() -> None:
     try:
         from upsonic.utils.package.system_id import get_system_id
         sentry_sdk.set_user({"id": get_system_id()})
-    except (ImportError, AttributeError, ValueError, OSError):
+    except Exception:
         pass  # System ID alınamazsa skip et
 
     _SENTRY_CONFIGURED = True

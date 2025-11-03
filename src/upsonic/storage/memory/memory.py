@@ -328,8 +328,7 @@ YOUR TASK: Create a concise summary that captures the key points of the entire c
         from upsonic.tasks.tasks import Task
 
         if not self.model:
-            # Return empty dict instead of raising - the caller should check for model before calling
-            return {}
+            raise ValueError("model must be configured for user trait analysis")
 
         historical_prompts_content = []
         new_prompts_content = []
