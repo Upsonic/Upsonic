@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any, List
-from datetime import datetime
 
 
 class ExecutionState(Dict[str, Any]):

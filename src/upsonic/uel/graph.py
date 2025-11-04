@@ -1,5 +1,4 @@
-from typing import Any, List, Tuple, Set, Dict, Optional
-import io
+from typing import List, Tuple, Set, Dict, Optional
 
 from upsonic.uel.runnable import Runnable
 
@@ -281,7 +280,7 @@ class RunnableGraph:
                 merge_to = merge_targets[node_id]
                 lines.append(f"  Merges to: Node {merge_to}")
             elif not node.parallel_branches and not node.edges_to:
-                lines.append(f"  (leaf node)")
+                lines.append("  (leaf node)")
         
         return "\n".join(lines)
     

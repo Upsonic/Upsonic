@@ -9,10 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-import operator
 from collections.abc import Callable
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional, Tuple, Type, TypeVar, Union, get_args, get_origin
 
 from upsonic.uel.runnable import Runnable
@@ -486,7 +485,7 @@ class CompiledStateGraph(Runnable[Dict[str, Any], Dict[str, Any]]):
                 **state,
                 "__interrupt__": [{"value": e.value}]
             }
-        except Exception as e:
+        except Exception:
             # Any other error - flush checkpoints if using exit durability
             if self.durability == "exit" and self.checkpointer:
                 await self._flush_exit_checkpoints()

@@ -20,7 +20,7 @@ except ImportError:
 
 from upsonic.utils.printing import warning_log, info_log, debug_log
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
 from ..utils.package.exception import ConfigurationError, ModelConnectionError
 

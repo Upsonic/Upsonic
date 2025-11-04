@@ -31,7 +31,6 @@ except ImportError:
 
 from upsonic.loaders.pdfplumber import PdfPlumberLoader
 from upsonic.loaders.config import PdfPlumberLoaderConfig
-from upsonic.schemas.data_models import Document
 
 
 class MockPDFCreatorOCRSafe:

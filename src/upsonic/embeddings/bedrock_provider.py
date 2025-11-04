@@ -10,7 +10,7 @@ try:
 except ImportError:
     BOTO3_AVAILABLE = False
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
 from .base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode
 from ..utils.package.exception import ConfigurationError, ModelConnectionError
 from upsonic.utils.printing import warning_log, info_log, debug_log

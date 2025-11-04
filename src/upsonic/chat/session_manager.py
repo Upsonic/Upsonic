@@ -1,7 +1,7 @@
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional
 from upsonic.usage import RequestUsage
 from upsonic.models import Model
 from .message import ChatMessage

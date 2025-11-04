@@ -93,7 +93,7 @@ class ActionBase(ABC):
         try:
             detected_lang = llm.detect_language(combined_text)
             return detected_lang
-        except Exception as e:
+        except Exception:
             return "en"  # Fallback to English
     
     async def _detect_content_language_async(self, content: List[str]) -> str:
@@ -109,7 +109,7 @@ class ActionBase(ABC):
             llm = UpsonicLLMProvider(agent_name="Language Detection Agent", model=self.language_identify_llm)
         try:
             return await llm.detect_language_async(combined_text)
-        except Exception as e:
+        except Exception:
             return "en"
     
 

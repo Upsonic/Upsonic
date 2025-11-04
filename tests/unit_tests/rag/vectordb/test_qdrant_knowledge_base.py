@@ -2,20 +2,18 @@
 Test QdrantProvider integration with Knowledge Base.
 """
 import pytest
-import asyncio
 from unittest.mock import Mock, patch, AsyncMock
-from typing import List, Dict, Any
 
 from upsonic.knowledge_base.knowledge_base import KnowledgeBase
 from upsonic.vectordb.providers.qdrant import QdrantProvider
 from upsonic.vectordb.config import Config, CoreConfig, IndexingConfig, SearchConfig, DataManagementConfig, AdvancedConfig
 from upsonic.vectordb.config import Mode, ProviderName, DistanceMetric, IndexType, HNSWTuningConfig
-from upsonic.schemas.data_models import Document, Chunk, RAGSearchResult
+from upsonic.schemas.data_models import RAGSearchResult
 from upsonic.schemas.vector_schemas import VectorSearchResult
 
 from .mock_components import (
     MockEmbeddingProvider, MockChunker, MockLoader,
-    create_mock_document, create_mock_chunk, create_mock_vector_search_result
+    create_mock_vector_search_result
 )
 
 

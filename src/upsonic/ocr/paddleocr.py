@@ -176,7 +176,6 @@ class BasePaddleOCRProvider(OCRProvider):
         start_time = time.time()
         
         try:
-            import numpy as np
             import tempfile
             
             # Save image to temporary file for PaddleOCR (it expects file path)
@@ -307,7 +306,7 @@ class BasePaddleOCRProvider(OCRProvider):
                                             height=height,
                                             confidence=conf
                                         )
-                            except (IndexError, TypeError, ValueError, AttributeError) as e:
+                            except (IndexError, TypeError, ValueError, AttributeError):
                                 # Skip bbox creation on error
                                 pass
                         
@@ -319,7 +318,7 @@ class BasePaddleOCRProvider(OCRProvider):
                             page_number=page_idx + 1
                         ))
                     
-        except Exception as e:
+        except Exception:
             # Fallback: try to get string representation
             try:
                 if isinstance(paddle_result, (list, tuple)) and paddle_result:
@@ -423,7 +422,7 @@ class PaddleOCRProvider(BasePaddleOCRProvider):
                 
                 # Process each page as an image
                 all_results = []
-                print(f"🔍 Processing pages with PaddleOCR...")
+                print("🔍 Processing pages with PaddleOCR...")
                 
                 for page_num, image in enumerate(images, 1):
                     print(f"  • Page {page_num}/{len(images)}...", end=' ', flush=True)
@@ -459,14 +458,14 @@ class PaddleOCRProvider(BasePaddleOCRProvider):
                 
             else:
                 # For images, process directly without temp files
-                print(f"🖼️  Processing image with PaddleOCR...")
+                print("🖼️  Processing image with PaddleOCR...")
                 paddle_result = self._paddle_instance.predict(str(path), **kwargs)
                 
                 # Extract text and metadata from result
                 text, blocks, confidence = self._extract_paddle_predict_result(paddle_result)
                 
                 page_count = len(paddle_result) if paddle_result else 1
-                print(f"  ✓ Complete!")
+                print("  ✓ Complete!")
             
             processing_time = (time.time() - start_time) * 1000
             

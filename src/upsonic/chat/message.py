@@ -1,9 +1,9 @@
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union, Literal, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Literal, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from upsonic.messages.messages import ModelMessage, ModelRequest, ModelResponse, UserPromptPart, TextPart, ToolCallPart, BuiltinToolCallPart, ThinkingPart
+    from upsonic.messages.messages import ModelMessage
 
 
 @dataclass

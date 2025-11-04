@@ -6,9 +6,8 @@ Each step handles a specific part of the agent execution flow. All steps must ex
 there is no skipping. If any error occurs, it's raised immediately to the user.
 """
 
-import asyncio
 import time
-from typing import Any, Optional, AsyncIterator
+from typing import Any, AsyncIterator
 from .step import Step, StepResult, StepStatus
 from .context import StepContext
 
@@ -920,7 +919,7 @@ class StreamModelExecutionStep(Step):
     
     async def execute_stream(self, context: StepContext) -> AsyncIterator[Any]:
         """Execute model request in streaming mode and yield events."""
-        from upsonic.messages import PartStartEvent, PartDeltaEvent, TextPart, FinalResultEvent, ToolCallPart, ModelRequest
+        from upsonic.messages import PartStartEvent, PartDeltaEvent, TextPart, FinalResultEvent
         
         start_time = time.time()
         accumulated_text = ""

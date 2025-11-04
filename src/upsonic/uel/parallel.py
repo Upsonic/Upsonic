@@ -1,7 +1,7 @@
 import asyncio
-from typing import Any, Dict, List, Tuple, Union, Callable, Awaitable
+from typing import Any, Dict, Union, Callable
 
-from upsonic.uel.runnable import Runnable, Input, Output
+from upsonic.uel.runnable import Runnable, Input
 
 
 class RunnableParallel(Runnable[Input, Dict[str, Any]]):
@@ -116,7 +116,7 @@ class RunnableParallel(Runnable[Input, Dict[str, Any]]):
         # Wait for all tasks to complete
         try:
             results_list = await asyncio.gather(*tasks)
-        except Exception as e:
+        except Exception:
             # Cancel any remaining tasks
             for task in tasks:
                 if not task.done():

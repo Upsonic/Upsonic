@@ -6,14 +6,11 @@ needed during the agent's execution pipeline. It gets passed through each
 step and can be modified by steps to communicate state changes.
 """
 
-from typing import Any, Optional, List, Dict, TYPE_CHECKING
+from typing import Any, List, TYPE_CHECKING
 from pydantic import BaseModel, Field, ConfigDict
 
 if TYPE_CHECKING:
-    from upsonic.tasks.tasks import Task
-    from upsonic.models import Model, ModelRequest, ModelResponse
-    from upsonic.agent.context_managers import MemoryManager
-    from upsonic.graph.graph import State
+    pass
 
 
 class StepContext(BaseModel):

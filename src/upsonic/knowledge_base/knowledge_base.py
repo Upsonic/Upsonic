@@ -2,7 +2,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import os
 from typing import List, Optional, Dict, Any, Union
 from pathlib import Path
 
@@ -10,8 +9,7 @@ from ..text_splitter.base import BaseChunker
 from ..embeddings.base import EmbeddingProvider
 from ..vectordb.base import BaseVectorDBProvider
 from ..loaders.base import BaseLoader
-from ..loaders.config import LoaderConfig
-from ..schemas.data_models import Document, Chunk, RAGSearchResult
+from ..schemas.data_models import Document, RAGSearchResult
 from ..loaders.factory import create_intelligent_loaders
 from ..text_splitter.factory import create_intelligent_splitters
 from ..utils.printing import info_log, debug_log, warning_log, error_log

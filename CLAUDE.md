@@ -61,6 +61,78 @@ pre-commit run --all-files
 uv lock
 ```
 
+### Code Quality Standards (Ruff Configuration)
+
+This project uses [Ruff](https://docs.astral.sh/ruff/) for linting and code quality enforcement. The following rules are configured in `pyproject.toml`:
+
+#### Rule Sets Enabled
+
+```toml
+select = [
+  "E",  # pycodestyle errors (style)
+  "W",  # pycodestyle warnings
+  "F",  # pyflakes (undefined names, unused imports)
+  "I",  # isort (import order and grouping)
+  "B",  # flake8-bugbear (common logic errors)
+  "UP", # pyupgrade (modern Python syntax suggestions)
+]
+```
+
+**Explanation**:
+- **E**: pycodestyle errors - Enforces PEP 8 style guidelines
+- **W**: pycodestyle warnings - Catches style issues that don't break functionality
+- **F**: pyflakes - Detects undefined names, unused imports, and other common errors
+- **I**: isort - Ensures consistent import ordering and grouping
+- **B**: flake8-bugbear - Identifies common bugs and design problems
+- **UP**: pyupgrade - Suggests modern Python syntax improvements
+
+#### Rules Intentionally Ignored
+
+```toml
+ignore = [
+  "E501",  # Line length (handled by formatter)
+  "B008",  # Function default argument warning (too strict for ML/AI use)
+]
+```
+
+**Explanation**:
+- **E501**: Line length is handled by the code formatter, not the linter
+- **B008**: Function default argument warnings are disabled because they're too strict for ML/AI use cases where mutable defaults are sometimes necessary
+
+#### Configuration
+
+```toml
+# Automatically fix issues where possible
+fix = true
+
+# Exclude generated or external files
+exclude = [
+  ".venv",
+  "build",
+  "dist",
+  "__pycache__",
+]
+```
+
+**Features**:
+- **fix = true**: Automatically fixes issues where possible when running ruff
+- **exclude**: Excludes virtual environments, build directories, and cache files from linting
+
+#### Running Ruff
+
+```bash
+# Check for issues
+ruff check .
+
+# Auto-fix issues
+ruff check --fix .
+
+# Check specific directory
+ruff check src/upsonic/agent/
+```
+
+These rules ensure consistent code quality across the Upsonic framework while maintaining flexibility for ML/AI development patterns.
+
 ### Running Examples
 ```bash
 # Run basic agent example

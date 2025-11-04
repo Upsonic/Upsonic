@@ -4,7 +4,7 @@ Handles detection and protection of personal data like names, addresses, emails,
 """
 
 import re
-from typing import List, Optional, Dict, Any
+from typing import Optional, Dict, Any
 from ..base import RuleBase, ActionBase, Policy
 from ..models import PolicyInput, RuleOutput, PolicyOutput
 
@@ -259,7 +259,7 @@ class PIIRule_LLM_Finder(RuleBase):
                 triggered_keywords=triggered_keywords
             )
             
-        except Exception as e:
+        except Exception:
             # Fallback to pattern-based detection on error
             fallback_rule = PIIRule()
             return fallback_rule.process(policy_input)

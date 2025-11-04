@@ -1,10 +1,8 @@
 import unittest
 import tempfile
 import os
-from pathlib import Path
 from upsonic.loaders.docx import DOCXLoader
 from upsonic.loaders.config import DOCXLoaderConfig
-from upsonic.schemas.data_models import Document
 
 
 class TestDOCXLoaderSimple(unittest.TestCase):

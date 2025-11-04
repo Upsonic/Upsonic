@@ -9,7 +9,6 @@ from upsonic.uel import (
     ChatPromptTemplate,
     RunnablePassthrough,
 )
-from upsonic.uel.lambda_runnable import coerce_to_runnable
 
 
 # ============================================================================
@@ -66,14 +65,14 @@ def test_lambda_truncation_issue():
     print(f"\n📝 Prompt template: {prompt}")
     
     # Build chain with lambda function
-    print(f"\n🔗 Building chain with lambda function...")
+    print("\n🔗 Building chain with lambda function...")
     lambda_func = lambda x: x[:20]
     print(f"Lambda function: {lambda_func}")
     print(f"Lambda function type: {type(lambda_func)}")
     
     # Test the lambda function directly
     test_input = "This is a very long string that should be truncated to 20 characters"
-    print(f"\n🧪 Testing lambda function directly:")
+    print("\n🧪 Testing lambda function directly:")
     print(f"Input: {test_input}")
     print(f"Input length: {len(test_input)}")
     
@@ -94,7 +93,7 @@ def test_lambda_truncation_issue():
     
     print(f"\n✅ Final result: {result}")
     print(f"Result length: {len(result)}")
-    print(f"Expected length: 20")
+    print("Expected length: 20")
     print(f"Length matches expected: {len(result) == 20}")
     
     if len(result) == 20:
@@ -121,7 +120,7 @@ def test_other_graph_visualization_methods():
     model = MockModel()
     
     # Build a complex chain
-    print(f"\n📝 Creating complex chain...")
+    print("\n📝 Creating complex chain...")
     prompt = ChatPromptTemplate.from_template(
         "Answer the question based on the following context:\n{context}\n\nQuestion: {question}"
     )
@@ -134,17 +133,17 @@ def test_other_graph_visualization_methods():
     print(f"Chain: {chain}")
     
     # Test get_graph()
-    print(f"\n📊 Getting graph representation...")
+    print("\n📊 Getting graph representation...")
     graph = chain.get_graph()
     print(f"Graph: {graph}")
     
     # Test to_ascii()
-    print(f"\n📊 ASCII representation:")
+    print("\n📊 ASCII representation:")
     ascii_repr = graph.to_ascii()
     print(ascii_repr)
     
     # Test to_mermaid()
-    print(f"\n📊 Mermaid representation:")
+    print("\n📊 Mermaid representation:")
     try:
         mermaid_repr = graph.to_mermaid()
         print(mermaid_repr)
@@ -153,7 +152,7 @@ def test_other_graph_visualization_methods():
         print(f"❌ Mermaid representation failed: {e}")
     
     # Test graph structure details
-    print(f"\n📊 Graph structure details:")
+    print("\n📊 Graph structure details:")
     print(graph.get_structure_details())
     
     # Test graph repr

@@ -1,7 +1,4 @@
 from upsonic import Task, Agent
-from upsonic.tools import tool
-from pydantic import BaseModel
-from upsonic.tools import YFinanceTools
 
 
 

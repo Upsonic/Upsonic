@@ -1,9 +1,8 @@
 import functools
 import inspect
-from typing import Any, Callable, TypeVar, Union
+from typing import Any, Callable, TypeVar
 
 from upsonic.uel.runnable import Runnable, Input, Output
-from upsonic.uel.lambda_runnable import RunnableLambda, coerce_to_runnable
 
 
 F = TypeVar('F', bound=Callable[..., Any])
