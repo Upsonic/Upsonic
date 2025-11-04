@@ -3,7 +3,7 @@ import pytest
 from io import StringIO
 from contextlib import redirect_stdout
 from pydantic import BaseModel
-from upsonic import Agent, Task, KnowledgeBase
+from upsonic import Agent, Task
 from upsonic.tools import  tool
 from upsonic.embeddings import OpenAIEmbedding
 # Add timeout marker for all tests to prevent hanging

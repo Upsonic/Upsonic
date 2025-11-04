@@ -1,4 +1,3 @@
-import pytest
 from upsonic import Agent, Task, Team
 from pydantic import BaseModel
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional, Dict, Any
-import os
+from typing import List, Optional
 
 from upsonic.ocr.base import OCRProvider, OCRConfig, OCRResult, OCRTextBlock
 from upsonic.ocr.exceptions import OCRProviderError, OCRProcessingError

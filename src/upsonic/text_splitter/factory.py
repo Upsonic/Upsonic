@@ -5,7 +5,6 @@ from enum import Enum
 from pathlib import Path
 
 from .base import BaseChunker, BaseChunkingConfig
-from ..schemas.data_models import Document
 from ..utils.package.exception import ConfigurationError
 from upsonic.utils.printing import warning_log, info_log
 

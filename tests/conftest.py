@@ -24,7 +24,7 @@ def pytest_runtest_makereport(item, call):
         if is_disallowed:
             # Print the error message
             print(f"\n⚠️  DisallowedOperation caught in {item.name}: {exc_value}", file=sys.stderr)
-            print(f"   Handling gracefully - test will not fail\n", file=sys.stderr)
+            print("   Handling gracefully - test will not fail\n", file=sys.stderr)
             
             # Modify the report to mark as passed while preserving structure
             report.outcome = "passed"

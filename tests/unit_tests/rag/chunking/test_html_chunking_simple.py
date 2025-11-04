@@ -2,7 +2,6 @@ import unittest
 import tempfile
 import os
 import uuid
-from pathlib import Path
 from upsonic.text_splitter.html_chunker import HTMLChunker, HTMLChunkingConfig
 from upsonic.schemas.data_models import Document, Chunk
 

@@ -164,7 +164,7 @@ class AccuracyEvaluator:
             color, title = "red", "[bold red]❌ Evaluation Failed[/bold red]"
 
         summary_text = Text()
-        summary_text.append(f"Average Score: ", style="bold")
+        summary_text.append("Average Score: ", style="bold")
         summary_text.append(f"{result.average_score:.2f} / 10.0\n\n", style=f"bold {color}")
         summary_text.append("--- Last Run Details ---\n", style="dim")
         summary_text.append("User Query: ", style="bold")

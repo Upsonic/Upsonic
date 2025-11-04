@@ -1,5 +1,5 @@
 import re
-from typing import Optional, Any
+from typing import Optional
 
 from upsonic.models import infer_model, Model
 

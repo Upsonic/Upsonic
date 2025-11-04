@@ -1,7 +1,5 @@
 import unittest
 import uuid
-import os
-import pytest
 from upsonic.text_splitter.semantic import SemanticChunker, SemanticChunkingConfig
 from upsonic.schemas.data_models import Document, Chunk
 from upsonic.embeddings.fastembed_provider import FastEmbedProvider

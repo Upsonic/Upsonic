@@ -4,7 +4,6 @@ import os
 from pathlib import Path
 from upsonic.loaders.pymupdf import PyMuPDFLoader
 from upsonic.loaders.config import PyMuPDFLoaderConfig
-from upsonic.schemas.data_models import Document
 
 
 class TestPyMuPDFLoaderSimple(unittest.TestCase):

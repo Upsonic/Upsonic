@@ -38,7 +38,7 @@ class RuleBase(ABC):
         # Use rule's default language or auto-detect
         try:
             detected_language = llm.detect_language(combined_text)
-        except Exception as e:
+        except Exception:
             detected_language = self.language
             
         return llm.find_keywords(content_type, combined_text, language=detected_language)
@@ -56,6 +56,6 @@ class RuleBase(ABC):
         llm = UpsonicLLMProvider(agent_name="Text Finder Agent", model=self.text_finder_llm)
         try:
             detected_language = await llm.detect_language_async(combined_text)
-        except Exception as e:
+        except Exception:
             detected_language = self.language
         return await llm.find_keywords_async(content_type, combined_text, language=detected_language)

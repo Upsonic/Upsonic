@@ -2,8 +2,7 @@
 Upsonic LLM Provider for AI Safety Engine
 """
 
-from typing import List, Optional, Union
-import asyncio
+from typing import List, Union
 from pydantic import BaseModel
 from upsonic.models import Model
 
@@ -86,7 +85,7 @@ class UpsonicLLMProvider:
             else:
                 return []
                 
-        except Exception as e:
+        except Exception:
             return []
 
     async def find_keywords_async(self, content_type: str, text: str, language: str = "en") -> List[str]:
@@ -140,7 +139,7 @@ class UpsonicLLMProvider:
             result = self.agent.do(task)
             return result.block_message
             
-        except Exception as e:
+        except Exception:
             return f"Content blocked: {reason}"
 
     async def generate_block_message_async(self, reason: str, language: str = "en") -> str:
@@ -190,7 +189,7 @@ class UpsonicLLMProvider:
             result = self.agent.do(task)
             return result.anonymized_content
             
-        except Exception as e:
+        except Exception:
             # Fallback to simple replacement
             anonymized = text
             for keyword in keywords:
@@ -245,7 +244,7 @@ class UpsonicLLMProvider:
             else:
                 return "en"  # Default to English if confidence is low
                 
-        except Exception as e:
+        except Exception:
             return "en"  # Default fallback
 
     async def detect_language_async(self, text: str) -> str:
@@ -400,7 +399,7 @@ class UpsonicLLMProvider:
                 
                 return text
             
-        except Exception as e:
+        except Exception:
             return text  # Fallback to original text
 
     async def translate_text_async(self, text: str, target_language: str) -> str:

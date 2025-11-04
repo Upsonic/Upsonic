@@ -27,17 +27,17 @@ class AttachmentFileNotFoundError(Exception):
         
         if not os.path.isabs(attachment_path):
             suggestions.append(f"• Check if the file path is correct relative to the current working directory: {os.getcwd()}")
-            suggestions.append(f"• Try using an absolute path instead of a relative path")
+            suggestions.append("• Try using an absolute path instead of a relative path")
         
         parent_dir = os.path.dirname(attachment_path)
         if parent_dir and os.path.exists(parent_dir) and not os.access(parent_dir, os.R_OK):
             suggestions.append(f"• Check if you have read permissions for the directory: {parent_dir}")
         
         if '.' in attachment_path:
-            suggestions.append(f"• Verify the file extension is correct")
+            suggestions.append("• Verify the file extension is correct")
         
         if suggestions:
-            message += f"\n\nSuggestions:\n" + "\n".join(suggestions)
+            message += "\n\nSuggestions:\n" + "\n".join(suggestions)
         
         super().__init__(message)
 

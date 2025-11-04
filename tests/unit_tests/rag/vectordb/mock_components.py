@@ -1,10 +1,8 @@
 """
 Mock components for testing vector database integrations with Knowledge Base.
 """
-import asyncio
 import uuid
-from typing import List, Dict, Any, Union, Optional
-from unittest.mock import Mock, AsyncMock
+from typing import List, Dict, Any, Union
 
 from upsonic.schemas.data_models import Document, Chunk, RAGSearchResult
 from upsonic.schemas.vector_schemas import VectorSearchResult

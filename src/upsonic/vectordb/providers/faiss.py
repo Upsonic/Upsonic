@@ -26,13 +26,9 @@ except ImportError:
 
 from upsonic.vectordb.config import (
     Config,
-    Mode,
     DistanceMetric,
-    IndexType,
     HNSWTuningConfig,
-    IVFTuningConfig,
-    FlatTuningConfig,
-    QuantizationConfig
+    IVFTuningConfig
 )
 from upsonic.vectordb.base import BaseVectorDBProvider
 from upsonic.utils.printing import info_log, debug_log, warning_log
@@ -40,7 +36,6 @@ from upsonic.utils.printing import info_log, debug_log, warning_log
 from upsonic.utils.package.exception import(
     VectorDBConnectionError, 
     ConfigurationError, 
-    CollectionDoesNotExistError,
     VectorDBError,
     SearchError,
     UpsertError

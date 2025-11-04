@@ -3,7 +3,6 @@ from typing import Any, Optional, Union, List, TYPE_CHECKING
 from pydantic import BaseModel, Field
 from enum import Enum
 import re
-from urllib.parse import urlparse
 import asyncio
 
 from upsonic.models import Model
@@ -226,7 +225,7 @@ class ReliabilityProcessor:
                 old_task_output = result.output
             elif hasattr(result, 'model_dump'):
                 old_task_output = result.model_dump()
-        except Exception as e:
+        except Exception:
             pass
 
         prevent_hallucination = getattr(reliability_layer, 'prevent_hallucination', 0)

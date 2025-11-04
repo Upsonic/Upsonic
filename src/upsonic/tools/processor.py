@@ -7,26 +7,24 @@ import functools
 import hashlib
 import inspect
 import json
-import re
 import time
 from pathlib import Path
 from typing import (
-    Any, Callable, Dict, Generator, List, Optional, Tuple, Type, Union, TYPE_CHECKING
+    Any, Callable, Dict, List, Optional, Type, TYPE_CHECKING
 )
 
 from upsonic.tools.base import (
-    Tool, ToolBase, ToolCall, ToolDefinition, ToolKit, ToolResult
+    Tool, ToolDefinition, ToolKit
 )
 from upsonic.tools.config import ToolConfig
 from upsonic.tools.context import ToolContext
 from upsonic.tools.schema import (
-    FunctionSchema, generate_function_schema, validate_tool_function
+    generate_function_schema, validate_tool_function
 )
 from upsonic.tools.wrappers import FunctionTool
 
 if TYPE_CHECKING:
-    from upsonic.tools.mcp import MCPTool
-    from upsonic.tasks.tasks import Task
+    pass
 
 
 class ToolValidationError(Exception):
@@ -37,7 +35,7 @@ class ToolValidationError(Exception):
 class ExternalExecutionPause(Exception):
     """Exception for pausing agent execution for external tool execution."""
     def __init__(self):
-        super().__init__(f"Agent paused for external execution of a tool.")
+        super().__init__("Agent paused for external execution of a tool.")
 
 
 class ToolProcessor:
@@ -338,7 +336,7 @@ class ToolProcessor:
     def _get_user_confirmation(self, tool_name: str, args: Dict[str, Any]) -> bool:
         """Get user confirmation for tool execution."""
         from upsonic.utils.printing import console
-        console.print(f"[bold yellow]⚠️ Confirmation Required[/bold yellow]")
+        console.print("[bold yellow]⚠️ Confirmation Required[/bold yellow]")
         console.print(f"Tool: [cyan]{tool_name}[/cyan]")
         console.print(f"Arguments: {args}")
         

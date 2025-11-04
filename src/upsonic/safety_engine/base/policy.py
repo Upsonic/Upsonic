@@ -2,7 +2,6 @@
 Policy class that combines rules and actions
 """
 
-from typing import Optional, List
 import asyncio
 from .rule_base import RuleBase
 from .action_base import ActionBase

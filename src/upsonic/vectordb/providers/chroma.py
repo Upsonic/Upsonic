@@ -27,7 +27,6 @@ from upsonic.utils.printing import info_log, debug_log
 
 from upsonic.vectordb.config import (
     Config, 
-    IndexTuningConfig,
     HNSWTuningConfig,
     IndexType, 
     Mode, 
@@ -116,7 +115,7 @@ class ChromaProvider(BaseVectorDBProvider):
                 # Use CloudClient for Chroma Cloud connections
                 try:
                     client_instance = chromadb.CloudClient(**cloud_kwargs)
-                except (AttributeError, ImportError, TypeError) as e:
+                except (AttributeError, ImportError, TypeError):
                     # Fallback to HttpClient if CloudClient is not available
                     if not self._config.core.host:
                         raise ConfigurationError("CloudClient not available and no host specified for fallback HttpClient.")

@@ -3,7 +3,6 @@ Test runner for vector database tests.
 """
 import pytest
 import sys
-import os
 from pathlib import Path
 
 # Add the src directory to the Python path

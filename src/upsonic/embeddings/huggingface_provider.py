@@ -461,7 +461,8 @@ class HuggingFaceEmbedding(EmbeddingProvider):
         Remove HuggingFace model/tokenizer cache files from local storage.
         """
         from huggingface_hub import try_to_load_from_cache
-        import shutil, os
+        import shutil
+        import os
 
         try:
             model_path = try_to_load_from_cache(

@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Union, Literal, Generator
+from typing import Any, Dict, List, Optional, Union, Literal
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, message=".*Cannot infer schema from data.*")
 
@@ -38,12 +38,10 @@ from upsonic.vectordb.config import (
     Config,
     Mode,
     DistanceMetric,
-    IndexType,
     WriteConsistency,
     HNSWTuningConfig,
     IVFTuningConfig,
     FlatTuningConfig,
-    PayloadIndexConfig,
     ConsistencyLevel
 )
 

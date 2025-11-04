@@ -11,7 +11,7 @@ from upsonic.tools.config import ToolConfig
 from upsonic.tools.schema import FunctionSchema
 
 if TYPE_CHECKING:
-    from upsonic.tasks.tasks import Task
+    pass
 
 
 class FunctionTool(ToolBase):
@@ -67,8 +67,7 @@ class FunctionTool(ToolBase):
     
     def _convert_dicts_to_pydantic(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
         """Convert dictionary arguments to Pydantic models based on function type hints."""
-        import inspect
-        from typing import get_type_hints, get_origin, get_args
+        from typing import get_type_hints
         from pydantic import BaseModel
         
         # Get function signature and type hints
@@ -233,8 +232,7 @@ class FunctionTool(ToolBase):
     
     def _convert_dict_to_pydantic_recursive(self, data: dict, model_class: type) -> Any:
         """Recursively convert a dictionary to a Pydantic model, handling nested models."""
-        from pydantic import BaseModel, ValidationError
-        from typing import get_origin, get_args, Union
+        from pydantic import ValidationError
         
         if not isinstance(data, dict):
             raise TypeError(f"Expected dict for {model_class.__name__}, got {type(data).__name__}")
@@ -261,7 +259,7 @@ class FunctionTool(ToolBase):
                     converted_data[field_name] = self._convert_field_value(
                         field_name, field_value, field_type, model_class.__name__
                     )
-                except Exception as e:
+                except Exception:
                     # If field conversion fails, keep the original value
                     # Pydantic will handle validation
                     converted_data[field_name] = field_value
@@ -291,7 +289,7 @@ class FunctionTool(ToolBase):
                 try:
                     result = model_class(**converted_data)
                     return result
-                except Exception as e2:
+                except Exception:
                     # Still failed - raise original validation error
                     raise ValueError(
                         f"Validation failed for {model_class.__name__}: {str(e)}"

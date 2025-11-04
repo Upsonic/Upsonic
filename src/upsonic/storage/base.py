@@ -1,8 +1,8 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import List, Optional, Type, TypeVar, Union, overload
+from typing import Optional, Type, TypeVar, Union, overload
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from upsonic.utils.async_utils import AsyncExecutionMixin
 from upsonic.storage.session.sessions import (

@@ -108,7 +108,7 @@ class RunnableBranch(Runnable[Input, Output]):
             try:
                 if condition(input):
                     return runnable.invoke(input, config)
-            except Exception as e:
+            except Exception:
                 # If condition evaluation fails, skip to next
                 continue
         
@@ -138,7 +138,7 @@ class RunnableBranch(Runnable[Input, Output]):
                     
                 if condition_result:
                     return await runnable.ainvoke(input, config)
-            except Exception as e:
+            except Exception:
                 # If condition evaluation fails, skip to next
                 continue
         

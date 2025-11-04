@@ -24,13 +24,11 @@ from upsonic.utils.printing import info_log, debug_log, warning_log
 from upsonic.vectordb.config import (
     Config,
     Mode,
-    IndexType,
     DistanceMetric,
     HNSWTuningConfig,
     IVFTuningConfig,
     FlatTuningConfig,
-    WriteConsistency,
-    PayloadIndexConfig
+    WriteConsistency
 )
 
 from upsonic.utils.package.exception import(

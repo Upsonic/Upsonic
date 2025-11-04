@@ -155,7 +155,6 @@ class ChatPromptTemplate(Runnable[dict[str, Any], Union[str, ModelRequest]]):
             from upsonic.messages import ModelResponse, TextPart
             from upsonic.usage import RequestUsage
             from upsonic._utils import now_utc
-            import datetime
             
             # Build the conversation history following strict rules:
             # 1. Only ONE SystemPromptPart in the FIRST ModelRequest

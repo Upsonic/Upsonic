@@ -470,7 +470,7 @@ def call_end(result: Any, model: Any, response_format: str, start_time: float, e
             else:
                 from decimal import Decimal
                 price_id_summary[price_id]['estimated_cost'] = Decimal(str(price_id_summary[price_id]['estimated_cost'])) + Decimal(cost_str)
-        except Exception as e:
+        except Exception:
             if debug:
                 pass  # Error calculating cost
 
@@ -927,7 +927,7 @@ def print_orchestrator_tool_step(tool_name: str, params: dict, result: Any):
 
     tool_panel = Panel(
         tool_table,
-        title=f"[bold cyan]Orchestrator - Tool Call Result[/bold cyan]",
+        title="[bold cyan]Orchestrator - Tool Call Result[/bold cyan]",
         border_style="cyan",
         expand=True,
         width=70
@@ -944,13 +944,13 @@ def policy_triggered(policy_name: str, check_type: str, action_taken: str, rule_
     
     if "BLOCK" in action_taken.upper() or "DISALLOWED" in action_taken.upper():
         border_style = "bold red"
-        title = f"[bold red]🛡️ Safety Policy Triggered: ACCESS DENIED[/bold red]"
+        title = "[bold red]🛡️ Safety Policy Triggered: ACCESS DENIED[/bold red]"
     elif "REPLACE" in action_taken.upper() or "ANONYMIZE" in action_taken.upper():
         border_style = "bold yellow"
-        title = f"[bold yellow]🛡️ Safety Policy Triggered: CONTENT MODIFIED[/bold yellow]"
+        title = "[bold yellow]🛡️ Safety Policy Triggered: CONTENT MODIFIED[/bold yellow]"
     else:
         border_style = "bold green"
-        title = f"[bold green]🛡️ Safety Policy Check: PASSED[/bold green]"
+        title = "[bold green]🛡️ Safety Policy Check: PASSED[/bold green]"
 
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
@@ -2326,7 +2326,7 @@ def ocr_language_not_supported(
     
     panel = Panel(
         table,
-        title=f"[bold red]❌ OCR Language Not Supported[/bold red]",
+        title="[bold red]❌ OCR Language Not Supported[/bold red]",
         border_style="red",
         expand=True,
         width=70
