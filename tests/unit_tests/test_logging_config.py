@@ -8,7 +8,7 @@ import unittest
 import logging
 import os
 import tempfile
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch
 from pathlib import Path
 
 # Import the module under test

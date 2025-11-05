@@ -5,7 +5,7 @@ import tempfile
 import shutil
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
-from unittest.mock import Mock, patch, AsyncMock, MagicMock
+from unittest.mock import Mock, patch, AsyncMock
 import numpy as np
 
 from upsonic.embeddings.base import EmbeddingProvider, EmbeddingConfig, EmbeddingMode, EmbeddingMetrics
@@ -20,7 +20,7 @@ from upsonic.embeddings.factory import create_embedding_provider, list_available
 
 from upsonic.knowledge_base.knowledge_base import KnowledgeBase
 from upsonic.vectordb.providers.faiss import FaissProvider
-from upsonic.vectordb.config import Config, Mode, DistanceMetric, IndexType
+from upsonic.vectordb.config import Config, DistanceMetric, IndexType
 from upsonic.schemas.data_models import Chunk, Document
 from upsonic.text_splitter.base import BaseChunker
 from upsonic.loaders.base import BaseLoader

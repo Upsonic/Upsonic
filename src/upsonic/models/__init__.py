@@ -1322,7 +1322,7 @@ def infer_model(model: Model | KnownModelName | str) -> Model:  # noqa: C901
         if task_kwargs.get("bypass_llm_model", None) is not None:
             bypass_llm_model = task_kwargs.get("bypass_llm_model")
 
-    except Exception as e:
+    except Exception:
         pass
 
 

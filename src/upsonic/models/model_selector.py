@@ -1,5 +1,3 @@
-import json
-import re
 from typing import Dict, List, Optional, Any, Literal
 from pydantic import BaseModel, Field
 
@@ -8,9 +6,6 @@ from upsonic.models.model_registry import (
     ModelMetadata,
     ModelCapability,
     ModelTier,
-    get_models_by_capability,
-    get_models_by_tier,
-    get_top_models,
 )
 
 

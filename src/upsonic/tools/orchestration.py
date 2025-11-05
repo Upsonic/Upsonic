@@ -128,7 +128,7 @@ class Orchestrator:
         self.is_reasoning_enabled = agent_instance.enable_reasoning_tool if agent_instance else False
         self.original_user_request = task.description
         
-        self.execution_history = f"Orchestrator's execution history for the user's request:\n"
+        self.execution_history = "Orchestrator's execution history for the user's request:\n"
         self.program_counter = 0
         self.pending_plan = []
         self.revision_count = 0
@@ -199,7 +199,6 @@ class Orchestrator:
     async def _inject_analysis(self) -> AnalysisResult:
         """Inject mandatory analysis step after tool execution."""
         from upsonic.tasks.tasks import Task
-        import copy
         
         analysis_prompt = (
             f"Original user request(This is just for remembrance. You have to follow instructions below based on this. But this is not the main focus you will try to fulfill right now): '{self.original_user_request}'\n\n"
@@ -250,7 +249,6 @@ class Orchestrator:
         """Request revised plan based on execution history."""
         from upsonic.tasks.tasks import Task
         from upsonic.utils.printing import console
-        import copy
         
         revision_prompt = (
             f"Original user request(This is just for remembrance. You have to follow instructions below based on this. But this is not the main focus you will try to fulfill right now): '{self.original_user_request}'\n\n"
@@ -281,7 +279,6 @@ class Orchestrator:
         """Synthesize final answer based on execution history."""
         from upsonic.tasks.tasks import Task
         from upsonic.utils.printing import console, spacing
-        import copy
         
         console.print("[bold magenta]Orchestrator:[/bold magenta] Plan complete. Preparing for final synthesis.")
         spacing()

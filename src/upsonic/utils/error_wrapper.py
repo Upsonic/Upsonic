@@ -12,8 +12,7 @@ from upsonic.utils.package.exception import (
     TaskProcessingError,
     ConfigurationError,
     RetryExhaustedError,
-    NoAPIKeyException,
-    CallErrorException
+    NoAPIKeyException
 )
 from upsonic.utils.printing import error_message
 

@@ -4,7 +4,7 @@ Handles detection and protection against fraud, scams, and financial crimes.
 """
 
 import re
-from typing import List, Optional, Dict, Any
+from typing import Optional, Dict, Any
 from ..base import RuleBase, ActionBase, Policy
 from ..models import PolicyInput, RuleOutput, PolicyOutput
 
@@ -231,7 +231,7 @@ class FraudDetectionRule_LLM_Finder(RuleBase):
                 triggered_keywords=triggered_keywords
             )
             
-        except Exception as e:
+        except Exception:
             # Fallback to pattern-based detection on error
             fallback_rule = FraudDetectionRule()
             return fallback_rule.process(policy_input)

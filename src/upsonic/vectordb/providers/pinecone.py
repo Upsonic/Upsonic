@@ -1,6 +1,5 @@
 import time
 from typing import Any, Dict, List, Optional, Union, Literal, Generator
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
     import pinecone
@@ -20,9 +19,7 @@ from upsonic.vectordb.base import BaseVectorDBProvider
 
 from upsonic.vectordb.config import (
     Config,
-    Mode,
     ProviderName,
-    IndexType,
     IVFTuningConfig,
     DistanceMetric
 )
@@ -30,7 +27,6 @@ from upsonic.vectordb.config import (
 from upsonic.utils.package.exception import(
     VectorDBConnectionError,
     ConfigurationError,
-    CollectionDoesNotExistError,
     VectorDBError,
     SearchError,
     UpsertError
@@ -420,7 +416,6 @@ class PineconeProvider(BaseVectorDBProvider):
 
     def _wait_for_index_ready(self, index_name: str) -> None:
         """Wait for index to be ready."""
-        import time
         wait_timeout = 600
         start_time = time.time()
         
@@ -440,7 +435,6 @@ class PineconeProvider(BaseVectorDBProvider):
 
     def _wait_for_deletion(self, index_name: str) -> None:
         """Wait for index deletion to complete."""
-        import time
         wait_timeout = 300 
         start_time = time.time()
         

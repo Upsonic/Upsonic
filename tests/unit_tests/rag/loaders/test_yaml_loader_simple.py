@@ -1,7 +1,6 @@
 import unittest
 import tempfile
 import os
-import uuid
 from pathlib import Path
 from upsonic.loaders.yaml import YAMLLoader
 from upsonic.loaders.config import YAMLLoaderConfig

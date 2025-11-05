@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, Union, Tuple
+from typing import List, Dict, Any, Optional, Tuple
 from enum import Enum
 import time
 try:

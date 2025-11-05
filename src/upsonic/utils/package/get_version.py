@@ -1,6 +1,6 @@
 import toml
 import os
-from importlib.metadata import version, PackageNotFoundError
+from importlib.metadata import version
 
 def get_library_version() -> str:
     """

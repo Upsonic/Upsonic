@@ -1,9 +1,5 @@
 import pytest
-import os
-import tempfile
-from unittest.mock import patch, MagicMock
 from upsonic import Agent, Task
-from upsonic.tools import WebSearch, WebRead
 from pydantic import BaseModel
 
 

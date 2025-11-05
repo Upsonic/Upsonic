@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Set, Union
-import copy
 
 from pydantic import BaseModel, Field, ConfigDict
-from rich.console import Console
-from rich.markup import escape
 from rich.panel import Panel
 from rich.progress import (BarColumn, Progress, SpinnerColumn, TextColumn,
                            TimeElapsedColumn)
@@ -650,7 +646,7 @@ class Graph(BaseModel):
         Runs tasks sequentially.
         """
         if verbose:
-            console.print(f"[blue]Executing graph with decision support[/blue]")
+            console.print("[blue]Executing graph with decision support[/blue]")
             spacing()
 
         start_nodes = self._get_start_nodes()

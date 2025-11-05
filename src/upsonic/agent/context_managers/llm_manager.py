@@ -27,7 +27,7 @@ class LLMManager:
                 if task_kwargs.get("bypass_llm_model", None) is not None:
                     model = task_kwargs.get("bypass_llm_model")
 
-            except Exception as e:
+            except Exception:
                 pass
 
         return model

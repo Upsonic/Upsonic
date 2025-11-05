@@ -4,7 +4,7 @@ Handles detection and protection against malware, malicious code, and cyber thre
 """
 
 import re
-from typing import List, Optional, Dict, Any
+from typing import Optional, Dict, Any
 from ..base import RuleBase, ActionBase, Policy
 from ..models import PolicyInput, RuleOutput, PolicyOutput
 
@@ -206,7 +206,7 @@ class CybersecurityRule_LLM_Finder(RuleBase):
                 triggered_keywords=triggered_keywords
             )
             
-        except Exception as e:
+        except Exception:
             # Fallback to pattern-based detection on error
             fallback_rule = CybersecurityRule()
             return fallback_rule.process(policy_input)

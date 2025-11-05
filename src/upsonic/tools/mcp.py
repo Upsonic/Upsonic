@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Type
 from urllib.parse import urlparse
 
 from mcp import types as mcp_types
@@ -155,7 +154,7 @@ class MCPHandler:
         try:
             loop = asyncio.get_running_loop()
             # If we're in an async context, create tools in a thread
-            console.print(f"[yellow]⚠️  MCP async limitation detected. Attempting threaded connection...[/yellow]")
+            console.print("[yellow]⚠️  MCP async limitation detected. Attempting threaded connection...[/yellow]")
             
             import concurrent.futures
             
@@ -173,7 +172,7 @@ class MCPHandler:
                 future = executor.submit(discover_tools_in_thread)
                 self.tools = future.result(timeout=10)  # 10 second timeout
                 
-            console.print(f"[green]✅ MCP tools discovered via thread[/green]")
+            console.print("[green]✅ MCP tools discovered via thread[/green]")
             
         except RuntimeError:
             # No running loop, safe to create one

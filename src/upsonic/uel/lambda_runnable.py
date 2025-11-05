@@ -1,6 +1,6 @@
 import asyncio
 import inspect
-from typing import Any, Callable, Union, Coroutine, TypeVar, Awaitable
+from typing import Any, Callable, Union
 
 from upsonic.uel.runnable import Runnable, Input, Output
 

@@ -47,6 +47,39 @@ agent.print_do(task)
 <br>
 <br>
 
+## Development Setup
+
+### Pre-commit Hooks
+
+This repository uses pre-commit hooks to ensure code quality and consistency. **All contributors must install and activate these hooks** before making commits.
+
+**Installation Steps:**
+
+1. Install pre-commit (if using `uv`):
+   ```bash
+   uv tool install pre-commit
+   ```
+
+2. Install the git hooks:
+   ```bash
+   pre-commit install
+   ```
+
+3. (Optional) Test the hooks on all files:
+   ```bash
+   pre-commit run --all-files
+   ```
+
+After installation, pre-commit hooks will automatically run before each commit, checking:
+- UV lockfile updates
+- UV sync
+- Pytest tests
+
+**Note:** Each developer must run `pre-commit install` on their local machine. The hooks are not automatically activated when cloning the repository.
+
+<br>
+<br>
+
 # Guides | 7 Step
 See our guides to jumpstart your AI agent within minutes. We design them to onboard the new users to the framework.
 
