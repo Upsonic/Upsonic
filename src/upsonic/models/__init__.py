@@ -1413,6 +1413,10 @@ def infer_model(model: Model | KnownModelName | str) -> Model:  # noqa: C901
         from .huggingface import HuggingFaceModel
 
         return HuggingFaceModel(model_name, provider=provider)
+    elif provider == 'ollama':
+        from .openai import OpenAIChatModel
+
+        return OpenAIChatModel(model_name, provider=provider)
     else:
         raise UserError(f'Unknown model: {model}')  # pragma: no cover
 
