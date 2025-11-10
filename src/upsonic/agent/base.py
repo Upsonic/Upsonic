@@ -1,5 +1,6 @@
 from abc import ABC
 
+
 class BaseAgent(ABC):
     """
     An abstract base class for all agent implementations.
@@ -9,4 +10,5 @@ class BaseAgent(ABC):
     implementations. Any class inheriting from this can be used as an agent
     in a Graph.
     """
+
     pass
