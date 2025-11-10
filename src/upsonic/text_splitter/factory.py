@@ -352,14 +352,24 @@ def recommend_strategy_for_content(
         content_type: Detected content type
         use_case: Intended use case
         content_length: Length of content in characters
-        quality_preference: Speed vs quality preference
+        quality_preference: Speed vs quality preference ("fast", "balanced", "quality")
         
     Returns:
         Recommended strategy name
+        
+    Quality Preference Behavior:
+        - "fast": Prioritizes speed, uses character-based chunking
+        - "balanced": Balances quality and performance, uses semantic or recursive
+        - "quality": Maximizes quality, uses agentic or semantic strategies
+        
+    Note:
+        This function only recommends strategies. It does not check for embedding provider
+        availability. The caller must provide embedding_provider if semantic strategy is selected.
     """
     _lazy_import_strategies()
     available = set(list_available_strategies())
     
+    # Content-specific strategies (override quality preference for structured content)
     if content_type == ContentType.MARKDOWN and "markdown" in available:
         return "markdown"
     elif content_type == ContentType.HTML and "html" in available:
@@ -369,33 +379,43 @@ def recommend_strategy_for_content(
     elif content_type in [ContentType.PYTHON, ContentType.JAVASCRIPT] and "python" in available:
         return "python"
     
-    if use_case == ChunkingUseCase.SEMANTIC_SEARCH and "semantic" in available:
-        if quality_preference == "quality":
-            try:
-                from upsonic.embeddings.factory import create_embedding_provider
-                create_embedding_provider("openai")
-                return "semantic"
-            except (ImportError, ConfigurationError):
-                pass
-    
-    if use_case in [ChunkingUseCase.RAG_RETRIEVAL, ChunkingUseCase.QUESTION_ANSWERING]:
-        if quality_preference == "quality" and "agentic" in available and content_length < 50000:
-            try:
-                return "agentic"
-            except:
-                pass
-        elif "semantic" in available and quality_preference != "fast":
-            try:
-                from upsonic.embeddings.factory import create_embedding_provider
-                create_embedding_provider("openai")
-                return "semantic"
-            except (ImportError, ConfigurationError):
-                pass
-    
+    # Fast preference: prioritize speed over quality
     if quality_preference == "fast" or content_length > 100000:
         if "character" in available:
             return "character"
+        elif "recursive" in available:
+            return "recursive"
     
+    # Quality preference: maximize quality regardless of cost
+    if quality_preference == "quality":
+        if use_case == ChunkingUseCase.SEMANTIC_SEARCH and "semantic" in available:
+            return "semantic"
+        
+        if use_case in [ChunkingUseCase.RAG_RETRIEVAL, ChunkingUseCase.QUESTION_ANSWERING]:
+            # Try agentic first for highest quality (if content is not too large)
+            if "agentic" in available and content_length < 50000:
+                return "agentic"
+            # Fall back to semantic for quality
+            if "semantic" in available:
+                return "semantic"
+    
+    # Balanced preference: good quality without expensive operations
+    if quality_preference == "balanced":
+        if use_case == ChunkingUseCase.SEMANTIC_SEARCH and "semantic" in available:
+            # Use semantic for semantic search but with reasonable content size limits
+            if content_length < 75000:
+                return "semantic"
+        
+        if use_case in [ChunkingUseCase.RAG_RETRIEVAL, ChunkingUseCase.QUESTION_ANSWERING]:
+            # Skip expensive agentic, use semantic for balanced approach
+            if "semantic" in available and content_length < 75000:
+                return "semantic"
+        
+        # For balanced, prefer recursive over character
+        if "recursive" in available:
+            return "recursive"
+    
+    # Default fallback strategy
     if "recursive" in available:
         return "recursive"
     elif "character" in available:
@@ -438,24 +458,25 @@ def create_chunking_strategy(
     if strategy == "semantic":
         embedding_provider = kwargs.pop("embedding_provider", None)
         if embedding_provider is None:
-            try:
-                from upsonic.embeddings.factory import create_embedding_provider
-                embedding_provider = create_embedding_provider("openai")
-            except (ImportError, ConfigurationError) as e:
-                error_code = getattr(e, 'error_code', 'MISSING_EMBEDDING_PROVIDER')
-                raise ConfigurationError(
-                    f"Semantic strategy requires an embedding_provider. Original error: {str(e)}",
-                    error_code=error_code
-                )
+            raise ConfigurationError(
+                "Semantic strategy requires an embedding_provider. Please provide one via the embedding_provider parameter.",
+                error_code="MISSING_EMBEDDING_PROVIDER"
+            )
         kwargs["embedding_provider"] = embedding_provider
     
     elif strategy in ["agentic", "ai"]:
         agent = kwargs.pop("agent", None)
         if agent is None:
-            raise ConfigurationError(
-                "Agentic strategy requires an agent. Please provide one.",
-                error_code="MISSING_AGENT"
-            )
+            # Create a default agent if none is provided
+            try:
+                from upsonic.agent.agent import Agent
+                agent = Agent("openai/gpt-4o")
+                info_log("Created default agent for agentic chunking strategy", context="TextSplitterFactory")
+            except (ImportError, Exception) as e:
+                raise ConfigurationError(
+                    f"Agentic strategy requires an agent. Failed to create default agent: {str(e)}",
+                    error_code="MISSING_AGENT"
+                )
         
         # Create config for agentic strategy
         final_config = _create_final_config(config, config_class, kwargs)
@@ -494,6 +515,8 @@ def create_adaptive_strategy(
     metadata: Optional[Dict[str, Any]] = None,
     use_case: ChunkingUseCase = ChunkingUseCase.GENERAL,
     quality_preference: str = "balanced",
+    embedding_provider: Optional[Any] = None,
+    agent: Optional[Any] = None,
     **kwargs
 ) -> BaseChunker:
     """
@@ -504,6 +527,8 @@ def create_adaptive_strategy(
         metadata: Optional metadata
         use_case: Intended use case
         quality_preference: Speed vs quality preference
+        embedding_provider: Optional embedding provider (required if semantic strategy is selected)
+        agent: Optional agent (will be created if agentic strategy is selected and none provided)
         **kwargs: Additional configuration
         
     Returns:
@@ -519,6 +544,14 @@ def create_adaptive_strategy(
     )
     
     optimized_config = _create_optimized_config(content, content_type, strategy_name, **kwargs)
+    
+    # Pass embedding_provider if semantic strategy is selected
+    if strategy_name == "semantic" and embedding_provider is not None:
+        optimized_config["embedding_provider"] = embedding_provider
+    
+    # Pass agent if agentic strategy is selected
+    if strategy_name == "agentic" and agent is not None:
+        optimized_config["agent"] = agent
     
     info_log(f"Auto-selected {strategy_name} strategy for {content_type.value} content", context="TextSplitterFactory")
     
@@ -565,6 +598,8 @@ def create_intelligent_splitters(
     content_samples: Optional[List[str]] = None,
     use_case: ChunkingUseCase = ChunkingUseCase.RAG_RETRIEVAL,
     quality_preference: str = "balanced",
+    embedding_provider: Optional[Any] = None,
+    agent: Optional[Any] = None,
     **global_config_kwargs
 ) -> List[BaseChunker]:
     """
@@ -579,6 +614,8 @@ def create_intelligent_splitters(
         content_samples: Optional list of content samples for analysis (if sources are file paths)
         use_case: Intended use case for chunking optimization
         quality_preference: Speed vs quality preference
+        embedding_provider: Optional embedding provider (required if semantic strategy is selected)
+        agent: Optional agent (will be created if agentic strategy is selected and none provided)
         **global_config_kwargs: Global configuration options to apply to all strategies
         
     Returns:
@@ -610,7 +647,7 @@ def create_intelligent_splitters(
                 content_sample = source_str
             
             source_config = _create_source_optimized_config(
-                source_str, content_sample, use_case, quality_preference, **global_config_kwargs
+                source_str, content_sample, use_case, **global_config_kwargs
             )
             
             splitter = create_adaptive_strategy(
@@ -618,6 +655,8 @@ def create_intelligent_splitters(
                 metadata={'source': source_str},
                 use_case=use_case,
                 quality_preference=quality_preference,
+                embedding_provider=embedding_provider,
+                agent=agent,
                 **source_config
             )
             
@@ -628,7 +667,7 @@ def create_intelligent_splitters(
             warning_log(f"Failed to create intelligent splitter for {source}: {e}", context="TextSplitterFactory")
             try:
                 fallback_config = _create_source_optimized_config(
-                    source_str, "", use_case, "fast", **global_config_kwargs
+                    source_str, "", use_case, **global_config_kwargs
                 )
                 fallback_splitter = create_chunking_strategy("recursive", **fallback_config)
                 splitters.append(fallback_splitter)
@@ -644,7 +683,6 @@ def _create_source_optimized_config(
     source: Union[str, Path],
     content_sample: str,
     use_case: ChunkingUseCase,
-    quality_preference: str,
     **global_config_kwargs
 ) -> Dict[str, Any]:
     """
@@ -654,7 +692,6 @@ def _create_source_optimized_config(
         source: Source path (Path object or string) or content string
         content_sample: Sample of content for analysis
         use_case: Intended use case
-        quality_preference: Speed vs quality preference
         **global_config_kwargs: Global configuration options
         
     Returns:
@@ -663,7 +700,6 @@ def _create_source_optimized_config(
     config = global_config_kwargs.copy()
     
     source_path = Path(source) if not isinstance(source, Path) else source
-    source_str = str(source)
     
     if source_path.exists() and source_path.is_file():
         file_size = source_path.stat().st_size
@@ -711,39 +747,50 @@ def _create_source_optimized_config(
     return config
 
 
-def create_rag_strategy(content: str = "", **kwargs) -> BaseChunker:
+def create_rag_strategy(content: str = "", embedding_provider: Optional[Any] = None, agent: Optional[Any] = None, **kwargs) -> BaseChunker:
     """Create optimal strategy for RAG use case."""
     if content:
         return create_adaptive_strategy(
             content, 
             use_case=ChunkingUseCase.RAG_RETRIEVAL,
             quality_preference="balanced",
+            embedding_provider=embedding_provider,
+            agent=agent,
             **kwargs
         )
     else:
         return create_chunking_strategy("recursive", **kwargs)
 
 
-def create_semantic_search_strategy(content: str = "", **kwargs) -> BaseChunker:
-    """Create optimal strategy for semantic search."""
+def create_semantic_search_strategy(content: str = "", embedding_provider: Optional[Any] = None, **kwargs) -> BaseChunker:
+    """
+    Create optimal strategy for semantic search.
+    
+    Args:
+        content: Optional content string for adaptive strategy selection
+        embedding_provider: Embedding provider (required if semantic strategy is selected)
+        **kwargs: Additional configuration parameters
+        
+    Returns:
+        Configured chunking strategy
+        
+    Raises:
+        ConfigurationError: If semantic strategy is selected but embedding_provider is not provided
+    """
     if content:
         return create_adaptive_strategy(
             content,
             use_case=ChunkingUseCase.SEMANTIC_SEARCH,
             quality_preference="quality",
+            embedding_provider=embedding_provider,
             **kwargs
         )
     else:
-        try:
-            return create_chunking_strategy("semantic", **kwargs)
-        except ConfigurationError as e:
-            error_code = getattr(e, 'error_code', '')
-            if (error_code in ['MISSING_EMBEDDING_PROVIDER', 'API_KEY_MISSING', 'DEPENDENCY_MISSING'] or 
-                "OpenAI API key not found" in str(e) or "embedding_provider" in str(e)):
-                warning_log("No embedding provider available, falling back to recursive strategy", context="TextSplitterFactory")
-                return create_chunking_strategy("recursive", **kwargs)
-            else:
-                raise
+        if embedding_provider is None:
+            warning_log("No embedding provider provided, falling back to recursive strategy", context="TextSplitterFactory")
+            return create_chunking_strategy("recursive", **kwargs)
+        kwargs["embedding_provider"] = embedding_provider
+        return create_chunking_strategy("semantic", **kwargs)
 
 
 def create_fast_strategy(**kwargs) -> BaseChunker:
@@ -751,35 +798,50 @@ def create_fast_strategy(**kwargs) -> BaseChunker:
     return create_chunking_strategy("character", **kwargs)
 
 
-def create_quality_strategy(content: str = "", **kwargs) -> BaseChunker:
-    """Create highest quality strategy available."""
+def create_quality_strategy(content: str = "", embedding_provider: Optional[Any] = None, agent: Optional[Any] = None, **kwargs) -> BaseChunker:
+    """
+    Create highest quality strategy available.
+    
+    Args:
+        content: Optional content string for adaptive strategy selection
+        embedding_provider: Optional embedding provider (required if semantic strategy is selected)
+        agent: Optional agent (will be created if agentic strategy is selected and none provided)
+        **kwargs: Additional configuration parameters
+        
+    Returns:
+        Configured chunking strategy
+    """
     if content:
         return create_adaptive_strategy(
             content,
             quality_preference="quality",
+            embedding_provider=embedding_provider,
+            agent=agent,
             **kwargs
         )
     else:
         available = list_available_strategies()
         if "agentic" in available:
+            # Agent will be created automatically if not provided
+            if agent is not None:
+                kwargs["agent"] = agent
             try:
                 return create_chunking_strategy("agentic", **kwargs)
             except ConfigurationError as e:
                 error_code = getattr(e, 'error_code', '')
                 if error_code == 'MISSING_AGENT' or "agent" in str(e).lower():
-                    warning_log("No agent available, trying semantic strategy", context="TextSplitterFactory")
+                    warning_log("Failed to create agent, trying semantic strategy", context="TextSplitterFactory")
                 else:
                     raise
         
         if "semantic" in available:
-            try:
-                return create_chunking_strategy("semantic", **kwargs)
-            except ConfigurationError as e:
-                error_code = getattr(e, 'error_code', '')
-                if (error_code in ['MISSING_EMBEDDING_PROVIDER', 'API_KEY_MISSING', 'DEPENDENCY_MISSING'] or 
-                    "OpenAI API key not found" in str(e) or "embedding_provider" in str(e)):
-                    warning_log("No embedding provider available, falling back to recursive strategy", context="TextSplitterFactory")
-                else:
+            if embedding_provider is not None:
+                kwargs["embedding_provider"] = embedding_provider
+                try:
+                    return create_chunking_strategy("semantic", **kwargs)
+                except ConfigurationError as e:
                     raise
+            else:
+                warning_log("No embedding provider provided, falling back to recursive strategy", context="TextSplitterFactory")
         
         return create_chunking_strategy("recursive", **kwargs)

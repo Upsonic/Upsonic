@@ -6,9 +6,32 @@ from .base import (
 )
 
 from .config import (
+    # Base configs
+    BaseVectorDBConfig,
     DistanceMetric,
     IndexType,
-    QuantizationConfig,
+    Mode,
+    ConnectionConfig,
+    
+    # Index configs
+    HNSWIndexConfig,
+    IVFIndexConfig,
+    FlatIndexConfig,
+    
+    # Payload configs
+    PayloadFieldConfig,
+    
+    # Provider configs
+    ChromaConfig,
+    FaissConfig,
+    QdrantConfig,
+    PineconeConfig,
+    MilvusConfig,
+    WeaviateConfig,
+    PgVectorConfig,
+    
+    # Factory function
+    create_config,
 )
 
 if TYPE_CHECKING:
@@ -18,7 +41,7 @@ if TYPE_CHECKING:
     from .providers.qdrant import QdrantProvider
     from .providers.milvus import MilvusProvider
     from .providers.weaviate import WeaviateProvider
-    from .providers.pgvector import PgvectorProvider
+    from .providers.pgvector import PgVectorProvider
 
 def _get_provider_classes():
     """Get provider classes with lazy importing."""
@@ -61,8 +84,8 @@ def _get_provider_classes():
         pass
     
     try:
-        from .providers.pgvector import PgvectorProvider
-        providers['PgvectorProvider'] = PgvectorProvider
+        from .providers.pgvector import PgVectorProvider
+        providers['PgVectorProvider'] = PgVectorProvider
     except ImportError:
         pass
     
@@ -78,13 +101,36 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
+    # Base classes
+    'BaseVectorDBProvider',
+    
+    # Provider classes
     'ChromaProvider',
     'FaissProvider',
     'PineconeProvider',
     'QdrantProvider',
     'MilvusProvider',
     'WeaviateProvider',
-    'PgvectorProvider',
+    'PgVectorProvider',
+    
+    # Config classes
+    'BaseVectorDBConfig',
+    'DistanceMetric',
+    'IndexType',
+    'Mode',
+    'ConnectionConfig',
+    'HNSWIndexConfig',
+    'IVFIndexConfig',
+    'FlatIndexConfig',
+    'PayloadFieldConfig',
+    'ChromaConfig',
+    'FaissConfig',
+    'QdrantConfig',
+    'PineconeConfig',
+    'MilvusConfig',
+    'WeaviateConfig',
+    'PgVectorConfig',
+    'create_config',
 ]
 
 

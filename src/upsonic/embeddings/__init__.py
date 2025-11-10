@@ -117,6 +117,58 @@ def _get_gemini_cloud_embedding():
     from .gemini_provider import create_gemini_cloud_embedding
     return create_gemini_cloud_embedding
 
+def _get_azure_embedding_with_managed_identity():
+    from .azure_openai_provider import create_azure_embedding_with_managed_identity
+    return create_azure_embedding_with_managed_identity
+
+def _get_create_titan_embedding():
+    from .bedrock_provider import create_titan_embedding
+    return create_titan_embedding
+
+def _get_create_cohere_embedding():
+    from .bedrock_provider import create_cohere_embedding
+    return create_cohere_embedding
+
+def _get_create_mpnet_embedding():
+    from .huggingface_provider import create_mpnet_embedding
+    return create_mpnet_embedding
+
+def _get_create_minilm_embedding():
+    from .huggingface_provider import create_minilm_embedding
+    return create_minilm_embedding
+
+def _get_create_huggingface_api_embedding():
+    from .huggingface_provider import create_huggingface_api_embedding
+    return create_huggingface_api_embedding
+
+def _get_create_bge_large_embedding():
+    from .fastembed_provider import create_bge_large_embedding
+    return create_bge_large_embedding
+
+def _get_create_e5_embedding():
+    from .fastembed_provider import create_e5_embedding
+    return create_e5_embedding
+
+def _get_create_gpu_accelerated_embedding():
+    from .fastembed_provider import create_gpu_accelerated_embedding
+    return create_gpu_accelerated_embedding
+
+def _get_create_sparse_embedding():
+    from .fastembed_provider import create_sparse_embedding
+    return create_sparse_embedding
+
+def _get_create_nomic_embedding():
+    from .ollama_provider import create_nomic_embedding
+    return create_nomic_embedding
+
+def _get_create_mxbai_embedding():
+    from .ollama_provider import create_mxbai_embedding
+    return create_mxbai_embedding
+
+def _get_create_arctic_embedding():
+    from .ollama_provider import create_arctic_embedding
+    return create_arctic_embedding
+
 
 def __getattr__(name: str) -> Any:
     """Lazy loading of provider classes and functions."""
@@ -140,6 +192,19 @@ def __getattr__(name: str) -> Any:
         "create_gemini_query_embedding": _get_gemini_query_embedding,
         "create_gemini_semantic_embedding": _get_gemini_semantic_embedding,
         "create_gemini_cloud_embedding": _get_gemini_cloud_embedding,
+        "create_azure_embedding_with_managed_identity": _get_azure_embedding_with_managed_identity,
+        "create_titan_embedding": _get_create_titan_embedding,
+        "create_cohere_embedding": _get_create_cohere_embedding,
+        "create_mpnet_embedding": _get_create_mpnet_embedding,
+        "create_minilm_embedding": _get_create_minilm_embedding,
+        "create_huggingface_api_embedding": _get_create_huggingface_api_embedding,
+        "create_bge_large_embedding": _get_create_bge_large_embedding,
+        "create_e5_embedding": _get_create_e5_embedding,
+        "create_gpu_accelerated_embedding": _get_create_gpu_accelerated_embedding,
+        "create_sparse_embedding": _get_create_sparse_embedding,
+        "create_nomic_embedding": _get_create_nomic_embedding,
+        "create_mxbai_embedding": _get_create_mxbai_embedding,
+        "create_arctic_embedding": _get_create_arctic_embedding,
     }
     
     if name in lazy_loaders:
@@ -187,4 +252,18 @@ __all__ = [
     "create_gemini_query_embedding",
     "create_gemini_semantic_embedding",
     "create_gemini_cloud_embedding",
+    "create_azure_embedding_with_managed_identity",
+    "create_titan_embedding",
+    "create_cohere_embedding",
+    "create_mpnet_embedding",
+    "create_minilm_embedding",
+    "create_huggingface_api_embedding",
+    "create_bge_large_embedding",
+    "create_e5_embedding",
+    "create_gpu_accelerated_embedding",
+    "create_sparse_embedding",
+    "create_nomic_embedding",
+    "create_mxbai_embedding",
+    "create_arctic_embedding",
 ]
+
