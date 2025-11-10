@@ -8,8 +8,7 @@ from typing import List, Dict, Any
 
 from upsonic.knowledge_base.knowledge_base import KnowledgeBase
 from upsonic.vectordb.providers.chroma import ChromaProvider
-from upsonic.vectordb.config import Config, CoreConfig, IndexingConfig, SearchConfig, DataManagementConfig, AdvancedConfig
-from upsonic.vectordb.config import Mode, ProviderName, DistanceMetric, IndexType, HNSWTuningConfig
+from upsonic.vectordb.config import ChromaConfig, ConnectionConfig, Mode, DistanceMetric, HNSWIndexConfig
 from upsonic.schemas.data_models import Document, Chunk, RAGSearchResult
 from upsonic.schemas.vector_schemas import VectorSearchResult
 
@@ -25,36 +24,17 @@ class TestChromaKnowledgeBaseIntegration:
     @pytest.fixture
     def chroma_config(self):
         """Create a ChromaProvider configuration."""
-        core_config = CoreConfig(
-            provider_name=ProviderName.CHROMA,
-            mode=Mode.IN_MEMORY,
+        connection = ConnectionConfig(mode=Mode.IN_MEMORY)
+        return ChromaConfig(
+            connection=connection,
             collection_name="test_collection",
             vector_size=384,
-            distance_metric=DistanceMetric.COSINE
-        )
-        
-        indexing_config = IndexingConfig(
-            index_config=HNSWTuningConfig(index_type=IndexType.HNSW),
-            create_dense_index=True,
-            create_sparse_index=False
-        )
-        
-        search_config = SearchConfig(
+            distance_metric=DistanceMetric.COSINE,
+            index=HNSWIndexConfig(),
             default_top_k=5,
             dense_search_enabled=True,
             full_text_search_enabled=True,
             hybrid_search_enabled=True
-        )
-        
-        data_config = DataManagementConfig()
-        advanced_config = AdvancedConfig()
-        
-        return Config(
-            core=core_config,
-            indexing=indexing_config,
-            search=search_config,
-            data_management=data_config,
-            advanced=advanced_config
         )
     
     @pytest.fixture
@@ -308,16 +288,18 @@ class TestChromaKnowledgeBaseIntegration:
     
     def test_chroma_configuration_validation(self):
         """Test ChromaProvider configuration validation."""
-        # Test invalid provider
-        invalid_config = CoreConfig(
-            provider_name=ProviderName.QDRANT,  # Wrong provider
-            mode=Mode.IN_MEMORY,
+        # Test invalid config (wrong provider type)
+        from upsonic.vectordb.config import QdrantConfig
+        invalid_connection = ConnectionConfig(mode=Mode.IN_MEMORY)
+        invalid_config = QdrantConfig(
+            connection=invalid_connection,
             collection_name="test",
             vector_size=384
         )
         
+        # ChromaProvider should only accept ChromaConfig
         with pytest.raises(Exception):
-            ChromaProvider(Config(core=invalid_config))
+            ChromaProvider(invalid_config)
     
     def test_chroma_collection_recreation(self, chroma_provider):
         """Test ChromaProvider collection recreation."""

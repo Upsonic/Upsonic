@@ -11,8 +11,7 @@ from typing import List, Dict, Any
 
 from upsonic.knowledge_base.knowledge_base import KnowledgeBase
 from upsonic.vectordb.providers.milvus import MilvusProvider
-from upsonic.vectordb.config import Config, CoreConfig, IndexingConfig, SearchConfig, DataManagementConfig, AdvancedConfig
-from upsonic.vectordb.config import Mode, ProviderName, DistanceMetric, IndexType, HNSWTuningConfig, IVFTuningConfig
+from upsonic.vectordb.config import MilvusConfig, ConnectionConfig, Mode, DistanceMetric, HNSWIndexConfig
 from upsonic.schemas.data_models import Document, Chunk, RAGSearchResult
 from upsonic.schemas.vector_schemas import VectorSearchResult
 
@@ -41,37 +40,17 @@ class TestMilvusKnowledgeBaseIntegration:
         """Create a MilvusProvider configuration."""
         import uuid
         unique_id = str(uuid.uuid4())[:8]
-        core_config = CoreConfig(
-            provider_name=ProviderName.MILVUS,
-            mode=Mode.EMBEDDED,
-            db_path=f"test_milvus_{unique_id}.db",
+        connection = ConnectionConfig(mode=Mode.EMBEDDED, db_path=f"test_milvus_{unique_id}.db")
+        return MilvusConfig(
+            connection=connection,
             collection_name=f"test_collection_{unique_id}",
             vector_size=384,
-            distance_metric=DistanceMetric.COSINE
-        )
-        
-        indexing_config = IndexingConfig(
-            index_config=HNSWTuningConfig(index_type=IndexType.HNSW),
-            create_dense_index=True,
-            create_sparse_index=False
-        )
-        
-        search_config = SearchConfig(
+            distance_metric=DistanceMetric.COSINE,
+            index=HNSWIndexConfig(),
             default_top_k=5,
             dense_search_enabled=True,
             full_text_search_enabled=True,
             hybrid_search_enabled=True
-        )
-        
-        data_config = DataManagementConfig()
-        advanced_config = AdvancedConfig()
-        
-        return Config(
-            core=core_config,
-            indexing=indexing_config,
-            search=search_config,
-            data_management=data_config,
-            advanced=advanced_config
         )
     
     @pytest.fixture
@@ -79,37 +58,18 @@ class TestMilvusKnowledgeBaseIntegration:
         """Create a MilvusProvider configuration with both dense and sparse indexes for hybrid search."""
         import uuid
         unique_id = str(uuid.uuid4())[:8]
-        core_config = CoreConfig(
-            provider_name=ProviderName.MILVUS,
-            mode=Mode.EMBEDDED,
-            db_path=f"test_milvus_hybrid_{unique_id}.db",
+        connection = ConnectionConfig(mode=Mode.EMBEDDED, db_path=f"test_milvus_hybrid_{unique_id}.db")
+        return MilvusConfig(
+            connection=connection,
             collection_name=f"test_collection_hybrid_{unique_id}",
             vector_size=384,
-            distance_metric=DistanceMetric.COSINE
-        )
-        
-        indexing_config = IndexingConfig(
-            index_config=HNSWTuningConfig(index_type=IndexType.HNSW),
-            create_dense_index=True,
-            create_sparse_index=True
-        )
-        
-        search_config = SearchConfig(
+            distance_metric=DistanceMetric.COSINE,
+            index=HNSWIndexConfig(),
+            use_sparse_vectors=True,
             default_top_k=5,
             dense_search_enabled=True,
             full_text_search_enabled=True,
             hybrid_search_enabled=True
-        )
-        
-        data_config = DataManagementConfig()
-        advanced_config = AdvancedConfig()
-        
-        return Config(
-            core=core_config,
-            indexing=indexing_config,
-            search=search_config,
-            data_management=data_config,
-            advanced=advanced_config
         )
     
     @pytest.fixture
@@ -443,17 +403,18 @@ class TestMilvusKnowledgeBaseIntegration:
     
     def test_milvus_configuration_validation(self):
         """Test MilvusProvider configuration validation (mocked)."""
-        # Mock configuration validation
-        with patch('upsonic.vectordb.providers.milvus.MilvusProvider._validate_config') as mock_validate:
-            mock_validate.side_effect = Exception("Invalid configuration")
-            
-            with pytest.raises(Exception):
-                MilvusProvider(Config(core=CoreConfig(
-                    provider_name=ProviderName.CHROMA,  # Wrong provider
-                    mode=Mode.IN_MEMORY,
-                    collection_name="test",
-                    vector_size=384
-                )))
+        # Test invalid config (wrong provider type)
+        from upsonic.vectordb.config import ChromaConfig
+        invalid_connection = ConnectionConfig(mode=Mode.IN_MEMORY)
+        invalid_config = ChromaConfig(
+            connection=invalid_connection,
+            collection_name="test",
+            vector_size=384
+        )
+        
+        # MilvusProvider should only accept MilvusConfig
+        with pytest.raises(Exception):
+            MilvusProvider(invalid_config)
     
     def test_milvus_collection_recreation(self, milvus_provider):
         """Test MilvusProvider collection recreation (mocked)."""

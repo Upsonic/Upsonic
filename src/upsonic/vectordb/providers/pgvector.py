@@ -1974,3 +1974,7 @@ class PgVectorProvider(BaseVectorDBProvider):
             f"index={self._config.index.type.value})"
         )
 
+
+# Alias for backward compatibility
+PgvectorProvider = PgVectorProvider
+
