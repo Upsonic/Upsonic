@@ -41,6 +41,8 @@ rag = [
     "scipy>=1.13.0",
     "scikit-learn>=1.4.0",
     "reportlab>=4.1.0",
+    "pgvector>=0.4.1",
+    "sqlalchemy>=2.0.44",
 ]
 
 storage = [
