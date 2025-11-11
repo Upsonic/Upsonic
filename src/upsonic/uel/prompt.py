@@ -4,7 +4,7 @@ import re
 from typing import Any, Optional, List, Tuple, Union, Literal, Dict
 
 from upsonic.uel.runnable import Runnable
-from upsonic.messages import ModelRequest, SystemPromptPart, UserPromptPart, ModelResponse
+from upsonic.messages import ModelRequest, SystemPromptPart, UserPromptPart, ModelResponse, ModelMessage
 
 
 class ChatPromptTemplate(Runnable[dict[str, Any], Union[str, ModelRequest]]):
@@ -127,23 +127,36 @@ class ChatPromptTemplate(Runnable[dict[str, Any], Union[str, ModelRequest]]):
         # Store all messages including placeholders
         return cls(messages=messages)
     
-    def invoke(self, input: dict[str, Any], config: Optional[dict[str, Any]] = None) -> Union[str, ModelRequest, List[Union[ModelRequest, ModelResponse]]]:
+    def invoke(self, input: Union[dict[str, Any], ModelMessage, List[ModelMessage]], config: Optional[dict[str, Any]] = None) -> Union[str, ModelMessage, List[ModelMessage]]:
         """Format the template with the provided variables.
         
         Args:
-            input: Dictionary of variable names to values
+            input: Dictionary of variable names to values, or a ModelMessage/list of ModelMessages to pass through
             config: Optional runtime configuration (unused)
             
         Returns:
+            If input is a ModelMessage or list of ModelMessages: Returns the input unchanged
             For string templates: The formatted prompt string
             For message templates: A ModelRequest or list of ModelRequest/ModelResponse objects
             
         Raises:
             KeyError: If a required variable is missing from input
-            TypeError: If input is not a dictionary
+            TypeError: If input is not a dictionary, ModelMessage, or list of ModelMessages
         """
+        # If input is a ModelMessage, return it directly without modification
+        # Check by checking if it has the 'kind' attribute that ModelMessages have
+        if hasattr(input, 'kind') and input.kind in ('request', 'response'):
+            return input
+        
+        # If input is a list of ModelMessages, return it directly without modification
+        if isinstance(input, list) and len(input) > 0:
+            # Check if all items are ModelMessages by checking for 'kind' attribute
+            if all(hasattr(item, 'kind') and item.kind in ('request', 'response') for item in input):
+                return input
+        
+        # Otherwise, expect a dictionary
         if not isinstance(input, dict):
-            raise TypeError(f"ChatPromptTemplate expects a dict input, got {type(input)}")
+            raise TypeError(f"ChatPromptTemplate expects a dict, ModelMessage, or list of ModelMessages, got {type(input)}")
         
         # Check for missing variables
         missing_vars = set(self.input_variables) - set(input.keys())
@@ -152,7 +165,7 @@ class ChatPromptTemplate(Runnable[dict[str, Any], Union[str, ModelRequest]]):
         
         # Handle message-based templates
         if self.is_message_template:
-            from upsonic.messages import ModelResponse, TextPart
+            from upsonic.messages import TextPart
             from upsonic.usage import RequestUsage
             from upsonic._utils import now_utc
             import datetime
@@ -343,16 +356,17 @@ class ChatPromptTemplate(Runnable[dict[str, Any], Union[str, ModelRequest]]):
         
         return formatted
     
-    async def ainvoke(self, input: dict[str, Any], config: Optional[dict[str, Any]] = None) -> Union[str, ModelRequest, List[Union[ModelRequest, ModelResponse]]]:
+    async def ainvoke(self, input: Union[dict[str, Any], ModelMessage, List[ModelMessage]], config: Optional[dict[str, Any]] = None) -> Union[str, ModelMessage, List[ModelMessage]]:
         """Format the template asynchronously.
         
         Since formatting is synchronous, this just calls invoke().
         
         Args:
-            input: Dictionary of variable names to values
+            input: Dictionary of variable names to values, or a ModelMessage/list of ModelMessages to pass through
             config: Optional runtime configuration
             
         Returns:
+            If input is a ModelMessage or list of ModelMessages: Returns the input unchanged
             For string templates: The formatted prompt string
             For message templates: A ModelRequest or list of ModelRequest/ModelResponse objects
         """
