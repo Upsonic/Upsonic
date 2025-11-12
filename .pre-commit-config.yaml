@@ -19,7 +19,7 @@ repos:
     hooks:
       - id: pytest
         name: pytest
-        entry: uv run pytest tests/server/
+        entry: uv run --all-extras pytest tests/unit_tests/
         language: python
         pass_filenames: false
         always_run: true
