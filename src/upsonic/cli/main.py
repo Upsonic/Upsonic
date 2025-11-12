@@ -3,7 +3,7 @@
 import sys
 from typing import Optional
 
-from upsonic.cli.commands import init_command, add_command, run_command
+from upsonic.cli.commands import init_command, add_command, run_command, install_command
 from upsonic.cli.printer import print_usage, print_unknown_command, print_error
 
 
@@ -35,6 +35,12 @@ def main(args: Optional[list[str]] = None) -> int:
         library = args[1]
         section = args[2]
         return add_command(library, section)
+    elif command == "install":
+        # Parse optional section argument
+        section = None
+        if len(args) >= 2:
+            section = args[1]
+        return install_command(section)
     elif command == "run":
         # Parse optional host and port arguments
         host = "0.0.0.0"

@@ -1,11 +1,9 @@
-import contextlib
 import importlib.util
-import inspect
 import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from upsonic.cli.printer import (
     prompt_agent_name,
@@ -20,6 +18,73 @@ from upsonic.cli.printer import (
     print_info,
     print_success,
 )
+
+# Lazy import cache for heavy dependencies
+_FASTAPI_IMPORTS = None
+
+# Cache for config files to avoid repeated I/O
+_CONFIG_CACHE = {}
+
+
+def _get_fastapi_imports():
+    """Lazy load FastAPI dependencies only when needed."""
+    global _FASTAPI_IMPORTS
+    if _FASTAPI_IMPORTS is None:
+        try:
+            from fastapi import FastAPI, Request
+            from fastapi.responses import JSONResponse
+            import uvicorn
+            
+            _FASTAPI_IMPORTS = {
+                'FastAPI': FastAPI,
+                'Request': Request,
+                'JSONResponse': JSONResponse,
+                'uvicorn': uvicorn,
+            }
+        except ImportError:
+            return None
+    return _FASTAPI_IMPORTS
+
+
+def _load_config(config_path: Path, use_cache: bool = True) -> Optional[Dict[str, Any]]:
+    """
+    Load and parse config file with caching.
+    
+    Args:
+        config_path: Path to upsonic_config.json
+        use_cache: Whether to use cached config (default: True)
+    
+    Returns:
+        Parsed config dictionary or None if error
+    """
+    cache_key = str(config_path.absolute())
+    
+    if use_cache and cache_key in _CONFIG_CACHE:
+        # Check if file has been modified
+        try:
+            current_mtime = config_path.stat().st_mtime
+            cached_mtime, cached_data = _CONFIG_CACHE[cache_key]
+            if current_mtime == cached_mtime:
+                return cached_data
+        except Exception:
+            pass
+    
+    # Load config
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config_data = json.load(f)
+        
+        # Cache it
+        if use_cache:
+            try:
+                mtime = config_path.stat().st_mtime
+                _CONFIG_CACHE[cache_key] = (mtime, config_data)
+            except Exception:
+                pass
+        
+        return config_data
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
 
 
 def init_command() -> int:
@@ -152,7 +217,10 @@ async def main(inputs):
             "streamlit_app_py": "streamlit_app.py"
         }
         
-        config_json_path.write_text(json.dumps(config_data, indent=4))
+        config_json_path.write_text(
+            json.dumps(config_data, indent=4, ensure_ascii=False),
+            encoding="utf-8"
+        )
         print_file_created(config_json_path)
         
         # Print success message with created files
@@ -188,12 +256,10 @@ def add_command(library: str, section: str) -> int:
             print_config_not_found()
             return 1
         
-        # Read the config file
-        try:
-            with open(config_json_path, "r") as f:
-                config_data = json.load(f)
-        except json.JSONDecodeError as e:
-            print_error(f"Invalid JSON in upsonic_config.json: {str(e)}")
+        # Read the config file (don't use cache since we're modifying)
+        config_data = _load_config(config_json_path, use_cache=False)
+        if config_data is None:
+            print_error("Invalid JSON in upsonic_config.json")
             return 1
         
         # Validate dependencies section exists
@@ -218,8 +284,8 @@ def add_command(library: str, section: str) -> int:
         dependencies[section].append(library)
         
         # Write back to file
-        with open(config_json_path, "w") as f:
-            json.dump(config_data, f, indent=4)
+        with open(config_json_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, indent=4, ensure_ascii=False)
         
         # Print success message
         print_dependency_added(library, section)
@@ -233,193 +299,6 @@ def add_command(library: str, section: str) -> int:
         return 1
 
 
-def _build_endpoint_parameters(
-    inputs_schema: List[Dict[str, Any]],
-    UploadFile: Any,
-    File: Any,
-    Form: Any,
-    Annotated: Any,
-) -> List[inspect.Parameter]:
-    """
-    Build function parameters with proper annotations for FastAPI endpoint.
-    
-    Args:
-        inputs_schema: List of input schema items
-        UploadFile: FastAPI UploadFile type
-        File: FastAPI File dependency
-        Form: FastAPI Form dependency
-        Annotated: typing.Annotated type
-        
-    Returns:
-        List of inspect.Parameter objects
-    """
-    from inspect import Parameter
-    
-    parameters = []
-    for item in inputs_schema:
-        name = item["name"]
-        itype = item.get("type", "string")
-        required = item.get("required", False)
-        default = item.get("default")
-        desc = item.get("description", "")
-        
-        # Determine annotation and default
-        if itype in ("file", "binary", "string($binary)"):
-            annotation = Annotated[UploadFile, File(description=desc)]
-            param_default = Parameter.empty if required else None
-        elif itype == "files":
-            annotation = Annotated[List[UploadFile], File(description=desc)]
-            param_default = Parameter.empty if required else None
-        else:
-            # Map basic types to Python types
-            if itype == "number":
-                py_type = float
-            elif itype == "integer":
-                py_type = int
-            elif itype in ("boolean", "bool"):
-                py_type = bool
-            else:
-                py_type = str
-            
-            annotation = Annotated[py_type, Form(description=desc)]
-            if required:
-                param_default = Parameter.empty
-            elif default is not None:
-                param_default = default
-            else:
-                param_default = None
-        
-        param = Parameter(
-            name=name,
-            kind=Parameter.POSITIONAL_OR_KEYWORD,
-            default=param_default,
-            annotation=annotation,
-        )
-        parameters.append(param)
-    
-    return parameters
-
-
-def _process_form_inputs(**kwargs: Any) -> Dict[str, Any]:
-    """
-    Process form inputs from FastAPI endpoint parameters.
-    
-    Handles UploadFile objects, lists of UploadFiles, and regular values.
-    
-    Args:
-        **kwargs: Form parameters from FastAPI
-        
-    Returns:
-        Dictionary of processed inputs
-    """
-    from fastapi.datastructures import UploadFile
-    
-    inputs = {}
-    for key, value in kwargs.items():
-        if value is None:
-            continue
-            
-        if isinstance(value, UploadFile):
-            # Single file - read content
-            try:
-                # Note: This will be awaited in the async function
-                inputs[key] = value
-            except Exception:
-                inputs[key] = None
-        elif isinstance(value, list) and value and all(
-            isinstance(x, UploadFile) for x in value
-        ):
-            # List of files
-            inputs[key] = value
-        else:
-            # Regular value
-            inputs[key] = value
-    
-    return inputs
-
-
-async def _read_upload_files(inputs: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Read UploadFile objects asynchronously.
-    
-    Args:
-        inputs: Dictionary that may contain UploadFile objects
-        
-    Returns:
-        Dictionary with UploadFile objects replaced with their content
-    """
-    from fastapi.datastructures import UploadFile
-    
-    processed = {}
-    for key, value in inputs.items():
-        if isinstance(value, UploadFile):
-            try:
-                processed[key] = await value.read()
-            except Exception:
-                processed[key] = None
-        elif isinstance(value, list) and value and all(
-            isinstance(x, UploadFile) for x in value
-        ):
-            file_contents = []
-            for upload_file in value:
-                try:
-                    file_contents.append(await upload_file.read())
-                except Exception:
-                    file_contents.append(None)
-            processed[key] = file_contents
-        else:
-            processed[key] = value
-    
-    return processed
-
-
-def _create_endpoint_function(
-    parameters: List[inspect.Parameter],
-    main_func: Callable,
-    JSONResponse: Any,
-) -> Callable:
-    """
-    Create the FastAPI endpoint function dynamically.
-    
-    Args:
-        parameters: List of function parameters
-        main_func: The agent's main function to call
-        JSONResponse: FastAPI JSONResponse class
-        
-    Returns:
-        The endpoint function
-    """
-    from types import FunctionType
-    
-    # Create function signature
-    sig = inspect.Signature(parameters)
-    
-    # Create the function code
-    async def endpoint_function(*args, **kwargs):
-        # Process form inputs
-        inputs = _process_form_inputs(**kwargs)
-        
-        # Read upload files asynchronously
-        inputs = await _read_upload_files(inputs)
-        
-        # Call main function
-        try:
-            result = await main_func(inputs)
-            return JSONResponse(content=result)
-        except Exception as e:
-            return JSONResponse(
-                status_code=500,
-                content={"error": str(e), "type": type(e).__name__}
-            )
-    
-    # Set the signature
-    endpoint_function.__signature__ = sig
-    
-    # Set annotations from parameters
-    annotations = {param.name: param.annotation for param in parameters}
-    endpoint_function.__annotations__ = annotations
-    
-    return endpoint_function
 
 
 def _map_inputs_props(inputs_schema: List[Dict[str, Any]]) -> tuple[Dict[str, Any], Dict[str, Any], List[str]]:
@@ -591,12 +470,13 @@ def _modify_openapi_schema(
     return schema
 
 
-def _install_dependencies(dependencies: list[str]) -> bool:
+def _install_dependencies(dependencies: list[str], quiet: bool = False) -> bool:
     """
     Install dependencies using uv or pip.
     
     Args:
         dependencies: List of dependency strings (e.g., ["fastapi>=0.115.12", "uvicorn>=0.34.2"])
+        quiet: If True, suppress output messages
     
     Returns:
         True if successful, False otherwise.
@@ -605,18 +485,20 @@ def _install_dependencies(dependencies: list[str]) -> bool:
         return True
     
     try:
-        print_info(f"Installing {len(dependencies)} dependencies...")
+        if not quiet:
+            print_info(f"Installing {len(dependencies)} dependencies...")
         
         # Try uv first (preferred for this project)
         try:
             result = subprocess.run(
-                ["uv", "pip", "install"] + dependencies,
+                ["uv", "add"] + dependencies,
                 capture_output=True,
                 text=True,
                 check=False
             )
             if result.returncode == 0:
-                print_success("Dependencies installed successfully")
+                if not quiet:
+                    print_success("Dependencies installed successfully")
                 return True
             # If uv fails, fall back to pip
         except FileNotFoundError:
@@ -631,18 +513,92 @@ def _install_dependencies(dependencies: list[str]) -> bool:
                 check=False
             )
             if result.returncode == 0:
-                print_success("Dependencies installed successfully")
+                if not quiet:
+                    print_success("Dependencies installed successfully")
                 return True
             else:
-                print_error(f"Failed to install dependencies: {result.stderr}")
+                if not quiet:
+                    print_error(f"Failed to install dependencies: {result.stderr}")
                 return False
         except Exception as e:
-            print_error(f"Error installing dependencies: {str(e)}")
+            if not quiet:
+                print_error(f"Error installing dependencies: {str(e)}")
             return False
             
     except Exception as e:
-        print_error(f"Error installing dependencies: {str(e)}")
+        if not quiet:
+            print_error(f"Error installing dependencies: {str(e)}")
         return False
+
+
+def install_command(section: Optional[str] = None) -> int:
+    """
+    Install dependencies from upsonic_config.json.
+    
+    Args:
+        section: Specific section to install ("api", "streamlit", "development", "all", or None for "api")
+    
+    Returns:
+        Exit code (0 for success, non-zero for failure).
+    """
+    try:
+        # Get current directory
+        current_dir = Path.cwd()
+        config_json_path = current_dir / "upsonic_config.json"
+        
+        # Check if config file exists
+        if not config_json_path.exists():
+            print_config_not_found()
+            return 1
+        
+        # Read config (use cache since we're only reading)
+        config_data = _load_config(config_json_path)
+        if config_data is None:
+            print_error("Invalid JSON in upsonic_config.json")
+            return 1
+        
+        # Get dependencies
+        all_dependencies = config_data.get("dependencies", {})
+        if not all_dependencies:
+            print_error("No dependencies section found in upsonic_config.json")
+            return 1
+        
+        # Determine which sections to install
+        if section is None or section == "api":
+            sections_to_install = ["api"]
+        elif section == "all":
+            sections_to_install = list(all_dependencies.keys())
+        else:
+            sections_to_install = [section]
+        
+        # Validate sections
+        for sec in sections_to_install:
+            if sec not in all_dependencies:
+                available_sections = list(all_dependencies.keys())
+                print_invalid_section(sec, available_sections)
+                return 1
+        
+        # Collect all dependencies to install
+        dependencies_to_install = []
+        for sec in sections_to_install:
+            dependencies_to_install.extend(all_dependencies[sec])
+        
+        if not dependencies_to_install:
+            print_info("No dependencies to install")
+            return 0
+        
+        # Install dependencies
+        if _install_dependencies(dependencies_to_install):
+            return 0
+        else:
+            return 1
+            
+    except KeyboardInterrupt:
+        print_cancelled()
+        return 1
+    except Exception as e:
+        print_error(f"An error occurred: {str(e)}")
+        return 1
 
 
 def run_command(host: str = "0.0.0.0", port: int = 8000) -> int:
@@ -662,31 +618,24 @@ def run_command(host: str = "0.0.0.0", port: int = 8000) -> int:
             print_config_not_found()
             return 1
 
-        # Read config
-        try:
-            with open(config_json_path, "r") as f:
-                config_data = json.load(f)
-        except json.JSONDecodeError as e:
-            print_error(f"Invalid JSON in upsonic_config.json: {str(e)}")
+        # Read config (use cache for faster startup)
+        config_data = _load_config(config_json_path)
+        if config_data is None:
+            print_error("Invalid JSON in upsonic_config.json")
             return 1
 
-        # Install dependencies
-        dependencies = config_data.get("dependencies", {}).get("api", [])
-        if dependencies:
-            if not _install_dependencies(dependencies):
-                print_error("Failed to install required dependencies")
-                return 1
-
-
-        # Import FastAPI pieces
-        try:
-            from fastapi import FastAPI, File, Form, Request
-            from fastapi.responses import JSONResponse
-            from fastapi.datastructures import UploadFile
-            import uvicorn
-        except ImportError:
-            print_error("FastAPI dependencies not found. Please install with: pip install upsonic[run]")
+        # Get FastAPI imports (lazy loaded)
+        fastapi_imports = _get_fastapi_imports()
+        if fastapi_imports is None:
+            print_error("FastAPI dependencies not found. Please run: upsonic install")
             return 1
+        
+        # Extract imports from cache
+        FastAPI = fastapi_imports['FastAPI']
+        JSONResponse = fastapi_imports['JSONResponse']
+        uvicorn = fastapi_imports['uvicorn']
+        request_fastapi = fastapi_imports['Request']
+
 
         # Agent metadata
         agent_name = config_data.get("agent_name", "Upsonic Agent")
@@ -728,104 +677,68 @@ def run_command(host: str = "0.0.0.0", port: int = 8000) -> int:
         # Build output schema
         output_schema_dict = config_data.get("output_schema", {}) or {}
 
-        # Store a flag to track if schema is modified (shared between lifespan and custom_openapi)
-        _schema_modified_flag = {"modified": False}
-        
-        # Create lifespan first (will be used when creating app)
-        @contextlib.asynccontextmanager
-        async def lifespan(app: FastAPI):
-            # Modify schema immediately on startup
+        # Create app
+        app = FastAPI(title=f"{agent_name} - Upsonic", description=description, version="0.1.0")
+
+        # Import necessary types
+        # Create unified endpoint that handles BOTH multipart/form-data AND application/json
+        @app.post("/call", summary="Call Main", operation_id="call_main_call_post", tags=["jobs"])
+        async def call_endpoint_unified(request: request_fastapi):
+            """
+            Unified endpoint - accepts BOTH:
+            - multipart/form-data (for forms and files)
+            - application/json (for JSON APIs)
+            """
             try:
-                print_info("=== LIFESPAN: Modifying OpenAPI schema on startup ===")
-                # Force schema generation (this will call custom_openapi())
-                schema = app.openapi()
+                content_type = request.headers.get("content-type", "").lower()
                 
-                # Modify schema using helper function
-                schema = _modify_openapi_schema(schema, inputs_schema, output_schema_dict, "/call")
+                if "application/json" in content_type:
+                    # Handle JSON request
+                    inputs = await request.json()
+                elif "multipart/form-data" in content_type:
+                    # Handle multipart/form-data request
+                    form_data = await request.form()
+                    inputs = {}
+                    
+                    for key, value in form_data.items():
+                        if value is None:
+                            continue
+                        # Check if it's a file upload
+                        if hasattr(value, 'read'):
+                            # It's an UploadFile
+                            try:
+                                inputs[key] = await value.read()
+                            except Exception:
+                                inputs[key] = None
+                        else:
+                            # Regular form field
+                            inputs[key] = value
+                else:
+                    # Default to form data for other content types
+                    form_data = await request.form()
+                    inputs = {k: v for k, v in form_data.items() if v is not None}
                 
-                # Update the schema and mark as modified
-                app.openapi_schema = schema
-                _schema_modified_flag["modified"] = True
+                # Call main function
+                result = await main_func(inputs)
+                return JSONResponse(content=result)
                 
-                # Verify
-                paths = schema.get("paths", {})
-                if "/call" in paths:
-                    post_op = paths["/call"].get("post", {})
-                    verify_rb = post_op.get("requestBody", {})
-                    verify_content = verify_rb.get("content", {})
-                    print_info(f"=== LIFESPAN: Content types set: {list(verify_content.keys())} ===")
             except Exception as e:
-                print_error(f"=== LIFESPAN: Error updating OpenAPI schema: {e} ===")
-                import traceback
-                traceback.print_exc()
-            
-            yield
-        
-        # Create app with lifespan
-        app = FastAPI(title=f"{agent_name} - Upsonic", description=description, version="0.1.0", lifespan=lifespan)
+                return JSONResponse(
+                    status_code=500,
+                    content={"error": str(e), "type": type(e).__name__}
+                )
 
-        # Build endpoint parameters using helper function
-        from typing import Annotated
-        parameters = _build_endpoint_parameters(
-            inputs_schema, UploadFile, File, Form, Annotated
-        )
-        
-        # Create endpoint function using helper function
-        call_endpoint_form = _create_endpoint_function(parameters, main_func, JSONResponse)
-        
-        # Debug: Check function signature
-        sig = inspect.signature(call_endpoint_form)
-        print_info(f"Function signature: {sig}")
-        print_info(f"Function annotations: {call_endpoint_form.__annotations__}")
-        for param_name, param in sig.parameters.items():
-            print_info(f"  Param {param_name}: annotation={param.annotation}, default={param.default}")
-
-        # Register endpoint
-        app.post("/call", summary="Call Main", operation_id="call_main_call_post", tags=["jobs"])(
-            call_endpoint_form
-        )
-
-        # Override openapi() to ALWAYS return our modified schema
+        # Override openapi() to return modified schema
         original_openapi = app.openapi
         
         def custom_openapi():
-            # If already modified, ALWAYS return the cached version - NEVER regenerate!
-            if _schema_modified_flag["modified"] and app.openapi_schema:
-                print_info("Returning cached modified schema (already modified)")
-                # Double-check it has multipart
-                try:
-                    paths = app.openapi_schema.get("paths", {})
-                    if "/call" in paths:
-                        post_op = paths["/call"].get("post", {})
-                        rb = post_op.get("requestBody", {})
-                        content = rb.get("content", {})
-                        if "multipart/form-data" in content:
-                            print_info(f"Cached schema verified - has multipart/form-data. Content types: {list(content.keys())}")
-                            return app.openapi_schema
-                        else:
-                            print_error("Cached schema missing multipart/form-data! Regenerating...")
-                except Exception as e:
-                    print_error(f"Error checking cached schema: {e}")
-                    # Fall through to regenerate
+            if app.openapi_schema:
+                return app.openapi_schema
             
-            # Generate base schema (only if not already modified)
-            print_info("Generating base OpenAPI schema in custom_openapi()...")
+            # Generate and modify schema once
             schema = original_openapi()
-            
-            print_info(f"Base schema generated. Paths: {list(schema.get('paths', {}).keys())}")
-            
-            try:
-                # Modify schema using helper function
-                schema = _modify_openapi_schema(schema, inputs_schema, output_schema_dict, "/call")
-                
-                # Store the modified schema and mark as modified
-                app.openapi_schema = schema
-                _schema_modified_flag["modified"] = True
-                print_info("Schema modification complete and cached")
-            except Exception as e:
-                print_error(f"Error in custom_openapi: {e}")
-                import traceback
-                traceback.print_exc()
+            schema = _modify_openapi_schema(schema, inputs_schema, output_schema_dict, "/call")
+            app.openapi_schema = schema
             
             return app.openapi_schema
         

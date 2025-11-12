@@ -135,6 +135,10 @@ def print_usage() -> None:
         "Add a dependency to upsonic_config.json"
     )
     table.add_row(
+        "[bold]install[/bold]",
+        "Install dependencies from upsonic_config.json"
+    )
+    table.add_row(
         "[bold]run[/bold]",
         "Run the agent as a FastAPI server"
     )
@@ -154,7 +158,7 @@ def print_unknown_command(command: str) -> None:
     console.print()
     panel = Panel(
         f"[bold red]Unknown command:[/bold red] [yellow]{escape_rich_markup(command)}[/yellow]\n\n"
-        "[bold]Available commands:[/bold] [cyan]init[/cyan], [cyan]add[/cyan], [cyan]run[/cyan]",
+        "[bold]Available commands:[/bold] [cyan]init[/cyan], [cyan]add[/cyan], [cyan]install[/cyan], [cyan]run[/cyan]",
         title="[bold red]❌ Error[/bold red]",
         border_style="red",
         box=box.ROUNDED,
