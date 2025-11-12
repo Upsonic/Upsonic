@@ -593,7 +593,7 @@ class Model(Runnable[Any, Any]):
         self,
         input: str | "ModelRequest" | list["ModelMessage"],
         config: dict[str, Any] | None = None
-    ) -> Any:
+    ) -> ModelResponse:
         """Execute the model synchronously for UEL compatibility.
         
         This is the synchronous version of invoke for UEL chains.
@@ -614,7 +614,7 @@ class Model(Runnable[Any, Any]):
         self,
         input: str | "ModelRequest" | list["ModelMessage"],
         config: dict[str, Any] | None = None
-    ) -> Any:
+    ) -> ModelResponse:
         """Execute the model with the configured memory and tools.
         
         This is the main entry point for UEL execution. It handles:
@@ -693,7 +693,7 @@ class Model(Runnable[Any, Any]):
         if self._memory:
             await self._save_to_memory(messages, response)
         
-        return output
+        return response
     
     def _prepare_messages_for_invoke(
         self, 
@@ -1020,6 +1020,7 @@ class Model(Runnable[Any, Any]):
         """Extract output from model response.
         
         Handles both plain text output and structured Pydantic model output.
+        Uses output parsers internally for modular parsing logic.
         
         Args:
             response: Model response
@@ -1027,31 +1028,27 @@ class Model(Runnable[Any, Any]):
         Returns:
             Extracted output (string or Pydantic model instance)
         """
-        from upsonic.messages import TextPart
+        from upsonic.uel.output_parser import StrOutputParser, PydanticOutputParser
         
-        text_parts = [
-            part.content for part in response.parts 
-            if isinstance(part, TextPart)
-        ]
-        
+        # Use StrOutputParser for string outputs
         if self._response_format == str or self._response_format is str:
-            return "".join(text_parts)
+            parser = StrOutputParser()
+            return parser.parse(response)
         
-        text_content = "".join(text_parts)
-        
-        if self._response_format and text_content:
+        # Use PydanticOutputParser for structured outputs
+        if self._response_format:
             try:
-                import json
-                parsed = json.loads(text_content)
-                if hasattr(self._response_format, 'model_validate'):
-                    return self._response_format.model_validate(parsed)
-                return parsed
-            except Exception:
-                # If parsing fails, return as text
-                pass
+                parser = PydanticOutputParser(self._response_format)
+                return parser.parse(response)
+            except (ValueError, Exception):
+                # If parsing fails, fall back to string output
+                # This maintains backward compatibility
+                parser = StrOutputParser()
+                return parser.parse(response)
         
         # Default: return as string
-        return text_content
+        parser = StrOutputParser()
+        return parser.parse(response)
     
     async def _save_to_memory(
         self, 

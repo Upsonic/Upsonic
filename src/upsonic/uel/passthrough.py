@@ -5,6 +5,23 @@ from typing import Any, Optional, Dict, Union, Callable
 from upsonic.uel.runnable import Runnable
 
 
+class AssignDescriptor:
+    """Descriptor that makes assign() work as both classmethod and instance method."""
+    
+    def __get__(self, obj, objtype=None):
+        if obj is None:
+            # Called on class: RunnablePassthrough.assign(...)
+            def class_assign(**kwargs):
+                return objtype(assignments=kwargs)
+            return class_assign
+        else:
+            # Called on instance: instance.assign(...)
+            def instance_assign(**kwargs):
+                merged_assignments = {**obj.assignments, **kwargs}
+                return RunnablePassthrough(assignments=merged_assignments)
+            return instance_assign
+
+
 class RunnablePassthrough(Runnable[Any, Any]):
     """A Runnable that passes its input through, optionally assigning new values.
     
@@ -64,14 +81,14 @@ class RunnablePassthrough(Runnable[Any, Any]):
         # Start with a copy of the input
         result = input.copy()
         
-        # Process each assignment
+        # Process each assignment sequentially, so later assignments can use earlier ones
         for key, runnable in self.assignments.items():
             # Convert to runnable if needed
             from upsonic.uel.lambda_runnable import coerce_to_runnable
             runnable = coerce_to_runnable(runnable)
             
-            # Invoke the runnable with the original input
-            value = runnable.invoke(input, config)
+            # Invoke the runnable with the current result (so it can see previous assignments)
+            value = runnable.invoke(result, config)
             result[key] = value
         
         return result
@@ -98,54 +115,45 @@ class RunnablePassthrough(Runnable[Any, Any]):
         # Start with a copy of the input
         result = input.copy()
         
-        # Process each assignment
-        import asyncio
-        tasks = []
-        keys = []
-        
+        # Process each assignment sequentially, so later assignments can use earlier ones
         for key, runnable in self.assignments.items():
             # Convert to runnable if needed
             from upsonic.uel.lambda_runnable import coerce_to_runnable
             runnable = coerce_to_runnable(runnable)
             
-            # Create task for each assignment
-            task = asyncio.create_task(runnable.ainvoke(input, config))
-            tasks.append(task)
-            keys.append(key)
-        
-        # Wait for all assignments to complete
-        if tasks:
-            values = await asyncio.gather(*tasks)
-            
-            # Update result with assigned values
-            for key, value in zip(keys, values):
-                result[key] = value
+            # Invoke the runnable with the current result (so it can see previous assignments)
+            value = await runnable.ainvoke(result, config)
+            result[key] = value
         
         return result
     
-    @classmethod
-    def assign(cls, **kwargs: Union[Runnable, Callable]) -> "RunnablePassthrough":
-        """Create a RunnablePassthrough that assigns new values.
+    assign = AssignDescriptor()
+    """Create or extend a RunnablePassthrough with assignments.
+    
+    Works as both a classmethod and instance method:
+    - RunnablePassthrough.assign(a=...) creates a new instance
+    - instance.assign(b=...) merges assignments and returns a new instance
+    - RunnablePassthrough.assign(a=...).assign(b=...) chains assignments
+    
+    Args:
+        **kwargs: Key-value pairs where values are Runnables or callables
         
-        Args:
-            **kwargs: Key-value pairs where values are Runnables or callables
-            
-        Returns:
-            A RunnablePassthrough configured with assignments
-            
-        Example:
-            ```python
-            chain = (
-                RunnablePassthrough.assign(
-                    formatted_question=lambda x: f"Question: {x['question']}",
-                    context=lambda x: retrieve_context(x['question'])
-                )
-                | prompt
-                | model
+    Returns:
+        A RunnablePassthrough configured with assignments
+        
+    Example:
+        ```python
+        chain = (
+            RunnablePassthrough.assign(
+                formatted_question=lambda x: f"Question: {x['question']}",
+            ).assign(
+                context=lambda x: retrieve_context(x['question'])
             )
-            ```
-        """
-        return cls(assignments=kwargs)
+            | prompt
+            | model
+        )
+        ```
+    """
     
     def __repr__(self) -> str:
         """Return a string representation of the passthrough."""

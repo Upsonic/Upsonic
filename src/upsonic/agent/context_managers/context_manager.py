@@ -133,7 +133,7 @@ class ContextManager:
                 config = knowledge_base.get_config_summary()
                 vector_db_info = config.get('vectordb', {})
                 if isinstance(vector_db_info, dict):
-                    provider = vector_db_info.get('class', 'Unknown')
+                    provider = vector_db_info.get('provider', 'Unknown')
                     kb_info += f" (Vector DB: {provider})"
             except Exception:
                 pass
@@ -302,12 +302,17 @@ class ContextManager:
                         "sources_count": len(item.sources) if hasattr(item, 'sources') else 0
                     }
                     
-                    
-                    if hasattr(item, 'vector_db') and hasattr(item.vector_db, 'get_config_summary'):
+                    # Get vector database configuration from KnowledgeBase
+                    if hasattr(item, 'get_config_summary'):
                         try:
-                            kb_info["vector_db"] = item.vector_db.get_config_summary()
+                            config_summary = item.get_config_summary()
+                            kb_info["vector_db"] = config_summary.get('vectordb', {})
                         except Exception:
-                            kb_info["vector_db"] = {"provider": item.vector_db.__class__.__name__}
+                            # Fallback: try to get provider name from vectordb attribute
+                            if hasattr(item, 'vectordb'):
+                                kb_info["vector_db"] = {"provider": item.vectordb.__class__.__name__}
+                            else:
+                                kb_info["vector_db"] = {"provider": "Unknown"}
                     
                     if hasattr(item, 'get_collection_info_async'):
                         try:

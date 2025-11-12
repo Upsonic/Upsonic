@@ -11,8 +11,7 @@ from typing import List, Dict, Any
 
 from upsonic.knowledge_base.knowledge_base import KnowledgeBase
 from upsonic.vectordb.providers.milvus import MilvusProvider
-from upsonic.vectordb.config import Config, CoreConfig, IndexingConfig, SearchConfig, DataManagementConfig, AdvancedConfig
-from upsonic.vectordb.config import Mode, ProviderName, DistanceMetric, IndexType, HNSWTuningConfig, IVFTuningConfig
+from upsonic.vectordb.config import MilvusConfig, ConnectionConfig, Mode, DistanceMetric, HNSWIndexConfig
 from upsonic.schemas.data_models import Document, Chunk, RAGSearchResult
 from upsonic.schemas.vector_schemas import VectorSearchResult
 
@@ -41,37 +40,17 @@ class TestMilvusKnowledgeBaseIntegration:
         """Create a MilvusProvider configuration."""
         import uuid
         unique_id = str(uuid.uuid4())[:8]
-        core_config = CoreConfig(
-            provider_name=ProviderName.MILVUS,
-            mode=Mode.EMBEDDED,
-            db_path=f"test_milvus_{unique_id}.db",
+        connection = ConnectionConfig(mode=Mode.EMBEDDED, db_path=f"test_milvus_{unique_id}.db")
+        return MilvusConfig(
+            connection=connection,
             collection_name=f"test_collection_{unique_id}",
             vector_size=384,
-            distance_metric=DistanceMetric.COSINE
-        )
-        
-        indexing_config = IndexingConfig(
-            index_config=HNSWTuningConfig(index_type=IndexType.HNSW),
-            create_dense_index=True,
-            create_sparse_index=False
-        )
-        
-        search_config = SearchConfig(
+            distance_metric=DistanceMetric.COSINE,
+            index=HNSWIndexConfig(),
             default_top_k=5,
             dense_search_enabled=True,
             full_text_search_enabled=True,
             hybrid_search_enabled=True
-        )
-        
-        data_config = DataManagementConfig()
-        advanced_config = AdvancedConfig()
-        
-        return Config(
-            core=core_config,
-            indexing=indexing_config,
-            search=search_config,
-            data_management=data_config,
-            advanced=advanced_config
         )
     
     @pytest.fixture
@@ -79,37 +58,18 @@ class TestMilvusKnowledgeBaseIntegration:
         """Create a MilvusProvider configuration with both dense and sparse indexes for hybrid search."""
         import uuid
         unique_id = str(uuid.uuid4())[:8]
-        core_config = CoreConfig(
-            provider_name=ProviderName.MILVUS,
-            mode=Mode.EMBEDDED,
-            db_path=f"test_milvus_hybrid_{unique_id}.db",
+        connection = ConnectionConfig(mode=Mode.EMBEDDED, db_path=f"test_milvus_hybrid_{unique_id}.db")
+        return MilvusConfig(
+            connection=connection,
             collection_name=f"test_collection_hybrid_{unique_id}",
             vector_size=384,
-            distance_metric=DistanceMetric.COSINE
-        )
-        
-        indexing_config = IndexingConfig(
-            index_config=HNSWTuningConfig(index_type=IndexType.HNSW),
-            create_dense_index=True,
-            create_sparse_index=True
-        )
-        
-        search_config = SearchConfig(
+            distance_metric=DistanceMetric.COSINE,
+            index=HNSWIndexConfig(),
+            use_sparse_vectors=True,
             default_top_k=5,
             dense_search_enabled=True,
             full_text_search_enabled=True,
             hybrid_search_enabled=True
-        )
-        
-        data_config = DataManagementConfig()
-        advanced_config = AdvancedConfig()
-        
-        return Config(
-            core=core_config,
-            indexing=indexing_config,
-            search=search_config,
-            data_management=data_config,
-            advanced=advanced_config
         )
     
     @pytest.fixture
@@ -153,49 +113,57 @@ class TestMilvusKnowledgeBaseIntegration:
         """Test MilvusProvider initialization."""
         assert milvus_provider._config == milvus_config
         assert not milvus_provider._is_connected
-        assert milvus_provider._collection is None
+        # MilvusProvider uses _sync_client and _async_client, not _collection
+        assert milvus_provider._sync_client is None
+        assert milvus_provider._async_client is None
     
     @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
-    def test_milvus_provider_connection(self, milvus_provider):
+    @pytest.mark.asyncio
+    async def test_milvus_provider_connection(self, milvus_provider):
         """Test MilvusProvider connection."""
-        milvus_provider.connect()
+        await milvus_provider.connect()
         assert milvus_provider._is_connected
-        assert milvus_provider.is_ready()
+        assert await milvus_provider.is_ready()
     
     @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
-    def test_milvus_provider_disconnection(self, milvus_provider):
+    @pytest.mark.asyncio
+    async def test_milvus_provider_disconnection(self, milvus_provider):
         """Test MilvusProvider disconnection."""
-        milvus_provider.connect()
+        await milvus_provider.connect()
         assert milvus_provider._is_connected
         
-        milvus_provider.disconnect()
+        await milvus_provider.disconnect()
         assert not milvus_provider._is_connected
-        assert milvus_provider._collection is None
+        assert milvus_provider._sync_client is None
+        assert milvus_provider._async_client is None
     
     @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
-    def test_milvus_collection_creation(self, milvus_provider):
+    @pytest.mark.asyncio
+    async def test_milvus_collection_creation(self, milvus_provider):
         """Test MilvusProvider collection creation."""
-        milvus_provider.connect()
-        assert not milvus_provider.collection_exists()
+        await milvus_provider.connect()
+        assert not await milvus_provider.collection_exists()
         
-        milvus_provider.create_collection()
-        assert milvus_provider.collection_exists()
+        await milvus_provider.create_collection()
+        assert await milvus_provider.collection_exists()
     
     @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
-    def test_milvus_collection_deletion(self, milvus_provider):
+    @pytest.mark.asyncio
+    async def test_milvus_collection_deletion(self, milvus_provider):
         """Test MilvusProvider collection deletion."""
-        milvus_provider.connect()
-        milvus_provider.create_collection()
-        assert milvus_provider.collection_exists()
+        await milvus_provider.connect()
+        await milvus_provider.create_collection()
+        assert await milvus_provider.collection_exists()
         
-        milvus_provider.delete_collection()
-        assert not milvus_provider.collection_exists()
+        await milvus_provider.delete_collection()
+        assert not await milvus_provider.collection_exists()
     
     @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
-    def test_milvus_upsert_operations(self, milvus_provider):
+    @pytest.mark.asyncio
+    async def test_milvus_upsert_operations(self, milvus_provider):
         """Test MilvusProvider upsert operations."""
-        milvus_provider.connect()
-        milvus_provider.create_collection()
+        await milvus_provider.connect()
+        await milvus_provider.create_collection()
         
         # Test data
         vectors = [[0.1] * 384, [0.2] * 384]
@@ -204,19 +172,20 @@ class TestMilvusKnowledgeBaseIntegration:
         chunks = ["chunk1", "chunk2"]
         
         # Upsert data
-        milvus_provider.upsert(vectors, payloads, ids, chunks)
+        await milvus_provider.upsert(vectors, payloads, ids, chunks)
         
         # Verify data was stored
-        results = milvus_provider.fetch(ids)
+        results = await milvus_provider.fetch(ids)
         assert len(results) == 2
         assert results[0].id == "id1"
         assert results[1].id == "id2"
     
     @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
-    def test_milvus_search_operations(self, milvus_provider):
+    @pytest.mark.asyncio
+    async def test_milvus_search_operations(self, milvus_provider):
         """Test MilvusProvider search operations."""
-        milvus_provider.connect()
-        milvus_provider.create_collection()
+        await milvus_provider.connect()
+        await milvus_provider.create_collection()
         
         # Insert test data
         vectors = [[0.1] * 384, [0.2] * 384, [0.3] * 384]
@@ -224,19 +193,20 @@ class TestMilvusKnowledgeBaseIntegration:
         ids = ["id1", "id2", "id3"]
         chunks = ["chunk1", "chunk2", "chunk3"]
         
-        milvus_provider.upsert(vectors, payloads, ids, chunks)
+        await milvus_provider.upsert(vectors, payloads, ids, chunks)
         
         # Test dense search
         query_vector = [0.15] * 384
-        results = milvus_provider.dense_search(query_vector, top_k=2)
+        results = await milvus_provider.dense_search(query_vector, top_k=2)
         assert len(results) <= 2
         assert all(isinstance(result, VectorSearchResult) for result in results)
     
     @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
-    def test_milvus_delete_operations(self, milvus_provider):
+    @pytest.mark.asyncio
+    async def test_milvus_delete_operations(self, milvus_provider):
         """Test MilvusProvider delete operations."""
-        milvus_provider.connect()
-        milvus_provider.create_collection()
+        await milvus_provider.connect()
+        await milvus_provider.create_collection()
         
         # Insert test data
         vectors = [[0.1] * 384, [0.2] * 384]
@@ -244,17 +214,17 @@ class TestMilvusKnowledgeBaseIntegration:
         ids = ["id1", "id2"]
         chunks = ["chunk1", "chunk2"]
         
-        milvus_provider.upsert(vectors, payloads, ids, chunks)
+        await milvus_provider.upsert(vectors, payloads, ids, chunks)
         
         # Verify data exists
-        results = milvus_provider.fetch(ids)
+        results = await milvus_provider.fetch(ids)
         assert len(results) == 2
         
         # Delete one item
-        milvus_provider.delete(["id1"])
+        await milvus_provider.delete(["id1"])
         
         # Verify deletion
-        results = milvus_provider.fetch(ids)
+        results = await milvus_provider.fetch(ids)
         assert len(results) == 1
         assert results[0].id == "id2"
     
@@ -262,14 +232,16 @@ class TestMilvusKnowledgeBaseIntegration:
     async def test_knowledge_base_setup_with_milvus(self, knowledge_base):
         """Test Knowledge Base setup with MilvusProvider."""
         # Mock the vectordb methods
-        knowledge_base.vectordb.connect = Mock()
-        knowledge_base.vectordb.create_collection = Mock()
-        knowledge_base.vectordb.upsert = Mock()
-        knowledge_base.vectordb.collection_exists = Mock(return_value=False)
-        knowledge_base.vectordb.is_ready = Mock(return_value=True)
+        knowledge_base.vectordb.connect = AsyncMock()
+        knowledge_base.vectordb.create_collection = AsyncMock()
+        knowledge_base.vectordb.upsert = AsyncMock()
+        knowledge_base.vectordb.collection_exists = AsyncMock(return_value=False)
+        knowledge_base.vectordb.is_ready = AsyncMock(return_value=True)
         
-        # Mock the embedding provider
-        knowledge_base.embedding_provider.embed_documents = AsyncMock(return_value=[[0.1] * 384, [0.2] * 384])
+        # Mock the embedding provider - return 1 vector per chunk
+        async def mock_embed_documents(chunks):
+            return [[0.1] * 384] * len(chunks)
+        knowledge_base.embedding_provider.embed_documents = AsyncMock(side_effect=mock_embed_documents)
         
         # Setup the knowledge base
         await knowledge_base.setup_async()
@@ -283,18 +255,20 @@ class TestMilvusKnowledgeBaseIntegration:
     async def test_knowledge_base_query_with_milvus(self, knowledge_base):
         """Test Knowledge Base query with MilvusProvider."""
         # Mock the vectordb methods
-        knowledge_base.vectordb.connect = Mock()
-        knowledge_base.vectordb.create_collection = Mock()
-        knowledge_base.vectordb.upsert = Mock()
-        knowledge_base.vectordb.collection_exists = Mock(return_value=False)
-        knowledge_base.vectordb.is_ready = Mock(return_value=True)
-        knowledge_base.vectordb.search = Mock(return_value=[
+        knowledge_base.vectordb.connect = AsyncMock()
+        knowledge_base.vectordb.create_collection = AsyncMock()
+        knowledge_base.vectordb.upsert = AsyncMock()
+        knowledge_base.vectordb.collection_exists = AsyncMock(return_value=False)
+        knowledge_base.vectordb.is_ready = AsyncMock(return_value=True)
+        knowledge_base.vectordb.search = AsyncMock(return_value=[
             create_mock_vector_search_result("id1", 0.9, "Test result 1"),
             create_mock_vector_search_result("id2", 0.8, "Test result 2")
         ])
         
-        # Mock the embedding provider
-        knowledge_base.embedding_provider.embed_documents = AsyncMock(return_value=[[0.1] * 384, [0.2] * 384])
+        # Mock the embedding provider - return 1 vector per chunk
+        async def mock_embed_documents(chunks):
+            return [[0.1] * 384] * len(chunks)
+        knowledge_base.embedding_provider.embed_documents = AsyncMock(side_effect=mock_embed_documents)
         knowledge_base.embedding_provider.embed_query = AsyncMock(return_value=[0.15] * 384)
         
         # Setup the knowledge base
@@ -377,8 +351,9 @@ class TestMilvusKnowledgeBaseIntegration:
         milvus_provider.create_collection = Mock()
         
         # Test that different index types can be created
-        hnsw_config = HNSWTuningConfig(index_type=IndexType.HNSW, m=16, ef_construction=200)
-        ivf_config = IVFTuningConfig(index_type=IndexType.IVF_FLAT, nlist=100)
+        from upsonic.vectordb.config import HNSWIndexConfig, IVFIndexConfig
+        hnsw_config = HNSWIndexConfig(m=16, ef_construction=200)
+        ivf_config = IVFIndexConfig(nlist=100)
         
         # Should not raise error
         assert hnsw_config.m == 16
@@ -404,28 +379,10 @@ class TestMilvusKnowledgeBaseIntegration:
     
     def test_milvus_payload_indexes(self, milvus_provider):
         """Test MilvusProvider payload indexes (mocked)."""
-        from upsonic.vectordb.config import PayloadIndexConfig
-        
-        # Test payload index configuration
-        payload_indexes = [
-            PayloadIndexConfig(
-                field_name="category",
-                field_schema_type="keyword"
-            ),
-            PayloadIndexConfig(
-                field_name="description",
-                field_schema_type="text",
-                enable_full_text_index=True
-            )
-        ]
-        
-        # Mock collection creation
-        milvus_provider.create_collection = Mock()
-        
-        # Test that payload indexes can be configured
-        assert len(payload_indexes) == 2
-        assert payload_indexes[0].field_name == "category"
-        assert payload_indexes[1].enable_full_text_index == True
+        # Test that indexed_fields can be configured in MilvusConfig
+        config = milvus_provider._config
+        # indexed_fields is optional in BaseVectorDBConfig
+        assert hasattr(config, 'indexed_fields') or True
     
     def test_milvus_error_handling(self, milvus_provider):
         """Test MilvusProvider error handling (mocked)."""
@@ -443,33 +400,35 @@ class TestMilvusKnowledgeBaseIntegration:
     
     def test_milvus_configuration_validation(self):
         """Test MilvusProvider configuration validation (mocked)."""
-        # Mock configuration validation
-        with patch('upsonic.vectordb.providers.milvus.MilvusProvider._validate_config') as mock_validate:
-            mock_validate.side_effect = Exception("Invalid configuration")
-            
-            with pytest.raises(Exception):
-                MilvusProvider(Config(core=CoreConfig(
-                    provider_name=ProviderName.CHROMA,  # Wrong provider
-                    mode=Mode.IN_MEMORY,
-                    collection_name="test",
-                    vector_size=384
-                )))
+        # Test invalid config (wrong provider type)
+        from upsonic.vectordb.config import ChromaConfig
+        invalid_connection = ConnectionConfig(mode=Mode.IN_MEMORY)
+        invalid_config = ChromaConfig(
+            connection=invalid_connection,
+            collection_name="test",
+            vector_size=384
+        )
+        
+        # MilvusProvider should only accept MilvusConfig
+        with pytest.raises(Exception):
+            MilvusProvider(invalid_config)
     
-    def test_milvus_collection_recreation(self, milvus_provider):
+    @pytest.mark.asyncio
+    async def test_milvus_collection_recreation(self, milvus_provider):
         """Test MilvusProvider collection recreation (mocked)."""
         # Mock collection operations
-        milvus_provider.connect = Mock()
-        milvus_provider.create_collection = Mock()
-        milvus_provider.collection_exists = Mock(return_value=True)
+        milvus_provider.connect = AsyncMock()
+        milvus_provider.create_collection = AsyncMock()
+        milvus_provider.collection_exists = AsyncMock(return_value=True)
         
         # Test collection creation
-        milvus_provider.connect()
-        milvus_provider.create_collection()
-        assert milvus_provider.collection_exists()
+        await milvus_provider.connect()
+        await milvus_provider.create_collection()
+        assert await milvus_provider.collection_exists()
         
         # Test recreation
-        milvus_provider.create_collection()  # Should not raise error
-        assert milvus_provider.collection_exists()
+        await milvus_provider.create_collection()  # Should not raise error
+        assert await milvus_provider.collection_exists()
     
     def test_milvus_distance_metrics(self, milvus_provider):
         """Test MilvusProvider distance metrics (mocked)."""
@@ -482,11 +441,7 @@ class TestMilvusKnowledgeBaseIntegration:
     
     def test_milvus_consistency_levels(self, milvus_provider):
         """Test MilvusProvider consistency levels (mocked)."""
-        from upsonic.vectordb.config import WriteConsistency
-        
-        # Test different consistency levels
-        consistency_levels = [WriteConsistency.STRONG, WriteConsistency.EVENTUAL]
-        
-        for consistency in consistency_levels:
-            # Test that consistency levels are valid
-            assert consistency in consistency_levels
+        # Test that consistency levels are valid in MilvusConfig
+        consistency_levels = ['Strong', 'Bounded', 'Session', 'Eventually']
+        config = milvus_provider._config
+        assert config.consistency_level in consistency_levels

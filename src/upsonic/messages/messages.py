@@ -1276,3 +1276,117 @@ HandleResponseEvent = Annotated[
 
 AgentStreamEvent = Annotated[ModelResponseStreamEvent | HandleResponseEvent, pydantic.Discriminator('event_kind')]
 """An event in the agent stream: model response stream events and response-handling events."""
+
+
+# Utility functions for extracting parts from ModelResponse
+
+def get_text_content(response: ModelResponse) -> str | None:
+    """
+    Extract text content from a ModelResponse.
+    
+    Returns the content of the last TextPart in the response, or None if no TextPart exists.
+    This is the most common way to get the model's text output.
+    
+    Args:
+        response: The ModelResponse to extract text from
+        
+    Returns:
+        The text content as a string, or None if no TextPart exists
+        
+    Example:
+        ```python
+        from upsonic.messages import get_text_content
+        
+        result = chain.invoke({"topic": "AI"})
+        text = get_text_content(result)
+        print(text)
+        ```
+    """
+    text_parts = [part for part in response.parts if isinstance(part, TextPart)]
+    if text_parts:
+        return text_parts[-1].content
+    return None
+
+
+def get_text_parts(response: ModelResponse) -> list[TextPart]:
+    """
+    Extract all TextPart instances from a ModelResponse.
+    
+    Args:
+        response: The ModelResponse to extract TextParts from
+        
+    Returns:
+        A list of all TextPart instances in the response
+    """
+    return [part for part in response.parts if isinstance(part, TextPart)]
+
+
+def get_tool_calls(response: ModelResponse) -> list[ToolCallPart]:
+    """
+    Extract all ToolCallPart instances from a ModelResponse.
+    
+    Args:
+        response: The ModelResponse to extract tool calls from
+        
+    Returns:
+        A list of all ToolCallPart instances in the response
+    """
+    return [part for part in response.parts if isinstance(part, ToolCallPart)]
+
+
+def get_builtin_tool_calls(response: ModelResponse) -> list[BuiltinToolCallPart]:
+    """
+    Extract all BuiltinToolCallPart instances from a ModelResponse.
+    
+    Args:
+        response: The ModelResponse to extract builtin tool calls from
+        
+    Returns:
+        A list of all BuiltinToolCallPart instances in the response
+    """
+    return [part for part in response.parts if isinstance(part, BuiltinToolCallPart)]
+
+
+def get_thinking_content(response: ModelResponse) -> str | None:
+    """
+    Extract thinking content from a ModelResponse.
+    
+    Returns the content of the last ThinkingPart in the response, or None if no ThinkingPart exists.
+    This is useful for models that support reasoning/thinking steps.
+    
+    Args:
+        response: The ModelResponse to extract thinking content from
+        
+    Returns:
+        The thinking content as a string, or None if no ThinkingPart exists
+    """
+    thinking_parts = [part for part in response.parts if isinstance(part, ThinkingPart)]
+    if thinking_parts:
+        return thinking_parts[-1].content
+    return None
+
+
+def get_thinking_parts(response: ModelResponse) -> list[ThinkingPart]:
+    """
+    Extract all ThinkingPart instances from a ModelResponse.
+    
+    Args:
+        response: The ModelResponse to extract thinking parts from
+        
+    Returns:
+        A list of all ThinkingPart instances in the response
+    """
+    return [part for part in response.parts if isinstance(part, ThinkingPart)]
+
+
+def get_tool_returns(response: ModelResponse) -> list[BaseToolReturnPart]:
+    """
+    Extract all tool return parts from a ModelResponse.
+    
+    Args:
+        response: The ModelResponse to extract tool returns from
+        
+    Returns:
+        A list of all BaseToolReturnPart instances (including BuiltinToolReturnPart) in the response
+    """
+    return [part for part in response.parts if isinstance(part, BaseToolReturnPart)]

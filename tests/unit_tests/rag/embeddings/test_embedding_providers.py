@@ -403,32 +403,17 @@ class TestKnowledgeBaseIntegration:
     @pytest.fixture
     def mock_vectordb_config(self, temp_dir):
         """Create mock vector database configuration."""
-        from upsonic.vectordb.config import CoreConfig, IndexingConfig, SearchConfig
+        from upsonic.vectordb.config import FaissConfig, FlatIndexConfig
         
-        core_config = CoreConfig(
-            provider_name="faiss",
-            mode="local",
+        return FaissConfig(
             db_path=temp_dir,
+            collection_name="test_collection",
             vector_size=384,
-            distance_metric=DistanceMetric.COSINE
-        )
-        
-        from upsonic.vectordb.config import FlatTuningConfig
-        
-        indexing_config = IndexingConfig(
-            index_config=FlatTuningConfig(index_type=IndexType.FLAT),
-            quantization=None
-        )
-        
-        search_config = SearchConfig(
+            distance_metric=DistanceMetric.COSINE,
+            index=FlatIndexConfig(),
             default_top_k=10,
-            default_similarity_threshold=0.7
-        )
-        
-        return Config(
-            core=core_config,
-            indexing=indexing_config,
-            search=search_config
+            default_similarity_threshold=0.7,
+            provider_id="test_faiss_provider_id"
         )
     
     @pytest.fixture

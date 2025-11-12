@@ -1,683 +1,1980 @@
-from __future__ import annotations
+"""
+PgVector Provider Implementation
 
+A comprehensive, high-level vector database provider for PostgreSQL with pgvector extension.
+Supports async operations, flexible metadata management, advanced indexing, and hybrid search.
+
+This implementation follows the BaseVectorDBProvider interface and integrates best practices
+from both SQLAlchemy and pgvector for optimal performance and flexibility.
+"""
+
+import asyncio
 import json
-
-from typing import Any, Dict, List, Optional, Union, Literal as TypingLiteral, Tuple, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import psycopg
-    from psycopg.errors import OperationalError, InFailedSqlTransaction
-    from psycopg.sql import SQL, Identifier, Literal as SqlLiteral, Composed, Placeholder
+from hashlib import md5
+from math import sqrt
+from typing import Any, Dict, List, Optional, Union, Literal, cast
+from uuid import uuid4
 
 try:
-    import psycopg
-    from psycopg.errors import OperationalError, InFailedSqlTransaction
-    from psycopg.sql import SQL, Identifier, Literal as SqlLiteral, Composed, Placeholder
-    _PSYCOPG_AVAILABLE = True
+    from sqlalchemy import (
+        Column, String, Text, Integer, DateTime, Index, MetaData, Table,
+        create_engine, text, select, delete as sa_delete, update as sa_update, func, desc
+    )
+    from sqlalchemy.dialects import postgresql
+    from sqlalchemy.engine import Engine
+    from sqlalchemy.orm import Session, scoped_session, sessionmaker
+    from sqlalchemy.inspection import inspect
+    from sqlalchemy.sql.expression import bindparam
 except ImportError:
-    psycopg = None  # type: ignore
-    OperationalError = None  # type: ignore
-    InFailedSqlTransaction = None  # type: ignore
-    SQL = None  # type: ignore
-    Identifier = None  # type: ignore
-    SqlLiteral = None  # type: ignore
-    Composed = None  # type: ignore
-    Placeholder = None  # type: ignore
-    _PSYCOPG_AVAILABLE = False
+    raise ImportError(
+        "`sqlalchemy` not installed. Please install using `pip install sqlalchemy psycopg`"
+    )
 
-from upsonic.vectordb.config import (
-    Config,
-    ProviderName,
-    IndexType,
-    DistanceMetric,
-    HNSWTuningConfig,
-    IVFTuningConfig,
-    FlatTuningConfig
-)
+try:
+    from pgvector.sqlalchemy import Vector
+except ImportError:
+    raise ImportError("`pgvector` not installed. Please install using `pip install pgvector`")
+
 from upsonic.vectordb.base import BaseVectorDBProvider
-from upsonic.utils.printing import info_log, debug_log
-
-from upsonic.utils.package.exception import(
-    VectorDBConnectionError, 
-    ConfigurationError, 
-    CollectionDoesNotExistError,
+from upsonic.vectordb.config import PgVectorConfig, HNSWIndexConfig, IVFIndexConfig, DistanceMetric
+from upsonic.schemas.vector_schemas import VectorSearchResult
+from upsonic.utils.logging_config import get_logger
+from upsonic.utils.package.exception import (
+    VectorDBConnectionError,
     VectorDBError,
+    CollectionDoesNotExistError,
+    UpsertError,
     SearchError,
-    UpsertError
+    ConfigurationError
 )
 
-from upsonic.schemas.vector_schemas import VectorSearchResult
+logger = get_logger(__name__)
 
-class PgvectorProvider(BaseVectorDBProvider):
+
+class PgVectorProvider(BaseVectorDBProvider):
     """
-    An implementation of the BaseVectorDBProvider for PostgreSQL with the pgvector extension.
+    PostgreSQL + pgvector provider with comprehensive features:
     
-    This provider translates the abstract framework configurations and calls into
-    precise, parameterized SQL statements. It manages the connection lifecycle,
-    table and index schema, data manipulation, and query generation required
-    to use PostgreSQL as a powerful vector database.
+    - Async-first architecture for high performance
+    - Flexible metadata management with custom fields
+    - Advanced indexing (HNSW, IVFFlat) with auto-tuning
+    - Full-text search with PostgreSQL's GIN indexes
+    - Hybrid search combining vector similarity and full-text
+    - Batch operations for efficient data ingestion
+    - Dynamic schema with version management
+    - Extensive filtering and querying capabilities
+    
+    This provider is fully compatible with SQLAlchemy's API and leverages
+    PostgreSQL's native capabilities for optimal performance.
     """
 
-    def __init__(self, config: Config):
-        if not _PSYCOPG_AVAILABLE:
-            from upsonic.utils.printing import import_error
-            import_error(
-                package_name="psycopg",
-                install_command='pip install "upsonic[rag]"',
-                feature_name="PostgreSQL vector database provider"
-            )
-
-        if config.core.provider_name.value != 'pgvector':
-            raise ConfigurationError(
-                f"Attempted to initialize PgvectorProvider with a configuration for "
-                f"'{config.core.provider_name.value}'."
-            )
+    def __init__(self, config: Union[PgVectorConfig, Dict[str, Any]]):
+        """
+        Initialize the PgVector provider.
+        
+        Args:
+            config: Either a PgVectorConfig object or a dictionary to create one
+        """
+        # Convert dict to PgVectorConfig if needed
+        if isinstance(config, dict):
+            config = PgVectorConfig.from_dict(config)
+        
+        # Initialize base class
         super().__init__(config)
-        self._connection: Optional[psycopg.Connection] = None
-        info_log(f"PgvectorProvider initialized for table '{self._config.core.collection_name}'.", context="PgVectorDB")
+        self._config: PgVectorConfig = cast(PgVectorConfig, self._config)
+        
+        # Database settings
+        self.schema_name: str = self._config.schema_name
+        self.table_name: str = self._config.table_name or self._config.collection_name
+        self.connection_string: str = self._config.connection_string.get_secret_value()
+        
+        # Engine and session (will be initialized in connect())
+        self._engine: Optional[Engine] = None
+        self._session_factory: Optional[scoped_session] = None
+        
+        # Table and metadata
+        self._metadata: Optional[MetaData] = None
+        self._table: Optional[Table] = None
+        
+        # Index names (will be set during index creation)
+        self._vector_index_name: Optional[str] = None
+        self._gin_index_name: Optional[str] = None
+        
+        logger.info(
+            f"Initialized PgVectorProvider for collection '{self._config.collection_name}' "
+            f"(table: {self.schema_name}.{self.table_name})"
+        )
 
-    def connect(self) -> None:
-        if self._is_connected and self._connection:
-            info_log("Already connected to PostgreSQL.", context="PgVectorDB")
-            return
+    # ========================================================================
+    # Connection Management
+    # ========================================================================
 
-        debug_log(f"Attempting to connect to PostgreSQL at {self._config.core.host}:{self._config.core.port}...", context="PgVectorDB")
+    async def connect(self) -> None:
+        """
+        Establish connection to PostgreSQL database.
+        Creates the engine and session factory.
+        """
         try:
-            conninfo = (
-                f"host={self._config.core.host} "
-                f"port={self._config.core.port} "
-                f"dbname={self._config.core.db_path} "
-                f"user={self._config.advanced.namespace or 'postgres'} "
-                f"password={self._config.core.api_key.get_secret_value() if self._config.core.api_key else ''}"
+            logger.info(f"Connecting to PostgreSQL database...")
+            
+            # Create engine with connection pooling
+            self._engine = await asyncio.to_thread(
+                create_engine,
+                self.connection_string,
+                pool_size=self._config.pool_size,
+                max_overflow=self._config.max_overflow,
+                pool_timeout=self._config.pool_timeout,
+                pool_recycle=self._config.pool_recycle,
+                echo=False
             )
             
-            self._connection = psycopg.connect(conninfo)
-            if not self._connection:
-                raise OperationalError("psycopg.connect() returned None.")
+            # Create session factory
+            self._session_factory = scoped_session(
+                sessionmaker(bind=self._engine, expire_on_commit=False)
+            )
             
-            with self._connection.cursor() as cursor:
-                debug_log("Verifying 'vector' extension exists in PostgreSQL...", context="PgVectorDB")
-                cursor.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-                info_log("'vector' extension is enabled.", context="PgVectorDB")
+            # Initialize metadata and table
+            self._metadata = MetaData(schema=self.schema_name)
+            self._table = self._get_table_schema()
             
-            self._connection.commit()
+            # Verify connection
+            await self._verify_connection()
+            
             self._is_connected = True
-            info_log("Successfully connected to PostgreSQL.", context="PgVectorDB")
-        except OperationalError as e:
-            self._connection = None
-            self._is_connected = False
-            raise VectorDBConnectionError(f"Failed to connect to PostgreSQL: {e}")
+            logger.info("Successfully connected to PostgreSQL database")
+            
         except Exception as e:
-            self._connection = None
+            logger.error(f"Failed to connect to PostgreSQL: {e}")
+            raise VectorDBConnectionError(f"Connection failed: {e}")
+
+    async def _verify_connection(self) -> None:
+        """Verify the database connection by executing a simple query."""
+        try:
+            def _verify():
+                with self._session_factory() as session:
+                    session.execute(text("SELECT 1"))
+            
+            await asyncio.to_thread(_verify)
+            logger.debug("Database connection verified")
+        except Exception as e:
+            raise VectorDBConnectionError(f"Connection verification failed: {e}")
+
+    async def disconnect(self) -> None:
+        """Gracefully close the database connection."""
+        try:
+            if self._session_factory:
+                await asyncio.to_thread(self._session_factory.remove)
+            
+            if self._engine:
+                await asyncio.to_thread(self._engine.dispose)
+            
             self._is_connected = False
-            raise VectorDBConnectionError(f"An unexpected error occurred during connection: {e}")
+            logger.info("Disconnected from PostgreSQL database")
+        except Exception as e:
+            logger.error(f"Error during disconnect: {e}")
+            raise VectorDBError(f"Disconnect failed: {e}")
 
-    def disconnect(self) -> None:
-        if self._is_connected and self._connection:
-            try:
-                self._connection.close()
-                self._is_connected = False
-                self._connection = None
-                info_log("Successfully disconnected from PostgreSQL.", context="PgVectorDB")
-            except Exception as e:
-                self._is_connected = False
-                self._connection = None
-                debug_log(f"An error occurred during disconnection, but status is now 'disconnected'. Error: {e}", context="PgVectorDB")
-        else:
-            debug_log("Already disconnected. No action taken.", context="PgVectorDB")
+    def connect_sync(self) -> None:
+        """Establish connection to PostgreSQL database (sync)."""
+        return self._run_async_from_sync(self.connect())
 
-    def is_ready(self) -> bool:
-        if not self._is_connected or not self._connection or self._connection.closed:
+    def disconnect_sync(self) -> None:
+        """Gracefully close the database connection (sync)."""
+        return self._run_async_from_sync(self.disconnect())
+
+    def is_ready_sync(self) -> bool:
+        """Check if the database is connected and responsive (sync)."""
+        return self._run_async_from_sync(self.is_ready())
+
+    async def is_ready(self) -> bool:
+        """Check if the database is connected and responsive."""
+        if not self._is_connected or not self._engine:
             return False
         
         try:
-            with self._connection.cursor() as cursor:
-                cursor.execute("SELECT 1;")
-                result = cursor.fetchone()
-                return result[0] == 1
-        except (OperationalError, psycopg.InterfaceError):
-            self._is_connected = False
+            await self._verify_connection()
+            return True
+        except:
             return False
 
-    def create_collection(self) -> None:
-        if not self._is_connected or not self._connection:
-            raise VectorDBConnectionError("Must be connected to PostgreSQL before creating a collection.")
+    # ========================================================================
+    # Schema Management
+    # ========================================================================
 
-        table_name = self._config.core.collection_name
-
-        try:
-            if self.collection_exists():
-                if self._config.core.recreate_if_exists:
-                    info_log(f"Table '{table_name}' already exists. Deleting and recreating as requested.", context="PgVectorDB")
-                    self.delete_collection()
-                else:
-                    info_log(f"Table '{table_name}' already exists and 'recreate_if_exists' is False. No action taken.", context="PgVectorDB")
-                    return
-
-            with self._connection.cursor() as cursor:
-                create_table_sql = SQL("""
-                    CREATE TABLE {table} (
-                        id TEXT PRIMARY KEY,
-                        payload JSONB,
-                        vector vector({vector_size}),
-                        tenant_id TEXT NOT NULL
-                    );
-                """).format(
-                    table=Identifier(table_name),
-                    vector_size=SqlLiteral(self._config.core.vector_size)
-                )
-                debug_log(f"Creating table '{table_name}'...", context="PgVectorDB")
-                cursor.execute(create_table_sql)
-
-                debug_log("Creating indexes...", context="PgVectorDB")
-                tenant_index_sql = SQL("CREATE INDEX ON {table} (tenant_id);").format(table=Identifier(table_name))
-                cursor.execute(tenant_index_sql)
-                
-                payload_index_sql = SQL("CREATE INDEX ON {table} USING gin (payload);").format(table=Identifier(table_name))
-                cursor.execute(payload_index_sql)
-
-                index_conf = self._config.indexing.index_config
-                if isinstance(index_conf, (HNSWTuningConfig, IVFTuningConfig)):
-                    distance_map = {
-                        DistanceMetric.COSINE: "vector_cosine_ops",
-                        DistanceMetric.EUCLIDEAN: "vector_l2_ops",
-                        DistanceMetric.DOT_PRODUCT: "vector_ip_ops",
-                    }
-                    operator_class = distance_map.get(self._config.core.distance_metric)
-                    if not operator_class:
-                        raise ConfigurationError(f"Unsupported distance metric '{self._config.core.distance_metric}' for pgvector.")
-                    
-                    if isinstance(index_conf, HNSWTuningConfig):
-                        index_type, with_opts = "hnsw", f"m = {index_conf.m}, ef_construction = {index_conf.ef_construction}"
-                    else:
-                        index_type, with_opts = "ivfflat", f"lists = {index_conf.nlist}"
-
-                    vector_index_sql = SQL("""
-                        CREATE INDEX ON {table} USING {index_type} (vector {operator_class}) 
-                        WITH ({with_opts});
-                    """).format(
-                        table=Identifier(table_name), index_type=SQL(index_type),
-                        operator_class=SQL(operator_class), with_opts=SQL(with_opts)
-                    )
-                    debug_log(f"Creating {index_type.upper()} index on 'vector' column...", context="PgVectorDB")
-                    cursor.execute(vector_index_sql)
-
-                elif isinstance(index_conf, FlatTuningConfig):
-                    debug_log("Index type is FLAT. No vector index created.", context="PgVectorDB")
-            
-            self._connection.commit()
-            info_log(f"Successfully created table '{table_name}' and its indexes.", context="PgVectorDB")
-        except (Exception, psycopg.Error) as e:
-            if self._connection: self._connection.rollback()
-            raise VectorDBError(f"Failed to create collection '{table_name}': {e}")
-
-    def delete_collection(self) -> None:
-        if not self._is_connected or not self._connection:
-            raise VectorDBConnectionError("Must be connected to PostgreSQL before deleting a collection.")
-        
-        table_name = self._config.core.collection_name
-        
-        try:
-            with self._connection.cursor() as cursor:
-                delete_sql = SQL("DROP TABLE IF EXISTS {table} CASCADE;").format(table=Identifier(table_name))
-                debug_log(f"Deleting table '{table_name}'...", context="PgVectorDB")
-                cursor.execute(delete_sql)
-            
-            self._connection.commit()
-            info_log(f"Successfully deleted table '{table_name}'.", context="PgVectorDB")
-        except (Exception, psycopg.Error) as e:
-            if self._connection: self._connection.rollback()
-            raise VectorDBError(f"Failed to delete collection '{table_name}': {e}")
-
-    def collection_exists(self) -> bool:
-        if not self._is_connected or not self._connection:
-            raise VectorDBConnectionError("Must be connected to PostgreSQL to check for a collection's existence.")
-        
-        try:
-            with self._connection.cursor() as cursor:
-                exists_sql = "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = %s);"
-                cursor.execute(exists_sql, (self._config.core.collection_name,))
-                result = cursor.fetchone()
-                return result[0] if result else False
-        except (Exception, psycopg.Error) as e:
-            if isinstance(e, InFailedSqlTransaction) and self._connection:
-                self._connection.rollback()
-            debug_log(f"Could not check for collection existence: {e}", context="PgVectorDB")
-            return False
-
-    def upsert(self, vectors: List[List[float]], payloads: List[Dict[str, Any]], ids: List[Union[str, int]], chunks: Optional[List[str]], **kwargs) -> None:
+    def _get_table_schema(self) -> Table:
         """
-        Adds new data or updates existing data in the table using PostgreSQL's
-        `INSERT ... ON CONFLICT` statement for atomic and efficient upserts.
-
-        Args:
-            vectors: A list of vector embeddings.
-            payloads: A list of corresponding metadata objects (will be stored in JSONB).
-            ids: A list of unique identifiers for each vector-payload pair.
-
-        Raises:
-            UpsertError: If the data ingestion fails.
-            ConfigurationError: If no `namespace` is provided in the config, as it's
-                                required for the `tenant_id` column.
-        """
-        if not self._is_connected or not self._connection:
-            raise VectorDBConnectionError("Must be connected to PostgreSQL before upserting data.")
+        Define and return the table schema based on schema version.
         
-        if not (len(vectors) == len(payloads) == len(ids)):
-            raise UpsertError("The lengths of vectors, payloads, and ids lists must be identical.")
-        if not vectors:
-            debug_log("Upsert called with empty lists. No action taken.", context="PgVectorDB")
-            return
-
-        if chunks is not None:
-            if len(chunks) != len(payloads):
-                raise UpsertError("The lengths of chunks and payloads lists must be identical.")
-            for i in range(len(payloads)):
-                payloads[i]["chunk"] = chunks[i]
-
-        tenant_id = self._config.advanced.namespace
-        if not tenant_id:
-            raise ConfigurationError("A `namespace` must be provided in the AdvancedConfig for pgvector multi-tenancy.")
-
-        table_name = self._config.core.collection_name
-        
-        try:
-            data_to_insert = [
-                (str(ids[i]), json.dumps(payloads[i]), vectors[i], tenant_id)
-                for i in range(len(vectors))
-            ]
-
-            upsert_sql = SQL("""
-                INSERT INTO {table} (id, payload, vector, tenant_id) VALUES (%s, %s, %s, %s)
-                ON CONFLICT (id) DO UPDATE SET
-                    payload = EXCLUDED.payload,
-                    vector = EXCLUDED.vector;
-            """).format(table=Identifier(table_name))
-
-            with self._connection.cursor() as cursor:
-                debug_log(f"Upserting {len(data_to_insert)} records into '{table_name}'...", context="PgVectorDB")
-                cursor.executemany(upsert_sql, data_to_insert)
-            
-            self._connection.commit()
-            info_log("Upsert successful.", context="PgVectorDB")
-
-        except (Exception, psycopg.Error) as e:
-            if self._connection: self._connection.rollback()
-            raise UpsertError(f"Failed to upsert data to '{table_name}': {e}")
-
-
-    def delete(self, ids: List[Union[str, int]], **kwargs) -> None:
-        """
-        Removes data from the collection by their unique identifiers, scoped to the
-        provider's configured tenant.
-
-        Args:
-            ids: A list of specific IDs to remove.
-        """
-        if not self._is_connected or not self._connection:
-            raise VectorDBConnectionError("Must be connected to PostgreSQL before deleting data.")
-        if not ids:
-            debug_log("Delete called with an empty list of IDs. No action taken.", context="PgVectorDB")
-            return
-
-        tenant_id = self._config.advanced.namespace
-        if not tenant_id:
-            raise ConfigurationError("A `namespace` must be provided in the AdvancedConfig for pgvector multi-tenancy.")
-
-        table_name = self._config.core.collection_name
-
-        try:
-            delete_sql = SQL("DELETE FROM {table} WHERE tenant_id = %s AND id = ANY(%s);").format(
-                table=Identifier(table_name)
-            )
-            
-            with self._connection.cursor() as cursor:
-                cursor.execute(delete_sql, (tenant_id, [str(id_val) for id_val in ids]))
-                debug_log(f"Delete command affected {cursor.rowcount} rows in '{table_name}'.", context="PgVectorDB")
-
-            self._connection.commit()
-        except (Exception, psycopg.Error) as e:
-            if self._connection: self._connection.rollback()
-            raise VectorDBError(f"Failed to delete data from '{table_name}': {e}")
-
-    
-    def fetch(self, ids: List[Union[str, int]], **kwargs) -> List[VectorSearchResult]:
-        """
-        Retrieves full records (payload and vector) by their IDs, scoped to the
-        provider's configured tenant.
-
-        Args:
-            ids: A list of IDs to retrieve the full records for.
-
         Returns:
-            A list of VectorSearchResult objects containing the fetched data.
+            SQLAlchemy Table object with the complete schema
         """
-        if not self._is_connected or not self._connection:
-            raise VectorDBConnectionError("Must be connected to PostgreSQL before fetching data.")
-        if not ids:
-            return []
-
-        tenant_id = self._config.advanced.namespace
-        if not tenant_id:
-            raise ConfigurationError("A `namespace` must be provided in the AdvancedConfig for pgvector multi-tenancy.")
-        
-        table_name = self._config.core.collection_name
-        results = []
-
-        try:
-            fetch_sql = SQL("SELECT id, payload, vector FROM {table} WHERE tenant_id = %s AND id = ANY(%s);").format(
-                table=Identifier(table_name)
+        if self._config.schema_version == 1:
+            return self._get_table_schema_v1()
+        else:
+            raise NotImplementedError(
+                f"Unsupported schema version: {self._config.schema_version}"
             )
 
-            with self._connection.cursor() as cursor:
-                cursor.execute(fetch_sql, (tenant_id, [str(id_val) for id_val in ids]))
+    def _get_table_schema_v1(self) -> Table:
+        """
+        Schema version 1: Comprehensive schema with all required fields.
+        
+        Fields:
+        - id: Primary key (UUID or string)
+        - content_id: Unique identifier for content (auto-generated if not provided)
+        - document_name: Optional document name
+        - document_id: Optional document identifier
+        - content: The actual text content (required, used for full-text search)
+        - embedding: Vector embedding
+        - metadata: JSONB field for custom metadata
+        - created_at: Timestamp of creation
+        - updated_at: Timestamp of last update
+        """
+        if self._config.vector_size is None:
+            raise ValueError("vector_size must be set in config")
+        
+        table = Table(
+            self.table_name,
+            self._metadata,
+            # Primary key (internal ID)
+            Column("id", String, primary_key=True),
+            
+            # Core identifiers
+            Column("content_id", String, unique=True, nullable=False, index=True),
+            Column("document_name", String, nullable=True, index=True),
+            Column("document_id", String, nullable=True, index=True),
+            
+            # Content and embedding
+            Column("content", Text, nullable=False),
+            Column("embedding", Vector(self._config.vector_size), nullable=False),
+            
+            # Flexible metadata storage
+            Column("metadata", postgresql.JSONB, server_default=text("'{}'::jsonb")),
+            
+            # Timestamps
+            Column("created_at", DateTime(timezone=True), server_default=func.now()),
+            Column("updated_at", DateTime(timezone=True), onupdate=func.now()),
+            
+            extend_existing=True,
+        )
+        
+        # Add indexes for commonly queried fields
+        Index(f"idx_{self.table_name}_id", table.c.id)
+        Index(f"idx_{self.table_name}_content_id", table.c.content_id)
+        
+        # Add indexes for fields specified in config
+        if self._config.indexed_fields:
+            for field in self._config.indexed_fields:
+                if field in ['document_name', 'document_id']:
+                    # Already indexed above
+                    continue
+                elif field == 'metadata' and 'metadata' in [c.name for c in table.columns]:
+                    # GIN index for JSONB metadata (created separately)
+                    pass
+        
+        return table
+
+    async def create_collection(self) -> None:
+        """
+        Create the collection (table) in PostgreSQL.
+        
+        This method:
+        1. Enables the pgvector extension
+        2. Creates the schema if it doesn't exist
+        3. Creates the table with all columns
+        4. Creates necessary indexes
+        """
+        if not self._is_connected:
+            raise VectorDBConnectionError("Not connected to database")
+        
+        try:
+            # Check if collection exists
+            exists = await self.collection_exists()
+            
+            if exists:
+                if self._config.recreate_if_exists:
+                    logger.info(f"Collection '{self.table_name}' exists, recreating...")
+                    await self.delete_collection()
+                else:
+                    logger.info(f"Collection '{self.table_name}' already exists")
+                    return
+            
+            # Create collection
+            def _create():
+                with self._session_factory() as session:
+                    with session.begin():
+                        # Enable pgvector extension
+                        logger.debug("Enabling pgvector extension")
+                        session.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+                        
+                        # Create schema
+                        if self.schema_name and self.schema_name != "public":
+                            logger.debug(f"Creating schema: {self.schema_name}")
+                            session.execute(
+                                text(f"CREATE SCHEMA IF NOT EXISTS {self.schema_name};")
+                            )
                 
-                for row in cursor.fetchall():
-                    payload = row[1] if isinstance(row[1], dict) else json.loads(row[1])
-                    
-                    if hasattr(row[2], 'tolist'):
-                        vector = row[2].tolist()
-                    elif isinstance(row[2], (list, tuple)):
-                        vector = list(row[2])
-                    elif isinstance(row[2], str):
-                        import ast
-                        try:
-                            vector = ast.literal_eval(row[2])
-                        except:
-                            vector = row[2]
-                    else:
-                        vector = row[2]
-                    
-                    text = payload.get("chunk", "") if payload else ""
-                    
-                    results.append(VectorSearchResult(
-                        id=row[0],
-                        score=1.0,
-                        payload=payload,
-                        vector=vector,
-                        text=text
-                    ))
-            return results
-        except (Exception, psycopg.Error) as e:
-            if self._connection: self._connection.rollback()
-            raise VectorDBError(f"Failed to fetch data from '{table_name}': {e}")
+                # Create table
+                logger.debug(f"Creating table: {self.table_name}")
+                self._table.create(self._engine)
+            
+            await asyncio.to_thread(_create)
+            
+            # Create indexes
+            await self._create_vector_index()
+            await self._create_gin_index()
+            
+            # Create metadata indexes if specified
+            if self._config.indexed_fields and 'metadata' in self._config.indexed_fields:
+                await self._create_metadata_indexes()
+            
+            logger.info(f"Successfully created collection '{self.table_name}'")
+            
+        except Exception as e:
+            logger.error(f"Failed to create collection: {e}")
+            raise VectorDBError(f"Collection creation failed: {e}")
 
-
-    def search(self, top_k: Optional[int] = None, query_vector: Optional[List[float]] = None, query_text: Optional[str] = None, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[TypingLiteral['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
+    async def delete_collection(self) -> None:
+        """Permanently delete the collection (table)."""
+        if not self._is_connected:
+            raise VectorDBConnectionError("Not connected to database")
         
-        filter = filter if filter is not None else self._config.search.filter
-        final_top_k = top_k if top_k is not None else self._config.search.default_top_k or 10
-        has_vector = query_vector is not None and len(query_vector) > 0
-        has_text = query_text is not None and query_text.strip()
+        try:
+            exists = await self.collection_exists()
+            if not exists:
+                raise CollectionDoesNotExistError(
+                    f"Collection '{self.table_name}' does not exist"
+                )
+            
+            def _drop():
+                logger.debug(f"Dropping table: {self.schema_name}.{self.table_name}")
+                self._table.drop(self._engine)
+            
+            await asyncio.to_thread(_drop)
+            logger.info(f"Successfully deleted collection '{self.table_name}'")
+            
+        except CollectionDoesNotExistError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to delete collection: {e}")
+            raise VectorDBError(f"Collection deletion failed: {e}")
 
-        if has_vector and not has_text:
-            if self._config.search.dense_search_enabled is False:
-                raise ConfigurationError("Dense search is disabled by the current configuration.")
-            debug_log("Dispatching to: dense_search", context="PgVectorDB")
-            return self.dense_search(query_vector=query_vector, top_k=final_top_k, filter=filter, similarity_threshold=similarity_threshold, **kwargs)
+    async def collection_exists(self) -> bool:
+        """Check if the collection (table) exists."""
+        if not self._is_connected or not self._engine:
+            return False
         
-        elif not has_vector and has_text:
-            if self._config.search.full_text_search_enabled is False:
-                raise ConfigurationError("Full-text search is disabled by the current configuration.")
-            debug_log("Dispatching to: full_text_search", context="PgVectorDB")
-            return self.full_text_search(query_text=query_text, top_k=final_top_k, filter=filter, similarity_threshold=similarity_threshold, **kwargs)
+        try:
+            def _check():
+                return inspect(self._engine).has_table(
+                    self.table_name, 
+                    schema=self.schema_name
+                )
+            
+            return await asyncio.to_thread(_check)
+        except Exception as e:
+            logger.error(f"Error checking collection existence: {e}")
+            return False
 
-        elif has_vector and has_text:
-            if self._config.search.hybrid_search_enabled is False:
-                raise ConfigurationError("Hybrid search is disabled by the current configuration.")
-            debug_log("Dispatching to: hybrid_search", context="PgVectorDB")
-            return self.hybrid_search(query_vector=query_vector, query_text=query_text, top_k=final_top_k, filter=filter, alpha=alpha, fusion_method=fusion_method, similarity_threshold=similarity_threshold, **kwargs)
+    def create_collection_sync(self) -> None:
+        """Create the collection (table) in PostgreSQL (sync)."""
+        return self._run_async_from_sync(self.create_collection())
+
+    def delete_collection_sync(self) -> None:
+        """Permanently delete the collection (table) (sync)."""
+        return self._run_async_from_sync(self.delete_collection())
+
+    def collection_exists_sync(self) -> bool:
+        """Check if the collection (table) exists (sync)."""
+        return self._run_async_from_sync(self.collection_exists())
+
+    # ========================================================================
+    # Data Operations
+    # ========================================================================
+
+    async def upsert(
+        self,
+        vectors: List[List[float]],
+        payloads: List[Dict[str, Any]],
+        ids: List[Union[str, int]],
+        chunks: Optional[List[str]] = None,
+        sparse_vectors: Optional[List[Dict[str, Any]]] = None,
+        **kwargs
+    ) -> None:
+        """
+        Upsert (insert or update) data into the collection.
+        
+        Args:
+            vectors: List of vector embeddings
+            payloads: List of metadata dictionaries
+            ids: List of unique identifiers
+            chunks: Optional list of text content for each vector
+            sparse_vectors: Not used in PgVector (reserved for future)
+            **kwargs: Additional options:
+                - metadata: Additional metadata to merge with payloads
+                - batch_size: Override default batch size
+        """
+        if not self._is_connected:
+            raise VectorDBConnectionError("Not connected to database")
+        
+        if not await self.collection_exists():
+            raise CollectionDoesNotExistError(
+                f"Collection '{self.table_name}' does not exist. Create it first."
+            )
+        
+        # Validate inputs
+        if not (len(vectors) == len(payloads) == len(ids)):
+            raise UpsertError(
+                f"Length mismatch: vectors({len(vectors)}), "
+                f"payloads({len(payloads)}), ids({len(ids)})"
+            )
+        
+        if chunks and len(chunks) != len(vectors):
+            raise UpsertError(
+                f"Length mismatch: chunks({len(chunks)}) != vectors({len(vectors)})"
+            )
+        
+        try:
+            # Prepare records
+            records = self._prepare_records(
+                vectors=vectors,
+                payloads=payloads,
+                ids=ids,
+                chunks=chunks,
+                additional_metadata=kwargs.get('metadata')
+            )
+            
+            # Batch upsert
+            batch_size = kwargs.get('batch_size', self._config.batch_size)
+            await self._batch_upsert(records, batch_size)
+            
+            logger.info(f"Successfully upserted {len(records)} records")
+            
+        except Exception as e:
+            logger.error(f"Upsert failed: {e}")
+            raise UpsertError(f"Failed to upsert data: {e}")
+
+    def upsert_sync(
+        self,
+        vectors: List[List[float]],
+        payloads: List[Dict[str, Any]],
+        ids: List[Union[str, int]],
+        chunks: Optional[List[str]] = None,
+        sparse_vectors: Optional[List[Dict[str, Any]]] = None,
+        **kwargs
+    ) -> None:
+        """Upsert (insert or update) data into the collection (sync)."""
+        return self._run_async_from_sync(
+            self.upsert(vectors, payloads, ids, chunks, sparse_vectors, **kwargs)
+        )
+
+    def _prepare_records(
+        self,
+        vectors: List[List[float]],
+        payloads: List[Dict[str, Any]],
+        ids: List[Union[str, int]],
+        chunks: Optional[List[str]] = None,
+        additional_metadata: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Prepare records for insertion/update.
+        
+        This method:
+        1. Generates content_id if not provided
+        2. Merges metadata from config and kwargs
+        3. Extracts document_name and document_id from payload
+        4. Creates the content field from chunks or payload
+        """
+        records = []
+        
+        for i, (vector, payload, record_id) in enumerate(zip(vectors, payloads, ids)):
+            # Get or generate content_id
+            content_id = payload.get('content_id')
+            if not content_id:
+                if self._config.auto_generate_content_id:
+                    content_id = self._generate_content_id(payload, chunks[i] if chunks else None)
+                else:
+                    content_id = str(record_id)
+            
+            # Extract document identifiers
+            document_name = payload.get('document_name')
+            document_id = payload.get('document_id')
+            
+            # Get content (required field)
+            if chunks and i < len(chunks):
+                content = chunks[i]
+            elif 'content' in payload:
+                content = payload['content']
+            elif 'text' in payload:
+                content = payload['text']
+            else:
+                raise UpsertError(
+                    f"No content found for record {i}. "
+                    "Provide 'chunks' or include 'content'/'text' in payload"
+                )
+            
+            # Clean content
+            content = self._clean_content(content)
+            
+            # Prepare metadata
+            metadata = {}
+            
+            # Add default metadata from config
+            if self._config.default_metadata:
+                metadata.update(self._config.default_metadata)
+            
+            # Add additional metadata from kwargs
+            if additional_metadata:
+                metadata.update(additional_metadata)
+            
+            # Add payload (excluding special fields)
+            excluded_fields = {
+                'content_id', 'document_name', 'document_id', 
+                'content', 'text', 'embedding', 'vector'
+            }
+            for key, value in payload.items():
+                if key not in excluded_fields:
+                    metadata[key] = value
+            
+            # Create record
+            record = {
+                'id': str(record_id),
+                'content_id': content_id,
+                'document_name': document_name,
+                'document_id': document_id,
+                'content': content,
+                'embedding': vector,
+                'metadata': metadata
+            }
+            
+            records.append(record)
+        
+        return records
+
+    def _generate_content_id(
+        self, 
+        payload: Dict[str, Any], 
+        content: Optional[str] = None
+    ) -> str:
+        """
+        Generate a unique content_id based on content hash or UUID.
+        
+        Args:
+            payload: The payload dictionary
+            content: The content string
+            
+        Returns:
+            A unique content_id
+        """
+        if content:
+            # Use content hash for deduplication
+            return md5(content.encode('utf-8')).hexdigest()
         else:
-            raise ConfigurationError("Search requires at least one of 'query_vector' or 'query_text'.")
+            # Use UUID for unique identification
+            return str(uuid4())
 
+    def _clean_content(self, content: str) -> str:
+        """
+        Clean content by replacing null characters.
+        PostgreSQL doesn't accept null characters in TEXT fields.
+        """
+        return content.replace("\x00", "\ufffd")
 
-    def dense_search(self, query_vector: List[float], top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
-        if not self._is_connected or not self._connection:
-            raise VectorDBConnectionError("Must be connected to PostgreSQL before searching.")
+    async def _batch_upsert(
+        self, 
+        records: List[Dict[str, Any]], 
+        batch_size: int
+    ) -> None:
+        """
+        Perform batch upsert operations.
         
-        tenant_id = self._config.advanced.namespace
-        if not tenant_id:
-            raise ConfigurationError("A `namespace` must be provided for pgvector multi-tenancy.")
-
-        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
-
-        table_name = self._config.core.collection_name
+        Uses PostgreSQL's ON CONFLICT clause for efficient upserts.
+        """
+        def _upsert_batch(batch: List[Dict[str, Any]]):
+            with self._session_factory() as session:
+                with session.begin():
+                    # Use INSERT ... ON CONFLICT ... DO UPDATE
+                    insert_stmt = postgresql.insert(self._table).values(batch)
+                    upsert_stmt = insert_stmt.on_conflict_do_update(
+                        index_elements=['content_id'],
+                        set_={
+                            'id': insert_stmt.excluded.id,
+                            'document_name': insert_stmt.excluded.document_name,
+                            'document_id': insert_stmt.excluded.document_id,
+                            'content': insert_stmt.excluded.content,
+                            'embedding': insert_stmt.excluded.embedding,
+                            'metadata': insert_stmt.excluded.metadata,
+                        }
+                    )
+                    session.execute(upsert_stmt)
         
-        metric_map = {
-            DistanceMetric.COSINE: (SQL("<=>"), SQL("1 - (vector <=> %s::vector) AS score"), "ASC"),
-            DistanceMetric.EUCLIDEAN: (SQL("<->"), SQL("vector <-> %s::vector AS score"), "ASC"),
-            DistanceMetric.DOT_PRODUCT: (SQL("<#>"), SQL("(vector <#> %s::vector) * -1 AS score"), "DESC"),
+        # Process in batches
+        for i in range(0, len(records), batch_size):
+            batch = records[i:i + batch_size]
+            logger.debug(f"Upserting batch {i // batch_size + 1} ({len(batch)} records)")
+            await asyncio.to_thread(_upsert_batch, batch)
+
+    async def delete(
+        self, 
+        ids: List[Union[str, int]], 
+        **kwargs
+    ) -> None:
+        """
+        Delete records by their IDs.
+        
+        Args:
+            ids: List of IDs to delete
+            **kwargs: Additional options:
+                - by_content_id: If True, treat ids as content_ids instead of ids
+        """
+        if not self._is_connected:
+            raise VectorDBConnectionError("Not connected to database")
+        
+        try:
+            by_content_id = kwargs.get('by_content_id', False)
+            
+            def _delete():
+                with self._session_factory() as session:
+                    with session.begin():
+                        if by_content_id:
+                            stmt = sa_delete(self._table).where(
+                                self._table.c.content_id.in_(ids)
+                            )
+                        else:
+                            stmt = sa_delete(self._table).where(
+                                self._table.c.id.in_([str(id) for id in ids])
+                            )
+                        session.execute(stmt)
+            
+            await asyncio.to_thread(_delete)
+            logger.info(f"Deleted {len(ids)} records")
+            
+        except Exception as e:
+            logger.error(f"Delete failed: {e}")
+            raise VectorDBError(f"Failed to delete records: {e}")
+
+    def delete_sync(self, ids: List[Union[str, int]], **kwargs) -> None:
+        """Delete records by their IDs (sync)."""
+        return self._run_async_from_sync(self.delete(ids, **kwargs))
+
+    def delete_by_metadata(self, metadata: Dict[str, Any]) -> bool:
+        """Delete records matching metadata filter (sync)."""
+        return self._run_async_from_sync(self.async_delete_by_metadata(metadata))
+    
+    async def async_delete_by_metadata(
+        self, 
+        metadata: Dict[str, Any]
+    ) -> bool:
+        """
+        Delete records matching metadata filter (async).
+        
+        Args:
+            metadata: Dictionary of metadata key-value pairs to match
+            
+        Returns:
+            True if deletion was successful, False otherwise
+        """
+        if not self._is_connected:
+            raise VectorDBConnectionError("Not connected to database")
+        
+        try:
+            def _delete():
+                with self._session_factory() as session:
+                    with session.begin():
+                        stmt = sa_delete(self._table).where(
+                            self._table.c.metadata.contains(metadata)
+                        )
+                        result = session.execute(stmt)
+                        return result.rowcount
+            
+            count = await asyncio.to_thread(_delete)
+            logger.info(f"Deleted {count} records matching metadata filter")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Delete by metadata failed: {e}")
+            return False
+
+    def delete_by_document_id(self, document_id: str) -> bool:
+        """Delete all records with the given document_id (sync)."""
+        return self._run_async_from_sync(self.async_delete_by_document_id(document_id))
+    
+    async def async_delete_by_document_id(
+        self, 
+        document_id: str
+    ) -> bool:
+        """Delete all records with the given document_id."""
+        if not self._is_connected:
+            raise VectorDBConnectionError("Not connected to database")
+        
+        try:
+            def _delete():
+                with self._session_factory() as session:
+                    with session.begin():
+                        stmt = sa_delete(self._table).where(
+                            self._table.c.document_id == document_id
+                        )
+                        result = session.execute(stmt)
+                        return result.rowcount
+            
+            count = await asyncio.to_thread(_delete)
+            logger.info(f"Deleted {count} records with document_id '{document_id}'")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Delete by document_id failed: {e}")
+            return False
+
+    async def fetch(
+        self, 
+        ids: List[Union[str, int]], 
+        **kwargs
+    ) -> List[VectorSearchResult]:
+        """
+        Retrieve records by their IDs.
+        
+        Args:
+            ids: List of IDs to fetch
+            **kwargs: Additional options:
+                - by_content_id: If True, treat ids as content_ids
+                
+        Returns:
+            List of VectorSearchResult objects
+        """
+        if not self._is_connected:
+            raise VectorDBConnectionError("Not connected to database")
+        
+        try:
+            by_content_id = kwargs.get('by_content_id', False)
+            
+            def _fetch():
+                with self._session_factory() as session:
+                    if by_content_id:
+                        stmt = select(self._table).where(
+                            self._table.c.content_id.in_(ids)
+                        )
+                    else:
+                        stmt = select(self._table).where(
+                            self._table.c.id.in_([str(id) for id in ids])
+                        )
+                    result = session.execute(stmt)
+                    return result.fetchall()
+            
+            rows = await asyncio.to_thread(_fetch)
+            
+            # Convert to VectorSearchResult
+            results = []
+            for row in rows:
+                results.append(
+                    VectorSearchResult(
+                        id=row.content_id,
+                        score=1.0,  # No score for direct fetch
+                        payload=self._row_to_payload(row),
+                        vector=list(row.embedding) if row.embedding is not None else None,
+                        text=row.content
+                    )
+                )
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Fetch failed: {e}")
+            raise VectorDBError(f"Failed to fetch records: {e}")
+
+    def fetch_sync(
+        self, 
+        ids: List[Union[str, int]], 
+        **kwargs
+    ) -> List[VectorSearchResult]:
+        """Retrieve records by their IDs (sync)."""
+        return self._run_async_from_sync(self.fetch(ids, **kwargs))
+
+    def _row_to_payload(self, row) -> Dict[str, Any]:
+        """Convert a database row to a payload dictionary."""
+        payload = {
+            'id': row.id,
+            'content_id': row.content_id,
+            'document_name': row.document_name,
+            'document_id': row.document_id,
+            'created_at': row.created_at.isoformat() if row.created_at else None,
+            'updated_at': row.updated_at.isoformat() if row.updated_at else None,
         }
         
-        metric = self._config.core.distance_metric
-        if metric not in metric_map:
-            raise ConfigurationError(f"Unsupported distance metric for dense search: {metric}")
-
-        distance_op, score_sql, order_direction = metric_map[metric]
-
-        query_parts = [
-            SQL("SELECT id, payload, vector,"),
-            score_sql,
-            SQL("FROM {} WHERE tenant_id = %s").format(Identifier(table_name))
-        ]
-
-        params = [query_vector, tenant_id]
-
-        if filter:
-            filter_sql, filter_params = self._translate_filter(filter)
-            query_parts.append(SQL("AND"))
-            query_parts.append(filter_sql)
-            params.extend(filter_params)
-
-        query_parts.append(SQL("ORDER BY vector ") + distance_op + SQL(" %s::vector ") + SQL(order_direction))
-        params.append(query_vector)
-
-        query_parts.append(SQL("LIMIT %s"))
-        params.append(top_k)
-
-        final_sql = SQL(" ").join(query_parts)
+        # Add metadata fields
+        if row.metadata:
+            payload.update(row.metadata)
         
-        results = []
-        try:
-            with self._connection.cursor() as cursor:
-                cursor.execute(final_sql, params)
-                for row in cursor.fetchall():
-                    payload = row[1] if isinstance(row[1], dict) else json.loads(row[1])
-                    
-                    if hasattr(row[2], 'tolist'):
-                        vector = row[2].tolist()
-                    elif isinstance(row[2], (list, tuple)):
-                        vector = list(row[2])
-                    elif isinstance(row[2], str):
-                        import ast
-                        try:
-                            vector = ast.literal_eval(row[2])
-                        except:
-                            vector = row[2]
-                    else:
-                        vector = row[2]
-                    
-                    text = payload.get("chunk", "") if payload else ""
-                    score = float(row[3])
-                    
-                    if score >= final_similarity_threshold:
-                        results.append(VectorSearchResult(
-                            id=row[0],
-                            payload=payload,
-                            vector=vector,
-                            score=score,
-                            text=text
-                        ))
-            return results
-        except (Exception, psycopg.Error) as e:
-            if self._connection: self._connection.rollback()
-            raise SearchError(f"An error occurred during dense search: {e}")
+        return payload
 
-    def full_text_search(self, query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
-        if not self._is_connected or not self._connection:
-            raise VectorDBConnectionError("Must be connected to PostgreSQL before searching.")
+    # ========================================================================
+    # Search Operations
+    # ========================================================================
 
-        tenant_id = self._config.advanced.namespace
-        if not tenant_id:
-            raise ConfigurationError("A `namespace` must be provided for pgvector multi-tenancy.")
-        
-        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.search.default_similarity_threshold or 0.5
-        
-        fts_field = kwargs.get("fts_field")
-        if not fts_field:
-            raise ConfigurationError("`fts_field` must be provided in kwargs for full_text_search.")
-
-        table_name = self._config.core.collection_name
-        
-        query_parts = [
-            SQL("SELECT id, payload, vector,"),
-            SQL("ts_rank(to_tsvector('english', payload->>%s), plainto_tsquery('english', %s)) AS score"),
-            SQL("FROM {table} WHERE to_tsvector('english', payload->>%s) @@ plainto_tsquery('english', %s) AND tenant_id = %s").format(
-                table=Identifier(table_name)
-            )
-        ]
-        
-        params = [fts_field, query_text, fts_field, query_text, tenant_id]
-
-        if filter:
-            filter_sql, filter_params = self._translate_filter(filter)
-            query_parts.append(SQL("AND"))
-            query_parts.append(filter_sql)
-            params.extend(filter_params)
-
-        query_parts.append(SQL("ORDER BY score DESC LIMIT %s"))
-        params.append(top_k)
-
-        final_sql = SQL(" ").join(query_parts)
-        results = []
-        try:
-            with self._connection.cursor() as cursor:
-                cursor.execute(final_sql, params)
-                for row in cursor.fetchall():
-                    payload = row[1] if isinstance(row[1], dict) else json.loads(row[1])
-                    
-                    if hasattr(row[2], 'tolist'):
-                        vector = row[2].tolist()
-                    elif isinstance(row[2], (list, tuple)):
-                        vector = list(row[2])
-                    elif isinstance(row[2], str):
-                        import ast
-                        try:
-                            vector = ast.literal_eval(row[2])
-                        except:
-                            vector = row[2]
-                    else:
-                        vector = row[2]
-                    
-                    text = payload.get("chunk", "") if payload else ""
-                    score = float(row[3])
-                    
-                    if score >= final_similarity_threshold:
-                        results.append(VectorSearchResult(
-                            id=row[0], 
-                            payload=payload, 
-                            vector=vector, 
-                            score=score,
-                            text=text
-                        ))
-            return results
-        except (Exception, psycopg.Error) as e:
-            if self._connection: self._connection.rollback()
-            raise SearchError(f"An error occurred during full-text search: {e}")
-
-    def hybrid_search(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[TypingLiteral['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
+    async def search(
+        self,
+        top_k: Optional[int] = None,
+        query_vector: Optional[List[float]] = None,
+        query_text: Optional[str] = None,
+        filter: Optional[Dict[str, Any]] = None,
+        alpha: Optional[float] = None,
+        fusion_method: Optional[Literal['rrf', 'weighted']] = None,
+        similarity_threshold: Optional[float] = None,
+        **kwargs
+    ) -> List[VectorSearchResult]:
         """
-        Performs a hybrid search by fetching results from dense and full-text searches
-        and fusing them using a Reciprocal Rank Fusion (RRF) algorithm.
-        """
-        final_alpha = alpha if alpha is not None else self._config.search.default_hybrid_alpha or 0.5
-        fusion_k = 60
-
-        candidate_pool_size = top_k
-
-        dense_results = self.dense_search(query_vector, candidate_pool_size, filter, similarity_threshold, **kwargs)
-
-        keyword_results = self.full_text_search(query_text, candidate_pool_size, filter, similarity_threshold, **kwargs)
-
-        all_docs = {doc.id: doc for doc in dense_results}
-        all_docs.update({doc.id: doc for doc in keyword_results})
-
-        rrf_scores = {}
+        Master search method that dispatches to appropriate search function.
         
-        for i, doc in enumerate(dense_results):
-            if doc.id not in rrf_scores:
-                rrf_scores[doc.id] = 0
-            rrf_scores[doc.id] += final_alpha * (1 / (fusion_k + i + 1))
+        Args:
+            top_k: Number of results to return
+            query_vector: Vector for dense search
+            query_text: Text for full-text search
+            filter: Metadata filter
+            alpha: Weight for hybrid search
+            fusion_method: Fusion algorithm for hybrid search
+            similarity_threshold: Minimum similarity score
+            **kwargs: Additional provider-specific options
             
-        for i, doc in enumerate(keyword_results):
-            if doc.id not in rrf_scores:
-                rrf_scores[doc.id] = 0
-            rrf_scores[doc.id] += (1 - final_alpha) * (1 / (fusion_k + i + 1))
+        Returns:
+            List of VectorSearchResult objects
+        """
+        # Use defaults from config if not provided
+        top_k = top_k or self._config.default_top_k
+        similarity_threshold = similarity_threshold or self._config.default_similarity_threshold
+        alpha = alpha or self._config.default_hybrid_alpha
+        fusion_method = fusion_method or self._config.default_fusion_method
         
-        sorted_ids = sorted(rrf_scores.keys(), key=lambda id: rrf_scores[id], reverse=True)
+        # Determine search type
+        has_vector = query_vector is not None
+        has_text = query_text is not None
+        
+        # Validate search capabilities
+        if has_vector and has_text:
+            if not self._config.hybrid_search_enabled:
+                raise ConfigurationError("Hybrid search is disabled in configuration")
+            return await self.hybrid_search(
+                query_vector=query_vector,
+                query_text=query_text,
+                top_k=top_k,
+                filter=filter,
+                alpha=alpha,
+                fusion_method=fusion_method,
+                similarity_threshold=similarity_threshold,
+                **kwargs
+            )
+        elif has_vector:
+            if not self._config.dense_search_enabled:
+                raise ConfigurationError("Dense search is disabled in configuration")
+            return await self.dense_search(
+                query_vector=query_vector,
+                top_k=top_k,
+                filter=filter,
+                similarity_threshold=similarity_threshold,
+                **kwargs
+            )
+        elif has_text:
+            if not self._config.full_text_search_enabled:
+                raise ConfigurationError("Full-text search is disabled in configuration")
+            return await self.full_text_search(
+                query_text=query_text,
+                top_k=top_k,
+                filter=filter,
+                similarity_threshold=similarity_threshold,
+                **kwargs
+            )
+        else:
+            raise ConfigurationError(
+                "Must provide either query_vector, query_text, or both"
+            )
 
-        final_results = []
+    def search_sync(
+        self,
+        top_k: Optional[int] = None,
+        query_vector: Optional[List[float]] = None,
+        query_text: Optional[str] = None,
+        filter: Optional[Dict[str, Any]] = None,
+        alpha: Optional[float] = None,
+        fusion_method: Optional[Literal['rrf', 'weighted']] = None,
+        similarity_threshold: Optional[float] = None,
+        **kwargs
+    ) -> List[VectorSearchResult]:
+        """Master search method that dispatches to appropriate search function (sync)."""
+        return self._run_async_from_sync(
+            self.search(
+                top_k, query_vector, query_text, filter, 
+                alpha, fusion_method, similarity_threshold, **kwargs
+            )
+        )
+
+    async def dense_search(
+        self,
+        query_vector: List[float],
+        top_k: int,
+        filter: Optional[Dict[str, Any]] = None,
+        similarity_threshold: Optional[float] = None,
+        **kwargs
+    ) -> List[VectorSearchResult]:
+        """
+        Perform pure vector similarity search.
+        
+        Uses pgvector's distance operators based on the configured metric.
+        """
+        if not self._is_connected:
+            raise VectorDBConnectionError("Not connected to database")
+        
+        try:
+            def _search():
+                with self._session_factory() as session:
+                    with session.begin():
+                        # Set index parameters
+                        self._set_index_params(session)
+                        
+                        # Build query
+                        stmt = select(
+                            self._table.c.id,
+                            self._table.c.content_id,
+                            self._table.c.document_name,
+                            self._table.c.document_id,
+                            self._table.c.content,
+                            self._table.c.embedding,
+                            self._table.c.metadata,
+                            self._table.c.created_at,
+                            self._table.c.updated_at,
+                        )
+                        
+                        # Apply filter
+                        if filter:
+                            stmt = self._apply_filter(stmt, filter)
+                        
+                        # Calculate distance and add as column
+                        distance_col = self._get_distance_column(query_vector)
+                        stmt = stmt.add_columns(distance_col.label('distance'))
+                        
+                        # Order by distance
+                        stmt = stmt.order_by('distance')
+                        
+                        # Apply similarity threshold if provided
+                        if similarity_threshold is not None:
+                            # Convert similarity to distance based on metric
+                            max_distance = self._similarity_to_distance(similarity_threshold)
+                            stmt = stmt.where(distance_col <= max_distance)
+                        
+                        # Limit results
+                        stmt = stmt.limit(top_k)
+                        
+                        # Execute
+                        result = session.execute(stmt)
+                        return result.fetchall()
+            
+            rows = await asyncio.to_thread(_search)
+            
+            # Convert to VectorSearchResult
+            results = []
+            for row in rows:
+                # Convert distance to similarity score
+                score = self._distance_to_similarity(row.distance)
+                
+                results.append(
+                    VectorSearchResult(
+                        id=row.content_id,
+                        score=score,
+                        payload=self._row_to_payload(row),
+                        vector=list(row.embedding) if row.embedding is not None else None,
+                        text=row.content
+                    )
+                )
+            
+            logger.debug(f"Dense search returned {len(results)} results")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Dense search failed: {e}")
+            raise SearchError(f"Dense search failed: {e}")
+
+    def dense_search_sync(
+        self,
+        query_vector: List[float],
+        top_k: int,
+        filter: Optional[Dict[str, Any]] = None,
+        similarity_threshold: Optional[float] = None,
+        **kwargs
+    ) -> List[VectorSearchResult]:
+        """Perform pure vector similarity search (sync)."""
+        return self._run_async_from_sync(
+            self.dense_search(query_vector, top_k, filter, similarity_threshold, **kwargs)
+        )
+
+    async def full_text_search(
+        self,
+        query_text: str,
+        top_k: int,
+        filter: Optional[Dict[str, Any]] = None,
+        similarity_threshold: Optional[float] = None,
+        **kwargs
+    ) -> List[VectorSearchResult]:
+        """
+        Perform full-text search using PostgreSQL's text search.
+        
+        Uses GIN indexes for fast text matching.
+        """
+        if not self._is_connected:
+            raise VectorDBConnectionError("Not connected to database")
+        
+        try:
+            def _search():
+                with self._session_factory() as session:
+                    # Build text search query
+                    processed_query = self._process_text_query(query_text)
+                    
+                    # Build statement
+                    stmt = select(
+                        self._table.c.id,
+                        self._table.c.content_id,
+                        self._table.c.document_name,
+                        self._table.c.document_id,
+                        self._table.c.content,
+                        self._table.c.embedding,
+                        self._table.c.metadata,
+                        self._table.c.created_at,
+                        self._table.c.updated_at,
+                    )
+                    
+                    # Apply filter
+                    if filter:
+                        stmt = self._apply_filter(stmt, filter)
+                    
+                    # Create text search components
+                    ts_vector = func.to_tsvector(
+                        self._config.content_language, 
+                        self._table.c.content
+                    )
+                    ts_query = func.websearch_to_tsquery(
+                        self._config.content_language,
+                        bindparam("query", value=processed_query)
+                    )
+                    text_rank = func.ts_rank_cd(ts_vector, ts_query)
+                    
+                    # Add rank column
+                    stmt = stmt.add_columns(text_rank.label('rank'))
+                    
+                    # Filter out results with rank 0 (no match at all)
+                    # PostgreSQL ts_rank returns 0 for documents that don't match the query
+                    stmt = stmt.where(text_rank > 0)
+                    
+                    # Order by rank
+                    stmt = stmt.order_by(desc('rank'))
+                    
+                    # Apply similarity threshold if provided
+                    if similarity_threshold is not None:
+                        stmt = stmt.where(text_rank >= similarity_threshold)
+                    
+                    # Limit results
+                    stmt = stmt.limit(top_k)
+                    
+                    # Execute
+                    result = session.execute(stmt)
+                    return result.fetchall()
+            
+            rows = await asyncio.to_thread(_search)
+            
+            # Convert to VectorSearchResult
+            results = []
+            
+            # Normalize scores to 0-1 range if we have results
+            if rows:
+                max_rank = max(float(row.rank) for row in rows) if rows else 1.0
+                # Avoid division by zero
+                if max_rank == 0:
+                    max_rank = 1.0
+                
+                for row in rows:
+                    # Normalize the rank to 0-1 by dividing by max rank
+                    normalized_score = float(row.rank) / max_rank
+                    results.append(
+                        VectorSearchResult(
+                            id=row.content_id,
+                            score=normalized_score,
+                            payload=self._row_to_payload(row),
+                            vector=list(row.embedding) if row.embedding is not None else None,
+                            text=row.content
+                        )
+                    )
+            
+            logger.debug(f"Full-text search returned {len(results)} results")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Full-text search failed: {e}")
+            raise SearchError(f"Full-text search failed: {e}")
+
+    def full_text_search_sync(
+        self,
+        query_text: str,
+        top_k: int,
+        filter: Optional[Dict[str, Any]] = None,
+        similarity_threshold: Optional[float] = None,
+        **kwargs
+    ) -> List[VectorSearchResult]:
+        """Perform full-text search using PostgreSQL's text search (sync)."""
+        return self._run_async_from_sync(
+            self.full_text_search(query_text, top_k, filter, similarity_threshold, **kwargs)
+        )
+
+    async def hybrid_search(
+        self,
+        query_vector: List[float],
+        query_text: str,
+        top_k: int,
+        filter: Optional[Dict[str, Any]] = None,
+        alpha: Optional[float] = None,
+        fusion_method: Optional[Literal['rrf', 'weighted']] = None,
+        similarity_threshold: Optional[float] = None,
+        **kwargs
+    ) -> List[VectorSearchResult]:
+        """
+        Perform hybrid search combining vector similarity and full-text search.
+        
+        This implementation uses PostgreSQL's native capabilities to compute
+        both scores in a single query for optimal performance.
+        """
+        if not self._is_connected:
+            raise VectorDBConnectionError("Not connected to database")
+        
+        # Use defaults
+        alpha = alpha or self._config.default_hybrid_alpha
+        fusion_method = fusion_method or self._config.default_fusion_method
+        
+        try:
+            if fusion_method == 'rrf':
+                return await self._hybrid_search_rrf(
+                    query_vector, query_text, top_k, filter, similarity_threshold, **kwargs
+                )
+            else:  # weighted
+                return await self._hybrid_search_weighted(
+                    query_vector, query_text, top_k, filter, alpha, similarity_threshold, **kwargs
+                )
+        except Exception as e:
+            logger.error(f"Hybrid search failed: {e}")
+            raise SearchError(f"Hybrid search failed: {e}")
+
+    async def _hybrid_search_weighted(
+        self,
+        query_vector: List[float],
+        query_text: str,
+        top_k: int,
+        filter: Optional[Dict[str, Any]],
+        alpha: float,
+        similarity_threshold: Optional[float],
+        **kwargs
+    ) -> List[VectorSearchResult]:
+        """Hybrid search using weighted score combination."""
+        
+        def _search():
+            with self._session_factory() as session:
+                with session.begin():
+                    # Set index parameters
+                    self._set_index_params(session)
+                    
+                    # Process text query
+                    processed_query = self._process_text_query(query_text)
+                    
+                    # Build statement
+                    stmt = select(
+                        self._table.c.id,
+                        self._table.c.content_id,
+                        self._table.c.document_name,
+                        self._table.c.document_id,
+                        self._table.c.content,
+                        self._table.c.embedding,
+                        self._table.c.metadata,
+                        self._table.c.created_at,
+                        self._table.c.updated_at,
+                    )
+                    
+                    # Apply filter
+                    if filter:
+                        stmt = self._apply_filter(stmt, filter)
+                    
+                    # Calculate vector distance
+                    distance_col = self._get_distance_column(query_vector)
+                    
+                    # Calculate vector similarity score (normalized to 0-1)
+                    vector_score = self._distance_to_similarity_expression(distance_col)
+                    
+                    # Calculate text rank
+                    ts_vector = func.to_tsvector(
+                        self._config.content_language,
+                        self._table.c.content
+                    )
+                    ts_query = func.websearch_to_tsquery(
+                        self._config.content_language,
+                        bindparam("query", value=processed_query)
+                    )
+                    text_rank = func.ts_rank_cd(ts_vector, ts_query)
+                    
+                    # Combine scores with weights
+                    text_weight = 1.0 - alpha
+                    hybrid_score = (alpha * vector_score) + (text_weight * text_rank)
+                    
+                    # Add columns
+                    stmt = stmt.add_columns(
+                        distance_col.label('distance'),
+                        text_rank.label('text_rank'),
+                        hybrid_score.label('hybrid_score')
+                    )
+                    
+                    # Order by hybrid score
+                    stmt = stmt.order_by(desc('hybrid_score'))
+                    
+                    # Apply threshold
+                    if similarity_threshold is not None:
+                        stmt = stmt.where(hybrid_score >= similarity_threshold)
+                    
+                    # Limit results
+                    stmt = stmt.limit(top_k)
+                    
+                    # Execute
+                    result = session.execute(stmt)
+                    return result.fetchall()
+        
+        rows = await asyncio.to_thread(_search)
+        
+        # Convert to VectorSearchResult
+        results = []
+        for row in rows:
+            results.append(
+                VectorSearchResult(
+                    id=row.content_id,
+                    score=float(row.hybrid_score),
+                    payload=self._row_to_payload(row),
+                    vector=list(row.embedding) if row.embedding is not None else None,
+                    text=row.content
+                )
+            )
+        
+        logger.debug(f"Hybrid search (weighted) returned {len(results)} results")
+        return results
+
+    async def _hybrid_search_rrf(
+        self,
+        query_vector: List[float],
+        query_text: str,
+        top_k: int,
+        filter: Optional[Dict[str, Any]],
+        similarity_threshold: Optional[float],
+        **kwargs
+    ) -> List[VectorSearchResult]:
+        """
+        Hybrid search using Reciprocal Rank Fusion (RRF).
+        
+        RRF formula: score = sum(1 / (k + rank_i)) for each ranking
+        Default k = 60 (common value in literature)
+        """
+        k = kwargs.get('rrf_k', 60)
+        
+        # Get separate results
+        vector_results = await self.dense_search(
+            query_vector=query_vector,
+            top_k=top_k * 2,  # Get more results for fusion
+            filter=filter,
+            **kwargs
+        )
+        
+        text_results = await self.full_text_search(
+            query_text=query_text,
+            top_k=top_k * 2,
+            filter=filter,
+            **kwargs
+        )
+        
+        # Create rank maps
+        vector_ranks = {r.id: i + 1 for i, r in enumerate(vector_results)}
+        text_ranks = {r.id: i + 1 for i, r in enumerate(text_results)}
+        
+        # Combine using RRF
+        rrf_scores: Dict[str, float] = {}
+        all_ids = set(vector_ranks.keys()) | set(text_ranks.keys())
+        
+        for doc_id in all_ids:
+            score = 0.0
+            if doc_id in vector_ranks:
+                score += 1.0 / (k + vector_ranks[doc_id])
+            if doc_id in text_ranks:
+                score += 1.0 / (k + text_ranks[doc_id])
+            rrf_scores[doc_id] = score
+        
+        # Sort by RRF score
+        sorted_ids = sorted(rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True)
+        
+        # Create result map for quick lookup
+        result_map = {}
+        for r in vector_results + text_results:
+            if r.id not in result_map:
+                result_map[r.id] = r
+        
+        # Build final results
+        results = []
         for doc_id in sorted_ids[:top_k]:
-            result = all_docs[doc_id]
-            result_with_fused_score = VectorSearchResult(
-                id=result.id,
-                payload=result.payload,
-                vector=result.vector,
-                score=rrf_scores[doc_id],
-                text=result.text
+            result = result_map[doc_id]
+            # Update score with RRF score
+            results.append(
+                VectorSearchResult(
+                    id=result.id,
+                    score=rrf_scores[doc_id],
+                    payload=result.payload,
+                    vector=result.vector,
+                    text=result.text
+                )
             )
-            final_results.append(result_with_fused_score)
-            
-        return final_results
-    
+        
+        # Apply threshold if provided
+        if similarity_threshold is not None:
+            results = [r for r in results if r.score >= similarity_threshold]
+        
+        logger.debug(f"Hybrid search (RRF) returned {len(results)} results")
+        return results
 
+    def hybrid_search_sync(
+        self,
+        query_vector: List[float],
+        query_text: str,
+        top_k: int,
+        filter: Optional[Dict[str, Any]] = None,
+        alpha: Optional[float] = None,
+        fusion_method: Optional[Literal['rrf', 'weighted']] = None,
+        similarity_threshold: Optional[float] = None,
+        **kwargs
+    ) -> List[VectorSearchResult]:
+        """Perform hybrid search combining vector similarity and full-text search (sync)."""
+        return self._run_async_from_sync(
+            self.hybrid_search(
+                query_vector, query_text, top_k, filter,
+                alpha, fusion_method, similarity_threshold, **kwargs
+            )
+        )
 
-    def _translate_filter(self, filter_dict: Dict[str, Any]) -> Tuple[Composed, List[Any]]:
-        """
-        Recursively translates a framework-standard filter dictionary into a
-        parameterized psycopg SQL Composed object and a list of parameters.
-        """
-        sql_parts = []
-        params = []
+    # ========================================================================
+    # Helper Methods for Search
+    # ========================================================================
 
-        logical_ops = {"and": SQL(" AND "), "or": SQL(" OR ")}
+    def _set_index_params(self, session: Session) -> None:
+        """Set index-specific parameters for the current session."""
+        if isinstance(self._config.index, IVFIndexConfig):
+            # Use nprobe from index config, fallback to default
+            nprobe = self._config.index.nprobe if self._config.index.nprobe else 10
+            session.execute(
+                text(f"SET LOCAL ivfflat.probes = {nprobe}")
+            )
+        elif isinstance(self._config.index, HNSWIndexConfig):
+            # Use ef_search from index config, fallback to default
+            ef_search = self._config.index.ef_search if self._config.index.ef_search else 40
+            session.execute(
+                text(f"SET LOCAL hnsw.ef_search = {ef_search}")
+            )
 
-        if len(filter_dict) == 1 and list(filter_dict.keys())[0] in logical_ops:
-            op = list(filter_dict.keys())[0]
-            sub_filters = filter_dict[op]
+    def _get_distance_column(self, query_vector: List[float]):
+        """Get the appropriate distance column based on the metric."""
+        if self._config.distance_metric == DistanceMetric.COSINE:
+            return self._table.c.embedding.cosine_distance(query_vector)
+        elif self._config.distance_metric == DistanceMetric.EUCLIDEAN:
+            return self._table.c.embedding.l2_distance(query_vector)
+        elif self._config.distance_metric == DistanceMetric.DOT_PRODUCT:
+            return self._table.c.embedding.max_inner_product(query_vector)
+        else:
+            raise ConfigurationError(f"Unsupported distance metric: {self._config.distance_metric}")
 
-            sub_sql_parts = []
-            for sub_filter in sub_filters:
-                sub_sql, sub_params = self._translate_filter(sub_filter)
-                sub_sql_parts.append(sub_sql)
-                params.extend(sub_params)
+    def _distance_to_similarity(self, distance: float) -> float:
+        """Convert distance to similarity score (0-1 range)."""
+        if self._config.distance_metric == DistanceMetric.DOT_PRODUCT:
+            # Inner product: higher is better, normalize to 0-1
+            return (distance + 1.0) / 2.0
+        else:
+            # Distance metrics: lower is better, invert
+            return 1.0 / (1.0 + distance)
 
-            sql_composition = SQL("(") + logical_ops[op].join(sub_sql_parts) + SQL(")")
-            return sql_composition, params
+    def _similarity_to_distance(self, similarity: float) -> float:
+        """Convert similarity score to distance."""
+        if self._config.distance_metric == DistanceMetric.DOT_PRODUCT:
+            # Reverse the normalization
+            return (similarity * 2.0) - 1.0
+        else:
+            # Reverse the inversion
+            return (1.0 / similarity) - 1.0
 
-        for field, value in filter_dict.items():
-            field_sql = SQL("(payload->>") + Placeholder() + SQL(")")
-            params.append(field)
+    def _distance_to_similarity_expression(self, distance_col):
+        """Create a SQL expression to convert distance to similarity."""
+        if self._config.distance_metric == DistanceMetric.DOT_PRODUCT:
+            # Normalize inner product to 0-1
+            return (distance_col + 1.0) / 2.0
+        else:
+            # Invert distance
+            return 1.0 / (1.0 + distance_col)
 
-            if isinstance(value, dict):
-                op, val = list(value.items())[0]
-                if op == "$gte":
-                    sql_parts.append(field_sql + SQL("::numeric >= ") + Placeholder())
-                elif op == "$lte":
-                    sql_parts.append(field_sql + SQL("::numeric <= ") + Placeholder())
-                elif op == "$gt":
-                    sql_parts.append(field_sql + SQL("::numeric > ") + Placeholder())
-                elif op == "$lt":
-                    sql_parts.append(field_sql + SQL("::numeric < ") + Placeholder())
-                elif op == "$ne":
-                    sql_parts.append(field_sql + SQL("::text != ") + Placeholder())
-                elif op == "$in":
-                    sql_parts.append(field_sql + SQL("::text = ANY(") + Placeholder() + SQL(")"))
-                else:
-                    raise SearchError(f"Unsupported filter operator '{op}'.")
-                params.append(val)
+    def _process_text_query(self, query: str) -> str:
+        """Process text query for full-text search."""
+        if self._config.prefix_match:
+            # Enable prefix matching by appending '*' to each word
+            words = query.strip().split()
+            processed_words = [word + "*" for word in words]
+            return " ".join(processed_words)
+        return query
+
+    def _apply_filter(self, stmt, filter: Dict[str, Any]):
+        """Apply metadata filter to the query."""
+        for key, value in filter.items():
+            # Check if it's a direct column
+            if key in ['document_name', 'document_id', 'content_id']:
+                column = getattr(self._table.c, key)
+                stmt = stmt.where(column == value)
             else:
-                sql_parts.append(field_sql + SQL("::text = ") + Placeholder())
-                params.append(str(value))
+                # Metadata field - use JSONB containment
+                stmt = stmt.where(
+                    self._table.c.metadata[key].astext == str(value)
+                )
+        return stmt
 
-        return SQL(" AND ").join(sql_parts), params
+    # ========================================================================
+    # Index Management
+    # ========================================================================
+
+    async def _create_vector_index(self) -> None:
+        """Create vector index (HNSW or IVFFlat)."""
+        try:
+            # Generate index name
+            index_type = 'hnsw' if isinstance(self._config.index, HNSWIndexConfig) else 'ivfflat'
+            self._vector_index_name = f"{self.table_name}_{index_type}_embedding_idx"
+            
+            # Check if index exists
+            if await self._index_exists(self._vector_index_name):
+                logger.info(f"Vector index '{self._vector_index_name}' already exists")
+                return
+            
+            # Get distance operator
+            distance_op = self._get_distance_operator()
+            
+            def _create():
+                with self._session_factory() as session:
+                    with session.begin():
+                        if isinstance(self._config.index, HNSWIndexConfig):
+                            self._create_hnsw_index(session, distance_op)
+                        else:
+                            self._create_ivfflat_index(session, distance_op)
+            
+            await asyncio.to_thread(_create)
+            logger.info(f"Created vector index '{self._vector_index_name}'")
+            
+        except Exception as e:
+            logger.error(f"Failed to create vector index: {e}")
+            raise VectorDBError(f"Vector index creation failed: {e}")
+
+    def _create_hnsw_index(self, session: Session, distance_op: str) -> None:
+        """Create HNSW index."""
+        config = cast(HNSWIndexConfig, self._config.index)
+        
+        logger.debug(
+            f"Creating HNSW index with m={config.m}, "
+            f"ef_construction={config.ef_construction}"
+        )
+        
+        create_sql = text(
+            f'CREATE INDEX "{self._vector_index_name}" '
+            f'ON {self.schema_name}.{self.table_name} '
+            f'USING hnsw (embedding {distance_op}) '
+            f'WITH (m = :m, ef_construction = :ef_construction);'
+        )
+        
+        session.execute(
+            create_sql,
+            {'m': config.m, 'ef_construction': config.ef_construction}
+        )
+
+    def _create_ivfflat_index(self, session: Session, distance_op: str) -> None:
+        """Create IVFFlat index."""
+        config = cast(IVFIndexConfig, self._config.index)
+        
+        # Calculate number of lists dynamically or use configured value
+        num_lists = self._calculate_ivfflat_lists(session)
+        
+        logger.debug(f"Creating IVFFlat index with lists={num_lists}")
+        
+        create_sql = text(
+            f'CREATE INDEX "{self._vector_index_name}" '
+            f'ON {self.schema_name}.{self.table_name} '
+            f'USING ivfflat (embedding {distance_op}) '
+            f'WITH (lists = :lists);'
+        )
+        
+        session.execute(create_sql, {'lists': num_lists})
+
+    def _calculate_ivfflat_lists(self, session: Session) -> int:
+        """
+        Calculate optimal number of lists for IVFFlat based on row count.
+        
+        - Small datasets (< 1M rows): lists = rows / 1000
+        - Large datasets (>= 1M rows): lists = sqrt(rows)
+        """
+        # Get row count
+        count_stmt = select(func.count()).select_from(self._table)
+        result = session.execute(count_stmt)
+        row_count = result.scalar() or 0
+        
+        logger.debug(f"Row count for IVFFlat calculation: {row_count}")
+        
+        if row_count < 1000000:
+            num_lists = max(int(row_count / 1000), 1)
+        else:
+            num_lists = max(int(sqrt(row_count)), 1)
+        
+        return num_lists
+
+    def _get_distance_operator(self) -> str:
+        """Get the distance operator string for index creation."""
+        metric_map = {
+            DistanceMetric.COSINE: 'vector_cosine_ops',
+            DistanceMetric.EUCLIDEAN: 'vector_l2_ops',
+            DistanceMetric.DOT_PRODUCT: 'vector_ip_ops'
+        }
+        return metric_map[self._config.distance_metric]
+
+    async def _create_gin_index(self) -> None:
+        """Create GIN index for full-text search on content field."""
+        try:
+            self._gin_index_name = f"{self.table_name}_content_gin_idx"
+            
+            # Check if index exists
+            if await self._index_exists(self._gin_index_name):
+                logger.info(f"GIN index '{self._gin_index_name}' already exists")
+                return
+            
+            def _create():
+                with self._session_factory() as session:
+                    with session.begin():
+                        logger.debug("Creating GIN index for full-text search")
+                        create_sql = text(
+                            f'CREATE INDEX "{self._gin_index_name}" '
+                            f'ON {self.schema_name}.{self.table_name} '
+                            f'USING GIN (to_tsvector(:language, content));'
+                        )
+                        session.execute(
+                            create_sql,
+                            {'language': self._config.content_language}
+                        )
+            
+            await asyncio.to_thread(_create)
+            logger.info(f"Created GIN index '{self._gin_index_name}'")
+            
+        except Exception as e:
+            logger.error(f"Failed to create GIN index: {e}")
+            raise VectorDBError(f"GIN index creation failed: {e}")
+
+    async def _create_metadata_indexes(self) -> None:
+        """Create GIN index for JSONB metadata field."""
+        try:
+            metadata_index_name = f"{self.table_name}_metadata_gin_idx"
+            
+            # Check if index exists
+            if await self._index_exists(metadata_index_name):
+                logger.info(f"Metadata index '{metadata_index_name}' already exists")
+                return
+            
+            def _create():
+                with self._session_factory() as session:
+                    with session.begin():
+                        logger.debug("Creating GIN index for metadata")
+                        create_sql = text(
+                            f'CREATE INDEX "{metadata_index_name}" '
+                            f'ON {self.schema_name}.{self.table_name} '
+                            f'USING GIN (metadata);'
+                        )
+                        session.execute(create_sql)
+            
+            await asyncio.to_thread(_create)
+            logger.info(f"Created metadata index '{metadata_index_name}'")
+            
+        except Exception as e:
+            logger.error(f"Failed to create metadata index: {e}")
+            raise VectorDBError(f"Metadata index creation failed: {e}")
+
+    async def _index_exists(self, index_name: str) -> bool:
+        """Check if an index exists."""
+        try:
+            def _check():
+                inspector = inspect(self._engine)
+                indexes = inspector.get_indexes(self.table_name, schema=self.schema_name)
+                return any(idx['name'] == index_name for idx in indexes)
+            
+            return await asyncio.to_thread(_check)
+        except:
+            return False
+
+    def optimize(self, force_recreate: bool = False) -> bool:
+        """Optimize the database by creating/recreating indexes (sync)."""
+        return self._run_async_from_sync(self.async_optimize(force_recreate))
+    
+    async def async_optimize(self, force_recreate: bool = False) -> bool:
+        """
+        Optimize the database by creating/recreating indexes (async).
+        
+        Args:
+            force_recreate: If True, drop and recreate all indexes
+
+        Returns:
+            True if optimization was successful, False otherwise
+        """
+        logger.info("Optimizing PgVector database...")
+        try:
+            if force_recreate:
+                # Drop existing indexes
+                if self._vector_index_name:
+                    await self._drop_index(self._vector_index_name)
+                if self._gin_index_name:
+                    await self._drop_index(self._gin_index_name)
+            
+            # Create indexes
+            await self._create_vector_index()
+            await self._create_gin_index()
+            
+            if self._config.indexed_fields and 'metadata' in self._config.indexed_fields:
+                await self._create_metadata_indexes()
+            
+            logger.info("Optimization complete")
+            return True
+        except Exception as e:
+            logger.error(f"Optimization failed: {e}")
+            return False
+
+    async def _drop_index(self, index_name: str) -> None:
+        """Drop an index."""
+        try:
+            def _drop():
+                with self._session_factory() as session:
+                    with session.begin():
+                        session.execute(
+                            text(f'DROP INDEX IF EXISTS {self.schema_name}."{index_name}";')
+                        )
+            
+            await asyncio.to_thread(_drop)
+            logger.info(f"Dropped index '{index_name}'")
+        except Exception as e:
+            logger.error(f"Failed to drop index '{index_name}': {e}")
+
+    # ========================================================================
+    # Utility Methods
+    # ========================================================================
+
+    async def get_count(self) -> int:
+        """Get the total number of records in the collection."""
+        if not self._is_connected:
+            return 0
+        
+        try:
+            def _count():
+                with self._session_factory() as session:
+                    stmt = select(func.count()).select_from(self._table)
+                    result = session.execute(stmt)
+                    return result.scalar() or 0
+            
+            return await asyncio.to_thread(_count)
+        except:
+            return 0
+
+    async def _record_exists(self, column_name: str, value: Any) -> bool:
+        """
+        Check if a record with the given column value exists.
+        
+        Args:
+            column_name: The name of the column to check
+            value: The value to search for
+            
+        Returns:
+            True if the record exists, False otherwise
+        """
+        if not self._is_connected:
+            return False
+        
+        try:
+            def _check():
+                with self._session_factory() as session:
+                    column = getattr(self._table.c, column_name)
+                    stmt = select(1).where(column == value).limit(1)
+                    result = session.execute(stmt).first()
+                    return result is not None
+            
+            return await asyncio.to_thread(_check)
+        except Exception as e:
+            logger.error(f"Error checking if record exists: {e}")
+            return False
+
+    def content_id_exists(self, content_id: str) -> bool:
+        """Check if a record with the given content_id exists (sync)."""
+        return self._run_async_from_sync(self.async_content_id_exists(content_id))
+    
+    async def async_content_id_exists(self, content_id: str) -> bool:
+        """
+        Check if a record with the given content_id exists (async).
+        
+        Args:
+            content_id: The content_id to check
+            
+        Returns:
+            True if a record with the content_id exists, False otherwise
+        """
+        return await self._record_exists('content_id', content_id)
+
+    def document_name_exists(self, document_name: str) -> bool:
+        """Check if a record with the given document_name exists (sync)."""
+        return self._run_async_from_sync(self.async_document_name_exists(document_name))
+    
+    async def async_document_name_exists(self, document_name: str) -> bool:
+        """
+        Check if a record with the given document_name exists (async).
+        
+        Args:
+            document_name: The document_name to check
+            
+        Returns:
+            True if a record with the document_name exists, False otherwise
+        """
+        return await self._record_exists('document_name', document_name)
+
+    def document_id_exists(self, document_id: str) -> bool:
+        """Check if a record with the given document_id exists (sync)."""
+        return self._run_async_from_sync(self.async_document_id_exists(document_id))
+    
+    async def async_document_id_exists(self, document_id: str) -> bool:
+        """
+        Check if a record with the given document_id exists (async).
+        
+        Args:
+            document_id: The document_id to check
+            
+        Returns:
+            True if a record with the document_id exists, False otherwise
+        """
+        return await self._record_exists('document_id', document_id)
+    
+    def get_supported_search_types(self) -> List[str]:
+        """Get the supported search types for PgVector (sync)."""
+        supported = []
+        if self._config.dense_search_enabled:
+            supported.append('dense')
+        if self._config.full_text_search_enabled:
+            supported.append('full_text')
+        if self._config.hybrid_search_enabled:
+            supported.append('hybrid')
+        return supported
+    
+    async def async_get_supported_search_types(self) -> List[str]:
+        """Get the supported search types for PgVector (async)."""
+        return self.get_supported_search_types()
+
+    async def id_exists(self, id: str) -> bool:
+        """
+        Check if a record with the given ID exists.
+        
+        Args:
+            id: The ID to check
+            
+        Returns:
+            True if a record with the ID exists, False otherwise
+        """
+        return await self._record_exists('id', id)
+
+    def delete_by_document_name(self, document_name: str) -> bool:
+        """Delete all records with the given document_name (sync)."""
+        return self._run_async_from_sync(self.async_delete_by_document_name(document_name))
+    
+    async def async_delete_by_document_name(self, document_name: str) -> bool:
+        """
+        Delete all records with the given document_name (async).
+        
+        Args:
+            document_name: The document_name to delete
+            
+        Returns:
+            True if deletion was successful, False otherwise
+        """
+        if not self._is_connected:
+            raise VectorDBConnectionError("Not connected to database")
+        
+        try:
+            def _delete():
+                with self._session_factory() as session:
+                    with session.begin():
+                        stmt = sa_delete(self._table).where(
+                            self._table.c.document_name == document_name
+                        )
+                        result = session.execute(stmt)
+                        return result.rowcount
+            
+            count = await asyncio.to_thread(_delete)
+            logger.info(f"Deleted {count} records with document_name '{document_name}'")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Delete by document_name failed: {e}")
+            return False
+    
+    def delete_by_content_id(self, content_id: str) -> bool:
+        """Delete all records with the given content_id (sync)."""
+        return self._run_async_from_sync(self.async_delete_by_content_id(content_id))
+    
+    async def async_delete_by_content_id(self, content_id: str) -> bool:
+        """
+        Delete all records with the given content_id (async).
+        
+        Args:
+            content_id: The content_id to delete
+            
+        Returns:
+            True if deletion was successful, False otherwise
+        """
+        if not self._is_connected:
+            raise VectorDBConnectionError("Not connected to database")
+        
+        try:
+            def _delete():
+                with self._session_factory() as session:
+                    with session.begin():
+                        stmt = sa_delete(self._table).where(
+                            self._table.c.content_id == content_id
+                        )
+                        result = session.execute(stmt)
+                        return result.rowcount
+            
+            count = await asyncio.to_thread(_delete)
+            logger.info(f"Deleted {count} records with content_id '{content_id}'")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Delete by content_id failed: {e}")
+            return False
+
+    def update_metadata(self, content_id: str, metadata: Dict[str, Any]) -> bool:
+        """Update metadata for a specific record (sync)."""
+        return self._run_async_from_sync(self.async_update_metadata(content_id, metadata))
+    
+    async def async_update_metadata(
+        self, 
+        content_id: str, 
+        metadata: Dict[str, Any],
+        merge: bool = True
+    ) -> bool:
+        """
+        Update metadata for a specific record (async).
+        
+        Args:
+            content_id: The content_id of the record
+            metadata: The metadata to update
+            merge: If True, merge with existing metadata; if False, replace
+
+        Returns:
+            True if update was successful, False otherwise
+        """
+        if not self._is_connected:
+            raise VectorDBConnectionError("Not connected to database")
+        
+        try:
+            def _update():
+                with self._session_factory() as session:
+                    with session.begin():
+                        if merge:
+                            # Merge with existing metadata
+                            stmt = (
+                                sa_update(self._table)
+                                .where(self._table.c.content_id == content_id)
+                                .values(
+                                    metadata=func.coalesce(
+                                        self._table.c.metadata, text("'{}'::jsonb")
+                                    ).op("||")(
+                                        bindparam("md", metadata, type_=postgresql.JSONB)
+                                    )
+                                )
+                            )
+                        else:
+                            # Replace metadata
+                            stmt = (
+                                sa_update(self._table)
+                                .where(self._table.c.content_id == content_id)
+                                .values(metadata=metadata)
+                            )
+                        
+                        session.execute(stmt)
+            
+            await asyncio.to_thread(_update)
+            logger.info(f"Updated metadata for content_id '{content_id}'")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update metadata: {e}")
+            return False
+            
+
+
+    async def clear(self) -> None:
+        """Delete all records from the collection without dropping the table."""
+        if not self._is_connected:
+            raise VectorDBConnectionError("Not connected to database")
+        
+        try:
+            def _clear():
+                with self._session_factory() as session:
+                    with session.begin():
+                        session.execute(sa_delete(self._table))
+            
+            await asyncio.to_thread(_clear)
+            logger.info(f"Cleared all records from collection '{self.table_name}'")
+            
+        except Exception as e:
+            logger.error(f"Failed to clear collection: {e}")
+            raise VectorDBError(f"Clear operation failed: {e}")
+
+    def __deepcopy__(self, memo):
+        """
+        Create a deep copy of the PgVectorProvider instance.
+        
+        This is useful when you need to clone the provider for parallel operations.
+        Note: The database engine and session are shared, not copied.
+        
+        Args:
+            memo: A dictionary of objects already copied during the current copying pass
+            
+        Returns:
+            A deep-copied instance of PgVectorProvider
+        """
+        from copy import deepcopy
+        
+        # Create a new instance without calling __init__
+        cls = self.__class__
+        copied_obj = cls.__new__(cls)
+        memo[id(self)] = copied_obj
+        
+        # Deep copy most attributes
+        for k, v in self.__dict__.items():
+            # Skip SQLAlchemy objects that shouldn't be copied
+            if k in {'_metadata', '_table'}:
+                continue
+            # Reuse engine and session factory (they're thread-safe)
+            elif k in {'_engine', '_session_factory'}:
+                setattr(copied_obj, k, v)
+            else:
+                setattr(copied_obj, k, deepcopy(v, memo))
+        
+        # Recreate metadata and table for the copied instance
+        if self._metadata is not None and self._table is not None:
+            copied_obj._metadata = MetaData(schema=copied_obj.schema_name)
+            copied_obj._table = copied_obj._get_table_schema()
+        
+        return copied_obj
+
+    def __repr__(self) -> str:
+        return (
+            f"PgVectorProvider(collection='{self._config.collection_name}', "
+            f"table='{self.schema_name}.{self.table_name}', "
+            f"vector_size={self._config.vector_size}, "
+            f"metric={self._config.distance_metric.value}, "
+            f"index={self._config.index.type.value})"
+        )
+
+
+# Alias for backward compatibility
+PgvectorProvider = PgVectorProvider
+
