@@ -746,8 +746,9 @@ def run_command(host: str = "0.0.0.0", port: int = 8000) -> int:
 
         # Startup messages
         print_success(f"Starting {agent_name} server...")
-        print_info(f"Server will be available at http://{host}:{port}")
-        print_info(f"API documentation: http://{host}:{port}/docs")
+        display_host = "localhost" if host == "0.0.0.0" else host
+        print_info(f"Server will be available at http://{display_host}:{port}")
+        print_info(f"API documentation: http://{display_host}:{port}/docs")
         print_info("Press CTRL+C to stop the server")
         print()
 
