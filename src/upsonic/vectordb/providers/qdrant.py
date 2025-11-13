@@ -28,8 +28,7 @@ from upsonic.vectordb.config import (
     Mode,
     DistanceMetric,
     HNSWIndexConfig,
-    IVFIndexConfig,
-    FlatIndexConfig
+    IVFIndexConfig
 )
 
 from upsonic.utils.package.exception import(

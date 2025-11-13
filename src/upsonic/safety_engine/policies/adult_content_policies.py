@@ -4,7 +4,7 @@ Handles explicit material and adult themes.
 """
 
 import re
-from typing import List, Optional, Dict, Any
+from typing import Optional, Dict, Any
 from ..base import RuleBase, ActionBase, Policy
 from ..models import PolicyInput, RuleOutput, PolicyOutput
 
@@ -201,7 +201,7 @@ class AdultContentRule_LLM_Finder(RuleBase):
                 triggered_keywords=triggered_keywords
             )
             
-        except Exception as e:
+        except Exception:
             # Fallback to keyword-based detection on error
             fallback_rule = AdultContentRule()
             return fallback_rule.process(policy_input)

@@ -1,19 +1,15 @@
-import asyncio
 import pytest
-import json
-import time
-from unittest.mock import AsyncMock, MagicMock, patch, Mock
-from typing import List, Dict, Any, Optional, Type
-from pydantic import BaseModel, Field
+from unittest.mock import AsyncMock, patch, Mock
+from typing import List, Any, Optional, Type
+from pydantic import BaseModel
 
 from upsonic.storage.memory.memory import Memory
 from upsonic.storage.base import Storage
-from upsonic.storage.providers.in_memory import InMemoryStorage
 from upsonic.storage.session.sessions import InteractionSession, UserProfile
 from upsonic.storage.types import SessionId, UserId
 from upsonic.messages.messages import (
     ModelRequest, ModelResponse, TextPart, UserPromptPart, 
-    SystemPromptPart, ModelMessagesTypeAdapter, ToolCallPart, ToolReturnPart
+    SystemPromptPart
 )
 from upsonic.schemas import UserTraits
 
@@ -834,7 +830,6 @@ class TestMemoryDynamicProfile:
             mock_agent = AsyncMock()
             
             # Mock schema generation
-            from upsonic.storage.memory.memory import Memory
             from pydantic import BaseModel, Field
             from typing import List
             

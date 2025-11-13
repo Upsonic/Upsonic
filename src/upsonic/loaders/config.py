@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Dict, Any, Optional, List, Literal
 from pydantic import BaseModel, Field, ConfigDict
-from abc import ABC, abstractmethod
+from abc import ABC
 
 
 class LoaderConfig(BaseModel, ABC):

@@ -1,9 +1,8 @@
-import asyncio
 import pytest
 import time
 from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, MagicMock, patch, Mock
-from typing import List, Dict, Any, Optional
+from unittest.mock import AsyncMock, patch, Mock
+from typing import Any
 
 from upsonic.agent.agent import Agent
 from upsonic.agent.run_result import StreamRunResult
@@ -12,8 +11,8 @@ from upsonic.storage.memory.memory import Memory
 from upsonic.storage.providers.in_memory import InMemoryStorage
 from upsonic.models import Model
 from upsonic.messages.messages import (
-    ModelRequest, ModelResponse, TextPart, PartStartEvent, 
-    PartDeltaEvent, FinalResultEvent, UserPromptPart, SystemPromptPart
+    ModelResponse, TextPart, PartStartEvent, 
+    PartDeltaEvent, FinalResultEvent
 )
 
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 from typing import Dict, Type, List, Any, Optional, Union, Callable, Tuple
 import os
-import importlib
 from functools import lru_cache
 
 from .base import EmbeddingProvider, EmbeddingConfig

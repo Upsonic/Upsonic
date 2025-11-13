@@ -3,7 +3,6 @@ Phone Number Anonymization Policies
 """
 
 import re
-from typing import List
 from ..base import RuleBase, ActionBase, Policy
 from ..models import PolicyInput, RuleOutput, PolicyOutput
 

@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Tuple, get_args, get_origin
+from typing import Any, Callable, Dict, List, Optional, get_args, get_origin
 from inspect import Parameter, signature
 
-from pydantic import BaseModel, create_model
-from pydantic.json_schema import JsonSchemaValue, model_json_schema
+from pydantic import BaseModel
 
-from upsonic.tools.base import ToolSchema
 from upsonic._griffe import doc_descriptions
 
 
@@ -213,7 +211,7 @@ def validate_tool_function(func: Callable) -> List[str]:
     try:
         sig = signature(func)
     except ValueError:
-        errors.append(f"Cannot get signature for function")
+        errors.append("Cannot get signature for function")
         return errors
     
     # Check for type hints

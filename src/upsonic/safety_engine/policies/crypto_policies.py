@@ -3,7 +3,7 @@ Crypto Currency Block Policy
 """
 
 import re
-from typing import List, Optional, Dict, Any
+from typing import Optional, Dict, Any
 from ..base import RuleBase, ActionBase, Policy
 from ..models import PolicyInput, RuleOutput, PolicyOutput
 

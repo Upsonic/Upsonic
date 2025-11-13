@@ -1,6 +1,5 @@
 import json
-from pydantic import BaseModel
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from upsonic.tasks.tasks import Task
