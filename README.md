@@ -26,7 +26,7 @@
 
 
 # Introduction
-Upsonic is an AI agent development framework used by fintech leaders and tested at their scale against attacks and reasoning puzzles.
+Upsonic is an AI agent development framework used by fintech and banks. Upsonic tested at their scale against attacks and reasoning puzzles.
 
 
 ```bash
