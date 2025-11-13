@@ -193,6 +193,81 @@ def _get_exception_classes():
         'NoAPIKeyException': NoAPIKeyException,
     }
 
+def _get_vectordb_components():
+    """Lazy import of vectordb components."""
+    try:
+        from upsonic.vectordb import (
+            # Base classes
+            BaseVectorDBProvider,
+            BaseVectorDBConfig,
+            
+            # Provider classes
+            ChromaProvider,
+            FaissProvider,
+            PineconeProvider,
+            QdrantProvider,
+            MilvusProvider,
+            WeaviateProvider,
+            PgVectorProvider,
+            
+            # Config classes
+            DistanceMetric,
+            IndexType,
+            Mode,
+            ConnectionConfig,
+            HNSWIndexConfig,
+            IVFIndexConfig,
+            FlatIndexConfig,
+            PayloadFieldConfig,
+            ChromaConfig,
+            FaissConfig,
+            QdrantConfig,
+            PineconeConfig,
+            MilvusConfig,
+            WeaviateConfig,
+            PgVectorConfig,
+            
+            # Factory function
+            create_config,
+        )
+        
+        return {
+            # Base classes
+            "BaseVectorDBProvider": BaseVectorDBProvider,
+            "BaseVectorDBConfig": BaseVectorDBConfig,
+            
+            # Provider classes
+            "ChromaProvider": ChromaProvider,
+            "FaissProvider": FaissProvider,
+            "PineconeProvider": PineconeProvider,
+            "QdrantProvider": QdrantProvider,
+            "MilvusProvider": MilvusProvider,
+            "WeaviateProvider": WeaviateProvider,
+            "PgVectorProvider": PgVectorProvider,
+            
+            # Config classes
+            "DistanceMetric": DistanceMetric,
+            "IndexType": IndexType,
+            "Mode": Mode,
+            "ConnectionConfig": ConnectionConfig,
+            "HNSWIndexConfig": HNSWIndexConfig,
+            "IVFIndexConfig": IVFIndexConfig,
+            "FlatIndexConfig": FlatIndexConfig,
+            "PayloadFieldConfig": PayloadFieldConfig,
+            "ChromaConfig": ChromaConfig,
+            "FaissConfig": FaissConfig,
+            "QdrantConfig": QdrantConfig,
+            "PineconeConfig": PineconeConfig,
+            "MilvusConfig": MilvusConfig,
+            "WeaviateConfig": WeaviateConfig,
+            "PgVectorConfig": PgVectorConfig,
+            
+            # Factory function
+            "create_config": create_config,
+        }
+    except ImportError:
+        return {}
+
 def hello() -> str:
     return "Hello from upsonic!"
 
@@ -255,6 +330,10 @@ def __getattr__(name: str) -> Any:
     exception_classes = _get_exception_classes()
     if name in exception_classes:
         return exception_classes[name]
+    
+    vectordb_components = _get_vectordb_components()
+    if name in vectordb_components:
+        return vectordb_components[name]
     
     if name == "MultiAgent":
         return _get_Team()
@@ -326,4 +405,30 @@ __all__ = [
     "FileDurableStorage",
     "SQLiteDurableStorage",
     "RedisDurableStorage",
+    # VectorDB components
+    "BaseVectorDBProvider",
+    "BaseVectorDBConfig",
+    "ChromaProvider",
+    "FaissProvider",
+    "PineconeProvider",
+    "QdrantProvider",
+    "MilvusProvider",
+    "WeaviateProvider",
+    "PgVectorProvider",
+    "DistanceMetric",
+    "IndexType",
+    "Mode",
+    "ConnectionConfig",
+    "HNSWIndexConfig",
+    "IVFIndexConfig",
+    "FlatIndexConfig",
+    "PayloadFieldConfig",
+    "ChromaConfig",
+    "FaissConfig",
+    "QdrantConfig",
+    "PineconeConfig",
+    "MilvusConfig",
+    "WeaviateConfig",
+    "PgVectorConfig",
+    "create_config",
 ]
