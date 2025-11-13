@@ -132,10 +132,6 @@ ocr = [
     "rapidocr-onnxruntime>=1.4.4",
 ]
 ocr-gpu = []
-run = [
-    "fastapi>=0.121.1",
-    "python-multipart>=0.0.20",
-]
 
 [project.scripts]
 upsonic = "upsonic.cli.main:main"

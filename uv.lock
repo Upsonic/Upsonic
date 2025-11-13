@@ -249,15 +249,6 @@ wheels = [
 ]
 
 [[package]]
-name = "annotated-doc"
-version = "0.0.4"
-source = { registry = "https://pypi.org/simple/" }
-sdist = { url = "https://files.pythonhosted.org/packages/57/ba/046ceea27344560984e26a590f90bc7f4a75b06701f653222458922b558c/annotated_doc-0.0.4.tar.gz", hash = "sha256:fbcda96e87e9c92ad167c2e53839e57503ecfda18804ea28102353485033faa4", size = 7288, upload-time = "2025-11-10T22:07:42.062Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1e/d3/26bf1008eb3d2daa8ef4cacc7f3bfdc11818d111f7e2d0201bc6e3b49d45/annotated_doc-0.0.4-py3-none-any.whl", hash = "sha256:571ac1dc6991c450b25a9c2d84a3705e2ae7a53467b5d111c24fa8baabbed320", size = 5303, upload-time = "2025-11-10T22:07:40.673Z" },
-]
-
-[[package]]
 name = "annotated-types"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple/" }
@@ -1386,21 +1377,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/3d/84/e95acaa848b855e15c83331d0401ee5f84b2f60889255c2e055cb4fb6bdf/faker-37.12.0.tar.gz", hash = "sha256:7505e59a7e02fa9010f06c3e1e92f8250d4cfbb30632296140c2d6dbef09b0fa", size = 1935741, upload-time = "2025-10-24T15:19:58.764Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8e/98/2c050dec90e295a524c9b65c4cb9e7c302386a296b2938710448cbd267d5/faker-37.12.0-py3-none-any.whl", hash = "sha256:afe7ccc038da92f2fbae30d8e16d19d91e92e242f8401ce9caf44de892bab4c4", size = 1975461, upload-time = "2025-10-24T15:19:55.739Z" },
-]
-
-[[package]]
-name = "fastapi"
-version = "0.121.1"
-source = { registry = "https://pypi.org/simple/" }
-dependencies = [
-    { name = "annotated-doc" },
-    { name = "pydantic" },
-    { name = "starlette" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/6b/a4/29e1b861fc9017488ed02ff1052feffa40940cb355ed632a8845df84ce84/fastapi-0.121.1.tar.gz", hash = "sha256:b6dba0538fd15dab6fe4d3e5493c3957d8a9e1e9257f56446b5859af66f32441", size = 342523, upload-time = "2025-11-08T21:48:14.068Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/94/fd/2e6f7d706899cc08690c5f6641e2ffbfffe019e8f16ce77104caa5730910/fastapi-0.121.1-py3-none-any.whl", hash = "sha256:2c5c7028bc3a58d8f5f09aecd3fd88a000ccc0c5ad627693264181a3c33aa1fc", size = 109192, upload-time = "2025-11-08T21:48:12.458Z" },
 ]
 
 [[package]]
@@ -7337,10 +7313,6 @@ rag = [
     { name = "sqlalchemy" },
     { name = "weaviate-client" },
 ]
-run = [
-    { name = "fastapi" },
-    { name = "python-multipart" },
-]
 storage = [
     { name = "aiosqlite" },
     { name = "asyncpg" },
@@ -7405,7 +7377,6 @@ requires-dist = [
     { name = "duckduckgo-search", marker = "extra == 'tools'", specifier = ">=8.1.1" },
     { name = "easyocr", marker = "extra == 'ocr'", specifier = ">=1.7.2" },
     { name = "faiss-cpu", marker = "extra == 'rag'", specifier = ">=1.12.0" },
-    { name = "fastapi", marker = "extra == 'run'", specifier = ">=0.121.1" },
     { name = "fastembed", marker = "extra == 'embeddings'", specifier = ">=0.7.3" },
     { name = "genai-prices", marker = "extra == 'tools'", specifier = ">=0.0.29" },
     { name = "google-auth", marker = "extra == 'embeddings'", specifier = ">=2.40.3" },
@@ -7455,7 +7426,6 @@ requires-dist = [
     { name = "python-docx", marker = "extra == 'loaders'", specifier = ">=1.2.0" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "python-frontmatter", marker = "extra == 'loaders'", specifier = ">=1.1.0" },
-    { name = "python-multipart", marker = "extra == 'run'", specifier = ">=0.0.20" },
     { name = "python-multipart", marker = "extra == 'web'", specifier = ">=0.0.20" },
     { name = "pyyaml", marker = "extra == 'loaders'", specifier = ">=6.0.2" },
     { name = "qdrant-client", marker = "extra == 'rag'", specifier = ">=1.12.1" },
@@ -7484,7 +7454,7 @@ requires-dist = [
     { name = "weaviate-client", marker = "extra == 'rag'", specifier = ">=4.16.9" },
     { name = "yfinance", marker = "extra == 'tools'", specifier = ">=0.2.66" },
 ]
-provides-extras = ["rag", "storage", "models", "embeddings", "loaders", "tools", "web", "ocr", "ocr-gpu", "run"]
+provides-extras = ["rag", "storage", "models", "embeddings", "loaders", "tools", "web", "ocr", "ocr-gpu"]
 
 [package.metadata.requires-dev]
 dev = [
