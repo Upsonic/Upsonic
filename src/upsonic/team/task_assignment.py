@@ -78,7 +78,7 @@ class TaskAssignment:
 
         while attempts < max_attempts:
             selecting_task = Task(
-                description=f"Select the most appropriate agent from the available agents to handle the current task. Consider all tasks in the workflow and previous results to make the best choice. Return only the exact agent name from the list.",
+                description="Select the most appropriate agent from the available agents to handle the current task. Consider all tasks in the workflow and previous results to make the best choice. Return only the exact agent name from the list.",
                 attachments=current_task.attachments, 
                 response_format=SelectedAgent, 
                 context=context

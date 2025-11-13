@@ -35,7 +35,6 @@ from upsonic.vectordb.config import (
 from upsonic.utils.package.exception import(
     VectorDBConnectionError,
     ConfigurationError,
-    CollectionDoesNotExistError,
     VectorDBError,
     SearchError,
     UpsertError
@@ -719,7 +718,7 @@ class PineconeProvider(BaseVectorDBProvider):
         def _delete():
             try:
                 self._index.delete(filter=filter, namespace=namespace)
-                logger.info(f"Deleted records matching filter.")
+                logger.info("Deleted records matching filter.")
                 return True
             except ApiException as e:
                 logger.warning(f"Filter delete failed: {e}")

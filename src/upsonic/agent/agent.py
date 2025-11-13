@@ -1,6 +1,5 @@
 import asyncio
 import copy
-import time
 import uuid
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Dict, List, Literal, Optional, Union, TYPE_CHECKING
@@ -8,18 +7,16 @@ from typing import Any, AsyncIterator, Dict, List, Literal, Optional, Union, TYP
 PromptCompressor = None
 
 from upsonic.utils.logging_config import sentry_sdk
-from upsonic import _utils
 from upsonic.agent.base import BaseAgent
 from upsonic.agent.run_result import RunResult, StreamRunResult
 from upsonic._utils import now_utc
 from upsonic.utils.retry import retryable
 from upsonic.utils.validators import validate_attachments_exist
 from upsonic.tools.processor import ExternalExecutionPause
-from upsonic.messages import FinalResultEvent
 
 if TYPE_CHECKING:
     from upsonic.models import Model, ModelRequest, ModelMessage, ModelRequestParameters, ModelResponse
-    from upsonic.messages import ModelResponseStreamEvent, FinalResultEvent, PartStartEvent, PartDeltaEvent, TextPart, ToolCallPart, ToolReturnPart
+    from upsonic.messages import ModelResponseStreamEvent, ToolCallPart, ToolReturnPart
     from upsonic.tasks.tasks import Task
     from upsonic.storage.memory.memory import Memory
     from upsonic.canvas.canvas import Canvas
@@ -765,7 +762,7 @@ class Agent(BaseAgent):
         messages: List["ModelRequest"]
     ) -> "ModelResponse":
         """Handle model response including tool calls."""
-        from upsonic.messages import ToolCallPart, ToolReturnPart, TextPart, UserPromptPart, ModelRequest, ModelResponse
+        from upsonic.messages import ToolCallPart, TextPart, UserPromptPart, ModelRequest, ModelResponse
         
         if hasattr(self, '_tool_limit_reached') and self._tool_limit_reached:
             return response
@@ -1518,7 +1515,6 @@ class Agent(BaseAgent):
         This method extracts and yields text from streaming events.
         Note: Event storage and accumulation are already handled by the pipeline.
         """
-        from upsonic.messages import FinalResultEvent
         
         # The pipeline already handles event storage, text accumulation, and metrics
         # We just extract and yield text here
@@ -1893,7 +1889,7 @@ class Agent(BaseAgent):
             ```
         """
         from upsonic.durable import DurableExecution
-        from upsonic.agent.pipeline import PipelineManager, StepContext
+        from upsonic.agent.pipeline import PipelineManager
         
         # Load the durable execution
         if storage is None:
@@ -1914,7 +1910,7 @@ class Agent(BaseAgent):
         step_name = checkpoint['step_name']
         agent_state = checkpoint.get('agent_state', {})
         
-        from upsonic.utils.printing import info_log, warning_log
+        from upsonic.utils.printing import info_log
         checkpoint_status = checkpoint.get('status', 'unknown')
         
         info_log(

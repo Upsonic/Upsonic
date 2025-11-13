@@ -1,6 +1,5 @@
 import asyncio
 import re
-import json
 from pathlib import Path
 from typing import List, Optional, Tuple, Union, Dict, Any
 import concurrent.futures
@@ -315,7 +314,7 @@ class PyMuPDFLoader(BaseLoader):
                 images_info = await self._extract_images_info(doc)
                 if images_info:
                     metadata["images"] = images_info
-            except Exception as e:
+            except Exception:
                 # Skip image extraction if it fails
                 pass
         
@@ -347,7 +346,7 @@ class PyMuPDFLoader(BaseLoader):
                         "filter": img[8],
                     }
                     images_info.append(img_info)
-                except (IndexError, TypeError) as e:
+                except (IndexError, TypeError):
                     # Skip malformed image entries
                     continue
         
@@ -379,7 +378,7 @@ class PyMuPDFLoader(BaseLoader):
                             annot_info["json"] = ""
                     
                     annotations.append(annot_info)
-                except Exception as e:
+                except Exception:
                     # Skip malformed annotations
                     continue
         

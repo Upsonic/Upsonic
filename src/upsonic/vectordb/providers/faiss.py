@@ -30,8 +30,7 @@ from upsonic.vectordb.config import (
     FaissConfig,
     DistanceMetric,
     HNSWIndexConfig,
-    IVFIndexConfig,
-    FlatIndexConfig
+    IVFIndexConfig
 )
 from upsonic.vectordb.base import BaseVectorDBProvider
 from upsonic.utils.printing import info_log, debug_log, warning_log

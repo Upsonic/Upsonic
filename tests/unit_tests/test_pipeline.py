@@ -6,7 +6,7 @@ import pytest
 from upsonic.agent.pipeline import (
     Step, StepResult, StepStatus, StepContext,
     PipelineManager,
-    InitializationStep, CacheCheckStep, UserPolicyStep, ModelSelectionStep,
+    InitializationStep, ModelSelectionStep,
     ValidationStep, FinalizationStep
 )
 

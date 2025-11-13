@@ -9,7 +9,6 @@ from both SQLAlchemy and pgvector for optimal performance and flexibility.
 """
 
 import asyncio
-import json
 from hashlib import md5
 from math import sqrt
 from typing import Any, Dict, List, Optional, Union, Literal, cast
@@ -115,7 +114,7 @@ class PgVectorProvider(BaseVectorDBProvider):
         Creates the engine and session factory.
         """
         try:
-            logger.info(f"Connecting to PostgreSQL database...")
+            logger.info("Connecting to PostgreSQL database...")
             
             # Create engine with connection pooling
             self._engine = await asyncio.to_thread(

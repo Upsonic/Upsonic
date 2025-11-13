@@ -14,10 +14,8 @@ This test suite covers:
 """
 
 import pytest
-import asyncio
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-from typing import List
+from unittest.mock import Mock, patch
 
 # Check if docling is available
 try:
@@ -492,7 +490,6 @@ class TestDoclingLoaderErrorHandling:
     
     def test_empty_content_skip(self, basic_config):
         """Test skipping empty content when configured."""
-        from upsonic.loaders import DoclingLoader
         
         config = DoclingLoaderConfig(
             extraction_mode="chunks",

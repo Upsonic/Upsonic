@@ -105,7 +105,6 @@ class EasyOCR(OCRProvider):
                 # Handle SSL certificate issues during model download
                 # EasyOCR downloads models on first use
                 import ssl
-                import urllib.request
                 
                 # Save original SSL context
                 original_context = ssl._create_default_https_context

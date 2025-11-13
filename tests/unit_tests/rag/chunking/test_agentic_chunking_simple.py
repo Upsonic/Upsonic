@@ -1,7 +1,5 @@
 import unittest
-from unittest.mock import Mock, AsyncMock, patch
 import asyncio
-import pytest
 from upsonic.text_splitter.agentic import AgenticChunker, AgenticChunkingConfig
 from upsonic.schemas.data_models import Document, Chunk
 from upsonic.schemas.agentic import PropositionList, TopicAssignmentList, Topic, RefinedTopic

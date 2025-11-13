@@ -1,18 +1,12 @@
 import asyncio
 import time
-import uuid
-from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, AsyncIterator, Dict, List, Optional, Union, Callable, Literal, TYPE_CHECKING, overload
+from typing import Any, AsyncIterator, Dict, List, Optional, Union, Literal, TYPE_CHECKING, overload
 
 from upsonic.tasks.tasks import Task
 from upsonic.storage.memory.memory import Memory
 from upsonic.storage.base import Storage
 from upsonic.storage.providers.in_memory import InMemoryStorage
-from upsonic.messages.messages import ModelMessage, ModelRequest, ModelResponse, UserPromptPart, TextPart
-from upsonic.agent.run_result import RunResult, StreamRunResult
-from .cost_calculator import CostTracker, format_cost, format_tokens
+from upsonic.messages.messages import ModelResponse
 from .session_manager import SessionManager, SessionState
 from .message import ChatMessage
 
@@ -467,7 +461,7 @@ class Chat:
             # End response timer
             self._session_manager.end_response_timer(response_start_time)
             return result
-        except Exception as e:
+        except Exception:
             # End response timer even on error
             self._session_manager.end_response_timer(response_start_time)
             raise

@@ -1,4 +1,3 @@
-import copy
 from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 
 from upsonic.agent.agent import Agent

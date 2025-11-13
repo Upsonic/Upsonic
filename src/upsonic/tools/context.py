@@ -6,7 +6,7 @@ import dataclasses
 from dataclasses import field
 from typing import TYPE_CHECKING, Any, Dict, Generic, Optional, TypeVar
 
-from upsonic._utils import dataclasses_no_defaults_repr, now_utc
+from upsonic._utils import dataclasses_no_defaults_repr
 
 if TYPE_CHECKING:
     from upsonic.tools.base import ToolCall

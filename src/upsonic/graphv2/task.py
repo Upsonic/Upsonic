@@ -13,7 +13,7 @@ import inspect
 import time
 import random
 from contextvars import ContextVar
-from typing import Any, Callable, Generic, Optional, Sequence, TypeVar, Union
+from typing import Callable, Generic, Optional, Sequence, TypeVar, Union
 from dataclasses import dataclass
 
 from upsonic.graphv2.cache import BaseCache, CachePolicy

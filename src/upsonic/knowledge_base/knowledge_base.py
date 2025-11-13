@@ -733,7 +733,7 @@ class KnowledgeBase:
                     # Try fallback splitter on error
                     try:
                         warning_log(
-                            f"Primary splitter failed with error. Trying RecursiveChunker...",
+                            "Primary splitter failed with error. Trying RecursiveChunker...",
                             context="KnowledgeBase"
                         )
                         from ..text_splitter.factory import create_chunking_strategy

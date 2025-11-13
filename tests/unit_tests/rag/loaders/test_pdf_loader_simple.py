@@ -1,10 +1,8 @@
 import unittest
 import tempfile
 import os
-from pathlib import Path
 from upsonic.loaders.pdf import PdfLoader
 from upsonic.loaders.config import PdfLoaderConfig
-from upsonic.schemas.data_models import Document
 
 
 class TestPdfLoaderSimple(unittest.TestCase):

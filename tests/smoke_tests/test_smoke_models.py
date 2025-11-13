@@ -1,4 +1,3 @@
-import pytest
 from upsonic import Task, Agent
 #t
 

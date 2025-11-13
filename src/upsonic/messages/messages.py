@@ -1,6 +1,5 @@
 from __future__ import annotations as _annotations
 
-import base64
 import hashlib
 from abc import ABC, abstractmethod
 from collections.abc import Sequence

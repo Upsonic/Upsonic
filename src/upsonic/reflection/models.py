@@ -5,7 +5,7 @@ This module provides classes for implementing reflection logic where an evaluato
 evaluates the main LLM's response and provides feedback for improvement.
 """
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import List, Optional
 from pydantic import BaseModel, Field
 from enum import Enum
 

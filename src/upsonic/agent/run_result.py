@@ -8,9 +8,8 @@ with comprehensive message tracking and output management capabilities.
 import time
 from dataclasses import dataclass, field
 from typing import List, Generic, AsyncIterator, Optional, Any, TYPE_CHECKING, Dict
-from contextlib import asynccontextmanager
 
-from upsonic.messages.messages import ModelMessage, ModelResponseStreamEvent, TextPart, PartStartEvent, PartDeltaEvent, FinalResultEvent
+from upsonic.messages.messages import ModelMessage, ModelResponseStreamEvent, TextPart, PartStartEvent, PartDeltaEvent
 from upsonic.output import OutputDataT
 
 if TYPE_CHECKING:
@@ -263,7 +262,7 @@ class StreamRunResult(Generic[OutputDataT]):
             
             self._end_time = time.time()
             
-        except Exception as e:
+        except Exception:
             # Ensure completion state is set even on error
             self._is_complete = True
             self._end_time = time.time()
@@ -312,7 +311,7 @@ class StreamRunResult(Generic[OutputDataT]):
             
             self._end_time = time.time()
             
-        except Exception as e:
+        except Exception:
             # Ensure completion state is set even on error
             self._is_complete = True
             self._end_time = time.time()

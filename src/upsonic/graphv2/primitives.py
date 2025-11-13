@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, Dict, Generic, List, Literal, Optional, TypeVar, Union
+from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 
 
 # Type variable for Command goto targets

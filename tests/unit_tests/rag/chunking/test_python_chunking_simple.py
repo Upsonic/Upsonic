@@ -1,6 +1,4 @@
 import unittest
-import uuid
-from typing import Dict, Any, List
 from upsonic.text_splitter.python import PythonChunker, PythonChunkingConfig
 from upsonic.schemas.data_models import Document, Chunk
 

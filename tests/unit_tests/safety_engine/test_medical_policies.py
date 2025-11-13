@@ -1,29 +1,17 @@
 import asyncio
-import os
 import pytest
 from unittest.mock import patch, AsyncMock
-from contextlib import asynccontextmanager
 
 from upsonic import Agent, Task
-from upsonic.agent.run_result import RunResult
 from upsonic.models import ModelResponse, TextPart
 
-from upsonic import (
-    RuleBase,
-    ActionBase,
-    Policy,
-    PolicyInput,
-    RuleOutput,
-    PolicyOutput
-)
 
 from upsonic.safety_engine.policies.medical_policies import (
     MedicalInfoBlockPolicy,
     MedicalInfoBlockPolicy_LLM,
     MedicalInfoAnonymizePolicy,
     MedicalInfoReplacePolicy,
-    MedicalInfoRaiseExceptionPolicy,
-    MedicalInfoRaiseExceptionPolicy_LLM
+    MedicalInfoRaiseExceptionPolicy
 )
 
 

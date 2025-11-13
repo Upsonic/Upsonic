@@ -5,7 +5,6 @@ from enum import Enum
 from pathlib import Path
 
 from .base import BaseChunker, BaseChunkingConfig
-from ..schemas.data_models import Document
 from ..utils.package.exception import ConfigurationError
 from upsonic.utils.printing import warning_log, info_log
 
@@ -839,7 +838,7 @@ def create_quality_strategy(content: str = "", embedding_provider: Optional[Any]
                 kwargs["embedding_provider"] = embedding_provider
                 try:
                     return create_chunking_strategy("semantic", **kwargs)
-                except ConfigurationError as e:
+                except ConfigurationError:
                     raise
             else:
                 warning_log("No embedding provider provided, falling back to recursive strategy", context="TextSplitterFactory")

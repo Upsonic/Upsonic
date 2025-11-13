@@ -1,11 +1,8 @@
-import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
-from contextlib import asynccontextmanager
 from PIL import Image
 import tempfile
 import os
 from upsonic import Task, Agent
-from upsonic.agent.run_result import RunResult
 from upsonic.models import ModelResponse, TextPart
 from pydantic import BaseModel
 
