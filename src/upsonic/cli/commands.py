@@ -5,20 +5,6 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from upsonic.cli.printer import (
-    prompt_agent_name,
-    print_error,
-    print_file_created,
-    confirm_overwrite,
-    print_cancelled,
-    print_init_success,
-    print_dependency_added,
-    print_config_not_found,
-    print_invalid_section,
-    print_info,
-    print_success,
-)
-
 # Lazy import cache for heavy dependencies
 _FASTAPI_IMPORTS = None
 
@@ -99,6 +85,16 @@ def init_command() -> int:
         Exit code (0 for success, non-zero for failure).
     """
     try:
+        # Lazy import printer functions
+        from upsonic.cli.printer import (
+            prompt_agent_name,
+            print_error,
+            print_file_created,
+            confirm_overwrite,
+            print_cancelled,
+            print_init_success,
+        )
+        
         # Prompt for agent name
         agent_name = prompt_agent_name()
         
@@ -228,9 +224,11 @@ async def main(inputs):
         return 0
         
     except KeyboardInterrupt:
+        from upsonic.cli.printer import print_cancelled
         print_cancelled()
         return 1
     except Exception as e:
+        from upsonic.cli.printer import print_error
         print_error(f"An error occurred: {str(e)}")
         return 1
 
@@ -247,6 +245,14 @@ def add_command(library: str, section: str) -> int:
         Exit code (0 for success, non-zero for failure).
     """
     try:
+        # Lazy import printer functions
+        from upsonic.cli.printer import (
+            print_config_not_found,
+            print_error,
+            print_invalid_section,
+            print_dependency_added,
+        )
+        
         # Get current directory
         current_dir = Path.cwd()
         config_json_path = current_dir / "upsonic_config.json"
@@ -292,9 +298,11 @@ def add_command(library: str, section: str) -> int:
         return 0
         
     except KeyboardInterrupt:
+        from upsonic.cli.printer import print_cancelled
         print_cancelled()
         return 1
     except Exception as e:
+        from upsonic.cli.printer import print_error
         print_error(f"An error occurred: {str(e)}")
         return 1
 
@@ -485,7 +493,9 @@ def _install_dependencies(dependencies: list[str], quiet: bool = False) -> bool:
         return True
     
     try:
+        # Lazy import printer functions only when needed
         if not quiet:
+            from upsonic.cli.printer import print_info, print_success, print_error
             print_info(f"Installing {len(dependencies)} dependencies...")
         
         # Try uv first (preferred for this project)
@@ -498,6 +508,7 @@ def _install_dependencies(dependencies: list[str], quiet: bool = False) -> bool:
             )
             if result.returncode == 0:
                 if not quiet:
+                    from upsonic.cli.printer import print_success
                     print_success("Dependencies installed successfully")
                 return True
             # If uv fails, fall back to pip
@@ -514,19 +525,23 @@ def _install_dependencies(dependencies: list[str], quiet: bool = False) -> bool:
             )
             if result.returncode == 0:
                 if not quiet:
+                    from upsonic.cli.printer import print_success
                     print_success("Dependencies installed successfully")
                 return True
             else:
                 if not quiet:
+                    from upsonic.cli.printer import print_error
                     print_error(f"Failed to install dependencies: {result.stderr}")
                 return False
         except Exception as e:
             if not quiet:
+                from upsonic.cli.printer import print_error
                 print_error(f"Error installing dependencies: {str(e)}")
             return False
             
     except Exception as e:
         if not quiet:
+            from upsonic.cli.printer import print_error
             print_error(f"Error installing dependencies: {str(e)}")
         return False
 
@@ -542,6 +557,14 @@ def install_command(section: Optional[str] = None) -> int:
         Exit code (0 for success, non-zero for failure).
     """
     try:
+        # Lazy import printer functions
+        from upsonic.cli.printer import (
+            print_config_not_found,
+            print_error,
+            print_invalid_section,
+            print_info,
+        )
+        
         # Get current directory
         current_dir = Path.cwd()
         config_json_path = current_dir / "upsonic_config.json"
@@ -594,9 +617,11 @@ def install_command(section: Optional[str] = None) -> int:
             return 1
             
     except KeyboardInterrupt:
+        from upsonic.cli.printer import print_cancelled
         print_cancelled()
         return 1
     except Exception as e:
+        from upsonic.cli.printer import print_error
         print_error(f"An error occurred: {str(e)}")
         return 1
 
@@ -609,6 +634,14 @@ def run_command(host: str = "0.0.0.0", port: int = 8000) -> int:
     from upsonic_config.json input_schema/output_schema so /docs shows editable form fields.
     """
     try:
+        # Lazy import printer functions
+        from upsonic.cli.printer import (
+            print_config_not_found,
+            print_error,
+            print_success,
+            print_info,
+        )
+        
         # Get current directory
         current_dir = Path.cwd()
         config_json_path = current_dir / "upsonic_config.json"
@@ -758,16 +791,19 @@ def run_command(host: str = "0.0.0.0", port: int = 8000) -> int:
             uvicorn.run(app, host=host, port=port, log_level="info")
         except KeyboardInterrupt:
             # This should be caught by uvicorn, but just in case
+            from upsonic.cli.printer import print_info
             print()
             print_info("Server stopped by user")
         
         return 0
 
     except KeyboardInterrupt:
+        from upsonic.cli.printer import print_info
         print()
         print_info("Server stopped by user")
         return 0
     except Exception as e:
+        from upsonic.cli.printer import print_error
         print_error(f"An error occurred: {str(e)}")
         import traceback
         traceback.print_exc()
