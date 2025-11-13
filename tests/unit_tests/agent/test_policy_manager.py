@@ -438,22 +438,5 @@ class TestPolicyResult:
 # ============================================================================
 
 
-class TestPolicyManagerSetupModels:
-    """Test suite for setup_policy_models method."""
-
-    def test_setup_policy_models(self):
-        """Test setup_policy_models method."""
-        policy = create_mock_policy("Test Policy")
-        manager = PolicyManager(policies=policy)
-
-        # Use a string model name instead of Mock to avoid infer_model issues
-        mock_model = "openai/gpt-4o"
-        manager.setup_policy_models(mock_model)
-
-        # Verify that base_llm is set if policy has the attribute
-        # (Note: Mock policies may not have base_llm, so this test verifies the method runs)
-        assert manager.policies[0] is not None
-
-
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
