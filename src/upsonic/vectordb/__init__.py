@@ -43,60 +43,44 @@ if TYPE_CHECKING:
     from .providers.weaviate import WeaviateProvider
     from .providers.pgvector import PgVectorProvider
 
-def _get_provider_classes():
-    """Get provider classes with lazy importing."""
-    providers = {}
-    
-    try:
-        from .providers.chroma import ChromaProvider
-        providers['ChromaProvider'] = ChromaProvider
-    except ImportError:
-        pass
-    
-    try:
-        from .providers.faiss import FaissProvider
-        providers['FaissProvider'] = FaissProvider
-    except ImportError:
-        pass
-    
-    try:
-        from .providers.pinecone import PineconeProvider
-        providers['PineconeProvider'] = PineconeProvider
-    except ImportError:
-        pass
-    
-    try:
-        from .providers.qdrant import QdrantProvider
-        providers['QdrantProvider'] = QdrantProvider
-    except ImportError:
-        pass
-    
-    try:
-        from .providers.milvus import MilvusProvider
-        providers['MilvusProvider'] = MilvusProvider
-    except ImportError:
-        pass
-    
-    try:
-        from .providers.weaviate import WeaviateProvider
-        providers['WeaviateProvider'] = WeaviateProvider
-    except ImportError:
-        pass
-    
-    try:
-        from .providers.pgvector import PgVectorProvider
-        providers['PgVectorProvider'] = PgVectorProvider
-    except ImportError:
-        pass
-    
-    return providers
+# Provider class mapping for lazy imports
+_PROVIDER_MAP = {
+    'ChromaProvider': '.providers.chroma',
+    'FaissProvider': '.providers.faiss',
+    'PineconeProvider': '.providers.pinecone',
+    'QdrantProvider': '.providers.qdrant',
+    'MilvusProvider': '.providers.milvus',
+    'WeaviateProvider': '.providers.weaviate',
+    'PgVectorProvider': '.providers.pgvector',
+}
+
+# Cache for lazily imported providers
+_provider_cache: dict[str, Any] = {}
 
 
 def __getattr__(name: str) -> Any:
     """Lazy import of provider classes."""
-    providers = _get_provider_classes()
-    if name in providers:
-        return providers[name]
+    # Check cache first
+    if name in _provider_cache:
+        return _provider_cache[name]
+    
+    # Check if it's a provider class
+    if name in _PROVIDER_MAP:
+        module_path = _PROVIDER_MAP[name]
+        try:
+            # Import the module dynamically
+            from importlib import import_module
+            module = import_module(module_path, package=__package__)
+            provider_class = getattr(module, name)
+            # Cache it for future access
+            _provider_cache[name] = provider_class
+            return provider_class
+        except (ImportError, AttributeError) as e:
+            raise AttributeError(
+                f"module '{__name__}' has no attribute '{name}'. "
+                f"Failed to import provider: {e}"
+            ) from e
+    
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
