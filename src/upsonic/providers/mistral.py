@@ -5,19 +5,18 @@ from typing import overload
 
 import httpx
 
+from upsonic.profiles import ModelProfile
 from upsonic.utils.package.exception import UserError
 from upsonic.models import cached_async_http_client
-from upsonic.profiles import ModelProfile
 from upsonic.profiles.mistral import mistral_model_profile
 from upsonic.providers import Provider
 
 try:
     from mistralai import Mistral
-    _MISTRALAI_AVAILABLE = True
-except ImportError:
-    Mistral = None
-    _MISTRALAI_AVAILABLE = False
-
+except ImportError as e:  # pragma: no cover
+    raise ImportError(
+        'Please install the `mistral` package to use the Mistral provider, '
+    ) from e
 
 
 class MistralProvider(Provider[Mistral]):
@@ -52,14 +51,6 @@ class MistralProvider(Provider[Mistral]):
         base_url: str | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        if not _MISTRALAI_AVAILABLE:
-            from upsonic.utils.printing import import_error
-            import_error(
-                package_name="mistralai",
-                install_command='pip install mistralai',
-                feature_name="Mistral provider"
-            )
-
         """Create a new Mistral provider.
 
         Args:

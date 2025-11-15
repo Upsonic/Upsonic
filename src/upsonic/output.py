@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Generic, Literal
+from abc import ABC
 
 from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
 from pydantic.json_schema import JsonSchemaValue
@@ -10,10 +11,10 @@ from pydantic_core import core_schema
 from typing_extensions import TypeAliasType, TypeVar
 
 from upsonic import _utils
-from upsonic.tools import ToolContext as RunContext, ObjectJsonSchema
+from upsonic._json_schema import InlineDefsJsonSchemaTransformer
+from upsonic.tools import ObjectJsonSchema
+from upsonic.utils.package.exception import UserError
 
-DEFAULT_OUTPUT_TOOL_NAME = 'structured_output'
-"""Default name for the output tool used in structured outputs."""
 
 __all__ = (
     # classes
@@ -22,6 +23,7 @@ __all__ = (
     'PromptedOutput',
     'TextOutput',
     'StructuredDict',
+    'OutputObjectDefinition',
     # types
     'OutputDataT',
     'OutputMode',
@@ -29,18 +31,22 @@ __all__ = (
     'OutputSpec',
     'OutputTypeOrFunction',
     'TextOutputFunc',
-    # constants
-    'DEFAULT_OUTPUT_TOOL_NAME',
 )
 
 T = TypeVar('T')
 T_co = TypeVar('T_co', covariant=True)
 
+DEFAULT_OUTPUT_TOOL_NAME = 'final_result'
+
 OutputDataT = TypeVar('OutputDataT', default=str, covariant=True)
 """Covariant type variable for the output data type of a run."""
 
-OutputMode = Literal['text', 'tool', 'native', 'prompted', 'tool_or_text']
-"""All output modes."""
+OutputMode = Literal['text', 'tool', 'native', 'prompted', 'tool_or_text', 'image', 'auto']
+"""All output modes.
+
+- `tool_or_text` is deprecated and no longer in use.
+- `auto` means the model will automatically choose a structured output mode based on the model's `ModelProfile.default_structured_output_mode`.
+"""
 StructuredOutputMode = Literal['tool', 'native', 'prompted']
 """Output modes that can be used for structured output. Used by ModelProfile.default_structured_output_mode"""
 
@@ -58,7 +64,7 @@ See [output docs](../output.md) for more information.
 
 TextOutputFunc = TypeAliasType(
     'TextOutputFunc',
-    Callable[[RunContext, str], Awaitable[T_co] | T_co] | Callable[[str], Awaitable[T_co] | T_co],
+    Callable[[str], Awaitable[T_co] | T_co],
     type_params=(T_co,),
 )
 """Definition of a function that will be called to process the model's plain text output. The function must take a single string argument.
@@ -68,47 +74,10 @@ You should not need to import or use this type directly.
 See [text output docs](../output.md#text-output) for more information.
 """
 
-@dataclass
-class OutputObjectDefinition:
-    json_schema: ObjectJsonSchema
-    name: str | None = None
-    description: str | None = None
-    strict: bool | None = None
-
 
 @dataclass(init=False)
 class ToolOutput(Generic[OutputDataT]):
-    """Marker class to use a tool for output and optionally customize the tool.
-
-    Example:
-    ```python {title="tool_output.py"}
-    from pydantic import BaseModel
-
-    from upsonic import Agent, ToolOutput
-
-
-    class Fruit(BaseModel):
-        name: str
-        color: str
-
-
-    class Vehicle(BaseModel):
-        name: str
-        wheels: int
-
-
-    agent = Agent(
-        'openai:gpt-4o',
-        output_type=[
-            ToolOutput(Fruit, name='return_fruit'),
-            ToolOutput(Vehicle, name='return_vehicle'),
-        ],
-    )
-    result = agent.run_sync('What is a banana?')
-    print(repr(result.output))
-    #> Fruit(name='banana', color='yellow')
-    ```
-    """
+    """Marker class to use a tool for output and optionally customize the tool."""
 
     output: OutputTypeOrFunction[OutputDataT]
     """An output type or function."""
@@ -139,27 +108,7 @@ class ToolOutput(Generic[OutputDataT]):
 
 @dataclass(init=False)
 class NativeOutput(Generic[OutputDataT]):
-    """Marker class to use the model's native structured outputs functionality for outputs and optionally customize the name and description.
-
-    Example:
-    ```python {title="native_output.py" requires="tool_output.py"}
-    from upsonic import Agent, NativeOutput
-
-    from tool_output import Fruit, Vehicle
-
-    agent = Agent(
-        'openai:gpt-4o',
-        output_type=NativeOutput(
-            [Fruit, Vehicle],
-            name='Fruit or vehicle',
-            description='Return a fruit or vehicle.'
-        ),
-    )
-    result = agent.run_sync('What is a Ford Explorer?')
-    print(repr(result.output))
-    #> Vehicle(name='Ford Explorer', wheels=4)
-    ```
-    """
+    """Marker class to use the model's native structured outputs functionality for outputs and optionally customize the name and description. """
 
     outputs: OutputTypeOrFunction[OutputDataT] | Sequence[OutputTypeOrFunction[OutputDataT]]
     """The output types or functions."""
@@ -186,46 +135,7 @@ class NativeOutput(Generic[OutputDataT]):
 
 @dataclass(init=False)
 class PromptedOutput(Generic[OutputDataT]):
-    """Marker class to use a prompt to tell the model what to output and optionally customize the prompt.
-
-    Example:
-    ```python {title="prompted_output.py" requires="tool_output.py"}
-    from pydantic import BaseModel
-
-    from upsonic import Agent, PromptedOutput
-
-    from tool_output import Vehicle
-
-
-    class Device(BaseModel):
-        name: str
-        kind: str
-
-
-    agent = Agent(
-        'openai:gpt-4o',
-        output_type=PromptedOutput(
-            [Vehicle, Device],
-            name='Vehicle or device',
-            description='Return a vehicle or device.'
-        ),
-    )
-    result = agent.run_sync('What is a MacBook?')
-    print(repr(result.output))
-    #> Device(name='MacBook', kind='laptop')
-
-    agent = Agent(
-        'openai:gpt-4o',
-        output_type=PromptedOutput(
-            [Vehicle, Device],
-            template='Gimme some JSON: {schema}'
-        ),
-    )
-    result = agent.run_sync('What is a Ford Explorer?')
-    print(repr(result.output))
-    #> Vehicle(name='Ford Explorer', wheels=4)
-    ```
-    """
+    """Marker class to use a prompt to tell the model what to output and optionally customize the prompt."""
 
     outputs: OutputTypeOrFunction[OutputDataT] | Sequence[OutputTypeOrFunction[OutputDataT]]
     """The output types or functions."""
@@ -254,27 +164,18 @@ class PromptedOutput(Generic[OutputDataT]):
 
 
 @dataclass
+class OutputObjectDefinition:
+    """Definition of an output object used for structured output generation."""
+
+    json_schema: ObjectJsonSchema
+    name: str | None = None
+    description: str | None = None
+    strict: bool | None = None
+
+
+@dataclass
 class TextOutput(Generic[OutputDataT]):
-    """Marker class to use text output for an output function taking a string argument.
-
-    Example:
-    ```python
-    from upsonic import Agent, TextOutput
-
-
-    def split_into_words(text: str) -> list[str]:
-        return text.split()
-
-
-    agent = Agent(
-        'openai:gpt-4o',
-        output_type=TextOutput(split_into_words),
-    )
-    result = agent.run_sync('Who was Albert Einstein?')
-    print(result.output)
-    #> ['Albert', 'Einstein', 'was', 'a', 'German-born', 'theoretical', 'physicist.']
-    ```
-    """
+    """Marker class to use text output for an output function taking a string argument."""
 
     output_function: TextOutputFunc[OutputDataT]
     """The function that will be called to process the model's plain text output. The function must take a single string argument."""
@@ -283,33 +184,17 @@ class TextOutput(Generic[OutputDataT]):
 def StructuredDict(
     json_schema: JsonSchemaValue, name: str | None = None, description: str | None = None
 ) -> type[JsonSchemaValue]:
-    """Returns a `dict[str, Any]` subclass with a JSON schema attached that will be used for structured output.
-
-    Args:
-        json_schema: A JSON schema of type `object` defining the structure of the dictionary content.
-        name: Optional name of the structured output. If not provided, the `title` field of the JSON schema will be used if it's present.
-        description: Optional description of the structured output. If not provided, the `description` field of the JSON schema will be used if it's present.
-
-    Example:
-    ```python {title="structured_dict.py"}
-    from upsonic import Agent, StructuredDict
-
-    schema = {
-        'type': 'object',
-        'properties': {
-            'name': {'type': 'string'},
-            'age': {'type': 'integer'}
-        },
-        'required': ['name', 'age']
-    }
-
-    agent = Agent('openai:gpt-4o', output_type=StructuredDict(schema))
-    result = agent.run_sync('Create a person')
-    print(result.output)
-    #> {'name': 'John Doe', 'age': 30}
-    ```
-    """
+    """Returns a `dict[str, Any]` subclass with a JSON schema attached that will be used for structured output."""
     json_schema = _utils.check_object_json_schema(json_schema)
+
+    # Pydantic `TypeAdapter` fails when `object.__get_pydantic_json_schema__` has `$defs`, so we inline them
+    # See https://github.com/pydantic/pydantic/issues/12145
+    if '$defs' in json_schema:
+        json_schema = InlineDefsJsonSchemaTransformer(json_schema).walk()
+        if '$defs' in json_schema:
+            raise UserError(
+                '`StructuredDict` does not currently support recursive `$ref`s and `$defs`. See https://github.com/pydantic/pydantic/issues/12145 for more information.'
+            )
 
     if name:
         json_schema['title'] = name
@@ -349,15 +234,3 @@ OutputSpec = TypeAliasType(
     _OutputSpecItem[T_co] | Sequence['OutputSpec[T_co]'],
     type_params=(T_co,),
 )
-"""Specification of the agent's output data.
-
-This can be a single type, a function, a sequence of types and/or functions, or an instance of one of the output mode marker classes:
-- [`ToolOutput`][upsonic.output.ToolOutput]
-- [`NativeOutput`][upsonic.output.NativeOutput]
-- [`PromptedOutput`][upsonic.output.PromptedOutput]
-- [`TextOutput`][upsonic.output.TextOutput]
-
-You should not need to import or use this type directly.
-
-See [output docs](../output.md) for more information.
-"""

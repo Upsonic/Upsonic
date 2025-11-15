@@ -1,6 +1,6 @@
 from __future__ import annotations as _annotations
 
-from upsonic.messages.messages import TextPart, ThinkingPart
+from upsonic.messages import TextPart, ThinkingPart
 
 
 def split_content_into_text_and_thinking(content: str, thinking_tags: tuple[str, str]) -> list[ThinkingPart | TextPart]:

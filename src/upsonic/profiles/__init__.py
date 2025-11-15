@@ -6,8 +6,8 @@ from textwrap import dedent
 
 from typing_extensions import Self
 
+from upsonic._json_schema import InlineDefsJsonSchemaTransformer, JsonSchemaTransformer
 from upsonic.output import StructuredOutputMode
-from ._json_schema import InlineDefsJsonSchemaTransformer, JsonSchemaTransformer
 
 __all__ = [
     'ModelProfile',
@@ -28,6 +28,8 @@ class ModelProfile:
     """Whether the model supports JSON schema output."""
     supports_json_object_output: bool = False
     """Whether the model supports JSON object output."""
+    supports_image_output: bool = False
+    """Whether the model supports image output."""
     default_structured_output_mode: StructuredOutputMode = 'tool'
     """The default structured output mode to use for the model."""
     prompted_output_template: str = dedent(
@@ -47,7 +49,13 @@ class ModelProfile:
     """The tags used to indicate thinking parts in the model's output. Defaults to ('<think>', '</think>')."""
 
     ignore_streamed_leading_whitespace: bool = False
-    """Whether to ignore leading whitespace when streaming a response."""
+    """Whether to ignore leading whitespace when streaming a response.
+
+    This is a workaround for models that emit `<think>\n</think>\n\n` or an empty text part ahead of tool calls (e.g. Ollama + Qwen3),
+    which we don't want to end up treating as a final result when using `run_stream` with `str` a valid `output_type`.
+
+    This is currently only used by `OpenAIChatModel`, `HuggingFaceModel`, and `GroqModel`.
+    """
 
     @classmethod
     def from_profile(cls, profile: ModelProfile | None) -> Self:

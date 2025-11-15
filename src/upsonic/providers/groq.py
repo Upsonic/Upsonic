@@ -5,26 +5,32 @@ from typing import overload
 
 import httpx
 
+from upsonic.profiles import ModelProfile
 from upsonic.utils.package.exception import UserError
 from upsonic.models import cached_async_http_client
-from upsonic.profiles import ModelProfile
 from upsonic.profiles.deepseek import deepseek_model_profile
 from upsonic.profiles.google import google_model_profile
 from upsonic.profiles.groq import groq_model_profile
 from upsonic.profiles.meta import meta_model_profile
 from upsonic.profiles.mistral import mistral_model_profile
+from upsonic.profiles.moonshotai import moonshotai_model_profile
 from upsonic.profiles.openai import openai_model_profile
 from upsonic.profiles.qwen import qwen_model_profile
 from upsonic.providers import Provider
 
 try:
     from groq import AsyncGroq
-    _GROQ_AVAILABLE = True
-except ImportError:
-    AsyncGroq = None
-    _GROQ_AVAILABLE = False
+except ImportError as _import_error:  # pragma: no cover
+    raise ImportError(
+        'Please install the `groq` package to use the Groq provider, '
+    ) from _import_error
 
 
+def groq_moonshotai_model_profile(model_name: str) -> ModelProfile | None:
+    """Get the model profile for an MoonshotAI model used with the Groq provider."""
+    return ModelProfile(supports_json_object_output=True, supports_json_schema_output=True).update(
+        moonshotai_model_profile(model_name)
+    )
 
 
 def meta_groq_model_profile(model_name: str) -> ModelProfile | None:
@@ -60,6 +66,7 @@ class GroqProvider(Provider[AsyncGroq]):
             'qwen': qwen_model_profile,
             'deepseek': deepseek_model_profile,
             'mistral': mistral_model_profile,
+            'moonshotai/': groq_moonshotai_model_profile,
             'compound-': groq_model_profile,
             'openai/': openai_model_profile,
         }
@@ -89,14 +96,6 @@ class GroqProvider(Provider[AsyncGroq]):
         groq_client: AsyncGroq | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        if not _GROQ_AVAILABLE:
-            from upsonic.utils.printing import import_error
-            import_error(
-                package_name="groq",
-                install_command='pip install groq',
-                feature_name="Groq provider"
-            )
-
         """Create a new Groq provider.
 
         Args:

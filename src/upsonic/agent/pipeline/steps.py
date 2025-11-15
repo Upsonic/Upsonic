@@ -1052,9 +1052,6 @@ class StreamModelExecutionStep(Step):
                 
                 # Yield the event
                 yield event
-                
-                if isinstance(event, FinalResultEvent):
-                    break
         
         # Get the final response from the stream
         final_response = stream.get()

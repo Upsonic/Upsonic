@@ -7,18 +7,17 @@ from collections.abc import Sequence
 from dataclasses import KW_ONLY, dataclass, field, replace
 from datetime import datetime
 from mimetypes import guess_type
-from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias, cast, overload
+from typing import Annotated, Any, Literal, TypeAlias, cast, overload
 
 import pydantic
 import pydantic_core
+from genai_prices import calc_price, types as genai_types
 
 from upsonic import _utils
 from upsonic._utils import generate_tool_call_id as _generate_tool_call_id, now_utc as _now_utc
 from upsonic.utils.package.exception import UnexpectedModelBehavior
 from upsonic.usage import RequestUsage
 
-if TYPE_CHECKING:
-    pass
 
 
 AudioMediaType: TypeAlias = Literal['audio/wav', 'audio/mpeg', 'audio/ogg', 'audio/flac', 'audio/aiff', 'audio/aac']
@@ -31,6 +30,7 @@ DocumentMediaType: TypeAlias = Literal[
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'text/html',
     'text/markdown',
+    'application/msword',
     'application/vnd.ms-excel',
 ]
 VideoMediaType: TypeAlias = Literal[
@@ -56,12 +56,15 @@ FinishReason: TypeAlias = Literal[
     'tool_call',
     'error',
 ]
-"""Reason the model finished generating the response, normalized to OpenTelemetry values."""
+"""Reason the model finished generating the response."""
 
 
 @dataclass(repr=False)
 class SystemPromptPart:
-    """A system prompt, generally written by the application developer."""
+    """A system prompt, generally written by the application developer.
+
+    This gives the model context and guidance on how to respond.
+    """
 
     content: str
     """The content of the prompt."""
@@ -97,38 +100,65 @@ class FileUrl(ABC):
     _: KW_ONLY
 
     force_download: bool = False
-    """If True, the file is downloaded and the data is sent to the model as bytes."""
+    """For OpenAI and Google APIs it:
+
+    * If True, the file is downloaded and the data is sent to the model as bytes.
+    * If False, the URL is sent directly to the model and no download is performed.
+    """
 
     vendor_metadata: dict[str, Any] | None = None
-    """Vendor-specific metadata for the file."""
+    """Vendor-specific metadata for the file.
+
+    Supported by:
+    - `GoogleModel`: `VideoUrl.vendor_metadata` is used as `video_metadata`: https://ai.google.dev/gemini-api/docs/video-understanding#customize-video-processing
+    - `OpenAIChatModel`, `OpenAIResponsesModel`: `ImageUrl.vendor_metadata['detail']` is used as `detail` setting for images
+    """
 
     _media_type: Annotated[str | None, pydantic.Field(alias='media_type', default=None, exclude=True)] = field(
         compare=False, default=None
     )
 
-    identifier: str | None = None
-    """The identifier of the file, such as a unique ID."""
+    _identifier: Annotated[str | None, pydantic.Field(alias='identifier', default=None, exclude=True)] = field(
+        compare=False, default=None
+    )
 
     def __init__(
         self,
         url: str,
         *,
-        force_download: bool = False,
-        vendor_metadata: dict[str, Any] | None = None,
         media_type: str | None = None,
         identifier: str | None = None,
+        force_download: bool = False,
+        vendor_metadata: dict[str, Any] | None = None,
     ) -> None:
         self.url = url
+        self._media_type = media_type
+        self._identifier = identifier
         self.force_download = force_download
         self.vendor_metadata = vendor_metadata
-        self._media_type = media_type
-        self.identifier = identifier or _multi_modal_content_identifier(url)
 
     @pydantic.computed_field
     @property
     def media_type(self) -> str:
         """Return the media type of the file, based on the URL or the provided `media_type`."""
         return self._media_type or self._infer_media_type()
+
+    @pydantic.computed_field
+    @property
+    def identifier(self) -> str:
+        """The identifier of the file, such as a unique ID.
+
+        This identifier can be provided to the model in a message to allow it to refer to this file in a tool call argument,
+        and the tool can look up the file in question by iterating over the message history and finding the matching `FileUrl`.
+
+        This identifier is only automatically passed to the model when the `FileUrl` is returned by a tool.
+        If you're passing the `FileUrl` as a user message, it's up to you to include a separate text part with the identifier,
+        e.g. "This is file <identifier>:" preceding the `FileUrl`.
+
+        It's also included in inline-text delimiters for providers that require inlining text documents, so the model can
+        distinguish multiple files.
+        """
+        return self._identifier or _multi_modal_content_identifier(self.url)
 
     @abstractmethod
     def _infer_media_type(self) -> str:
@@ -160,20 +190,21 @@ class VideoUrl(FileUrl):
         self,
         url: str,
         *,
+        media_type: str | None = None,
+        identifier: str | None = None,
         force_download: bool = False,
         vendor_metadata: dict[str, Any] | None = None,
-        media_type: str | None = None,
         kind: Literal['video-url'] = 'video-url',
-        identifier: str | None = None,
         # Required for inline-snapshot which expects all dataclass `__init__` methods to take all field names as kwargs.
         _media_type: str | None = None,
+        _identifier: str | None = None,
     ) -> None:
         super().__init__(
             url=url,
             force_download=force_download,
             vendor_metadata=vendor_metadata,
             media_type=media_type or _media_type,
-            identifier=identifier,
+            identifier=identifier or _identifier,
         )
         self.kind = kind
 
@@ -235,20 +266,21 @@ class AudioUrl(FileUrl):
         self,
         url: str,
         *,
+        media_type: str | None = None,
+        identifier: str | None = None,
         force_download: bool = False,
         vendor_metadata: dict[str, Any] | None = None,
-        media_type: str | None = None,
         kind: Literal['audio-url'] = 'audio-url',
-        identifier: str | None = None,
         # Required for inline-snapshot which expects all dataclass `__init__` methods to take all field names as kwargs.
         _media_type: str | None = None,
+        _identifier: str | None = None,
     ) -> None:
         super().__init__(
             url=url,
             force_download=force_download,
             vendor_metadata=vendor_metadata,
             media_type=media_type or _media_type,
-            identifier=identifier,
+            identifier=identifier or _identifier,
         )
         self.kind = kind
 
@@ -297,20 +329,21 @@ class ImageUrl(FileUrl):
         self,
         url: str,
         *,
+        media_type: str | None = None,
+        identifier: str | None = None,
         force_download: bool = False,
         vendor_metadata: dict[str, Any] | None = None,
-        media_type: str | None = None,
         kind: Literal['image-url'] = 'image-url',
-        identifier: str | None = None,
         # Required for inline-snapshot which expects all dataclass `__init__` methods to take all field names as kwargs.
         _media_type: str | None = None,
+        _identifier: str | None = None,
     ) -> None:
         super().__init__(
             url=url,
             force_download=force_download,
             vendor_metadata=vendor_metadata,
             media_type=media_type or _media_type,
-            identifier=identifier,
+            identifier=identifier or _identifier,
         )
         self.kind = kind
 
@@ -354,20 +387,21 @@ class DocumentUrl(FileUrl):
         self,
         url: str,
         *,
+        media_type: str | None = None,
+        identifier: str | None = None,
         force_download: bool = False,
         vendor_metadata: dict[str, Any] | None = None,
-        media_type: str | None = None,
         kind: Literal['document-url'] = 'document-url',
-        identifier: str | None = None,
         # Required for inline-snapshot which expects all dataclass `__init__` methods to take all field names as kwargs.
         _media_type: str | None = None,
+        _identifier: str | None = None,
     ) -> None:
         super().__init__(
             url=url,
             force_download=force_download,
             vendor_metadata=vendor_metadata,
             media_type=media_type or _media_type,
-            identifier=identifier,
+            identifier=identifier or _identifier,
         )
         self.kind = kind
 
@@ -385,8 +419,12 @@ class DocumentUrl(FileUrl):
             return 'application/pdf'
         elif self.url.endswith('.rtf'):
             return 'application/rtf'
+        elif self.url.endswith('.doc'):
+            return 'application/msword'
         elif self.url.endswith('.docx'):
             return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        elif self.url.endswith('.xls'):
+            return 'application/vnd.ms-excel'
         elif self.url.endswith('.xlsx'):
             return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
@@ -422,22 +460,17 @@ class BinaryContent:
     media_type: AudioMediaType | ImageMediaType | DocumentMediaType | str
     """The media type of the binary data."""
 
-    identifier: str
-    """Identifier for the binary content, such as a unique ID. generating one from the data if not explicitly set
-    This identifier can be provided to the model in a message to allow it to refer to this file in a tool call argument,
-    and the tool can look up the file in question by iterating over the message history and finding the matching `BinaryContent`.
-
-    This identifier is only automatically passed to the model when the `BinaryContent` is returned by a tool.
-    If you're passing the `BinaryContent` as a user message, it's up to you to include a separate text part with the identifier,
-    e.g. "This is file <identifier>:" preceding the `BinaryContent`.
-    """
-
     vendor_metadata: dict[str, Any] | None = None
     """Vendor-specific metadata for the file.
 
     Supported by:
     - `GoogleModel`: `BinaryContent.vendor_metadata` is used as `video_metadata`: https://ai.google.dev/gemini-api/docs/video-understanding#customize-video-processing
+    - `OpenAIChatModel`, `OpenAIResponsesModel`: `BinaryContent.vendor_metadata['detail']` is used as `detail` setting for images
     """
+
+    _identifier: Annotated[str | None, pydantic.Field(alias='identifier', default=None, exclude=True)] = field(
+        compare=False, default=None
+    )
 
     kind: Literal['binary'] = 'binary'
     """Type identifier, this is available on all parts as a discriminator."""
@@ -450,12 +483,58 @@ class BinaryContent:
         identifier: str | None = None,
         vendor_metadata: dict[str, Any] | None = None,
         kind: Literal['binary'] = 'binary',
+        # Required for inline-snapshot which expects all dataclass `__init__` methods to take all field names as kwargs.
+        _identifier: str | None = None,
     ) -> None:
         self.data = data
         self.media_type = media_type
-        self.identifier = identifier or _multi_modal_content_identifier(data)
+        self._identifier = identifier or _identifier
         self.vendor_metadata = vendor_metadata
         self.kind = kind
+
+    @staticmethod
+    def narrow_type(bc: BinaryContent) -> BinaryContent | BinaryImage:
+        """Narrow the type of the `BinaryContent` to `BinaryImage` if it's an image."""
+        if bc.is_image:
+            return BinaryImage(
+                data=bc.data,
+                media_type=bc.media_type,
+                identifier=bc.identifier,
+                vendor_metadata=bc.vendor_metadata,
+            )
+        else:
+            return bc
+
+    @classmethod
+    def from_data_uri(cls, data_uri: str) -> BinaryContent:
+        """Create a `BinaryContent` from a data URI."""
+        prefix = 'data:'
+        if not data_uri.startswith(prefix):
+            raise ValueError('Data URI must start with "data:"')
+        media_type, data = data_uri[len(prefix) :].split(';base64,', 1)
+        return cls.narrow_type(cls(data=base64.b64decode(data), media_type=media_type))
+
+    @pydantic.computed_field
+    @property
+    def identifier(self) -> str:
+        """Identifier for the binary content, such as a unique ID.
+
+        This identifier can be provided to the model in a message to allow it to refer to this file in a tool call argument,
+        and the tool can look up the file in question by iterating over the message history and finding the matching `BinaryContent`.
+
+        This identifier is only automatically passed to the model when the `BinaryContent` is returned by a tool.
+        If you're passing the `BinaryContent` as a user message, it's up to you to include a separate text part with the identifier,
+        e.g. "This is file <identifier>:" preceding the `BinaryContent`.
+
+        It's also included in inline-text delimiters for providers that require inlining text documents, so the model can
+        distinguish multiple files.
+        """
+        return self._identifier or _multi_modal_content_identifier(self.data)
+
+    @property
+    def data_uri(self) -> str:
+        """Convert the `BinaryContent` to a data URI."""
+        return f'data:{self.media_type};base64,{base64.b64encode(self.data).decode()}'
 
     @property
     def is_audio(self) -> bool:
@@ -495,8 +574,46 @@ class BinaryContent:
     __repr__ = _utils.dataclasses_no_defaults_repr
 
 
+class BinaryImage(BinaryContent):
+    """Binary content that's guaranteed to be an image."""
+
+    def __init__(
+        self,
+        data: bytes,
+        *,
+        media_type: str,
+        identifier: str | None = None,
+        vendor_metadata: dict[str, Any] | None = None,
+        # Required for inline-snapshot which expects all dataclass `__init__` methods to take all field names as kwargs.
+        kind: Literal['binary'] = 'binary',
+        _identifier: str | None = None,
+    ):
+        super().__init__(
+            data=data, media_type=media_type, identifier=identifier or _identifier, vendor_metadata=vendor_metadata
+        )
+
+        if not self.is_image:
+            raise ValueError('`BinaryImage` must be have a media type that starts with "image/"')  # pragma: no cover
+
+
+@dataclass
+class CachePoint:
+    """A cache point marker for prompt caching.
+
+    Can be inserted into UserPromptPart.content to mark cache boundaries.
+    Models that don't support caching will filter these out.
+
+    Supported by:
+
+    - Anthropic
+    """
+
+    kind: Literal['cache-point'] = 'cache-point'
+    """Type identifier, this is available on all parts as a discriminator."""
+
+
 MultiModalContent = ImageUrl | AudioUrl | DocumentUrl | VideoUrl | BinaryContent
-UserContent: TypeAlias = str | MultiModalContent
+UserContent: TypeAlias = str | MultiModalContent | CachePoint
 
 
 @dataclass(repr=False)
@@ -525,8 +642,6 @@ class ToolReturn:
     __repr__ = _utils.dataclasses_no_defaults_repr
 
 
-# Ideally this would be a Union of types, but Python 3.9 requires it to be a string, and strings don't work with `isinstance``.
-MultiModalContentTypes = (ImageUrl, AudioUrl, DocumentUrl, VideoUrl, BinaryContent)
 _document_format_lookup: dict[str, DocumentFormat] = {
     'application/pdf': 'pdf',
     'text/plain': 'txt',
@@ -535,6 +650,7 @@ _document_format_lookup: dict[str, DocumentFormat] = {
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
     'text/html': 'html',
     'text/markdown': 'md',
+    'application/msword': 'doc',
     'application/vnd.ms-excel': 'xls',
 }
 _audio_format_lookup: dict[str, AudioFormat] = {
@@ -565,7 +681,10 @@ _video_format_lookup: dict[str, VideoFormat] = {
 
 @dataclass(repr=False)
 class UserPromptPart:
-    """A user prompt, generally written by the end user."""
+    """A user prompt, generally written by the end user.
+
+
+    """
 
     content: str | Sequence[UserContent]
     """The content of the prompt."""
@@ -599,7 +718,7 @@ class BaseToolReturnPart:
     tool_call_id: str = field(default_factory=_generate_tool_call_id)
     """The tool call identifier, this is used by some models including OpenAI.
 
-    In case the tool call id is not provided by the model, Pydantic AI will generate a random one.
+    In case the tool call id is not provided by the model, Upsonic will generate a random one.
     """
 
     _: KW_ONLY
@@ -620,10 +739,11 @@ class BaseToolReturnPart:
     def model_response_object(self) -> dict[str, Any]:
         """Return a dictionary representation of the content, wrapping non-dict types appropriately."""
         # gemini supports JSON dict return values, but no other JSON types, hence we wrap anything else in a dict
-        if isinstance(self.content, dict):
-            return tool_return_ta.dump_python(self.content, mode='json')  # pyright: ignore[reportUnknownMemberType]
+        json_content = tool_return_ta.dump_python(self.content, mode='json')
+        if isinstance(json_content, dict):
+            return json_content  # type: ignore[reportUnknownReturn]
         else:
-            return {'return_value': tool_return_ta.dump_python(self.content, mode='json')}
+            return {'return_value': json_content}
 
     def has_content(self) -> bool:
         """Return `True` if the tool return has content."""
@@ -666,12 +786,12 @@ class RetryPromptPart:
 
     * Pydantic validation of tool arguments failed, here content is derived from a Pydantic
       [`ValidationError`][pydantic_core.ValidationError]
-    * a tool raised a [`ModelRetry`][upsonic.exceptions.ModelRetry] exception
+    * a tool raised a [`ModelRetry`][upsonic.utils.package.exception.ModelRetry] exception
     * no tool was found for the tool name
     * the model returned plain text when a structured response was expected
     * Pydantic validation of a structured response failed, here content is derived from a Pydantic
       [`ValidationError`][pydantic_core.ValidationError]
-    * an output validator raised a [`ModelRetry`][upsonic.exceptions.ModelRetry] exception
+    * an output validator raised a [`ModelRetry`][upsonic.utils.package.exception.ModelRetry] exception
     """
 
     content: list[pydantic_core.ErrorDetails] | str
@@ -689,7 +809,7 @@ class RetryPromptPart:
     tool_call_id: str = field(default_factory=_generate_tool_call_id)
     """The tool call identifier, this is used by some models including OpenAI.
 
-    In case the tool call id is not provided by the model, Pydantic AI will generate a random one.
+    In case the tool call id is not provided by the model, Upsonic will generate a random one.
     """
 
     timestamp: datetime = field(default_factory=_now_utc)
@@ -707,7 +827,10 @@ class RetryPromptPart:
                 description = self.content
         else:
             json_errors = error_details_ta.dump_json(self.content, exclude={'__all__': {'ctx'}}, indent=2)
-            description = f'{len(self.content)} validation errors: {json_errors.decode()}'
+            plural = isinstance(self.content, list) and len(self.content) != 1
+            description = (
+                f'{len(self.content)} validation error{"s" if plural else ""}:\n```json\n{json_errors.decode()}\n```'
+            )
         return f'{description}\n\nFix the errors and try again.'
 
     __repr__ = _utils.dataclasses_no_defaults_repr
@@ -716,12 +839,12 @@ class RetryPromptPart:
 ModelRequestPart = Annotated[
     SystemPromptPart | UserPromptPart | ToolReturnPart | RetryPromptPart, pydantic.Discriminator('part_kind')
 ]
-"""A message part sent by Pydantic AI to a model."""
+"""A message part sent by Upsonic to a model."""
 
 
 @dataclass(repr=False)
 class ModelRequest:
-    """A request generated by Pydantic AI and sent to a model, e.g. a message from the Pydantic AI app to the model."""
+    """A request generated by Upsonic and sent to a model, e.g. a message from the Upsonic app to the model."""
 
     parts: Sequence[ModelRequestPart]
     """The parts of the user message."""
@@ -733,6 +856,9 @@ class ModelRequest:
 
     kind: Literal['request'] = 'request'
     """Message type identifier, this is available on all parts as a discriminator."""
+
+    run_id: str | None = None
+    """The unique identifier of the agent run in which this message originated."""
 
     @classmethod
     def user_text_prompt(cls, user_prompt: str, *, instructions: str | None = None) -> ModelRequest:
@@ -804,6 +930,32 @@ class ThinkingPart:
 
 
 @dataclass(repr=False)
+class FilePart:
+    """A file response from a model."""
+
+    content: Annotated[BinaryContent, pydantic.AfterValidator(BinaryImage.narrow_type)]
+    """The file content of the response."""
+
+    _: KW_ONLY
+
+    id: str | None = None
+    """The identifier of the file part."""
+
+    provider_name: str | None = None
+    """The name of the provider that generated the response.
+    """
+
+    part_kind: Literal['file'] = 'file'
+    """Part type identifier, this is available on all parts as a discriminator."""
+
+    def has_content(self) -> bool:
+        """Return `True` if the file content is non-empty."""
+        return bool(self.content)  # pragma: no cover
+
+    __repr__ = _utils.dataclasses_no_defaults_repr
+
+
+@dataclass(repr=False)
 class BaseToolCallPart:
     """A tool call from a model."""
 
@@ -819,8 +971,15 @@ class BaseToolCallPart:
     tool_call_id: str = field(default_factory=_generate_tool_call_id)
     """The tool call identifier, this is used by some models including OpenAI.
 
-    In case the tool call id is not provided by the model, Pydantic AI will generate a random one.
+    In case the tool call id is not provided by the model, Upsonic will generate a random one.
     """
+
+    _: KW_ONLY
+
+    id: str | None = None
+    """An optional identifier of the tool call part, separate from the tool call ID.
+
+    This is used by some APIs like OpenAI Responses."""
 
     def args_as_dict(self) -> dict[str, Any]:
         """Return the arguments as a Python dictionary.
@@ -885,7 +1044,7 @@ class BuiltinToolCallPart(BaseToolCallPart):
 
 
 ModelResponsePart = Annotated[
-    TextPart | ToolCallPart | BuiltinToolCallPart | BuiltinToolReturnPart | ThinkingPart,
+    TextPart | ToolCallPart | BuiltinToolCallPart | BuiltinToolReturnPart | ThinkingPart | FilePart,
     pydantic.Discriminator('part_kind'),
 ]
 """A message part returned by a model."""
@@ -893,7 +1052,7 @@ ModelResponsePart = Annotated[
 
 @dataclass(repr=False)
 class ModelResponse:
-    """A response from a model, e.g. a message from the model to the upsonic app."""
+    """A response from a model, e.g. a message from the model to the Upsonic app."""
 
     parts: Sequence[ModelResponsePart]
     """The parts of the model message."""
@@ -921,18 +1080,98 @@ class ModelResponse:
     provider_name: str | None = None
     """The name of the LLM provider that generated the response."""
 
-    provider_details: dict[str, Any] | None = None
+    provider_details: Annotated[
+        dict[str, Any] | None,
+        # `vendor_details` is deprecated, but we still want to support deserializing model responses stored in a DB before the name was changed
+        pydantic.Field(validation_alias=pydantic.AliasChoices('provider_details', 'vendor_details')),
+    ] = None
     """Additional provider-specific details in a serializable format.
 
     This allows storing selected vendor-specific data that isn't mapped to standard ModelResponse fields.
     For OpenAI models, this may include 'logprobs', 'finish_reason', etc.
     """
 
-    provider_response_id: str | None = None
+    provider_response_id: Annotated[
+        str | None,
+        # `vendor_id` is deprecated, but we still want to support deserializing model responses stored in a DB before the name was changed
+        pydantic.Field(validation_alias=pydantic.AliasChoices('provider_response_id', 'vendor_id')),
+    ] = None
     """request ID as specified by the model provider. This can be used to track the specific request to the model."""
 
     finish_reason: FinishReason | None = None
-    """Reason the model finished generating the response, normalized to OpenTelemetry values."""
+    """Reason the model finished generating the response."""
+
+    run_id: str | None = None
+    """The unique identifier of the agent run in which this message originated."""
+
+    @property
+    def text(self) -> str | None:
+        """Get the text in the response."""
+        texts: list[str] = []
+        last_part: ModelResponsePart | None = None
+        for part in self.parts:
+            if isinstance(part, TextPart):
+                # Adjacent text parts should be joined together, but if there are parts in between
+                # (like built-in tool calls) they should have newlines between them
+                if isinstance(last_part, TextPart):
+                    texts[-1] += part.content
+                else:
+                    texts.append(part.content)
+            last_part = part
+        if not texts:
+            return None
+
+        return '\n\n'.join(texts)
+
+    @property
+    def thinking(self) -> str | None:
+        """Get the thinking in the response."""
+        thinking_parts = [part.content for part in self.parts if isinstance(part, ThinkingPart)]
+        if not thinking_parts:
+            return None
+        return '\n\n'.join(thinking_parts)
+
+    @property
+    def files(self) -> list[BinaryContent]:
+        """Get the files in the response."""
+        return [part.content for part in self.parts if isinstance(part, FilePart)]
+
+    @property
+    def images(self) -> list[BinaryImage]:
+        """Get the images in the response."""
+        return [file for file in self.files if isinstance(file, BinaryImage)]
+
+    @property
+    def tool_calls(self) -> list[ToolCallPart]:
+        """Get the tool calls in the response."""
+        return [part for part in self.parts if isinstance(part, ToolCallPart)]
+
+    @property
+    def builtin_tool_calls(self) -> list[tuple[BuiltinToolCallPart, BuiltinToolReturnPart]]:
+        """Get the builtin tool calls and results in the response."""
+        calls = [part for part in self.parts if isinstance(part, BuiltinToolCallPart)]
+        if not calls:
+            return []
+        returns_by_id = {part.tool_call_id: part for part in self.parts if isinstance(part, BuiltinToolReturnPart)}
+        return [
+            (call_part, returns_by_id[call_part.tool_call_id])
+            for call_part in calls
+            if call_part.tool_call_id in returns_by_id
+        ]
+
+
+    def cost(self) -> genai_types.PriceCalculation:
+        """Calculate the cost of the usage.
+
+        Uses [`genai-prices`](https://github.com/pydantic/genai-prices).
+        """
+        assert self.model_name, 'Model name is required to calculate price'
+        return calc_price(
+            self.usage,
+            self.model_name,
+            provider_id=self.provider_name,
+            genai_request_timestamp=self.timestamp,
+        )
 
     __repr__ = _utils.dataclasses_no_defaults_repr
 
@@ -1182,6 +1421,14 @@ class PartStartEvent:
     part: ModelResponsePart
     """The newly started `ModelResponsePart`."""
 
+    previous_part_kind: (
+        Literal['text', 'thinking', 'tool-call', 'builtin-tool-call', 'builtin-tool-return', 'file'] | None
+    ) = None
+    """The kind of the previous part, if any.
+
+    This is useful for UI event streams to know whether to group parts of the same kind together when emitting events.
+    """
+
     event_kind: Literal['part_start'] = 'part_start'
     """Event type identifier, used as a discriminator."""
 
@@ -1205,11 +1452,32 @@ class PartDeltaEvent:
 
 
 @dataclass(repr=False, kw_only=True)
+class PartEndEvent:
+    """An event indicating that a part is complete."""
+
+    index: int
+    """The index of the part within the overall response parts list."""
+
+    part: ModelResponsePart
+    """The complete `ModelResponsePart`."""
+
+    next_part_kind: (
+        Literal['text', 'thinking', 'tool-call', 'builtin-tool-call', 'builtin-tool-return', 'file'] | None
+    ) = None
+    """The kind of the next part, if any.
+
+    This is useful for UI event streams to know whether to group parts of the same kind together when emitting events.
+    """
+
+    event_kind: Literal['part_end'] = 'part_end'
+    """Event type identifier, used as a discriminator."""
+
+    __repr__ = _utils.dataclasses_no_defaults_repr
+
+
+@dataclass(repr=False, kw_only=True)
 class FinalResultEvent:
-    """An event indicating that the final result has been completely received.
-    
-    This event is emitted after all content for the result part (text or tool output) has been 
-    streamed, signaling that the result is complete and ready for processing."""
+    """An event indicating the response to the current model request matches the output schema and will produce a result."""
 
     tool_name: str | None
     """The name of the output tool that was called. `None` if the result is from text content and not from a tool."""
@@ -1222,9 +1490,9 @@ class FinalResultEvent:
 
 
 ModelResponseStreamEvent = Annotated[
-    PartStartEvent | PartDeltaEvent | FinalResultEvent, pydantic.Discriminator('event_kind')
+    PartStartEvent | PartDeltaEvent | PartEndEvent | FinalResultEvent, pydantic.Discriminator('event_kind')
 ]
-"""An event in the model response stream, starting a new part, applying a delta to an existing one, or indicating the final result."""
+"""An event in the model response stream, starting a new part, applying a delta to an existing one, indicating a part is complete, or indicating the final result."""
 
 
 @dataclass(repr=False)
@@ -1257,6 +1525,9 @@ class FunctionToolResultEvent:
 
     _: KW_ONLY
 
+    content: str | Sequence[UserContent] | None = None
+    """The content that will be sent to the model as a UserPromptPart following the result."""
+
     event_kind: Literal['function_tool_result'] = 'function_tool_result'
     """Event type identifier, used as a discriminator."""
 
@@ -1268,17 +1539,17 @@ class FunctionToolResultEvent:
     __repr__ = _utils.dataclasses_no_defaults_repr
 
 
+
+
+
 HandleResponseEvent = Annotated[
-    FunctionToolCallEvent | FunctionToolResultEvent,
-    pydantic.Discriminator('event_kind'),
+    FunctionToolCallEvent | FunctionToolResultEvent, pydantic.Discriminator('event_kind')
 ]
 """An event yielded when handling a model response, indicating tool calls and results."""
 
 AgentStreamEvent = Annotated[ModelResponseStreamEvent | HandleResponseEvent, pydantic.Discriminator('event_kind')]
 """An event in the agent stream: model response stream events and response-handling events."""
 
-
-# Utility functions for extracting parts from ModelResponse
 
 def get_text_content(response: ModelResponse) -> str | None:
     """

@@ -9,53 +9,54 @@ from openai import AsyncOpenAI
 from upsonic.profiles import ModelProfile
 from upsonic.utils.package.exception import UserError
 from upsonic.models import cached_async_http_client
-from upsonic.profiles.grok import grok_model_profile
-from upsonic.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIModelProfile
+from upsonic.profiles.moonshotai import moonshotai_model_profile
+from upsonic.profiles.openai import (
+    OpenAIJsonSchemaTransformer,
+    OpenAIModelProfile,
+)
 from upsonic.providers import Provider
 
-try:
-    from openai import AsyncOpenAI
-except ImportError as _import_error:  # pragma: no cover
-    raise ImportError(
-        'Please install the `openai` package to use the Grok provider, '
-    ) from _import_error
-
-# https://docs.x.ai/docs/models
-GrokModelName = Literal[
-    'grok-4',
-    'grok-4-0709',
-    'grok-3',
-    'grok-3-mini',
-    'grok-3-fast',
-    'grok-3-mini-fast',
-    'grok-2-vision-1212',
-    'grok-2-image-1212',
+MoonshotAIModelName = Literal[
+    'moonshot-v1-8k',
+    'moonshot-v1-32k',
+    'moonshot-v1-128k',
+    'moonshot-v1-8k-vision-preview',
+    'moonshot-v1-32k-vision-preview',
+    'moonshot-v1-128k-vision-preview',
+    'kimi-latest',
+    'kimi-thinking-preview',
+    'kimi-k2-0711-preview',
 ]
 
 
-class GrokProvider(Provider[AsyncOpenAI]):
-    """Provider for Grok API."""
+class MoonshotAIProvider(Provider[AsyncOpenAI]):
+    """Provider for MoonshotAI platform (Kimi models)."""
 
     @property
     def name(self) -> str:
-        return 'grok'
+        return 'moonshotai'
 
     @property
     def base_url(self) -> str:
-        return 'https://api.x.ai/v1'
+        # OpenAI-compatible endpoint, see MoonshotAI docs
+        return 'https://api.moonshot.ai/v1'
 
     @property
     def client(self) -> AsyncOpenAI:
         return self._client
 
     def model_profile(self, model_name: str) -> ModelProfile | None:
-        profile = grok_model_profile(model_name)
+        profile = moonshotai_model_profile(model_name)
 
-        # As the Grok API is OpenAI-compatible, let's assume we also need OpenAIJsonSchemaTransformer,
+        # As the MoonshotAI API is OpenAI-compatible, let's assume we also need OpenAIJsonSchemaTransformer,
         # unless json_schema_transformer is set explicitly.
-        # Also, Grok does not support strict tool definitions
+        # Also, MoonshotAI does not support strict tool definitions
+        # https://platform.moonshot.ai/docs/guide/migrating-from-openai-to-kimi#about-tool_choice
+        # "Please note that the current version of Kimi API does not support the tool_choice=required parameter."
         return OpenAIModelProfile(
-            json_schema_transformer=OpenAIJsonSchemaTransformer, openai_supports_strict_tool_definition=False
+            json_schema_transformer=OpenAIJsonSchemaTransformer,
+            openai_supports_tool_choice_required=False,
+            supports_json_object_output=True,
         ).update(profile)
 
     @overload
@@ -77,11 +78,11 @@ class GrokProvider(Provider[AsyncOpenAI]):
         openai_client: AsyncOpenAI | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        api_key = api_key or os.getenv('GROK_API_KEY')
+        api_key = api_key or os.getenv('MOONSHOTAI_API_KEY')
         if not api_key and openai_client is None:
             raise UserError(
-                'Set the `GROK_API_KEY` environment variable or pass it via `GrokProvider(api_key=...)`'
-                'to use the Grok provider.'
+                'Set the `MOONSHOTAI_API_KEY` environment variable or pass it via '
+                '`MoonshotAIProvider(api_key=...)` to use the MoonshotAI provider.'
             )
 
         if openai_client is not None:
@@ -89,5 +90,5 @@ class GrokProvider(Provider[AsyncOpenAI]):
         elif http_client is not None:
             self._client = AsyncOpenAI(base_url=self.base_url, api_key=api_key, http_client=http_client)
         else:
-            http_client = cached_async_http_client(provider='grok')
+            http_client = cached_async_http_client(provider='moonshotai')
             self._client = AsyncOpenAI(base_url=self.base_url, api_key=api_key, http_client=http_client)

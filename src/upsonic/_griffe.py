@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 from griffe import Docstring, DocstringSectionKind, Object as GriffeObject
 
 if TYPE_CHECKING:
-    from upsonic.tools import DocstringFormat
+    from .tools import DocstringFormat
 
 DocstringStyle = Literal['google', 'numpy', 'sphinx']
 
@@ -21,15 +21,24 @@ def doc_descriptions(
     *,
     docstring_format: DocstringFormat,
 ) -> tuple[str | None, dict[str, str]]:
-    """Extract function description and parameter descriptions from docstring.
+    """Extract the function description and parameter descriptions from a function's docstring.
+
+    The function parses the docstring using the specified format (or infers it if 'auto')
+    and extracts both the main description and parameter descriptions. If a returns section
+    is present in the docstring, the main description will be formatted as XML.
 
     Returns:
-        Tuple of main description and parameter descriptions dict.
+        A tuple containing:
+        - str: Main description string, which may be either:
+            * Plain text if no returns section is present
+            * XML-formatted if returns section exists, including <summary> and <returns> tags
+        - dict[str, str]: Dictionary mapping parameter names to their descriptions
     """
     doc = func.__doc__
     if doc is None:
         return None, {}
 
+    # see https://github.com/mkdocstrings/griffe/issues/293
     parent = cast(GriffeObject, sig)
 
     docstring_style = _infer_docstring_style(doc) if docstring_format == 'auto' else docstring_format
@@ -38,6 +47,7 @@ def doc_descriptions(
         lineno=1,
         parser=docstring_style,
         parent=parent,
+        # https://mkdocstrings.github.io/griffe/reference/docstrings/#google-options
         parser_options={'returns_named_value': False, 'returns_multiple_items': False},
     )
     with _disable_griffe_logging():
@@ -67,16 +77,18 @@ def doc_descriptions(
 
 
 def _infer_docstring_style(doc: str) -> DocstringStyle:
-    """Infer docstring style from content."""
+    """Simplistic docstring style inference."""
     for pattern, replacements, style in _docstring_style_patterns:
         matches = (
             re.search(pattern.format(replacement), doc, re.IGNORECASE | re.MULTILINE) for replacement in replacements
         )
         if any(matches):
             return style
+    # fallback to google style
     return 'google'
 
 
+# See https://github.com/mkdocstrings/griffe/issues/329#issuecomment-2425017804
 _docstring_style_patterns: list[tuple[str, list[str], DocstringStyle]] = [
     (
         r'\n[ \t]*:{0}([ \t]+\w+)*:([ \t]+.+)?\n',
@@ -155,6 +167,7 @@ _docstring_style_patterns: list[tuple[str, list[str], DocstringStyle]] = [
 
 @contextmanager
 def _disable_griffe_logging():
+    # Hacky, but suggested here: https://github.com/mkdocstrings/griffe/issues/293#issuecomment-2167668117
     old_level = logging.root.getEffectiveLevel()
     logging.root.setLevel(logging.ERROR)
     yield

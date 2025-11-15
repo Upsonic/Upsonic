@@ -11,15 +11,15 @@ from typing import TYPE_CHECKING, Any, Generic, Literal, cast, overload
 
 import anyio
 import anyio.to_thread
+from botocore.exceptions import ClientError
 from typing_extensions import ParamSpec, assert_never
 
-from upsonic import _utils, usage
-from upsonic.utils.package.exception import UserError
 from upsonic.messages import (
     AudioUrl,
     BinaryContent,
     BuiltinToolCallPart,
     BuiltinToolReturnPart,
+    CachePoint,
     DocumentUrl,
     FinishReason,
     ImageUrl,
@@ -37,13 +37,15 @@ from upsonic.messages import (
     UserPromptPart,
     VideoUrl,
 )
+
+from upsonic.utils.package.exception import ModelHTTPError, UserError
 from upsonic.models import Model, ModelRequestParameters, StreamedResponse, download_item
-from upsonic.profiles import ModelProfileSpec
 from upsonic.providers import Provider, infer_provider
 from upsonic.providers.bedrock import BedrockModelProfile
 from upsonic.models.settings import ModelSettings
 from upsonic.tools import ToolDefinition
-
+from upsonic import _utils, usage
+from upsonic.profiles import ModelProfileSpec
 if TYPE_CHECKING:
     from botocore.client import BaseClient
     from botocore.eventstream import EventStream
@@ -57,6 +59,7 @@ if TYPE_CHECKING:
         ConverseStreamMetadataEventTypeDef,
         ConverseStreamOutputTypeDef,
         ConverseStreamResponseTypeDef,
+        CountTokensRequestTypeDef,
         DocumentBlockTypeDef,
         GuardrailConfigurationTypeDef,
         ImageBlockTypeDef,
@@ -72,7 +75,6 @@ if TYPE_CHECKING:
         ToolTypeDef,
         VideoBlockTypeDef,
     )
-
 
 LatestBedrockModelNames = Literal[
     'amazon.titan-tg1-large',
@@ -102,6 +104,13 @@ LatestBedrockModelNames = Literal[
     'us.anthropic.claude-opus-4-20250514-v1:0',
     'anthropic.claude-sonnet-4-20250514-v1:0',
     'us.anthropic.claude-sonnet-4-20250514-v1:0',
+    'eu.anthropic.claude-sonnet-4-20250514-v1:0',
+    'anthropic.claude-sonnet-4-5-20250929-v1:0',
+    'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+    'eu.anthropic.claude-sonnet-4-5-20250929-v1:0',
+    'anthropic.claude-haiku-4-5-20251001-v1:0',
+    'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+    'eu.anthropic.claude-haiku-4-5-20251001-v1:0',
     'cohere.command-text-v14',
     'cohere.command-r-v1:0',
     'cohere.command-r-plus-v1:0',
@@ -132,7 +141,6 @@ Since Bedrock supports a variety of date-stamped models, we explicitly list the 
 See [the Bedrock docs](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html) for a full list.
 """
 
-
 P = ParamSpec('P')
 T = typing.TypeVar('T')
 
@@ -144,6 +152,13 @@ _FINISH_REASON_MAP: dict[StopReasonType, FinishReason] = {
     'stop_sequence': 'stop',
     'tool_use': 'tool_call',
 }
+
+_AWS_BEDROCK_INFERENCE_GEO_PREFIXES: tuple[str, ...] = ('us.', 'eu.', 'apac.', 'jp.', 'au.', 'ca.')
+"""Geo prefixes for Bedrock inference profile IDs (e.g., 'eu.', 'us.').
+
+Used to strip the geo prefix so we can pass a pure foundation model ID/ARN to CountTokens,
+which does not accept profile IDs. Extend if new geos appear (e.g., 'global.', 'us-gov.').
+"""
 
 
 class BedrockModelSettings(ModelSettings, total=False):
@@ -205,7 +220,7 @@ class BedrockConverseModel(Model):
         self,
         model_name: BedrockModelName,
         *,
-        provider: Literal['bedrock'] | Provider[BaseClient] = 'bedrock',
+        provider: Literal['bedrock', 'gateway'] | Provider[BaseClient] = 'bedrock',
         profile: ModelProfileSpec | None = None,
         settings: ModelSettings | None = None,
     ):
@@ -224,7 +239,7 @@ class BedrockConverseModel(Model):
         self._model_name = model_name
 
         if isinstance(provider, str):
-            provider = infer_provider(provider)
+            provider = infer_provider('gateway/bedrock' if provider == 'gateway' else provider)
         self._provider = provider
         self.client = cast('BedrockRuntimeClient', provider.client)
 
@@ -262,10 +277,42 @@ class BedrockConverseModel(Model):
         model_settings: ModelSettings | None,
         model_request_parameters: ModelRequestParameters,
     ) -> ModelResponse:
+        model_settings, model_request_parameters = self.prepare_request(
+            model_settings,
+            model_request_parameters,
+        )
         settings = cast(BedrockModelSettings, model_settings or {})
         response = await self._messages_create(messages, False, settings, model_request_parameters)
         model_response = await self._process_response(response)
         return model_response
+
+    async def count_tokens(
+        self,
+        messages: list[ModelMessage],
+        model_settings: ModelSettings | None,
+        model_request_parameters: ModelRequestParameters,
+    ) -> usage.RequestUsage:
+        """Count the number of tokens, works with limited models.
+
+        Check the actual supported models on <https://docs.aws.amazon.com/bedrock/latest/userguide/count-tokens.html>
+        """
+        model_settings, model_request_parameters = self.prepare_request(model_settings, model_request_parameters)
+        system_prompt, bedrock_messages = await self._map_messages(messages, model_request_parameters)
+        params: CountTokensRequestTypeDef = {
+            'modelId': self._remove_inference_geo_prefix(self.model_name),
+            'input': {
+                'converse': {
+                    'messages': bedrock_messages,
+                    'system': system_prompt,
+                },
+            },
+        }
+        try:
+            response = await anyio.to_thread.run_sync(functools.partial(self.client.count_tokens, **params))
+        except ClientError as e:
+            status_code = e.response.get('ResponseMetadata', {}).get('HTTPStatusCode', 500)
+            raise ModelHTTPError(status_code=status_code, model_name=self.model_name, body=e.response) from e
+        return usage.RequestUsage(input_tokens=response['inputTokens'])
 
     @asynccontextmanager
     async def request_stream(
@@ -274,6 +321,10 @@ class BedrockConverseModel(Model):
         model_settings: ModelSettings | None,
         model_request_parameters: ModelRequestParameters,
     ) -> AsyncIterator[StreamedResponse]:
+        model_settings, model_request_parameters = self.prepare_request(
+            model_settings,
+            model_request_parameters,
+        )
         settings = cast(BedrockModelSettings, model_settings or {})
         response = await self._messages_create(messages, True, settings, model_request_parameters)
         yield BedrockStreamedResponse(
@@ -363,7 +414,7 @@ class BedrockConverseModel(Model):
         model_settings: BedrockModelSettings | None,
         model_request_parameters: ModelRequestParameters,
     ) -> ConverseResponseTypeDef | ConverseStreamResponseTypeDef:
-        system_prompt, bedrock_messages = await self._map_messages(messages)
+        system_prompt, bedrock_messages = await self._map_messages(messages, model_request_parameters)
         inference_config = self._map_inference_config(model_settings)
 
         params: ConverseRequestTypeDef = {
@@ -397,10 +448,16 @@ class BedrockConverseModel(Model):
             if prompt_variables := model_settings.get('bedrock_prompt_variables', None):
                 params['promptVariables'] = prompt_variables
 
-        if stream:
-            model_response = await anyio.to_thread.run_sync(functools.partial(self.client.converse_stream, **params))
-        else:
-            model_response = await anyio.to_thread.run_sync(functools.partial(self.client.converse, **params))
+        try:
+            if stream:
+                model_response = await anyio.to_thread.run_sync(
+                    functools.partial(self.client.converse_stream, **params)
+                )
+            else:
+                model_response = await anyio.to_thread.run_sync(functools.partial(self.client.converse, **params))
+        except ClientError as e:
+            status_code = e.response.get('ResponseMetadata', {}).get('HTTPStatusCode', 500)
+            raise ModelHTTPError(status_code=status_code, model_name=self.model_name, body=e.response) from e
         return model_response
 
     @staticmethod
@@ -439,9 +496,9 @@ class BedrockConverseModel(Model):
         return tool_config
 
     async def _map_messages(  # noqa: C901
-        self, messages: list[ModelMessage]
+        self, messages: list[ModelMessage], model_request_parameters: ModelRequestParameters
     ) -> tuple[list[SystemContentBlockTypeDef], list[MessageUnionTypeDef]]:
-        """
+        """Maps a `upsonic.Message` to the Bedrock `MessageUnionTypeDef`.
 
         Groups consecutive ToolReturnPart objects into a single user message as required by Bedrock Claude/Nova models.
         """
@@ -477,7 +534,7 @@ class BedrockConverseModel(Model):
                             }
                         )
                     elif isinstance(part, RetryPromptPart):
-                        # TODO(Marcelo): We need to add a test here.
+                        # TODO: We need to add a test here.
                         if part.tool_name is None:  # pragma: no cover
                             bedrock_messages.append({'role': 'user', 'content': [{'text': part.model_response()}]})
                         else:
@@ -550,7 +607,7 @@ class BedrockConverseModel(Model):
             processed_messages.append(current_message)
             last_message = cast(dict[str, Any], current_message)
 
-        if instructions := self._get_instructions(messages):
+        if instructions := self._get_instructions(messages, model_request_parameters):
             system_prompt.insert(0, {'text': instructions})
 
         return system_prompt, processed_messages
@@ -613,6 +670,9 @@ class BedrockConverseModel(Model):
                         content.append({'video': video})
                 elif isinstance(item, AudioUrl):  # pragma: no cover
                     raise NotImplementedError('Audio is not supported yet.')
+                elif isinstance(item, CachePoint):
+                    # Bedrock support has not been implemented yet
+                    pass
                 else:
                     assert_never(item)
         return [{'role': 'user', 'content': content}]
@@ -622,6 +682,14 @@ class BedrockConverseModel(Model):
         return {
             'toolUse': {'toolUseId': _utils.guard_tool_call_id(t=t), 'name': t.tool_name, 'input': t.args_as_dict()}
         }
+
+    @staticmethod
+    def _remove_inference_geo_prefix(model_name: BedrockModelName) -> BedrockModelName:
+        """Remove inference geographic prefix from model ID if present."""
+        for prefix in _AWS_BEDROCK_INFERENCE_GEO_PREFIXES:
+            if model_name.startswith(prefix):
+                return model_name.removeprefix(prefix)
+        return model_name
 
 
 @dataclass
@@ -690,8 +758,8 @@ class BedrockStreamedResponse(StreamedResponse):
                                 signature=signature,
                                 provider_name=self.provider_name if signature else None,
                             )
-                    if 'text' in delta:
-                        maybe_event = self._parts_manager.handle_text_delta(vendor_part_id=index, content=delta['text'])
+                    if text := delta.get('text'):
+                        maybe_event = self._parts_manager.handle_text_delta(vendor_part_id=index, content=text)
                         if maybe_event is not None:  # pragma: no branch
                             yield maybe_event
                     if 'toolUse' in delta:

@@ -1550,12 +1550,17 @@ class Agent(BaseAgent):
     
     def _extract_text_from_stream_event(self, event: "ModelResponseStreamEvent") -> Optional[str]:
         """Extract text content from a streaming event."""
-        from upsonic.messages import PartStartEvent, PartDeltaEvent, TextPart
+        from upsonic.messages import PartStartEvent, PartDeltaEvent, TextPart, TextPartDelta
         
         if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
             return event.part.content
-        elif isinstance(event, PartDeltaEvent) and hasattr(event.delta, 'content_delta'):
-            return event.delta.content_delta
+        elif isinstance(event, PartDeltaEvent):
+            # Check if delta is a TextPartDelta specifically
+            if isinstance(event.delta, TextPartDelta):
+                return event.delta.content_delta
+            # Fallback to hasattr check for compatibility
+            elif hasattr(event.delta, 'content_delta'):
+                return event.delta.content_delta
         return None
     
     async def _create_stream_iterator(
