@@ -5,9 +5,9 @@ from typing import overload
 
 import httpx
 
+from upsonic.profiles import ModelProfile
 from upsonic.utils.package.exception import UserError
 from upsonic.models import cached_async_http_client
-from upsonic.profiles import ModelProfile
 from upsonic.profiles.cohere import cohere_model_profile
 from upsonic.profiles.deepseek import deepseek_model_profile
 from upsonic.profiles.grok import grok_model_profile
@@ -18,11 +18,10 @@ from upsonic.providers import Provider
 
 try:
     from openai import AsyncOpenAI
-    _OPENAI_AVAILABLE = True
-except ImportError:  # pragma: no cover
-    AsyncOpenAI = None
-    _OPENAI_AVAILABLE = False
-
+except ImportError as _import_error:  # pragma: no cover
+    raise ImportError(
+        'Please install the `openai` package to use the GitHub Models provider, '
+    ) from _import_error
 
 
 class GitHubProvider(Provider[AsyncOpenAI]):
@@ -96,13 +95,6 @@ class GitHubProvider(Provider[AsyncOpenAI]):
             openai_client: An existing `AsyncOpenAI` client to use. If provided, `api_key` and `http_client` must be `None`.
             http_client: An existing `httpx.AsyncClient` to use for making HTTP requests.
         """
-        if not _OPENAI_AVAILABLE:
-            from upsonic.utils.printing import import_error
-            import_error(
-                package_name="openai",
-                install_command='pip install openai',
-                feature_name="openai provider"
-            )
         api_key = api_key or os.getenv('GITHUB_API_KEY')
         if not api_key and openai_client is None:
             raise UserError(

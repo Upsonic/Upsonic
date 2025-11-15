@@ -4,19 +4,18 @@ import os
 
 import httpx
 
+from upsonic.profiles import ModelProfile
 from upsonic.utils.package.exception import UserError
 from upsonic.models import cached_async_http_client
-from upsonic.profiles import ModelProfile
 from upsonic.profiles.cohere import cohere_model_profile
 from upsonic.providers import Provider
 
 try:
     from cohere import AsyncClientV2
-    _COHERE_AVAILABLE = True
-except ImportError:
-    AsyncClientV2 = None
-    _COHERE_AVAILABLE = False
-
+except ImportError as _import_error:  # pragma: no cover
+    raise ImportError(
+        'Please install the `cohere` package to use the Cohere provider, '
+    ) from _import_error
 
 
 class CohereProvider(Provider[AsyncClientV2]):
@@ -45,14 +44,6 @@ class CohereProvider(Provider[AsyncClientV2]):
         cohere_client: AsyncClientV2 | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        if not _COHERE_AVAILABLE:
-            from upsonic.utils.printing import import_error
-            import_error(
-                package_name="cohere",
-                install_command='pip install cohere',
-                feature_name="Cohere provider"
-            )
-
         """Create a new Cohere provider.
 
         Args:

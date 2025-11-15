@@ -7216,6 +7216,7 @@ source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "anyio" },
+    { name = "genai-prices" },
     { name = "griffe" },
     { name = "httpx" },
     { name = "mcp", extra = ["cli"] },
@@ -7378,6 +7379,7 @@ requires-dist = [
     { name = "easyocr", marker = "extra == 'ocr'", specifier = ">=1.7.2" },
     { name = "faiss-cpu", marker = "extra == 'rag'", specifier = ">=1.12.0" },
     { name = "fastembed", marker = "extra == 'embeddings'", specifier = ">=0.7.3" },
+    { name = "genai-prices", specifier = ">=0.0.38" },
     { name = "genai-prices", marker = "extra == 'tools'", specifier = ">=0.0.29" },
     { name = "google-auth", marker = "extra == 'embeddings'", specifier = ">=2.40.3" },
     { name = "google-auth", marker = "extra == 'models'", specifier = ">=2.40.3" },

@@ -1,32 +1,25 @@
 from __future__ import annotations as _annotations
 
 import os
-from typing import TypeAlias, overload, TYPE_CHECKING
+from typing import TypeAlias, overload
 
 import httpx
 
+from upsonic.profiles import ModelProfile
 from upsonic.utils.package.exception import UserError
 from upsonic.models import cached_async_http_client
-from upsonic.profiles import ModelProfile
 from upsonic.profiles.anthropic import anthropic_model_profile
 from upsonic.providers import Provider
 
-if TYPE_CHECKING:
-    from anthropic import AsyncAnthropic, AsyncAnthropicBedrock
-
 try:
-    from anthropic import AsyncAnthropic, AsyncAnthropicBedrock
-    _ANTHROPIC_AVAILABLE = True
-except ImportError:
-    AsyncAnthropic = None  # type: ignore
-    AsyncAnthropicBedrock = None  # type: ignore
-    _ANTHROPIC_AVAILABLE = False
+    from anthropic import AsyncAnthropic, AsyncAnthropicBedrock, AsyncAnthropicVertex
+except ImportError as _import_error:
+    raise ImportError(
+        'Please install the `anthropic` package to use the Anthropic provider, '
+    ) from _import_error
 
 
-if TYPE_CHECKING:
-    AsyncAnthropicClient: TypeAlias = AsyncAnthropic | AsyncAnthropicBedrock
-else:
-    AsyncAnthropicClient = AsyncAnthropic if _ANTHROPIC_AVAILABLE else None
+AsyncAnthropicClient: TypeAlias = AsyncAnthropic | AsyncAnthropicBedrock | AsyncAnthropicVertex
 
 
 class AnthropicProvider(Provider[AsyncAnthropicClient]):
@@ -73,14 +66,6 @@ class AnthropicProvider(Provider[AsyncAnthropicClient]):
                 client to use. If provided, the `api_key` and `http_client` arguments will be ignored.
             http_client: An existing `httpx.AsyncClient` to use for making HTTP requests.
         """
-        if not _ANTHROPIC_AVAILABLE:
-            from upsonic.utils.printing import import_error
-            import_error(
-                package_name="anthropic",
-                install_command='pip install anthropic',
-                feature_name="Anthropic provider"
-            )
-
         if anthropic_client is not None:
             assert http_client is None, 'Cannot provide both `anthropic_client` and `http_client`'
             assert api_key is None, 'Cannot provide both `anthropic_client` and `api_key`'

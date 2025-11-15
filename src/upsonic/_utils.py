@@ -6,7 +6,7 @@ import inspect
 import re
 import time
 import uuid
-from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable, Iterator
+from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable, Iterable, Iterator
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, fields, is_dataclass
 from datetime import datetime, timezone
@@ -25,8 +25,6 @@ from typing_extensions import (
 from typing_inspection import typing_objects
 from typing_inspection.introspection import is_union_origin
 
-from upsonic.utils.package.exception import UserError
-
 
 if TYPE_CHECKING:
     from upsonic.messages import messages as _messages
@@ -42,9 +40,10 @@ async def run_in_executor(func: Callable[_P, _R], *args: _P.args, **kwargs: _P.k
 
 
 def is_model_like(type_: Any) -> bool:
-    """Check if type is a pydantic model, dataclass or typedict.
+    """Check if something is a pydantic model, dataclass or typedict.
 
-    These generate JSON Schema with {"type": "object"} and are usable as function parameters.
+    These should all generate a JSON Schema with `{"type": "object"}` and therefore be usable directly as
+    function parameters.
     """
     return (
         isinstance(type_, type)
@@ -58,18 +57,36 @@ def is_model_like(type_: Any) -> bool:
     )
 
 
-def check_object_json_schema(schema: JsonSchemaValue) -> 'ObjectJsonSchema':
+def check_object_json_schema(schema: JsonSchemaValue) -> ObjectJsonSchema:
+    from upsonic.utils.package.exception import UserError
 
     if schema.get('type') == 'object':
         return schema
-    elif schema.get('$ref') is not None:
-        maybe_result = schema.get('$defs', {}).get(schema['$ref'][8:])  # This removes the initial "#/$defs/".
-
-        if "'$ref': '#/$defs/" in str(maybe_result):
-            return schema
-        return maybe_result
+    elif ref := schema.get('$ref'):
+        prefix = '#/$defs/'
+        # Return the referenced schema unless it contains additional nested references.
+        if (
+            ref.startswith(prefix)
+            and (resolved := schema.get('$defs', {}).get(ref[len(prefix) :]))
+            and resolved.get('type') == 'object'
+            and not _contains_ref(resolved)
+        ):
+            return resolved
+        return schema
     else:
         raise UserError('Schema must be an object')
+
+
+def _contains_ref(obj: JsonSchemaValue | list[JsonSchemaValue]) -> bool:
+    """Recursively check if an object contains any $ref keys."""
+    items: Iterable[JsonSchemaValue]
+    if isinstance(obj, dict):
+        if '$ref' in obj:
+            return True
+        items = obj.values()
+    else:
+        items = obj
+    return any(isinstance(item, dict | list) and _contains_ref(item) for item in items)  # pyright: ignore[reportUnknownArgumentType]
 
 
 T = TypeVar('T')
@@ -77,17 +94,17 @@ T = TypeVar('T')
 
 @dataclass
 class Some(Generic[T]):
-    """Rust's Option::Some equivalent."""
+    """Analogous to Rust's `Option::Some` type."""
 
     value: T
 
 
 Option: TypeAlias = Some[T] | None
-"""Rust's Option equivalent: Option[Thing] = Some[Thing] | None."""
+"""Analogous to Rust's `Option` type, usage: `Option[Thing]` is equivalent to `Some[Thing] | None`."""
 
 
 class Unset:
-    """Singleton representing unset value."""
+    """A singleton to represent an unset value."""
 
     pass
 
@@ -103,16 +120,29 @@ def is_set(t_or_unset: T | Unset) -> TypeGuard[T]:
 async def group_by_temporal(
     aiterable: AsyncIterable[T], soft_max_interval: float | None
 ) -> AsyncIterator[AsyncIterable[list[T]]]:
-    """Group async iterable items into lists based on time interval.
+    """Group items from an async iterable into lists based on time interval between them.
 
-    Debounces the iterator. Returns context manager for cancellation on error.
+    Effectively, this debounces the iterator.
+
+    This returns a context manager usable as an iterator so any pending tasks can be cancelled if an error occurs
+    during iteration.
+
+    Usage:
+
+    ```python
+    async with group_by_temporal(yield_groups(), 0.1) as groups_iter:
+        async for groups in groups_iter:
+            print(groups)
+    ```
 
     Args:
-        aiterable: Async iterable to group.
-        soft_max_interval: Max interval for grouping. If None, no grouping performed.
+        aiterable: The async iterable to group.
+        soft_max_interval: Maximum interval over which to group items, this should avoid a trickle of items causing
+            a group to never be yielded. It's a soft max in the sense that once we're over this time, we yield items
+            as soon as `anext(aiter)` returns. If `None`, no grouping/debouncing is performed
 
     Returns:
-        Context manager yielding async iterable of item lists.
+        A context manager usable as an async iterable of lists of items produced by the input async iterable.
     """
     if soft_max_interval is None:
 
@@ -133,39 +163,52 @@ async def group_by_temporal(
         buffer: list[T] = []
         group_start_time = time.monotonic()
 
-        aiterator = aiterable.__aiter__()
+        aiterator = aiter(aiterable)
         while True:
             if group_start_time is None:
+                # group hasn't started, we just wait for the maximum interval
                 wait_time = soft_max_interval
             else:
+                # wait for the time remaining in the group
                 wait_time = soft_max_interval - (time.monotonic() - group_start_time)
 
+            # if there's no current task, we get the next one
             if task is None:
-                task = asyncio.create_task(aiterator.__anext__())
+                # anext(aiter) returns an Awaitable[T], not a Coroutine which asyncio.create_task expects
+                # so far, this doesn't seem to be a problem
+                task = asyncio.create_task(anext(aiterator))  # pyright: ignore[reportArgumentType]
 
+            # we use asyncio.wait to avoid cancelling the coroutine if it's not done
             done, _ = await asyncio.wait((task,), timeout=wait_time)
 
             if done:
+                # the one task we waited for completed
                 try:
                     item = done.pop().result()
                 except StopAsyncIteration:
+                    # if the task raised StopAsyncIteration, we're done iterating
                     if buffer:
                         yield buffer
                     task = None
                     break
                 else:
+                    # we got an item, add it to the buffer and set task to None to get the next item
                     buffer.append(item)
                     task = None
+                    # if this is the first item in the group, set the group start time
                     if group_start_time is None:
                         group_start_time = time.monotonic()
             elif buffer:
+                # otherwise if the task timeout expired and we have items in the buffer, yield the buffer
                 yield buffer
+                # clear the buffer and reset the group start time ready for the next group
                 buffer = []
                 group_start_time = None
 
     try:
         yield async_iter_groups()
-    finally:
+    finally:  # pragma: no cover
+        # after iteration if a tasks still exists, cancel it, this will only happen if an error occurred
         if task:
             task.cancel('Cancelling due to error in iterator')
             with suppress(asyncio.CancelledError):
@@ -173,14 +216,23 @@ async def group_by_temporal(
 
 
 def sync_anext(iterator: Iterator[T]) -> T:
-    """Get next item from sync iterator, raising StopAsyncIteration if exhausted.
+    """Get the next item from a sync iterator, raising `StopAsyncIteration` if it's exhausted.
 
-    Useful for iterating over sync iterator in async context.
+    Useful when iterating over a sync iterator in an async context.
     """
     try:
         return next(iterator)
     except StopIteration as e:
         raise StopAsyncIteration() from e
+
+
+def sync_async_iterator(async_iter: AsyncIterator[T]) -> Iterator[T]:
+    loop = get_event_loop()
+    while True:
+        try:
+            yield loop.run_until_complete(anext(async_iter))
+        except StopAsyncIteration:
+            break
 
 
 def now_utc() -> datetime:
@@ -194,19 +246,23 @@ def guard_tool_call_id(
     | _messages.BuiltinToolCallPart
     | _messages.BuiltinToolReturnPart,
 ) -> str:
-    """Return tool call id or generate new one if None."""
+    """Type guard that either returns the tool call id or generates a new one if it's None."""
     return t.tool_call_id or generate_tool_call_id()
 
 
 def generate_tool_call_id() -> str:
-    """Generate unique tool call id."""
-    return f'upsonic_{uuid.uuid4().hex}'
+    """Generate a tool call id.
+
+    Ensure that the tool call id is unique.
+    """
+    return f'pyd_ai_{uuid.uuid4().hex}'
 
 
 class PeekableAsyncStream(Generic[T]):
-    """Wraps async iterable allowing peek at next item without consuming.
+    """Wraps an async iterable of type T and allows peeking at the *next* item without consuming it.
 
-    Buffers one item at a time. Single-pass stream.
+    We only buffer one item at a time (the next item). Once that item is yielded, it is discarded.
+    This is a single-pass stream.
     """
 
     def __init__(self, source: AsyncIterable[T]):
@@ -216,21 +272,23 @@ class PeekableAsyncStream(Generic[T]):
         self._exhausted = False
 
     async def peek(self) -> T | Unset:
-        """Return next item without consuming it.
+        """Returns the next item that would be yielded without consuming it.
 
-        Returns UNSET if stream exhausted.
+        Returns None if the stream is exhausted.
         """
         if self._exhausted:
             return UNSET
 
+        # If we already have a buffered item, just return it.
         if not isinstance(self._buffer, Unset):
             return self._buffer
 
+        # Otherwise, we need to fetch the next item from the underlying iterator.
         if self._source_iter is None:
-            self._source_iter = self._source.__aiter__()
+            self._source_iter = aiter(self._source)
 
         try:
-            self._buffer = await self._source_iter.__anext__()
+            self._buffer = await anext(self._source_iter)
         except StopAsyncIteration:
             self._exhausted = True
             return UNSET
@@ -238,38 +296,40 @@ class PeekableAsyncStream(Generic[T]):
         return self._buffer
 
     async def is_exhausted(self) -> bool:
-        """Return True if stream exhausted, False otherwise."""
+        """Returns True if the stream is exhausted, False otherwise."""
         return isinstance(await self.peek(), Unset)
 
     def __aiter__(self) -> AsyncIterator[T]:
+        # For a single-pass iteration, we can return self as the iterator.
         return self
 
     async def __anext__(self) -> T:
-        """Yield buffered item or fetch next from source.
+        """Yields the buffered item if present, otherwise fetches the next item from the underlying source.
 
-        Raises StopAsyncIteration if stream exhausted.
+        Raises StopAsyncIteration if the stream is exhausted.
         """
         if self._exhausted:
             raise StopAsyncIteration
 
+        # If we have a buffered item, yield it.
         if not isinstance(self._buffer, Unset):
             item = self._buffer
             self._buffer = UNSET
             return item
 
+        # Otherwise, fetch the next item from the source.
         if self._source_iter is None:
-            self._source_iter = self._source.__aiter__()
+            self._source_iter = aiter(self._source)
 
         try:
-            return await self._source_iter.__anext__()
+            return await anext(self._source_iter)
         except StopAsyncIteration:
             self._exhausted = True
             raise
 
 
-
 def dataclasses_no_defaults_repr(self: Any) -> str:
-    """Exclude fields with values equal to field default."""
+    """Exclude fields with values equal to the field default."""
     kv_pairs = (
         f'{f.name}={getattr(self, f.name)!r}' for f in fields(self) if f.repr and getattr(self, f.name) != f.default
     )
@@ -295,7 +355,11 @@ def is_async_callable(obj: Any) -> TypeIs[AwaitableCallable[Any]]: ...
 
 
 def is_async_callable(obj: Any) -> Any:
-    """Check if callable is async."""
+    """Correctly check if a callable is async.
+
+    This function was copied from Starlette:
+    https://github.com/encode/starlette/blob/78da9b9e218ab289117df7d62aee200ed4c59617/starlette/_utils.py#L36-L40
+    """
     while isinstance(obj, functools.partial):
         obj = obj.func
 
@@ -303,19 +367,21 @@ def is_async_callable(obj: Any) -> Any:
 
 
 def _update_mapped_json_schema_refs(s: dict[str, Any], name_mapping: dict[str, str]) -> None:
-    """Update $refs in schema to use new names from name_mapping."""
+    """Update $refs in a schema to use the new names from name_mapping."""
     if '$ref' in s:
         ref = s['$ref']
-        if ref.startswith('#/$defs/'):
-            original_name = ref[8:]
+        if ref.startswith('#/$defs/'):  # pragma: no branch
+            original_name = ref[8:]  # Remove '#/$defs/'
             new_name = name_mapping.get(original_name, original_name)
             s['$ref'] = f'#/$defs/{new_name}'
 
+    # Recursively update refs in properties
     if 'properties' in s:
         props: dict[str, dict[str, Any]] = s['properties']
         for prop in props.values():
             _update_mapped_json_schema_refs(prop, name_mapping)
 
+    # Handle arrays
     if 'items' in s and isinstance(s['items'], dict):
         items: dict[str, Any] = s['items']
         _update_mapped_json_schema_refs(items, name_mapping)
@@ -324,6 +390,7 @@ def _update_mapped_json_schema_refs(s: dict[str, Any], name_mapping: dict[str, s
         for item in prefix_items:
             _update_mapped_json_schema_refs(item, name_mapping)
 
+    # Handle unions
     for union_type in ['anyOf', 'oneOf']:
         if union_type in s:
             union_items: list[dict[str, Any]] = s[union_type]
@@ -332,12 +399,9 @@ def _update_mapped_json_schema_refs(s: dict[str, Any], name_mapping: dict[str, s
 
 
 def merge_json_schema_defs(schemas: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
-    """Merge $defs from different JSON schemas into single deduplicated $defs.
+    """Merges the `$defs` from different JSON schemas into a single deduplicated `$defs`, handling name collisions of `$defs` that are not the same, and rewrites `$ref`s to point to the new `$defs`.
 
-    Handles name collisions and rewrites $refs to point to new $defs.
-
-    Returns:
-        Tuple of rewritten schemas and new $defs dictionary.
+    Returns a tuple of the rewritten schemas and a dictionary of the new `$defs`.
     """
     all_defs: dict[str, dict[str, Any]] = {}
     rewritten_schemas: list[dict[str, Any]] = []
@@ -351,6 +415,7 @@ def merge_json_schema_defs(schemas: list[dict[str, Any]]) -> tuple[list[dict[str
         defs = schema.pop('$defs', None)
         schema_name_mapping: dict[str, str] = {}
 
+        # Process definitions and build mapping
         for name, def_schema in defs.items():
             if name not in all_defs:
                 all_defs[name] = def_schema
@@ -377,15 +442,16 @@ def merge_json_schema_defs(schemas: list[dict[str, Any]]) -> tuple[list[dict[str
 
 
 def validate_empty_kwargs(_kwargs: dict[str, Any]) -> None:
-    """Validate no unknown kwargs remain after processing.
+    """Validate that no unknown kwargs remain after processing.
 
     Args:
-        _kwargs: Dictionary of remaining kwargs after processing.
+        _kwargs: Dictionary of remaining kwargs after specific ones have been processed.
 
     Raises:
-        UserError: If unknown kwargs remain.
+        UserError: If any unknown kwargs remain.
     """
     if _kwargs:
+        from upsonic.utils.package.exception import UserError
         unknown_kwargs = ', '.join(f'`{k}`' for k in _kwargs.keys())
         raise UserError(f'Unknown keyword arguments: {unknown_kwargs}')
 
@@ -421,3 +487,12 @@ def get_union_args(tp: Any) -> tuple[Any, ...]:
         return tuple(_unwrap_annotated(arg) for arg in get_args(tp))
     else:
         return ()
+
+
+def get_event_loop():
+    try:
+        event_loop = asyncio.get_event_loop()
+    except RuntimeError:  # pragma: lax no cover
+        event_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(event_loop)
+    return event_loop

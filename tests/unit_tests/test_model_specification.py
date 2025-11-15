@@ -1,5 +1,14 @@
 import unittest
 from unittest.mock import patch, MagicMock
+
+# Patch GoogleFinishReason.NO_IMAGE before any imports that might use it
+try:
+    from google.genai.types import FinishReason as GoogleFinishReason
+    if not hasattr(GoogleFinishReason, 'NO_IMAGE'):
+        GoogleFinishReason.NO_IMAGE = MagicMock()
+except (ImportError, AttributeError):
+    pass
+
 from upsonic import Agent
 from upsonic.models import infer_model
 from upsonic.providers.openai import OpenAIProvider
@@ -27,9 +36,14 @@ class TestModelSpecification(unittest.TestCase):
         self.assertEqual(agent2.model.model_name, "claude-3-5-sonnet-latest")
         self.assertIsInstance(agent2.model._provider, AnthropicProvider)
 
+    @patch('upsonic.providers.google.HttpOptions')
     @patch('upsonic.providers.google.Client')
     @patch.dict('os.environ', {'GOOGLE_API_KEY': 'test-key'})
-    def test_google_specification(self, mock_google):
+    def test_google_specification(self, mock_google, mock_http_options):
+        # Mock HttpOptions to accept any parameters (including httpx_async_client)
+        mock_http_options_instance = MagicMock()
+        mock_http_options.return_value = mock_http_options_instance
+        
         # Mock the Google client
         mock_google.return_value = MagicMock()
         
@@ -51,7 +65,7 @@ class TestModelSpecification(unittest.TestCase):
     def test_error_handling(self):
         # Test cases that should raise exceptions
         error_cases = [
-            ("invalid/gpt-4o", "unknown model"),
+            ("invalid/gpt-4o", "unknown provider"),
             ("just-a-model-name", "unknown model"),
         ]
         for model_spec, expected_error in error_cases:

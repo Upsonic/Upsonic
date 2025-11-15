@@ -4,10 +4,11 @@ import os
 from typing import overload
 
 import httpx
+from openai import AsyncOpenAI
 
+from upsonic.profiles import ModelProfile
 from upsonic.utils.package.exception import UserError
 from upsonic.models import cached_async_http_client
-from upsonic.profiles import ModelProfile
 from upsonic.profiles.cohere import cohere_model_profile
 from upsonic.profiles.deepseek import deepseek_model_profile
 from upsonic.profiles.grok import grok_model_profile
@@ -17,13 +18,11 @@ from upsonic.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIModelProf
 from upsonic.providers import Provider
 
 try:
-    from openai import AsyncOpenAI, AsyncAzureOpenAI
-    _OPENAI_AVAILABLE = True
-except ImportError:  # pragma: no cover
-    AsyncOpenAI = None
-    AsyncAzureOpenAI = None
-    _OPENAI_AVAILABLE = False
-
+    from openai import AsyncAzureOpenAI
+except ImportError as _import_error:  # pragma: no cover
+    raise ImportError(
+        'Please install the `openai` package to use the Azure provider, '
+    ) from _import_error
 
 
 class AzureProvider(Provider[AsyncOpenAI]):
@@ -108,13 +107,6 @@ class AzureProvider(Provider[AsyncOpenAI]):
                 client to use. If provided, `base_url`, `api_key`, and `http_client` must be `None`.
             http_client: An existing `httpx.AsyncClient` to use for making HTTP requests.
         """
-        if not _OPENAI_AVAILABLE:
-            from upsonic.utils.printing import import_error
-            import_error(
-                package_name="openai",
-                install_command='pip install "upsonic[openai]"',
-                feature_name="Azure provider"
-            )
         if openai_client is not None:
             assert azure_endpoint is None, 'Cannot provide both `openai_client` and `azure_endpoint`'
             assert http_client is None, 'Cannot provide both `openai_client` and `http_client`'
@@ -123,19 +115,17 @@ class AzureProvider(Provider[AsyncOpenAI]):
             self._client = openai_client
         else:
             azure_endpoint = azure_endpoint or os.getenv('AZURE_OPENAI_ENDPOINT')
-            api_version = api_version or os.getenv('OPENAI_API_VERSION') or os.getenv('AZURE_OPENAI_API_VERSION')
-            api_key = api_key or os.getenv('AZURE_OPENAI_API_KEY')
             if not azure_endpoint:
                 raise UserError(
                     'Must provide one of the `azure_endpoint` argument or the `AZURE_OPENAI_ENDPOINT` environment variable'
                 )
 
-            if not api_key:  # pragma: no cover
+            if not api_key and 'AZURE_OPENAI_API_KEY' not in os.environ:  # pragma: no cover
                 raise UserError(
                     'Must provide one of the `api_key` argument or the `AZURE_OPENAI_API_KEY` environment variable'
                 )
 
-            if not api_version:  # pragma: no cover
+            if not api_version and 'OPENAI_API_VERSION' not in os.environ:  # pragma: no cover
                 raise UserError(
                     'Must provide one of the `api_version` argument or the `OPENAI_API_VERSION` environment variable'
                 )

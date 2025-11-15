@@ -1,6 +1,7 @@
 from __future__ import annotations as _annotations
 
-from upsonic.profiles import InlineDefsJsonSchemaTransformer, ModelProfile
+from upsonic.profiles import ModelProfile
+from upsonic._json_schema import InlineDefsJsonSchemaTransformer
 
 
 def amazon_model_profile(model_name: str) -> ModelProfile | None:

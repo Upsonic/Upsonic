@@ -5,9 +5,12 @@ This module provides the RunResult class that wraps agent execution results
 with comprehensive message tracking and output management capabilities.
 """
 
+import asyncio
 import time
+import threading
+from queue import Queue, Empty
 from dataclasses import dataclass, field
-from typing import List, Generic, AsyncIterator, Optional, Any, TYPE_CHECKING, Dict
+from typing import List, Generic, AsyncIterator, Iterator, Optional, Any, TYPE_CHECKING, Dict
 from contextlib import asynccontextmanager
 
 from upsonic.messages.messages import ModelMessage, ModelResponseStreamEvent, TextPart, PartStartEvent, PartDeltaEvent, FinalResultEvent
@@ -249,7 +252,8 @@ class StreamRunResult(Generic[OutputDataT]):
             state = getattr(self, '_state', None)
             graph_execution_id = getattr(self, '_graph_execution_id', None)
             
-            # Delegate to agent's text streaming method
+            # Always execute the stream to get real-time events
+            # Events are collected in _streaming_events during iteration
             async for text_chunk in self._agent._stream_text_output(
                 self._task,
                 self._model,
@@ -299,6 +303,8 @@ class StreamRunResult(Generic[OutputDataT]):
             state = getattr(self, '_state', None)
             graph_execution_id = getattr(self, '_graph_execution_id', None)
             
+            # Always execute the stream to get real-time events
+            # Events are collected in _streaming_events during iteration
             async for event in self._agent._stream_events_output(
                 self._task,
                 self._model,
@@ -318,6 +324,118 @@ class StreamRunResult(Generic[OutputDataT]):
             self._end_time = time.time()
             raise
     
+    def stream_output_sync(self) -> Iterator[str]:
+        """
+        Stream text content from the agent response synchronously.
+        
+        This is a synchronous wrapper around stream_output().
+        
+        Yields:
+            str: Incremental text content as it becomes available
+            
+        Example:
+            ```python
+            result = agent.stream(task)
+            for text_chunk in result.stream_output_sync():
+                print(text_chunk, end='', flush=True)
+            ```
+        """
+        queue: Queue = Queue()
+        exception_holder = [None]
+        done = threading.Event()
+        
+        async def _run_async():
+            try:
+                async with self:
+                    async for item in self.stream_output():
+                        queue.put(item)
+            except Exception as e:
+                exception_holder[0] = e
+            finally:
+                queue.put(None)
+                done.set()
+        
+        def _run_in_thread():
+            try:
+                asyncio.run(_run_async())
+            except Exception as e:
+                exception_holder[0] = e
+                queue.put(None)
+                done.set()
+        
+        thread = threading.Thread(target=_run_in_thread, daemon=True)
+        thread.start()
+        
+        while True:
+            try:
+                item = queue.get(timeout=0.1)
+                if item is None:
+                    break
+                yield item
+            except Empty:
+                if done.is_set():
+                    break
+                continue
+        
+        if exception_holder[0]:
+            raise exception_holder[0]
+    
+    def stream_events_sync(self) -> Iterator[ModelResponseStreamEvent]:
+        """
+        Stream raw events from the agent response synchronously.
+        
+        This is a synchronous wrapper around stream_events().
+        
+        Yields:
+            ModelResponseStreamEvent: Raw streaming events
+            
+        Example:
+            ```python
+            result = agent.stream(task)
+            for event in result.stream_events_sync():
+                if isinstance(event, PartStartEvent):
+                    print(f"New part: {type(event.part).__name__}")
+            ```
+        """
+        queue: Queue = Queue()
+        exception_holder = [None]
+        done = threading.Event()
+        
+        async def _run_async():
+            try:
+                async with self:
+                    async for item in self.stream_events():
+                        queue.put(item)
+            except Exception as e:
+                exception_holder[0] = e
+            finally:
+                queue.put(None)
+                done.set()
+        
+        def _run_in_thread():
+            try:
+                asyncio.run(_run_async())
+            except Exception as e:
+                exception_holder[0] = e
+                queue.put(None)
+                done.set()
+        
+        thread = threading.Thread(target=_run_in_thread, daemon=True)
+        thread.start()
+        
+        while True:
+            try:
+                item = queue.get(timeout=0.1)
+                if item is None:
+                    break
+                yield item
+            except Empty:
+                if done.is_set():
+                    break
+                continue
+        
+        if exception_holder[0]:
+            raise exception_holder[0]
     
     def get_final_output(self) -> Optional[OutputDataT]:
         """
