@@ -18,6 +18,7 @@ from upsonic.output import OutputDataT
 
 if TYPE_CHECKING:
     from upsonic.tasks.tasks import Task
+    from upsonic.messages.messages import ModelResponse
 
 
 @dataclass
@@ -85,6 +86,24 @@ class RunResult(Generic[OutputDataT]):
         # Get messages from the start of the last run to the end
         last_run_start_idx = self._run_boundaries[-1]
         return self._all_messages[last_run_start_idx:].copy()
+    
+    def get_last_model_response(self) -> Optional['ModelResponse']:
+        """
+        Get the last ModelResponse from the messages.
+        
+        This method searches through the messages from the last run and returns
+        the most recent ModelResponse, if any exists.
+        
+        Returns:
+            The last ModelResponse from the messages, or None if no ModelResponse exists.
+        """
+        from upsonic.messages.messages import ModelResponse
+        
+        messages = self.new_messages()
+        for msg in reversed(messages):
+            if isinstance(msg, ModelResponse):
+                return msg
+        return None
     
     def add_messages(self, messages: List[ModelMessage]) -> None:
         """
@@ -542,6 +561,24 @@ class StreamRunResult(Generic[OutputDataT]):
         
         last_run_start_idx = self._run_boundaries[-1]
         return self._all_messages[last_run_start_idx:].copy()
+    
+    def get_last_model_response(self) -> Optional['ModelResponse']:
+        """
+        Get the last ModelResponse from the messages.
+        
+        This method searches through the messages from the last run and returns
+        the most recent ModelResponse, if any exists.
+        
+        Returns:
+            The last ModelResponse from the messages, or None if no ModelResponse exists.
+        """
+        from upsonic.messages.messages import ModelResponse
+        
+        messages = self.new_messages()
+        for msg in reversed(messages):
+            if isinstance(msg, ModelResponse):
+                return msg
+        return None
     
     def add_messages(self, messages: List[ModelMessage]) -> None:
         """

@@ -33,7 +33,6 @@ class InitializationStep(Step):
 
         agent_started(context.agent.get_agent_id())
 
-        context.agent.tool_call_count = 0
         context.agent._tool_call_count = 0
         context.agent.current_task = context.task
 

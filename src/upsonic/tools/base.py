@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import asyncio
-import inspect
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import (
-    Any, Callable, Dict, List, Optional, Type, Union, 
-    Literal, TypeAlias, Protocol, runtime_checkable
+    Any, Dict, List, Optional, 
+    Literal, TypeAlias, TYPE_CHECKING
 )
+
+if TYPE_CHECKING:
+    from upsonic.tools.context import ToolMetrics
 
 # Type aliases for compatibility
 DocstringFormat: TypeAlias = Literal['google', 'numpy', 'sphinx', 'auto']
@@ -17,13 +18,6 @@ DocstringFormat: TypeAlias = Literal['google', 'numpy', 'sphinx', 'auto']
 
 ObjectJsonSchema: TypeAlias = Dict[str, Any]
 """Type representing JSON schema of an object."""
-
-from pydantic import BaseModel
-
-
-# Type aliases for tool functions
-ToolCallResult: TypeAlias = Union[str, Dict[str, Any], BaseModel, Any]
-ToolFunction: TypeAlias = Callable[..., Union[ToolCallResult, asyncio.Future[ToolCallResult]]]
 
 # Tool kinds
 ToolKind: TypeAlias = Literal['function', 'output', 'external', 'unapproved', 'mcp']
@@ -58,32 +52,33 @@ class ToolSchema:
         }
 
 
-@runtime_checkable
-class Tool(Protocol):
-    """Protocol for all tools in the Upsonic framework."""
+class Tool:
+    """
+    Central base class for all tools in the Upsonic framework.
     
-    @property
-    def name(self) -> str:
-        """The name of the tool."""
-        ...
+    This is the main class that all tools (except builtin tools) inherit from.
+    It provides:
+    - Standard tool interface (name, description, schema, metadata)
+    - Metrics tracking for each tool instance
+    - Abstract execute method for tool logic
     
-    @property
-    def description(self) -> Optional[str]:
-        """The description of the tool."""
-        ...
-    
-    @property
-    def schema(self) -> ToolSchema:
-        """The schema for the tool."""
-        ...
-    
-    async def execute(self, *args: Any, **kwargs: Any) -> Any:
-        """Execute the tool."""
-        ...
-
-
-class ToolBase(ABC):
-    """Abstract base class for tools."""
+    Usage:
+        Create custom tools by inheriting from Tool and implementing execute():
+        
+        ```python
+        class MyTool(Tool):
+            def __init__(self):
+                super().__init__(
+                    name="my_tool",
+                    description="Does something useful",
+                    schema=ToolSchema(parameters={...})
+                )
+            
+            async def execute(self, **kwargs):
+                # Tool logic here
+                return result
+        ```
+    """
     
     def __init__(
         self,
@@ -92,35 +87,112 @@ class ToolBase(ABC):
         schema: Optional[ToolSchema] = None,
         metadata: Optional[ToolMetadata] = None,
     ):
+        """
+        Initialize a tool.
+        
+        Args:
+            name: Tool name
+            description: Tool description
+            schema: Tool parameter schema
+            metadata: Tool metadata
+        """
         self._name = name
         self._description = description
         self._schema = schema or ToolSchema(parameters={})
         self._metadata = metadata or ToolMetadata(name=name)
+        
+        # Tool-specific metrics tracking
+        from upsonic.tools.context import ToolMetrics
+        self._metrics = ToolMetrics()
     
     @property
     def name(self) -> str:
+        """The name of the tool."""
         return self._name
     
     @property
     def description(self) -> Optional[str]:
+        """The description of the tool."""
         return self._description
     
     @property
     def schema(self) -> ToolSchema:
+        """The schema for the tool."""
         return self._schema
     
     @property
     def metadata(self) -> ToolMetadata:
+        """The metadata for the tool."""
         return self._metadata
+    
+    @property
+    def metrics(self) -> "ToolMetrics":
+        """The metrics for this tool instance."""
+        return self._metrics
+    
+    def record_execution(self, execution_time: float, success: bool = True) -> None:
+        """
+        Record a tool execution in metrics.
+        
+        Args:
+            execution_time: Time taken to execute in seconds
+            success: Whether the execution was successful
+        """
+        self._metrics.increment_tool_count()
+        
+        # Store execution history in metadata custom dict
+        if 'execution_history' not in self._metadata.custom:
+            self._metadata.custom['execution_history'] = []
+        
+        self._metadata.custom['execution_history'].append({
+            'execution_time': execution_time,
+            'success': success,
+            'total_calls': self._metrics.tool_call_count
+        })
+        
+        # Keep only last 100 executions to avoid memory bloat
+        if len(self._metadata.custom['execution_history']) > 100:
+            self._metadata.custom['execution_history'] = self._metadata.custom['execution_history'][-100:]
     
     @abstractmethod
     async def execute(self, *args: Any, **kwargs: Any) -> Any:
-        """Execute the tool."""
+        """
+        Execute the tool.
+        
+        This method must be implemented by all tool subclasses.
+        
+        Args:
+            *args: Positional arguments
+            **kwargs: Keyword arguments
+            
+        Returns:
+            Tool execution result
+        """
         raise NotImplementedError
 
 
 class ToolKit:
-    """Base class for organized tool collections. Only @tool decorated methods are exposed."""
+    """
+    Base class for organized tool collections.
+    
+    Only @tool decorated methods are exposed as tools.
+    
+    Usage:
+        ```python
+        from upsonic.tools import tool, ToolKit
+        
+        class MyToolKit(ToolKit):
+            @tool
+            def tool1(self, x: int) -> int:
+                '''Tool 1 description'''
+                return x * 2
+            
+            @tool
+            def tool2(self, y: str) -> str:
+                '''Tool 2 description'''
+                return y.upper()
+        ```
+    """
     pass
 
 

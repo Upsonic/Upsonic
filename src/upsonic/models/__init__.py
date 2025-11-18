@@ -458,7 +458,7 @@ class Model(Runnable[Any, Any]):
     _memory: Any = None  # Memory instance for chat history
     _tools: list[Any] | None = None  # List of tools to bind
     _tool_manager: Any = None  # ToolManager instance
-    _tool_context: Any = None  # ToolContext for tool execution
+    _tool_metrics: Any = None  # ToolMetrics for tool execution tracking
     _response_format: Any = None  # Pydantic model for structured output
     _tool_call_limit: int = 5  # Maximum tool calls per invocation
     _tool_call_count: int = 0  # Current tool call count
@@ -852,22 +852,20 @@ class Model(Runnable[Any, Any]):
     
     def _setup_tools_for_invoke(self) -> None:
         """Setup ToolManager and register tools for invocation."""
-        from upsonic.tools import ToolManager, ToolContext
+        from upsonic.tools import ToolManager, ToolMetrics
         
         if not self._tool_manager:
             self._tool_manager = ToolManager()
         
-        if not self._tool_context:
-            self._tool_context = ToolContext(
-                deps=None,
-                agent_id="uel_model",
-                max_retries=1,
-                tool_call_limit=5
+        if not self._tool_metrics:
+            self._tool_metrics = ToolMetrics(
+                tool_call_count=self._tool_call_count,
+                tool_call_limit=self._tool_call_limit
             )
         
         self._tool_manager.register_tools(
             tools=self._tools,
-            context=self._tool_context,
+            metrics=self._tool_metrics,
             task=None,
             agent_instance=None
         )
@@ -1425,6 +1423,9 @@ def infer_model(  # noqa: C901
             Function that instantiates a provider object. The provider name is passed into the function parameter. Defaults to `provider.infer_provider`.
     """
     
+    # Check for custom_provider from environment variable
+    custom_provider = os.getenv("LLM_CUSTOM_PROVIDER") if os.getenv("LLM_CUSTOM_PROVIDER", None) else None
+    
     env_set_model = os.getenv("LLM_MODEL_KEY").split(":")[0] if os.getenv("LLM_MODEL_KEY", None) else "openai/gpt-4o"
     bypass_llm_model = None
     try:
@@ -1478,7 +1479,14 @@ def infer_model(  # noqa: C901
         )
         provider_name = 'google-vertex'
 
-    provider: Provider[Any] = provider_factory(provider_name)
+    # Use custom_provider if it's set from environment variable
+    # custom_provider from os.getenv is always a string (provider name) or None
+    if custom_provider is not None:
+        # Use the custom provider name (override the inferred one)
+        provider_name = custom_provider
+        provider: Provider[Any] = provider_factory(provider_name)
+    else:
+        provider: Provider[Any] = provider_factory(provider_name)
 
     model_kind = provider_name
     if model_kind.startswith('gateway/'):

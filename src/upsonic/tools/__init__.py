@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from upsonic.tasks.tasks import Task
     from upsonic.tools.base import (
         Tool,
-        ToolBase,
         ToolKit,
         ToolDefinition,
         ToolCall,
@@ -36,8 +35,7 @@ if TYPE_CHECKING:
         ToolHooks,
     )
     from upsonic.tools.context import (
-        ToolContext,
-        AgentDepsT,
+        ToolMetrics,
     )
     from upsonic.tools.schema import (
         FunctionSchema,
@@ -88,7 +86,6 @@ def _get_base_classes():
     """Lazy import of base classes."""
     from upsonic.tools.base import (
         Tool,
-        ToolBase,
         ToolKit,
         ToolDefinition,
         ToolCall,
@@ -101,7 +98,6 @@ def _get_base_classes():
     
     return {
         'Tool': Tool,
-        'ToolBase': ToolBase,
         'ToolKit': ToolKit,
         'ToolDefinition': ToolDefinition,
         'ToolCall': ToolCall,
@@ -127,15 +123,13 @@ def _get_config_classes():
     }
 
 def _get_context_classes():
-    """Lazy import of context classes."""
+    """Lazy import of metrics classes."""
     from upsonic.tools.context import (
-        ToolContext,
-        AgentDepsT,
+        ToolMetrics,
     )
     
     return {
-        'ToolContext': ToolContext,
-        'AgentDepsT': AgentDepsT,
+        'ToolMetrics': ToolMetrics,
     }
 
 def _get_schema_classes():
@@ -225,11 +219,19 @@ def _get_mcp_classes():
     from upsonic.tools.mcp import (
         MCPTool,
         MCPHandler,
+        MultiMCPHandler,
+        SSEClientParams,
+        StreamableHTTPClientParams,
+        prepare_command,
     )
     
     return {
         'MCPTool': MCPTool,
         'MCPHandler': MCPHandler,
+        'MultiMCPHandler': MultiMCPHandler,
+        'SSEClientParams': SSEClientParams,
+        'StreamableHTTPClientParams': StreamableHTTPClientParams,
+        'prepare_command': prepare_command,
     }
 
 def _get_builtin_classes():
@@ -266,7 +268,7 @@ def __getattr__(name: str) -> Any:
     if name in config_classes:
         return config_classes[name]
     
-    # Context classes
+    # Metrics classes
     context_classes = _get_context_classes()
     if name in context_classes:
         return context_classes[name]
@@ -325,23 +327,18 @@ class ToolManager:
     def register_tools(
         self,
         tools: list,
-        context: Optional[ToolContext] = None,
+        metrics: Optional['ToolMetrics'] = None,
         task: Optional['Task'] = None,
         agent_instance: Optional[Any] = None
     ) -> Dict[str, Tool]:
         """Register a list of tools and create appropriate wrappers."""
         self.current_task = task
         
-        registered_tools = self.processor.process_tools(tools, context)
+        registered_tools = self.processor.process_tools(tools)
         
         for name, tool in registered_tools.items():
             if name != 'plan_and_execute':
-                if context is None:
-                    from upsonic.tools.context import ToolContext
-                    context = ToolContext(deps=None)
-                self.wrapped_tools[name] = self.processor.create_behavioral_wrapper(
-                    tool, context
-                )
+                self.wrapped_tools[name] = self.processor.create_behavioral_wrapper(tool)
         
         if 'plan_and_execute' in registered_tools and agent_instance and agent_instance.enable_thinking_tool:
             if not self.orchestrator and agent_instance:
@@ -355,12 +352,8 @@ class ToolManager:
                 return await self.orchestrator.execute(thought)
             self.wrapped_tools['plan_and_execute'] = orchestrator_executor
         elif 'plan_and_execute' in registered_tools:
-            if context is None:
-                from upsonic.tools.context import ToolContext
-                context = ToolContext(deps=None)
             self.wrapped_tools['plan_and_execute'] = self.processor.create_behavioral_wrapper(
-                registered_tools['plan_and_execute'], 
-                context
+                registered_tools['plan_and_execute']
             )
         
         return registered_tools
@@ -369,16 +362,13 @@ class ToolManager:
         self,
         tool_name: str,
         args: Dict[str, Any],
-        context: Optional[ToolContext] = None,
+        metrics: Optional['ToolMetrics'] = None,
         tool_call_id: Optional[str] = None
     ) -> ToolResult:
         """Execute a tool by name using pre-wrapped executor."""
         wrapped = self.wrapped_tools.get(tool_name)
         if not wrapped:
             raise ValueError(f"Tool '{tool_name}' not found or not wrapped")
-        
-        if context:
-            self.processor.current_context = context
         
         if not tool_call_id:
             tool_call_id = f"call_{uuid.uuid4().hex[:8]}"
@@ -469,7 +459,6 @@ class ToolManager:
 
 __all__ = [
     'Tool',
-    'ToolBase', 
     'ToolKit',
     'ToolDefinition',
     'ToolCall',
@@ -483,8 +472,7 @@ __all__ = [
     'ToolConfig',
     'ToolHooks',
     
-    'ToolContext',
-    'AgentDepsT',
+    'ToolMetrics',
     
     'FunctionSchema',
     'generate_function_schema',
@@ -515,6 +503,10 @@ __all__ = [
     
     'MCPTool',
     'MCPHandler',
+    'MultiMCPHandler',
+    'SSEClientParams',
+    'StreamableHTTPClientParams',
+    'prepare_command',
     
     'ToolManager',
     

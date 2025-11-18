@@ -6,7 +6,7 @@ import asyncio
 import inspect
 from typing import Any, Callable, Dict, Optional, TYPE_CHECKING
 
-from upsonic.tools.base import ToolBase, ToolSchema, ToolMetadata
+from upsonic.tools.base import Tool, ToolSchema, ToolMetadata
 from upsonic.tools.config import ToolConfig
 from upsonic.tools.schema import FunctionSchema
 
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from upsonic.tasks.tasks import Task
 
 
-class FunctionTool(ToolBase):
+class FunctionTool(Tool):
     """Wrapper for function-based tools."""
     
     def __init__(
@@ -378,7 +378,7 @@ class FunctionTool(ToolBase):
         return field_value
 
 
-class AgentTool(ToolBase):
+class AgentTool(Tool):
     """Wrapper for agent-based tools."""
     
     def __init__(self, agent: Any):
