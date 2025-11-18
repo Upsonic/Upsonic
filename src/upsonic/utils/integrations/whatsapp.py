@@ -83,7 +83,7 @@ async def get_media_async(media_id: str) -> Union[dict, bytes]:
         return {"error": str(e)}
 
 
-def upload_media(media_data: bytes, mime_type: str, filename: str = "file"):
+def upload_media(media_data: bytes, mime_type: str, filename: str = "file") -> Union[str, dict]:
     """
     Sends a POST request to the Facebook Graph API to upload media for WhatsApp.
 
@@ -91,6 +91,9 @@ def upload_media(media_data: bytes, mime_type: str, filename: str = "file"):
         media_data: Bytes buffer containing the file data
         mime_type (str): The MIME type of the file
         filename (str): The name to use for the file in the upload. Defaults to "file"
+    
+    Returns:
+        Union[str, dict]: Media ID string on success, or error dict on failure
     """
     phone_number_id = get_phone_number_id()
 
@@ -120,7 +123,7 @@ def upload_media(media_data: bytes, mime_type: str, filename: str = "file"):
         return {"error": str(e)}
 
 
-async def upload_media_async(media_data: bytes, mime_type: str, filename: str = "file"):
+async def upload_media_async(media_data: bytes, mime_type: str, filename: str = "file") -> Union[str, dict]:
     """
     Sends a POST request to the Facebook Graph API to upload media for WhatsApp.
 
@@ -128,6 +131,9 @@ async def upload_media_async(media_data: bytes, mime_type: str, filename: str = 
         media_data: Bytes buffer containing the file data
         mime_type (str): The MIME type of the file
         filename (str): The name to use for the file in the upload. Defaults to "file"
+    
+    Returns:
+        Union[str, dict]: Media ID string on success, or error dict on failure
     """
     phone_number_id = get_phone_number_id()
 
@@ -256,9 +262,9 @@ def send_image_message(
         raise
 
 
-def typing_indicator(message_id: Optional[str] = None):
+def typing_indicator(message_id: Optional[str] = None) -> Optional[dict]:
     if not message_id:
-        return
+        return None
 
     phone_number_id = get_phone_number_id()
 
@@ -280,9 +286,9 @@ def typing_indicator(message_id: Optional[str] = None):
         return {"error": str(e)}
 
 
-async def typing_indicator_async(message_id: Optional[str] = None):
+async def typing_indicator_async(message_id: Optional[str] = None) -> Optional[dict]:
     if not message_id:
-        return
+        return None
 
     phone_number_id = get_phone_number_id()
 

@@ -82,7 +82,7 @@ if TYPE_CHECKING:
         WebRead,
     )
 
-def _get_base_classes():
+def _get_base_classes() -> Dict[str, Any]:
     """Lazy import of base classes."""
     from upsonic.tools.base import (
         Tool,
@@ -108,7 +108,7 @@ def _get_base_classes():
         'ObjectJsonSchema': ObjectJsonSchema,
     }
 
-def _get_config_classes():
+def _get_config_classes() -> Dict[str, Any]:
     """Lazy import of config classes."""
     from upsonic.tools.config import (
         tool,
@@ -122,7 +122,7 @@ def _get_config_classes():
         'ToolHooks': ToolHooks,
     }
 
-def _get_context_classes():
+def _get_context_classes() -> Dict[str, Any]:
     """Lazy import of metrics classes."""
     from upsonic.tools.context import (
         ToolMetrics,
@@ -132,7 +132,7 @@ def _get_context_classes():
         'ToolMetrics': ToolMetrics,
     }
 
-def _get_schema_classes():
+def _get_schema_classes() -> Dict[str, Any]:
     """Lazy import of schema classes."""
     from upsonic.tools.schema import (
         FunctionSchema,
@@ -148,7 +148,7 @@ def _get_schema_classes():
         'SchemaGenerationError': SchemaGenerationError,
     }
 
-def _get_processor_classes():
+def _get_processor_classes() -> Dict[str, Any]:
     """Lazy import of processor classes."""
     from upsonic.tools.processor import (
         ToolProcessor,
@@ -162,7 +162,7 @@ def _get_processor_classes():
         'ExternalExecutionPause': ExternalExecutionPause,
     }
 
-def _get_wrapper_classes():
+def _get_wrapper_classes() -> Dict[str, Any]:
     """Lazy import of wrapper classes."""
     from upsonic.tools.wrappers import (
         FunctionTool,
@@ -176,7 +176,7 @@ def _get_wrapper_classes():
         'MethodTool': MethodTool,
     }
 
-def _get_orchestration_classes():
+def _get_orchestration_classes() -> Dict[str, Any]:
     """Lazy import of orchestration classes."""
     from upsonic.tools.orchestration import (
         PlanStep,
@@ -196,7 +196,7 @@ def _get_orchestration_classes():
         'Orchestrator': Orchestrator,
     }
 
-def _get_deferred_classes():
+def _get_deferred_classes() -> Dict[str, Any]:
     """Lazy import of deferred classes."""
     from upsonic.tools.deferred import (
         ExternalToolCall,
@@ -214,7 +214,7 @@ def _get_deferred_classes():
         'DeferredExecutionManager': DeferredExecutionManager,
     }
 
-def _get_mcp_classes():
+def _get_mcp_classes() -> Dict[str, Any]:
     """Lazy import of MCP classes."""
     from upsonic.tools.mcp import (
         MCPTool,
@@ -234,7 +234,7 @@ def _get_mcp_classes():
         'prepare_command': prepare_command,
     }
 
-def _get_builtin_classes():
+def _get_builtin_classes() -> Dict[str, Any]:
     """Lazy import of builtin classes."""
     from upsonic.tools.builtin_tools import (
         AbstractBuiltinTool,
