@@ -4,10 +4,11 @@ import os
 from typing import overload
 
 import httpx
+from openai import AsyncOpenAI
 
+from upsonic.profiles import ModelProfile
 from upsonic.utils.package.exception import UserError
 from upsonic.models import cached_async_http_client
-from upsonic.profiles import ModelProfile
 from upsonic.profiles.amazon import amazon_model_profile
 from upsonic.profiles.anthropic import anthropic_model_profile
 from upsonic.profiles.cohere import cohere_model_profile
@@ -16,17 +17,17 @@ from upsonic.profiles.google import google_model_profile
 from upsonic.profiles.grok import grok_model_profile
 from upsonic.profiles.meta import meta_model_profile
 from upsonic.profiles.mistral import mistral_model_profile
+from upsonic.profiles.moonshotai import moonshotai_model_profile
 from upsonic.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIModelProfile, openai_model_profile
 from upsonic.profiles.qwen import qwen_model_profile
 from upsonic.providers import Provider
 
 try:
     from openai import AsyncOpenAI
-    _OPENAI_AVAILABLE = True
-except ImportError:  # pragma: no cover
-    AsyncOpenAI = None
-    _OPENAI_AVAILABLE = False
-
+except ImportError as _import_error:  # pragma: no cover
+    raise ImportError(
+        'Please install the `openai` package to use the OpenRouter provider, '
+    ) from _import_error
 
 
 class OpenRouterProvider(Provider[AsyncOpenAI]):
@@ -56,6 +57,7 @@ class OpenRouterProvider(Provider[AsyncOpenAI]):
             'amazon': amazon_model_profile,
             'deepseek': deepseek_model_profile,
             'meta-llama': meta_model_profile,
+            'moonshotai': moonshotai_model_profile,
         }
 
         profile = None
@@ -79,6 +81,9 @@ class OpenRouterProvider(Provider[AsyncOpenAI]):
     def __init__(self, *, api_key: str, http_client: httpx.AsyncClient) -> None: ...
 
     @overload
+    def __init__(self, *, http_client: httpx.AsyncClient) -> None: ...
+
+    @overload
     def __init__(self, *, openai_client: AsyncOpenAI | None = None) -> None: ...
 
     def __init__(
@@ -88,14 +93,6 @@ class OpenRouterProvider(Provider[AsyncOpenAI]):
         openai_client: AsyncOpenAI | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        if not _OPENAI_AVAILABLE:
-            from upsonic.utils.printing import import_error
-            import_error(
-                package_name="openai",
-                install_command='pip install openai',
-                feature_name="openai provider"
-            )
-
         api_key = api_key or os.getenv('OPENROUTER_API_KEY')
         if not api_key and openai_client is None:
             raise UserError(

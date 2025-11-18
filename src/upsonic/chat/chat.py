@@ -249,7 +249,7 @@ class Chat:
         """Get the most recent messages."""
         return self._session_manager.get_recent_messages(count)
     
-    def _normalize_input(self, input_data: Union[str, Task], attachments: Optional[List[str]] = None) -> Task:
+    def _normalize_input(self, input_data: Union[str, Task], context: Optional[List[str]] = None) -> Task:
         """Normalize various input types into a Task object."""
         if input_data is None:
             raise ValueError("Input data cannot be None")
@@ -259,13 +259,11 @@ class Chat:
                 raise ValueError("Input string cannot be empty or whitespace only")
             return Task(
                 description=input_data.strip(),
-                attachments=attachments
+                context=context
             )
         elif isinstance(input_data, Task):
             if not input_data.description or not input_data.description.strip():
                 raise ValueError("Task description cannot be empty or whitespace only")
-            if attachments and not input_data.attachments:
-                input_data.attachments = attachments
             return input_data
         else:
             raise TypeError(f"Unsupported input type: {type(input_data)}. Expected str or Task, got {type(input_data)}")
@@ -336,7 +334,7 @@ class Chat:
         self,
         input_data: Union[str, Task],
         *,
-        attachments: Optional[List[str]] = None,
+        context: Optional[List[str]] = None,
         stream: Literal[False] = False,
         **kwargs
     ) -> str: ...
@@ -346,7 +344,7 @@ class Chat:
         self,
         input_data: Union[str, Task],
         *,
-        attachments: Optional[List[str]] = None,
+        context: Optional[List[str]] = None,
         stream: Literal[True],
         **kwargs
     ) -> AsyncIterator[str]: ...
@@ -355,7 +353,7 @@ class Chat:
         self,
         input_data: Union[str, Task],
         *,
-        attachments: Optional[List[str]] = None,
+        context: Optional[List[str]] = None,
         stream: bool = False,
         **kwargs
     ) -> Union[str, AsyncIterator[str]]:
@@ -372,7 +370,7 @@ class Chat:
         
         Args:
             input_data: The message content (string) or Task object
-            attachments: Optional list of file paths to attach
+            context: Optional list of file paths to attach
             stream: Whether to stream the response
             **kwargs: Additional arguments passed to the agent
             
@@ -395,8 +393,8 @@ class Chat:
             async for chunk in chat.invoke("Tell me a story", stream=True):
                 print(chunk, end='', flush=True)
             
-            # With attachments
-            response = await chat.invoke("Analyze this", attachments=["data.csv"])
+            # With context
+            response = await chat.invoke("Analyze this", context=["data.csv"])
             ```
         """
         # State and concurrency checks
@@ -409,7 +407,7 @@ class Chat:
                 raise RuntimeError(f"Maximum concurrent invocations exceeded. Current: {current}, Max allowed: {max_allowed}. Wait for current operations to complete or increase max_concurrent_invocations.")
         
         # Normalize input
-        task = self._normalize_input(input_data, attachments)
+        task = self._normalize_input(input_data, context)
         
         # Add user message to history
         user_message = ChatMessage(
@@ -565,7 +563,7 @@ class Chat:
         self,
         input_data: Union[str, Task],
         *,
-        attachments: Optional[List[str]] = None,
+        context: Optional[List[str]] = None,
         **kwargs
     ) -> AsyncIterator[str]:
         """
@@ -575,7 +573,7 @@ class Chat:
         
         Args:
             input_data: The message content (string) or Task object
-            attachments: Optional list of file paths to attach
+            context: Optional list of file paths to attach
             **kwargs: Additional arguments passed to the agent
             
         Returns:
@@ -588,7 +586,7 @@ class Chat:
             ```
         """
         # Normalize input
-        task = self._normalize_input(input_data, attachments)
+        task = self._normalize_input(input_data, context)
         
         # Add user message to history
         user_message = ChatMessage(

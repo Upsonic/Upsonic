@@ -5,23 +5,23 @@ from typing import overload
 
 from httpx import AsyncClient
 
-from upsonic.utils.package.exception import UserError
 from upsonic.profiles import ModelProfile
+from upsonic.utils.package.exception import UserError
 from upsonic.profiles.deepseek import deepseek_model_profile
 from upsonic.profiles.google import google_model_profile
 from upsonic.profiles.meta import meta_model_profile
 from upsonic.profiles.mistral import mistral_model_profile
+from upsonic.profiles.moonshotai import moonshotai_model_profile
 from upsonic.profiles.qwen import qwen_model_profile
-from upsonic.providers import Provider
 
 try:
     from huggingface_hub import AsyncInferenceClient
-    _HUGGINGFACE_HUB_AVAILABLE = True
-except ImportError:
-    AsyncInferenceClient = None
-    _HUGGINGFACE_HUB_AVAILABLE = False
+except ImportError as _import_error:  # pragma: no cover
+    raise ImportError(
+        'Please install the `huggingface_hub` package to use the HuggingFace provider, '
+    ) from _import_error
 
-
+from upsonic.providers import Provider
 
 
 class HuggingFaceProvider(Provider[AsyncInferenceClient]):
@@ -46,6 +46,7 @@ class HuggingFaceProvider(Provider[AsyncInferenceClient]):
             'qwen': qwen_model_profile,
             'meta-llama': meta_model_profile,
             'mistralai': mistral_model_profile,
+            'moonshotai': moonshotai_model_profile,
         }
 
         if '/' not in model_name:
@@ -79,14 +80,6 @@ class HuggingFaceProvider(Provider[AsyncInferenceClient]):
         http_client: AsyncClient | None = None,
         provider_name: str | None = None,
     ) -> None:
-        if not _HUGGINGFACE_HUB_AVAILABLE:
-            from upsonic.utils.printing import import_error
-            import_error(
-                package_name="huggingface_hub",
-                install_command='pip install huggingface_hub',
-                feature_name="HuggingFace provider"
-            )
-
         """Create a new Hugging Face provider.
 
         Args:

@@ -3,9 +3,10 @@ from __future__ import annotations as _annotations
 from typing import overload
 
 from httpx import AsyncClient as AsyncHTTPClient
+from openai import AsyncOpenAI
 
-from upsonic.models import cached_async_http_client
 from upsonic.profiles import ModelProfile
+from upsonic.models import cached_async_http_client
 from upsonic.profiles.amazon import amazon_model_profile
 from upsonic.profiles.anthropic import anthropic_model_profile
 from upsonic.profiles.cohere import cohere_model_profile
@@ -15,17 +16,17 @@ from upsonic.profiles.grok import grok_model_profile
 from upsonic.profiles.groq import groq_model_profile
 from upsonic.profiles.meta import meta_model_profile
 from upsonic.profiles.mistral import mistral_model_profile
+from upsonic.profiles.moonshotai import moonshotai_model_profile
 from upsonic.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIModelProfile, openai_model_profile
 from upsonic.profiles.qwen import qwen_model_profile
 from upsonic.providers import Provider
 
 try:
     from openai import AsyncOpenAI
-    _OPENAI_AVAILABLE = True
-except ImportError:  # pragma: no cover
-    AsyncOpenAI = None
-    _OPENAI_AVAILABLE = False
-
+except ImportError as _import_error:  # pragma: no cover
+    raise ImportError(
+        'Please install the `openai` package to use the LiteLLM provider, '
+    ) from _import_error
 
 
 class LiteLLMProvider(Provider[AsyncOpenAI]):
@@ -58,6 +59,7 @@ class LiteLLMProvider(Provider[AsyncOpenAI]):
             'meta': meta_model_profile,
             'groq': groq_model_profile,
             'deepseek': deepseek_model_profile,
+            'moonshotai': moonshotai_model_profile,
             'x-ai': grok_model_profile,
             'qwen': qwen_model_profile,
         }
@@ -106,14 +108,6 @@ class LiteLLMProvider(Provider[AsyncOpenAI]):
         openai_client: AsyncOpenAI | None = None,
         http_client: AsyncHTTPClient | None = None,
     ) -> None:
-        if not _OPENAI_AVAILABLE:
-            from upsonic.utils.printing import import_error
-            import_error(
-                package_name="openai",
-                install_command='pip install openai',
-                feature_name="openai provider"
-            )
-
         """Initialize a LiteLLM provider.
 
         Args:

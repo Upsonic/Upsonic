@@ -27,6 +27,7 @@ dependencies = [
     "aiohttp>=3.12.15",
     "requests>=2.32.5",
     "openai>=2.2.0",
+    "genai-prices>=0.0.38",
 ]
 
 [project.optional-dependencies]

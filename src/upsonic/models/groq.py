@@ -1,18 +1,17 @@
 from __future__ import annotations as _annotations
 
-import base64
 from collections.abc import AsyncIterable, AsyncIterator, Iterable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Literal, cast, overload, Any
+from typing import Any, Literal, cast, overload
 
 from pydantic import BaseModel, Json, ValidationError
 from pydantic_core import from_json
 from typing_extensions import assert_never
 
-from upsonic import _utils, usage
 from upsonic.utils.package.exception import ModelHTTPError, UnexpectedModelBehavior
+from upsonic import _utils, usage
 from upsonic.output import DEFAULT_OUTPUT_TOOL_NAME, OutputObjectDefinition
 from upsonic.models._thinking_part import split_content_into_text_and_thinking
 from upsonic._utils import generate_tool_call_id, guard_tool_call_id as _guard_tool_call_id, number_to_datetime
@@ -23,6 +22,7 @@ from upsonic.messages import (
     BuiltinToolCallPart,
     BuiltinToolReturnPart,
     DocumentUrl,
+    FilePart,
     FinishReason,
     ImageUrl,
     ModelMessage,
@@ -38,12 +38,12 @@ from upsonic.messages import (
     ToolReturnPart,
     UserPromptPart,
 )
-from upsonic.profiles import ModelProfile, ModelProfileSpec
-from upsonic.profiles.groq import GroqModelProfile
-from upsonic.providers import Provider, infer_provider
-from upsonic.models.settings import ModelSettings
-from upsonic.tools import ToolDefinition
-from upsonic.models import (
+from ..profiles import ModelProfile, ModelProfileSpec
+from ..profiles.groq import GroqModelProfile
+from ..providers import Provider, infer_provider
+from ..settings import ModelSettings
+from ..tools import ToolDefinition
+from . import (
     Model,
     ModelRequestParameters,
     StreamedResponse,
@@ -56,12 +56,10 @@ try:
     from groq.types import chat
     from groq.types.chat.chat_completion_content_part_image_param import ImageURL
     from groq.types.chat.chat_completion_message import ExecutedTool
-    _GROQ_AVAILABLE = True
-except ImportError:
-    # Optional imports for Groq model
-    # If these are not available, the provider check will catch it when the model is used
-    _GROQ_AVAILABLE = False
-    pass
+except ImportError as _import_error:
+    raise ImportError(
+        'Please install `groq` to use the Groq model, '
+    ) from _import_error
 
 ProductionGroqModelNames = Literal[
     'distil-whisper-large-v3-en',
@@ -118,6 +116,10 @@ class GroqModelSettings(ModelSettings, total=False):
     # ALL FIELDS MUST BE `groq_` PREFIXED SO YOU CAN MERGE THEM WITH OTHER MODELS.
 
     groq_reasoning_format: Literal['hidden', 'raw', 'parsed']
+    """The format of the reasoning output.
+
+    See [the Groq docs](https://console.groq.com/docs/reasoning#reasoning-format) for more details.
+    """
 
 
 @dataclass(init=False)
@@ -138,7 +140,7 @@ class GroqModel(Model):
         self,
         model_name: GroqModelName,
         *,
-        provider: Literal['groq'] | Provider[AsyncGroq] = 'groq',
+        provider: Literal['groq', 'gateway'] | Provider[AsyncGroq] = 'groq',
         profile: ModelProfileSpec | None = None,
         settings: ModelSettings | None = None,
     ):
@@ -153,19 +155,10 @@ class GroqModel(Model):
             profile: The model profile to use. Defaults to a profile picked by the provider based on the model name.
             settings: Model-specific settings that will be used as defaults for this model.
         """
-
-        if not _GROQ_AVAILABLE:
-            from upsonic.utils.printing import import_error
-            import_error(
-                package_name="groq",
-                install_command='pip install groq',
-                feature_name="Groq model"
-            )
-
         self._model_name = model_name
 
         if isinstance(provider, str):
-            provider = infer_provider(provider)
+            provider = infer_provider('gateway/groq' if provider == 'gateway' else provider)
         self._provider = provider
         self.client = provider.client
 
@@ -192,6 +185,10 @@ class GroqModel(Model):
         model_request_parameters: ModelRequestParameters,
     ) -> ModelResponse:
         check_allow_model_requests()
+        model_settings, model_request_parameters = self.prepare_request(
+            model_settings,
+            model_request_parameters,
+        )
         try:
             response = await self._completions_create(
                 messages, False, cast(GroqModelSettings, model_settings or {}), model_request_parameters
@@ -227,6 +224,10 @@ class GroqModel(Model):
         model_request_parameters: ModelRequestParameters,
     ) -> AsyncIterator[StreamedResponse]:
         check_allow_model_requests()
+        model_settings, model_request_parameters = self.prepare_request(
+            model_settings,
+            model_request_parameters,
+        )
         response = await self._completions_create(
             messages, True, cast(GroqModelSettings, model_settings or {}), model_request_parameters
         )
@@ -269,7 +270,7 @@ class GroqModel(Model):
         else:
             tool_choice = 'auto'
 
-        groq_messages = self._map_messages(messages)
+        groq_messages = self._map_messages(messages, model_request_parameters)
 
         response_format: chat.completion_create_params.ResponseFormat | None = None
         if model_request_parameters.output_mode == 'native':
@@ -327,7 +328,7 @@ class GroqModel(Model):
                 if call_part and return_part:  # pragma: no branch
                     items.append(call_part)
                     items.append(return_part)
-        if choice.message.content is not None:
+        if choice.message.content:
             # NOTE: The `<think>` tag is only present if `groq_reasoning_format` is set to `raw`.
             items.extend(split_content_into_text_and_thinking(choice.message.content, self.profile.thinking_tags))
         if choice.message.tool_calls is not None:
@@ -385,7 +386,10 @@ class GroqModel(Model):
                 )
         return tools
 
-    def _map_messages(self, messages: list[ModelMessage]) -> list[chat.ChatCompletionMessageParam]:
+    def _map_messages(
+        self, messages: list[ModelMessage], model_request_parameters: ModelRequestParameters
+    ) -> list[chat.ChatCompletionMessageParam]:
+        """Just maps a `upsonic.Message` to a `groq.types.ChatCompletionMessageParam`."""
         groq_messages: list[chat.ChatCompletionMessageParam] = []
         for message in messages:
             if isinstance(message, ModelRequest):
@@ -404,6 +408,9 @@ class GroqModel(Model):
                     elif isinstance(item, BuiltinToolCallPart | BuiltinToolReturnPart):  # pragma: no cover
                         # These are not currently sent back
                         pass
+                    elif isinstance(item, FilePart):  # pragma: no cover
+                        # Files generated by models are not sent back to models that don't themselves generate files.
+                        pass
                     else:
                         assert_never(item)
                 message_param = chat.ChatCompletionAssistantMessageParam(role='assistant')
@@ -416,7 +423,7 @@ class GroqModel(Model):
                 groq_messages.append(message_param)
             else:
                 assert_never(message)
-        if instructions := self._get_instructions(messages):
+        if instructions := self._get_instructions(messages, model_request_parameters):
             groq_messages.insert(0, chat.ChatCompletionSystemMessageParam(role='system', content=instructions))
         return groq_messages
 
@@ -491,9 +498,8 @@ class GroqModel(Model):
                     image_url = ImageURL(url=item.url)
                     content.append(chat.ChatCompletionContentPartImageParam(image_url=image_url, type='image_url'))
                 elif isinstance(item, BinaryContent):
-                    base64_encoded = base64.b64encode(item.data).decode('utf-8')
                     if item.is_image:
-                        image_url = ImageURL(url=f'data:{item.media_type};base64,{base64_encoded}')
+                        image_url = ImageURL(url=item.data_uri)
                         content.append(chat.ChatCompletionContentPartImageParam(image_url=image_url, type='image_url'))
                     else:
                         raise RuntimeError('Only images are supported for binary content in Groq.')
@@ -518,6 +524,8 @@ class GroqStreamedResponse(StreamedResponse):
     async def _get_event_iterator(self) -> AsyncIterator[ModelResponseStreamEvent]:  # noqa: C901
         try:
             executed_tool_call_id: str | None = None
+            reasoning_index = 0
+            reasoning = False
             async for chunk in self._response:
                 self._usage += _map_usage(chunk)
 
@@ -534,10 +542,16 @@ class GroqStreamedResponse(StreamedResponse):
                     self.finish_reason = _FINISH_REASON_MAP.get(raw_finish_reason)
 
                 if choice.delta.reasoning is not None:
+                    if not reasoning:
+                        reasoning_index += 1
+                        reasoning = True
+
                     # NOTE: The `reasoning` field is only present if `groq_reasoning_format` is set to `parsed`.
                     yield self._parts_manager.handle_thinking_delta(
-                        vendor_part_id='reasoning', content=choice.delta.reasoning
+                        vendor_part_id=f'reasoning-{reasoning_index}', content=choice.delta.reasoning
                     )
+                else:
+                    reasoning = False
 
                 if choice.delta.executed_tools:
                     for tool in choice.delta.executed_tools:
@@ -546,18 +560,18 @@ class GroqStreamedResponse(StreamedResponse):
                         )
                         if call_part:
                             executed_tool_call_id = call_part.tool_call_id
-                            yield self._parts_manager.handle_builtin_tool_call_part(
+                            yield self._parts_manager.handle_part(
                                 vendor_part_id=f'executed_tools-{tool.index}-call', part=call_part
                             )
                         if return_part:
                             executed_tool_call_id = None
-                            yield self._parts_manager.handle_builtin_tool_return_part(
+                            yield self._parts_manager.handle_part(
                                 vendor_part_id=f'executed_tools-{tool.index}-return', part=return_part
                             )
 
                 # Handle the text part of the response
                 content = choice.delta.content
-                if content is not None:
+                if content:
                     maybe_event = self._parts_manager.handle_text_delta(
                         vendor_part_id='content',
                         content=content,

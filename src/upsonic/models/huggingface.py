@@ -1,11 +1,10 @@
 from __future__ import annotations as _annotations
 
-import base64
 from collections.abc import AsyncIterable, AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Literal, cast, overload
+from typing import Any, Literal, cast, overload
 
 from typing_extensions import assert_never
 
@@ -19,7 +18,9 @@ from upsonic.messages import (
     BinaryContent,
     BuiltinToolCallPart,
     BuiltinToolReturnPart,
+    CachePoint,
     DocumentUrl,
+    FilePart,
     FinishReason,
     ImageUrl,
     ModelMessage,
@@ -40,12 +41,7 @@ from upsonic.profiles import ModelProfile, ModelProfileSpec
 from upsonic.providers import Provider, infer_provider
 from upsonic.models.settings import ModelSettings
 from upsonic.tools import ToolDefinition
-from upsonic.models import (
-    Model,
-    ModelRequestParameters,
-    StreamedResponse,
-    check_allow_model_requests,
-)
+from upsonic.models import Model, ModelRequestParameters, StreamedResponse, check_allow_model_requests
 
 try:
     import aiohttp
@@ -63,12 +59,10 @@ try:
     )
     from huggingface_hub.errors import HfHubHTTPError
 
-    _HUGGINGFACE_HUB_AVAILABLE = True
-except ImportError:
-    # Optional imports for HuggingFace model
-    # If these are not available, the provider check will catch it when the model is used
-    _HUGGINGFACE_HUB_AVAILABLE = False
-    pass
+except ImportError as _import_error:
+    raise ImportError(
+        'Please install `huggingface_hub` to use Hugging Face Inference Providers, '
+    ) from _import_error
 
 __all__ = (
     'HuggingFaceModel',
@@ -142,15 +136,6 @@ class HuggingFaceModel(Model):
             profile: The model profile to use. Defaults to a profile picked by the provider based on the model name.
             settings: Model-specific settings that will be used as defaults for this model.
         """
-
-        if not _HUGGINGFACE_HUB_AVAILABLE:
-            from upsonic.utils.printing import import_error
-            import_error(
-                package_name="huggingface_hub",
-                install_command='pip install huggingface_hub',
-                feature_name="Huggingface_Hub model"
-            )
-
         self._model_name = model_name
         if isinstance(provider, str):
             provider = infer_provider(provider)
@@ -176,6 +161,10 @@ class HuggingFaceModel(Model):
         model_request_parameters: ModelRequestParameters,
     ) -> ModelResponse:
         check_allow_model_requests()
+        model_settings, model_request_parameters = self.prepare_request(
+            model_settings,
+            model_request_parameters,
+        )
         response = await self._completions_create(
             messages, False, cast(HuggingFaceModelSettings, model_settings or {}), model_request_parameters
         )
@@ -190,6 +179,10 @@ class HuggingFaceModel(Model):
         model_request_parameters: ModelRequestParameters,
     ) -> AsyncIterator[StreamedResponse]:
         check_allow_model_requests()
+        model_settings, model_request_parameters = self.prepare_request(
+            model_settings,
+            model_request_parameters,
+        )
         response = await self._completions_create(
             messages, True, cast(HuggingFaceModelSettings, model_settings or {}), model_request_parameters
         )
@@ -232,7 +225,7 @@ class HuggingFaceModel(Model):
         if model_request_parameters.builtin_tools:
             raise UserError('HuggingFace does not support built-in tools')
 
-        hf_messages = await self._map_messages(messages)
+        hf_messages = await self._map_messages(messages, model_request_parameters)
 
         try:
             return await self.client.chat.completions.create(  # type: ignore
@@ -278,7 +271,7 @@ class HuggingFaceModel(Model):
 
         items: list[ModelResponsePart] = []
 
-        if content is not None:
+        if content:
             items.extend(split_content_into_text_and_thinking(content, self.profile.thinking_tags))
         if tool_calls is not None:
             for c in tool_calls:
@@ -323,8 +316,9 @@ class HuggingFaceModel(Model):
         return [self._map_tool_definition(r) for r in model_request_parameters.tool_defs.values()]
 
     async def _map_messages(
-        self, messages: list[ModelMessage]
+        self, messages: list[ModelMessage], model_request_parameters: ModelRequestParameters
     ) -> list[ChatCompletionInputMessage | ChatCompletionOutputMessage]:
+        """Just maps a `upsonic.Message` to a `huggingface_hub.ChatCompletionInputMessage`."""
         hf_messages: list[ChatCompletionInputMessage | ChatCompletionOutputMessage] = []
         for message in messages:
             if isinstance(message, ModelRequest):
@@ -344,6 +338,9 @@ class HuggingFaceModel(Model):
                     elif isinstance(item, BuiltinToolCallPart | BuiltinToolReturnPart):  # pragma: no cover
                         # This is currently never returned from huggingface
                         pass
+                    elif isinstance(item, FilePart):  # pragma: no cover
+                        # Files generated by models are not sent back to models that don't themselves generate files.
+                        pass
                     else:
                         assert_never(item)
                 message_param = ChatCompletionInputMessage(role='assistant')  # type: ignore
@@ -356,7 +353,7 @@ class HuggingFaceModel(Model):
                 hf_messages.append(message_param)
             else:
                 assert_never(message)
-        if instructions := self._get_instructions(messages):
+        if instructions := self._get_instructions(messages, model_request_parameters):
             hf_messages.insert(0, ChatCompletionInputMessage(content=instructions, role='system'))  # type: ignore
         return hf_messages
 
@@ -385,8 +382,6 @@ class HuggingFaceModel(Model):
                 },
             }
         )
-        if f.strict is not None:
-            tool_param['function']['strict'] = f.strict
         return tool_param
 
     async def _map_user_message(
@@ -435,9 +430,8 @@ class HuggingFaceModel(Model):
                     url = ChatCompletionInputURL(url=item.url)  # type: ignore
                     content.append(ChatCompletionInputMessageChunk(type='image_url', image_url=url))  # type: ignore
                 elif isinstance(item, BinaryContent):
-                    base64_encoded = base64.b64encode(item.data).decode('utf-8')
                     if item.is_image:
-                        url = ChatCompletionInputURL(url=f'data:{item.media_type};base64,{base64_encoded}')  # type: ignore
+                        url = ChatCompletionInputURL(url=item.data_uri)  # type: ignore
                         content.append(ChatCompletionInputMessageChunk(type='image_url', image_url=url))  # type: ignore
                     else:  # pragma: no cover
                         raise RuntimeError(f'Unsupported binary content type: {item.media_type}')
@@ -447,6 +441,9 @@ class HuggingFaceModel(Model):
                     raise NotImplementedError('DocumentUrl is not supported for Hugging Face')
                 elif isinstance(item, VideoUrl):
                     raise NotImplementedError('VideoUrl is not supported for Hugging Face')
+                elif isinstance(item, CachePoint):
+                    # Hugging Face doesn't support prompt caching via CachePoint
+                    pass
                 else:
                     assert_never(item)
         return ChatCompletionInputMessage(role='user', content=content)  # type: ignore
@@ -482,7 +479,7 @@ class HuggingFaceStreamedResponse(StreamedResponse):
 
             # Handle the text part of the response
             content = choice.delta.content
-            if content is not None:
+            if content:
                 maybe_event = self._parts_manager.handle_text_delta(
                     vendor_part_id='content',
                     content=content,

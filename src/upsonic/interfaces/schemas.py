@@ -1,0 +1,62 @@
+"""
+Schemas module for Interface Manager.
+
+This module provides common Pydantic models for API requests and responses
+used across all interfaces. Interface-specific schemas are in their respective modules.
+"""
+
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field
+
+
+# ============================================================================
+# Common Schemas
+# ============================================================================
+
+class HealthCheckResponse(BaseModel):
+    """Response model for health check endpoint."""
+    
+    status: str = Field(default="healthy", description="Service health status")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Current timestamp")
+    interfaces: List[str] = Field(default_factory=list, description="List of active interfaces")
+    connections: int = Field(default=0, description="Number of active WebSocket connections")
+
+
+class ErrorResponse(BaseModel):
+    """Standard error response model."""
+    
+    error: str = Field(..., description="Error message")
+    detail: Optional[str] = Field(None, description="Detailed error information")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Error timestamp")
+
+
+# ============================================================================
+# WebSocket Schemas
+# ============================================================================
+
+class WebSocketMessage(BaseModel):
+    """Model for WebSocket messages."""
+    
+    type: str = Field(..., description="Message type (e.g., 'agent_response', 'status', 'error')")
+    data: Dict[str, Any] = Field(..., description="Message data")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Message timestamp")
+    connection_id: Optional[str] = Field(None, description="Connection ID")
+
+
+class WebSocketConnectionInfo(BaseModel):
+    """Model for WebSocket connection information."""
+    
+    id: str = Field(..., description="Unique identifier (UUID) for this connection")
+    name: str = Field(..., description="Human-readable name for this connection")
+    connection_id: str = Field(..., description="Client-provided connection ID (from URL path)")
+    connected_at: datetime = Field(..., description="Connection timestamp")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Connection metadata")
+
+
+class WebSocketStatusResponse(BaseModel):
+    """Response model for WebSocket status endpoint."""
+    
+    total_connections: int = Field(..., description="Total number of active connections")
+    connections: List[WebSocketConnectionInfo] = Field(..., description="List of active connections")

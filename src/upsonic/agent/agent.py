@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from upsonic.safety_engine.base import Policy
     from upsonic.safety_engine.exceptions import DisallowedOperation
     from upsonic.safety_engine.models import PolicyInput, RuleOutput
-    from upsonic.tools import ToolManager, ToolContext, ToolDefinition
+    from upsonic.tools import ToolManager, ToolMetrics, ToolDefinition
     from upsonic.usage import RequestUsage
     from upsonic.agent.context_managers import (
         CallManager, ContextManager, ReliabilityManager, 
@@ -56,7 +56,7 @@ else:
     PolicyInput = "PolicyInput"
     RuleOutput = "RuleOutput"
     ToolManager = "ToolManager"
-    ToolContext = "ToolContext"
+    ToolMetrics = "ToolMetrics"
     ToolDefinition = "ToolDefinition"
     RequestUsage = "RequestUsage"
     validate_attachments_exist = "validate_attachments_exist"
@@ -316,7 +316,6 @@ class Agent(BaseAgent):
         self._cache_manager = CacheManager(session_id=f"agent_{self.agent_id}")
         self.tool_manager = ToolManager()
         
-        self.tool_call_count = 0
         self._current_messages = []
         self._tool_call_count = 0
         
@@ -461,11 +460,9 @@ class Agent(BaseAgent):
         if not task.tools:
             return
         
-        from upsonic.tools import ToolContext
-        self._context = ToolContext(
-            deps=getattr(self, 'dependencies', None),
-            agent_id=self.name,
-            max_retries=self.retry,
+        from upsonic.tools import ToolMetrics
+        self._tool_metrics = ToolMetrics(
+            tool_call_count=self._tool_call_count,
             tool_call_limit=self.tool_call_limit
         )
         
@@ -493,7 +490,6 @@ class Agent(BaseAgent):
         
         self.tool_manager.register_tools(
             tools=final_tools,
-            context=self._context,
             task=task,
             agent_instance=agent_for_this_run
         )
@@ -630,7 +626,6 @@ class Agent(BaseAgent):
         Other tools can be executed in parallel if multiple are called.
         """
         from upsonic.messages import ToolReturnPart
-        from upsonic.tools import ToolContext
         
         if not tool_calls:
             return []
@@ -662,29 +657,16 @@ class Agent(BaseAgent):
         
         for tool_call in sequential_calls:
             try:
-                task_id = None
-                if hasattr(self, 'current_task') and self.current_task:
-                    task_id = getattr(self.current_task, 'id', None) or getattr(self.current_task, 'price_id', None)
-                
                 result = await self.tool_manager.execute_tool(
                     tool_name=tool_call.tool_name,
                     args=tool_call.args_as_dict(),
-                    context=ToolContext(
-                        deps=getattr(self, 'dependencies', None),
-                        agent_id=self.name,
-                        task_id=task_id,
-                        messages=self._current_messages,
-                        retry=0,
-                        max_retries=self.retry,
-                        tool_call_count=self._tool_call_count,
-                        tool_call_limit=self.tool_call_limit
-                    ),
+                    metrics=self._tool_metrics,
                     tool_call_id=tool_call.tool_call_id
                 )
                 
                 self._tool_call_count += 1
-                if hasattr(self, '_context') and self._context:
-                    self._context.tool_call_count = self._tool_call_count
+                if hasattr(self, '_tool_metrics') and self._tool_metrics:
+                    self._tool_metrics.tool_call_count = self._tool_call_count
                 
                 tool_return = ToolReturnPart(
                     tool_name=result.tool_name,
@@ -709,23 +691,10 @@ class Agent(BaseAgent):
             async def execute_single_tool(tool_call: "ToolCallPart") -> "ToolReturnPart":
                 """Execute a single tool call and return the result."""
                 try:
-                    task_id = None
-                    if hasattr(self, 'current_task') and self.current_task:
-                        task_id = getattr(self.current_task, 'id', None) or getattr(self.current_task, 'price_id', None)
-                    
                     result = await self.tool_manager.execute_tool(
                         tool_name=tool_call.tool_name,
                         args=tool_call.args_as_dict(),
-                        context=ToolContext(
-                            deps=getattr(self, 'dependencies', None),
-                            agent_id=self.name,
-                            task_id=task_id,
-                            messages=self._current_messages,
-                            retry=0,
-                            max_retries=self.retry,
-                            tool_call_count=self._tool_call_count,
-                            tool_call_limit=self.tool_call_limit
-                        ),
+                        metrics=self._tool_metrics,
                         tool_call_id=tool_call.tool_call_id
                     )
                     
@@ -752,8 +721,8 @@ class Agent(BaseAgent):
             )
             
             self._tool_call_count += len(parallel_calls)
-            if hasattr(self, '_context') and self._context:
-                self._context.tool_call_count = self._tool_call_count
+            if hasattr(self, '_tool_metrics') and self._tool_metrics:
+                self._tool_metrics.tool_call_count = self._tool_call_count
             
             results.extend(parallel_results)
         
@@ -1369,9 +1338,21 @@ class Agent(BaseAgent):
             return self._run_result.output
     
     def _extract_output(self, response: "ModelResponse", task: "Task") -> Any:
-        """Extract output from model response based on task response format."""
+        """Extract output from model response based on task response format.
+        
+        For image generation tasks, if the response contains images, returns the bytes
+        of the first image. Otherwise, extracts text content based on the task's
+        response format.
+        """
         from upsonic.messages import TextPart
         
+        # Check for images first - if images are present, return bytes from the first image
+        images = response.images
+        if images:
+            # Return bytes from the first image
+            return images[0].data
+        
+        # Extract text parts for non-image responses
         text_parts = [part.content for part in response.parts if isinstance(part, TextPart)]
         
         if task.response_format == str or task.response_format is str:
@@ -1550,12 +1531,17 @@ class Agent(BaseAgent):
     
     def _extract_text_from_stream_event(self, event: "ModelResponseStreamEvent") -> Optional[str]:
         """Extract text content from a streaming event."""
-        from upsonic.messages import PartStartEvent, PartDeltaEvent, TextPart
+        from upsonic.messages import PartStartEvent, PartDeltaEvent, TextPart, TextPartDelta
         
         if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
             return event.part.content
-        elif isinstance(event, PartDeltaEvent) and hasattr(event.delta, 'content_delta'):
-            return event.delta.content_delta
+        elif isinstance(event, PartDeltaEvent):
+            # Check if delta is a TextPartDelta specifically
+            if isinstance(event.delta, TextPartDelta):
+                return event.delta.content_delta
+            # Fallback to hasattr check for compatibility
+            elif hasattr(event.delta, 'content_delta'):
+                return event.delta.content_delta
         return None
     
     async def _create_stream_iterator(
@@ -1798,7 +1784,6 @@ class Agent(BaseAgent):
         if hasattr(task, '_continuation_state') and task._continuation_state:
             saved_state = task._continuation_state
             self._tool_call_count = saved_state.get('tool_call_count', 0)
-            self.tool_call_count = saved_state.get('tool_call_count', 0)
             self._tool_limit_reached = saved_state.get('tool_limit_reached', False)
             self._current_messages = saved_state.get('current_messages', [])
         

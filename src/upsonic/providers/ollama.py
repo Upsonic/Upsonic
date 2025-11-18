@@ -3,13 +3,15 @@ from __future__ import annotations as _annotations
 import os
 
 import httpx
+from openai import AsyncOpenAI
 
+from upsonic.profiles import ModelProfile
 from upsonic.utils.package.exception import UserError
 from upsonic.models import cached_async_http_client
-from upsonic.profiles import ModelProfile
 from upsonic.profiles.cohere import cohere_model_profile
 from upsonic.profiles.deepseek import deepseek_model_profile
 from upsonic.profiles.google import google_model_profile
+from upsonic.profiles.harmony import harmony_model_profile
 from upsonic.profiles.meta import meta_model_profile
 from upsonic.profiles.mistral import mistral_model_profile
 from upsonic.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIModelProfile
@@ -18,11 +20,10 @@ from upsonic.providers import Provider
 
 try:
     from openai import AsyncOpenAI
-    _OPENAI_AVAILABLE = True
-except ImportError:  # pragma: no cover
-    AsyncOpenAI = None
-    _OPENAI_AVAILABLE = False
-
+except ImportError as _import_error:  # pragma: no cover
+    raise ImportError(
+        'Please install the `openai` package to use the Ollama provider, '
+    ) from _import_error
 
 
 class OllamaProvider(Provider[AsyncOpenAI]):
@@ -49,6 +50,7 @@ class OllamaProvider(Provider[AsyncOpenAI]):
             'deepseek': deepseek_model_profile,
             'mistral': mistral_model_profile,
             'command': cohere_model_profile,
+            'gpt-oss': harmony_model_profile,
         }
 
         profile = None
@@ -68,14 +70,6 @@ class OllamaProvider(Provider[AsyncOpenAI]):
         openai_client: AsyncOpenAI | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        if not _OPENAI_AVAILABLE:
-            from upsonic.utils.printing import import_error
-            import_error(
-                package_name="openai",
-                install_command='pip install openai',
-                feature_name="openai provider"
-            )
-
         """Create a new Ollama provider.
 
         Args:
