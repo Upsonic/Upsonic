@@ -327,7 +327,6 @@ class ToolManager:
     def register_tools(
         self,
         tools: list,
-        metrics: Optional['ToolMetrics'] = None,
         task: Optional['Task'] = None,
         agent_instance: Optional[Any] = None
     ) -> Dict[str, Tool]:

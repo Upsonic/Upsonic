@@ -490,7 +490,6 @@ class Agent(BaseAgent):
         
         self.tool_manager.register_tools(
             tools=final_tools,
-            metrics=self._tool_metrics,
             task=task,
             agent_instance=agent_for_this_run
         )

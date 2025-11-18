@@ -865,7 +865,6 @@ class Model(Runnable[Any, Any]):
         
         self._tool_manager.register_tools(
             tools=self._tools,
-            metrics=self._tool_metrics,
             task=None,
             agent_instance=None
         )
@@ -1058,7 +1057,6 @@ class Model(Runnable[Any, Any]):
                 result = await self._tool_manager.execute_tool(
                     tool_name=tool_call.tool_name,
                     args=tool_call.args_as_dict(),
-                    context=self._tool_context,
                     tool_call_id=tool_call.tool_call_id
                 )
                 
