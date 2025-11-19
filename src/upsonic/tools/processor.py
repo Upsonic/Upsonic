@@ -45,7 +45,6 @@ class ToolProcessor:
     
     def __init__(self):
         self.registered_tools: Dict[str, Tool] = {}
-        self.tool_definitions: Dict[str, ToolDefinition] = {}
         self.mcp_handlers: List[Any] = []
     
     def process_tools(
