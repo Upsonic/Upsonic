@@ -28,10 +28,11 @@ dependencies = [
     "requests>=2.32.5",
     "openai>=2.2.0",
     "genai-prices>=0.0.38",
+    "protobuf>=5.27.2,<6.0.0",
 ]
 
 [project.optional-dependencies]
-rag = [
+vectordb = [
     "chromadb>=1.0.20",
     "faiss-cpu>=1.12.0",
     "pinecone>=7.3.0",
@@ -133,6 +134,9 @@ ocr = [
     "rapidocr-onnxruntime>=1.4.4",
 ]
 ocr-gpu = []
+custom-tools = [
+    "slack-sdk>=3.38.0",
+]
 
 [project.scripts]
 upsonic = "upsonic.cli.main:main"

@@ -103,6 +103,9 @@ class KnowledgeBase:
         if not sources:
             raise ValueError("KnowledgeBase must be initialized with at least one source.")
 
+        # Validate that all file/directory sources exist before processing
+        self._validate_sources_exist(sources)
+
         # Core components
         self.sources: List[Union[str, Path]] = self._resolve_sources(sources)
         self.embedding_provider: EmbeddingProvider = embedding_provider
@@ -137,6 +140,63 @@ class KnowledgeBase:
             f"{len(self.loaders)} loaders, {len(self.splitters)} splitters",
             context="KnowledgeBase"
         )
+
+    def _validate_sources_exist(self, sources: Union[str, Path, List[Union[str, Path]]]) -> None:
+        """
+        Validate that all file and directory sources exist before processing.
+        
+        This method checks that:
+        - File paths exist and are files
+        - Directory paths exist and are directories
+        - String content sources are skipped (they don't need to exist as files)
+        
+        Args:
+            sources: Single source or list of sources to validate
+            
+        Raises:
+            FileNotFoundError: If any file or directory source doesn't exist
+            ValueError: If a path exists but is not the expected type (file vs directory)
+        """
+        if not isinstance(sources, list):
+            source_list = [sources]
+        else:
+            source_list = sources
+        
+        missing_sources = []
+        
+        for item in source_list:
+            # Skip string content sources (they don't need to exist as files)
+            if isinstance(item, str) and self._is_direct_content(item):
+                continue
+            
+            try:
+                path_item = Path(item)
+                
+                # Check if path exists
+                if not path_item.exists():
+                    missing_sources.append(str(item))
+                    continue
+                
+                # Validate that files are actually files and directories are actually directories
+                if path_item.is_file():
+                    # File exists and is a file - valid
+                    continue
+                elif path_item.is_dir():
+                    # Directory exists and is a directory - valid
+                    continue
+                else:
+                    # Path exists but is neither file nor directory (e.g., symlink to nowhere)
+                    missing_sources.append(str(item))
+                    
+            except (OSError, ValueError) as e:
+                # If we can't even create a Path, it's invalid
+                missing_sources.append(str(item))
+        
+        if missing_sources:
+            raise FileNotFoundError(
+                f"The following source(s) do not exist: {', '.join(missing_sources)}. "
+                f"Please ensure all file and directory paths are valid and exist."
+            )
 
     def _resolve_sources(self, sources: Union[str, Path, List[Union[str, Path]]]) -> List[Union[str, Path]]:
         """

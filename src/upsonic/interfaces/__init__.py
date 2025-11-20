@@ -31,6 +31,7 @@ Example:
 from upsonic.interfaces.base import Interface
 from upsonic.interfaces.manager import InterfaceManager
 from upsonic.interfaces.whatsapp.interface import WhatsAppInterface
+from upsonic.interfaces.slack import SlackInterface
 from upsonic.interfaces.settings import InterfaceSettings
 from upsonic.interfaces.websocket_manager import WebSocketManager, WebSocketConnection
 from upsonic.interfaces.auth import (
@@ -53,6 +54,7 @@ from upsonic.interfaces.whatsapp.schemas import WhatsAppWebhookPayload
 
 # Aliases for convenience
 Whatsapp = WhatsAppInterface  # Shortened alias
+Slack = SlackInterface
 
 __all__ = [
     # Core classes
@@ -63,6 +65,8 @@ __all__ = [
     # Interface implementations
     "WhatsAppInterface",
     "Whatsapp",  # Alias
+    "SlackInterface",
+    "Slack",
     
     # WebSocket
     "WebSocketManager",

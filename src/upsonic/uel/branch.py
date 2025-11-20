@@ -19,8 +19,8 @@ class RunnableBranch(Runnable[Input, Output]):
         model = infer_model("gpt-4o")
         
         # Define branch chains
-        langchain_chain = (
-            ChatPromptTemplate.from_template("Expert response about LangChain: {question}")
+        upsonic_chain = (
+            ChatPromptTemplate.from_template("Expert response about Upsonic: {question}")
             | model
         )
         
@@ -36,12 +36,12 @@ class RunnableBranch(Runnable[Input, Output]):
         
         # Create branch with conditions
         branch = RunnableBranch(
-            (lambda x: "langchain" in x["topic"].lower(), langchain_chain),
+            (lambda x: "upsonic" in x["topic"].lower(), upsonic_chain),
             (lambda x: "anthropic" in x["topic"].lower(), anthropic_chain),
             general_chain  # default branch
         )
         
-        result = branch.invoke({"topic": "langchain", "question": "How does it work?"})
+        result = branch.invoke({"topic": "upsonic", "question": "How does it work?"})
         ```
     """
     

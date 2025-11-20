@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import List, Optional, Union
 
 import uvicorn
-from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect, status
+from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
@@ -148,6 +148,15 @@ class InterfaceManager:
             lifespan=lifespan,
         )
         
+        # Add Request ID Middleware
+        @app.middleware("http")
+        async def request_id_middleware(request: Request, call_next):
+            request_id = str(uuid.uuid4())
+            request.state.request_id = request_id
+            response = await call_next(request)
+            response.headers["X-Request-ID"] = request_id
+            return response
+        
         # Add CORS middleware if enabled
         if self.settings.cors_enabled:
             app.add_middleware(
@@ -169,7 +178,7 @@ class InterfaceManager:
         
         # Add request size and timeout validation middleware
         @app.middleware("http")
-        async def validate_request_middleware(request, call_next):
+        async def validate_request_middleware(request: Request, call_next):
             """
             Middleware to validate request size and add timeout configuration.
             
@@ -215,8 +224,9 @@ class InterfaceManager:
         
         # Add global exception handler
         @app.exception_handler(Exception)
-        async def global_exception_handler(request, exc: Exception):
-            error_log(f"Unhandled exception: {exc}", exc_info=True)
+        async def global_exception_handler(request: Request, exc: Exception):
+            import traceback
+            error_log(f"Unhandled exception: {exc}\n{traceback.format_exc()}")
             return JSONResponse(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 content=ErrorResponse(
@@ -256,9 +266,21 @@ class InterfaceManager:
             
             Returns system status and information about active interfaces.
             """
+            interface_statuses = []
+            for iface in self.interfaces:
+                try:
+                    status = await iface.health_check()
+                    interface_statuses.append(status)
+                except Exception as e:
+                    interface_statuses.append({
+                        "name": iface.get_name(),
+                        "status": "error",
+                        "error": str(e)
+                    })
+            
             return HealthCheckResponse(
                 status="healthy",
-                interfaces=[iface.get_name() for iface in self.interfaces],
+                interfaces=interface_statuses,
                 connections=self.websocket_manager.get_connection_count()
             )
         
@@ -573,6 +595,6 @@ class InterfaceManager:
         except KeyboardInterrupt:
             info_log("Server stopped by user")
         except Exception as e:
-            error_log(f"Server error: {e}", exc_info=True)
+            import traceback
+            error_log(f"Server error: {e}\n{traceback.format_exc()}")
             raise
-

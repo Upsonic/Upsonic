@@ -29,7 +29,6 @@ from upsonic.tools.custom_tools.whatsapp import WhatsAppTools
 
 if TYPE_CHECKING:
     from upsonic.agent import Agent
-    from upsonic.interfaces.settings import InterfaceSettings
 
 
 class WhatsAppInterface(Interface):
@@ -46,7 +45,6 @@ class WhatsAppInterface(Interface):
     
     Attributes:
         agent: The AI agent that processes messages
-        settings: Interface settings for authentication and configuration
         whatsapp_tools: WhatsApp API toolkit for sending messages
         verify_token: Token for webhook verification
         app_secret: App secret for webhook signature validation
@@ -55,7 +53,6 @@ class WhatsAppInterface(Interface):
     def __init__(
         self,
         agent: "Agent",
-        settings: Optional["InterfaceSettings"] = None,
         verify_token: Optional[str] = None,
         app_secret: Optional[str] = None,
         name: str = "WhatsApp",
@@ -65,15 +62,11 @@ class WhatsAppInterface(Interface):
         
         Args:
             agent: The AI agent to process messages
-            settings: Interface settings (optional, will use defaults if not provided)
             verify_token: WhatsApp webhook verification token (or set WHATSAPP_VERIFY_TOKEN)
             app_secret: WhatsApp app secret for signature validation (or set WHATSAPP_APP_SECRET)
             name: Interface name (defaults to "WhatsApp")
         """
         super().__init__(agent, name)
-        
-        from upsonic.interfaces.settings import InterfaceSettings
-        self.settings = settings or InterfaceSettings()
         
         # Initialize WhatsApp tools for sending messages
         self.whatsapp_tools = WhatsAppTools()
@@ -95,6 +88,29 @@ class WhatsAppInterface(Interface):
             )
         
         info_log(f"WhatsApp interface initialized with agent: {agent}")
+    
+    async def health_check(self) -> Dict[str, Any]:
+        """
+        Check the health status of the WhatsApp interface.
+        
+        Returns:
+            Dict[str, Any]: Health status
+        """
+        status_data = {
+            "status": "active",
+            "name": self.name,
+            "id": self.id,
+            "configuration": {
+                "verify_token_configured": bool(self.verify_token),
+                "app_secret_configured": bool(self.app_secret),
+            }
+        }
+        
+        if not self.verify_token:
+            status_data["status"] = "degraded"
+            status_data["issues"] = ["WHATSAPP_VERIFY_TOKEN is missing"]
+            
+        return status_data
     
     def _validate_webhook_signature(self, payload: bytes, signature: str) -> bool:
         """
@@ -274,7 +290,7 @@ class WhatsAppInterface(Interface):
             media_attachments: Optional dict with media attachments (image, video, audio, document)
         """
         try:
-            from upsonic.tasks import Task
+            from upsonic.tasks.tasks import Task
             from upsonic.messages.messages import BinaryContent
             
             # Build task input
@@ -341,7 +357,8 @@ class WhatsAppInterface(Interface):
                 await self._send_whatsapp_message(recipient=sender, message=text_content)
             
         except Exception as e:
-            error_log(f"Error processing message with agent: {e}", exc_info=True)
+            import traceback
+            error_log(f"Error processing message with agent: {e}\n{traceback.format_exc()}")
             raise
     
     async def _process_text_message(
@@ -376,7 +393,8 @@ class WhatsAppInterface(Interface):
             )
             
         except Exception as e:
-            error_log(f"Error processing text message from {sender}: {e}", exc_info=True)
+            import traceback
+            error_log(f"Error processing text message from {sender}: {e}\n{traceback.format_exc()}")
             
             # Send error message to user
             try:
@@ -468,7 +486,8 @@ class WhatsAppInterface(Interface):
             )
             
         except Exception as e:
-            error_log(f"Error processing {media_type_key} message from {sender}: {e}", exc_info=True)
+            import traceback
+            error_log(f"Error processing {media_type_key} message from {sender}: {e}\n{traceback.format_exc()}")
             try:
                 await self._send_whatsapp_message(
                     recipient=sender,
@@ -477,13 +496,12 @@ class WhatsAppInterface(Interface):
             except Exception as send_error:
                 error_log(f"Error sending error message: {str(send_error)}")
     
-    async def _process_message(self, message: Dict[str, Any], metadata: Dict[str, Any]):
+    async def _process_message(self, message: Dict[str, Any]):
         """
         Route message to appropriate handler based on type.
         
         Args:
             message: Message data from webhook
-            metadata: Metadata from webhook
         """
         message_type = message.get("type")
         sender = message.get("from")
@@ -610,8 +628,7 @@ class WhatsAppInterface(Interface):
                             for message in value.messages:
                                 background_tasks.add_task(
                                     self._process_message,
-                                    message,
-                                    value.metadata
+                                    message
                                 )
                         
                         # Log status updates (delivery, read receipts, etc.)
@@ -630,7 +647,8 @@ class WhatsAppInterface(Interface):
                 # Re-raise HTTP exceptions (signature validation failures)
                 raise
             except Exception as e:
-                error_log(f"Error processing webhook: {e}", exc_info=True)
+                import traceback
+                error_log(f"Error processing webhook: {e}\n{traceback.format_exc()}")
                 # Return 200 to prevent Meta from retrying on errors
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -638,14 +656,9 @@ class WhatsAppInterface(Interface):
                 )
         
         @router.get("/health", summary="Health Check")
-        async def health_check():
+        async def health_check_endpoint():
             """Health check endpoint for WhatsApp interface."""
-            return {
-                "status": "healthy",
-                "interface": self.name,
-                "agent": str(self.agent)
-            }
+            return await self.health_check()
         
         info_log(f"WhatsApp routes attached with prefix: /whatsapp")
         return router
-
