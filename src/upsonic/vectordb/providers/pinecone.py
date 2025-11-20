@@ -1195,7 +1195,7 @@ class PineconeProvider(BaseVectorDBProvider):
         """
         Check if a record with the given content_id exists (async).
         
-        Uses fetch method from Pinecone API (following agno_pinecone.py pattern).
+        Uses fetch method from Pinecone API
         Assumes content_id is used as the record ID.
         
         Args:

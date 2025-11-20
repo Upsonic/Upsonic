@@ -6585,6 +6585,15 @@ wheels = [
 ]
 
 [[package]]
+name = "slack-sdk"
+version = "3.38.0"
+source = { registry = "https://pypi.org/simple/" }
+sdist = { url = "https://files.pythonhosted.org/packages/69/90/8c830172b1847bd3084a2cf39aee9d522e2a55d1c3d4e2b066001e9765ee/slack_sdk-3.38.0.tar.gz", hash = "sha256:73f43ef535929c6034982434aba4d5fd04db3b40f4e0cd14c3abfd56419d181d", size = 240091, upload-time = "2025-11-13T16:05:20.905Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3d/fc/0563891d3d1f7c503b2daf0b5b9ae9e605ea112272661897c150fd3d69cb/slack_sdk-3.38.0-py2.py3-none-any.whl", hash = "sha256:6c5e908abd68e97373a88437ef2fa3ff7a4c356807bbc41fcd7d6cbbfa2034d6", size = 302796, upload-time = "2025-11-13T16:05:18.856Z" },
+]
+
+[[package]]
 name = "sniffio"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple/" }
@@ -7222,6 +7231,7 @@ dependencies = [
     { name = "mcp", extra = ["cli"] },
     { name = "nest-asyncio" },
     { name = "openai" },
+    { name = "protobuf" },
     { name = "psutil" },
     { name = "pydantic" },
     { name = "pydantic-core" },
@@ -7237,6 +7247,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+custom-tools = [
+    { name = "slack-sdk" },
+]
 embeddings = [
     { name = "aiohttp" },
     { name = "anthropic" },
@@ -7298,22 +7311,6 @@ ocr = [
     { name = "pytesseract" },
     { name = "rapidocr-onnxruntime" },
 ]
-rag = [
-    { name = "chromadb" },
-    { name = "faiss-cpu" },
-    { name = "pgvector" },
-    { name = "pinecone" },
-    { name = "pinecone-text" },
-    { name = "psycopg" },
-    { name = "pymilvus", extra = ["milvus-lite"] },
-    { name = "qdrant-client" },
-    { name = "reportlab" },
-    { name = "scikit-learn" },
-    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple/" }, marker = "python_full_version < '3.11'" },
-    { name = "scipy", version = "1.16.3", source = { registry = "https://pypi.org/simple/" }, marker = "python_full_version >= '3.11'" },
-    { name = "sqlalchemy" },
-    { name = "weaviate-client" },
-]
 storage = [
     { name = "aiosqlite" },
     { name = "asyncpg" },
@@ -7333,6 +7330,22 @@ tools = [
     { name = "pandas" },
     { name = "tavily-python" },
     { name = "yfinance" },
+]
+vectordb = [
+    { name = "chromadb" },
+    { name = "faiss-cpu" },
+    { name = "pgvector" },
+    { name = "pinecone" },
+    { name = "pinecone-text" },
+    { name = "psycopg" },
+    { name = "pymilvus", extra = ["milvus-lite"] },
+    { name = "qdrant-client" },
+    { name = "reportlab" },
+    { name = "scikit-learn" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple/" }, marker = "python_full_version < '3.11'" },
+    { name = "scipy", version = "1.16.3", source = { registry = "https://pypi.org/simple/" }, marker = "python_full_version >= '3.11'" },
+    { name = "sqlalchemy" },
+    { name = "weaviate-client" },
 ]
 web = [
     { name = "celery" },
@@ -7372,12 +7385,12 @@ requires-dist = [
     { name = "botocore", marker = "extra == 'embeddings'", specifier = ">=1.40.45" },
     { name = "botocore", marker = "extra == 'models'", specifier = ">=1.40.45" },
     { name = "celery", marker = "extra == 'web'", specifier = ">=5.5.3" },
-    { name = "chromadb", marker = "extra == 'rag'", specifier = ">=1.0.20" },
+    { name = "chromadb", marker = "extra == 'vectordb'", specifier = ">=1.0.20" },
     { name = "cohere", marker = "extra == 'models'", specifier = ">=5.18.0" },
     { name = "docling", marker = "extra == 'loaders'", specifier = ">=2.55.1" },
     { name = "duckduckgo-search", marker = "extra == 'tools'", specifier = ">=8.1.1" },
     { name = "easyocr", marker = "extra == 'ocr'", specifier = ">=1.7.2" },
-    { name = "faiss-cpu", marker = "extra == 'rag'", specifier = ">=1.12.0" },
+    { name = "faiss-cpu", marker = "extra == 'vectordb'", specifier = ">=1.12.0" },
     { name = "fastembed", marker = "extra == 'embeddings'", specifier = ">=0.7.3" },
     { name = "genai-prices", specifier = ">=0.0.38" },
     { name = "genai-prices", marker = "extra == 'tools'", specifier = ">=0.0.29" },
@@ -7410,18 +7423,19 @@ requires-dist = [
     { name = "pandas", marker = "extra == 'tools'", specifier = ">=2.3.2" },
     { name = "pdf2image", marker = "extra == 'ocr'", specifier = ">=1.17.0" },
     { name = "pdfplumber", marker = "extra == 'loaders'", specifier = ">=0.11.7" },
-    { name = "pgvector", marker = "extra == 'rag'", specifier = ">=0.4.1" },
+    { name = "pgvector", marker = "extra == 'vectordb'", specifier = ">=0.4.1" },
     { name = "pillow", marker = "extra == 'loaders'", specifier = ">=10.0.0" },
     { name = "pillow", marker = "extra == 'ocr'", specifier = ">=11.3.0" },
-    { name = "pinecone", marker = "extra == 'rag'", specifier = ">=7.3.0" },
-    { name = "pinecone-text", marker = "extra == 'rag'", specifier = ">=0.11.0" },
+    { name = "pinecone", marker = "extra == 'vectordb'", specifier = ">=7.3.0" },
+    { name = "pinecone-text", marker = "extra == 'vectordb'", specifier = ">=0.11.0" },
+    { name = "protobuf", specifier = ">=5.27.2,<6.0.0" },
     { name = "psutil", specifier = "==6.1.1" },
-    { name = "psycopg", marker = "extra == 'rag'", specifier = ">=3.2.9" },
+    { name = "psycopg", marker = "extra == 'vectordb'", specifier = ">=3.2.9" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'storage'", specifier = ">=3.2.9" },
     { name = "psycopg2-binary", marker = "extra == 'storage'", specifier = ">=2.9.10" },
     { name = "pydantic", specifier = "==2.10.5" },
     { name = "pydantic-core", specifier = ">=2.27.2" },
-    { name = "pymilvus", extras = ["milvus-lite"], marker = "extra == 'rag'", specifier = ">=2.6.1" },
+    { name = "pymilvus", extras = ["milvus-lite"], marker = "extra == 'vectordb'", specifier = ">=2.6.1" },
     { name = "pymupdf", marker = "extra == 'loaders'", specifier = ">=1.26.4" },
     { name = "pypdf", marker = "extra == 'loaders'", specifier = ">=6.1.1" },
     { name = "pytesseract", marker = "extra == 'ocr'", specifier = ">=0.3.13" },
@@ -7430,20 +7444,21 @@ requires-dist = [
     { name = "python-frontmatter", marker = "extra == 'loaders'", specifier = ">=1.1.0" },
     { name = "python-multipart", marker = "extra == 'web'", specifier = ">=0.0.20" },
     { name = "pyyaml", marker = "extra == 'loaders'", specifier = ">=6.0.2" },
-    { name = "qdrant-client", marker = "extra == 'rag'", specifier = ">=1.12.1" },
+    { name = "qdrant-client", marker = "extra == 'vectordb'", specifier = ">=1.12.1" },
     { name = "rapidocr-onnxruntime", marker = "extra == 'loaders'", specifier = ">=1.4.4" },
     { name = "rapidocr-onnxruntime", marker = "extra == 'ocr'", specifier = ">=1.4.4" },
     { name = "redis", marker = "extra == 'storage'", specifier = ">=5.2.1" },
-    { name = "reportlab", marker = "extra == 'rag'", specifier = ">=4.1.0" },
+    { name = "reportlab", marker = "extra == 'vectordb'", specifier = ">=4.1.0" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "requests", marker = "extra == 'embeddings'", specifier = ">=2.32.5" },
     { name = "requests", marker = "extra == 'loaders'", specifier = ">=2.32.5" },
     { name = "rich", specifier = ">=13.9.4" },
-    { name = "scikit-learn", marker = "extra == 'rag'", specifier = ">=1.4.0" },
-    { name = "scipy", marker = "extra == 'rag'", specifier = ">=1.13.0" },
+    { name = "scikit-learn", marker = "extra == 'vectordb'", specifier = ">=1.4.0" },
+    { name = "scipy", marker = "extra == 'vectordb'", specifier = ">=1.13.0" },
     { name = "sentry-sdk", extras = ["opentelemetry"], specifier = ">=2.35.0" },
-    { name = "sqlalchemy", marker = "extra == 'rag'", specifier = ">=2.0.44" },
+    { name = "slack-sdk", marker = "extra == 'custom-tools'", specifier = ">=3.38.0" },
     { name = "sqlalchemy", marker = "extra == 'storage'", specifier = ">=2.0.42" },
+    { name = "sqlalchemy", marker = "extra == 'vectordb'", specifier = ">=2.0.44" },
     { name = "tavily-python", marker = "extra == 'tools'", specifier = ">=0.7.12" },
     { name = "toml", specifier = ">=0.10.2" },
     { name = "torch", marker = "extra == 'embeddings'", specifier = ">=2.8.0" },
@@ -7453,10 +7468,10 @@ requires-dist = [
     { name = "uv", specifier = ">=0.5.20" },
     { name = "uvicorn", specifier = ">=0.34.0" },
     { name = "uvicorn", marker = "extra == 'web'", specifier = ">=0.35.0" },
-    { name = "weaviate-client", marker = "extra == 'rag'", specifier = ">=4.16.9" },
+    { name = "weaviate-client", marker = "extra == 'vectordb'", specifier = ">=4.16.9" },
     { name = "yfinance", marker = "extra == 'tools'", specifier = ">=0.2.66" },
 ]
-provides-extras = ["rag", "storage", "models", "embeddings", "loaders", "tools", "web", "ocr", "ocr-gpu"]
+provides-extras = ["vectordb", "storage", "models", "embeddings", "loaders", "tools", "web", "ocr", "ocr-gpu", "custom-tools"]
 
 [package.metadata.requires-dev]
 dev = [

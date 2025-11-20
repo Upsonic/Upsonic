@@ -6,9 +6,9 @@ used across all interfaces. Interface-specific schemas are in their respective m
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # ============================================================================
@@ -18,14 +18,18 @@ from pydantic import BaseModel, Field
 class HealthCheckResponse(BaseModel):
     """Response model for health check endpoint."""
     
+    model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
+    
     status: str = Field(default="healthy", description="Service health status")
     timestamp: datetime = Field(default_factory=datetime.utcnow, description="Current timestamp")
-    interfaces: List[str] = Field(default_factory=list, description="List of active interfaces")
+    interfaces: List[Dict[str, Any]] = Field(default_factory=list, description="List of active interfaces with status")
     connections: int = Field(default=0, description="Number of active WebSocket connections")
 
 
 class ErrorResponse(BaseModel):
     """Standard error response model."""
+    
+    model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
     
     error: str = Field(..., description="Error message")
     detail: Optional[str] = Field(None, description="Detailed error information")
@@ -39,6 +43,8 @@ class ErrorResponse(BaseModel):
 class WebSocketMessage(BaseModel):
     """Model for WebSocket messages."""
     
+    model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
+    
     type: str = Field(..., description="Message type (e.g., 'agent_response', 'status', 'error')")
     data: Dict[str, Any] = Field(..., description="Message data")
     timestamp: datetime = Field(default_factory=datetime.utcnow, description="Message timestamp")
@@ -47,6 +53,8 @@ class WebSocketMessage(BaseModel):
 
 class WebSocketConnectionInfo(BaseModel):
     """Model for WebSocket connection information."""
+    
+    model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
     
     id: str = Field(..., description="Unique identifier (UUID) for this connection")
     name: str = Field(..., description="Human-readable name for this connection")
