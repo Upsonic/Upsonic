@@ -8,7 +8,7 @@ this base class and implement the required methods.
 
 import uuid
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Dict, Any
 
 from fastapi import APIRouter
 
@@ -71,6 +71,20 @@ class Interface(ABC):
         """
         pass
     
+    async def health_check(self) -> Dict[str, Any]:
+        """
+        Check the health status of the interface.
+        
+        Returns:
+            Dict[str, Any]: Dictionary containing status and details.
+            Default implementation returns basic status.
+        """
+        return {
+            "status": "active",
+            "name": self.name,
+            "id": self.id
+        }
+    
     def get_id(self) -> str:
         """
         Get the unique identifier of this interface.
@@ -92,4 +106,3 @@ class Interface(ABC):
     def __repr__(self) -> str:
         """String representation of the interface."""
         return f"{self.__class__.__name__}(id={self.id}, name={self.name})"
-
