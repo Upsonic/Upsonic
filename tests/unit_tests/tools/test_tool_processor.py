@@ -10,7 +10,7 @@ from upsonic.tools.processor import (
     ExternalExecutionPause,
 )
 from upsonic.tools.base import Tool, ToolCall, ToolResult
-from upsonic.tools.context import ToolContext
+from upsonic.tools.metrics import ToolMetrics
 from upsonic.tools.config import ToolConfig
 
 
@@ -34,8 +34,8 @@ class TestToolProcessor:
 
     @pytest.fixture
     def mock_context(self):
-        """Create a mock ToolContext for testing."""
-        return ToolContext(deps=None)
+        """Create a mock ToolMetrics for testing."""
+        return ToolMetrics()
 
     def test_tool_processor_initialization(self, processor):
         """Test ToolProcessor initialization."""

@@ -6,7 +6,7 @@ from typing import Dict, Any
 
 from upsonic.tools import ToolManager
 from upsonic.tools.base import Tool, ToolResult, ToolDefinition
-from upsonic.tools.context import ToolContext
+from upsonic.tools.metrics import ToolMetrics
 from upsonic.tools.deferred import DeferredToolRequests, DeferredToolResults
 
 
@@ -41,8 +41,8 @@ class TestToolManager:
 
     @pytest.fixture
     def mock_context(self):
-        """Create a mock ToolContext for testing."""
-        return ToolContext(deps=None)
+        """Create a mock ToolMetrics for testing."""
+        return ToolMetrics()
 
     def test_tool_manager_initialization(self, tool_manager):
         """Test ToolManager initialization."""

@@ -196,11 +196,11 @@ def print_usage() -> None:
     )
     table.add_row(
         "[bold]add[/bold]",
-        "Add a dependency to upsonic_config.json"
+        "Add a dependency to upsonic_configs.json"
     )
     table.add_row(
         "[bold]install[/bold]",
-        "Install dependencies from upsonic_config.json"
+        "Install dependencies from upsonic_configs.json"
     )
     table.add_row(
         "[bold]run[/bold]",
@@ -255,7 +255,7 @@ def print_dependency_added(library: str, section: str) -> None:
 
 
 def print_config_not_found() -> None:
-    """Print error when upsonic_config.json is not found."""
+    """Print error when upsonic_configs.json is not found."""
     rich = _get_rich_imports()
     console = rich['console']
     Panel = rich['Panel']
@@ -263,7 +263,7 @@ def print_config_not_found() -> None:
     
     console.print()
     panel = Panel(
-        "[bold red]upsonic_config.json not found![/bold red]\n\n"
+        "[bold red]upsonic_configs.json not found![/bold red]\n\n"
         "Please run [cyan]upsonic init[/cyan] first to create the configuration file.",
         title="[bold red]❌ Configuration Not Found[/bold red]",
         border_style="red",
