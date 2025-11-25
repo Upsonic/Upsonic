@@ -220,9 +220,9 @@ async def main(inputs):
                     "redis>=5.0.0"
                 ],
                 "streamlit": [
-                    "streamlit==1.32.2",
-                    "pandas==2.2.1",
-                    "numpy==1.26.4"
+                    "streamlit==1.40.0",
+                    "pandas",
+                    "numpy==2.2.6"
                 ],
                 "development": [
                     "watchdog",
