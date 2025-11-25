@@ -39,7 +39,7 @@ from upsonic.messages import (
 )
 
 from upsonic.utils.package.exception import ModelHTTPError, UserError
-from upsonic.models import Model, ModelRequestParameters, StreamedResponse, download_item
+from . import Model, ModelRequestParameters, StreamedResponse, download_item
 from upsonic.providers import Provider, infer_provider
 from upsonic.providers.bedrock import BedrockModelProfile
 from upsonic.models.settings import ModelSettings

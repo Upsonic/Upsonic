@@ -51,7 +51,7 @@ from upsonic.profiles.openai import OpenAIModelProfile, OpenAISystemPromptRole
 from upsonic.providers import Provider, infer_provider
 from upsonic.models.settings import ModelSettings
 from upsonic.tools import ToolDefinition
-from upsonic.models import Model, ModelRequestParameters, StreamedResponse, check_allow_model_requests, download_item, get_user_agent
+from . import Model, ModelRequestParameters, StreamedResponse, check_allow_model_requests, download_item, get_user_agent
 
 try:
     from openai import NOT_GIVEN, APIStatusError, AsyncOpenAI, AsyncStream, NotGiven
@@ -83,10 +83,13 @@ try:
     from openai.types.responses.response_status import ResponseStatus
     from openai.types.shared import ReasoningEffort
     from openai.types.shared_params import Reasoning
-except ImportError as _import_error:
-    raise ImportError(
-        'Please install `openai` to use the OpenAI model, '
-    ) from _import_error
+except ImportError:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="openai",
+        install_command="pip install openai",
+        feature_name="OpenAI model"
+    )
 
 __all__ = (
     'OpenAIModel',

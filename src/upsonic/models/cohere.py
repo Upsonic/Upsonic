@@ -10,7 +10,7 @@ from upsonic.utils.package.exception import UserError
 
 from upsonic.utils.package.exception import ModelHTTPError
 from upsonic import usage
-from upsonic.models import Model, ModelRequestParameters, check_allow_model_requests
+from . import Model, ModelRequestParameters, check_allow_model_requests
 from upsonic._utils import generate_tool_call_id as _generate_tool_call_id, guard_tool_call_id as _guard_tool_call_id
 from upsonic.messages import (
     BuiltinToolCallPart,
@@ -54,10 +54,13 @@ try:
     )
     from cohere.core.api_error import ApiError
     from cohere.v2.client import OMIT
-except ImportError as _import_error:
-    raise ImportError(
-        'Please install `cohere` to use the Cohere model, '
-    ) from _import_error
+except ImportError:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="cohere",
+        install_command="pip install cohere",
+        feature_name="Cohere model"
+    )
 
 LatestCohereModelNames = Literal[
     'c4ai-aya-expanse-32b',

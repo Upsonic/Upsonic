@@ -10,6 +10,7 @@ _COMMAND_HANDLERS = {
     'add': lambda args: _handle_add(args),
     'install': lambda args: _handle_install(args),
     'run': lambda args: _handle_run(args),
+    'zip': lambda args: _handle_zip(args),
 }
 
 
@@ -61,6 +62,13 @@ def _handle_run(args: list[str]) -> int:
     
     from upsonic.cli.commands import run_command
     return run_command(host=host, port=port)
+
+
+def _handle_zip(args: list[str]) -> int:
+    """Handle 'zip' command with lazy import."""
+    output_file = args[1] if len(args) >= 2 else None
+    from upsonic.cli.commands import zip_command
+    return zip_command(output_file)
 
 
 def main(args: Optional[list[str]] = None) -> int:

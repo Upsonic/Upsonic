@@ -41,7 +41,7 @@ from upsonic.profiles import ModelProfileSpec
 from upsonic.providers import Provider, infer_provider
 from upsonic.models.settings import ModelSettings
 from upsonic.tools import ToolDefinition
-from upsonic.models import (
+from . import (
     Model,
     ModelRequestParameters,
     StreamedResponse,
@@ -86,10 +86,13 @@ try:
         UrlContextDict,
         VideoMetadataDict,
     )
-except ImportError as _import_error:
-    raise ImportError(
-        'Please install `google-genai` to use the Google model, '
-    ) from _import_error
+except ImportError:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="google-genai",
+        install_command="pip install google-genai",
+        feature_name="Google model"
+    )
 
 LatestGoogleModelNames = Literal[
     'gemini-2.0-flash',
