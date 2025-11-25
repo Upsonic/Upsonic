@@ -37,7 +37,7 @@ def _load_config(config_path: Path, use_cache: bool = True) -> Optional[Dict[str
     Load and parse config file with caching.
     
     Args:
-        config_path: Path to upsonic_config.json
+        config_path: Path to upsonic_configs.json
         use_cache: Whether to use cached config (default: True)
     
     Returns:
@@ -78,8 +78,9 @@ def init_command() -> int:
     Initialize a new Upsonic agent project.
     
     Prompts the user for an agent name and creates:
-    - agent.py: Template agent file
-    - upsonic_config.json: Configuration file with agent name
+    - src/io.py: Input/output schema definitions
+    - src/main.py: Main agent file
+    - upsonic_configs.json: Configuration file with agent name
     
     Returns:
         Exit code (0 for success, non-zero for failure).
@@ -105,12 +106,21 @@ def init_command() -> int:
         # Get current directory
         current_dir = Path.cwd()
         
-        # Check if files already exist
-        agent_py_path = current_dir / "agent.py"
-        config_json_path = current_dir / "upsonic_config.json"
+        # Create src directory
+        src_dir = current_dir / "src"
         
-        if agent_py_path.exists():
-            if not confirm_overwrite(agent_py_path):
+        # Check if src directory already exists and has files
+        io_py_path = src_dir / "io.py"
+        main_py_path = src_dir / "main.py"
+        config_json_path = current_dir / "upsonic_configs.json"
+        
+        if io_py_path.exists():
+            if not confirm_overwrite(io_py_path):
+                print_cancelled()
+                return 1
+        
+        if main_py_path.exists():
+            if not confirm_overwrite(main_py_path):
                 print_cancelled()
                 return 1
         
@@ -119,8 +129,34 @@ def init_command() -> int:
                 print_cancelled()
                 return 1
         
-        # Create agent.py
-        agent_py_content = """from upsonic import Task, Agent
+        # Create src directory if it doesn't exist
+        src_dir.mkdir(exist_ok=True)
+        
+        # Create io.py
+        io_py_content = """inputs = [
+    {
+        "name": "question",
+        "description": "The mail to analyze",
+        "type": "string",
+        "default": None,
+        "required": True
+    }
+]
+
+outputs = [
+    {
+        "name": "answer",
+        "description": "The action list to the person",
+        "type": "string"
+    }
+]
+"""
+        
+        io_py_path.write_text(io_py_content, encoding="utf-8")
+        print_file_created(io_py_path)
+        
+        # Create main.py (renamed from agent.py)
+        main_py_content = """from upsonic import Task, Agent
 
 
 async def main(inputs):
@@ -133,10 +169,10 @@ async def main(inputs):
     }
 """
         
-        agent_py_path.write_text(agent_py_content)
-        print_file_created(agent_py_path)
+        main_py_path.write_text(main_py_content, encoding="utf-8")
+        print_file_created(main_py_path)
         
-        # Create upsonic_config.json
+        # Create upsonic_configs.json
         config_data = {
             "envinroment_variables": {
                 "UPSONIC_WORKERS_AMOUNT": {
@@ -178,7 +214,8 @@ async def main(inputs):
                     "pytz>=2025.2",
                     "psutil>=5.9.8",
                     "fire>=0.7.0",
-                    "ruamel.yaml>=0.18.5"
+                    "ruamel.yaml>=0.18.5",
+                    "redis>=5.0.0"
                 ],
                 "streamlit": [
                     "streamlit==1.32.2",
@@ -208,9 +245,7 @@ async def main(inputs):
                     "type": "string",
                     "description": "Answer of the agent"
                 }
-            },
-            "agent_py": "agent.py",
-            "streamlit_app_py": "streamlit_app.py"
+            }
         }
         
         config_json_path.write_text(
@@ -220,7 +255,7 @@ async def main(inputs):
         print_file_created(config_json_path)
         
         # Print success message with created files
-        print_init_success(agent_name, [str(agent_py_path), str(config_json_path)])
+        print_init_success(agent_name, [str(io_py_path), str(main_py_path), str(config_json_path)])
         return 0
         
     except KeyboardInterrupt:
@@ -235,7 +270,7 @@ async def main(inputs):
 
 def add_command(library: str, section: str) -> int:
     """
-    Add a dependency to upsonic_config.json.
+    Add a dependency to upsonic_configs.json.
     
     Args:
         library: Library name with version (e.g., "x_library==0.52.0")
@@ -255,7 +290,7 @@ def add_command(library: str, section: str) -> int:
         
         # Get current directory
         current_dir = Path.cwd()
-        config_json_path = current_dir / "upsonic_config.json"
+        config_json_path = current_dir / "upsonic_configs.json"
         
         # Check if config file exists
         if not config_json_path.exists():
@@ -265,12 +300,12 @@ def add_command(library: str, section: str) -> int:
         # Read the config file (don't use cache since we're modifying)
         config_data = _load_config(config_json_path, use_cache=False)
         if config_data is None:
-            print_error("Invalid JSON in upsonic_config.json")
+            print_error("Invalid JSON in upsonic_configs.json")
             return 1
         
         # Validate dependencies section exists
         if "dependencies" not in config_data:
-            print_error("'dependencies' section not found in upsonic_config.json")
+            print_error("'dependencies' section not found in upsonic_configs.json")
             return 1
         
         dependencies = config_data["dependencies"]
@@ -548,7 +583,7 @@ def _install_dependencies(dependencies: list[str], quiet: bool = False) -> bool:
 
 def install_command(section: Optional[str] = None) -> int:
     """
-    Install dependencies from upsonic_config.json.
+    Install dependencies from upsonic_configs.json.
     
     Args:
         section: Specific section to install ("api", "streamlit", "development", "all", or None for "api")
@@ -567,7 +602,7 @@ def install_command(section: Optional[str] = None) -> int:
         
         # Get current directory
         current_dir = Path.cwd()
-        config_json_path = current_dir / "upsonic_config.json"
+        config_json_path = current_dir / "upsonic_configs.json"
         
         # Check if config file exists
         if not config_json_path.exists():
@@ -577,13 +612,13 @@ def install_command(section: Optional[str] = None) -> int:
         # Read config (use cache since we're only reading)
         config_data = _load_config(config_json_path)
         if config_data is None:
-            print_error("Invalid JSON in upsonic_config.json")
+            print_error("Invalid JSON in upsonic_configs.json")
             return 1
         
         # Get dependencies
         all_dependencies = config_data.get("dependencies", {})
         if not all_dependencies:
-            print_error("No dependencies section found in upsonic_config.json")
+            print_error("No dependencies section found in upsonic_configs.json")
             return 1
         
         # Determine which sections to install
@@ -631,7 +666,7 @@ def run_command(host: str = "0.0.0.0", port: int = 8000) -> int:
     Run the agent as a FastAPI server.
 
     Dynamically builds OpenAPI for both multipart/form-data and application/json
-    from upsonic_config.json input_schema/output_schema so /docs shows editable form fields.
+    from upsonic_configs.json input_schema/output_schema so /docs shows editable form fields.
     """
     try:
         # Lazy import printer functions
@@ -644,7 +679,7 @@ def run_command(host: str = "0.0.0.0", port: int = 8000) -> int:
         
         # Get current directory
         current_dir = Path.cwd()
-        config_json_path = current_dir / "upsonic_config.json"
+        config_json_path = current_dir / "upsonic_configs.json"
 
         # Check if config file exists
         if not config_json_path.exists():
@@ -654,7 +689,7 @@ def run_command(host: str = "0.0.0.0", port: int = 8000) -> int:
         # Read config (use cache for faster startup)
         config_data = _load_config(config_json_path)
         if config_data is None:
-            print_error("Invalid JSON in upsonic_config.json")
+            print_error("Invalid JSON in upsonic_configs.json")
             return 1
 
         # Get FastAPI imports (lazy loaded)
@@ -674,20 +709,20 @@ def run_command(host: str = "0.0.0.0", port: int = 8000) -> int:
         agent_name = config_data.get("agent_name", "Upsonic Agent")
         description = config_data.get("description", "An Upsonic AI agent")
 
-        # Load agent.py
-        agent_py_file = config_data.get("agent_py", "agent.py")
+        # Load main.py from src directory
+        agent_py_file = config_data.get("agent_py", "src/main.py")
         agent_py_path = current_dir / agent_py_file
         if not agent_py_path.exists():
             print_error(f"Agent file not found: {agent_py_path}")
             return 1
 
-        spec = importlib.util.spec_from_file_location("agent", agent_py_path)
+        spec = importlib.util.spec_from_file_location("main", agent_py_path)
         if spec is None or spec.loader is None:
             print_error(f"Failed to load agent module from {agent_py_path}")
             return 1
 
         agent_module = importlib.util.module_from_spec(spec)
-        sys.modules["agent"] = agent_module
+        sys.modules["main"] = agent_module
         spec.loader.exec_module(agent_module)
 
         if not hasattr(agent_module, "main"):
