@@ -843,5 +843,3 @@ def run_command(host: str = "0.0.0.0", port: int = 8000) -> int:
         import traceback
         traceback.print_exc()
         return 1
-
-
