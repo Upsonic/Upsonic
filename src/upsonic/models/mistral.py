@@ -41,7 +41,7 @@ from upsonic.providers import Provider, infer_provider
 from upsonic.models.settings import ModelSettings
 from upsonic.tools import ToolDefinition
 from upsonic.usage import RequestUsage
-from upsonic.models import (
+from . import (
     Model,
     ModelRequestParameters,
     StreamedResponse,
@@ -82,10 +82,13 @@ try:
     from mistralai.models.usermessage import UserMessage as MistralUserMessage
     from mistralai.types.basemodel import Unset as MistralUnset
     from mistralai.utils.eventstreaming import EventStreamAsync as MistralEventStreamAsync
-except ImportError as e:  # pragma: lax no cover
-    raise ImportError(
-        'Please install `mistral` to use the Mistral model, '
-    ) from e
+except ImportError:  # pragma: lax no cover
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="mistralai",
+        install_command="pip install mistralai",
+        feature_name="Mistral model"
+    )
 
 LatestMistralModelNames = Literal[
     'mistral-large-latest', 'mistral-small-latest', 'codestral-latest', 'mistral-moderation-latest'

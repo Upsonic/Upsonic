@@ -42,7 +42,7 @@ from upsonic.providers import Provider, infer_provider
 from upsonic.providers.anthropic import AsyncAnthropicClient
 from upsonic.models.settings import ModelSettings, merge_model_settings
 from upsonic.tools import ToolDefinition
-from upsonic.models import Model, ModelRequestParameters, StreamedResponse, check_allow_model_requests, download_item, get_user_agent
+from . import Model, ModelRequestParameters, StreamedResponse, check_allow_model_requests, download_item, get_user_agent
 
 _FINISH_REASON_MAP: dict[BetaStopReason, FinishReason] = {
     'end_turn': 'stop',
@@ -115,10 +115,13 @@ try:
     from anthropic.types.beta.beta_web_search_tool_20250305_param import UserLocation
     from anthropic.types.model_param import ModelParam
 
-except ImportError as _import_error:
-    raise ImportError(
-        'Please install `anthropic` to use the Anthropic model, '
-    ) from _import_error
+except ImportError:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="anthropic",
+        install_command="pip install anthropic",
+        feature_name="Anthropic model"
+    )
 
 LatestAnthropicModelNames = ModelParam
 """Latest Anthropic models."""

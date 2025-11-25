@@ -41,7 +41,7 @@ from upsonic.profiles import ModelProfile, ModelProfileSpec
 from upsonic.providers import Provider, infer_provider
 from upsonic.models.settings import ModelSettings
 from upsonic.tools import ToolDefinition
-from upsonic.models import Model, ModelRequestParameters, StreamedResponse, check_allow_model_requests
+from . import Model, ModelRequestParameters, StreamedResponse, check_allow_model_requests
 
 try:
     import aiohttp
@@ -59,10 +59,13 @@ try:
     )
     from huggingface_hub.errors import HfHubHTTPError
 
-except ImportError as _import_error:
-    raise ImportError(
-        'Please install `huggingface_hub` to use Hugging Face Inference Providers, '
-    ) from _import_error
+except ImportError:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="huggingface_hub",
+        install_command="pip install huggingface_hub",
+        feature_name="Hugging Face Inference Providers"
+    )
 
 __all__ = (
     'HuggingFaceModel',

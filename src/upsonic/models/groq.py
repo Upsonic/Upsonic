@@ -56,10 +56,13 @@ try:
     from groq.types import chat
     from groq.types.chat.chat_completion_content_part_image_param import ImageURL
     from groq.types.chat.chat_completion_message import ExecutedTool
-except ImportError as _import_error:
-    raise ImportError(
-        'Please install `groq` to use the Groq model, '
-    ) from _import_error
+except ImportError:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="groq",
+        install_command="pip install groq",
+        feature_name="Groq model"
+    )
 
 ProductionGroqModelNames = Literal[
     'distil-whisper-large-v3-en',

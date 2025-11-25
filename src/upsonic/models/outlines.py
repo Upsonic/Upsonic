@@ -40,7 +40,7 @@ from upsonic.messages import (
 from upsonic.profiles import ModelProfile, ModelProfileSpec
 from upsonic.providers import Provider, infer_provider
 from upsonic.models.settings import ModelSettings
-from upsonic.models import (
+from . import (
     DownloadedItem,
     Model,
     ModelRequestParameters,
@@ -64,10 +64,13 @@ try:
     )
     from outlines.types.dsl import JsonSchema
     from PIL import Image as PILImage
-except ImportError as _import_error:
-    raise ImportError(
-        'Please install `outlines` to use the Outlines model, '
-    ) from _import_error
+except ImportError:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="outlines",
+        install_command="pip install outlines",
+        feature_name="Outlines model"
+    )
 
 if TYPE_CHECKING:
     import llama_cpp
@@ -200,10 +203,13 @@ class OutlinesModel(Model):
         """
         try:
             from openai import AsyncOpenAI
-        except ImportError as _import_error:
-            raise ImportError(
-                'Please install `openai` to use the Outlines SGLang model, '
-            ) from _import_error
+        except ImportError:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="openai",
+                install_command="pip install openai",
+                feature_name="Outlines SGLang model"
+            )
 
         openai_client = AsyncOpenAI(base_url=base_url, api_key=api_key)
         outlines_model: OutlinesBaseModel | OutlinesAsyncBaseModel = from_sglang(openai_client, model_name)
