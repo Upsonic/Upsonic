@@ -206,6 +206,10 @@ def print_usage() -> None:
         "[bold]run[/bold]",
         "Run the agent as a FastAPI server"
     )
+    table.add_row(
+        "[bold]zip[/bold]",
+        "Create a zip file with the current directory context"
+    )
     
     panel = Panel(
         table,
@@ -227,7 +231,7 @@ def print_unknown_command(command: str) -> None:
     console.print()
     panel = Panel(
         f"[bold red]Unknown command:[/bold red] [yellow]{_escape_rich_markup(command)}[/yellow]\n\n"
-        "[bold]Available commands:[/bold] [cyan]init[/cyan], [cyan]add[/cyan], [cyan]install[/cyan], [cyan]run[/cyan]",
+        "[bold]Available commands:[/bold] [cyan]init[/cyan], [cyan]add[/cyan], [cyan]install[/cyan], [cyan]run[/cyan], [cyan]zip[/cyan]",
         title="[bold red]❌ Error[/bold red]",
         border_style="red",
         box=box.ROUNDED,
