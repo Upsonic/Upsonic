@@ -718,13 +718,54 @@ def run_command(host: str = "0.0.0.0", port: int = 8000) -> int:
             print_error(f"Agent file not found: {agent_py_path}")
             return 1
 
+
+        agent_dir = agent_py_path.parent.absolute()
+        project_root = current_dir.absolute()
+        
+        # Add agent directory to sys.path (handles same-dir and subdirectory imports)
+        agent_dir_str = str(agent_dir)
+        if agent_dir_str not in sys.path:
+            sys.path.insert(0, agent_dir_str)
+        
+        # Add project root to sys.path (handles project-level imports)
+        project_root_str = str(project_root)
+        if project_root_str not in sys.path:
+            sys.path.insert(0, project_root_str)
+
+        # Determine package structure for relative imports
+        # Calculate relative path from project root to agent file
+        try:
+            relative_path = agent_py_path.relative_to(project_root)
+            # Remove .py extension and convert to package path
+            package_parts = relative_path.parts[:-1]  # Exclude filename
+            module_package = '.'.join(package_parts) if package_parts else None
+        except ValueError:
+            # If agent file is outside project root, use None
+            module_package = None
+
+        # Create spec with "main" as the module name (loader requires this to match)
         spec = importlib.util.spec_from_file_location("main", agent_py_path)
         if spec is None or spec.loader is None:
             print_error(f"Failed to load agent module from {agent_py_path}")
             return 1
 
         agent_module = importlib.util.module_from_spec(spec)
+        
+        # Set __package__ for relative imports to work correctly
+        # This is the key for relative imports (from .module import X)
+        if module_package:
+            agent_module.__package__ = module_package
+        else:
+            # If no package structure, set to empty string to allow relative imports
+            agent_module.__package__ = ""
+        
+        # Keep __name__ as "main" to match the spec (loader requirement)
+        # The __package__ attribute is sufficient for relative imports to work
+        agent_module.__name__ = "main"
+        
+        # Register the module
         sys.modules["main"] = agent_module
+        
         spec.loader.exec_module(agent_module)
 
         if not hasattr(agent_module, "main"):
