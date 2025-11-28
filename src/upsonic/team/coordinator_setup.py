@@ -48,7 +48,15 @@ class CoordinatorSetup:
             role = agent.role or "No specific role defined."
             goal = agent.goal or "No specific goal defined."
             system_prompt = agent.system_prompt or "No system prompt defined."
-            part = f"- Member ID: `{agent_id}`\n  - Role: {role}\n  - Goal: {goal}\n  - System Prompt: {system_prompt}"
+            
+            # Include agent tools if available
+            tools_info = ""
+            if hasattr(agent, 'tools') and agent.tools:
+                tool_summaries = [self._summarize_tool(tool) for tool in agent.tools]
+                tools_str = "\n    ".join([f"- {summary}" for summary in tool_summaries])
+                tools_info = f"\n  - Agent Tools:\n    {tools_str}"
+            
+            part = f"- Member ID: `{agent_id}`\n  - Role: {role}\n  - Goal: {goal}\n  - System Prompt: {system_prompt}\n  -Agent Tools: {tools_info}"
             manifest_parts.append(part)
         return "\n".join(manifest_parts)
 

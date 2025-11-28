@@ -7,7 +7,7 @@ This module provides agent classes for executing tasks and managing AI interacti
 from .agent import Agent
 from .base import BaseAgent
 from .run_result import AgentRunResult, OutputDataT
-from .deep_agent import DeepAgent, create_deep_agent
+from .deepagent import DeepAgent
 
 __all__ = [
     'Agent',
@@ -15,5 +15,4 @@ __all__ = [
     'AgentRunResult',
     'OutputDataT',
     'DeepAgent',
-    'create_deep_agent',
 ]

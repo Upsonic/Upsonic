@@ -22,10 +22,8 @@ if TYPE_CHECKING:
         Tool,
         ToolKit,
         ToolDefinition,
-        ToolCall,
         ToolResult,
         ToolMetadata,
-        ToolSchema,
         DocstringFormat,
         ObjectJsonSchema,
     )
@@ -34,13 +32,12 @@ if TYPE_CHECKING:
         ToolConfig,
         ToolHooks,
     )
-    from upsonic.tools.context import (
+    from upsonic.tools.metrics import (
         ToolMetrics,
     )
     from upsonic.tools.schema import (
         FunctionSchema,
-        generate_function_schema,
-        validate_tool_function,
+        function_schema,
         SchemaGenerationError,
     )
     from upsonic.tools.processor import (
@@ -51,7 +48,6 @@ if TYPE_CHECKING:
     from upsonic.tools.wrappers import (
         FunctionTool,
         AgentTool,
-        MethodTool,
     )
     from upsonic.tools.orchestration import (
         PlanStep,
@@ -63,9 +59,6 @@ if TYPE_CHECKING:
     )
     from upsonic.tools.deferred import (
         ExternalToolCall,
-        DeferredToolRequests,
-        DeferredToolResults,
-        ToolApproval,
         DeferredExecutionManager,
     )
     from upsonic.tools.mcp import (
@@ -88,10 +81,8 @@ def _get_base_classes() -> Dict[str, Any]:
         Tool,
         ToolKit,
         ToolDefinition,
-        ToolCall,
         ToolResult,
         ToolMetadata,
-        ToolSchema,
         DocstringFormat,
         ObjectJsonSchema,
     )
@@ -100,10 +91,8 @@ def _get_base_classes() -> Dict[str, Any]:
         'Tool': Tool,
         'ToolKit': ToolKit,
         'ToolDefinition': ToolDefinition,
-        'ToolCall': ToolCall,
         'ToolResult': ToolResult,
         'ToolMetadata': ToolMetadata,
-        'ToolSchema': ToolSchema,
         'DocstringFormat': DocstringFormat,
         'ObjectJsonSchema': ObjectJsonSchema,
     }
@@ -122,9 +111,9 @@ def _get_config_classes() -> Dict[str, Any]:
         'ToolHooks': ToolHooks,
     }
 
-def _get_context_classes() -> Dict[str, Any]:
+def _get_metrics_classes() -> Dict[str, Any]:
     """Lazy import of metrics classes."""
-    from upsonic.tools.context import (
+    from upsonic.tools.metrics import (
         ToolMetrics,
     )
     
@@ -136,15 +125,13 @@ def _get_schema_classes() -> Dict[str, Any]:
     """Lazy import of schema classes."""
     from upsonic.tools.schema import (
         FunctionSchema,
-        generate_function_schema,
-        validate_tool_function,
+        function_schema,
         SchemaGenerationError,
     )
     
     return {
         'FunctionSchema': FunctionSchema,
-        'generate_function_schema': generate_function_schema,
-        'validate_tool_function': validate_tool_function,
+        'function_schema': function_schema,
         'SchemaGenerationError': SchemaGenerationError,
     }
 
@@ -167,13 +154,11 @@ def _get_wrapper_classes() -> Dict[str, Any]:
     from upsonic.tools.wrappers import (
         FunctionTool,
         AgentTool,
-        MethodTool,
     )
     
     return {
         'FunctionTool': FunctionTool,
         'AgentTool': AgentTool,
-        'MethodTool': MethodTool,
     }
 
 def _get_orchestration_classes() -> Dict[str, Any]:
@@ -200,17 +185,11 @@ def _get_deferred_classes() -> Dict[str, Any]:
     """Lazy import of deferred classes."""
     from upsonic.tools.deferred import (
         ExternalToolCall,
-        DeferredToolRequests,
-        DeferredToolResults,
-        ToolApproval,
         DeferredExecutionManager,
     )
     
     return {
         'ExternalToolCall': ExternalToolCall,
-        'DeferredToolRequests': DeferredToolRequests,
-        'DeferredToolResults': DeferredToolResults,
-        'ToolApproval': ToolApproval,
         'DeferredExecutionManager': DeferredExecutionManager,
     }
 
@@ -269,9 +248,9 @@ def __getattr__(name: str) -> Any:
         return config_classes[name]
     
     # Metrics classes
-    context_classes = _get_context_classes()
-    if name in context_classes:
-        return context_classes[name]
+    metrics_classes = _get_metrics_classes()
+    if name in metrics_classes:
+        return metrics_classes[name]
     
     # Schema classes
     schema_classes = _get_schema_classes()
@@ -333,7 +312,20 @@ class ToolManager:
         """Register a list of tools and create appropriate wrappers."""
         self.current_task = task
         
-        registered_tools = self.processor.process_tools(tools)
+        # Track registered tool objects by their identity (object-level comparison)
+        registered_tool_objects = set(id(t) for t in self.processor.registered_tools.values())
+        
+        # Filter out already registered tools (same object instance)
+        tools_to_register = []
+        for tool in tools:
+            if tool is None:
+                continue
+            # Check if this exact object is already registered
+            if id(tool) not in registered_tool_objects:
+                tools_to_register.append(tool)
+        
+        # Process remaining tools
+        registered_tools = self.processor.process_tools(tools_to_register)
         
         for name, tool in registered_tools.items():
             if name != 'plan_and_execute':
@@ -351,7 +343,7 @@ class ToolManager:
                 return await self.orchestrator.execute(thought)
             self.wrapped_tools['plan_and_execute'] = orchestrator_executor
         elif 'plan_and_execute' in registered_tools:
-            self.wrapped_tools['plan_and_execute'] = self.processor.create_behavioral_wrapper(
+            self.wrapped_tools ['plan_and_execute'] = self.processor.create_behavioral_wrapper(
                 registered_tools['plan_and_execute']
             )
         
@@ -403,8 +395,7 @@ class ToolManager:
                 external_call = self.deferred_manager.create_external_call(
                     tool_name=tool_name,
                     args=args,
-                    tool_call_id=tool_call_id,
-                    requires_approval=False
+                    tool_call_id=tool_call_id
                 )
                 e.external_call = external_call
                 raise e
@@ -414,7 +405,7 @@ class ToolManager:
                 tool_name=tool_name,
                 content=str(e),
                 tool_call_id=tool_call_id,
-                success=False,
+        success=False,
                 error=str(e)
             )
     
@@ -425,45 +416,35 @@ class ToolManager:
         definitions = []
         for tool in self.processor.registered_tools.values():
             config = getattr(tool, 'config', None)
-            strict = config.strict if config and config.strict is not None else tool.schema.strict
+            
+            # Get JSON schema from tool.schema
+            if tool.schema:
+                json_schema = tool.schema.json_schema
+            else:
+                # Fallback if schema is not set
+                json_schema = {'type': 'object', 'properties': {}}
+            
             sequential = config.sequential if config else False
             
             definition = ToolDefinition(
                 name=tool.name,
                 description=tool.description,
-                parameters_json_schema=tool.schema.json_schema,
-                kind='function',
-                strict=strict,
+                parameters_json_schema=json_schema,
+                kind=tool.metadata.kind if hasattr(tool, 'metadata') else 'function',
+                strict=tool.metadata.strict if hasattr(tool, 'metadata') else False,
                 sequential=sequential,
-                metadata=tool.metadata.custom if hasattr(tool, 'metadata') else None
+                metadata=tool.metadata if tool.metadata else None
             )
             definitions.append(definition)
         return definitions
-    
-    def has_deferred_requests(self) -> bool:
-        """Check if there are pending deferred requests."""
-        return self.deferred_manager.has_pending_requests()
-    
-    def get_deferred_requests(self) -> 'DeferredToolRequests':
-        """Get pending deferred requests."""
-        return self.deferred_manager.get_pending_requests()
-    
-    def process_deferred_results(
-        self,
-        results: 'DeferredToolResults'
-    ) -> List['ToolResult']:
-        """Process results from deferred execution."""
-        return self.deferred_manager.process_results(results)
 
 
 __all__ = [
     'Tool',
     'ToolKit',
     'ToolDefinition',
-    'ToolCall',
     'ToolResult',
     'ToolMetadata',
-    'ToolSchema',
     'DocstringFormat',
     'ObjectJsonSchema',
     
@@ -474,8 +455,7 @@ __all__ = [
     'ToolMetrics',
     
     'FunctionSchema',
-    'generate_function_schema',
-    'validate_tool_function',
+    'function_schema',
     'SchemaGenerationError',
     
     'ToolProcessor',
@@ -484,7 +464,6 @@ __all__ = [
     
     'FunctionTool',
     'AgentTool',
-    'MethodTool',
     
     
     'PlanStep',
@@ -495,9 +474,6 @@ __all__ = [
     'Orchestrator',
     
     'ExternalToolCall',
-    'DeferredToolRequests',
-    'DeferredToolResults',
-    'ToolApproval',
     'DeferredExecutionManager',
     
     'MCPTool',

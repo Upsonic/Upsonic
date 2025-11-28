@@ -59,6 +59,9 @@ class Task(BaseModel):
     durable_execution: Optional[Any] = None  # DurableExecution instance
     durable_checkpoint_enabled: bool = False
 
+    # DeepAgent planning support
+    _task_todos: Optional[List[Any]] = None  # List of Todo objects for task planning
+
     @staticmethod
     def _is_file_path(item: Any) -> bool:
         """
@@ -287,6 +290,7 @@ class Task(BaseModel):
         cache_embedding_provider: Optional[Any] = None,
         cache_duration_minutes: int = 60,
         durable_execution: Optional[Any] = None,
+        _task_todos: Optional[List[Any]] = None,
     ):
         if guardrail is not None and not callable(guardrail):
             raise TypeError("The 'guardrail' parameter must be a callable function.")
@@ -357,6 +361,7 @@ class Task(BaseModel):
             "_last_cache_entry": None,
             "durable_execution": durable_execution,
             "durable_checkpoint_enabled": durable_execution is not None,
+            "_task_todos": _task_todos or [],
         })
         
         self.validate_tools()

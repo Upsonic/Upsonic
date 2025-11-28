@@ -15,35 +15,43 @@ from typing import (
 )
 
 from upsonic.tools.base import (
-    Tool, ToolCall, ToolDefinition, ToolKit, ToolResult
+    Tool, ToolDefinition, ToolKit, ToolResult
 )
 from upsonic.tools.config import ToolConfig
-from upsonic.tools.context import ToolMetrics
+from upsonic.tools.metrics import ToolMetrics
 from upsonic.tools.schema import (
-    FunctionSchema, generate_function_schema, validate_tool_function
+    FunctionSchema,
+    function_schema,
+    SchemaGenerationError,
+    GenerateToolJsonSchema,
 )
-from upsonic.tools.wrappers import FunctionTool
+from upsonic.tools.wrappers import FunctionTool, AgentTool
+from upsonic.tools.deferred import DeferredExecutionManager, ExternalToolCall
 
 if TYPE_CHECKING:
-    from upsonic.tools.mcp import MCPTool
-    from upsonic.tasks.tasks import Task
+    from upsonic.tools.base import Tool, ToolConfig, ToolMetadata
+    from upsonic.tools.orchestration import PlanStep
 
 
 class ToolValidationError(Exception):
-    """Exception raised for invalid tool definitions."""
+    """Error raised when tool validation fails."""
     pass
 
 
 class ExternalExecutionPause(Exception):
-    """Exception for pausing agent execution for external tool execution."""
-    def __init__(self):
-        super().__init__(f"Agent paused for external execution of a tool.")
+    """Exception to pause execution when external tool execution is required."""
+    
+    def __init__(self, external_calls: List[ExternalToolCall] = None):
+        self.external_calls = external_calls or []
+        super().__init__(f"Paused for {len(self.external_calls)} external tool calls")
 
 
 class ToolProcessor:
-    """Main engine for processing, validating, and managing tools."""
+    """Processes and validates tools before registration."""
     
-    def __init__(self):
+    def __init__(
+        self,
+    ):
         self.registered_tools: Dict[str, Tool] = {}
         self.mcp_handlers: List[Any] = []
     
@@ -56,6 +64,12 @@ class ToolProcessor:
         
         for tool_item in tools:
             if tool_item is None:
+                continue
+            
+            # Optimization: If tool already inherits from Tool base class, skip processing
+            if isinstance(tool_item, Tool):
+                # Tool is already properly formed, register directly
+                processed_tools[tool_item.name] = tool_item
                 continue
                 
             if self._is_builtin_tool(tool_item):
@@ -154,22 +168,21 @@ class ToolProcessor:
     
     def _process_function_tool(self, func: Callable) -> Tool:
         """Process a function into a Tool."""
-        # Validate function
-        errors = validate_tool_function(func)
-        if errors:
-            raise ToolValidationError(
-                f"Invalid tool function '{func.__name__}': " + "; ".join(errors)
-            )
-        
         # Get tool config
         config = getattr(func, '_upsonic_tool_config', ToolConfig())
         
-        # Generate schema
-        schema = generate_function_schema(
-            func,
-            docstring_format=config.docstring_format,
-            require_parameter_descriptions=config.require_parameter_descriptions
-        )
+        # Generate schema using new function
+        try:
+            schema = function_schema(
+                func,
+                schema_generator=GenerateToolJsonSchema,
+                docstring_format=config.docstring_format,
+                require_parameter_descriptions=config.require_parameter_descriptions
+            )
+        except SchemaGenerationError as e:
+            raise ToolValidationError(
+                f"Invalid tool function '{func.__name__}': {e}"
+            )
         
         # Create wrapped tool
         return FunctionTool(
@@ -324,7 +337,12 @@ class ToolProcessor:
             execution_time = time.time() - start_time
             
             # Record execution in tool metrics
-            tool.record_execution(execution_time, execution_success)
+            tool.record_execution(
+                execution_time=execution_time,
+                args=kwargs,
+                result=result,
+                success=execution_success
+            )
             
             # Cache result
             if config.cache_results and cache_key:

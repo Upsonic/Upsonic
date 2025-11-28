@@ -144,11 +144,15 @@ class MongoStorage(Storage):
             return model_type.model_validate(doc)
         return None
 
-    async def upsert_async(self, data: Union[InteractionSession, UserProfile]) -> None:
+    async def upsert_async(self, data: BaseModel) -> None:
         collection = self._get_collection_for_model(type(data))
         id_field_name = self._get_id_field(data)
         object_id = getattr(data, id_field_name)
-        data.updated_at = time.time()
+        
+        # Update timestamp if field exists
+        if hasattr(data, 'updated_at'):
+            data.updated_at = time.time()
+        
         doc = data.model_dump()
         doc["_id"] = doc.pop(id_field_name)
         await collection.replace_one({"_id": object_id}, doc, upsert=True)
@@ -156,6 +160,28 @@ class MongoStorage(Storage):
     async def delete_async(self, object_id: str, model_type: Type[BaseModel]) -> None:
         collection = self._get_collection_for_model(model_type)
         await collection.delete_one({"_id": object_id})
+    
+    async def list_all_async(self, model_type: Type[T]) -> List[T]:
+        """List all objects of a specific type."""
+        try:
+            collection = self._get_collection_for_model(model_type)
+            id_field_name = self._get_id_field(model_type)
+            
+            results = []
+            cursor = collection.find({})
+            
+            async for doc in cursor:
+                try:
+                    # Convert MongoDB's _id back to model's ID field
+                    doc[id_field_name] = doc.pop("_id")
+                    obj = model_type.model_validate(doc)
+                    results.append(obj)
+                except Exception:
+                    continue
+            
+            return results
+        except Exception:
+            return []
 
     async def drop_async(self) -> None:
         if self._db is None:
@@ -206,9 +232,9 @@ class MongoStorage(Storage):
         elif model_type is UserProfile:
             return self._db[self.profiles_collection_name]
         else:
-            raise TypeError(
-                f"Unsupported model type for MongoDB storage: {model_type.__name__}"
-            )
+            # Generic model support: collection name is {model_name}_storage
+            collection_name = f"{model_type.__name__.lower()}_storage"
+            return self._db[collection_name]
 
     @staticmethod
     def _get_id_field(model_or_type: Union[BaseModel, Type[BaseModel]]) -> str:
@@ -220,4 +246,9 @@ class MongoStorage(Storage):
         elif model_type is UserProfile:
             return "user_id"
         else:
-            raise TypeError(f"Unsupported model type: {model_or_type}")
+            # Generic model: auto-detect primary key
+            if hasattr(model_type, 'model_fields'):
+                for field_name in ['path', 'id', 'key', 'name']:
+                    if field_name in model_type.model_fields:
+                        return field_name
+            return "id"

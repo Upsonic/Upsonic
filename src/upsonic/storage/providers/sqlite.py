@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 import json
 from pathlib import Path
-from typing import Optional, Type, Union, TypeVar, TYPE_CHECKING
+from typing import Optional, Type, Union, TypeVar, TYPE_CHECKING, List
 
 if TYPE_CHECKING:
     import aiosqlite
@@ -31,8 +31,8 @@ class SqliteStorage(Storage):
 
     def __init__(
         self,
-        sessions_table_name: str,
-        profiles_table_name: str,
+        sessions_table_name: Optional[str] = None,
+        profiles_table_name: Optional[str] = None,
         db_file: Optional[str] = None,
     ):
         """
@@ -58,8 +58,8 @@ class SqliteStorage(Storage):
             db_path_obj.parent.mkdir(parents=True, exist_ok=True)
             self.db_path = str(db_path_obj)
         
-        self.sessions_table_name = sessions_table_name
-        self.profiles_table_name = profiles_table_name
+        self.sessions_table_name = sessions_table_name or "sessions"
+        self.profiles_table_name = profiles_table_name or "profiles"
         self._db: Optional[aiosqlite.Connection] = None
 
 
@@ -115,10 +115,44 @@ class SqliteStorage(Storage):
         """)
         await db.commit()
 
+    def _get_table_info_for_model(self, model_type: Type[BaseModel]) -> Optional[tuple[str, str]]:
+        """
+        Get table name and primary key column for a model type.
+        
+        Args:
+            model_type: Pydantic model class
+            
+        Returns:
+            Tuple of (table_name, key_column) or None if not supported
+        """
+        if model_type is InteractionSession:
+            return (self.sessions_table_name, "session_id")
+        elif model_type is UserProfile:
+            return (self.profiles_table_name, "user_id")
+        else:
+            # Generic support for arbitrary models
+            # Use model class name as table name and "path" as key
+            table_name = f"{model_type.__name__.lower()}_storage"
+            # Determine primary key field - look for common patterns
+            if hasattr(model_type, 'model_fields'):
+                fields = model_type.model_fields
+                # Try common ID field names
+                for id_field in ['path', 'id', 'key', 'name']:
+                    if id_field in fields:
+                        return (table_name, id_field)
+            # Fallback to generic "id"
+            return (table_name, "id")
+    
     async def read_async(self, object_id: str, model_type: Type[T]) -> Optional[T]:
-        if model_type is InteractionSession: table, key_col = self.sessions_table_name, "session_id"
-        elif model_type is UserProfile: table, key_col = self.profiles_table_name, "user_id"
-        else: return None
+        table_info = self._get_table_info_for_model(model_type)
+        if table_info is None:
+            return None
+        
+        table, key_col = table_info
+        
+        # Ensure table exists for generic models
+        if model_type not in [InteractionSession, UserProfile]:
+            await self._ensure_table_for_model(model_type)
 
         db = await self._get_connection()
         sql = f"SELECT * FROM {table} WHERE {key_col} = ?"
@@ -126,14 +160,68 @@ class SqliteStorage(Storage):
             row = await cursor.fetchone()
             if row:
                 data = dict(row)
-                for key, value in data.items():
-                    if key in ['chat_history', 'session_data', 'extra_data', 'profile_data'] and isinstance(value, str):
-                        data[key] = json.loads(value)
-                return model_type.from_dict(data)
+                
+                if model_type in [InteractionSession, UserProfile]:
+                    # Handle known types with special fields
+                    for key, value in data.items():
+                        if key in ['chat_history', 'session_data', 'extra_data', 'profile_data'] and isinstance(value, str):
+                            try:
+                                data[key] = json.loads(value)
+                            except:
+                                pass
+                    
+                    if hasattr(model_type, 'from_dict'):
+                        return model_type.from_dict(data)
+                    else:
+                        return model_type.model_validate(data)
+                else:
+                    # Generic model - data stored as JSON in 'data' column
+                    if 'data' in data and isinstance(data['data'], str):
+                        try:
+                            obj_data = json.loads(data['data'])
+                            return model_type.model_validate(obj_data)
+                        except Exception:
+                            return None
         return None
 
-    async def upsert_async(self, data: Union[InteractionSession, UserProfile]) -> None:
-        data.updated_at = time.time()
+    async def _ensure_table_for_model(self, model_type: Type[BaseModel]) -> str:
+        """
+        Ensure table exists for a model type and return table name.
+        
+        For arbitrary models, creates a generic JSON storage table.
+        
+        Args:
+            model_type: Pydantic model class
+            
+        Returns:
+            Table name
+        """
+        table_info = self._get_table_info_for_model(model_type)
+        if table_info is None:
+            raise TypeError(f"Cannot determine table for model: {model_type.__name__}")
+        
+        table_name, key_col = table_info
+        
+        # For non-standard models, create generic JSON storage table
+        if model_type not in [InteractionSession, UserProfile]:
+            db = await self._get_connection()
+            # Create generic table: key + data (JSON) + timestamps
+            await db.execute(f"""
+                CREATE TABLE IF NOT EXISTS {table_name} (
+                    {key_col} TEXT PRIMARY KEY,
+                    data TEXT NOT NULL,
+                    created_at REAL,
+                    updated_at REAL
+                )
+            """)
+            await db.commit()
+        
+        return table_name
+    
+    async def upsert_async(self, data: BaseModel) -> None:
+        # Update timestamp if it exists
+        if hasattr(data, 'updated_at'):
+            data.updated_at = time.time()
         
         if isinstance(data, InteractionSession):
             table = self.sessions_table_name
@@ -160,21 +248,114 @@ class SqliteStorage(Storage):
             """
             params = (data.user_id, json.dumps(data.profile_data), data.created_at, data.updated_at)
         else:
-            raise TypeError(f"Unsupported data type for upsert: {type(data).__name__}")
+            # Generic model support
+            table_name = await self._ensure_table_for_model(type(data))
+            table_info = self._get_table_info_for_model(type(data))
+            _, key_col = table_info
+            
+            # Get the key value
+            key_value = getattr(data, key_col)
+            
+            # Serialize entire model as JSON
+            data_json = data.model_dump_json()
+            
+            # Get timestamps
+            created_at = getattr(data, 'created_at', time.time())
+            updated_at = getattr(data, 'updated_at', time.time())
+            
+            sql = f"""
+                INSERT INTO {table_name} ({key_col}, data, created_at, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT({key_col}) DO UPDATE SET
+                    data=excluded.data, updated_at=excluded.updated_at
+            """
+            params = (key_value, data_json, created_at, updated_at)
 
         db = await self._get_connection()
         await db.execute(sql, params)
         await db.commit()
 
     async def delete_async(self, object_id: str, model_type: Type[BaseModel]) -> None:
-        if model_type is InteractionSession: table, key_col = self.sessions_table_name, "session_id"
-        elif model_type is UserProfile: table, key_col = self.profiles_table_name, "user_id"
-        else: return
+        table_info = self._get_table_info_for_model(model_type)
+        if table_info is None:
+            return
+        
+        table, key_col = table_info
 
         db = await self._get_connection()
         sql = f"DELETE FROM {table} WHERE {key_col} = ?"
         await db.execute(sql, (object_id,))
         await db.commit()
+    
+    async def list_all_async(self, model_type: Type[T]) -> List[T]:
+        """
+        List all objects of a specific type from storage.
+        
+        Args:
+            model_type: The Pydantic model class to query
+            
+        Returns:
+            List of all objects of the specified type
+        """
+        table_info = self._get_table_info_for_model(model_type)
+        if table_info is None:
+            return []
+        
+        table_name, key_col = table_info
+        
+        # Ensure table exists
+        await self._ensure_table_for_model(model_type)
+        
+        db = await self._get_connection()
+        
+        # Check if table exists
+        async with db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (table_name,)
+        ) as cursor:
+            if not await cursor.fetchone():
+                # Table doesn't exist yet
+                return []
+        
+        # Query all rows
+        sql = f"SELECT * FROM {table_name}"
+        results = []
+        
+        async with db.execute(sql) as cursor:
+            async for row in cursor:
+                data = dict(row)
+                
+                if model_type in [InteractionSession, UserProfile]:
+                    # Handle known types
+                    for key, value in data.items():
+                        if key in ['chat_history', 'session_data', 'extra_data', 'profile_data'] and isinstance(value, str):
+                            try:
+                                data[key] = json.loads(value)
+                            except:
+                                pass
+                    
+                    if hasattr(model_type, 'from_dict'):
+                        obj = model_type.from_dict(data)
+                    else:
+                        obj = model_type.model_validate(data)
+                else:
+                    # Generic model - data is stored as JSON
+                    if 'data' in data and isinstance(data['data'], str):
+                        try:
+                            obj_data = json.loads(data['data'])
+                            obj = model_type.model_validate(obj_data)
+                        except Exception:
+                            continue
+                    else:
+                        # Try to parse the whole row
+                        try:
+                            obj = model_type.model_validate(data)
+                        except Exception:
+                            continue
+                
+                results.append(obj)
+        
+        return results
 
     async def drop_async(self) -> None:
         db = await self._get_connection()

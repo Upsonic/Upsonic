@@ -70,13 +70,35 @@ class RedisStorage(Storage):
             ssl=ssl, decode_responses=True
         )
 
-    def _get_key(self, object_id: str, model_type: Type[BaseModel]) -> str:
-        if model_type is InteractionSession: return f"{self.prefix}:session:{object_id}"
-        elif model_type is UserProfile: return f"{self.prefix}:profile:{object_id}"
-        raise TypeError(f"Unsupported model type for key generation: {model_type.__name__}")
+    def _get_primary_key_field(self, model_type: Type[BaseModel]) -> str:
+        """Determine the primary key field for a model type."""
+        if model_type is InteractionSession:
+            return "session_id"
+        elif model_type is UserProfile:
+            return "user_id"
+        
+        # Auto-detect for generic types
+        if hasattr(model_type, 'model_fields'):
+            for field_name in ['path', 'id', 'key', 'name']:
+                if field_name in model_type.model_fields:
+                    return field_name
+        return "id"
     
-    def _serialize(self, data: Dict[str, Any]) -> str: return json.dumps(data)
-    def _deserialize(self, data: str) -> Dict[str, Any]: return json.loads(data)
+    def _get_key(self, object_id: str, model_type: Type[BaseModel]) -> str:
+        if model_type is InteractionSession:
+            return f"{self.prefix}:session:{object_id}"
+        elif model_type is UserProfile:
+            return f"{self.prefix}:profile:{object_id}"
+        else:
+            # Generic model: prefix:model:model_type_name:object_id
+            model_name = model_type.__name__.lower()
+            return f"{self.prefix}:model:{model_name}:{object_id}"
+    
+    def _serialize(self, data: Dict[str, Any]) -> str:
+        return json.dumps(data)
+    
+    def _deserialize(self, data: str) -> Dict[str, Any]:
+        return json.loads(data)
 
 
 
@@ -125,26 +147,70 @@ class RedisStorage(Storage):
             return None
         try:
             data_dict = self._deserialize(data_str)
-            return model_type.from_dict(data_dict)
+            
+            # Try from_dict first, fallback to model_validate
+            if hasattr(model_type, 'from_dict'):
+                return model_type.from_dict(data_dict)
+            else:
+                return model_type.model_validate(data_dict)
         except (json.JSONDecodeError, TypeError) as e:
             from upsonic.utils.printing import warning_log
             warning_log(f"Could not parse key {key}. Error: {e}", "RedisStorage")
             return None
 
-    async def upsert_async(self, data: Union[InteractionSession, UserProfile]) -> None:
-        data.updated_at = time.time()
+    async def upsert_async(self, data: BaseModel) -> None:
+        if hasattr(data, 'updated_at'):
+            data.updated_at = time.time()
+        
         data_dict = data.model_dump(mode="json")
         json_string = self._serialize(data_dict)
 
-        if isinstance(data, InteractionSession): key = self._get_key(data.session_id, InteractionSession)
-        elif isinstance(data, UserProfile): key = self._get_key(data.user_id, UserProfile)
-        else: raise TypeError(f"Unsupported data type for upsert: {type(data).__name__}")
+        if isinstance(data, InteractionSession):
+            key = self._get_key(data.session_id, InteractionSession)
+        elif isinstance(data, UserProfile):
+            key = self._get_key(data.user_id, UserProfile)
+        else:
+            # Generic model support
+            primary_key_field = self._get_primary_key_field(type(data))
+            object_id = getattr(data, primary_key_field)
+            key = self._get_key(object_id, type(data))
         
         await self.redis_client.set(key, json_string, ex=self.expire)
 
     async def delete_async(self, object_id: str, model_type: Type[BaseModel]) -> None:
         key = self._get_key(object_id, model_type)
         await self.redis_client.delete(key)
+    
+    async def list_all_async(self, model_type: Type[T]) -> list[T]:
+        """List all objects of a specific type."""
+        if model_type is InteractionSession:
+            pattern = f"{self.prefix}:session:*"
+        elif model_type is UserProfile:
+            pattern = f"{self.prefix}:profile:*"
+        else:
+            # Generic model
+            model_name = model_type.__name__.lower()
+            pattern = f"{self.prefix}:model:{model_name}:*"
+        
+        results = []
+        
+        # Scan for all matching keys
+        async for key in self.redis_client.scan_iter(match=pattern):
+            try:
+                data_str = await self.redis_client.get(key)
+                if data_str:
+                    data_dict = self._deserialize(data_str)
+                    
+                    if hasattr(model_type, 'from_dict'):
+                        obj = model_type.from_dict(data_dict)
+                    else:
+                        obj = model_type.model_validate(data_dict)
+                    
+                    results.append(obj)
+            except Exception:
+                continue
+        
+        return results
 
     async def drop_async(self) -> None:
         """Asynchronously deletes ALL keys associated with this provider's prefix."""

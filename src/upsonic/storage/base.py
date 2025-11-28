@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import List, Optional, Type, TypeVar, Union, overload
+from typing import List, Optional, Type, TypeVar, Union, overload, Any
 
 from pydantic import BaseModel, Field
 
@@ -65,8 +65,10 @@ class Storage(AsyncExecutionMixin, ABC):
     def upsert(self, data: InteractionSession) -> None: ...
     @overload
     def upsert(self, data: UserProfile) -> None: ...
+    @overload
+    def upsert(self, data: BaseModel) -> None: ...
     @abstractmethod
-    def upsert(self, data: Union[InteractionSession, UserProfile]) -> None:
+    def upsert(self, data: BaseModel) -> None:
         raise NotImplementedError
 
     @overload
@@ -111,8 +113,10 @@ class Storage(AsyncExecutionMixin, ABC):
     async def upsert_async(self, data: InteractionSession) -> None: ...
     @overload
     async def upsert_async(self, data: UserProfile) -> None: ...
+    @overload
+    async def upsert_async(self, data: BaseModel) -> None: ...
     @abstractmethod
-    async def upsert_async(self, data: Union[InteractionSession, UserProfile]) -> None:
+    async def upsert_async(self, data: BaseModel) -> None:
         raise NotImplementedError
 
     @overload
@@ -126,3 +130,28 @@ class Storage(AsyncExecutionMixin, ABC):
     @abstractmethod
     async def drop_async(self) -> None:
         raise NotImplementedError
+    
+    # Generic query methods for arbitrary Pydantic models
+    async def list_all_async(self, model_type: Type[T]) -> List[T]:
+        """
+        List all objects of a specific type.
+        
+        This method enables querying all instances of any Pydantic model type.
+        Useful for FilesystemEntry, custom models, etc.
+        
+        Args:
+            model_type: The Pydantic model class to query
+            
+        Returns:
+            List of all objects of the specified type
+            
+        Note: Default implementation returns empty list.
+              Storage providers should override for full functionality.
+        """
+        # Default implementation (for backward compatibility)
+        # Providers can override for actual querying
+        return []
+    
+    def list_all(self, model_type: Type[T]) -> List[T]:
+        """Synchronous wrapper for list_all_async."""
+        return self._run_async_from_sync(self.list_all_async(model_type))

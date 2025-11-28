@@ -6,6 +6,7 @@ import copy
 from typing import Any, Callable, Dict, List, Literal, Optional, TYPE_CHECKING
 from pydantic import BaseModel, Field
 
+from upsonic.tools.base import Tool
 from upsonic.tools.config import tool
 
 if TYPE_CHECKING:
@@ -112,7 +113,7 @@ def plan_and_execute(thought: Thought) -> str:
     return "Plan received and will be executed by the orchestrator."
 
 
-class Orchestrator:
+class Orchestrator(Tool):
     """Orchestrator for complex multi-step tool executions with optional reasoning."""
     
     def __init__(
@@ -122,6 +123,13 @@ class Orchestrator:
         wrapped_tools: Dict[str, Callable]
     ):
         """Initialize the orchestrator."""
+        # Initialize Tool base class
+        super().__init__(
+            name="orchestrator",
+            description="Orchestrates multi-step tool execution with reasoning",
+            tool_id=f"Orchestrator_{id(agent_instance)}"  # Unique per agent instance
+        )
+        
         self.agent_instance = agent_instance
         self.task = task
         self.wrapped_tools = wrapped_tools
