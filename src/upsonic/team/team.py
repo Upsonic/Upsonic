@@ -212,7 +212,7 @@ class Team:
             final_task = Task(
                 description=consolidated_description,
                 attachments=all_attachments or None,
-                tools=list(set(all_tools)),
+                tools=list(set(all_tools)) if all_tools else None,
                 response_format=self.response_format
             )
 

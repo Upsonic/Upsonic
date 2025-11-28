@@ -71,5 +71,8 @@ class StepContext(BaseModel):
     # Streaming-specific attributes
     streaming_events: List[Any] = Field(default_factory=list, description="Events collected during streaming")
 
+    # DeepAgent-specific attributes
+    plan_context: Optional[str] = Field(default=None, description="Formatted plan for system prompt injection")
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

@@ -18,15 +18,15 @@ from upsonic.utils.package.exception import (
     VectorDBConnectionError, 
     UpsertError,
 )
+from upsonic.tools import ToolKit, tool
 
 
-class KnowledgeBase:
+class KnowledgeBase(ToolKit):
     """
     The central, intelligent orchestrator for a collection of knowledge in an AI Agent Framework.
 
     This class manages the entire lifecycle of documents for RAG (Retrieval-Augmented Generation) 
-    pipelines, from ingestion and processing to vector storage and retrieval. It is designed
-    to be idempotent, efficient, and production-ready.
+    pipelines, from ingestion and processing to vector storage and retrieval.
 
     Key Features:
     - **Intelligent Document Processing**: Automatic loader and splitter detection
@@ -49,6 +49,8 @@ class KnowledgeBase:
         splitters: Optional[Union[BaseChunker, List[BaseChunker]]] = None,
         loaders: Optional[Union[BaseLoader, List[BaseLoader]]] = None,
         name: Optional[str] = None,
+        description: Optional[str] = None,
+        topics: Optional[List[str]] = None,
         use_case: str = "rag_retrieval",
         quality_preference: str = "balanced",
         loader_config: Optional[Dict[str, Any]] = None,
@@ -105,6 +107,10 @@ class KnowledgeBase:
 
         # Validate that all file/directory sources exist before processing
         self._validate_sources_exist(sources)
+        self.description: str = description or f"Knowledge base for {name}"
+        self.topics: List[str] = topics or []
+        # Set dynamic docstring for search method with description
+        self._update_search_docstring()
 
         # Core components
         self.sources: List[Union[str, Path]] = self._resolve_sources(sources)
@@ -140,6 +146,31 @@ class KnowledgeBase:
             f"{len(self.loaders)} loaders, {len(self.splitters)} splitters",
             context="KnowledgeBase"
         )
+
+    def _update_search_docstring(self) -> None:
+        """
+        Update the search method's docstring to include the knowledge base description.
+        """
+        base_docstring = """Search the knowledge base for relevant information using semantic similarity.
+
+        This tool performs intelligent retrieval from the indexed knowledge base for the topics: {topics}.
+
+        Description about knowledge base:
+            {description}
+
+        Args:
+            query: The question, topic, or search query to find relevant information.
+                  Can be a natural language question, a topic description, or keywords.
+                  Examples: "What is machine learning?", "How does authentication work?",
+                  "Python best practices", "API documentation for user management".
+
+        Returns:
+            A formatted string containing the most relevant information found in the
+            knowledge base. Results are ranked by relevance and presented in a readable
+            format. Returns "No relevant information found in the knowledge base."
+            if no matches are found.
+        """
+        self.search.__doc__ = base_docstring.format(description=self.description)
 
     def _validate_sources_exist(self, sources: Union[str, Path, List[Union[str, Path]]]) -> None:
         """
@@ -975,7 +1006,6 @@ class KnowledgeBase:
                 search_type=search_type,
                 **search_kwargs
             )
-
             # Convert to RAG results
             rag_results = self._convert_to_rag_results(search_results)
 
@@ -995,6 +1025,54 @@ class KnowledgeBase:
         except Exception as e:
             error_log(f"Query failed: {e}", context="KnowledgeBase")
             raise
+
+    @tool
+    async def search(self, query: str) -> str:
+        """
+        Search the knowledge base for relevant information using semantic similarity.
+
+        This tool performs intelligent retrieval from the indexed knowledge base, using
+        vector similarity search to find the most relevant chunks of information that
+        match the query. The search leverages embeddings to understand semantic meaning,
+        making it effective for finding information even when exact keywords don't match.
+
+        Args:
+            query: The question, topic, or search query to find relevant information.
+                  Can be a natural language question, a topic description, or keywords.
+                  Examples: "What is machine learning?", "How does authentication work?",
+                  "Python best practices", "API documentation for user management".
+
+        Returns:
+            A formatted string containing the most relevant information found in the
+            knowledge base. Results are ranked by relevance and presented in a readable
+            format. Returns "No relevant information found in the knowledge base."
+            if no matches are found.
+
+        Use Cases:
+            - **Question Answering**: Answer specific questions from documentation or
+              knowledge sources. Example: "What are the system requirements?"
+            
+            - **Information Retrieval**: Find relevant sections or topics from large
+              document collections. Example: "Find information about error handling"
+            
+            - **Code Documentation Lookup**: Search through codebases or technical docs
+              for specific functionality. Example: "How to implement authentication?"
+            
+            - **Research Assistance**: Retrieve relevant information for research or
+              analysis tasks. Example: "What are the best practices for database design?"
+            
+            - **Context Gathering**: Collect relevant context before generating responses
+              or performing tasks. Example: "Find all mentions of security protocols"
+        """
+        results = await self.query_async(query)
+        if not results:
+            return "No relevant information found in the knowledge base."
+        
+        formatted_results = []
+        for i, result in enumerate(results, 1):
+            formatted_results.append(f"Result {i}:\n{result.text}")
+            
+        return "\n\n".join(formatted_results)
 
     async def _perform_search(
         self,

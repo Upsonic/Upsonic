@@ -437,7 +437,8 @@ class TestKnowledgeBaseIntegration:
             )
         ]
     
-    def test_knowledge_base_creation(self, mock_embedding_provider, mock_vectordb, temp_dir):
+    @patch('upsonic.knowledge_base.knowledge_base.KnowledgeBase._update_search_docstring')
+    def test_knowledge_base_creation(self, mock_update_docstring, mock_embedding_provider, mock_vectordb, temp_dir):
         """Test knowledge base creation with embedding provider."""
         chunker = MockChunker(chunk_size=50, chunk_overlap=10)
         loader = MockLoader("Sample content for testing knowledge base.")
@@ -456,7 +457,8 @@ class TestKnowledgeBaseIntegration:
         assert kb.vectordb == mock_vectordb
     
     @pytest.mark.asyncio
-    async def test_knowledge_base_setup(self, mock_embedding_provider, mock_vectordb, temp_dir):
+    @patch('upsonic.knowledge_base.knowledge_base.KnowledgeBase._update_search_docstring')
+    async def test_knowledge_base_setup(self, mock_update_docstring, mock_embedding_provider, mock_vectordb, temp_dir):
         """Test knowledge base setup process."""
         chunker = MockChunker(chunk_size=50, chunk_overlap=10)
         loader = MockLoader("Sample content for testing knowledge base setup.")
@@ -476,7 +478,8 @@ class TestKnowledgeBaseIntegration:
         assert kb._is_ready is True
     
     @pytest.mark.asyncio
-    async def test_knowledge_base_query(self, mock_embedding_provider, mock_vectordb, temp_dir):
+    @patch('upsonic.knowledge_base.knowledge_base.KnowledgeBase._update_search_docstring')
+    async def test_knowledge_base_query(self, mock_update_docstring, mock_embedding_provider, mock_vectordb, temp_dir):
         """Test knowledge base querying functionality."""
         chunker = MockChunker(chunk_size=50, chunk_overlap=10)
         loader = MockLoader("Sample content for testing knowledge base queries.")
@@ -502,7 +505,8 @@ class TestKnowledgeBaseIntegration:
             assert "not ready" in str(e).lower() or "index" in str(e).lower()
     
     @pytest.mark.asyncio
-    async def test_knowledge_base_health_check(self, mock_embedding_provider, mock_vectordb, temp_dir):
+    @patch('upsonic.knowledge_base.knowledge_base.KnowledgeBase._update_search_docstring')
+    async def test_knowledge_base_health_check(self, mock_update_docstring, mock_embedding_provider, mock_vectordb, temp_dir):
         """Test knowledge base health check."""
         chunker = MockChunker(chunk_size=50, chunk_overlap=10)
         loader = MockLoader("Sample content for testing health check.")
@@ -521,7 +525,8 @@ class TestKnowledgeBaseIntegration:
         assert "healthy" in health_status
         assert "components" in health_status
     
-    def test_knowledge_base_config_summary(self, mock_embedding_provider, mock_vectordb, temp_dir):
+    @patch('upsonic.knowledge_base.knowledge_base.KnowledgeBase._update_search_docstring')
+    def test_knowledge_base_config_summary(self, mock_update_docstring, mock_embedding_provider, mock_vectordb, temp_dir):
         """Test knowledge base configuration summary."""
         chunker = MockChunker(chunk_size=50, chunk_overlap=10)
         loader = MockLoader("Sample content for testing config summary.")

@@ -12,6 +12,7 @@ from .data_privacy_policies import *
 from .fraud_detection_policies import *
 from .phishing_policies import *
 from .insider_threat_policies import *
+from .tool_safety_policies import *
 
 __all__ = [
     # Original policies
@@ -123,4 +124,14 @@ __all__ = [
     "InsiderThreatReplacePolicy",
     "InsiderThreatRaiseExceptionPolicy",
     "InsiderThreatRaiseExceptionPolicy_LLM",
+    
+    # Tool Safety Policies
+    "HarmfulToolBlockPolicy",
+    "HarmfulToolBlockPolicy_LLM",
+    "HarmfulToolRaiseExceptionPolicy",
+    "HarmfulToolRaiseExceptionPolicy_LLM",
+    "MaliciousToolCallBlockPolicy",
+    "MaliciousToolCallBlockPolicy_LLM",
+    "MaliciousToolCallRaiseExceptionPolicy",
+    "MaliciousToolCallRaiseExceptionPolicy_LLM",
 ]

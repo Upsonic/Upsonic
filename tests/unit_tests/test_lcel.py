@@ -360,8 +360,8 @@ def test_runnablebranch():
     )
     
     # Create specialized chains
-    langchain_chain = (
-        ChatPromptTemplate.from_template("LangChain expert: {question}")
+    upsonic_chain = (
+        ChatPromptTemplate.from_template("Upsonic expert: {question}")
         | model
     )
     
@@ -378,14 +378,14 @@ def test_runnablebranch():
     # Create branch with conditions
     branch = RunnableBranch(
         (lambda x: "anthropic" in x.get("topic", "").lower(), anthropic_chain),
-        (lambda x: "langchain" in x.get("topic", "").lower(), langchain_chain),
+        (lambda x: "upsonic" in x.get("topic", "").lower(), upsonic_chain),
         general_chain  # default
     )
     
     # Test with different inputs
     test_cases = [
         {"topic": "anthropic", "question": "How does Anthropic work?"},
-        {"topic": "langchain", "question": "How does LangChain work?"},
+        {"topic": "upsonic", "question": "How does Upsonic work?"},
         {"topic": "other", "question": "How does AI work?"},
     ]
     
@@ -397,8 +397,8 @@ def test_runnablebranch():
         # Verify correct branch was taken
         if "anthropic" in test_input["topic"].lower():
             assert "Anthropic expert" in result
-        elif "langchain" in test_input["topic"].lower():
-            assert "LangChain expert" in result
+        elif "upsonic" in test_input["topic"].lower():
+            assert "Upsonic expert" in result
         else:
             assert "General" in result
     

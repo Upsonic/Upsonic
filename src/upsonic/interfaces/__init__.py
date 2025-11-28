@@ -8,6 +8,7 @@ Public API:
     - Interface: Base class for custom interfaces
     - InterfaceManager: Central manager for orchestrating interfaces
     - WhatsAppInterface: WhatsApp Business API integration
+    - GmailInterface: Gmail API integration
     - InterfaceSettings: Configuration settings
     - WebSocketManager: WebSocket connection manager
 
@@ -32,6 +33,7 @@ from upsonic.interfaces.base import Interface
 from upsonic.interfaces.manager import InterfaceManager
 from upsonic.interfaces.whatsapp.interface import WhatsAppInterface
 from upsonic.interfaces.slack import SlackInterface
+from upsonic.interfaces.gmail import GmailInterface
 from upsonic.interfaces.settings import InterfaceSettings
 from upsonic.interfaces.websocket_manager import WebSocketManager, WebSocketConnection
 from upsonic.interfaces.auth import (
@@ -55,6 +57,7 @@ from upsonic.interfaces.whatsapp.schemas import WhatsAppWebhookPayload
 # Aliases for convenience
 Whatsapp = WhatsAppInterface  # Shortened alias
 Slack = SlackInterface
+Gmail = GmailInterface
 
 __all__ = [
     # Core classes
@@ -67,6 +70,8 @@ __all__ = [
     "Whatsapp",  # Alias
     "SlackInterface",
     "Slack",
+    "GmailInterface",
+    "Gmail",
     
     # WebSocket
     "WebSocketManager",
@@ -86,4 +91,3 @@ __all__ = [
 ]
 
 __version__ = "1.0.0"
-

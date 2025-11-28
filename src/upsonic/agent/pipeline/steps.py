@@ -253,7 +253,12 @@ class ToolSetupStep(Step):
     
     async def execute(self, context: StepContext) -> StepResult:
         """Setup tools for the task."""
-        context.agent._setup_tools(context.task)
+        # Setup task-specific tools
+        context.agent._setup_task_tools(context.task)
+        
+        # Set current task on PlanningToolKit if it exists (for write_todos)
+        if hasattr(context.agent, '_planning_toolkit') and context.agent._planning_toolkit:
+            context.agent._planning_toolkit.set_current_task(context.task)
         
         return StepResult(
             status=StepStatus.SUCCESS,

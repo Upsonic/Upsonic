@@ -13,10 +13,13 @@ from upsonic.providers import Provider
 
 try:
     from anthropic import AsyncAnthropic, AsyncAnthropicBedrock, AsyncAnthropicVertex
-except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `anthropic` package to use the Anthropic provider, '
-    ) from _import_error
+except ImportError:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="anthropic",
+        install_command="pip install anthropic",
+        feature_name="Anthropic provider"
+    )
 
 
 AsyncAnthropicClient: TypeAlias = AsyncAnthropic | AsyncAnthropicBedrock | AsyncAnthropicVertex

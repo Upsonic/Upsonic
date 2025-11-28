@@ -6,12 +6,9 @@ from typing import Dict, Any
 
 from upsonic.tools.deferred import (
     DeferredExecutionManager,
-    DeferredToolRequests,
-    DeferredToolResults,
-    ToolApproval,
     ExternalToolCall,
 )
-from upsonic.tools.base import ToolCall, ToolResult
+from upsonic.tools.base import ToolResult
 
 
 class TestDeferredTools:
@@ -28,7 +25,6 @@ class TestDeferredTools:
             tool_name="test_tool",
             args={"param": "value"},
             tool_call_id="123",
-            requires_approval=False,
         )
 
         assert isinstance(external_call, ExternalToolCall)
@@ -36,78 +32,35 @@ class TestDeferredTools:
         assert external_call.tool_args == {"param": "value"}
         assert external_call.tool_call_id == "123"
 
-    @pytest.mark.asyncio
-    async def test_deferred_tool_execution(self, deferred_manager):
-        """Test deferred execution."""
-        # Create external call
+    def test_deferred_tool_update_result(self, deferred_manager):
+        """Test updating external call result."""
         external_call = deferred_manager.create_external_call(
             tool_name="test_tool", args={"param": "value"}, tool_call_id="123"
         )
 
-        # Create results
-        results = DeferredToolResults()
-        results.add_result("123", "execution_result")
+        updated_call = deferred_manager.update_call_result(
+            tool_call_id="123",
+            result="execution_result"
+        )
 
-        # Process results
-        tool_results = deferred_manager.process_results(results)
+        assert updated_call is not None
+        assert updated_call.result == "execution_result"
+        assert updated_call.error is None
 
-        assert len(tool_results) == 1
-        assert tool_results[0].tool_name == "test_tool"
-        assert tool_results[0].content == "execution_result"
-        assert tool_results[0].success is True
+    def test_deferred_tool_update_error(self, deferred_manager):
+        """Test updating external call with error."""
+        external_call = deferred_manager.create_external_call(
+            tool_name="test_tool", args={}, tool_call_id="123"
+        )
 
-    def test_deferred_tool_requests(self):
-        """Test deferred tool requests."""
-        requests = DeferredToolRequests()
+        updated_call = deferred_manager.update_call_result(
+            tool_call_id="123",
+            error="Test error"
+        )
 
-        call = ToolCall(tool_name="test", args={"param": "value"}, tool_call_id="123")
-        requests.add_call(call)
-
-        assert len(requests.calls) == 1
-        assert requests.is_empty() is False
-
-    def test_deferred_tool_approvals(self):
-        """Test deferred tool approvals."""
-        requests = DeferredToolRequests()
-
-        call = ToolCall(tool_name="test", args={"param": "value"}, tool_call_id="123")
-        requests.add_approval(call)
-
-        assert len(requests.approvals) == 1
-        assert requests.is_empty() is False
-
-    def test_deferred_tool_results(self):
-        """Test deferred tool results."""
-        results = DeferredToolResults()
-
-        results.add_result("123", "result_data")
-        assert results.get_result("123") == "result_data"
-        assert results.get_result("nonexistent") is None
-
-    def test_deferred_tool_approval_decision(self):
-        """Test approval decision."""
-        results = DeferredToolResults()
-
-        results.add_approval("123", approved=True, message="Approved")
-        approval = results.get_approval("123")
-
-        assert approval is not None
-        assert approval.approved is True
-        assert approval.message == "Approved"
-
-    def test_deferred_tool_denial(self, deferred_manager):
-        """Test tool denial."""
-        call = ToolCall(tool_name="test", args={}, tool_call_id="123")
-        deferred_manager.pending_requests.add_approval(call)
-
-        results = DeferredToolResults()
-        results.add_approval("123", approved=False, message="Denied")
-
-        tool_results = deferred_manager.process_results(results)
-
-        assert len(tool_results) == 1
-        assert tool_results[0].success is False
-        assert "Denied" in tool_results[0].content
+        assert updated_call is not None
+        assert updated_call.error == "Test error"
+        assert updated_call.result is None
 
     def test_deferred_tool_execution_history(self, deferred_manager):
         """Test execution history tracking."""
@@ -129,5 +82,6 @@ class TestDeferredTools:
 
         assert deferred_manager.has_pending_requests() is True
 
-        requests = deferred_manager.get_pending_requests()
-        assert len(requests.calls) == 1
+        pending_calls = deferred_manager.get_pending_calls()
+        assert len(pending_calls) == 1
+        assert pending_calls[0].tool_name == "test"

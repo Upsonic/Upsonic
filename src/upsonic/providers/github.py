@@ -18,10 +18,13 @@ from upsonic.providers import Provider
 
 try:
     from openai import AsyncOpenAI
-except ImportError as _import_error:  # pragma: no cover
-    raise ImportError(
-        'Please install the `openai` package to use the GitHub Models provider, '
-    ) from _import_error
+except ImportError:  # pragma: no cover
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="openai",
+        install_command="pip install openai",
+        feature_name="GitHub Models provider"
+    )
 
 
 class GitHubProvider(Provider[AsyncOpenAI]):

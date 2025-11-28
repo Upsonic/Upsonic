@@ -20,10 +20,13 @@ from upsonic.providers import Provider
 
 try:
     from groq import AsyncGroq
-except ImportError as _import_error:  # pragma: no cover
-    raise ImportError(
-        'Please install the `groq` package to use the Groq provider, '
-    ) from _import_error
+except ImportError:  # pragma: no cover
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="groq",
+        install_command="pip install groq",
+        feature_name="Groq provider"
+    )
 
 
 def groq_moonshotai_model_profile(model_name: str) -> ModelProfile | None:

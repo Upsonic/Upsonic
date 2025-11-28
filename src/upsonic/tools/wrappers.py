@@ -6,9 +6,9 @@ import asyncio
 import inspect
 from typing import Any, Callable, Dict, Optional, TYPE_CHECKING
 
-from upsonic.tools.base import Tool, ToolSchema, ToolMetadata
+from upsonic.tools.base import Tool, ToolMetadata
 from upsonic.tools.config import ToolConfig
-from upsonic.tools.schema import FunctionSchema
+from upsonic.tools.schema import FunctionSchema, function_schema, GenerateToolJsonSchema
 
 if TYPE_CHECKING:
     from upsonic.tasks.tasks import Task
@@ -24,31 +24,25 @@ class FunctionTool(Tool):
         config: Optional[ToolConfig] = None
     ):
         self.function = function
-        self.function_schema = schema
         self.config = config or ToolConfig()
         
-        # Convert function schema to tool schema
-        tool_schema = ToolSchema(
-            parameters=schema.parameters_schema,
-            return_type=schema.return_schema,
-            strict=config.strict if config.strict is not None else False
-        )
-        
-        # Create metadata
+        # Create metadata with universal fields
         metadata = ToolMetadata(
-            name=schema.name,
-            description=schema.description
+            name=function.__name__,
+            description=schema.description,
+            kind='function',
+            is_async=schema.is_async,
+            strict=config.strict if config and config.strict is not None else False
         )
         
         super().__init__(
-            name=schema.name,
+            name=function.__name__,
             description=schema.description,
-            schema=tool_schema,
+            schema=schema,
             metadata=metadata
         )
         
         self.is_async = schema.is_async
-        self.takes_ctx = schema.takes_ctx
     
     async def execute(self, *args: Any, **kwargs: Any) -> Any:
         """Execute the tool function."""
@@ -388,6 +382,7 @@ class AgentTool(Tool):
         agent_name = getattr(agent, 'name', None) or f"Agent_{id(agent)}"
         agent_role = getattr(agent, 'role', None)
         agent_goal = getattr(agent, 'goal', None)
+        agent_name = getattr(agent, 'name', None)
         system_prompt = getattr(agent, 'system_prompt', None)
         
         # Create method name
@@ -399,30 +394,47 @@ class AgentTool(Tool):
             description_parts.append(f"Role: {agent_role}")
         if agent_goal:
             description_parts.append(f"Goal: {agent_goal}")
+        if agent_name:
+            description_parts.append(f"Name: {agent_name}")
         if system_prompt:
-            description_parts.append(f"Specialty: {system_prompt[:100]}...")
+            description_parts.append(f"Specialty: {system_prompt}...")
         
         description = ". ".join(description_parts)
         
-        # Create schema
-        schema = ToolSchema(
-            parameters={
-                "type": "object",
-                "properties": {
-                    "request": {
-                        "type": "string",
-                        "description": "The task or question to delegate to the agent"
-                    }
-                },
-                "required": ["request"]
-            }
+        # Create a FunctionSchema for this agent tool
+        # Create schema with agent parameters
+        agent_func = self._create_agent_function()
+        agent_func.__name__ = method_name
+        agent_func.__doc__ = description
+        
+        agent_schema = function_schema(
+            function=agent_func,
+            schema_generator=GenerateToolJsonSchema,
+            require_parameter_descriptions=False
+        )
+        
+        # Create metadata with universal fields
+        metadata = ToolMetadata(
+            name=method_name,
+            description=description,
+            kind='agent',
+            is_async=True,
+            strict=False
         )
         
         super().__init__(
             name=method_name,
             description=description,
-            schema=schema
+            schema=agent_schema,
+            metadata=metadata
         )
+    
+    def _create_agent_function(self) -> Callable:
+        """Create a dummy function for the schema."""
+        async def agent_function(request: str) -> Any:
+            """Delegate request to agent."""
+            pass
+        return agent_function
     
     def _sanitize_name(self, name: str) -> str:
         """Sanitize name for use as method name."""
@@ -455,24 +467,3 @@ class AgentTool(Tool):
         
         # Convert result to string if needed
         return str(result) if result is not None else "No response from agent"
-
-
-class MethodTool(FunctionTool):
-    """Wrapper for class method tools with Pydantic support."""
-    
-    def __init__(
-        self,
-        instance: Any,
-        method: Callable,
-        schema: FunctionSchema,
-        config: Optional[ToolConfig] = None
-    ):
-        self.instance = instance
-        self.method = method
-        
-        # Initialize using FunctionTool's __init__ which sets up Pydantic handling
-        super().__init__(
-            function=method,
-            schema=schema,
-            config=config
-        )

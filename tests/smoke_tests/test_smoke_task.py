@@ -32,9 +32,6 @@ class AnalysisResult(BaseModel):
     confidence: float
     recommendations: list[str]
     key_metrics: dict[str, float]
-embedding_provider = OpenAIEmbedding()
-
-
 
 
 class TestUpsonicBasicFlow:

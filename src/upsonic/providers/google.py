@@ -15,10 +15,13 @@ try:
     from google.auth.credentials import Credentials
     from google.genai.client import Client
     from google.genai.types import HttpOptions
-except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `google-genai` package to use the Google provider, '
-    ) from _import_error
+except ImportError:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="google-genai",
+        install_command="pip install google-genai",
+        feature_name="Google provider"
+    )
 
 
 class GoogleProvider(Provider[Client]):

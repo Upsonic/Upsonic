@@ -133,10 +133,10 @@ class LoaderFactory:
                 conflicting_extensions.append(ext)
         
         if conflicting_extensions:
-            logger.warning(f"Extension conflicts detected for {loader_name}: {conflicting_extensions}")
+            logger.debug(f"Extension conflicts detected for {loader_name}: {conflicting_extensions}")
             for ext in conflicting_extensions:
                 old_loader = self._extensions[ext.lower()]
-                logger.info(f"Replacing {old_loader} with {loader_name} for extension {ext}")
+                logger.debug(f"Replacing {old_loader} with {loader_name} for extension {ext}")
         
         self._loaders[loader_name] = loader_class
         
@@ -287,7 +287,7 @@ class LoaderFactory:
                 loader = self.get_loader(source_str, loader_type, **source_config)
                 loaders.append(loader)
                 
-                logger.debug(f"Created {loader_type} loader for {source}")
+                logger.info(f"Created {loader_type.capitalize()}Loader for {source}")
                 
             except Exception as e:
                 logger.warning(f"Failed to create loader for {source}: {e}")

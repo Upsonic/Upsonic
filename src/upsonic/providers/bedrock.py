@@ -23,10 +23,13 @@ try:
     from botocore.exceptions import NoRegionError
     from botocore.session import Session
     from botocore.tokens import FrozenAuthToken
-except ImportError as _import_error:
-    raise ImportError(
-        'Please install the `boto3` package to use the Bedrock provider, '
-    ) from _import_error
+except ImportError:
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="boto3",
+        install_command="pip install boto3",
+        feature_name="Bedrock provider"
+    )
 
 
 @dataclass(kw_only=True)

@@ -41,7 +41,7 @@ from upsonic.messages import (
 from ..profiles import ModelProfile, ModelProfileSpec
 from ..profiles.groq import GroqModelProfile
 from ..providers import Provider, infer_provider
-from ..settings import ModelSettings
+from .settings import ModelSettings
 from ..tools import ToolDefinition
 from . import (
     Model,

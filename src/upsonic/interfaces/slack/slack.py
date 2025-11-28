@@ -1,10 +1,3 @@
-"""
-Slack Interface Implementation for Upsonic Framework.
-
-This module provides a production-ready Slack integration that handles incoming events,
-sends messages, and processes agent responses.
-"""
-
 import hashlib
 import hmac
 import json
@@ -362,6 +355,11 @@ class SlackInterface(Interface):
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Internal server error"
                 )
+
+        @router.get("/health", summary="Health Check")
+        async def health_check_endpoint():
+            """Health check endpoint for Slack interface."""
+            return await self.health_check()
 
         info_log("Slack routes attached with prefix: /slack")
         return router

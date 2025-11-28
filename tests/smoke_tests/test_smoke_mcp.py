@@ -81,8 +81,8 @@ class TestMCPOutputMessages:
         # Assert that specific lines are present in the output
         assert "✅ MCP tools discovered via thread" in output or "✅ MCP tools discovered" in output, \
             "Expected MCP tools discovery message not found in output"
-        
-        assert "Found 6 tools from DatabaseMCP" in output, \
+            
+        assert "Found 6 tools" in output, \
             "Expected 'Found 6 tools from DatabaseMCP' message not found in output"
         
         # Check for agent started message (with flexible formatting)

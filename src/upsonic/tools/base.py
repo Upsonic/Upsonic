@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import dataclasses
+import time
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import (
-    Any, Dict, List, Optional, 
+    Any, Dict, List, Optional,
     Literal, TypeAlias, TYPE_CHECKING
 )
 
 if TYPE_CHECKING:
-    from upsonic.tools.context import ToolMetrics
+    from upsonic.tools.metrics import ToolMetrics
+    from upsonic.tools.schema import FunctionSchema
 
 # Type aliases for compatibility
 DocstringFormat: TypeAlias = Literal['google', 'numpy', 'sphinx', 'auto']
@@ -22,34 +25,25 @@ ObjectJsonSchema: TypeAlias = Dict[str, Any]
 # Tool kinds
 ToolKind: TypeAlias = Literal['function', 'output', 'external', 'unapproved', 'mcp']
 
-
 @dataclass
 class ToolMetadata:
-    """Metadata for a tool."""
+    """Universal metadata for all tools."""
     name: str
     description: Optional[str] = None
-    version: Optional[str] = None
-    author: Optional[str] = None
-    tags: List[str] = field(default_factory=list)
-    custom: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class ToolSchema:
-    """Schema information for a tool."""
-    parameters: Dict[str, Any]  # JSON Schema for parameters
-    return_type: Optional[Dict[str, Any]] = None  # JSON Schema for return type
-    strict: bool = False
     
-    @property
-    def json_schema(self) -> Dict[str, Any]:
-        """Get the full JSON schema for the tool."""
-        return {
-            "type": "object",
-            "properties": self.parameters.get("properties", {}),
-            "required": self.parameters.get("required", []),
-            "additionalProperties": not self.strict
-        }
+    # Universal attributes
+    kind: ToolKind = 'function'
+    """Type of tool ('function', 'output', 'external', 'unapproved', 'mcp')"""
+    
+    is_async: bool = False
+    """Whether the tool is async"""
+    
+    strict: bool = False
+    """Whether to use strict schema validation"""
+    
+    # Tool-specific metadata
+    custom: Dict[str, Any] = field(default_factory=dict)
+    """Tool-specific metadata that doesn't fit in universal fields"""
 
 
 class Tool:
@@ -58,8 +52,8 @@ class Tool:
     
     This is the main class that all tools (except builtin tools) inherit from.
     It provides:
-    - Standard tool interface (name, description, schema, metadata)
-    - Metrics tracking for each tool instance
+    - Standard tool interface (name, description, metadata)
+    - Metrics tracking for each tool instance  
     - Abstract execute method for tool logic
     
     Usage:
@@ -71,7 +65,7 @@ class Tool:
                 super().__init__(
                     name="my_tool",
                     description="Does something useful",
-                    schema=ToolSchema(parameters={...})
+                    metadata=ToolMetadata(name="my_tool", kind='function')
                 )
             
             async def execute(self, **kwargs):
@@ -84,8 +78,9 @@ class Tool:
         self,
         name: str,
         description: Optional[str] = None,
-        schema: Optional[ToolSchema] = None,
+        schema: Optional['FunctionSchema'] = None,
         metadata: Optional[ToolMetadata] = None,
+        tool_id: Optional[str] = None,
     ):
         """
         Initialize a tool.
@@ -93,66 +88,62 @@ class Tool:
         Args:
             name: Tool name
             description: Tool description
-            schema: Tool parameter schema
+            schema: Tool's input schema
             metadata: Tool metadata
+            tool_id: Optional unique identifier. If not provided, auto-generated from class name + name
         """
-        self._name = name
-        self._description = description
-        self._schema = schema or ToolSchema(parameters={})
-        self._metadata = metadata or ToolMetadata(name=name)
+        self.name = name
+        self.description = description or ""
+        self.schema = schema
+        self.metadata = metadata or ToolMetadata(name=name)
+        
+        # Auto-generate stable tool_id if not provided
+        if tool_id is None:
+            tool_id = f"{self.__class__.__name__}_{name}"
+        self.tool_id = tool_id
         
         # Tool-specific metrics tracking
-        from upsonic.tools.context import ToolMetrics
+        from upsonic.tools.metrics import ToolMetrics
         self._metrics = ToolMetrics()
-    
-    @property
-    def name(self) -> str:
-        """The name of the tool."""
-        return self._name
-    
-    @property
-    def description(self) -> Optional[str]:
-        """The description of the tool."""
-        return self._description
-    
-    @property
-    def schema(self) -> ToolSchema:
-        """The schema for the tool."""
-        return self._schema
-    
-    @property
-    def metadata(self) -> ToolMetadata:
-        """The metadata for the tool."""
-        return self._metadata
     
     @property
     def metrics(self) -> "ToolMetrics":
         """The metrics for this tool instance."""
         return self._metrics
+
     
-    def record_execution(self, execution_time: float, success: bool = True) -> None:
+    
+    def record_execution(
+        self, 
+        execution_time: float, 
+        args: Dict[str, Any] = None,
+        result: Any = None,
+        success: bool = True
+    ) -> None:
         """
-        Record a tool execution in metrics.
+        Record a tool execution in metrics and history.
         
         Args:
             execution_time: Time taken to execute in seconds
+            args: Arguments passed to the tool
+            result: Result returned by the tool
             success: Whether the execution was successful
         """
         self._metrics.increment_tool_count()
         
         # Store execution history in metadata custom dict
-        if 'execution_history' not in self._metadata.custom:
-            self._metadata.custom['execution_history'] = []
+        if 'execution_history' not in self.metadata.custom:
+            self.metadata.custom['execution_history'] = []
         
-        self._metadata.custom['execution_history'].append({
+        self.metadata.custom['execution_history'].append({
+            'timestamp': time.time(),
             'execution_time': execution_time,
-            'success': success,
-            'total_calls': self._metrics.tool_call_count
+            'args': args,
+            'result': str(result) if result is not None else None,
+            'success': success
         })
-        
-        # Keep only last 100 executions to avoid memory bloat
-        if len(self._metadata.custom['execution_history']) > 100:
-            self._metadata.custom['execution_history'] = self._metadata.custom['execution_history'][-100:]
+        if len(self.metadata.custom['execution_history']) > 100:
+            self.metadata.custom['execution_history'] = self.metadata.custom['execution_history'][-100:]
     
     @abstractmethod
     async def execute(self, *args: Any, **kwargs: Any) -> Any:
@@ -226,22 +217,6 @@ class ToolDefinition:
         """Whether calls to this tool will be deferred."""
         return self.kind in ('external', 'unapproved')
 
-
-@dataclass
-class ToolCall:
-    """Internal representation of a tool call request."""
-    
-    tool_name: str
-    """The name of the tool to call."""
-    
-    args: Optional[Dict[str, Any]] = None
-    """The arguments to pass to the tool."""
-    
-    tool_call_id: Optional[str] = None
-    """The tool call identifier."""
-    
-    metadata: Optional[Dict[str, Any]] = None
-    """Additional metadata for the tool call."""
 
 
 @dataclass

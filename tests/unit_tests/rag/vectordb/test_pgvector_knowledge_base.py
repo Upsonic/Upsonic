@@ -61,14 +61,15 @@ class TestPgvectorKnowledgeBaseIntegration:
     @pytest.fixture
     def knowledge_base(self, pgvector_provider, mock_embedding_provider, mock_chunker, mock_loader):
         """Create a Knowledge Base with PgvectorProvider."""
-        return KnowledgeBase(
-            sources=["test_source.txt"],
-            embedding_provider=mock_embedding_provider,
-            vectordb=pgvector_provider,
-            splitters=mock_chunker,
-            loaders=mock_loader,
-            name="test_kb"
-        )
+        with patch('upsonic.knowledge_base.knowledge_base.KnowledgeBase._update_search_docstring'):
+            return KnowledgeBase(
+                sources=["test_source.txt"],
+                embedding_provider=mock_embedding_provider,
+                vectordb=pgvector_provider,
+                splitters=mock_chunker,
+                loaders=mock_loader,
+                name="test_kb"
+            )
     
     def test_pgvector_provider_initialization(self, pgvector_provider, pgvector_config):
         """Test PgvectorProvider initialization."""

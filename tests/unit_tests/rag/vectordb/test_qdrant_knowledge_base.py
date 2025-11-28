@@ -60,14 +60,15 @@ class TestQdrantKnowledgeBaseIntegration:
     @pytest.fixture
     def knowledge_base(self, qdrant_provider, mock_embedding_provider, mock_chunker, mock_loader):
         """Create a Knowledge Base with QdrantProvider."""
-        return KnowledgeBase(
-            sources=["test_source.txt"],
-            embedding_provider=mock_embedding_provider,
-            vectordb=qdrant_provider,
-            splitters=mock_chunker,
-            loaders=mock_loader,
-            name="test_kb"
-        )
+        with patch('upsonic.knowledge_base.knowledge_base.KnowledgeBase._update_search_docstring'):
+            return KnowledgeBase(
+                sources=["test_source.txt"],
+                embedding_provider=mock_embedding_provider,
+                vectordb=qdrant_provider,
+                splitters=mock_chunker,
+                loaders=mock_loader,
+                name="test_kb"
+            )
     
     def test_qdrant_provider_initialization(self, qdrant_provider, qdrant_config):
         """Test QdrantProvider initialization."""

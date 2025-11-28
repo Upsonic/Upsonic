@@ -13,10 +13,13 @@ from upsonic.providers import Provider
 
 try:
     from mistralai import Mistral
-except ImportError as e:  # pragma: no cover
-    raise ImportError(
-        'Please install the `mistral` package to use the Mistral provider, '
-    ) from e
+except ImportError:  # pragma: no cover
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="mistralai",
+        install_command="pip install mistralai",
+        feature_name="Mistral provider"
+    )
 
 
 class MistralProvider(Provider[Mistral]):

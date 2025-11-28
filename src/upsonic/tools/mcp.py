@@ -22,7 +22,7 @@ from mcp.client.session import ClientSession
 from mcp.client.sse import sse_client
 from mcp.client.stdio import StdioServerParameters, stdio_client, get_default_environment
 
-from upsonic.tools.base import Tool, ToolSchema, ToolMetadata
+from upsonic.tools.base import Tool, ToolMetadata
 
 # Try to import streamable HTTP client (may not be available in all MCP versions)
 try:
@@ -156,30 +156,43 @@ class MCPTool(Tool):
         self.handler = handler
         self.tool_info = tool_info
         
-        # Extract schema from tool info
-        input_schema = tool_info.inputSchema if tool_info.inputSchema else {}
+        from upsonic.tools.schema import FunctionSchema
         
-        # Convert MCP schema to our schema format
-        tool_schema = ToolSchema(
-            parameters=input_schema,
-            strict=True  # MCP tools are typically strict
+        input_schema = tool_info.inputSchema if tool_info.inputSchema else {
+            'type': 'object',
+            'properties': {},
+            'additionalProperties': True
+        }
+        
+        mcp_schema = FunctionSchema(
+            function=None,
+            description=tool_info.description,
+            validator=None,
+            json_schema=input_schema,
+            is_async=True,
+            single_arg_name=None,
+            positional_fields=[],
+            var_positional_field=None
         )
         
-        # Create metadata
+        # Create metadata with MCP tool info
         metadata = ToolMetadata(
             name=tool_info.name,
             description=tool_info.description,
-            custom={
-                'mcp_server': handler.server_name,
-                'mcp_type': handler.connection_type,
-                'mcp_transport': handler.transport
-            }
+            kind='mcp',
+            is_async=True,
+            strict=False
         )
+        
+        # Store MCP-specific data in custom
+        metadata.custom['mcp_server'] = handler.server_name
+        metadata.custom['mcp_type'] = handler.connection_type
+        metadata.custom['mcp_transport'] = handler.transport
         
         super().__init__(
             name=tool_info.name,
             description=tool_info.description,
-            schema=tool_schema,
+            schema=mcp_schema,
             metadata=metadata
         )
         
@@ -279,9 +292,11 @@ class MCPHandler:
                 self.connection_type = 'sse'
             elif transport == "streamable-http":
                 if not HAS_STREAMABLE_HTTP:
-                    raise ImportError(
-                        "Streamable HTTP transport requires mcp[streamable-http]. "
-                        "Install with: pip install 'mcp[streamable-http]'"
+                    from upsonic.utils.printing import import_error
+                    import_error(
+                        package_name="mcp[streamable-http]",
+                        install_command="pip install 'mcp[streamable-http]'",
+                        feature_name="MCP streamable HTTP transport"
                     )
                 self.connection_type = 'streamable-http'
             else:
@@ -357,7 +372,12 @@ class MCPHandler:
         elif self.connection_type == 'streamable-http':
             # Streamable HTTP connection
             if not HAS_STREAMABLE_HTTP:
-                raise ImportError("Streamable HTTP requires mcp[streamable-http]")
+                from upsonic.utils.printing import import_error
+                import_error(
+                    package_name="mcp[streamable-http]",
+                    install_command="pip install 'mcp[streamable-http]'",
+                    feature_name="MCP streamable HTTP"
+                )
             if isinstance(self.server_params, StreamableHTTPClientParams):
                 return streamablehttp_client(**asdict(self.server_params))
             else:

@@ -16,10 +16,13 @@ from upsonic.profiles.qwen import qwen_model_profile
 
 try:
     from huggingface_hub import AsyncInferenceClient
-except ImportError as _import_error:  # pragma: no cover
-    raise ImportError(
-        'Please install the `huggingface_hub` package to use the HuggingFace provider, '
-    ) from _import_error
+except ImportError:  # pragma: no cover
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="huggingface_hub",
+        install_command="pip install huggingface_hub",
+        feature_name="HuggingFace provider"
+    )
 
 from upsonic.providers import Provider
 

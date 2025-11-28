@@ -24,8 +24,11 @@ try:
         WeightedRanker,
     )
 except ImportError:
-    raise ImportError(
-        "The `pymilvus` package is required. Install it with: pip install pymilvus>=2.6.0"
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="pymilvus",
+        install_command="pip install pymilvus>=2.6.0",
+        feature_name="Milvus provider"
     )
 
 from upsonic.vectordb.base import BaseVectorDBProvider

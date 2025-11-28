@@ -153,6 +153,16 @@ def _get_policy_classes():
         InsiderThreatReplacePolicy,
         InsiderThreatRaiseExceptionPolicy,
         InsiderThreatRaiseExceptionPolicy_LLM,
+        
+        # Tool Safety Policies
+        HarmfulToolBlockPolicy,
+        HarmfulToolBlockPolicy_LLM,
+        HarmfulToolRaiseExceptionPolicy,
+        HarmfulToolRaiseExceptionPolicy_LLM,
+        MaliciousToolCallBlockPolicy,
+        MaliciousToolCallBlockPolicy_LLM,
+        MaliciousToolCallRaiseExceptionPolicy,
+        MaliciousToolCallRaiseExceptionPolicy_LLM,
     )
     
     return {
@@ -261,6 +271,16 @@ def _get_policy_classes():
         'InsiderThreatReplacePolicy': InsiderThreatReplacePolicy,
         'InsiderThreatRaiseExceptionPolicy': InsiderThreatRaiseExceptionPolicy,
         'InsiderThreatRaiseExceptionPolicy_LLM': InsiderThreatRaiseExceptionPolicy_LLM,
+        
+        # Tool Safety Policies
+        'HarmfulToolBlockPolicy': HarmfulToolBlockPolicy,
+        'HarmfulToolBlockPolicy_LLM': HarmfulToolBlockPolicy_LLM,
+        'HarmfulToolRaiseExceptionPolicy': HarmfulToolRaiseExceptionPolicy,
+        'HarmfulToolRaiseExceptionPolicy_LLM': HarmfulToolRaiseExceptionPolicy_LLM,
+        'MaliciousToolCallBlockPolicy': MaliciousToolCallBlockPolicy,
+        'MaliciousToolCallBlockPolicy_LLM': MaliciousToolCallBlockPolicy_LLM,
+        'MaliciousToolCallRaiseExceptionPolicy': MaliciousToolCallRaiseExceptionPolicy,
+        'MaliciousToolCallRaiseExceptionPolicy_LLM': MaliciousToolCallRaiseExceptionPolicy_LLM,
     }
 
 def __getattr__(name: str) -> Any:
@@ -405,4 +425,14 @@ __all__ = [
     "InsiderThreatReplacePolicy",
     "InsiderThreatRaiseExceptionPolicy",
     "InsiderThreatRaiseExceptionPolicy_LLM",
+    
+    # Tool Safety Policies
+    "HarmfulToolBlockPolicy",
+    "HarmfulToolBlockPolicy_LLM",
+    "HarmfulToolRaiseExceptionPolicy",
+    "HarmfulToolRaiseExceptionPolicy_LLM",
+    "MaliciousToolCallBlockPolicy",
+    "MaliciousToolCallBlockPolicy_LLM",
+    "MaliciousToolCallRaiseExceptionPolicy",
+    "MaliciousToolCallRaiseExceptionPolicy_LLM",
 ]

@@ -9,7 +9,7 @@ Components:
     - WhatsApp-specific schemas and utilities
 """
 
-from upsonic.interfaces.whatsapp.interface import WhatsAppInterface
+from upsonic.interfaces.whatsapp.whatsapp import WhatsAppInterface
 from upsonic.interfaces.whatsapp.schemas import WhatsAppWebhookPayload
 
 __all__ = [

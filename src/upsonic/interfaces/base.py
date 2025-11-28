@@ -1,11 +1,3 @@
-"""
-Base interface class for custom integrations.
-
-This module provides the abstract base class for all custom interfaces/integrations
-in the Upsonic framework. Each interface (e.g., WhatsApp, Slack) should inherit from
-this base class and implement the required methods.
-"""
-
 import uuid
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Optional, Dict, Any

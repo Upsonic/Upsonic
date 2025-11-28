@@ -7,7 +7,7 @@ from typing import Dict, Any
 from upsonic.tools import ToolManager
 from upsonic.tools.base import Tool, ToolResult, ToolDefinition
 from upsonic.tools.metrics import ToolMetrics
-from upsonic.tools.deferred import DeferredToolRequests, DeferredToolResults
+from upsonic.tools.deferred import DeferredExecutionManager
 
 
 class TestToolManager:
@@ -70,7 +70,7 @@ class TestToolManager:
                 return_value=AsyncMock(),
             ):
                 registered = tool_manager.register_tools(
-                    tools=[test_function], context=mock_context
+                    tools=[test_function]
                 )
 
                 assert "test_function" in registered
@@ -152,37 +152,35 @@ class TestToolManager:
 
     def test_tool_manager_has_deferred_requests(self, tool_manager):
         """Test checking for deferred requests."""
-        assert tool_manager.has_deferred_requests() is False
+        assert tool_manager.deferred_manager.has_pending_requests() is False
 
         # Add a deferred request
-        tool_manager.deferred_manager.pending_requests.add_call(
-            Mock(tool_name="test", args={}, tool_call_id="123")
+        tool_manager.deferred_manager.create_external_call(
+            tool_name="test", args={}, tool_call_id="123"
         )
 
-        assert tool_manager.has_deferred_requests() is True
+        assert tool_manager.deferred_manager.has_pending_requests() is True
 
     def test_tool_manager_get_deferred_requests(self, tool_manager):
         """Test getting deferred requests."""
-        requests = tool_manager.get_deferred_requests()
-        assert isinstance(requests, DeferredToolRequests)
-        assert requests.is_empty() is True
+        # Use deferred_manager directly
+        pending = tool_manager.deferred_manager.get_pending_calls()
+        assert isinstance(pending, list)
 
     def test_tool_manager_process_deferred_results(self, tool_manager):
         """Test processing deferred results."""
         # Add a pending call
-        from upsonic.tools.base import ToolCall
+        external_call = tool_manager.deferred_manager.create_external_call(
+            tool_name="test", args={"key": "value"}, tool_call_id="123"
+        )
 
-        call = ToolCall(tool_name="test", args={"key": "value"}, tool_call_id="123")
-        tool_manager.deferred_manager.pending_requests.add_call(call)
+        # Update with result
+        tool_manager.deferred_manager.update_call_result(
+            tool_call_id="123",
+            result="test_result"
+        )
 
-        # Create results
-        results = DeferredToolResults()
-        results.add_result("123", "test_result")
-
-        # Process results
-        tool_results = tool_manager.process_deferred_results(results)
-
-        assert len(tool_results) == 1
-        assert tool_results[0].tool_name == "test"
-        assert tool_results[0].content == "test_result"
-        assert tool_results[0].success is True
+        # The deferred manager tracks results in execution_history
+        history = tool_manager.deferred_manager.get_execution_history()
+        assert len(history) == 1
+        assert history[0].result == "test_result"

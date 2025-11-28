@@ -26,14 +26,22 @@ try:
     from sqlalchemy.inspection import inspect
     from sqlalchemy.sql.expression import bindparam
 except ImportError:
-    raise ImportError(
-        "`sqlalchemy` not installed. Please install using `pip install sqlalchemy psycopg`"
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="sqlalchemy psycopg",
+        install_command="pip install sqlalchemy psycopg",
+        feature_name="PGVector provider"
     )
 
 try:
     from pgvector.sqlalchemy import Vector
 except ImportError:
-    raise ImportError("`pgvector` not installed. Please install using `pip install pgvector`")
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="pgvector",
+        install_command="pip install pgvector",
+        feature_name="PGVector provider"
+    )
 
 from upsonic.vectordb.base import BaseVectorDBProvider
 from upsonic.vectordb.config import PgVectorConfig, HNSWIndexConfig, IVFIndexConfig, DistanceMetric
