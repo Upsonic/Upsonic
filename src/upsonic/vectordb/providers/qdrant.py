@@ -1485,7 +1485,7 @@ class QdrantProvider(BaseVectorDBProvider):
                         vector=vector,
                         text=point.payload.get("content", "") if point.payload else ""
                     ))
-            
+
             # Apply reranking if configured
             if self.reranker and kwargs.get('apply_reranking', True):
                 filtered_results = self._apply_reranking(filtered_results, str(query_vector))
