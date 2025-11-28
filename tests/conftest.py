@@ -1,6 +1,22 @@
 """Pytest configuration to handle DisallowedOperation exceptions gracefully."""
+import os
 import pytest
 import sys
+from pathlib import Path
+
+# Load environment variables from .env file before any tests run
+try:
+    from dotenv import load_dotenv
+    # Load .env from project root
+    env_path = Path(__file__).parent.parent / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+        print(f"✓ Loaded environment variables from: {env_path}")
+    else:
+        print(f"⚠️  .env file not found at: {env_path}")
+except ImportError:
+    print("⚠️  python-dotenv not installed. Install with: pip install python-dotenv")
+
 from upsonic.safety_engine.exceptions import DisallowedOperation
 
 
