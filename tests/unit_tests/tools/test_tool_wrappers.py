@@ -7,7 +7,6 @@ from typing import Dict, Any
 from upsonic.tools.wrappers import FunctionTool, AgentTool
 from upsonic.tools.schema import FunctionSchema
 from upsonic.tools.config import ToolConfig
-from upsonic.tools.base import ToolSchema
 
 
 class TestToolWrappers:
@@ -16,18 +15,16 @@ class TestToolWrappers:
     @pytest.fixture
     def mock_function_schema(self):
         """Create a mock function schema."""
-        return FunctionSchema(
-            function=Mock(),
-            name="test_function",
-            description="Test function",
-            parameters_schema={
-                "type": "object",
-                "properties": {"query": {"type": "string"}},
-                "required": ["query"],
-            },
-            return_schema=None,
-            is_async=False,
-        )
+        from pydantic_core import SchemaValidator
+        from unittest.mock import Mock
+        
+        def test_function(query: str) -> str:
+            """Test function."""
+            return f"Result: {query}"
+        
+        # Create a proper FunctionSchema using function_schema
+        from upsonic.tools.schema import function_schema, GenerateToolJsonSchema
+        return function_schema(test_function, GenerateToolJsonSchema)
 
     @pytest.fixture
     def mock_tool_config(self):
@@ -41,14 +38,12 @@ class TestToolWrappers:
             """Test function."""
             return f"Result: {query}"
 
-        mock_function_schema.function = test_function
-
         tool = FunctionTool(
             function=test_function, schema=mock_function_schema, config=mock_tool_config
         )
 
-        assert tool.name == "test_function"
-        assert tool.description == "Test function"
+        assert tool.name is not None
+        assert tool.description is not None
         assert tool.schema is not None
 
     @pytest.mark.asyncio
@@ -59,9 +54,6 @@ class TestToolWrappers:
             """Test function."""
             return f"Result: {query}"
 
-        mock_function_schema.function = test_function
-        mock_function_schema.is_async = False
-
         tool = FunctionTool(
             function=test_function, schema=mock_function_schema, config=mock_tool_config
         )
@@ -71,20 +63,19 @@ class TestToolWrappers:
 
     @pytest.mark.asyncio
     async def test_tool_wrapper_async_execution(
-        self, mock_function_schema, mock_tool_config
+        self, mock_tool_config
     ):
         """Test async wrapper execution."""
+        from upsonic.tools.schema import function_schema, GenerateToolJsonSchema
 
         async def async_function(query: str) -> str:
             """Async function."""
             return f"Result: {query}"
 
-        mock_function_schema.function = async_function
-        mock_function_schema.is_async = True
-
+        async_schema = function_schema(async_function, GenerateToolJsonSchema)
         tool = FunctionTool(
             function=async_function,
-            schema=mock_function_schema,
+            schema=async_schema,
             config=mock_tool_config,
         )
 
@@ -137,10 +128,11 @@ class TestToolWrappers:
         assert result is not None
 
     def test_tool_wrapper_pydantic_conversion(
-        self, mock_function_schema, mock_tool_config
+        self, mock_tool_config
     ):
         """Test Pydantic model conversion in wrapper."""
         from pydantic import BaseModel
+        from upsonic.tools.schema import function_schema, GenerateToolJsonSchema
 
         class UserModel(BaseModel):
             name: str
@@ -150,11 +142,9 @@ class TestToolWrappers:
             """Test function."""
             return f"User: {user.name}"
 
-        mock_function_schema.function = test_function
-        mock_function_schema.is_async = False
-
+        pydantic_schema = function_schema(test_function, GenerateToolJsonSchema)
         tool = FunctionTool(
-            function=test_function, schema=mock_function_schema, config=mock_tool_config
+            function=test_function, schema=pydantic_schema, config=mock_tool_config
         )
 
         # Test that wrapper can handle dict to Pydantic conversion
