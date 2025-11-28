@@ -26,6 +26,7 @@ from upsonic.interfaces.schemas import (
     WebSocketStatusResponse,
     WebSocketConnectionInfo,
 )
+from upsonic._utils import now_utc
 from upsonic.utils.printing import debug_log, error_log, info_log
 
 from upsonic.interfaces.auth import (
@@ -280,6 +281,7 @@ class InterfaceManager:
             
             return HealthCheckResponse(
                 status="healthy",
+                timestamp=now_utc(),
                 interfaces=interface_statuses,
                 connections=self.websocket_manager.get_connection_count()
             )
