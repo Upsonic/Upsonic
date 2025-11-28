@@ -2359,3 +2359,75 @@ def ocr_language_warning(provider_name: str, warning_langs: list, best_supported
     
     # Background logging
     _bg_logger.warning(f"[OCR] {provider_name}: Limited support for languages: {', '.join(warning_langs)}")
+
+
+def tool_safety_check(tool_name: str, validation_type: str, status: str, details: Optional[str] = None, confidence: Optional[float] = None) -> None:
+    """
+    Prints a formatted panel for tool safety validation results.
+    
+    Args:
+        tool_name: Name of the tool being validated
+        validation_type: Type of validation ("Pre-Execution" or "Post-Execution")
+        status: Validation status ("BLOCKED", "ALLOWED", "SAFE", "HARMFUL")
+        details: Optional details about the validation
+        confidence: Optional confidence score (0.0-1.0)
+    """
+    tool_name_esc = escape_rich_markup(tool_name)
+    validation_type_esc = escape_rich_markup(validation_type)
+    details_esc = escape_rich_markup(details) if details else ""
+    
+    # Determine styling based on status
+    if status.upper() in ["BLOCKED", "HARMFUL", "MALICIOUS"]:
+        border_style = "bold red"
+        title = "[bold red]🛡️ Tool Safety: BLOCKED[/bold red]"
+        status_display = f"[red]{status.upper()}[/red]"
+    elif status.upper() in ["ALLOWED", "SAFE"]:
+        border_style = "bold green"
+        title = "[bold green]🛡️ Tool Safety: PASSED[/bold green]"
+        status_display = f"[green]{status.upper()}[/green]"
+    else:
+        border_style = "yellow"
+        title = "[yellow]🛡️ Tool Safety: WARNING[/yellow]"
+        status_display = f"[yellow]{status.upper()}[/yellow]"
+    
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    table.add_row("[bold]Tool Name:[/bold]", f"[cyan]{tool_name_esc}[/cyan]")
+    table.add_row("[bold]Validation Type:[/bold]", f"[cyan]{validation_type_esc}[/cyan]")
+    table.add_row("")
+    table.add_row("[bold]Status:[/bold]", status_display)
+    
+    if confidence is not None:
+        table.add_row("[bold]Confidence:[/bold]", f"{confidence:.2f}")
+    
+    if details:
+        if len(details_esc) > 150:
+            details_esc = details_esc[:147] + "..."
+        table.add_row("")
+        table.add_row("[bold]Details:[/bold]")
+        table.add_row(f"[dim]{details_esc}[/dim]")
+    
+    panel = Panel(
+        table,
+        title=title,
+        border_style=border_style,
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
+    
+    # Background logging for Sentry
+    _sentry_logger.info(
+        "Tool safety validation: %s (%s) - %s",
+        tool_name, validation_type, status,
+        extra={
+            "tool_name": tool_name,
+            "validation_type": validation_type,
+            "status": status,
+            "confidence": confidence,
+            "details": details[:200] if details else None
+        }
+    )

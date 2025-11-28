@@ -142,8 +142,11 @@ class Agent(BaseAgent):
         tool_call_limit: int = 5,
         enable_thinking_tool: bool = False,
         enable_reasoning_tool: bool = False,
+        tools: Optional[list] = None,
         user_policy: Optional[Union["Policy", List["Policy"]]] = None,
         agent_policy: Optional[Union["Policy", List["Policy"]]] = None,
+        tool_policy_pre: Optional[Union["Policy", List["Policy"]]] = None,
+        tool_policy_post: Optional[Union["Policy", List["Policy"]]] = None,
         settings: Optional["ModelSettings"] = None,
         profile: Optional["ModelProfile"] = None,
         reflection_config: Optional["ReflectionConfig"] = None,
@@ -190,6 +193,7 @@ class Agent(BaseAgent):
             tool_call_limit: Maximum tool calls per execution
             enable_thinking_tool: Enable orchestrated thinking
             enable_reasoning_tool: Enable reasoning capabilities
+            tools: List of tools to register with this agent (can be functions, ToolKits, or other agents)
             user_policy: User input safety policy (single policy or list of policies)
             agent_policy: Agent output safety policy (single policy or list of policies)
             settings: Model-specific settings
@@ -205,6 +209,8 @@ class Agent(BaseAgent):
             thinking_budget: Token budget for thinking (Anthropic: budget_tokens, Google: thinking_budget)
             thinking_include_thoughts: Include thoughts in output (Google models)
             reasoning_format: Reasoning format for Groq models ("hidden", "raw", "parsed")
+            tool_policy_pre: Tool safety policy for pre-execution validation (single policy or list of policies)
+            tool_policy_post: Tool safety policy for post-execution validation (single policy or list of policies)
         """
         from upsonic.models import infer_model
         self.model = infer_model(model)
@@ -242,6 +248,7 @@ class Agent(BaseAgent):
         self.compression_strategy = compression_strategy
         self.compression_settings = compression_settings or {}
         self._prompt_compressor = None
+        
         if self.compression_strategy == "llmlingua":
             try:
                 from llmlingua import PromptCompressor
@@ -273,6 +280,9 @@ class Agent(BaseAgent):
         self.enable_thinking_tool = enable_thinking_tool
         self.enable_reasoning_tool = enable_reasoning_tool
         
+        # Initialize agent-level tools
+        self.tools = tools if tools is not None else []
+        
         # Set db attribute
         self.db = db
         
@@ -296,6 +306,15 @@ class Agent(BaseAgent):
         self.user_policy = user_policy
         self.agent_policy = agent_policy
         
+        # Initialize tool policy managers
+        from upsonic.agent.tool_policy_manager import ToolPolicyManager
+        self.tool_policy_pre_manager = ToolPolicyManager(policies=tool_policy_pre, debug=self.debug)
+        self.tool_policy_post_manager = ToolPolicyManager(policies=tool_policy_post, debug=self.debug)
+        
+        # Keep references
+        self.tool_policy_pre = tool_policy_pre
+        self.tool_policy_post = tool_policy_post
+        
         self.reflection_config = reflection_config
         if reflection_config:
             from upsonic.reflection import ReflectionProcessor
@@ -316,6 +335,12 @@ class Agent(BaseAgent):
         self._cache_manager = CacheManager(session_id=f"agent_{self.agent_id}")
         self.tool_manager = ToolManager()
         
+        # Track registered agent tools
+        self.registered_agent_tools = {}
+        
+        # Register agent-level tools immediately
+        self._register_agent_tools()
+        
         self._current_messages = []
         self._tool_call_count = 0
         
@@ -332,6 +357,8 @@ class Agent(BaseAgent):
         # Setup models for all policies in both managers
         self.user_policy_manager.setup_policy_models(self.model)
         self.agent_policy_manager.setup_policy_models(self.model)
+        self.tool_policy_pre_manager.setup_policy_models(self.model)
+        self.tool_policy_post_manager.setup_policy_models(self.model)
     
     def _apply_reasoning_settings(self) -> None:
         """Apply common reasoning/thinking attributes to model-specific settings."""
@@ -453,18 +480,75 @@ class Agent(BaseAgent):
         """
         self._stream_run_result = StreamRunResult()
     
-    def _setup_tools(self, task: "Task") -> None:
-        """Setup tools with ToolManager for the current task."""
-        self._tool_limit_reached = False
+    def _register_agent_tools(self) -> None:
+        """
+        Register agent-level tools with the ToolManager.
         
-        if not task.tools:
+        This is called in __init__ and add_tools() to ensure agent tools
+        are registered immediately.
+        """
+        if not self.tools:
+            self.registered_agent_tools = {}
             return
         
+        # Prepare tools list with thinking/reasoning tools if enabled
+        final_tools = list(self.tools)
+        
+        # Add thinking tool if enabled
+        if self.enable_thinking_tool:
+            from upsonic.tools.orchestration import plan_and_execute
+            if plan_and_execute not in final_tools:
+                final_tools.append(plan_and_execute)
+        
+        # Register tools with ToolManager
+        self.registered_agent_tools = self.tool_manager.register_tools(
+            tools=final_tools,
+            task=None,  # Agent tools not task-specific
+            agent_instance=self
+        )
+    
+    def add_tools(self, tools: Union[Any, List[Any]]) -> None:
+        """
+        Dynamically add tools to the agent and register them.
+        
+        Args:
+            tools: A single tool or list of tools to add
+        """
+        if not isinstance(tools, list):
+            tools = [tools]
+        
+        # Add to tools list
+        self.tools.extend(tools)
+        
+        # Register the new tools immediately
+        self._register_agent_tools()
+    
+    def get_tool_defs(self) -> List["ToolDefinition"]:
+        """
+        Get the tool definitions for all currently registered tools.
+        
+        Returns:
+            List[ToolDefinition]: List of tool definitions from the ToolManager
+        """
+        return self.tool_manager.get_tool_definitions()
+    
+    def _setup_task_tools(self, task: "Task") -> None:
+        """Setup tools with ToolManager for the current task (task tools only)."""
+        self._tool_limit_reached = False
+        
+        # Always initialize tool metrics (needed for both agent and task tools)
         from upsonic.tools import ToolMetrics
         self._tool_metrics = ToolMetrics(
             tool_call_count=self._tool_call_count,
             tool_call_limit=self.tool_call_limit
         )
+        
+        # Only process task-level tools (agent tools already registered in __init__)
+        task_tools = task.tools if task.tools else []
+        
+        # If no task tools, return early (agent tools are already set up)
+        if not task_tools:
+            return
         
         is_thinking_enabled = self.enable_thinking_tool
         if task.enable_thinking_tool is not None:
@@ -481,18 +565,62 @@ class Agent(BaseAgent):
         agent_for_this_run.enable_thinking_tool = is_thinking_enabled
         agent_for_this_run.enable_reasoning_tool = is_reasoning_enabled
 
-        final_tools = list(task.tools)
-        if is_thinking_enabled:
-            from upsonic.tools import plan_and_execute
-            final_tools.append(plan_and_execute)
-        
-        self._builtin_tools = self.tool_manager.processor.extract_builtin_tools(final_tools)
+        # Register ONLY task tools (agent tools already registered)
+        self._builtin_tools = self.tool_manager.processor.extract_builtin_tools(task_tools)
         
         self.tool_manager.register_tools(
-            tools=final_tools,
+            tools=task_tools,
             task=task,
             agent_instance=agent_for_this_run
         )
+        
+        # PRE-EXECUTION TOOL VALIDATION
+        # Validate all registered tools with tool_policy_pre before execution
+        if hasattr(self, 'tool_policy_pre_manager') and self.tool_policy_pre_manager.has_policies():
+            import asyncio
+            tool_definitions = self.tool_manager.get_tool_definitions()
+            
+            for tool_def in tool_definitions:
+                # Skip built-in orchestration tools
+                if tool_def.name == 'plan_and_execute':
+                    continue
+                    
+                tool_info = {
+                    "name": tool_def.name,
+                    "description": tool_def.description or "",
+                    "parameters": tool_def.parameters_json_schema or {},
+                    "metadata": tool_def.metadata or {}
+                }
+                
+                # Execute validation synchronously using nest_asyncio if needed
+                try:
+                    # Check if we're in async context
+                    loop = asyncio.get_running_loop()
+                    # Already in event loop - use ensure_future
+                    import nest_asyncio
+                    nest_asyncio.apply()
+                    validation_result = asyncio.run(
+                        self.tool_policy_pre_manager.execute_tool_validation_async(
+                            tool_info=tool_info,
+                            check_type="Pre-Execution Tool Validation"
+                        )
+                    )
+                except RuntimeError:
+                    # No event loop - safe to use asyncio.run()
+                    validation_result = asyncio.run(
+                        self.tool_policy_pre_manager.execute_tool_validation_async(
+                            tool_info=tool_info,
+                            check_type="Pre-Execution Tool Validation"
+                        )
+                    )
+                
+                if validation_result.should_block():
+                    # Tool is harmful - raise exception to block task execution
+                    from upsonic.safety_engine.exceptions import DisallowedOperation
+                    if validation_result.disallowed_exception:
+                        raise validation_result.disallowed_exception
+                    else:
+                        raise DisallowedOperation(validation_result.get_final_message())
     
     async def _build_model_request(self, task: "Task", memory_handler: Optional["MemoryManager"], state: Optional["State"] = None) -> List["ModelRequest"]:
         """Build the complete message history for the model request."""
@@ -656,6 +784,32 @@ class Agent(BaseAgent):
         results = []
         
         for tool_call in sequential_calls:
+            # POST-EXECUTION TOOL CALL VALIDATION
+            if hasattr(self, 'tool_policy_post_manager') and self.tool_policy_post_manager.has_policies():
+                tool_def = tool_defs.get(tool_call.tool_name)
+                tool_call_info = {
+                    "name": tool_call.tool_name,
+                    "description": tool_def.description if tool_def else "",
+                    "parameters": tool_def.parameters_json_schema if tool_def else {},
+                    "arguments": tool_call.args_as_dict(),
+                    "call_id": tool_call.tool_call_id
+                }
+                
+                validation_result = await self.tool_policy_post_manager.execute_tool_call_validation_async(
+                    tool_call_info=tool_call_info,
+                    check_type="Post-Execution Tool Call Validation"
+                )
+                
+                if validation_result.should_block():
+                    # Tool call is malicious - return error instead of executing
+                    results.append(ToolReturnPart(
+                        tool_name=tool_call.tool_name,
+                        content=validation_result.get_final_message(),
+                        tool_call_id=tool_call.tool_call_id,
+                        timestamp=now_utc()
+                    ))
+                    continue  # Skip execution
+            
             try:
                 result = await self.tool_manager.execute_tool(
                     tool_name=tool_call.tool_name,
@@ -690,6 +844,31 @@ class Agent(BaseAgent):
         if parallel_calls:
             async def execute_single_tool(tool_call: "ToolCallPart") -> "ToolReturnPart":
                 """Execute a single tool call and return the result."""
+                # POST-EXECUTION TOOL CALL VALIDATION (for parallel execution)
+                if hasattr(self, 'tool_policy_post_manager') and self.tool_policy_post_manager.has_policies():
+                    tool_def = tool_defs.get(tool_call.tool_name)
+                    tool_call_info = {
+                        "name": tool_call.tool_name,
+                        "description": tool_def.description if tool_def else "",
+                        "parameters": tool_def.parameters_json_schema if tool_def else {},
+                        "arguments": tool_call.args_as_dict(),
+                        "call_id": tool_call.tool_call_id
+                    }
+                    
+                    validation_result = await self.tool_policy_post_manager.execute_tool_call_validation_async(
+                        tool_call_info=tool_call_info,
+                        check_type="Post-Execution Tool Call Validation"
+                    )
+                    
+                    if validation_result.should_block():
+                        # Tool call is malicious - return error instead of executing
+                        return ToolReturnPart(
+                            tool_name=tool_call.tool_name,
+                            content=validation_result.get_final_message(),
+                            tool_call_id=tool_call.tool_call_id,
+                            timestamp=now_utc()
+                        )
+                
                 try:
                     result = await self.tool_manager.execute_tool(
                         tool_name=tool_call.tool_name,
@@ -1250,7 +1429,7 @@ class Agent(BaseAgent):
     @retryable()
     async def do_async(
         self, 
-        task: "Task", 
+        task: Union[str, "Task"], 
         model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
         retry: int = 1,
@@ -1282,6 +1461,10 @@ class Agent(BaseAgent):
             print(result)  # Access the response
             ```
         """
+        from upsonic.tasks.tasks import Task as TaskClass
+        if isinstance(task, str):
+            task = TaskClass(description=task)
+        
         from upsonic.agent.pipeline import (
             PipelineManager, StepContext,
             InitializationStep, CacheCheckStep, UserPolicyStep,
@@ -1373,7 +1556,7 @@ class Agent(BaseAgent):
     
     def do(
         self,
-        task: "Task",
+        task: Union[str, "Task"],
         model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
         retry: int = 1
@@ -1382,7 +1565,7 @@ class Agent(BaseAgent):
         Execute a task synchronously.
         
         Args:
-            task: Task to execute
+            task: Task to execute (can be a Task object or a string description)
             model: Override model for this execution
             debug: Enable debug mode
             retry: Number of retries
@@ -1390,6 +1573,11 @@ class Agent(BaseAgent):
         Returns:
             RunResult: A result object with output and message tracking
         """
+        # Auto-convert string to Task object if needed
+        from upsonic.tasks.tasks import Task as TaskClass
+        if isinstance(task, str):
+            task = TaskClass(description=task)
+        
         task.price_id_ = None
         _ = task.price_id
         task._tool_calls = []
