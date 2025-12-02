@@ -64,7 +64,7 @@ class BaseVectorDBConfig(pydantic.BaseModel, ABC):
 
     default_metadata: Optional[Dict[str, Any]] = None
     auto_generate_content_id: bool = True
-    indexed_fields: Optional[List[str]] = None
+    indexed_fields: Optional[List[Union[str, Dict[str, Any]]]] = None  # Can be ["field"] or [{"field": "name", "type": "keyword"}]
     
     @pydantic.field_validator('default_similarity_threshold')
     @classmethod

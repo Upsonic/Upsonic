@@ -5,9 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from upsonic.tools.base import ToolResult
-
-
 @dataclass
 class ExternalToolCall:
     """Represents a tool call that must be executed externally."""

@@ -2,7 +2,6 @@ import json
 import hashlib
 from pathlib import Path
 
-from pydantic_core import to_jsonable_python
 from upsonic.messages.messages import ModelMessagesTypeAdapter
 
 
@@ -19,7 +18,8 @@ def _get_agent_file_path(agent_id: str) -> Path:
 def save_agent_memory(agent, answer):
     """Save agent memory from pydantic response."""
     history = answer.all_messages()
-    json_data = to_jsonable_python(history)
+    # Use ModelMessagesTypeAdapter to properly serialize bytes as base64
+    json_data = ModelMessagesTypeAdapter.dump_python(history, mode='json')
     
     agent_file = _get_agent_file_path(agent.get_agent_id())
     

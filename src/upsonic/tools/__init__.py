@@ -14,7 +14,7 @@ A comprehensive, modular tool handling system for AI agents that supports:
 from __future__ import annotations
 import time
 import uuid
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from upsonic.tasks.tasks import Task
@@ -309,45 +309,86 @@ class ToolManager:
         task: Optional['Task'] = None,
         agent_instance: Optional[Any] = None
     ) -> Dict[str, Tool]:
-        """Register a list of tools and create appropriate wrappers."""
+        """
+        Register tools with the manager.
+        
+        This is the MAIN registration method that:
+        1. Filters out already registered tools (no re-processing)
+        2. Processes new tools via ToolProcessor
+        3. Creates behavioral wrappers
+        4. Handles plan_and_execute orchestrator
+        
+        Args:
+            tools: List of tools to register
+            task: Optional task context
+            agent_instance: Optional agent instance for orchestrator
+            
+        Returns:
+            Dict of newly registered tools
+        """
         self.current_task = task
         
-        # Track registered tool objects by their identity (object-level comparison)
-        registered_tool_objects = set(id(t) for t in self.processor.registered_tools.values())
+        if not tools:
+            return {}
         
-        # Filter out already registered tools (same object instance)
-        tools_to_register = []
-        for tool in tools:
-            if tool is None:
-                continue
-            # Check if this exact object is already registered
-            if id(tool) not in registered_tool_objects:
-                tools_to_register.append(tool)
+        # Use processor's register_tools (which filters out already registered tools)
+        newly_registered = self.processor.register_tools(tools)
         
-        # Process remaining tools
-        registered_tools = self.processor.process_tools(tools_to_register)
-        
-        for name, tool in registered_tools.items():
+        # Create wrappers for newly registered tools
+        for name, tool in newly_registered.items():
             if name != 'plan_and_execute':
                 self.wrapped_tools[name] = self.processor.create_behavioral_wrapper(tool)
         
-        if 'plan_and_execute' in registered_tools and agent_instance and agent_instance.enable_thinking_tool:
-            if not self.orchestrator and agent_instance:
-                from upsonic.tools.orchestration import Orchestrator
-                self.orchestrator = Orchestrator(
-                    agent_instance=agent_instance,
-                    task=task,
-                    wrapped_tools=self.wrapped_tools
+        # Handle plan_and_execute if it was newly registered
+        if 'plan_and_execute' in newly_registered:
+            if agent_instance and agent_instance.enable_thinking_tool:
+                # Update or create orchestrator
+                if self.orchestrator:
+                    # Update existing orchestrator with new tools
+                    self.orchestrator.wrapped_tools = self.wrapped_tools
+                    self.orchestrator.all_tools = {
+                        name: func 
+                        for name, func in self.wrapped_tools.items()
+                        if name != 'plan_and_execute'
+                    }
+                    # Update task reference if provided (critical for task-level tool registration)
+                    if task:
+                        self.orchestrator.task = task
+                        self.orchestrator.original_user_request = task.description
+                else:
+                    # Create new orchestrator
+                    from upsonic.tools.orchestration import Orchestrator
+                    self.orchestrator = Orchestrator(
+                        agent_instance=agent_instance,
+                        task=task,
+                        wrapped_tools=self.wrapped_tools
+                    )
+                
+                async def orchestrator_executor(thought) -> Any:
+                    return await self.orchestrator.execute(thought)
+                self.wrapped_tools['plan_and_execute'] = orchestrator_executor
+            else:
+                # Create regular wrapper
+                self.wrapped_tools['plan_and_execute'] = self.processor.create_behavioral_wrapper(
+                    newly_registered['plan_and_execute']
                 )
-            async def orchestrator_executor(thought) -> Any:
-                return await self.orchestrator.execute(thought)
-            self.wrapped_tools['plan_and_execute'] = orchestrator_executor
-        elif 'plan_and_execute' in registered_tools:
-            self.wrapped_tools ['plan_and_execute'] = self.processor.create_behavioral_wrapper(
-                registered_tools['plan_and_execute']
-            )
         
-        return registered_tools
+        # Update existing orchestrator with task context if:
+        # 1. Orchestrator exists (plan_and_execute was previously registered)
+        # 2. Task is provided (task-level tool registration)
+        # 3. plan_and_execute was not just newly registered (already handled above)
+        elif self.orchestrator and task and 'plan_and_execute' not in newly_registered:
+            self.orchestrator.task = task
+            self.orchestrator.original_user_request = task.description
+            # Also update tools in case new tools were added
+            self.orchestrator.wrapped_tools = self.wrapped_tools
+            self.orchestrator.all_tools = {
+                name: func 
+                for name, func in self.wrapped_tools.items()
+                if name != 'plan_and_execute'
+            }
+        
+        return newly_registered
     
     async def execute_tool(
         self,
@@ -367,13 +408,20 @@ class ToolManager:
         try:
             start_time = time.time()
             
-            if tool_name == 'plan_and_execute' and 'thought' in args:
+            if tool_name == 'plan_and_execute':
                 from upsonic.tools.orchestration import Thought
-                thought_data = args['thought']
-                if isinstance(thought_data, dict):
-                    thought = Thought(**thought_data)
+                
+                # Handle both wrapped and unwrapped thought data
+                if 'thought' in args:
+                    thought_data = args['thought']
+                    if isinstance(thought_data, dict):
+                        thought = Thought(**thought_data)
+                    else:
+                        thought = thought_data
                 else:
-                    thought = thought_data
+                    # LLM sent fields directly (reasoning, plan, criticism, action)
+                    thought = Thought(**args)
+                
                 result = await wrapped(thought)
             else:
                 result = await wrapped(**args)
@@ -437,6 +485,158 @@ class ToolManager:
             )
             definitions.append(definition)
         return definitions
+    
+    def remove_tools(
+        self,
+        tools: Union[Any, List[Any]],
+        registered_agent_tools: Dict[str, Any]
+    ) -> tuple[List[str], List[Any]]:
+        """
+        Remove tools from the manager.
+        
+        This is the MAIN removal method that handles ALL tool types:
+        - Tool names (strings)
+        - Function objects
+        - Agent objects
+        - MCP handlers
+        - Class instances (ToolKit or regular classes)
+        
+        Args:
+            tools: Single tool or list of tools to remove (any type)
+            registered_agent_tools: Agent's registered tools for reference
+            
+        Returns:
+            Tuple of (removed_tool_names, removed_original_objects)
+            - removed_tool_names: List of tool names that were removed
+            - removed_original_objects: List of original objects to remove from agent.tools
+        """
+        from upsonic.tools.mcp import MCPHandler, MultiMCPHandler
+        from upsonic.tools.base import ToolKit
+        import inspect
+        
+        if not isinstance(tools, list):
+            tools = [tools]
+        
+        if not tools:
+            return ([], [])
+        
+        # Categorize tools by type
+        mcp_handlers = []
+        class_instances = []
+        tool_names_to_remove = []
+        original_objects_to_remove = set()
+        
+        for tool_identifier in tools:
+            # String - it's a tool name
+            if isinstance(tool_identifier, str):
+                tool_names_to_remove.append(tool_identifier)
+                
+                # Find the original object for this tool name
+                if tool_identifier in registered_agent_tools:
+                    registered_tool = registered_agent_tools[tool_identifier]
+                    if hasattr(registered_tool, 'agent'):
+                        original_objects_to_remove.add(registered_tool.agent)
+                    elif hasattr(registered_tool, 'function'):
+                        original_objects_to_remove.add(registered_tool.function)
+                    elif hasattr(registered_tool, 'handler'):
+                        original_objects_to_remove.add(registered_tool.handler)
+            
+            # MCP Handler
+            elif isinstance(tool_identifier, (MCPHandler, MultiMCPHandler)):
+                mcp_handlers.append(tool_identifier)
+                original_objects_to_remove.add(tool_identifier)
+            
+            # ToolKit instance
+            elif isinstance(tool_identifier, ToolKit):
+                class_instances.append(tool_identifier)
+                original_objects_to_remove.add(tool_identifier)
+            
+            # Class (not instance)
+            elif inspect.isclass(tool_identifier):
+                # Find instance of this class in processor tracking
+                for instance_id, tool_list in self.processor.class_instance_to_tools.items():
+                    # This is a bit tricky - we need to find the actual instance
+                    # Skip for now, user should pass instance
+                    pass
+            
+            # Regular class instance or other object
+            else:
+                instance_id = id(tool_identifier)
+                
+                # Check if it's a tracked class instance
+                if instance_id in self.processor.class_instance_to_tools:
+                    class_instances.append(tool_identifier)
+                    original_objects_to_remove.add(tool_identifier)
+                else:
+                    # It might be a function, agent, or wrapped tool
+                    found = False
+                    for name, registered_tool in registered_agent_tools.items():
+                        # Direct match
+                        if registered_tool is tool_identifier or id(registered_tool) == id(tool_identifier):
+                            tool_names_to_remove.append(name)
+                            found = True
+                            break
+                        
+                        # Agent match
+                        if hasattr(registered_tool, 'agent') and registered_tool.agent is tool_identifier:
+                            tool_names_to_remove.append(name)
+                            original_objects_to_remove.add(tool_identifier)
+                            found = True
+                            break
+                        
+                        # Function match
+                        if hasattr(registered_tool, 'function') and registered_tool.function is tool_identifier:
+                            tool_names_to_remove.append(name)
+                            original_objects_to_remove.add(tool_identifier)
+                            found = True
+                            break
+                        
+                        # Handler match
+                        if hasattr(registered_tool, 'handler') and registered_tool.handler is tool_identifier:
+                            tool_names_to_remove.append(name)
+                            original_objects_to_remove.add(tool_identifier)
+                            found = True
+                            break
+                    
+                    if not found and hasattr(tool_identifier, 'name'):
+                        tool_names_to_remove.append(tool_identifier.name)
+                    elif not found and hasattr(tool_identifier, '__name__'):
+                        tool_names_to_remove.append(tool_identifier.__name__)
+        
+        # Now remove everything
+        all_removed_names = set(tool_names_to_remove)
+        
+        # Remove MCP handlers
+        if mcp_handlers:
+            removed_names = self.processor.unregister_mcp_handlers(mcp_handlers)
+            all_removed_names.update(removed_names)
+        
+        # Remove class instances
+        if class_instances:
+            removed_names = self.processor.unregister_class_instances(class_instances)
+            all_removed_names.update(removed_names)
+        
+        # Remove individual tools
+        if tool_names_to_remove:
+            self.processor.unregister_tools(list(set(tool_names_to_remove)))
+        
+        # Remove from wrapped_tools
+        for tool_name in all_removed_names:
+            if tool_name in self.wrapped_tools:
+                del self.wrapped_tools[tool_name]
+        
+        # Update orchestrator
+        if self.orchestrator and 'plan_and_execute' in all_removed_names:
+            self.orchestrator = None
+        elif self.orchestrator:
+            self.orchestrator.wrapped_tools = self.wrapped_tools
+            self.orchestrator.all_tools = {
+                name: func 
+                for name, func in self.wrapped_tools.items()
+                if name != 'plan_and_execute'
+            }
+        
+        return (list(all_removed_names), list(original_objects_to_remove))
 
 
 __all__ = [

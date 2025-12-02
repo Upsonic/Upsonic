@@ -29,11 +29,18 @@ class RedisStorage(Storage):
     """
     A hybrid sync/async, high-performance storage provider using Redis and
     its native async client, with proper connection lifecycle management.
+    
+    This storage provider is designed to be flexible and dynamic:
+    - Can accept a pre-existing Redis client or create one from connection details
+    - Uses key prefixes to organize data (sessions, profiles, generic models)
+    - Supports generic Pydantic models for custom storage needs
+    - Can be used for both custom purposes and built-in chat/profile features simultaneously
     """
 
     def __init__(
         self,
-        prefix: str,
+        redis_client: Optional['Redis'] = None,
+        prefix: str = "upsonic",
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,
@@ -45,12 +52,16 @@ class RedisStorage(Storage):
         Initializes the async Redis storage provider.
 
         Args:
+            redis_client: Optional pre-existing Redis client. If provided, this client
+                will be used instead of creating a new one. User is responsible for
+                client lifecycle management when providing their own client.
             prefix: A prefix to namespace all keys for this application instance.
-            host: The Redis server hostname.
-            port: The Redis server port.
-            db: The Redis database number to use.
-            password: Optional password for Redis authentication.
-            ssl: If True, uses an SSL connection.
+                Defaults to "upsonic".
+            host: The Redis server hostname. Ignored if redis_client is provided.
+            port: The Redis server port. Ignored if redis_client is provided.
+            db: The Redis database number to use. Ignored if redis_client is provided.
+            password: Optional password for Redis authentication. Ignored if redis_client is provided.
+            ssl: If True, uses an SSL connection. Ignored if redis_client is provided.
             expire: Optional TTL in seconds for all created keys.
         """
         if not _REDIS_AVAILABLE:
@@ -64,11 +75,18 @@ class RedisStorage(Storage):
         super().__init__()
         self.prefix = prefix
         self.expire = expire
-        # Client is configured but not connected on initialization
-        self.redis_client: Redis = Redis(
-            host=host, port=port, db=db, password=password,
-            ssl=ssl, decode_responses=True
-        )
+        
+        # Store client and track ownership for lifecycle management
+        self._owns_client = (redis_client is None)  # True if we create it, False if user provided
+        
+        if redis_client:
+            self.redis_client: Redis = redis_client
+        else:
+            # Create our own client (configured but not connected on initialization)
+            self.redis_client: Redis = Redis(
+                host=host, port=port, db=db, password=password,
+                ssl=ssl, decode_responses=True
+            )
 
     def _get_primary_key_field(self, model_type: Type[BaseModel]) -> str:
         """Determine the primary key field for a model type."""
@@ -134,6 +152,14 @@ class RedisStorage(Storage):
             raise ConnectionError(f"Failed to connect to Redis: {e}") from e
 
     async def disconnect_async(self) -> None:
+        """
+        Closes the Redis client connection.
+        If user provided the client, this is a no-op (user manages lifecycle).
+        """
+        if not self._owns_client:
+            # User manages their own client lifecycle
+            return
+        
         await self.redis_client.close()
         self._connected = False
 

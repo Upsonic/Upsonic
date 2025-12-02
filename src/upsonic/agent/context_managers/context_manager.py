@@ -105,7 +105,7 @@ class ContextManager:
             if knowledge_base.rag:
                 await knowledge_base.setup_rag()
                 
-                rag_results = await knowledge_base.query_async(query)
+                rag_results = await knowledge_base.query_async(query, task=self.task)
                 
                 if rag_results:
                     formatted_results = self._format_rag_results(rag_results, knowledge_base)

@@ -27,21 +27,34 @@ class SqliteStorage(Storage):
     """
     A hybrid sync/async, file-based storage provider using a single SQLite
     database and the `aiosqlite` driver with proper connection management.
+    
+    This storage provider is designed to be flexible and dynamic:
+    - Can accept a pre-existing aiosqlite connection or create one from connection details
+    - Only creates InteractionSession/UserProfile tables when they are actually used
+    - Supports generic Pydantic models for custom storage needs
+    - Can be used for both custom purposes and built-in chat/profile features simultaneously
     """
 
     def __init__(
         self,
+        db: Optional['aiosqlite.Connection'] = None,
+        db_file: Optional[str] = None,
         sessions_table_name: Optional[str] = None,
         profiles_table_name: Optional[str] = None,
-        db_file: Optional[str] = None,
     ):
         """
         Initializes the async SQLite storage provider.
 
         Args:
+            db: Optional pre-existing aiosqlite.Connection. If provided, this connection
+                will be used instead of creating a new one. User is responsible for
+                connection lifecycle management when providing their own connection.
+            db_file: Path to a local database file. If None and db is None, uses in-memory DB.
+                Ignored if db is provided.
             sessions_table_name: Name of the table for InteractionSession storage.
+                Only used if InteractionSession objects are stored. Defaults to "sessions".
             profiles_table_name: Name of the table for UserProfile storage.
-            db_file: Path to a local database file. If None, uses in-memory DB.
+                Only used if UserProfile objects are stored. Defaults to "profiles".
         """
         if not _AIOSQLITE_AVAILABLE:
             from upsonic.utils.printing import import_error
@@ -52,15 +65,25 @@ class SqliteStorage(Storage):
             )
 
         super().__init__()
+        
+        # Store connection and track ownership for lifecycle management
+        self._db: Optional[aiosqlite.Connection] = db
+        self._owns_connection = (db is None)  # True if we create it, False if user provided
+        
+        # Connection details for creating our own connection if needed
         self.db_path = ":memory:"
-        if db_file:
+        if db_file and not db:
             db_path_obj = Path(db_file).resolve()
             db_path_obj.parent.mkdir(parents=True, exist_ok=True)
             self.db_path = str(db_path_obj)
         
+        # Table names for InteractionSession/UserProfile (lazy initialization)
         self.sessions_table_name = sessions_table_name or "sessions"
         self.profiles_table_name = profiles_table_name or "profiles"
-        self._db: Optional[aiosqlite.Connection] = None
+        
+        # Track which built-in tables have been initialized
+        self._sessions_table_initialized = False
+        self._profiles_table_initialized = False
 
 
     
@@ -79,14 +102,33 @@ class SqliteStorage(Storage):
         return self._db is not None
 
     async def connect_async(self) -> None:
+        """
+        Establishes connection to the database.
+        If user provided a connection, this is a no-op.
+        Otherwise, creates a new connection using db_path.
+        """
         if await self.is_connected_async():
             return
+        
+        if not self._owns_connection:
+            # User provided connection, already set in __init__
+            self._connected = True
+            return
+        
+        # Create our own connection
         self._db = await aiosqlite.connect(self.db_path)
-        self._db.row_factory = aiosqlite.Row # Important for dict-like access
-        await self.create_async()
+        self._db.row_factory = aiosqlite.Row  # Important for dict-like access
         self._connected = True
 
     async def disconnect_async(self) -> None:
+        """
+        Closes the database connection.
+        If user provided the connection, this is a no-op (user manages lifecycle).
+        """
+        if not self._owns_connection:
+            # User manages their own connection lifecycle
+            return
+        
         if self._db:
             await self._db.close()
             self._db = None
@@ -99,6 +141,21 @@ class SqliteStorage(Storage):
         return self._db
 
     async def create_async(self) -> None:
+        """
+        Creates database schema.
+        Note: InteractionSession and UserProfile tables are created lazily
+        only when first accessed. This allows the storage to be used for
+        generic purposes without creating unused infrastructure.
+        """
+        # Ensure connection exists, but don't create any tables yet
+        # Tables will be created on-demand when accessed
+        await self._get_connection()
+    
+    async def _ensure_sessions_table(self) -> None:
+        """Lazily creates the sessions table on first access."""
+        if self._sessions_table_initialized:
+            return
+        
         db = await self._get_connection()
         await db.execute(f"""
             CREATE TABLE IF NOT EXISTS {self.sessions_table_name} (
@@ -107,6 +164,15 @@ class SqliteStorage(Storage):
                 session_data TEXT, extra_data TEXT, created_at REAL, updated_at REAL
             )
         """)
+        await db.commit()
+        self._sessions_table_initialized = True
+    
+    async def _ensure_profiles_table(self) -> None:
+        """Lazily creates the profiles table on first access."""
+        if self._profiles_table_initialized:
+            return
+        
+        db = await self._get_connection()
         await db.execute(f"""
             CREATE TABLE IF NOT EXISTS {self.profiles_table_name} (
                 user_id TEXT PRIMARY KEY, profile_data TEXT,
@@ -114,6 +180,7 @@ class SqliteStorage(Storage):
             )
         """)
         await db.commit()
+        self._profiles_table_initialized = True
 
     def _get_table_info_for_model(self, model_type: Type[BaseModel]) -> Optional[tuple[str, str]]:
         """
@@ -150,8 +217,13 @@ class SqliteStorage(Storage):
         
         table, key_col = table_info
         
-        # Ensure table exists for generic models
-        if model_type not in [InteractionSession, UserProfile]:
+        # Ensure table exists - lazy initialization for built-in types
+        if model_type is InteractionSession:
+            await self._ensure_sessions_table()
+        elif model_type is UserProfile:
+            await self._ensure_profiles_table()
+        else:
+            # Generic models - create table if needed
             await self._ensure_table_for_model(model_type)
 
         db = await self._get_connection()
@@ -224,6 +296,9 @@ class SqliteStorage(Storage):
             data.updated_at = time.time()
         
         if isinstance(data, InteractionSession):
+            # Ensure sessions table exists before upserting
+            await self._ensure_sessions_table()
+            
             table = self.sessions_table_name
             sql = f"""
                 INSERT INTO {table} (session_id, user_id, agent_id, team_session_id, chat_history, summary, session_data, extra_data, created_at, updated_at)
@@ -239,6 +314,9 @@ class SqliteStorage(Storage):
                 json.dumps(data.extra_data), data.created_at, data.updated_at
             )
         elif isinstance(data, UserProfile):
+            # Ensure profiles table exists before upserting
+            await self._ensure_profiles_table()
+            
             table = self.profiles_table_name
             sql = f"""
                 INSERT INTO {table} (user_id, profile_data, created_at, updated_at)
@@ -248,7 +326,7 @@ class SqliteStorage(Storage):
             """
             params = (data.user_id, json.dumps(data.profile_data), data.created_at, data.updated_at)
         else:
-            # Generic model support
+            # Generic model support - ensure table exists
             table_name = await self._ensure_table_for_model(type(data))
             table_info = self._get_table_info_for_model(type(data))
             _, key_col = table_info
@@ -281,6 +359,16 @@ class SqliteStorage(Storage):
             return
         
         table, key_col = table_info
+        
+        # Ensure table exists - lazy initialization for built-in types
+        if model_type is InteractionSession:
+            await self._ensure_sessions_table()
+        elif model_type is UserProfile:
+            await self._ensure_profiles_table()
+        else:
+            # For generic models, only delete if table exists
+            # No need to create table just to delete from it
+            pass
 
         db = await self._get_connection()
         sql = f"DELETE FROM {table} WHERE {key_col} = ?"
@@ -303,8 +391,14 @@ class SqliteStorage(Storage):
         
         table_name, key_col = table_info
         
-        # Ensure table exists
-        await self._ensure_table_for_model(model_type)
+        # Ensure table exists - lazy initialization for built-in types
+        if model_type is InteractionSession:
+            await self._ensure_sessions_table()
+        elif model_type is UserProfile:
+            await self._ensure_profiles_table()
+        else:
+            # Generic models - create table if needed
+            await self._ensure_table_for_model(model_type)
         
         db = await self._get_connection()
         
@@ -358,7 +452,18 @@ class SqliteStorage(Storage):
         return results
 
     async def drop_async(self) -> None:
+        """
+        Drops all tables managed by this storage provider.
+        Only drops InteractionSession/UserProfile tables if they were actually created.
+        """
         db = await self._get_connection()
+        
+        # Drop built-in tables (they may or may not exist)
         await db.execute(f"DROP TABLE IF EXISTS {self.sessions_table_name}")
         await db.execute(f"DROP TABLE IF EXISTS {self.profiles_table_name}")
+        
+        # Reset initialization flags
+        self._sessions_table_initialized = False
+        self._profiles_table_initialized = False
+        
         await db.commit()

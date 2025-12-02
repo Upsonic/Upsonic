@@ -155,8 +155,8 @@ class KnowledgeBase(ToolKit):
 
         This tool performs intelligent retrieval from the indexed knowledge base for the topics: {topics}.
 
-        Description about knowledge base:
-            {description}
+        Description about knowledge base which the informations will be retrieved from:
+            {description}Iha 
 
         Args:
             query: The question, topic, or search query to find relevant information.
@@ -940,6 +940,7 @@ class KnowledgeBase(ToolKit):
         top_k: Optional[int] = None,
         filter: Optional[Dict[str, Any]] = None,
         search_type: Literal['auto', 'dense', 'full_text', 'hybrid'] = 'auto',
+        task: Optional[Any] = None,
         **search_kwargs
     ) -> List[RAGSearchResult]:
         """
@@ -951,13 +952,14 @@ class KnowledgeBase(ToolKit):
 
         Args:
             query: The user's query string.
-            top_k: Number of results to return. If None, uses provider's default.
-            filter: Optional metadata filter to apply.
+            top_k: Number of results to return. If None, uses provider's default or Task's vector_search_top_k.
+            filter: Optional metadata filter to apply. If None, uses Task's vector_search_filter if provided.
             search_type: Type of search to perform:
                 - 'auto': Automatically choose based on provider capabilities (default)
                 - 'dense': Pure vector similarity search
                 - 'full_text': Text-based search (if supported)
                 - 'hybrid': Combined vector + text search (if supported)
+            task: Optional Task object. If provided, uses Task's vector search parameters to override config defaults.
             **search_kwargs: Additional search parameters (alpha, fusion_method, etc.)
 
         Returns:
@@ -1004,6 +1006,7 @@ class KnowledgeBase(ToolKit):
                 top_k=top_k,
                 filter=filter,
                 search_type=search_type,
+                task=task,
                 **search_kwargs
             )
             # Convert to RAG results
@@ -1081,6 +1084,7 @@ class KnowledgeBase(ToolKit):
         top_k: Optional[int],
         filter: Optional[Dict[str, Any]],
         search_type: str,
+        task: Optional[Any] = None,
         **search_kwargs
     ) -> List[VectorSearchResult]:
         """
@@ -1092,13 +1096,29 @@ class KnowledgeBase(ToolKit):
             top_k: Number of results
             filter: Metadata filter
             search_type: Type of search
+            task: Optional Task object to get search parameters from
             **search_kwargs: Additional search parameters
             
         Returns:
             List of VectorSearchResult objects
         """
-        # Determine search capabilities
+        # Get search parameters from Task if provided, otherwise use config defaults
         config = getattr(self.vectordb, '_config', None)
+        
+        # Extract Task parameters if provided (override method parameters and config defaults)
+        alpha = search_kwargs.pop('alpha', None) if 'alpha' in search_kwargs else None
+        fusion_method = search_kwargs.pop('fusion_method', None) if 'fusion_method' in search_kwargs else None
+        similarity_threshold = search_kwargs.pop('similarity_threshold', None) if 'similarity_threshold' in search_kwargs else None
+        
+        # Override with Task parameters if provided and not already set
+        if task is not None:
+            top_k = top_k if top_k is not None else getattr(task, 'vector_search_top_k', None)
+            alpha = alpha if alpha is not None else getattr(task, 'vector_search_alpha', None)
+            fusion_method = fusion_method if fusion_method is not None else getattr(task, 'vector_search_fusion_method', None)
+            similarity_threshold = similarity_threshold if similarity_threshold is not None else getattr(task, 'vector_search_similarity_threshold', None)
+            filter = filter if filter is not None else getattr(task, 'vector_search_filter', None)
+        
+        # Determine search capabilities
         hybrid_enabled = getattr(config, 'hybrid_search_enabled', False) if config else False
         full_text_enabled = getattr(config, 'full_text_search_enabled', False) if config else False
         
@@ -1120,6 +1140,9 @@ class KnowledgeBase(ToolKit):
                     query_text=query,
                     top_k=top_k,
                     filter=filter,
+                    alpha=alpha,
+                    fusion_method=fusion_method,
+                    similarity_threshold=similarity_threshold,
                     **search_kwargs
                 )
             elif hasattr(self.vectordb, 'search_sync'):
@@ -1128,6 +1151,9 @@ class KnowledgeBase(ToolKit):
                     query_text=query,
                     top_k=top_k,
                     filter=filter,
+                    alpha=alpha,
+                    fusion_method=fusion_method,
+                    similarity_threshold=similarity_threshold,
                     **search_kwargs
                 )
         elif search_type == 'full_text' and full_text_enabled:
@@ -1137,6 +1163,7 @@ class KnowledgeBase(ToolKit):
                     query_text=query,
                     top_k=top_k or 10,
                     filter=filter,
+                    similarity_threshold=similarity_threshold,
                     **search_kwargs
                 )
             elif hasattr(self.vectordb, 'full_text_search_sync'):
@@ -1144,6 +1171,7 @@ class KnowledgeBase(ToolKit):
                     query_text=query,
                     top_k=top_k or 10,
                     filter=filter,
+                    similarity_threshold=similarity_threshold,
                     **search_kwargs
                 )
         else:
@@ -1154,6 +1182,7 @@ class KnowledgeBase(ToolKit):
                     query_vector=query_vector,
                     top_k=top_k,
                     filter=filter,
+                    similarity_threshold=similarity_threshold,
                     **search_kwargs
                 )
             elif hasattr(self.vectordb, 'search_sync'):
@@ -1161,6 +1190,7 @@ class KnowledgeBase(ToolKit):
                     query_vector=query_vector,
                     top_k=top_k,
                     filter=filter,
+                    similarity_threshold=similarity_threshold,
                     **search_kwargs
                 )
         

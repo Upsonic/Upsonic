@@ -413,9 +413,54 @@ class FaissProvider(BaseVectorDBProvider):
         
         return final_payload
 
+    def _parse_indexed_fields(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Parse indexed_fields into a standardized format.
+        
+        Supports two formats:
+        1. Simple: ["document_name", "document_id"]
+        2. Advanced: [{"field": "document_name", "type": "keyword"}, {"field": "age", "type": "integer"}]
+        
+        Note: FAISS doesn't support native field types. Types are parsed for consistency but not used.
+        
+        Returns:
+            Dict mapping field_name to config: {"field_name": {"indexed": True, "type": "keyword"}}
+        """
+        if not self._config.indexed_fields:
+            return {}
+        
+        result = {}
+        for item in self._config.indexed_fields:
+            if isinstance(item, str):
+                # Simple format: just field name
+                result[item] = {"indexed": True, "type": "keyword"}
+            elif isinstance(item, dict):
+                # Advanced format: {"field": "name", "type": "keyword"}
+                field_name = item.get("field")
+                if field_name:
+                    result[field_name] = {
+                        "indexed": True,
+                        "type": item.get("type", "keyword")
+                    }
+        
+        return result
+    
+    def _get_field_names_from_config(self) -> List[str]:
+        """
+        Extract field names from indexed_fields configuration.
+        
+        Returns:
+            List of field names to index
+        """
+        indexed_fields_config = self._parse_indexed_fields()
+        return list(indexed_fields_config.keys())
+    
     def _update_field_indexes(self, content_id: str, payload: Dict[str, Any], operation: str = 'add') -> None:
         """
         Updates field indexes for fast lookups.
+        
+        Note: FAISS uses Python data structures for indexing. Field types from configuration
+        are not used since FAISS doesn't support native typed indexes.
 
         Args:
             content_id: The content ID to index
@@ -425,7 +470,10 @@ class FaissProvider(BaseVectorDBProvider):
         if not self._config.indexed_fields:
             return
         
-        for field_name in self._config.indexed_fields:
+        # Get field names (supports both simple and advanced format)
+        field_names = self._get_field_names_from_config()
+        
+        for field_name in field_names:
             # Handle nested fields (e.g., 'metadata.key')
             if '.' in field_name:
                 parts = field_name.split('.')
@@ -915,6 +963,11 @@ class FaissProvider(BaseVectorDBProvider):
         if not self._config.indexed_fields:
             return None
         
+        # Get indexed field names (supports both simple and advanced format)
+        indexed_field_names = self._get_field_names_from_config()
+        if not indexed_field_names:
+            return None
+        
         # Try to extract simple field-value pairs that can use indexes
         candidate_sets = []
         
@@ -928,7 +981,7 @@ class FaissProvider(BaseVectorDBProvider):
                 return
             else:
                 for key, value in filt.items():
-                    if key in self._config.indexed_fields:
+                    if key in indexed_field_names:
                         if isinstance(value, dict):
                             if "$in" in value:
                                 conditions.append((key, value["$in"]))

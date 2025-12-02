@@ -18,6 +18,7 @@ class TestOrchestrator:
         agent.enable_reasoning_tool = False
         agent.enable_thinking_tool = False
         agent.name = "TestAgent"
+        agent.model = "openai/gpt-4"  # Set a valid model string
         agent.do_async = AsyncMock(return_value=Mock(output="synthesis_result"))
         return agent
 

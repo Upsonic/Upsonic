@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import inspect
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -338,6 +339,9 @@ class Agent(BaseAgent):
         # Track registered agent tools
         self.registered_agent_tools = {}
         
+        # Track agent-level builtin tools
+        self.agent_builtin_tools = []
+        
         # Register agent-level tools immediately
         self._register_agent_tools()
         
@@ -480,15 +484,76 @@ class Agent(BaseAgent):
         """
         self._stream_run_result = StreamRunResult()
     
+    def _validate_tools_with_policy_pre(self, context_description: str = "Tool Validation") -> None:
+        """
+        Validate all currently registered tools with tool_policy_pre before use.
+        
+        This is a centralized method for tool safety validation that can be called
+        from different registration points (_register_agent_tools, add_tools, _setup_task_tools).
+        
+        Args:
+            context_description: Description of where this validation is being called from
+            
+        Raises:
+            DisallowedOperation: If any tool is blocked by the safety policy
+        """
+        if not hasattr(self, 'tool_policy_pre_manager') or not self.tool_policy_pre_manager.has_policies():
+            return
+        
+        import asyncio
+        tool_definitions = self.tool_manager.get_tool_definitions()
+        
+        for tool_def in tool_definitions:
+            # Skip built-in orchestration tools
+            if tool_def.name == 'plan_and_execute':
+                continue
+                
+            tool_info = {
+                "name": tool_def.name,
+                "description": tool_def.description or "",
+                "parameters": tool_def.parameters_json_schema or {},
+                "metadata": tool_def.metadata or {}
+            }
+            
+            # Execute validation synchronously using nest_asyncio if needed
+            try:
+                # Check if we're in async context
+                loop = asyncio.get_running_loop()
+                # Already in event loop - use nest_asyncio
+                import nest_asyncio
+                nest_asyncio.apply()
+                validation_result = asyncio.run(
+                    self.tool_policy_pre_manager.execute_tool_validation_async(
+                        tool_info=tool_info,
+                        check_type=f"Pre-Execution Tool Validation ({context_description})"
+                    )
+                )
+            except RuntimeError:
+                # No event loop - safe to use asyncio.run()
+                validation_result = asyncio.run(
+                    self.tool_policy_pre_manager.execute_tool_validation_async(
+                        tool_info=tool_info,
+                        check_type=f"Pre-Execution Tool Validation ({context_description})"
+                    )
+                )
+            
+            if validation_result.should_block():
+                # Tool is harmful - raise exception to block
+                from upsonic.safety_engine.exceptions import DisallowedOperation
+                if validation_result.disallowed_exception:
+                    raise validation_result.disallowed_exception
+                else:
+                    raise DisallowedOperation(validation_result.get_final_message())
+    
     def _register_agent_tools(self) -> None:
         """
         Register agent-level tools with the ToolManager.
         
-        This is called in __init__ and add_tools() to ensure agent tools
-        are registered immediately.
+        This is called in __init__ to ensure agent tools are registered immediately.
         """
         if not self.tools:
             self.registered_agent_tools = {}
+            self.agent_builtin_tools = []
             return
         
         # Prepare tools list with thinking/reasoning tools if enabled
@@ -500,28 +565,110 @@ class Agent(BaseAgent):
             if plan_and_execute not in final_tools:
                 final_tools.append(plan_and_execute)
         
-        # Register tools with ToolManager
+        # Extract builtin tools from agent-level tools
+        self.agent_builtin_tools = self.tool_manager.processor.extract_builtin_tools(final_tools)
+        
+        # Register tools with ToolManager using the new approach
         self.registered_agent_tools = self.tool_manager.register_tools(
             tools=final_tools,
             task=None,  # Agent tools not task-specific
             agent_instance=self
         )
+        
+        # PRE-EXECUTION TOOL VALIDATION
+        # Validate all registered agent tools with tool_policy_pre
+        self._validate_tools_with_policy_pre(context_description="Agent Tool Registration")
     
     def add_tools(self, tools: Union[Any, List[Any]]) -> None:
         """
         Dynamically add tools to the agent and register them.
         
+        This method:
+        1. Calls ToolManager to register new tools (filters already registered ones)
+        2. Updates self.tools with original tool objects
+        3. Updates self.registered_agent_tools with wrapped tools
+        4. Extracts and merges builtin tools
+        5. Validates tools with tool_policy_pre if configured
+        
         Args:
             tools: A single tool or list of tools to add
+            
+        Raises:
+            DisallowedOperation: If any tool is blocked by the safety policy
         """
         if not isinstance(tools, list):
             tools = [tools]
         
-        # Add to tools list
-        self.tools.extend(tools)
+        # Prepare tools with plan_and_execute if needed
+        tools_to_add = list(tools)
         
-        # Register the new tools immediately
-        self._register_agent_tools()
+        # Add thinking tool if enabled and not already in the list
+        if self.enable_thinking_tool:
+            from upsonic.tools.orchestration import plan_and_execute
+            if plan_and_execute not in tools_to_add and plan_and_execute not in self.tools:
+                tools_to_add.append(plan_and_execute)
+        
+        # Extract builtin tools from new tools and merge with existing agent builtin tools
+        new_builtin_tools = self.tool_manager.processor.extract_builtin_tools(tools_to_add)
+        if not hasattr(self, 'agent_builtin_tools'):
+            self.agent_builtin_tools = []
+        # Merge builtin tools (avoid duplicates based on unique_id)
+        existing_ids = {tool.unique_id for tool in self.agent_builtin_tools}
+        for tool in new_builtin_tools:
+            if tool.unique_id not in existing_ids:
+                self.agent_builtin_tools.append(tool)
+        
+        # Call ToolManager to register new tools (filters already registered ones)
+        newly_registered = self.tool_manager.register_tools(
+            tools=tools_to_add,
+            task=None,  # Agent tools are not task-specific
+            agent_instance=self
+        )
+        
+        # Update self.tools - add original tool objects (not plan_and_execute if auto-added)
+        for tool in tools:
+            if tool not in self.tools:
+                self.tools.append(tool)
+        
+        # Update self.registered_agent_tools with newly registered tools
+        self.registered_agent_tools.update(newly_registered)
+        
+        # PRE-EXECUTION TOOL VALIDATION
+        # Validate newly added tools with tool_policy_pre
+        self._validate_tools_with_policy_pre(context_description="Dynamic Tool Addition (add_tools)")
+    
+    def remove_tools(self, tools: Union[str, List[str], Any, List[Any]]) -> None:
+        """
+        Remove tools from the agent.
+        
+        Supports removing:
+        - Tool names (strings)
+        - Function objects
+        - Agent objects
+        - MCP handlers (and all their tools)
+        - Class instances (ToolKit or regular classes, and all their tools)
+        
+        Args:
+            tools: Single tool or list of tools to remove (any type)
+        """
+        # Call ToolManager to handle all removal logic
+        removed_tool_names, removed_objects = self.tool_manager.remove_tools(
+            tools=tools,
+            registered_agent_tools=self.registered_agent_tools
+        )
+        
+        # Update self.tools - remove the original objects
+        self.tools = [t for t in self.tools if t not in removed_objects]
+        
+        # Update self.registered_agent_tools - remove the tool names
+        for tool_name in removed_tool_names:
+            if tool_name in self.registered_agent_tools:
+                del self.registered_agent_tools[tool_name]
+        
+        # Re-extract builtin tools from remaining tools to keep in sync
+        if hasattr(self, 'agent_builtin_tools'):
+            final_tools = list(self.tools)
+            self.agent_builtin_tools = self.tool_manager.processor.extract_builtin_tools(final_tools)
     
     def get_tool_defs(self) -> List["ToolDefinition"]:
         """
@@ -546,10 +693,7 @@ class Agent(BaseAgent):
         # Only process task-level tools (agent tools already registered in __init__)
         task_tools = task.tools if task.tools else []
         
-        # If no task tools, return early (agent tools are already set up)
-        if not task_tools:
-            return
-        
+        # Determine thinking/reasoning settings (Task overrides Agent)
         is_thinking_enabled = self.enable_thinking_tool
         if task.enable_thinking_tool is not None:
             is_thinking_enabled = task.enable_thinking_tool
@@ -561,66 +705,39 @@ class Agent(BaseAgent):
         if is_reasoning_enabled and not is_thinking_enabled:
             raise ValueError("Configuration error: 'enable_reasoning_tool' cannot be True if 'enable_thinking_tool' is False.")
 
+        # If thinking is enabled at task level, add plan_and_execute to task tools
+        # (unless it's already explicitly added as a regular tool)
+        from upsonic.tools.orchestration import plan_and_execute
+        
+        tools_to_register = list(task_tools) if task_tools else []
+        
+        if is_thinking_enabled and plan_and_execute not in tools_to_register:
+            tools_to_register.append(plan_and_execute)
+        
+        # If no tools to register, return early
+        if not tools_to_register:
+            return
+
         agent_for_this_run = copy.copy(self)
         agent_for_this_run.enable_thinking_tool = is_thinking_enabled
         agent_for_this_run.enable_reasoning_tool = is_reasoning_enabled
 
-        # Register ONLY task tools (agent tools already registered)
-        self._builtin_tools = self.tool_manager.processor.extract_builtin_tools(task_tools)
+        # Register task tools (and plan_and_execute if thinking enabled)
+        task.task_builtin_tools = self.tool_manager.processor.extract_builtin_tools(tools_to_register)
         
-        self.tool_manager.register_tools(
-            tools=task_tools,
+        # Register task tools and store them in task.registered_task_tools
+        newly_registered = self.tool_manager.register_tools(
+            tools=tools_to_register,
             task=task,
             agent_instance=agent_for_this_run
         )
         
+        # Update task's registered_task_tools with newly registered tools
+        task.registered_task_tools.update(newly_registered)
+        
         # PRE-EXECUTION TOOL VALIDATION
-        # Validate all registered tools with tool_policy_pre before execution
-        if hasattr(self, 'tool_policy_pre_manager') and self.tool_policy_pre_manager.has_policies():
-            import asyncio
-            tool_definitions = self.tool_manager.get_tool_definitions()
-            
-            for tool_def in tool_definitions:
-                # Skip built-in orchestration tools
-                if tool_def.name == 'plan_and_execute':
-                    continue
-                    
-                tool_info = {
-                    "name": tool_def.name,
-                    "description": tool_def.description or "",
-                    "parameters": tool_def.parameters_json_schema or {},
-                    "metadata": tool_def.metadata or {}
-                }
-                
-                # Execute validation synchronously using nest_asyncio if needed
-                try:
-                    # Check if we're in async context
-                    loop = asyncio.get_running_loop()
-                    # Already in event loop - use ensure_future
-                    import nest_asyncio
-                    nest_asyncio.apply()
-                    validation_result = asyncio.run(
-                        self.tool_policy_pre_manager.execute_tool_validation_async(
-                            tool_info=tool_info,
-                            check_type="Pre-Execution Tool Validation"
-                        )
-                    )
-                except RuntimeError:
-                    # No event loop - safe to use asyncio.run()
-                    validation_result = asyncio.run(
-                        self.tool_policy_pre_manager.execute_tool_validation_async(
-                            tool_info=tool_info,
-                            check_type="Pre-Execution Tool Validation"
-                        )
-                    )
-                
-                if validation_result.should_block():
-                    # Tool is harmful - raise exception to block task execution
-                    from upsonic.safety_engine.exceptions import DisallowedOperation
-                    if validation_result.disallowed_exception:
-                        raise validation_result.disallowed_exception
-                    else:
-                        raise DisallowedOperation(validation_result.get_final_message())
+        # Validate all registered tools (agent + task) with tool_policy_pre before execution
+        self._validate_tools_with_policy_pre(context_description="Task Tool Setup")
     
     async def _build_model_request(self, task: "Task", memory_handler: Optional["MemoryManager"], state: Optional["State"] = None) -> List["ModelRequest"]:
         """Build the complete message history for the model request."""
@@ -718,7 +835,17 @@ class Agent(BaseAgent):
         else:
             tool_definitions = self.tool_manager.get_tool_definitions()
         
-        builtin_tools = getattr(self, '_builtin_tools', [])
+        # Combine agent-level and task-level builtin tools
+        agent_builtin_tools = getattr(self, 'agent_builtin_tools', [])
+        task_builtin_tools = getattr(task, 'task_builtin_tools', [])
+
+        # Merge builtin tools, avoiding duplicates based on unique_id
+        builtin_tools_dict = {}
+        for tool in agent_builtin_tools:
+            builtin_tools_dict[tool.unique_id] = tool
+        for tool in task_builtin_tools:
+            builtin_tools_dict[tool.unique_id] = tool
+        builtin_tools = list(builtin_tools_dict.values())
         
         output_mode = 'text'
         output_object = None
@@ -2168,7 +2295,7 @@ class Agent(BaseAgent):
         
         # Determine resume point based on checkpoint status
         if checkpoint_status == "failed":
-            # Retry the failed step
+            # Retry the failed step with the restored context
             resume_from_index = step_index
             completed_count = step_index
         else:

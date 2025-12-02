@@ -23,6 +23,11 @@ class JSONStorage(Storage):
     synchronous methods are convenient wrappers that intelligently manage the
     event loop to run the core async logic. The core async logic uses
     `asyncio.to_thread` to ensure file I/O operations are non-blocking.
+    
+    This storage provider is designed to be flexible and dynamic:
+    - Only creates InteractionSession/UserProfile directories when they are actually used
+    - Supports generic Pydantic models for custom storage needs
+    - Can be used for both custom purposes and built-in chat/profile features simultaneously
     """
 
     def __init__(self, directory_path: Optional[str] = None, pretty_print: bool = True):
@@ -42,9 +47,13 @@ class JSONStorage(Storage):
         self._json_indent = 4 if self._pretty_print else None
         self._lock: Optional[asyncio.Lock] = None
         
-        self.sessions_path.mkdir(parents=True, exist_ok=True)
-        self.profiles_path.mkdir(parents=True, exist_ok=True)
-        self.generic_path.mkdir(parents=True, exist_ok=True)
+        # Create base directory but not subdirectories yet (lazy initialization)
+        self.base_path.mkdir(parents=True, exist_ok=True)
+        
+        # Track which built-in directories have been initialized
+        self._sessions_dir_initialized = False
+        self._profiles_dir_initialized = False
+        
         self._connected = True
 
     @property
@@ -146,10 +155,40 @@ class JSONStorage(Storage):
         self._connected = False
 
     async def create_async(self) -> None:
+        """
+        Creates storage directories.
+        Note: InteractionSession and UserProfile directories are created lazily
+        only when first accessed. This allows the storage to be used for
+        generic purposes without creating unused infrastructure.
+        """
+        # Ensure base directory exists, but don't create subdirectories yet
+        # Subdirectories will be created on-demand when accessed
+        await asyncio.to_thread(self.base_path.mkdir, parents=True, exist_ok=True)
+    
+    async def _ensure_sessions_dir(self) -> None:
+        """Lazily creates the sessions directory on first access."""
+        if self._sessions_dir_initialized:
+            return
+        
         await asyncio.to_thread(self.sessions_path.mkdir, parents=True, exist_ok=True)
+        self._sessions_dir_initialized = True
+    
+    async def _ensure_profiles_dir(self) -> None:
+        """Lazily creates the profiles directory on first access."""
+        if self._profiles_dir_initialized:
+            return
+        
         await asyncio.to_thread(self.profiles_path.mkdir, parents=True, exist_ok=True)
+        self._profiles_dir_initialized = True
 
     async def read_async(self, object_id: str, model_type: Type[T]) -> Optional[T]:
+        # Ensure directory exists - lazy initialization for built-in types
+        if model_type is InteractionSession:
+            await self._ensure_sessions_dir()
+        elif model_type is UserProfile:
+            await self._ensure_profiles_dir()
+        # Generic models create their own directories in _get_path
+        
         file_path = self._get_path(object_id, model_type)
         async with self.lock:
             if not await asyncio.to_thread(file_path.exists):
@@ -176,11 +215,15 @@ class JSONStorage(Storage):
         json_string = self._serialize(data_dict)
 
         if isinstance(data, InteractionSession):
+            # Ensure sessions directory exists before upserting
+            await self._ensure_sessions_dir()
             file_path = self._get_path(data.session_id, InteractionSession)
         elif isinstance(data, UserProfile):
+            # Ensure profiles directory exists before upserting
+            await self._ensure_profiles_dir()
             file_path = self._get_path(data.user_id, UserProfile)
         else:
-            # Generic model support
+            # Generic model support - _get_path creates directory if needed
             primary_key_field = self._get_primary_key_field(type(data))
             object_id = getattr(data, primary_key_field)
             file_path = self._get_path(object_id, type(data))
@@ -192,6 +235,13 @@ class JSONStorage(Storage):
                 raise IOError(f"Failed to write file to {file_path}: {e}")
 
     async def delete_async(self, object_id: str, model_type: Type[BaseModel]) -> None:
+        # Ensure directory exists - lazy initialization for built-in types
+        if model_type is InteractionSession:
+            await self._ensure_sessions_dir()
+        elif model_type is UserProfile:
+            await self._ensure_profiles_dir()
+        # For generic models, only delete if directory exists
+        
         file_path = self._get_path(object_id, model_type)
         async with self.lock:
             if await asyncio.to_thread(file_path.exists):
@@ -205,8 +255,12 @@ class JSONStorage(Storage):
         """List all objects of a specific type."""
         async with self.lock:
             if model_type is InteractionSession:
+                # Ensure sessions directory exists
+                await self._ensure_sessions_dir()
                 folder = self.sessions_path
             elif model_type is UserProfile:
+                # Ensure profiles directory exists
+                await self._ensure_profiles_dir()
                 folder = self.profiles_path
             else:
                 # Generic model
@@ -239,6 +293,10 @@ class JSONStorage(Storage):
             return results
 
     async def drop_async(self) -> None:
+        """
+        Drops all directories managed by this storage provider.
+        Only drops InteractionSession/UserProfile directories if they were actually created.
+        """
         async with self.lock:
             if await asyncio.to_thread(self.sessions_path.exists): 
                 await asyncio.to_thread(shutil.rmtree, self.sessions_path)
@@ -246,4 +304,9 @@ class JSONStorage(Storage):
                 await asyncio.to_thread(shutil.rmtree, self.profiles_path)
             if await asyncio.to_thread(self.generic_path.exists):
                 await asyncio.to_thread(shutil.rmtree, self.generic_path)
+        
+        # Reset initialization flags
+        self._sessions_dir_initialized = False
+        self._profiles_dir_initialized = False
+        
         await self.create_async()

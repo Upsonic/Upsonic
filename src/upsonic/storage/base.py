@@ -29,6 +29,24 @@ class Storage(AsyncExecutionMixin, ABC):
 
     Concrete implementations must provide the logic for the `_async` methods.
     The synchronous methods can then be implemented as simple wrappers.
+    
+    Storage Provider Design Principles:
+    ------------------------------------
+    Storage providers are designed to be flexible and dynamic:
+    
+    1. **Bring Your Own Client**: Providers can accept pre-existing database 
+       clients/connections, allowing users to integrate with their existing 
+       infrastructure. When a client is provided, the user manages its lifecycle.
+    
+    2. **Lazy Initialization**: InteractionSession and UserProfile tables/collections
+       are only created when first accessed, not during initialization. This allows
+       storages to be used for generic purposes without creating unused infrastructure.
+    
+    3. **Generic Model Support**: All providers support arbitrary Pydantic models,
+       not just InteractionSession and UserProfile. This makes them truly general-purpose.
+    
+    4. **Dual Purpose**: Providers can be used for both custom storage needs AND
+       built-in chat/profile features simultaneously in the same database/connection.
     """
 
     def __init__(self):
