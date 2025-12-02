@@ -17,8 +17,9 @@ from uuid import uuid4
 
 try:
     from sqlalchemy import (
-        Column, String, Text, Integer, DateTime, Index, MetaData, Table,
-        create_engine, text, select, delete as sa_delete, update as sa_update, func, desc
+        Column, String, Text, Integer, BigInteger, Float, Boolean, DateTime, 
+        Index, MetaData, Table, create_engine, text, select, 
+        delete as sa_delete, update as sa_update, func, desc
     )
     from sqlalchemy.dialects import postgresql
     from sqlalchemy.engine import Engine
@@ -26,14 +27,22 @@ try:
     from sqlalchemy.inspection import inspect
     from sqlalchemy.sql.expression import bindparam
 except ImportError:
-    raise ImportError(
-        "`sqlalchemy` not installed. Please install using `pip install sqlalchemy psycopg`"
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="sqlalchemy psycopg",
+        install_command="pip install sqlalchemy psycopg",
+        feature_name="PGVector provider"
     )
 
 try:
     from pgvector.sqlalchemy import Vector
 except ImportError:
-    raise ImportError("`pgvector` not installed. Please install using `pip install pgvector`")
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="pgvector",
+        install_command="pip install pgvector",
+        feature_name="PGVector provider"
+    )
 
 from upsonic.vectordb.base import BaseVectorDBProvider
 from upsonic.vectordb.config import PgVectorConfig, HNSWIndexConfig, IVFIndexConfig, DistanceMetric
@@ -100,10 +109,125 @@ class PgVectorProvider(BaseVectorDBProvider):
         self._vector_index_name: Optional[str] = None
         self._gin_index_name: Optional[str] = None
         
+        # Provider metadata
+        self.provider_name = self._config.provider_name or f"PgVectorProvider_{self._config.collection_name}"
+        self.provider_description = self._config.provider_description
+        self.provider_id = self._config.provider_id or self._generate_provider_id()
+        
         logger.info(
             f"Initialized PgVectorProvider for collection '{self._config.collection_name}' "
             f"(table: {self.schema_name}.{self.table_name})"
         )
+
+    # ========================================================================
+    # Provider Metadata
+    # ========================================================================
+    
+    def _generate_provider_id(self) -> str:
+        """Generates a unique provider ID based on connection string and collection."""
+        # Create a unique identifier from connection details
+        conn_str = getattr(self, 'connection_string', 'default')
+        schema = getattr(self, 'schema_name', 'public')
+        table = getattr(self, 'table_name', self._config.collection_name)
+        
+        identifier_parts = [
+            conn_str.split("@")[-1] if "@" in conn_str else "local",
+            schema,
+            table
+        ]
+        identifier = "#".join(filter(None, identifier_parts))
+        return md5(identifier.encode()).hexdigest()[:16]
+    
+    # ========================================================================
+    # Indexed Fields Type Support
+    # ========================================================================
+    
+    def _parse_indexed_fields(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Parse indexed_fields into a standardized format.
+        
+        Supports two formats:
+        1. Simple: ["document_name", "document_id"]
+        2. Advanced: [{"field": "document_name", "type": "keyword"}, {"field": "age", "type": "integer"}]
+        
+        Returns:
+            Dict mapping field_name to config: {"field_name": {"indexed": True, "type": "keyword"}}
+        """
+        if not self._config.indexed_fields:
+            return {}
+        
+        result = {}
+        for item in self._config.indexed_fields:
+            if isinstance(item, str):
+                # Simple format: just field name
+                result[item] = {"indexed": True, "type": "text"}
+            elif isinstance(item, dict):
+                # Advanced format: {"field": "name", "type": "keyword"}
+                field_name = item.get("field")
+                if field_name:
+                    result[field_name] = {
+                        "indexed": True,
+                        "type": item.get("type", "text")
+                    }
+        
+        return result
+    
+    def _get_postgres_column_type(self, field_type: str) -> Any:
+        """
+        Convert field type string to SQLAlchemy/PostgreSQL column type.
+        
+        Args:
+            field_type: One of 'text', 'keyword', 'integer', 'int', 'bigint', 'float', 'boolean'
+        
+        Returns:
+            SQLAlchemy column type
+        """
+        type_map = {
+            'text': Text,
+            'keyword': String,  # VARCHAR with reasonable limit
+            'string': String,
+            'varchar': String,
+            'integer': Integer,
+            'int': Integer,
+            'int32': Integer,
+            'bigint': BigInteger,
+            'int64': BigInteger,
+            'float': Float,
+            'real': Float,
+            'double': Float,
+            'boolean': Boolean,
+            'bool': Boolean,
+        }
+        return type_map.get(field_type.lower(), Text)
+    
+    def _get_postgres_index_type(self, field_type: str) -> str:
+        """
+        Get appropriate PostgreSQL index type for field type.
+        
+        Args:
+            field_type: Field type string
+        
+        Returns:
+            Index type hint ('btree', 'gin', 'hash')
+        """
+        # PostgreSQL index types:
+        # - B-tree: default, good for equality and range queries (numbers, booleans, text)
+        # - GIN: good for full-text search and JSONB
+        # - Hash: good for equality only
+        # - GiST: good for geometric data and full-text
+        
+        if field_type.lower() in ['text']:
+            return 'gin'  # Full-text search
+        elif field_type.lower() in ['keyword', 'string', 'varchar']:
+            return 'btree'  # Exact match
+        elif field_type.lower() in ['integer', 'int', 'bigint', 'int64', 'int32']:
+            return 'btree'  # Range queries
+        elif field_type.lower() in ['float', 'real', 'double']:
+            return 'btree'  # Range queries
+        elif field_type.lower() in ['boolean', 'bool']:
+            return 'btree'  # Equality
+        else:
+            return 'btree'  # Default
 
     # ========================================================================
     # Connection Management
@@ -219,11 +343,15 @@ class PgVectorProvider(BaseVectorDBProvider):
         """
         Schema version 1: Comprehensive schema with all required fields.
         
+        Supports typed indexed_fields:
+        - Simple format: ["document_name", "document_id"]
+        - Advanced format: [{"field": "age", "type": "integer"}, {"field": "score", "type": "float"}]
+        
         Fields:
         - id: Primary key (UUID or string)
         - content_id: Unique identifier for content (auto-generated if not provided)
-        - document_name: Optional document name
-        - document_id: Optional document identifier
+        - document_name: Optional document name (type configurable via indexed_fields)
+        - document_id: Optional document identifier (type configurable via indexed_fields)
         - content: The actual text content (required, used for full-text search)
         - embedding: Vector embedding
         - metadata: JSONB field for custom metadata
@@ -233,16 +361,23 @@ class PgVectorProvider(BaseVectorDBProvider):
         if self._config.vector_size is None:
             raise ValueError("vector_size must be set in config")
         
+        # Parse indexed_fields configuration
+        indexed_fields_config = self._parse_indexed_fields()
+        
+        # Determine column types for standard fields based on indexed_fields config
+        doc_name_type = String if indexed_fields_config.get("document_name", {}).get("type", "text") in ["keyword", "string", "varchar"] else Text
+        doc_id_type = String if indexed_fields_config.get("document_id", {}).get("type", "text") in ["keyword", "string", "varchar"] else Text
+        
         table = Table(
             self.table_name,
             self._metadata,
             # Primary key (internal ID)
             Column("id", String, primary_key=True),
             
-            # Core identifiers
+            # Core identifiers with configurable types
             Column("content_id", String, unique=True, nullable=False, index=True),
-            Column("document_name", String, nullable=True, index=True),
-            Column("document_id", String, nullable=True, index=True),
+            Column("document_name", doc_name_type, nullable=True, index="document_name" in indexed_fields_config),
+            Column("document_id", doc_id_type, nullable=True, index="document_id" in indexed_fields_config),
             
             # Content and embedding
             Column("content", Text, nullable=False),
@@ -262,15 +397,28 @@ class PgVectorProvider(BaseVectorDBProvider):
         Index(f"idx_{self.table_name}_id", table.c.id)
         Index(f"idx_{self.table_name}_content_id", table.c.content_id)
         
-        # Add indexes for fields specified in config
-        if self._config.indexed_fields:
-            for field in self._config.indexed_fields:
-                if field in ['document_name', 'document_id']:
+        # Add indexes for fields specified in indexed_fields config
+        if indexed_fields_config:
+            for field_name, field_config in indexed_fields_config.items():
+                if field_name in ['id', 'content_id']:
                     # Already indexed above
                     continue
-                elif field == 'metadata' and 'metadata' in [c.name for c in table.columns]:
-                    # GIN index for JSONB metadata (created separately)
-                    pass
+                elif field_name in ['document_name', 'document_id']:
+                    # Already handled in column definition with index=True
+                    continue
+                elif field_name == 'content':
+                    # Full-text search index for content (will be created via GIN index)
+                    if field_config.get("type", "text") == "text":
+                        logger.debug(f"Full-text search on 'content' field will use GIN index")
+                elif field_name == 'metadata':
+                    # GIN index for JSONB metadata (created separately in create_collection)
+                    logger.debug("JSONB metadata field will use GIN index")
+                else:
+                    # Custom field - should be stored in metadata JSONB column
+                    logger.debug(
+                        f"Custom field '{field_name}' (type: {field_config.get('type')}) "
+                        f"should be stored in metadata JSONB column"
+                    )
         
         return table
 
@@ -838,10 +986,10 @@ class PgVectorProvider(BaseVectorDBProvider):
             List of VectorSearchResult objects
         """
         # Use defaults from config if not provided
-        top_k = top_k or self._config.default_top_k
-        similarity_threshold = similarity_threshold or self._config.default_similarity_threshold
-        alpha = alpha or self._config.default_hybrid_alpha
-        fusion_method = fusion_method or self._config.default_fusion_method
+        top_k = top_k if top_k is not None else self._config.default_top_k
+        similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.default_similarity_threshold
+        alpha = alpha if alpha is not None else self._config.default_hybrid_alpha
+        fusion_method = fusion_method if fusion_method is not None else self._config.default_fusion_method
         
         # Determine search type
         has_vector = query_vector is not None
@@ -921,6 +1069,9 @@ class PgVectorProvider(BaseVectorDBProvider):
         if not self._is_connected:
             raise VectorDBConnectionError("Not connected to database")
         
+        # Use config default if not provided
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.default_similarity_threshold
+        
         try:
             def _search():
                 with self._session_factory() as session:
@@ -953,9 +1104,9 @@ class PgVectorProvider(BaseVectorDBProvider):
                         stmt = stmt.order_by('distance')
                         
                         # Apply similarity threshold if provided
-                        if similarity_threshold is not None:
+                        if final_similarity_threshold is not None:
                             # Convert similarity to distance based on metric
-                            max_distance = self._similarity_to_distance(similarity_threshold)
+                            max_distance = self._similarity_to_distance(final_similarity_threshold)
                             stmt = stmt.where(distance_col <= max_distance)
                         
                         # Limit results
@@ -1019,6 +1170,9 @@ class PgVectorProvider(BaseVectorDBProvider):
         if not self._is_connected:
             raise VectorDBConnectionError("Not connected to database")
         
+        # Use config default if not provided
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.default_similarity_threshold
+        
         try:
             def _search():
                 with self._session_factory() as session:
@@ -1064,8 +1218,8 @@ class PgVectorProvider(BaseVectorDBProvider):
                     stmt = stmt.order_by(desc('rank'))
                     
                     # Apply similarity threshold if provided
-                    if similarity_threshold is not None:
-                        stmt = stmt.where(text_rank >= similarity_threshold)
+                    if final_similarity_threshold is not None:
+                        stmt = stmt.where(text_rank >= final_similarity_threshold)
                     
                     # Limit results
                     stmt = stmt.limit(top_k)
@@ -1139,9 +1293,9 @@ class PgVectorProvider(BaseVectorDBProvider):
         if not self._is_connected:
             raise VectorDBConnectionError("Not connected to database")
         
-        # Use defaults
-        alpha = alpha or self._config.default_hybrid_alpha
-        fusion_method = fusion_method or self._config.default_fusion_method
+        # Use defaults from config if not provided
+        alpha = alpha if alpha is not None else self._config.default_hybrid_alpha
+        fusion_method = fusion_method if fusion_method is not None else self._config.default_fusion_method
         
         try:
             if fusion_method == 'rrf':

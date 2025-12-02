@@ -15,37 +15,51 @@ from typing import (
 )
 
 from upsonic.tools.base import (
-    Tool, ToolCall, ToolDefinition, ToolKit, ToolResult
+    Tool, ToolDefinition, ToolKit, ToolResult
 )
 from upsonic.tools.config import ToolConfig
-from upsonic.tools.context import ToolMetrics
+from upsonic.tools.metrics import ToolMetrics
 from upsonic.tools.schema import (
-    FunctionSchema, generate_function_schema, validate_tool_function
+    FunctionSchema,
+    function_schema,
+    SchemaGenerationError,
+    GenerateToolJsonSchema,
 )
-from upsonic.tools.wrappers import FunctionTool
+from upsonic.tools.wrappers import FunctionTool, AgentTool
+from upsonic.tools.deferred import DeferredExecutionManager, ExternalToolCall
 
 if TYPE_CHECKING:
-    from upsonic.tools.mcp import MCPTool
-    from upsonic.tasks.tasks import Task
+    from upsonic.tools.base import Tool, ToolConfig, ToolMetadata
+    from upsonic.tools.orchestration import PlanStep
 
 
 class ToolValidationError(Exception):
-    """Exception raised for invalid tool definitions."""
+    """Error raised when tool validation fails."""
     pass
 
 
 class ExternalExecutionPause(Exception):
-    """Exception for pausing agent execution for external tool execution."""
-    def __init__(self):
-        super().__init__(f"Agent paused for external execution of a tool.")
+    """Exception to pause execution when external tool execution is required."""
+    
+    def __init__(self, external_calls: List[ExternalToolCall] = None):
+        self.external_calls = external_calls or []
+        super().__init__(f"Paused for {len(self.external_calls)} external tool calls")
 
 
 class ToolProcessor:
-    """Main engine for processing, validating, and managing tools."""
+    """Processes and validates tools before registration."""
     
-    def __init__(self):
+    def __init__(
+        self,
+    ):
         self.registered_tools: Dict[str, Tool] = {}
         self.mcp_handlers: List[Any] = []
+        # Track which tools belong to which MCP handler
+        self.mcp_handler_to_tools: Dict[int, List[str]] = {}  # handler id -> tool names
+        # Track which tools belong to which class instance (ToolKit or regular class)
+        self.class_instance_to_tools: Dict[int, List[str]] = {}  # class instance id -> tool names
+        # Track KnowledgeBase instances that need setup_async() called
+        self.knowledge_base_instances: Dict[int, Any] = {}  # instance id -> KnowledgeBase instance
     
     def process_tools(
         self,
@@ -56,6 +70,12 @@ class ToolProcessor:
         
         for tool_item in tools:
             if tool_item is None:
+                continue
+            
+            # Optimization: If tool already inherits from Tool base class, skip processing
+            if isinstance(tool_item, Tool):
+                # Tool is already properly formed, register directly
+                processed_tools[tool_item.name] = tool_item
                 continue
                 
             if self._is_builtin_tool(tool_item):
@@ -150,26 +170,33 @@ class ToolProcessor:
         
         # Get tools from MCP server(s)
         mcp_tools = handler.get_tools()
-        return {tool.name: tool for tool in mcp_tools}
+        tools_dict = {tool.name: tool for tool in mcp_tools}
+        
+        # Track which tools belong to this handler
+        handler_id = id(handler)
+        if handler_id not in self.mcp_handler_to_tools:
+            self.mcp_handler_to_tools[handler_id] = []
+        self.mcp_handler_to_tools[handler_id].extend(tools_dict.keys())
+        
+        return tools_dict
     
     def _process_function_tool(self, func: Callable) -> Tool:
         """Process a function into a Tool."""
-        # Validate function
-        errors = validate_tool_function(func)
-        if errors:
-            raise ToolValidationError(
-                f"Invalid tool function '{func.__name__}': " + "; ".join(errors)
-            )
-        
         # Get tool config
         config = getattr(func, '_upsonic_tool_config', ToolConfig())
         
-        # Generate schema
-        schema = generate_function_schema(
-            func,
-            docstring_format=config.docstring_format,
-            require_parameter_descriptions=config.require_parameter_descriptions
-        )
+        # Generate schema using new function
+        try:
+            schema = function_schema(
+                func,
+                schema_generator=GenerateToolJsonSchema,
+                docstring_format=config.docstring_format,
+                require_parameter_descriptions=config.require_parameter_descriptions
+            )
+        except SchemaGenerationError as e:
+            raise ToolValidationError(
+                f"Invalid tool function '{func.__name__}': {e}"
+            )
         
         # Create wrapped tool
         return FunctionTool(
@@ -182,11 +209,28 @@ class ToolProcessor:
         """Process a ToolKit instance."""
         tools = {}
         
+        # Check if this is a KnowledgeBase instance
+        try:
+            from upsonic.knowledge_base.knowledge_base import KnowledgeBase
+            if isinstance(toolkit, KnowledgeBase):
+                toolkit_id = id(toolkit)
+                self.knowledge_base_instances[toolkit_id] = toolkit
+        except ImportError:
+            # KnowledgeBase might not be available, skip
+            pass
+        
         for name, method in inspect.getmembers(toolkit, inspect.ismethod):
             # Only process methods marked with @tool
             if hasattr(method, '_upsonic_is_tool'):
                 tool = self._process_function_tool(method)
                 tools[tool.name] = tool
+        
+        # Track which tools belong to this toolkit instance
+        if tools:
+            toolkit_id = id(toolkit)
+            if toolkit_id not in self.class_instance_to_tools:
+                self.class_instance_to_tools[toolkit_id] = []
+            self.class_instance_to_tools[toolkit_id].extend(tools.keys())
         
         return tools
     
@@ -206,6 +250,13 @@ class ToolProcessor:
             except ToolValidationError:
                 # Skip invalid methods
                 continue
+        
+        # Track which tools belong to this class instance
+        if tools:
+            instance_id = id(instance)
+            if instance_id not in self.class_instance_to_tools:
+                self.class_instance_to_tools[instance_id] = []
+            self.class_instance_to_tools[instance_id].extend(tools.keys())
         
         return tools
     
@@ -239,6 +290,28 @@ class ToolProcessor:
             
             # Get tool config (re-fetch to ensure latest)
             config = getattr(tool, 'config', ToolConfig())
+
+            # Ensure KnowledgeBase setup_async() is called if this tool belongs to a KnowledgeBase
+            if isinstance(tool, FunctionTool) and hasattr(tool, 'function'):
+                try:
+                    from upsonic.knowledge_base.knowledge_base import KnowledgeBase
+                    # Check if the function is a bound method of a KnowledgeBase instance
+                    func = tool.function
+                    if inspect.ismethod(func) and hasattr(func, '__self__'):
+                        instance = func.__self__
+                        if isinstance(instance, KnowledgeBase):
+                            # Ensure setup_async() is called
+                            await instance.setup_async()
+                except ImportError:
+                    # KnowledgeBase might not be available, skip
+                    pass
+                except Exception as e:
+                    # Log but don't fail - setup_async() might already be called or fail for other reasons
+                    from upsonic.utils.printing import warning_log
+                    warning_log(
+                        f"Could not ensure KnowledgeBase setup for tool '{tool.name}': {e}",
+                        "ToolProcessor"
+                    )
 
             func_dict: Dict[str, Any] = {}
             # Before hook
@@ -324,7 +397,12 @@ class ToolProcessor:
             execution_time = time.time() - start_time
             
             # Record execution in tool metrics
-            tool.record_execution(execution_time, execution_success)
+            tool.record_execution(
+                execution_time=execution_time,
+                args=kwargs,
+                result=result,
+                success=execution_success
+            )
             
             # Cache result
             if config.cache_results and cache_key:
@@ -437,3 +515,173 @@ class ToolProcessor:
         except Exception as e:
             from upsonic.utils.printing import warning_log
             warning_log(f"Could not cache result: {e}", "ToolProcessor")
+
+    def register_tools(
+        self,
+        tools: List[Any]
+    ) -> Dict[str, Tool]:
+        """
+        Register new tools (similar to process_tools but only processes new tools).
+        
+        This method:
+        1. Filters out tools that are already registered (object-level comparison)
+        2. Processes only new tools
+        3. Registers them
+        4. Returns the newly registered tools
+        
+        Args:
+            tools: List of raw tools to register
+            
+        Returns:
+            Dict mapping tool names to Tool instances (only newly registered tools)
+        """
+        if not tools:
+            return {}
+        
+        # Track registered tool objects by their identity (object-level comparison)
+        registered_tool_objects = set(id(t) for t in self.registered_tools.values())
+        
+        # Filter out already registered tools (same object instance)
+        tools_to_register = []
+        for tool in tools:
+            if tool is None:
+                continue
+            # Check if this exact object is already registered
+            if id(tool) not in registered_tool_objects:
+                tools_to_register.append(tool)
+        
+        # Process only new tools
+        if not tools_to_register:
+            return {}
+        
+        # Use process_tools for the actual processing
+        newly_registered = self.process_tools(tools_to_register)
+        
+        return newly_registered
+    
+    def unregister_tools(
+        self,
+        tool_names: List[str]
+    ) -> None:
+        """
+        Unregister tools by name.
+        
+        This method:
+        1. Removes tools from registered_tools
+        2. Removes from MCP handler tracking
+        
+        Args:
+            tool_names: List of tool names to unregister
+        """
+        if not tool_names:
+            return
+        
+        for tool_name in tool_names:
+            if tool_name in self.registered_tools:
+                tool = self.registered_tools[tool_name]
+                
+                # If this is an MCP tool, remove from handler tracking
+                if hasattr(tool, 'handler'):
+                    # This is an MCPTool - remove from tracking
+                    handler_id = id(tool.handler)
+                    if handler_id in self.mcp_handler_to_tools:
+                        if tool_name in self.mcp_handler_to_tools[handler_id]:
+                            self.mcp_handler_to_tools[handler_id].remove(tool_name)
+                        # If no more tools from this handler, cleanup tracking
+                        if not self.mcp_handler_to_tools[handler_id]:
+                            del self.mcp_handler_to_tools[handler_id]
+                
+                # Remove from registered tools
+                del self.registered_tools[tool_name]
+    
+    def unregister_mcp_handlers(
+        self,
+        handlers: List[Any]
+    ) -> List[str]:
+        """
+        Unregister MCP handlers and ALL their tools.
+        
+        This method:
+        1. Gets all tools from each handler
+        2. Removes all those tools from registered_tools
+        3. Removes handlers from mcp_handlers list
+        4. Cleans up tracking
+        
+        Args:
+            handlers: List of MCPHandler or MultiMCPHandler instances
+            
+        Returns:
+            List of tool names that were removed
+        """
+        if not handlers:
+            return []
+        
+        from upsonic.tools.mcp import MCPHandler, MultiMCPHandler
+        
+        removed_tool_names = []
+        
+        for handler in handlers:
+            if not isinstance(handler, (MCPHandler, MultiMCPHandler)):
+                continue
+            
+            handler_id = id(handler)
+            
+            # Get all tool names from this handler
+            tool_names = self.mcp_handler_to_tools.get(handler_id, [])
+            
+            # Remove all tools from registered_tools
+            for tool_name in tool_names:
+                if tool_name in self.registered_tools:
+                    del self.registered_tools[tool_name]
+                    removed_tool_names.append(tool_name)
+            
+            # Remove from handler tracking
+            if handler_id in self.mcp_handler_to_tools:
+                del self.mcp_handler_to_tools[handler_id]
+            
+            # Remove handler from mcp_handlers list
+            if handler in self.mcp_handlers:
+                self.mcp_handlers.remove(handler)
+        
+        return removed_tool_names
+    
+    def unregister_class_instances(
+        self,
+        class_instances: List[Any]
+    ) -> List[str]:
+        """
+        Unregister class instances (ToolKit or regular classes) and ALL their tools.
+        
+        This method:
+        1. Gets all tools from each class instance
+        2. Removes all those tools from registered_tools
+        3. Cleans up tracking
+        
+        Args:
+            class_instances: List of ToolKit or regular class instances
+            
+        Returns:
+            List of tool names that were removed
+        """
+        if not class_instances:
+            return []
+        
+        removed_tool_names = []
+        
+        for instance in class_instances:
+            instance_id = id(instance)
+            
+            # Get all tool names from this class instance
+            tool_names = self.class_instance_to_tools.get(instance_id, [])
+            
+            # Remove all tools from registered_tools
+            for tool_name in tool_names:
+                if tool_name in self.registered_tools:
+                    del self.registered_tools[tool_name]
+                    removed_tool_names.append(tool_name)
+            
+            # Remove from class instance tracking
+            if instance_id in self.class_instance_to_tools:
+                del self.class_instance_to_tools[instance_id]
+        
+        return removed_tool_names

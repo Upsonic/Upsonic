@@ -141,10 +141,10 @@ class Memory:
             session = InteractionSession(session_id=self.session_id, user_id=self.user_id)
         
         if self.full_session_memory_enabled:
-            from pydantic_core import to_jsonable_python
             # Get only the new messages from this run
             new_messages_only = model_response.new_messages()
-            all_messages_as_dicts = to_jsonable_python(new_messages_only)
+            # Use ModelMessagesTypeAdapter to properly serialize bytes as base64
+            all_messages_as_dicts = ModelMessagesTypeAdapter.dump_python(new_messages_only, mode='json')
             session.chat_history.extend(all_messages_as_dicts)  # Store as a list of messages
 
         if self.summary_memory_enabled:
@@ -272,12 +272,12 @@ class Memory:
     async def _generate_new_summary(self, previous_summary: Optional[str], model_response) -> str:
         from upsonic.agent.agent import Agent
         from upsonic.tasks.tasks import Task
-        from pydantic_core import to_jsonable_python
 
         if not self.model:
             raise ValueError("A model must be configured on the Memory object to generate session summaries.")
 
-        last_turn = to_jsonable_python(model_response.new_messages())
+        # Use ModelMessagesTypeAdapter to properly serialize bytes as base64
+        last_turn = ModelMessagesTypeAdapter.dump_python(model_response.new_messages(), mode='json')
         session = await self.storage.read_async(self.session_id, InteractionSession)
         
         summarizer = Agent(name="Summarizer", model=self.model, debug=self.debug)

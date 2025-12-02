@@ -100,14 +100,15 @@ class TestMilvusKnowledgeBaseIntegration:
     @pytest.fixture
     def knowledge_base(self, milvus_provider, mock_embedding_provider, mock_chunker, mock_loader):
         """Create a Knowledge Base with MilvusProvider."""
-        return KnowledgeBase(
-            sources=["test_source.txt"],
-            embedding_provider=mock_embedding_provider,
-            vectordb=milvus_provider,
-            splitters=mock_chunker,
-            loaders=mock_loader,
-            name="test_kb"
-        )
+        with patch('upsonic.knowledge_base.knowledge_base.KnowledgeBase._update_search_docstring'):
+            return KnowledgeBase(
+                sources=["test_source.txt"],
+                embedding_provider=mock_embedding_provider,
+                vectordb=milvus_provider,
+                splitters=mock_chunker,
+                loaders=mock_loader,
+                name="test_kb"
+            )
     
     def test_milvus_provider_initialization(self, milvus_provider, milvus_config):
         """Test MilvusProvider initialization."""

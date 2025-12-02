@@ -10,9 +10,6 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
-# ============================================================================
-# WhatsApp Webhook Structures
-# ============================================================================
 
 class WhatsAppValue(BaseModel):
     """Model for WhatsApp webhook value."""

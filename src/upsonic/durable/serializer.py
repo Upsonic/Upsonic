@@ -76,6 +76,12 @@ class DurableStateSerializer:
             "cache_method": getattr(task, 'cache_method', 'vector_search'),
             "cache_threshold": getattr(task, 'cache_threshold', 0.7),
             "cache_duration_minutes": getattr(task, 'cache_duration_minutes', 60),
+            # Vector search parameters
+            "vector_search_top_k": getattr(task, 'vector_search_top_k', None),
+            "vector_search_alpha": getattr(task, 'vector_search_alpha', None),
+            "vector_search_fusion_method": getattr(task, 'vector_search_fusion_method', None),
+            "vector_search_similarity_threshold": getattr(task, 'vector_search_similarity_threshold', None),
+            "vector_search_filter": getattr(task, 'vector_search_filter', None),
         }
         
         return serialized
@@ -102,11 +108,13 @@ class DurableStateSerializer:
         if isinstance(end_time, float):
             end_time = int(end_time)
         
-        # Reconstruct the task with essential data
-        task = Task(
+        # Reconstruct the task using model_construct to bypass __init__
+        # This is important because Task has a custom __init__ that doesn't
+        # properly handle private fields like _response
+        task = Task.model_construct(
             description=data.get('description', ''),
             attachments=data.get('attachments'),
-            response=DurableStateSerializer._deserialize_response(data.get('_response')),
+            _response=DurableStateSerializer._deserialize_response(data.get('_response')),
             context=DurableStateSerializer._deserialize_context_data(data.get('context')),
             _context_formatted=data.get('_context_formatted'),
             price_id_=data.get('price_id_'),
@@ -122,6 +130,12 @@ class DurableStateSerializer:
             cache_method=data.get('cache_method', 'vector_search'),
             cache_threshold=data.get('cache_threshold', 0.7),
             cache_duration_minutes=data.get('cache_duration_minutes', 60),
+            # Vector search parameters
+            vector_search_top_k=data.get('vector_search_top_k'),
+            vector_search_alpha=data.get('vector_search_alpha'),
+            vector_search_fusion_method=data.get('vector_search_fusion_method'),
+            vector_search_similarity_threshold=data.get('vector_search_similarity_threshold'),
+            vector_search_filter=data.get('vector_search_filter'),
         )
         
         # Restore tool calls
@@ -275,8 +289,7 @@ class DurableStateSerializer:
         """
         Serialize message list to a JSON-safe dictionary.
         
-        Uses the same approach as Memory class:
-        - pydantic_core.to_jsonable_python() for serialization
+        Uses ModelMessagesTypeAdapter to properly handle binary content (base64 encoding).
         
         Args:
             messages: List of ModelMessage objects (ModelRequest/ModelResponse)
@@ -291,7 +304,9 @@ class DurableStateSerializer:
                 "count": 0
             }
         
-        serialized_messages = to_jsonable_python(messages)
+        # Use ModelMessagesTypeAdapter to properly serialize bytes as base64
+        from upsonic.messages import ModelMessagesTypeAdapter
+        serialized_messages = ModelMessagesTypeAdapter.dump_python(messages, mode='json')
         
         return {
             "type": "messages",
@@ -333,40 +348,52 @@ class DurableStateSerializer:
         """
         Serialize a ModelResponse object.
         
-        Uses model_dump(mode="json") and to_jsonable_python for proper serialization.
+        ModelResponse is a dataclass, not a Pydantic model, so we use ModelMessagesTypeAdapter
+        for proper serialization including base64 encoding of bytes.
         """
         if response is None:
             return None
         
-        if hasattr(response, 'model_dump'):
-            try:
-                # Use to_jsonable_python for consistent serialization
+        try:
+            # ModelResponse is a dataclass - use ModelMessagesTypeAdapter
+            from upsonic.messages import ModelMessagesTypeAdapter
+            from pydantic_core import to_jsonable_python
+            
+            # Serialize as a single-item list, then extract the item
+            serialized_list = ModelMessagesTypeAdapter.dump_python([response], mode="json")
+            if serialized_list and len(serialized_list) > 0:
                 return {
                     'type': 'ModelResponse',
-                    'data': to_jsonable_python(response)
+                    'data': serialized_list[0]
                 }
-            except Exception:
-                # Fallback to model_dump
-                return {
-                    'type': 'ModelResponse',
-                    'data': response.model_dump(mode="json")
-                }
-        
-        return None
+            return None
+        except Exception as e:
+            # If serialization fails, log the error
+            from upsonic.utils.printing import warning_log
+            warning_log(f"Failed to serialize ModelResponse: {e}", "DurableSerializer")
+            import traceback
+            warning_log(f"Stack: {traceback.format_exc()}", "DurableSerializer")
+            return None
     
     @staticmethod
     def _deserialize_model_response(data: Optional[Dict[str, Any]]) -> Any:
         """
         Deserialize a ModelResponse object.
         
-        Uses model_validate for proper reconstruction.
+        Uses ModelMessagesTypeAdapter for proper reconstruction.
         """
         if data is None:
             return None
         
         try:
-            from upsonic.messages import ModelResponse
-            return ModelResponse.model_validate(data.get('data'))
+            from upsonic.messages import ModelMessagesTypeAdapter
+            # Deserialize from the single-item list format
+            response_data = data.get('data')
+            if response_data:
+                messages = ModelMessagesTypeAdapter.validate_python([response_data])
+                if messages and len(messages) > 0:
+                    return messages[0]
+            return None
         except Exception as e:
             from upsonic.utils.printing import warning_log
             warning_log(f"Could not deserialize ModelResponse: {e}", "DurableSerializer")

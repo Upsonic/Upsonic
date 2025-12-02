@@ -1,6 +1,6 @@
 [project]
 name = "upsonic"
-version = "0.67.4"
+version = "0.68.0"
 description = "Agent Framework For Fintech"
 readme = "README.md"
 authors = [
@@ -74,6 +74,7 @@ models = [
     "mistralai>=1.9.11",
     "mypy-boto3-bedrock-runtime>=1.40.41",
     "openai>=2.1.0",
+    "outlines>=1.2.9",
 ]
 embeddings = [
     "aiohttp>=3.12.15",

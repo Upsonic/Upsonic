@@ -1571,6 +1571,10 @@ class WeaviateProvider(BaseVectorDBProvider):
         - content (TEXT, tokenized for BM25, always searchable)
         - metadata (TEXT, JSON serialized, optionally indexed)
         
+        indexed_fields can be:
+        - Simple list: ["document_name", "document_id"]
+        - Advanced list: [{"field": "document_name", "type": "keyword"}, {"field": "age", "type": "integer"}]
+        
         Args:
             additional_properties: Additional custom properties from method kwargs.
         
@@ -1578,42 +1582,48 @@ class WeaviateProvider(BaseVectorDBProvider):
             A list of Weaviate Property objects.
         """
         properties = []
-        indexed_fields = self._config.indexed_fields or []
+        indexed_fields_config = self._parse_indexed_fields()
         
         # document_name
+        field_config = indexed_fields_config.get("document_name", {})
         properties.append(wvc.config.Property(
             name="document_name",
-            data_type=wvc.config.DataType.TEXT,
+            data_type=self._get_weaviate_datatype(field_config.get("type", "text")),
+            tokenization=self._get_weaviate_tokenization(field_config.get("type", "text")),
             skip_vectorization=True,
-            index_filterable="document_name" in indexed_fields,
-            index_searchable="document_name" in indexed_fields
+            index_filterable=field_config.get("indexed", False),
+            index_searchable=field_config.get("indexed", False)
         ))
         
         # document_id
+        field_config = indexed_fields_config.get("document_id", {})
         properties.append(wvc.config.Property(
             name="document_id",
-            data_type=wvc.config.DataType.TEXT,
+            data_type=self._get_weaviate_datatype(field_config.get("type", "text")),
+            tokenization=self._get_weaviate_tokenization(field_config.get("type", "text")),
             skip_vectorization=True,
-            index_filterable="document_id" in indexed_fields,
-            index_searchable="document_id" in indexed_fields
+            index_filterable=field_config.get("indexed", False),
+            index_searchable=field_config.get("indexed", False)
         ))
         
         # content_id (main ID - always indexed)
         properties.append(wvc.config.Property(
             name="content_id",
             data_type=wvc.config.DataType.TEXT,
+            tokenization=wvc.config.Tokenization.WORD,
             skip_vectorization=True,
             index_filterable=True,  # Always index content_id
             index_searchable=True
         ))
         
         # content (required, tokenized for BM25, always searchable)
+        field_config = indexed_fields_config.get("content", {})
         properties.append(wvc.config.Property(
             name="content",
             data_type=wvc.config.DataType.TEXT,
             tokenization=wvc.config.Tokenization.LOWERCASE,
             skip_vectorization=True,
-            index_filterable="content" in indexed_fields,
+            index_filterable=field_config.get("indexed", False),
             index_searchable=True  # Always searchable for BM25
         ))
         
@@ -1621,6 +1631,7 @@ class WeaviateProvider(BaseVectorDBProvider):
         properties.append(wvc.config.Property(
             name="metadata",
             data_type=wvc.config.DataType.TEXT,
+            tokenization=wvc.config.Tokenization.WORD,
             skip_vectorization=True,
             index_filterable=True,  # Always True to enable filtering on nested JSON properties
             index_searchable=True   # Always True to enable searching on nested JSON properties
@@ -1635,6 +1646,77 @@ class WeaviateProvider(BaseVectorDBProvider):
             properties.extend(self._parse_custom_properties(additional_properties))
         
         return properties
+    
+    def _parse_indexed_fields(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Parse indexed_fields into a standardized format.
+        
+        Supports two formats:
+        1. Simple: ["document_name", "document_id"]
+        2. Advanced: [{"field": "document_name", "type": "keyword"}, {"field": "age", "type": "integer"}]
+        
+        Returns:
+            Dict mapping field_name to config: {"field_name": {"indexed": True, "type": "keyword"}}
+        """
+        if not self._config.indexed_fields:
+            return {}
+        
+        result = {}
+        for item in self._config.indexed_fields:
+            if isinstance(item, str):
+                # Simple format: just field name
+                result[item] = {"indexed": True, "type": "text"}
+            elif isinstance(item, dict):
+                # Advanced format: {"field": "name", "type": "keyword"}
+                field_name = item.get("field")
+                if field_name:
+                    result[field_name] = {
+                        "indexed": True,
+                        "type": item.get("type", "text")
+                    }
+        
+        return result
+    
+    def _get_weaviate_datatype(self, field_type: str) -> Any:
+        """
+        Convert field type string to Weaviate DataType.
+        
+        Args:
+            field_type: One of 'text', 'keyword', 'integer', 'float', 'boolean', 'geo'
+        
+        Returns:
+            Weaviate DataType enum value
+        """
+        datatype_map = {
+            'keyword': wvc.config.DataType.TEXT,
+            'text': wvc.config.DataType.TEXT,
+            'integer': wvc.config.DataType.INT,
+            'int': wvc.config.DataType.INT,
+            'float': wvc.config.DataType.NUMBER,
+            'number': wvc.config.DataType.NUMBER,
+            'boolean': wvc.config.DataType.BOOL,
+            'bool': wvc.config.DataType.BOOL,
+            'geo': wvc.config.DataType.GEO_COORDINATES
+        }
+        return datatype_map.get(field_type.lower(), wvc.config.DataType.TEXT)
+    
+    def _get_weaviate_tokenization(self, field_type: str) -> Any:
+        """
+        Get appropriate tokenization for field type.
+        
+        Args:
+            field_type: Field type string
+        
+        Returns:
+            Weaviate Tokenization enum value or None for non-text types
+        """
+        # Only TEXT fields need tokenization
+        if field_type.lower() in ['text', 'keyword']:
+            if field_type.lower() == 'keyword':
+                return wvc.config.Tokenization.WORD
+            else:
+                return wvc.config.Tokenization.WHITESPACE
+        return None
     
     def _parse_custom_properties(self, props: List[Dict[str, Any]]) -> List[Any]:
         """Parse custom properties from dict format to Weaviate Property objects."""

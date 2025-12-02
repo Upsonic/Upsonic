@@ -1,11 +1,3 @@
-"""
-WhatsApp Interface Implementation for Upsonic Framework.
-
-This module provides a production-ready WhatsApp Business API integration
-that handles incoming webhooks, sends messages, and processes agent responses
-with full image output support.
-"""
-
 import base64
 import binascii
 import hashlib

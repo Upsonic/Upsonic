@@ -45,6 +45,17 @@ class TranslationResponse(BaseModel):
     confidence: float
 
 
+class ToolSafetyAnalysisResponse(BaseModel):
+    """Response format for tool safety analysis"""
+    is_harmful: bool = False
+    is_malicious: bool = False
+    confidence: float
+    reasons: List[str]
+    threat_categories: List[str] = []
+    suspicious_args: List[str] = []
+    recommendation: str
+
+
 class UpsonicLLMProvider:
     """Upsonic-based LLM provider for AI Safety Engine"""
     
@@ -525,3 +536,188 @@ class UpsonicLLMProvider:
             return text
         except Exception:
             return text
+    
+    def analyze_tool_safety(
+        self,
+        tool_info: dict,
+        analysis_type: str = "HARMFUL_FUNCTIONALITY"
+    ) -> dict:
+        """
+        Analyze tool safety using LLM.
+        
+        Args:
+            tool_info: Dictionary containing tool information (name, description, parameters, arguments)
+            analysis_type: Type of analysis - "HARMFUL_FUNCTIONALITY" or "MALICIOUS_CALL"
+        
+        Returns:
+            Dictionary with analysis results
+        """
+        import json
+        
+        tool_name = tool_info.get("name", "unknown")
+        tool_description = tool_info.get("description", "")
+        tool_parameters = tool_info.get("parameters", {})
+        tool_arguments = tool_info.get("arguments", {})
+        
+        if analysis_type == "HARMFUL_FUNCTIONALITY":
+            # Analyze tool for harmful functionality during registration
+            prompt = (
+                f"Analyze this tool for harmful or dangerous functionality:\n\n"
+                f"Tool Name: {tool_name}\n"
+                f"Description: {tool_description}\n"
+                f"Parameters Schema: {json.dumps(tool_parameters, indent=2)}\n\n"
+                f"Determine if this tool could be used for:\n"
+                f"1. System manipulation (shutdown, restart, privilege escalation)\n"
+                f"2. Data destruction (file deletion, database drops, data wiping)\n"
+                f"3. Network attacks (port scanning, DoS, intrusion)\n"
+                f"4. Security violations (credential theft, encryption bypass)\n"
+                f"5. Malicious operations (malware installation, backdoors)\n\n"
+                f"Provide your analysis with confidence score (0.0-1.0), specific reasons, "
+                f"and threat categories if harmful."
+            )
+            
+            task = Task(prompt, response_format=ToolSafetyAnalysisResponse)
+            
+            try:
+                result = self.agent.do(task)
+                return {
+                    "is_harmful": result.is_harmful,
+                    "confidence": result.confidence,
+                    "reasons": result.reasons,
+                    "threat_categories": result.threat_categories,
+                    "recommendation": result.recommendation
+                }
+            except Exception as e:
+                return {
+                    "is_harmful": False,
+                    "confidence": 0.0,
+                    "reasons": ["Analysis failed"],
+                    "threat_categories": []
+                }
+        
+        elif analysis_type == "MALICIOUS_CALL":
+            # Analyze specific tool call for malicious arguments
+            prompt = (
+                f"Analyze this tool call for malicious or suspicious arguments:\n\n"
+                f"Tool Name: {tool_name}\n"
+                f"Description: {tool_description}\n"
+                f"Arguments Provided: {json.dumps(tool_arguments, indent=2)}\n"
+                f"Parameters Schema: {json.dumps(tool_parameters, indent=2)}\n\n"
+                f"Check for:\n"
+                f"1. Dangerous file paths (system directories, sensitive files)\n"
+                f"2. Suspicious commands or scripts (rm -rf, dd, format)\n"
+                f"3. Command injection attempts (&&, ||, ;, |, `)\n"
+                f"4. Unusual parameter combinations indicating attacks\n"
+                f"5. Attempts to access unauthorized resources\n\n"
+                f"Provide analysis with confidence score, reasons, and list suspicious arguments."
+            )
+            
+            task = Task(prompt, response_format=ToolSafetyAnalysisResponse)
+            
+            try:
+                result = self.agent.do(task)
+                return {
+                    "is_malicious": result.is_malicious,
+                    "confidence": result.confidence,
+                    "reasons": result.reasons,
+                    "suspicious_args": result.suspicious_args,
+                    "recommendation": result.recommendation
+                }
+            except Exception as e:
+                return {
+                    "is_malicious": False,
+                    "confidence": 0.0,
+                    "reasons": ["Analysis failed"],
+                    "suspicious_args": []
+                }
+        
+        else:
+            return {"error": "Unknown analysis type"}
+    
+    async def analyze_tool_safety_async(
+        self,
+        tool_info: dict,
+        analysis_type: str = "HARMFUL_FUNCTIONALITY"
+    ) -> dict:
+        """
+        Async version of analyze_tool_safety.
+        """
+        import json
+        
+        tool_name = tool_info.get("name", "unknown")
+        tool_description = tool_info.get("description", "")
+        tool_parameters = tool_info.get("parameters", {})
+        tool_arguments = tool_info.get("arguments", {})
+        
+        if analysis_type == "HARMFUL_FUNCTIONALITY":
+            prompt = (
+                f"Analyze this tool for harmful or dangerous functionality:\n\n"
+                f"Tool Name: {tool_name}\n"
+                f"Description: {tool_description}\n"
+                f"Parameters Schema: {json.dumps(tool_parameters, indent=2)}\n\n"
+                f"Determine if this tool could be used for:\n"
+                f"1. System manipulation (shutdown, restart, privilege escalation)\n"
+                f"2. Data destruction (file deletion, database drops, data wiping)\n"
+                f"3. Network attacks (port scanning, DoS, intrusion)\n"
+                f"4. Security violations (credential theft, encryption bypass)\n"
+                f"5. Malicious operations (malware installation, backdoors)\n\n"
+                f"Provide your analysis with confidence score (0.0-1.0), specific reasons, "
+                f"and threat categories if harmful."
+            )
+            
+            task = Task(prompt, response_format=ToolSafetyAnalysisResponse)
+            
+            try:
+                result = await self.agent.do_async(task)
+                return {
+                    "is_harmful": result.is_harmful,
+                    "confidence": result.confidence,
+                    "reasons": result.reasons,
+                    "threat_categories": result.threat_categories,
+                    "recommendation": result.recommendation
+                }
+            except Exception:
+                return {
+                    "is_harmful": False,
+                    "confidence": 0.0,
+                    "reasons": ["Analysis failed"],
+                    "threat_categories": []
+                }
+        
+        elif analysis_type == "MALICIOUS_CALL":
+            prompt = (
+                f"Analyze this tool call for malicious or suspicious arguments:\n\n"
+                f"Tool Name: {tool_name}\n"
+                f"Description: {tool_description}\n"
+                f"Arguments Provided: {json.dumps(tool_arguments, indent=2)}\n"
+                f"Parameters Schema: {json.dumps(tool_parameters, indent=2)}\n\n"
+                f"Check for:\n"
+                f"1. Dangerous file paths (system directories, sensitive files)\n"
+                f"2. Suspicious commands or scripts (rm -rf, dd, format)\n"
+                f"3. Command injection attempts (&&, ||, ;, |, `)\n"
+                f"4. Unusual parameter combinations indicating attacks\n"
+                f"5. Attempts to access unauthorized resources\n\n"
+                f"Provide analysis with confidence score, reasons, and list suspicious arguments."
+            )
+            
+            task = Task(prompt, response_format=ToolSafetyAnalysisResponse)
+            
+            try:
+                result = await self.agent.do_async(task)
+                return {
+                    "is_malicious": result.is_malicious,
+                    "confidence": result.confidence,
+                    "reasons": result.reasons,
+                    "suspicious_args": result.suspicious_args,
+                    "recommendation": result.recommendation
+                }
+            except Exception:
+                return {
+                    "is_malicious": False,
+                    "confidence": 0.0,
+                    "reasons": ["Analysis failed"],
+                    "suspicious_args": []
+                }
+        
+        else:
+            return {"error": "Unknown analysis type"}

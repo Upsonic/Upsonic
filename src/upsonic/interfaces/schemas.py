@@ -10,10 +10,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, ConfigDict
 
+from upsonic._utils import now_utc
 
-# ============================================================================
-# Common Schemas
-# ============================================================================
 
 class HealthCheckResponse(BaseModel):
     """Response model for health check endpoint."""
@@ -21,7 +19,7 @@ class HealthCheckResponse(BaseModel):
     model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
     
     status: str = Field(default="healthy", description="Service health status")
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Current timestamp")
+    timestamp: datetime = Field(default_factory=now_utc, description="Current timestamp")
     interfaces: List[Dict[str, Any]] = Field(default_factory=list, description="List of active interfaces with status")
     connections: int = Field(default=0, description="Number of active WebSocket connections")
 
@@ -33,12 +31,8 @@ class ErrorResponse(BaseModel):
     
     error: str = Field(..., description="Error message")
     detail: Optional[str] = Field(None, description="Detailed error information")
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Error timestamp")
+    timestamp: datetime = Field(default_factory=now_utc, description="Error timestamp")
 
-
-# ============================================================================
-# WebSocket Schemas
-# ============================================================================
 
 class WebSocketMessage(BaseModel):
     """Model for WebSocket messages."""
@@ -47,7 +41,7 @@ class WebSocketMessage(BaseModel):
     
     type: str = Field(..., description="Message type (e.g., 'agent_response', 'status', 'error')")
     data: Dict[str, Any] = Field(..., description="Message data")
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Message timestamp")
+    timestamp: datetime = Field(default_factory=now_utc, description="Message timestamp")
     connection_id: Optional[str] = Field(None, description="Connection ID")
 
 

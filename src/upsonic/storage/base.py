@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import List, Optional, Type, TypeVar, Union, overload
+from typing import List, Optional, Type, TypeVar, Union, overload, Any
 
 from pydantic import BaseModel, Field
 
@@ -29,6 +29,24 @@ class Storage(AsyncExecutionMixin, ABC):
 
     Concrete implementations must provide the logic for the `_async` methods.
     The synchronous methods can then be implemented as simple wrappers.
+    
+    Storage Provider Design Principles:
+    ------------------------------------
+    Storage providers are designed to be flexible and dynamic:
+    
+    1. **Bring Your Own Client**: Providers can accept pre-existing database 
+       clients/connections, allowing users to integrate with their existing 
+       infrastructure. When a client is provided, the user manages its lifecycle.
+    
+    2. **Lazy Initialization**: InteractionSession and UserProfile tables/collections
+       are only created when first accessed, not during initialization. This allows
+       storages to be used for generic purposes without creating unused infrastructure.
+    
+    3. **Generic Model Support**: All providers support arbitrary Pydantic models,
+       not just InteractionSession and UserProfile. This makes them truly general-purpose.
+    
+    4. **Dual Purpose**: Providers can be used for both custom storage needs AND
+       built-in chat/profile features simultaneously in the same database/connection.
     """
 
     def __init__(self):
@@ -65,8 +83,10 @@ class Storage(AsyncExecutionMixin, ABC):
     def upsert(self, data: InteractionSession) -> None: ...
     @overload
     def upsert(self, data: UserProfile) -> None: ...
+    @overload
+    def upsert(self, data: BaseModel) -> None: ...
     @abstractmethod
-    def upsert(self, data: Union[InteractionSession, UserProfile]) -> None:
+    def upsert(self, data: BaseModel) -> None:
         raise NotImplementedError
 
     @overload
@@ -111,8 +131,10 @@ class Storage(AsyncExecutionMixin, ABC):
     async def upsert_async(self, data: InteractionSession) -> None: ...
     @overload
     async def upsert_async(self, data: UserProfile) -> None: ...
+    @overload
+    async def upsert_async(self, data: BaseModel) -> None: ...
     @abstractmethod
-    async def upsert_async(self, data: Union[InteractionSession, UserProfile]) -> None:
+    async def upsert_async(self, data: BaseModel) -> None:
         raise NotImplementedError
 
     @overload
@@ -126,3 +148,28 @@ class Storage(AsyncExecutionMixin, ABC):
     @abstractmethod
     async def drop_async(self) -> None:
         raise NotImplementedError
+    
+    # Generic query methods for arbitrary Pydantic models
+    async def list_all_async(self, model_type: Type[T]) -> List[T]:
+        """
+        List all objects of a specific type.
+        
+        This method enables querying all instances of any Pydantic model type.
+        Useful for FilesystemEntry, custom models, etc.
+        
+        Args:
+            model_type: The Pydantic model class to query
+            
+        Returns:
+            List of all objects of the specified type
+            
+        Note: Default implementation returns empty list.
+              Storage providers should override for full functionality.
+        """
+        # Default implementation (for backward compatibility)
+        # Providers can override for actual querying
+        return []
+    
+    def list_all(self, model_type: Type[T]) -> List[T]:
+        """Synchronous wrapper for list_all_async."""
+        return self._run_async_from_sync(self.list_all_async(model_type))

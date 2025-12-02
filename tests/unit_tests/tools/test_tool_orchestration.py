@@ -18,6 +18,7 @@ class TestOrchestrator:
         agent.enable_reasoning_tool = False
         agent.enable_thinking_tool = False
         agent.name = "TestAgent"
+        agent.model = "openai/gpt-4"  # Set a valid model string
         agent.do_async = AsyncMock(return_value=Mock(output="synthesis_result"))
         return agent
 
@@ -54,8 +55,14 @@ class TestOrchestrator:
         assert orchestrator.revision_count == 0
 
     @pytest.mark.asyncio
-    async def test_orchestrator_orchestrate_tools(self, orchestrator):
+    @patch("upsonic.agent.agent.Agent")
+    async def test_orchestrator_orchestrate_tools(self, mock_agent_class, orchestrator):
         """Test tool orchestration."""
+        # Mock the Agent class to prevent real API calls
+        mock_synthesis_agent = Mock()
+        mock_synthesis_agent.do_async = AsyncMock(return_value=Mock(output="synthesis_result"))
+        mock_agent_class.return_value = mock_synthesis_agent
+        
         thought = Thought(
             reasoning="Test reasoning",
             plan=[
@@ -72,8 +79,14 @@ class TestOrchestrator:
         assert orchestrator.program_counter == 2
 
     @pytest.mark.asyncio
-    async def test_orchestrator_parallel_execution(self, orchestrator):
+    @patch("upsonic.agent.agent.Agent")
+    async def test_orchestrator_parallel_execution(self, mock_agent_class, orchestrator):
         """Test parallel tool execution."""
+        # Mock the Agent class to prevent real API calls
+        mock_synthesis_agent = Mock()
+        mock_synthesis_agent.do_async = AsyncMock(return_value=Mock(output="synthesis_result"))
+        mock_agent_class.return_value = mock_synthesis_agent
+        
         # Orchestrator executes sequentially by default
         # This test verifies sequential execution works
         thought = Thought(
@@ -93,8 +106,14 @@ class TestOrchestrator:
         assert orchestrator.wrapped_tools["tool2"].called
 
     @pytest.mark.asyncio
-    async def test_orchestrator_sequential_execution(self, orchestrator):
+    @patch("upsonic.agent.agent.Agent")
+    async def test_orchestrator_sequential_execution(self, mock_agent_class, orchestrator):
         """Test sequential execution."""
+        # Mock the Agent class to prevent real API calls
+        mock_synthesis_agent = Mock()
+        mock_synthesis_agent.do_async = AsyncMock(return_value=Mock(output="synthesis_result"))
+        mock_agent_class.return_value = mock_synthesis_agent
+        
         thought = Thought(
             reasoning="Test reasoning",
             plan=[
@@ -117,8 +136,14 @@ class TestOrchestrator:
         assert len(call_order) == 2
 
     @pytest.mark.asyncio
-    async def test_orchestrator_tool_not_found(self, orchestrator):
+    @patch("upsonic.agent.agent.Agent")
+    async def test_orchestrator_tool_not_found(self, mock_agent_class, orchestrator):
         """Test handling of non-existent tool."""
+        # Mock the Agent class to prevent real API calls
+        mock_synthesis_agent = Mock()
+        mock_synthesis_agent.do_async = AsyncMock(return_value=Mock(output="synthesis_result"))
+        mock_agent_class.return_value = mock_synthesis_agent
+        
         thought = Thought(
             reasoning="Test reasoning",
             plan=[PlanStep(tool_name="nonexistent_tool", parameters={})],
@@ -130,8 +155,14 @@ class TestOrchestrator:
         assert result is not None
 
     @pytest.mark.asyncio
-    async def test_orchestrator_tool_error(self, orchestrator):
+    @patch("upsonic.agent.agent.Agent")
+    async def test_orchestrator_tool_error(self, mock_agent_class, orchestrator):
         """Test handling of tool execution errors."""
+        # Mock the Agent class to prevent real API calls
+        mock_synthesis_agent = Mock()
+        mock_synthesis_agent.do_async = AsyncMock(return_value=Mock(output="synthesis_result"))
+        mock_agent_class.return_value = mock_synthesis_agent
+        
         orchestrator.wrapped_tools["tool1"] = AsyncMock(
             side_effect=Exception("Tool error")
         )

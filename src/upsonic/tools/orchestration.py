@@ -6,6 +6,7 @@ import copy
 from typing import Any, Callable, Dict, List, Literal, Optional, TYPE_CHECKING
 from pydantic import BaseModel, Field
 
+from upsonic.tools.base import Tool
 from upsonic.tools.config import tool
 
 if TYPE_CHECKING:
@@ -112,21 +113,28 @@ def plan_and_execute(thought: Thought) -> str:
     return "Plan received and will be executed by the orchestrator."
 
 
-class Orchestrator:
+class Orchestrator(Tool):
     """Orchestrator for complex multi-step tool executions with optional reasoning."""
     
     def __init__(
         self,
         agent_instance: Any,
-        task: 'Task',
+        task: Optional['Task'],
         wrapped_tools: Dict[str, Callable]
     ):
         """Initialize the orchestrator."""
+        # Initialize Tool base class
+        super().__init__(
+            name="orchestrator",
+            description="Orchestrates multi-step tool execution with reasoning",
+            tool_id=f"Orchestrator_{id(agent_instance)}"  # Unique per agent instance
+        )
+        
         self.agent_instance = agent_instance
         self.task = task
         self.wrapped_tools = wrapped_tools
         self.is_reasoning_enabled = agent_instance.enable_reasoning_tool if agent_instance else False
-        self.original_user_request = task.description
+        self.original_user_request = task.description if task else ""
         
         self.execution_history = f"Orchestrator's execution history for the user's request:\n"
         self.program_counter = 0
@@ -199,22 +207,37 @@ class Orchestrator:
     async def _inject_analysis(self) -> AnalysisResult:
         """Inject mandatory analysis step after tool execution."""
         from upsonic.tasks.tasks import Task
-        import copy
+        from upsonic.agent.agent import Agent
         
         analysis_prompt = (
             f"Original user request(This is just for remembrance. You have to follow instructions below based on this. But this is not the main focus you will try to fulfill right now): '{self.original_user_request}'\n\n"
             "You are in the middle of a multi-step plan. An action has just been completed. You must now analyze the outcome before proceeding. "
             "Based on the execution history, evaluate the result of the last tool call and decide the "
             "most logical next action.\n\n"
+            "CRITICAL: You are ONLY analyzing the results. DO NOT call any tools. DO NOT execute any actions. "
+            "ONLY provide your evaluation based on the execution history below.\n\n"
             "<ExecutionHistory>\n"
             f"{self.execution_history}"
             "</ExecutionHistory>"
         )
         
-        analysis_task = Task(description=analysis_prompt, not_main_task=True, response_format=AnalysisResult)
-        analysis_agent = copy.copy(self.agent_instance)
-        analysis_agent.enable_thinking_tool = False
-        analysis_agent.enable_reasoning_tool = False
+        # Create analysis task with NO tools - analysis agent should only evaluate, not execute
+        analysis_task = Task(
+            description=analysis_prompt, 
+            not_main_task=True, 
+            response_format=AnalysisResult,
+            tools=[]  # Explicitly no tools for analysis
+        )
+        
+        # Create a fresh analysis agent with NO tools at all
+        # We cannot use copy because it shares tool references
+        analysis_agent = Agent(
+            model=self.agent_instance.model,
+            name=f"{self.agent_instance.name}_analysis",
+            tools=[],  # NO tools for analysis
+            enable_thinking_tool=False,
+            enable_reasoning_tool=False
+        )
         
         analysis_run_result = await analysis_agent.do_async(analysis_task)
         analysis_result: AnalysisResult = analysis_run_result.output if hasattr(analysis_run_result, 'output') else analysis_run_result
@@ -250,7 +273,7 @@ class Orchestrator:
         """Request revised plan based on execution history."""
         from upsonic.tasks.tasks import Task
         from upsonic.utils.printing import console
-        import copy
+        from upsonic.agent.agent import Agent
         
         revision_prompt = (
             f"Original user request(This is just for remembrance. You have to follow instructions below based on this. But this is not the main focus you will try to fulfill right now): '{self.original_user_request}'\n\n"
@@ -258,15 +281,29 @@ class Orchestrator:
             "original plan is flawed or insufficient. Based on the *entire* execution history so far, "
             "formulate a new, complete `Thought` object with a better plan to achieve the user's "
             "original goal.\n\n"
+            "CRITICAL: You are ONLY creating a new plan. DO NOT call any tools. DO NOT execute any actions. "
+            "ONLY provide a revised Thought with a better plan based on the execution history.\n\n"
             "<ExecutionHistory>\n"
             f"{self.execution_history}"
             "</ExecutionHistory>"
         )
         
-        revision_task = Task(description=revision_prompt, not_main_task=True, response_format=Thought)
-        revision_agent = copy.copy(self.agent_instance)
-        revision_agent.enable_thinking_tool = False
-        revision_agent.enable_reasoning_tool = False
+        # Create revision task with NO tools - revision agent should only plan, not execute
+        revision_task = Task(
+            description=revision_prompt, 
+            not_main_task=True, 
+            response_format=Thought,
+            tools=[]  # Explicitly no tools for revision
+        )
+        
+        # Create a fresh revision agent with NO tools at all
+        revision_agent = Agent(
+            model=self.agent_instance.model,
+            name=f"{self.agent_instance.name}_revision",
+            tools=[],  # NO tools for revision
+            enable_thinking_tool=False,
+            enable_reasoning_tool=False
+        )
         
         revision_run_result = await revision_agent.do_async(revision_task)
         new_thought: Thought = revision_run_result.output if hasattr(revision_run_result, 'output') else revision_run_result
@@ -281,7 +318,7 @@ class Orchestrator:
         """Synthesize final answer based on execution history."""
         from upsonic.tasks.tasks import Task
         from upsonic.utils.printing import console, spacing
-        import copy
+        from upsonic.agent.agent import Agent
         
         console.print("[bold magenta]Orchestrator:[/bold magenta] Plan complete. Preparing for final synthesis.")
         spacing()
@@ -292,15 +329,28 @@ class Orchestrator:
             "You have already executed a plan and gathered all necessary information. "
             "Based *only* on the execution history provided below, synthesize a complete "
             "and final answer for the user's original request.\n\n"
+            "CRITICAL: You are ONLY synthesizing the final answer. DO NOT call any tools. DO NOT execute any actions. "
+            "ONLY provide a comprehensive summary based on the execution history.\n\n"
             "<ExecutionHistory>\n"
             f"{self.execution_history}"
             "</ExecutionHistory>"
         )
         
-        synthesis_task = Task(description=synthesis_prompt, not_main_task=True)
-        synthesis_agent = copy.copy(self.agent_instance)
-        synthesis_agent.enable_thinking_tool = False
-        synthesis_agent.enable_reasoning_tool = False
+        # Create synthesis task with NO tools - synthesis agent should only summarize, not execute
+        synthesis_task = Task(
+            description=synthesis_prompt, 
+            not_main_task=True,
+            tools=[]  # Explicitly no tools for synthesis
+        )
+        
+        # Create a fresh synthesis agent with NO tools at all
+        synthesis_agent = Agent(
+            model=self.agent_instance.model,
+            name=f"{self.agent_instance.name}_synthesis",
+            tools=[],  # NO tools for synthesis
+            enable_thinking_tool=False,
+            enable_reasoning_tool=False
+        )
         
         final_response = await synthesis_agent.do_async(synthesis_task)
         return final_response.output if hasattr(final_response, 'output') else final_response

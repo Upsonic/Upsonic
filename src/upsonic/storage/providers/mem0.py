@@ -33,6 +33,12 @@ T = TypeVar('T', bound=BaseModel)
 class Mem0Storage(Storage):
     """
     Mem0 storage provider.
+    
+    This storage provider is designed to be flexible and dynamic:
+    - Can accept a pre-existing Mem0 client (Memory or AsyncMemoryClient) or create one
+    - Supports generic Pydantic models through custom categories
+    - Uses InteractionSession/UserProfile categories when needed
+    - Can be used for both custom purposes and built-in chat/profile features simultaneously
     """
 
     # Category constants for type discrimination
@@ -41,6 +47,7 @@ class Mem0Storage(Storage):
 
     def __init__(
         self,
+        client: Optional[Union['Memory', 'AsyncMemoryClient']] = None,
         api_key: Optional[str] = None,
         org_id: Optional[str] = None,
         project_id: Optional[str] = None,
@@ -57,10 +64,13 @@ class Mem0Storage(Storage):
         Initialize Mem0 storage provider.
 
         Args:
-            api_key: Mem0 Platform API key (if using hosted service).
-            org_id: Organization ID for Mem0 Platform.
-            project_id: Project ID for Mem0 Platform.
-            local_config: Configuration dict for Open Source Mem0.
+            client: Optional pre-existing Memory or AsyncMemoryClient. If provided, this client
+                will be used instead of creating a new one. User is responsible for
+                client lifecycle management when providing their own client.
+            api_key: Mem0 Platform API key (if using hosted service). Ignored if client is provided.
+            org_id: Organization ID for Mem0 Platform. Ignored if client is provided.
+            project_id: Project ID for Mem0 Platform. Ignored if client is provided.
+            local_config: Configuration dict for Open Source Mem0. Ignored if client is provided.
             namespace: Application namespace for organizing memories.
             infer: Enable LLM-based memory inference (False for structured storage).
             custom_categories: Additional custom categories for the project.
@@ -89,10 +99,17 @@ class Mem0Storage(Storage):
         # Internal caches for performance optimization
         self._id_to_memory_id: Dict[str, str] = {}  # object_id → memory_id
         self._cache_timestamps: Dict[str, float] = {}  # object_id → timestamp
-        self._client: Optional[Union[Memory, AsyncMemoryClient]] = None
+        
+        # Store client and track ownership for lifecycle management
+        self._client: Optional[Union[Memory, AsyncMemoryClient]] = client
+        self._owns_client = (client is None)  # True if we create it, False if user provided
         self._is_platform_client = False
         
-        # Store initialization parameters
+        # Detect if user provided a platform client
+        if client and hasattr(client, 'api_key'):
+            self._is_platform_client = True
+        
+        # Store initialization parameters (only used if no client provided)
         self._api_key = api_key
         self._org_id = org_id
         self._project_id = project_id
@@ -158,8 +175,12 @@ class Mem0Storage(Storage):
             raise ConnectionError(f"Failed to initialize Mem0 client: {e}") from e
 
     async def _get_client(self) -> Union[Memory, AsyncMemoryClient]:
-        """Lazy-loaded Mem0 client with async initialization."""
+        """
+        Lazy-loaded Mem0 client with async initialization.
+        If user provided a client, returns that. Otherwise, creates one.
+        """
         if self._client is None:
+            # We own the client, so we need to create it
             self._client = await self._initialize_client()
         return self._client
 
@@ -271,6 +292,84 @@ class Mem0Storage(Storage):
             updated_at=metadata.get("updated_at", time.time()),
         )
 
+    def _get_primary_key_field(self, model_type: Type[BaseModel]) -> str:
+        """Determine the primary key field for a model type."""
+        if model_type is InteractionSession:
+            return "session_id"
+        elif model_type is UserProfile:
+            return "user_id"
+        
+        # Auto-detect for generic types
+        if hasattr(model_type, 'model_fields'):
+            for field_name in ['path', 'id', 'key', 'name']:
+                if field_name in model_type.model_fields:
+                    return field_name
+        return "id"
+    
+    def _serialize_generic_model(self, model: BaseModel) -> tuple[str, Dict[str, Any]]:
+        """
+        Serialize a generic Pydantic model into Mem0 memory text and metadata.
+        
+        Args:
+            model: Any Pydantic BaseModel instance
+            
+        Returns:
+            Tuple of (memory_text, metadata_dict)
+        """
+        model_type = type(model)
+        model_name = model_type.__name__
+        
+        # Store entire model as JSON in memory text
+        memory_data = {
+            "type": "generic_model",
+            "model_type": model_name,
+            "data": model.model_dump(mode="json")
+        }
+        memory_text = json.dumps(memory_data, ensure_ascii=False)
+        
+        # Get primary key for lookup
+        primary_key_field = self._get_primary_key_field(model_type)
+        object_id = getattr(model, primary_key_field, None)
+        
+        # Store metadata
+        metadata = {
+            "category": f"upsonic_generic_{model_name.lower()}",
+            "namespace": self.namespace,
+            "model_type": model_name,
+            "object_id": str(object_id) if object_id else None,
+            "created_at": getattr(model, 'created_at', time.time()),
+            "updated_at": getattr(model, 'updated_at', time.time()),
+        }
+        
+        # Remove None values
+        metadata = {k: v for k, v in metadata.items() if v is not None}
+        
+        return memory_text, metadata
+    
+    def _deserialize_generic_model(self, memory_dict: Dict[str, Any], model_type: Type[T]) -> T:
+        """
+        Deserialize a generic model from Mem0 memory dict.
+        
+        Args:
+            memory_dict: Mem0 memory dictionary
+            model_type: Pydantic model class to deserialize into
+            
+        Returns:
+            Reconstructed model instance
+        """
+        # Parse memory text
+        memory_text = memory_dict.get("memory", "{}")
+        try:
+            memory_data = json.loads(memory_text) if isinstance(memory_text, str) else {}
+        except json.JSONDecodeError:
+            memory_data = {}
+        
+        # Extract model data
+        model_data = memory_data.get("data", {})
+        
+        # Reconstruct model
+        return model_type.model_validate(model_data)
+
     def _serialize_profile(self, profile: UserProfile) -> tuple[str, Dict[str, Any]]:
         """
         Serialize UserProfile into Mem0 memory text and metadata.
@@ -339,8 +438,8 @@ class Mem0Storage(Storage):
         Resolve object_id to Mem0 memory_id using cache or get_all.
         
         Args:
-            object_id: Session ID or User ID
-            model_type: InteractionSession or UserProfile
+            object_id: Session ID, User ID, or generic model object ID
+            model_type: InteractionSession, UserProfile, or any Pydantic BaseModel
             
         Returns:
             Mem0 memory_id or None if not found
@@ -359,7 +458,9 @@ class Mem0Storage(Storage):
             elif model_type is UserProfile:
                 composite_user_id = f"{self.namespace}:profile:{object_id}"
             else:
-                return None
+                # Generic model support
+                model_name = model_type.__name__.lower()
+                composite_user_id = f"{self.namespace}:model:{model_name}:{object_id}"
             
             results = await client.get_all(user_id=composite_user_id)
             
@@ -489,12 +590,13 @@ class Mem0Storage(Storage):
         """
         Read an object from Mem0 using native Mem0 fields (user_id, agent_id).
         
-        For sessions: agent_id = f"session:{session_id}"
-        For profiles: user_id = user_id
+        For sessions: user_id = namespace:session:session_id
+        For profiles: user_id = namespace:profile:user_id
+        For generic models: user_id = namespace:model:model_type:object_id
         
         Args:
-            object_id: Session ID or User ID
-            model_type: InteractionSession or UserProfile class
+            object_id: Session ID, User ID, or generic model object ID
+            model_type: InteractionSession, UserProfile, or any Pydantic BaseModel class
             
         Returns:
             The requested object or None if not found.
@@ -503,12 +605,15 @@ class Mem0Storage(Storage):
             # Create composite user_id for lookup
             if model_type is InteractionSession:
                 composite_user_id = f"{self.namespace}:session:{object_id}"
+                target_category = self.CATEGORY_SESSION
             elif model_type is UserProfile:
                 composite_user_id = f"{self.namespace}:profile:{object_id}"
+                target_category = self.CATEGORY_PROFILE
             else:
-                from upsonic.utils.printing import warning_log
-                warning_log(f"Unsupported model type: {model_type}", "Mem0Storage")
-                return None
+                # Generic model support
+                model_name = model_type.__name__.lower()
+                composite_user_id = f"{self.namespace}:model:{model_name}:{object_id}"
+                target_category = f"upsonic_generic_{model_name}"
             
             client = await self._get_client()
             # Use get_all with user_id to retrieve memories
@@ -527,7 +632,6 @@ class Mem0Storage(Storage):
                 return None
             
             # Filter by category in metadata to ensure we get the right type
-            target_category = self.CATEGORY_SESSION if model_type is InteractionSession else self.CATEGORY_PROFILE
             filtered_memories = [
                 m for m in memories 
                 if m.get("metadata", {}).get("category") == target_category
@@ -549,26 +653,28 @@ class Mem0Storage(Storage):
                 return self._deserialize_session(memory_dict)
             elif model_type is UserProfile:
                 return self._deserialize_profile(memory_dict)
-            
-            return None
+            else:
+                # Generic model support
+                return self._deserialize_generic_model(memory_dict, model_type)
             
         except Exception as e:
             from upsonic.utils.printing import warning_log
             warning_log(f"Failed to read from Mem0 (id={object_id}): {e}", "Mem0Storage")
             return None
 
-    async def upsert_async(self, data: Union[InteractionSession, UserProfile]) -> None:
+    async def upsert_async(self, data: BaseModel) -> None:
         """
         Insert or update an object in Mem0.
         
         Args:
-            data: InteractionSession or UserProfile instance to store.
+            data: InteractionSession, UserProfile, or any Pydantic BaseModel instance to store.
             
         Raises:
             TypeError: If unsupported data type is provided.
         """
         try:
-            data.updated_at = time.time()
+            if hasattr(data, 'updated_at'):
+                data.updated_at = time.time()
             
             if isinstance(data, InteractionSession):
                 memory_text, metadata = self._serialize_session(data)
@@ -591,7 +697,19 @@ class Mem0Storage(Storage):
                 agent_id = None
                 
             else:
-                raise TypeError(f"Unsupported data type for upsert: {type(data).__name__}")
+                # Generic Pydantic model support
+                memory_text, metadata = self._serialize_generic_model(data)
+                model_type = type(data)
+                
+                # Get object ID from model
+                primary_key_field = self._get_primary_key_field(model_type)
+                object_id = getattr(data, primary_key_field)
+                
+                # For generic models, create composite user_id
+                # Format: namespace:model:model_type:object_id
+                model_name = model_type.__name__.lower()
+                user_id = f"{self.namespace}:model:{model_name}:{object_id}"
+                agent_id = None
             
             # Check if object already exists
             memory_id = await self._resolve_memory_id(object_id, model_type)

@@ -16,12 +16,24 @@ _COMMAND_HANDLERS = {
 
 def _handle_init(args: list[str]) -> int:
     """Handle 'init' command with lazy import."""
+    # Check for help flag
+    if len(args) >= 2 and args[1] in ("--help", "-h"):
+        from upsonic.cli.printer import print_help_init
+        print_help_init()
+        return 0
+    
     from upsonic.cli.commands import init_command
     return init_command()
 
 
 def _handle_add(args: list[str]) -> int:
     """Handle 'add' command with lazy import."""
+    # Check for help flag
+    if len(args) >= 2 and args[1] in ("--help", "-h"):
+        from upsonic.cli.printer import print_help_add
+        print_help_add()
+        return 0
+    
     if len(args) < 3:
         from upsonic.cli.printer import print_error
         print_error("Usage: upsonic add <library> <section>\nExample: upsonic add x_library==0.52.0 api")
@@ -32,6 +44,12 @@ def _handle_add(args: list[str]) -> int:
 
 def _handle_install(args: list[str]) -> int:
     """Handle 'install' command with lazy import."""
+    # Check for help flag
+    if len(args) >= 2 and args[1] in ("--help", "-h"):
+        from upsonic.cli.printer import print_help_install
+        print_help_install()
+        return 0
+    
     section = args[1] if len(args) >= 2 else None
     from upsonic.cli.commands import install_command
     return install_command(section)
@@ -39,6 +57,12 @@ def _handle_install(args: list[str]) -> int:
 
 def _handle_run(args: list[str]) -> int:
     """Handle 'run' command with lazy import and optimized arg parsing."""
+    # Check for help flag
+    if len(args) >= 2 and args[1] in ("--help", "-h"):
+        from upsonic.cli.printer import print_help_run
+        print_help_run()
+        return 0
+    
     host = "0.0.0.0"
     port = 8000
     
@@ -66,6 +90,12 @@ def _handle_run(args: list[str]) -> int:
 
 def _handle_zip(args: list[str]) -> int:
     """Handle 'zip' command with lazy import."""
+    # Check for help flag
+    if len(args) >= 2 and args[1] in ("--help", "-h"):
+        from upsonic.cli.printer import print_help_zip
+        print_help_zip()
+        return 0
+    
     output_file = args[1] if len(args) >= 2 else None
     from upsonic.cli.commands import zip_command
     return zip_command(output_file)
@@ -91,6 +121,12 @@ def main(args: Optional[list[str]] = None) -> int:
     if not args:
         from upsonic.cli.printer import print_usage
         print_usage()
+        return 0
+    
+    # Check for general help flag
+    if args[0] in ("--help", "-h"):
+        from upsonic.cli.printer import print_help_general
+        print_help_general()
         return 0
     
     command = args[0]

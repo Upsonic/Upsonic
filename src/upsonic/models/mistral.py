@@ -38,7 +38,7 @@ from upsonic.messages import (
 )
 from upsonic.profiles import ModelProfileSpec
 from upsonic.providers import Provider, infer_provider
-from upsonic.models.settings import ModelSettings
+from .settings import ModelSettings
 from upsonic.tools import ToolDefinition
 from upsonic.usage import RequestUsage
 from . import (

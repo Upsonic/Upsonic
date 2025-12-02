@@ -59,6 +59,20 @@ class Task(BaseModel):
     durable_execution: Optional[Any] = None  # DurableExecution instance
     durable_checkpoint_enabled: bool = False
 
+    # DeepAgent planning support
+    _task_todos: Optional[List[Any]] = None  # List of Todo objects for task planning
+    
+    # Task-specific tool tracking (similar to Agent's registered_agent_tools)
+    registered_task_tools: Dict[str, Any] = {}  # Maps tool names to wrapped Tool objects
+    task_builtin_tools: List[Any] = []
+        
+    # Vector search parameters (override config defaults when provided)
+    vector_search_top_k: Optional[int] = None
+    vector_search_alpha: Optional[float] = None
+    vector_search_fusion_method: Optional[Literal['rrf', 'weighted']] = None
+    vector_search_similarity_threshold: Optional[float] = None
+    vector_search_filter: Optional[Dict[str, Any]] = None
+
     @staticmethod
     def _is_file_path(item: Any) -> bool:
         """
@@ -287,6 +301,12 @@ class Task(BaseModel):
         cache_embedding_provider: Optional[Any] = None,
         cache_duration_minutes: int = 60,
         durable_execution: Optional[Any] = None,
+        _task_todos: Optional[List[Any]] = None,
+        vector_search_top_k: Optional[int] = None,
+        vector_search_alpha: Optional[float] = None,
+        vector_search_fusion_method: Optional[Literal['rrf', 'weighted']] = None,
+        vector_search_similarity_threshold: Optional[float] = None,
+        vector_search_filter: Optional[Dict[str, Any]] = None,
     ):
         if guardrail is not None and not callable(guardrail):
             raise TypeError("The 'guardrail' parameter must be a callable function.")
@@ -357,6 +377,13 @@ class Task(BaseModel):
             "_last_cache_entry": None,
             "durable_execution": durable_execution,
             "durable_checkpoint_enabled": durable_execution is not None,
+            "_task_todos": _task_todos or [],
+            "registered_task_tools": {},  # Initialize empty tool registry
+            "vector_search_top_k": vector_search_top_k,
+            "vector_search_alpha": vector_search_alpha,
+            "vector_search_fusion_method": vector_search_fusion_method,
+            "vector_search_similarity_threshold": vector_search_similarity_threshold,
+            "vector_search_filter": vector_search_filter,
         })
         
         self.validate_tools()
@@ -383,6 +410,73 @@ class Task(BaseModel):
                 if hasattr(tool, '__control__') and callable(getattr(tool, '__control__')):
 
                         control_result = tool.__control__()
+
+    def add_tools(self, tools: Union[Any, List[Any]]) -> None:
+        """
+        Add tools to the task's tool list.
+        
+        This method simply adds tools to self.tools without processing them.
+        Tools are processed at runtime when the agent executes the task.
+        
+        Note: If plan_and_execute is added explicitly, it will be treated as a
+        regular tool (not auto-managed by enable_thinking_tool).
+        
+        Args:
+            tools: A single tool or list of tools to add
+        """
+        if not isinstance(tools, list):
+            tools = [tools]
+        
+        # Initialize self.tools if it's None
+        if self.tools is None:
+            self.tools = []
+        
+        # Add tools to self.tools
+        for tool in tools:
+            if tool not in self.tools:
+                self.tools.append(tool)
+    
+    def remove_tools(self, tools: Union[str, List[str], Any, List[Any]], agent: Any) -> None:
+        """
+        Remove tools from the task.
+        
+        This method requires an agent instance because task tools are registered
+        at runtime (not in __init__), so we need access to the agent's ToolManager
+        to properly remove tools from all relevant data structures.
+        
+        Supports removing:
+        - Tool names (strings)
+        - Function objects
+        - Agent objects
+        - MCP handlers (and all their tools)
+        - Class instances (ToolKit or regular classes, and all their tools)
+        
+        Args:
+            tools: Single tool or list of tools to remove (any type)
+            agent: Agent instance for accessing ToolManager
+        """
+        if not isinstance(tools, list):
+            tools = [tools]
+        
+        # Call ToolManager to handle all removal logic
+        # Pass self.registered_task_tools instead of agent.registered_agent_tools
+        removed_tool_names, removed_objects = agent.tool_manager.remove_tools(
+            tools=tools,
+            registered_agent_tools=self.registered_task_tools
+        )
+        
+        # Update self.tools - remove the original objects
+        if self.tools:
+            self.tools = [t for t in self.tools if t not in removed_objects]
+        
+        # Update self.registered_task_tools - remove the tool names
+        for tool_name in removed_tool_names:
+            if tool_name in self.registered_task_tools:
+                del self.registered_task_tools[tool_name]
+        # Re-extract builtin tools from remaining tools to keep in sync
+        if hasattr(self, 'task_builtin_tools'):
+            final_tools = list(self.tools)
+            self.task_builtin_tools = self.agent.tool_manager.processor.extract_builtin_tools(final_tools)
 
     @property
     def context_formatted(self) -> Optional[str]:
@@ -445,7 +539,7 @@ class Task(BaseModel):
                 # Import KnowledgeBase only when needed
                 if isinstance(context, KnowledgeBase):
                     await context.setup_rag()
-                    rag_result_objects = await context.query_async(self.description)
+                    rag_result_objects = await context.query_async(self.description, task=self)
                     # Convert RAGSearchResult objects to formatted strings
                     if rag_result_objects:
                         formatted_results = []
@@ -683,7 +777,7 @@ class Task(BaseModel):
                 
             except Exception as e:
                 from upsonic.utils.printing import warning_log
-                warning_log(f"Could not load image {attachment_path}: {e}", "TaskProcessor")
+                warning_log(f"Could not load attachment {attachment_path}: {e}", "TaskProcessor")
 
         return input_list
 

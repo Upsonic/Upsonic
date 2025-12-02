@@ -24,8 +24,11 @@ try:
         WeightedRanker,
     )
 except ImportError:
-    raise ImportError(
-        "The `pymilvus` package is required. Install it with: pip install pymilvus>=2.6.0"
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="pymilvus",
+        install_command="pip install pymilvus>=2.6.0",
+        feature_name="Milvus provider"
     )
 
 from upsonic.vectordb.base import BaseVectorDBProvider
@@ -268,6 +271,9 @@ class MilvusProvider(BaseVectorDBProvider):
             enable_dynamic_field=True,  # Allow dynamic metadata fields
         )
         
+        # Parse indexed_fields configuration
+        indexed_fields_config = self._parse_indexed_fields()
+        
         # Primary key: content_id
         schema.add_field(
             field_name="content_id",
@@ -276,11 +282,33 @@ class MilvusProvider(BaseVectorDBProvider):
             is_primary=True
         )
         
-        # Core fields
-        schema.add_field(field_name="document_name", datatype=DataType.VARCHAR, max_length=1024)
-        schema.add_field(field_name="document_id", datatype=DataType.VARCHAR, max_length=256)
-        schema.add_field(field_name="content", datatype=DataType.VARCHAR, max_length=65535)
-        schema.add_field(field_name="metadata", datatype=DataType.VARCHAR, max_length=65535)  # JSON string
+        # Core fields with configurable types
+        # document_name
+        doc_name_config = indexed_fields_config.get("document_name", {"type": "keyword"})
+        schema.add_field(
+            field_name="document_name",
+            datatype=self._get_milvus_datatype(doc_name_config.get("type", "keyword")),
+            max_length=1024 if doc_name_config.get("type", "keyword") in ["text", "keyword"] else None
+        )
+        
+        # document_id
+        doc_id_config = indexed_fields_config.get("document_id", {"type": "keyword"})
+        schema.add_field(
+            field_name="document_id",
+            datatype=self._get_milvus_datatype(doc_id_config.get("type", "keyword")),
+            max_length=256 if doc_id_config.get("type", "keyword") in ["text", "keyword"] else None
+        )
+        
+        # content
+        content_config = indexed_fields_config.get("content", {"type": "text"})
+        schema.add_field(
+            field_name="content",
+            datatype=DataType.VARCHAR,
+            max_length=65535
+        )
+        
+        # metadata (always VARCHAR for JSON)
+        schema.add_field(field_name="metadata", datatype=DataType.VARCHAR, max_length=65535)
         
         # Dense vector
         schema.add_field(
@@ -301,19 +329,21 @@ class MilvusProvider(BaseVectorDBProvider):
         )
         
         # Add scalar indexes if specified (not supported in embedded mode)
-        if self._config.indexed_fields and self._config.connection.mode != Mode.EMBEDDED:
-            for field in self._config.indexed_fields:
-                if field in ['document_name', 'document_id', 'content_id']:
-                    # Note: Scalar indexing in Milvus server mode
-                    # Milvus Lite doesn't support explicit scalar indexes
-                    logger.info(f"Creating scalar index for field: {field}")
+        if indexed_fields_config and self._config.connection.mode != Mode.EMBEDDED:
+            for field_name, field_config in indexed_fields_config.items():
+                if field_name in ['document_name', 'document_id', 'content_id']:
+                    logger.info(f"Creating scalar index for field: {field_name} (type: {field_config.get('type', 'keyword')})")
                     try:
+                        # Determine index type based on field type
+                        field_type = field_config.get("type", "keyword")
+                        index_type = self._get_milvus_index_type(field_type)
+                        
                         index_params.add_index(
-                            field_name=field,
-                            index_type="TRIE",  # String index for VARCHAR fields
+                            field_name=field_name,
+                            index_type=index_type,
                         )
                     except Exception as e:
-                        logger.warning(f"Failed to add scalar index for {field}: {e}")
+                        logger.warning(f"Failed to add scalar index for {field_name}: {e}")
         
         # Create collection
         await self._aclient.create_collection(
@@ -330,6 +360,9 @@ class MilvusProvider(BaseVectorDBProvider):
             enable_dynamic_field=True,
         )
         
+        # Parse indexed_fields configuration
+        indexed_fields_config = self._parse_indexed_fields()
+        
         # Primary key: content_id
         schema.add_field(
             field_name="content_id",
@@ -338,11 +371,28 @@ class MilvusProvider(BaseVectorDBProvider):
             is_primary=True
         )
         
-        # Core fields
-        schema.add_field(field_name="document_name", datatype=DataType.VARCHAR, max_length=1024)
-        schema.add_field(field_name="document_id", datatype=DataType.VARCHAR, max_length=256)
+        # Core fields with configurable types
+        # document_name
+        doc_name_config = indexed_fields_config.get("document_name", {"type": "keyword"})
+        schema.add_field(
+            field_name="document_name",
+            datatype=self._get_milvus_datatype(doc_name_config.get("type", "keyword")),
+            max_length=1024 if doc_name_config.get("type", "keyword") in ["text", "keyword"] else None
+        )
+        
+        # document_id
+        doc_id_config = indexed_fields_config.get("document_id", {"type": "keyword"})
+        schema.add_field(
+            field_name="document_id",
+            datatype=self._get_milvus_datatype(doc_id_config.get("type", "keyword")),
+            max_length=256 if doc_id_config.get("type", "keyword") in ["text", "keyword"] else None
+        )
+        
+        # content
         schema.add_field(field_name="content", datatype=DataType.VARCHAR, max_length=65535)
-        schema.add_field(field_name="metadata", datatype=DataType.VARCHAR, max_length=65535)  # JSON string
+        
+        # metadata (always VARCHAR for JSON)
+        schema.add_field(field_name="metadata", datatype=DataType.VARCHAR, max_length=65535)
         
         # Dense vector
         schema.add_field(
@@ -378,17 +428,21 @@ class MilvusProvider(BaseVectorDBProvider):
         )
         
         # Add scalar indexes if specified (not supported in embedded mode)
-        if self._config.indexed_fields and self._config.connection.mode != Mode.EMBEDDED:
-            for field in self._config.indexed_fields:
-                if field in ['document_name', 'document_id', 'content_id']:
-                    logger.info(f"Creating scalar index for field: {field}")
+        if indexed_fields_config and self._config.connection.mode != Mode.EMBEDDED:
+            for field_name, field_config in indexed_fields_config.items():
+                if field_name in ['document_name', 'document_id', 'content_id']:
+                    logger.info(f"Creating scalar index for field: {field_name} (type: {field_config.get('type', 'keyword')})")
                     try:
+                        # Determine index type based on field type
+                        field_type = field_config.get("type", "keyword")
+                        index_type = self._get_milvus_index_type(field_type)
+                        
                         index_params.add_index(
-                            field_name=field,
-                            index_type="TRIE",
+                            field_name=field_name,
+                            index_type=index_type,
                         )
                     except Exception as e:
-                        logger.warning(f"Failed to add scalar index for {field}: {e}")
+                        logger.warning(f"Failed to add scalar index for {field_name}: {e}")
         
         # Create collection
         await self._aclient.create_collection(
@@ -441,6 +495,84 @@ class MilvusProvider(BaseVectorDBProvider):
             params["params"] = {}
         
         return params
+    
+    def _parse_indexed_fields(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Parse indexed_fields into a standardized format.
+        
+        Supports two formats:
+        1. Simple: ["document_name", "document_id"]
+        2. Advanced: [{"field": "document_name", "type": "keyword"}, {"field": "age", "type": "integer"}]
+        
+        Returns:
+            Dict mapping field_name to config: {"field_name": {"indexed": True, "type": "keyword"}}
+        """
+        if not self._config.indexed_fields:
+            return {}
+        
+        result = {}
+        for item in self._config.indexed_fields:
+            if isinstance(item, str):
+                # Simple format: just field name
+                result[item] = {"indexed": True, "type": "keyword"}
+            elif isinstance(item, dict):
+                # Advanced format: {"field": "name", "type": "keyword"}
+                field_name = item.get("field")
+                if field_name:
+                    result[field_name] = {
+                        "indexed": True,
+                        "type": item.get("type", "keyword")
+                    }
+        
+        return result
+    
+    def _get_milvus_datatype(self, field_type: str) -> DataType:
+        """
+        Convert field type string to Milvus DataType.
+        
+        Args:
+            field_type: One of 'text', 'keyword', 'integer', 'float', 'boolean'
+        
+        Returns:
+            Milvus DataType enum value
+        """
+        type_map = {
+            'text': DataType.VARCHAR,
+            'keyword': DataType.VARCHAR,
+            'integer': DataType.INT64,
+            'int': DataType.INT64,
+            'int8': DataType.INT8,
+            'int16': DataType.INT16,
+            'int32': DataType.INT32,
+            'int64': DataType.INT64,
+            'float': DataType.FLOAT,
+            'double': DataType.DOUBLE,
+            'boolean': DataType.BOOL,
+            'bool': DataType.BOOL,
+        }
+        return type_map.get(field_type.lower(), DataType.VARCHAR)
+    
+    def _get_milvus_index_type(self, field_type: str) -> str:
+        """
+        Get appropriate Milvus index type for field type.
+        
+        Args:
+            field_type: Field type string
+        
+        Returns:
+            Milvus index type string
+        """
+        # Milvus supports different scalar index types
+        if field_type.lower() in ['text', 'keyword']:
+            return "TRIE"  # Trie index for strings
+        elif field_type.lower() in ['integer', 'int', 'int64', 'int8', 'int16', 'int32']:
+            return "STL_SORT"  # Sorted index for integers
+        elif field_type.lower() in ['float', 'double']:
+            return "STL_SORT"  # Sorted index for floats
+        elif field_type.lower() in ['boolean', 'bool']:
+            return "INVERTED"  # Inverted index for booleans
+        else:
+            return "TRIE"  # Default to TRIE for unknown types
 
     async def delete_collection(self) -> None:
         """Delete the collection."""
@@ -642,8 +774,8 @@ class MilvusProvider(BaseVectorDBProvider):
         has_text = query_text is not None
         
         # Use config defaults if not provided
-        top_k = top_k or self._config.default_top_k
-        similarity_threshold = similarity_threshold or self._config.default_similarity_threshold
+        top_k = top_k if top_k is not None else self._config.default_top_k
+        similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.default_similarity_threshold
         
         # Dispatch to appropriate search method
         if has_vector and has_text:
@@ -707,6 +839,9 @@ class MilvusProvider(BaseVectorDBProvider):
         """
         info_log(f"Performing dense search (top_k={top_k})", context="MilvusProvider")
         
+        # Use config default if not provided
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.default_similarity_threshold
+        
         # Build search params
         search_params = self._build_search_params()
         
@@ -728,7 +863,7 @@ class MilvusProvider(BaseVectorDBProvider):
         search_results = []
         for hits in results:
             for hit in hits:
-                result = self._convert_to_search_result(hit, similarity_threshold)
+                result = self._convert_to_search_result(hit, final_similarity_threshold)
                 if result:
                     search_results.append(result)
         
@@ -769,6 +904,9 @@ class MilvusProvider(BaseVectorDBProvider):
         
         info_log(f"Performing full-text search (top_k={top_k})", context="MilvusProvider")
         
+        # Use config default if not provided
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.default_similarity_threshold
+        
         # Build search params for sparse vectors
         search_params = {"metric_type": "IP", "params": {"drop_ratio_search": 0.2}}
         
@@ -790,7 +928,7 @@ class MilvusProvider(BaseVectorDBProvider):
         search_results = []
         for hits in results:
             for hit in hits:
-                result = self._convert_to_search_result(hit, similarity_threshold)
+                result = self._convert_to_search_result(hit, final_similarity_threshold)
                 if result:
                     search_results.append(result)
         
@@ -838,7 +976,8 @@ class MilvusProvider(BaseVectorDBProvider):
         
         # Use config defaults if not provided
         alpha = alpha if alpha is not None else self._config.default_hybrid_alpha
-        fusion_method = fusion_method or self._config.default_fusion_method
+        fusion_method = fusion_method if fusion_method is not None else self._config.default_fusion_method
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.default_similarity_threshold
         
         # Build search params
         dense_search_params = self._build_search_params()
@@ -883,7 +1022,7 @@ class MilvusProvider(BaseVectorDBProvider):
         search_results = []
         for hits in results:
             for hit in hits:
-                result = self._convert_to_search_result(hit, similarity_threshold)
+                result = self._convert_to_search_result(hit, final_similarity_threshold)
                 if result:
                     search_results.append(result)
         
