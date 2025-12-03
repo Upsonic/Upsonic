@@ -114,9 +114,7 @@ class ConnectionConfig(pydantic.BaseModel):
         return self
 
 
-# ============================================================================
-# Index Tuning Configurations
-# ============================================================================
+
 
 class HNSWIndexConfig(pydantic.BaseModel):
     """HNSW index tuning parameters."""
@@ -144,9 +142,7 @@ class FlatIndexConfig(pydantic.BaseModel):
 IndexConfig = Union[HNSWIndexConfig, IVFIndexConfig, FlatIndexConfig]
 
 
-# ============================================================================
-# Provider-Specific Configurations
-# ============================================================================
+
 
 class ChromaConfig(BaseVectorDBConfig):
     """
@@ -196,10 +192,6 @@ class FaissConfig(BaseVectorDBConfig):
     quantization_type: Optional[Literal['scalar', 'product']] = None
     quantization_bits: int = 8
     
-    # Metadata and indexing configuration
-    # indexed_fields: List of field names to build indexes for (from BaseVectorDBConfig)
-    # default_metadata: Default metadata dict to merge with user metadata (from BaseVectorDBConfig)
-    # auto_generate_content_id: Whether to auto-generate content_id (from BaseVectorDBConfig)
     
     @pydantic.model_validator(mode='after')
     def validate_faiss_config(self):

@@ -550,14 +550,22 @@ class Agent(BaseAgent):
         Register agent-level tools with the ToolManager.
         
         This is called in __init__ to ensure agent tools are registered immediately.
+        Automatically includes canvas tools if canvas is provided.
         """
-        if not self.tools:
+        # Prepare tools list starting with user-provided tools
+        final_tools = list(self.tools) if self.tools else []
+        
+        if self.canvas:
+            canvas_functions = self.canvas.functions()
+            for canvas_func in canvas_functions:
+                if canvas_func not in final_tools:
+                    final_tools.append(canvas_func)
+            self.tools = final_tools
+        
+        if not final_tools:
             self.registered_agent_tools = {}
             self.agent_builtin_tools = []
             return
-        
-        # Prepare tools list with thinking/reasoning tools if enabled
-        final_tools = list(self.tools)
         
         # Add thinking tool if enabled
         if self.enable_thinking_tool:
