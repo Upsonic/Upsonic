@@ -151,12 +151,13 @@ class KnowledgeBase(ToolKit):
         """
         Update the search method's docstring to include the knowledge base description.
         """
+        topics_str = ", ".join(self.topics) if self.topics else "general"
         base_docstring = """Search the knowledge base for relevant information using semantic similarity.
 
         This tool performs intelligent retrieval from the indexed knowledge base for the topics: {topics}.
 
         Description about knowledge base which the informations will be retrieved from:
-            {description}Iha 
+            {description}
 
         Args:
             query: The question, topic, or search query to find relevant information.
@@ -170,7 +171,12 @@ class KnowledgeBase(ToolKit):
             format. Returns "No relevant information found in the knowledge base."
             if no matches are found.
         """
-        self.search.__doc__ = base_docstring.format(description=self.description)
+        # Use __func__ to access the underlying function object for docstring update
+        if hasattr(self.search, '__func__'):
+            self.search.__func__.__doc__ = base_docstring.format(
+                description=self.description,
+                topics=topics_str
+            )
 
     def _validate_sources_exist(self, sources: Union[str, Path, List[Union[str, Path]]]) -> None:
         """

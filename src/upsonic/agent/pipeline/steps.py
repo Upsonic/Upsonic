@@ -1254,6 +1254,32 @@ class FinalizationStep(Step):
             if context.task.price_id in price_id_summary:
                 print_price_id_summary(context.task.price_id, context.task)
 
+        # Cleanup task-level MCP handlers to prevent resource leaks
+        # Only close handlers that are task-specific (not agent-level tools)
+        try:
+            from upsonic.tools.mcp import MCPHandler, MultiMCPHandler
+            if context.task and hasattr(context.task, 'tools') and context.task.tools:
+                agent_tools_set = set(context.agent.tools) if context.agent.tools else set()
+                for tool in context.task.tools:
+                    # Close handlers that are in task tools but not in agent tools
+                    if isinstance(tool, (MCPHandler, MultiMCPHandler)):
+                        if tool not in agent_tools_set:
+                            try:
+                                await tool.close()
+                            except (RuntimeError, Exception) as e:
+                                # Suppress event loop closed errors (common in threaded contexts)
+                                error_msg = str(e).lower()
+                                if "event loop is closed" not in error_msg and "loop" not in error_msg:
+                                    # Only log non-loop-related errors in debug mode
+                                    if context.agent.debug:
+                                        from upsonic.utils.printing import console
+                                        console.print(f"[yellow]Warning: Error closing task-level MCP handler: {e}[/yellow]")
+        except Exception as e:
+            # Don't let cleanup errors break execution
+            if context.agent.debug:
+                from upsonic.utils.printing import console
+                console.print(f"[yellow]Warning: Error during MCP handler cleanup: {e}[/yellow]")
+
         return StepResult(
             status=StepStatus.SUCCESS,
             message="Execution finalized",
