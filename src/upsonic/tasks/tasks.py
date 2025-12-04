@@ -462,7 +462,7 @@ class Task(BaseModel):
         # Pass self.registered_task_tools instead of agent.registered_agent_tools
         removed_tool_names, removed_objects = agent.tool_manager.remove_tools(
             tools=tools,
-            registered_agent_tools=self.registered_task_tools
+            registered_tools=self.registered_task_tools
         )
         
         # Update self.tools - remove the original objects

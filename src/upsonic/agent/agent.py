@@ -662,7 +662,7 @@ class Agent(BaseAgent):
         # Call ToolManager to handle all removal logic
         removed_tool_names, removed_objects = self.tool_manager.remove_tools(
             tools=tools,
-            registered_agent_tools=self.registered_agent_tools
+            registered_tools=self.registered_agent_tools
         )
         
         # Update self.tools - remove the original objects
