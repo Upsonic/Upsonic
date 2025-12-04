@@ -489,7 +489,7 @@ class ToolManager:
     def remove_tools(
         self,
         tools: Union[Any, List[Any]],
-        registered_agent_tools: Dict[str, Any]
+        registered_tools: Dict[str, Any]
     ) -> tuple[List[str], List[Any]]:
         """
         Remove tools from the manager.
@@ -503,7 +503,7 @@ class ToolManager:
         
         Args:
             tools: Single tool or list of tools to remove (any type)
-            registered_agent_tools: Agent's registered tools for reference
+            registered_tools: Agent's registered tools for reference
             
         Returns:
             Tuple of (removed_tool_names, removed_original_objects)
@@ -532,8 +532,8 @@ class ToolManager:
                 tool_names_to_remove.append(tool_identifier)
                 
                 # Find the original object for this tool name
-                if tool_identifier in registered_agent_tools:
-                    registered_tool = registered_agent_tools[tool_identifier]
+                if tool_identifier in registered_tools:
+                    registered_tool = registered_tools[tool_identifier]
                     if hasattr(registered_tool, 'agent'):
                         original_objects_to_remove.add(registered_tool.agent)
                     elif hasattr(registered_tool, 'function'):
@@ -570,7 +570,7 @@ class ToolManager:
                 else:
                     # It might be a function, agent, or wrapped tool
                     found = False
-                    for name, registered_tool in registered_agent_tools.items():
+                    for name, registered_tool in registered_tools.items():
                         # Direct match
                         if registered_tool is tool_identifier or id(registered_tool) == id(tool_identifier):
                             tool_names_to_remove.append(name)
@@ -578,21 +578,21 @@ class ToolManager:
                             break
                         
                         # Agent match
-                        if hasattr(registered_tool, 'agent') and registered_tool.agent is tool_identifier:
+                        if hasattr(registered_tool, 'agent') and registered_tool.agent is tool_identifier or id(registered_tool.agent) == id(tool_identifier):
                             tool_names_to_remove.append(name)
                             original_objects_to_remove.add(tool_identifier)
                             found = True
                             break
                         
                         # Function match
-                        if hasattr(registered_tool, 'function') and registered_tool.function is tool_identifier:
+                        if hasattr(registered_tool, 'function') and registered_tool.function is tool_identifier or id(registered_tool.function) == id(tool_identifier):
                             tool_names_to_remove.append(name)
                             original_objects_to_remove.add(tool_identifier)
                             found = True
                             break
                         
                         # Handler match
-                        if hasattr(registered_tool, 'handler') and registered_tool.handler is tool_identifier:
+                        if hasattr(registered_tool, 'handler') and registered_tool.handler is tool_identifier or id(registered_tool.handler) == id(tool_identifier):
                             tool_names_to_remove.append(name)
                             original_objects_to_remove.add(tool_identifier)
                             found = True
