@@ -213,6 +213,7 @@ def infer_provider(provider_name: str, **kwargs) -> OCR:
         'tesseract': 'upsonic.ocr.tesseract.TesseractOCR',
         'deepseek': 'upsonic.ocr.deepseek.DeepSeekOCR',
         'deepseek_ocr': 'upsonic.ocr.deepseek.DeepSeekOCR',
+        'deepseek_ollama': 'upsonic.ocr.deepseek_ollama.DeepSeekOllamaOCR',
         'paddleocr': 'upsonic.ocr.paddleocr.PaddleOCR',
         'paddle': 'upsonic.ocr.paddleocr.PaddleOCR',
         'ppstructurev3': 'upsonic.ocr.paddleocr.PPStructureV3',
