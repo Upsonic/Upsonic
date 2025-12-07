@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import List, Optional
 from pathlib import Path
 import tempfile
+import time
+import threading
 
 from upsonic.ocr.base import OCRProvider, OCRConfig, OCRResult, OCRTextBlock
 from upsonic.ocr.exceptions import OCRProviderError, OCRProcessingError
@@ -38,6 +40,7 @@ class DeepSeekOllamaOCR(OCRProvider):
         host: str = 'http://localhost:11434',
         model: str = 'deepseek-ocr:3b',
         prompt: str = '<image>\nFree OCR.',
+        timeout: float = 60.0,
         **kwargs
     ):
         """Initialize DeepSeek Ollama OCR provider.
@@ -47,11 +50,13 @@ class DeepSeekOllamaOCR(OCRProvider):
             host: Ollama server host (default: 'http://localhost:11434')
             model: Model name (default: 'deepseek-ocr:3b')
             prompt: OCR prompt template (default: '<image>\nFree OCR.')
+            timeout: Timeout in seconds for streaming response (default: 60.0)
             **kwargs: Additional configuration arguments
         """
         self.host = host
         self.model = model
         self.prompt = prompt
+        self.timeout = timeout
         self._client = None
         super().__init__(config, **kwargs)
     
@@ -138,27 +143,97 @@ class DeepSeekOllamaOCR(OCRProvider):
             
             try:
                 prompt = kwargs.get('prompt', self.prompt)
+                timeout = kwargs.get('timeout', self.timeout)
                 client = self._get_client()
                 
-                response = client.chat(
-                    model=self.model,
-                    messages=[
-                        {
-                            'role': 'user',
-                            'content': prompt,
-                            'images': [tmp_path],
-                        }
-                    ],
-                )
+                # Variables for timeout control
+                result_data = {
+                    'text': '',
+                    'timeout_reached': False,
+                    'processing_time': 0.0,
+                    'chunk_count': 0
+                }
+                start_time = time.time()
+                stop_flag = threading.Event()
                 
-                extracted_text = response.message.content.strip() if response.message.content else ""
+                def stream_with_timeout():
+                    """Stream response in a separate thread"""
+                    try:
+                        stream = client.chat(
+                            model=self.model,
+                            messages=[
+                                {
+                                    'role': 'user',
+                                    'content': prompt,
+                                    'images': [tmp_path],
+                                }
+                            ],
+                            stream=True,
+                        )
+                        
+                        for chunk in stream:
+                            result_data['chunk_count'] += 1
+                            
+                            # Check timeout in thread
+                            current_time = time.time()
+                            elapsed = current_time - start_time
+                            
+                            if elapsed > timeout:
+                                result_data['timeout_reached'] = True
+                                break
+                            
+                            # Check if we should stop from outside
+                            if stop_flag.is_set():
+                                result_data['timeout_reached'] = True
+                                break
+                            
+                            # Add chunk content
+                            if hasattr(chunk, 'message') and hasattr(chunk.message, 'content'):
+                                if chunk.message.content:
+                                    result_data['text'] += chunk.message.content
+                    except Exception:
+                        pass
+                    finally:
+                        result_data['processing_time'] = time.time() - start_time
+                
+                # Start streaming thread
+                stream_thread = threading.Thread(target=stream_with_timeout, daemon=True)
+                stream_thread.start()
+                
+                # Wait with timeout
+                stream_thread.join(timeout=timeout + 0.5)
+                
+                # If thread is still alive, force stop
+                if stream_thread.is_alive():
+                    stop_flag.set()
+                    result_data['timeout_reached'] = True
+                    # Wait a bit more for graceful shutdown
+                    stream_thread.join(timeout=0.5)
+                
+                # Ensure processing_time is set
+                if result_data['processing_time'] == 0.0:
+                    result_data['processing_time'] = time.time() - start_time
+                
+                extracted_text = result_data['text'].strip()
                 
                 block = OCRTextBlock(
                     text=extracted_text,
-                    confidence=1.0,  # DeepSeek-OCR doesn't provide confidence scores
+                    confidence=1.0,
                     bbox=None,
                     language=None
                 )
+                
+                metadata = {
+                    'model': self.model,
+                    'host': self.host,
+                    'backend': 'ollama',
+                    'prompt': prompt,
+                    'streaming': True,
+                    'timeout_reached': result_data['timeout_reached'],
+                    'timeout_duration': timeout,
+                    'processing_time': result_data['processing_time'],
+                    'chunk_count': result_data['chunk_count'],
+                }
                 
                 return OCRResult(
                     text=extracted_text,
@@ -166,12 +241,7 @@ class DeepSeekOllamaOCR(OCRProvider):
                     confidence=1.0,
                     page_count=1,
                     provider=self.name,
-                    metadata={
-                        'model': self.model,
-                        'host': self.host,
-                        'backend': 'ollama',
-                        'prompt': prompt,
-                    }
+                    metadata=metadata
                 )
             finally:
                 # Clean up temporary file
@@ -189,4 +259,58 @@ class DeepSeekOllamaOCR(OCRProvider):
                 error_code="DEEPSEEK_OLLAMA_PROCESSING_FAILED",
                 original_error=e
             )
+    
+    def process_file(self, file_path, **kwargs):
+        """Process a file and preserve timeout metadata.
+        
+        Override base class to preserve streaming and timeout metadata.
+        
+        Args:
+            file_path: Path to the file
+            **kwargs: Additional arguments (including timeout)
+            
+        Returns:
+            OCRResult object with timeout metadata
+        """
+        from upsonic.ocr.utils import prepare_file_for_ocr
+        import time
+        
+        start_time = time.time()
+        
+        processing_config = {
+            'rotation_fix': kwargs.get('rotation_fix', self.config.rotation_fix),
+            'enhance_contrast': kwargs.get('enhance_contrast', self.config.enhance_contrast),
+            'remove_noise': kwargs.get('remove_noise', self.config.remove_noise),
+            'pdf_dpi': kwargs.get('pdf_dpi', self.config.pdf_dpi),
+        }
+        
+        images = prepare_file_for_ocr(file_path, **processing_config)
+        
+        # Process first image (single page for now)
+        if images:
+            result = self._process_image(images[0], **kwargs)
+            
+            # Update metrics
+            self._metrics.total_pages += 1
+            self._metrics.total_characters += len(result.text)
+            self._metrics.processing_time_ms += result.metadata.get('processing_time', 0) * 1000
+            self._metrics.files_processed += 1
+            if result.blocks:
+                self._metrics.average_confidence = sum(b.confidence for b in result.blocks) / len(result.blocks)
+            
+            # Add file_path to metadata
+            result.metadata['file_path'] = str(file_path)
+            result.metadata['config'] = self.config.model_dump()
+            
+            return result
+        
+        # Empty result if no images
+        return OCRResult(
+            text="",
+            blocks=[],
+            confidence=0.0,
+            page_count=0,
+            provider=self.name,
+            metadata={'file_path': str(file_path), 'error': 'No images found'}
+        )
 
