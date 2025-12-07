@@ -532,14 +532,39 @@ class ToolManager:
                 tool_names_to_remove.append(tool_identifier)
                 
                 # Find the original object for this tool name
+                # ONLY add to original_objects_to_remove for 1:1 relationships (functions, agents)
+                # NOT for 1:many relationships (MCP handlers, ToolKits, class instances)
                 if tool_identifier in registered_tools:
                     registered_tool = registered_tools[tool_identifier]
-                    if hasattr(registered_tool, 'agent'):
-                        original_objects_to_remove.add(registered_tool.agent)
-                    elif hasattr(registered_tool, 'function'):
-                        original_objects_to_remove.add(registered_tool.function)
-                    elif hasattr(registered_tool, 'handler'):
-                        original_objects_to_remove.add(registered_tool.handler)
+                    
+                    # Check if this tool comes from a 1:many relationship
+                    is_one_to_many = False
+                    
+                    # MCP handler (1:many) - check if handler is tracked
+                    if hasattr(registered_tool, 'handler'):
+                        handler_id = id(registered_tool.handler)
+                        if handler_id in self.processor.mcp_handler_to_tools:
+                            handler_tools = self.processor.mcp_handler_to_tools[handler_id]
+                            if len(handler_tools) > 1:  # Handler has multiple tools
+                                is_one_to_many = True
+                    
+                    # ToolKit or class instance (1:many) - check if instance is tracked
+                    elif hasattr(registered_tool, 'function') and hasattr(registered_tool.function, '__self__'):
+                        # This is a method (has __self__), check if instance is tracked
+                        instance = registered_tool.function.__self__
+                        instance_id = id(instance)
+                        if instance_id in self.processor.class_instance_to_tools:
+                            instance_tools = self.processor.class_instance_to_tools[instance_id]
+                            if len(instance_tools) > 1:  # Instance has multiple tools
+                                is_one_to_many = True
+                    
+                    # Only add to original_objects_to_remove if it's a 1:1 relationship
+                    if not is_one_to_many:
+                        if hasattr(registered_tool, 'agent'):
+                            original_objects_to_remove.add(registered_tool.agent)
+                        elif hasattr(registered_tool, 'function'):
+                            original_objects_to_remove.add(registered_tool.function)
+                        # Note: Don't add handler here - it's handled above in the 1:many check
             
             # MCP Handler
             elif isinstance(tool_identifier, (MCPHandler, MultiMCPHandler)):
@@ -578,21 +603,21 @@ class ToolManager:
                             break
                         
                         # Agent match
-                        if hasattr(registered_tool, 'agent') and registered_tool.agent is tool_identifier or id(registered_tool.agent) == id(tool_identifier):
+                        if hasattr(registered_tool, 'agent') and (registered_tool.agent is tool_identifier or id(registered_tool.agent) == id(tool_identifier)):
                             tool_names_to_remove.append(name)
                             original_objects_to_remove.add(tool_identifier)
                             found = True
                             break
                         
                         # Function match
-                        if hasattr(registered_tool, 'function') and registered_tool.function is tool_identifier or id(registered_tool.function) == id(tool_identifier):
+                        if hasattr(registered_tool, 'function') and (registered_tool.function is tool_identifier or id(registered_tool.function) == id(tool_identifier)):
                             tool_names_to_remove.append(name)
                             original_objects_to_remove.add(tool_identifier)
                             found = True
                             break
                         
                         # Handler match
-                        if hasattr(registered_tool, 'handler') and registered_tool.handler is tool_identifier or id(registered_tool.handler) == id(tool_identifier):
+                        if hasattr(registered_tool, 'handler') and (registered_tool.handler is tool_identifier or id(registered_tool.handler) == id(tool_identifier)):
                             tool_names_to_remove.append(name)
                             original_objects_to_remove.add(tool_identifier)
                             found = True

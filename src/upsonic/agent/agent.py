@@ -316,6 +316,12 @@ class Agent(BaseAgent):
         self.tool_policy_pre = tool_policy_pre
         self.tool_policy_post = tool_policy_post
         
+        # Handle reflection configuration
+        if reflection and not reflection_config:
+            # Create default reflection config if reflection=True but no config provided
+            from upsonic.reflection import ReflectionConfig
+            reflection_config = ReflectionConfig()
+        
         self.reflection_config = reflection_config
         if reflection_config:
             from upsonic.reflection import ReflectionProcessor
@@ -484,7 +490,11 @@ class Agent(BaseAgent):
         """
         self._stream_run_result = StreamRunResult()
     
-    def _validate_tools_with_policy_pre(self, context_description: str = "Tool Validation") -> None:
+    def _validate_tools_with_policy_pre(
+        self, 
+        context_description: str = "Tool Validation",
+        registered_tools_dicts: Optional[List[Dict[str, Any]]] = None
+    ) -> None:
         """
         Validate all currently registered tools with tool_policy_pre before use.
         
@@ -493,12 +503,18 @@ class Agent(BaseAgent):
         
         Args:
             context_description: Description of where this validation is being called from
+            registered_tools_dicts: List of registered tools dictionaries to check when removing tools.
+                                   If None, defaults to [self.registered_agent_tools]
             
         Raises:
             DisallowedOperation: If any tool is blocked by the safety policy
         """
         if not hasattr(self, 'tool_policy_pre_manager') or not self.tool_policy_pre_manager.has_policies():
             return
+        
+        # Default to agent tools if not specified
+        if registered_tools_dicts is None:
+            registered_tools_dicts = [self.registered_agent_tools]
         
         import asyncio
         tool_definitions = self.tool_manager.get_tool_definitions()
@@ -538,12 +554,33 @@ class Agent(BaseAgent):
                 )
             
             if validation_result.should_block():
-                # Tool is harmful - raise exception to block
+                # Handle blocking based on action type
                 from upsonic.safety_engine.exceptions import DisallowedOperation
+                
+                # If DisallowedOperation was raised by a RAISE action policy, re-raise it
                 if validation_result.disallowed_exception:
                     raise validation_result.disallowed_exception
-                else:
-                    raise DisallowedOperation(validation_result.get_final_message())
+                
+                # Otherwise it's a BLOCK action - skip this tool without raising exception
+                # Remove the tool from the tool manager to prevent its use
+                if self.debug:
+                    from upsonic.utils.printing import warning_log
+                    warning_log(
+                        f"Tool '{tool_def.name}' blocked by safety policy: {validation_result.get_final_message()}",
+                        "Tool Safety"
+                    )
+                
+                # Find which registered_tools dict contains this tool and remove it
+                # Try each dict in the provided list
+                for registered_tools_dict in registered_tools_dicts:
+                    self.tool_manager.remove_tools(
+                        tools=[tool_def.name],
+                        registered_tools=registered_tools_dict
+                    )
+                    
+                    # Also remove from the tracking dict to keep it clean
+                    if tool_def.name in registered_tools_dict:
+                        del registered_tools_dict[tool_def.name]
     
     def _register_agent_tools(self) -> None:
         """
@@ -573,29 +610,46 @@ class Agent(BaseAgent):
             if plan_and_execute not in final_tools:
                 final_tools.append(plan_and_execute)
         
-        # Extract builtin tools from agent-level tools
-        self.agent_builtin_tools = self.tool_manager.processor.extract_builtin_tools(final_tools)
+        # Separate builtin tools from regular tools
+        from upsonic.tools.builtin_tools import AbstractBuiltinTool
+        builtin_tools = []
+        regular_tools = []
         
-        # Register tools with ToolManager using the new approach
-        self.registered_agent_tools = self.tool_manager.register_tools(
-            tools=final_tools,
-            task=None,  # Agent tools not task-specific
-            agent_instance=self
-        )
+        for tool in final_tools:
+            if tool is not None and isinstance(tool, AbstractBuiltinTool):
+                builtin_tools.append(tool)
+            else:
+                regular_tools.append(tool)
+        
+        # Handle builtin tools separately - they don't need ToolManager/ToolProcessor
+        self.agent_builtin_tools = builtin_tools
+        
+        # Register only regular tools with ToolManager
+        if regular_tools:
+            self.registered_agent_tools = self.tool_manager.register_tools(
+                tools=regular_tools,
+                task=None,  # Agent tools not task-specific
+                agent_instance=self
+            )
+        else:
+            self.registered_agent_tools = {}
         
         # PRE-EXECUTION TOOL VALIDATION
         # Validate all registered agent tools with tool_policy_pre
-        self._validate_tools_with_policy_pre(context_description="Agent Tool Registration")
+        self._validate_tools_with_policy_pre(
+            context_description="Agent Tool Registration",
+            registered_tools_dicts=[self.registered_agent_tools]
+        )
     
     def add_tools(self, tools: Union[Any, List[Any]]) -> None:
         """
         Dynamically add tools to the agent and register them.
         
         This method:
-        1. Calls ToolManager to register new tools (filters already registered ones)
-        2. Updates self.tools with original tool objects
-        3. Updates self.registered_agent_tools with wrapped tools
-        4. Extracts and merges builtin tools
+        1. Separates builtin tools from regular tools
+        2. For builtin tools: Updates self.tools and self.agent_builtin_tools directly
+        3. For regular tools: Calls ToolManager to register them
+        4. Updates self.registered_agent_tools with wrapped tools
         5. Validates tools with tool_policy_pre if configured
         
         Args:
@@ -616,34 +670,52 @@ class Agent(BaseAgent):
             if plan_and_execute not in tools_to_add and plan_and_execute not in self.tools:
                 tools_to_add.append(plan_and_execute)
         
-        # Extract builtin tools from new tools and merge with existing agent builtin tools
-        new_builtin_tools = self.tool_manager.processor.extract_builtin_tools(tools_to_add)
-        if not hasattr(self, 'agent_builtin_tools'):
-            self.agent_builtin_tools = []
-        # Merge builtin tools (avoid duplicates based on unique_id)
-        existing_ids = {tool.unique_id for tool in self.agent_builtin_tools}
-        for tool in new_builtin_tools:
-            if tool.unique_id not in existing_ids:
-                self.agent_builtin_tools.append(tool)
+        # Separate builtin tools from regular tools
+        from upsonic.tools.builtin_tools import AbstractBuiltinTool
+        builtin_tools = []
+        regular_tools = []
         
-        # Call ToolManager to register new tools (filters already registered ones)
-        newly_registered = self.tool_manager.register_tools(
-            tools=tools_to_add,
-            task=None,  # Agent tools are not task-specific
-            agent_instance=self
-        )
+        for tool in tools_to_add:
+            if tool is not None and isinstance(tool, AbstractBuiltinTool):
+                builtin_tools.append(tool)
+            else:
+                regular_tools.append(tool)
+        
+        # Handle builtin tools separately - they don't need ToolManager/ToolProcessor
+        if builtin_tools:
+            if not hasattr(self, 'agent_builtin_tools'):
+                self.agent_builtin_tools = []
+            
+            # Merge builtin tools (avoid duplicates based on unique_id)
+            existing_ids = {tool.unique_id for tool in self.agent_builtin_tools}
+            for tool in builtin_tools:
+                if tool.unique_id not in existing_ids:
+                    self.agent_builtin_tools.append(tool)
+                    existing_ids.add(tool.unique_id)
+        
+        # Handle regular tools through ToolManager
+        if regular_tools:
+            # Call ToolManager to register new tools (filters already registered ones)
+            newly_registered = self.tool_manager.register_tools(
+                tools=regular_tools,
+                task=None,  # Agent tools are not task-specific
+                agent_instance=self
+            )
+            
+            # Update self.registered_agent_tools with newly registered tools
+            self.registered_agent_tools.update(newly_registered)
         
         # Update self.tools - add original tool objects (not plan_and_execute if auto-added)
         for tool in tools:
             if tool not in self.tools:
                 self.tools.append(tool)
         
-        # Update self.registered_agent_tools with newly registered tools
-        self.registered_agent_tools.update(newly_registered)
-        
         # PRE-EXECUTION TOOL VALIDATION
         # Validate newly added tools with tool_policy_pre
-        self._validate_tools_with_policy_pre(context_description="Dynamic Tool Addition (add_tools)")
+        self._validate_tools_with_policy_pre(
+            context_description="Dynamic Tool Addition (add_tools)",
+            registered_tools_dicts=[self.registered_agent_tools]
+        )
     
     def remove_tools(self, tools: Union[str, List[str], Any, List[Any]]) -> None:
         """
@@ -655,28 +727,55 @@ class Agent(BaseAgent):
         - Agent objects
         - MCP handlers (and all their tools)
         - Class instances (ToolKit or regular classes, and all their tools)
+        - Builtin tools (AbstractBuiltinTool instances)
         
         Args:
             tools: Single tool or list of tools to remove (any type)
         """
-        # Call ToolManager to handle all removal logic
-        removed_tool_names, removed_objects = self.tool_manager.remove_tools(
-            tools=tools,
-            registered_tools=self.registered_agent_tools
-        )
+        if not isinstance(tools, list):
+            tools = [tools]
         
-        # Update self.tools - remove the original objects
-        self.tools = [t for t in self.tools if t not in removed_objects]
+        # Separate builtin tools from regular tools
+        from upsonic.tools.builtin_tools import AbstractBuiltinTool
+        builtin_tools_to_remove = []
+        regular_tools_to_remove = []
         
-        # Update self.registered_agent_tools - remove the tool names
-        for tool_name in removed_tool_names:
-            if tool_name in self.registered_agent_tools:
-                del self.registered_agent_tools[tool_name]
+        for tool in tools:
+            if tool is not None and isinstance(tool, AbstractBuiltinTool):
+                builtin_tools_to_remove.append(tool)
+            else:
+                regular_tools_to_remove.append(tool)
         
-        # Re-extract builtin tools from remaining tools to keep in sync
-        if hasattr(self, 'agent_builtin_tools'):
-            final_tools = list(self.tools)
-            self.agent_builtin_tools = self.tool_manager.processor.extract_builtin_tools(final_tools)
+        # Handle regular tools through ToolManager
+        removed_tool_names = []
+        removed_objects = []
+        
+        if regular_tools_to_remove:
+            # Call ToolManager to handle all removal logic for regular tools
+            removed_tool_names, removed_objects = self.tool_manager.remove_tools(
+                tools=regular_tools_to_remove,
+                registered_tools=self.registered_agent_tools
+            )
+            
+            # Update self.registered_agent_tools - remove the tool names
+            for tool_name in removed_tool_names:
+                if tool_name in self.registered_agent_tools:
+                    del self.registered_agent_tools[tool_name]
+        
+        # Handle builtin tools separately - they don't use ToolManager/ToolProcessor
+        if builtin_tools_to_remove and hasattr(self, 'agent_builtin_tools'):
+            # Remove from agent_builtin_tools by unique_id
+            builtin_ids_to_remove = {tool.unique_id for tool in builtin_tools_to_remove}
+            self.agent_builtin_tools = [
+                tool for tool in self.agent_builtin_tools 
+                if tool.unique_id not in builtin_ids_to_remove
+            ]
+            # Add to removed_objects for self.tools cleanup
+            removed_objects.extend(builtin_tools_to_remove)
+        
+        # Update self.tools - remove all removed objects (regular + builtin)
+        if removed_objects:
+            self.tools = [t for t in self.tools if t not in removed_objects]
     
     def get_tool_defs(self) -> List["ToolDefinition"]:
         """
@@ -730,22 +829,39 @@ class Agent(BaseAgent):
         agent_for_this_run.enable_thinking_tool = is_thinking_enabled
         agent_for_this_run.enable_reasoning_tool = is_reasoning_enabled
 
-        # Register task tools (and plan_and_execute if thinking enabled)
-        task.task_builtin_tools = self.tool_manager.processor.extract_builtin_tools(tools_to_register)
+        # Separate builtin tools from regular tools
+        from upsonic.tools.builtin_tools import AbstractBuiltinTool
+        builtin_tools = []
+        regular_tools = []
         
-        # Register task tools and store them in task.registered_task_tools
-        newly_registered = self.tool_manager.register_tools(
-            tools=tools_to_register,
-            task=task,
-            agent_instance=agent_for_this_run
-        )
+        for tool in tools_to_register:
+            if tool is not None and isinstance(tool, AbstractBuiltinTool):
+                builtin_tools.append(tool)
+            else:
+                regular_tools.append(tool)
+        
+        # Handle builtin tools separately - they don't need ToolManager/ToolProcessor
+        task.task_builtin_tools = builtin_tools
+        
+        # Register only regular task tools and store them in task.registered_task_tools
+        if regular_tools:
+            newly_registered = self.tool_manager.register_tools(
+                tools=regular_tools,
+                task=task,
+                agent_instance=agent_for_this_run
+            )
+        else:
+            newly_registered = {}
         
         # Update task's registered_task_tools with newly registered tools
         task.registered_task_tools.update(newly_registered)
         
         # PRE-EXECUTION TOOL VALIDATION
         # Validate all registered tools (agent + task) with tool_policy_pre before execution
-        self._validate_tools_with_policy_pre(context_description="Task Tool Setup")
+        self._validate_tools_with_policy_pre(
+            context_description="Task Tool Setup",
+            registered_tools_dicts=[self.registered_agent_tools, task.registered_task_tools]
+        )
     
     async def _build_model_request(self, task: "Task", memory_handler: Optional["MemoryManager"], state: Optional["State"] = None) -> List["ModelRequest"]:
         """Build the complete message history for the model request."""
@@ -936,7 +1052,12 @@ class Agent(BaseAgent):
                 )
                 
                 if validation_result.should_block():
-                    # Tool call is malicious - return error instead of executing
+                    # Handle blocking based on action type
+                    # If DisallowedOperation was raised by a RAISE action policy, re-raise it
+                    if validation_result.disallowed_exception:
+                        raise validation_result.disallowed_exception
+                    
+                    # Otherwise it's a BLOCK action - return error message without raising
                     results.append(ToolReturnPart(
                         tool_name=tool_call.tool_name,
                         content=validation_result.get_final_message(),
@@ -996,7 +1117,12 @@ class Agent(BaseAgent):
                     )
                     
                     if validation_result.should_block():
-                        # Tool call is malicious - return error instead of executing
+                        # Handle blocking based on action type
+                        # If DisallowedOperation was raised by a RAISE action policy, re-raise it
+                        if validation_result.disallowed_exception:
+                            raise validation_result.disallowed_exception
+                        
+                        # Otherwise it's a BLOCK action - return error message without raising
                         return ToolReturnPart(
                             tool_name=tool_call.tool_name,
                             content=validation_result.get_final_message(),
@@ -1254,7 +1380,19 @@ class Agent(BaseAgent):
                 break
 
             try:
-                guardrail_result = task.guardrail(final_text_output)
+                # Parse structured output if response_format is a Pydantic model
+                guardrail_input = final_text_output
+                if task.response_format and task.response_format != str:
+                    try:
+                        import json
+                        parsed = json.loads(final_text_output)
+                        if hasattr(task.response_format, 'model_validate'):
+                            guardrail_input = task.response_format.model_validate(parsed)
+                    except:
+                        # If parsing fails, use the text output
+                        guardrail_input = final_text_output
+                
+                guardrail_result = task.guardrail(guardrail_input)
                 
                 if isinstance(guardrail_result, tuple) and len(guardrail_result) == 2:
                     is_valid, result = guardrail_result
@@ -1659,16 +1797,19 @@ class Agent(BaseAgent):
         """Extract output from model response based on task response format.
         
         For image generation tasks, if the response contains images, returns the bytes
-        of the first image. Otherwise, extracts text content based on the task's
-        response format.
+        of the first image (or list of bytes for multiple images). Otherwise, extracts 
+        text content based on the task's response format.
         """
         from upsonic.messages import TextPart
         
-        # Check for images first - if images are present, return bytes from the first image
+        # Check for image outputs first
         images = response.images
         if images:
-            # Return bytes from the first image
-            return images[0].data
+            # If there are multiple images, return a list; if single, return the image data
+            if len(images) == 1:
+                return images[0].data
+            else:
+                return [img.data for img in images]
         
         # Extract text parts for non-image responses
         text_parts = [part.content for part in response.parts if isinstance(part, TextPart)]

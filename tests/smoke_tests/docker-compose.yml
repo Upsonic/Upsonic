@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: upsonic_test_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-upsonic_test}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-test_password}
+      POSTGRES_DB: ${POSTGRES_DB:-upsonic_test}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-upsonic_test}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mongo:
+    image: mongo:7
+    container_name: upsonic_test_mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-upsonic_test}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-test_password}
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: upsonic_test_redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  mongo_data:
+

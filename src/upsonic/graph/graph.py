@@ -668,8 +668,8 @@ class Graph(BaseModel):
         try:
             while execution_queue:
                 node = execution_queue.pop(0)
-                node.task.context = []
                 if isinstance(node, TaskNode):
+                    node.task.context = []
                     predecessors = self._get_predecessors(node)
                     if predecessors:
                         existing_source_ids = {s.task_description_or_id for s in node.task.context if isinstance(s, TaskOutputSource)}

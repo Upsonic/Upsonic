@@ -65,14 +65,16 @@ class PerformanceEvaluator:
         if self.warmup_runs > 0:
             console.print(f"[bold dim]Running {self.warmup_runs} warmup iteration(s)...[/bold dim]")
             for _ in range(self.warmup_runs):
-                agent_for_this_run = copy.deepcopy(self.agent_under_test)
+                # Don't deepcopy agent_under_test - it contains unpicklable objects like httpx.AsyncClient
+                # Each task execution should be stateless anyway
                 task_for_this_run = copy.deepcopy(self.task)
-                await self._execute_component(agent_for_this_run, task_for_this_run)
+                await self._execute_component(self.agent_under_test, task_for_this_run)
 
         all_run_results: List[PerformanceRunResult] = []
         console.print(f"[bold blue]Running {self.num_iterations} measurement iteration(s)...[/bold blue]")
         for _ in range(self.num_iterations):
-            agent_for_this_run = copy.deepcopy(self.agent_under_test)
+            # Don't deepcopy agent_under_test - it contains unpicklable objects like httpx.AsyncClient
+            # Each task execution should be stateless anyway
             task_for_this_run = copy.deepcopy(self.task)
 
             tracemalloc.clear_traces()
@@ -81,7 +83,7 @@ class PerformanceEvaluator:
             
             start_time = time.perf_counter()
 
-            await self._execute_component(agent_for_this_run, task_for_this_run)
+            await self._execute_component(self.agent_under_test, task_for_this_run)
 
             end_time = time.perf_counter()
             latency = end_time - start_time

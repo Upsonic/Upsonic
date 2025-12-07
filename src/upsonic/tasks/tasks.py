@@ -450,6 +450,7 @@ class Task(BaseModel):
         - Agent objects
         - MCP handlers (and all their tools)
         - Class instances (ToolKit or regular classes, and all their tools)
+        - Builtin tools (AbstractBuiltinTool instances)
         
         Args:
             tools: Single tool or list of tools to remove (any type)
@@ -458,25 +459,48 @@ class Task(BaseModel):
         if not isinstance(tools, list):
             tools = [tools]
         
-        # Call ToolManager to handle all removal logic
-        # Pass self.registered_task_tools instead of agent.registered_agent_tools
-        removed_tool_names, removed_objects = agent.tool_manager.remove_tools(
-            tools=tools,
-            registered_tools=self.registered_task_tools
-        )
+        # Separate builtin tools from regular tools
+        from upsonic.tools.builtin_tools import AbstractBuiltinTool
+        builtin_tools_to_remove = []
+        regular_tools_to_remove = []
         
-        # Update self.tools - remove the original objects
-        if self.tools:
+        for tool in tools:
+            if tool is not None and isinstance(tool, AbstractBuiltinTool):
+                builtin_tools_to_remove.append(tool)
+            else:
+                regular_tools_to_remove.append(tool)
+        
+        # Handle regular tools through ToolManager
+        removed_tool_names = []
+        removed_objects = []
+        
+        if regular_tools_to_remove:
+            # Call ToolManager to handle all removal logic for regular tools
+            # Pass self.registered_task_tools instead of agent.registered_agent_tools
+            removed_tool_names, removed_objects = agent.tool_manager.remove_tools(
+                tools=regular_tools_to_remove,
+                registered_tools=self.registered_task_tools
+            )
+            
+            # Update self.registered_task_tools - remove the tool names
+            for tool_name in removed_tool_names:
+                if tool_name in self.registered_task_tools:
+                    del self.registered_task_tools[tool_name]
+        
+        # Handle builtin tools separately - they don't use ToolManager/ToolProcessor
+        if builtin_tools_to_remove and hasattr(self, 'task_builtin_tools'):
+            # Remove from task_builtin_tools by unique_id
+            builtin_ids_to_remove = {tool.unique_id for tool in builtin_tools_to_remove}
+            self.task_builtin_tools = [
+                tool for tool in self.task_builtin_tools 
+                if tool.unique_id not in builtin_ids_to_remove
+            ]
+            # Add to removed_objects for self.tools cleanup
+            removed_objects.extend(builtin_tools_to_remove)
+        
+        # Update self.tools - remove all removed objects (regular + builtin)
+        if self.tools and removed_objects:
             self.tools = [t for t in self.tools if t not in removed_objects]
-        
-        # Update self.registered_task_tools - remove the tool names
-        for tool_name in removed_tool_names:
-            if tool_name in self.registered_task_tools:
-                del self.registered_task_tools[tool_name]
-        # Re-extract builtin tools from remaining tools to keep in sync
-        if hasattr(self, 'task_builtin_tools'):
-            final_tools = list(self.tools)
-            self.task_builtin_tools = self.agent.tool_manager.processor.extract_builtin_tools(final_tools)
 
     @property
     def context_formatted(self) -> Optional[str]:

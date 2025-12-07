@@ -44,6 +44,10 @@ class ReflectionProcessor:
         # Convert response to string for evaluation
         current_response = self._extract_response_text(initial_response)
         
+        # Log reflection start
+        from upsonic.utils.printing import reflection_started
+        reflection_started(iteration=state.iteration + 1, max_iterations=self.config.max_iterations)
+        
         # Create evaluator agent
         evaluator_agent = self._create_evaluator_agent(agent)
         
@@ -51,6 +55,20 @@ class ReflectionProcessor:
             # Evaluate current response
             evaluation = await self._evaluate_response(
                 evaluator_agent, task, current_response, state
+            )
+            
+            # Log evaluation results
+            from upsonic.utils.printing import reflection_evaluation
+            action_str = evaluation.action.value if hasattr(evaluation.action, 'value') else str(evaluation.action)
+            reflection_evaluation(
+                iteration=state.iteration + 1,
+                overall_score=evaluation.overall_score,
+                accuracy=evaluation.criteria.accuracy,
+                completeness=evaluation.criteria.completeness,
+                relevance=evaluation.criteria.relevance,
+                clarity=evaluation.criteria.clarity,
+                action=action_str,
+                confidence=evaluation.confidence
             )
             
             # Add to state
@@ -74,6 +92,13 @@ class ReflectionProcessor:
             
             # Generate improved response
             if evaluation.action in [ReflectionAction.REVISE, ReflectionAction.RETRY]:
+                # Log improvement start
+                from upsonic.utils.printing import reflection_improvement_started
+                reflection_improvement_started(
+                    iteration=state.iteration + 1,
+                    feedback=evaluation.feedback
+                )
+                
                 improved_response = await self._generate_improved_response(
                     agent, task, current_response, evaluation, state
                 )
@@ -90,6 +115,15 @@ class ReflectionProcessor:
         if not state.final_response:
             state.final_response = current_response
             state.terminated_reason = "max_iterations_reached"
+        
+        # Log reflection completion
+        from upsonic.utils.printing import reflection_completed
+        final_score = state.evaluations[-1].overall_score if state.evaluations else 0.0
+        reflection_completed(
+            final_score=final_score,
+            total_iterations=len(state.evaluations),
+            termination_reason=state.terminated_reason
+        )
         
         # Convert back to original response format
         return self._convert_to_response_format(state.final_response, initial_response, task)
