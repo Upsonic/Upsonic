@@ -216,8 +216,22 @@ class Direct:
     
     def _extract_output(self, response, task: Task) -> Any:
         """Extract output from model response."""
-        from upsonic.messages import TextPart
+        from upsonic.messages import TextPart, FilePart, BinaryImage
         
+        # Check for image outputs first
+        image_parts = [
+            part.content for part in response.parts 
+            if isinstance(part, FilePart) and isinstance(part.content, BinaryImage)
+        ]
+        
+        if image_parts:
+            # If there are multiple images, return a list; if single, return the image data
+            if len(image_parts) == 1:
+                return image_parts[0].data
+            else:
+                return [img.data for img in image_parts]
+        
+        # Extract text parts
         text_parts = [
             part.content for part in response.parts 
             if isinstance(part, TextPart)

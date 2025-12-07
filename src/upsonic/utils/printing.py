@@ -2431,3 +2431,182 @@ def tool_safety_check(tool_name: str, validation_type: str, status: str, details
             "details": details[:200] if details else None
         }
     )
+
+
+def reflection_started(iteration: int, max_iterations: int) -> None:
+    """
+    Prints a formatted panel when reflection process starts.
+    
+    Args:
+        iteration: Current reflection iteration (1-based)
+        max_iterations: Maximum number of reflection iterations
+    """
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    table.add_row("[bold]Reflection Status:[/bold]", "[cyan]🔄 Started[/cyan]")
+    table.add_row("[bold]Iteration:[/bold]", f"[yellow]{iteration}/{max_iterations}[/yellow]")
+    table.add_row("[bold]Process:[/bold]", "[green]Evaluating response quality[/green]")
+    
+    panel = Panel(
+        table,
+        title="[bold cyan]🔍 Reflection Process Started[/bold cyan]",
+        border_style="cyan",
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
+    
+    _bg_logger.info(f"Reflection started: iteration {iteration}/{max_iterations}")
+
+
+def reflection_evaluation(
+    iteration: int,
+    overall_score: float,
+    accuracy: float,
+    completeness: float,
+    relevance: float,
+    clarity: float,
+    action: str,
+    confidence: float
+) -> None:
+    """
+    Prints a formatted panel for reflection evaluation results.
+    
+    Args:
+        iteration: Current reflection iteration
+        overall_score: Overall evaluation score (0-1)
+        accuracy: Accuracy score (0-1)
+        completeness: Completeness score (0-1)
+        relevance: Relevance score (0-1)
+        clarity: Clarity score (0-1)
+        action: Action taken (ACCEPT, REVISE, RETRY, CLARIFY)
+        confidence: Confidence level (0-1)
+    """
+    # Determine border style based on score
+    if overall_score >= 0.8:
+        border_style = "green"
+        status_emoji = "✅"
+        status_text = "High Quality"
+    elif overall_score >= 0.6:
+        border_style = "yellow"
+        status_emoji = "⚠️"
+        status_text = "Moderate Quality"
+    else:
+        border_style = "red"
+        status_emoji = "❌"
+        status_text = "Needs Improvement"
+    
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    table.add_row("[bold]Iteration:[/bold]", f"[cyan]{iteration}[/cyan]")
+    table.add_row("[bold]Overall Score:[/bold]", f"[{border_style}]{overall_score:.2f} - {status_emoji} {status_text}[/]")
+    table.add_row("")
+    table.add_row("[bold]Criteria Scores:[/bold]", "")
+    table.add_row("  Accuracy:", f"[yellow]{accuracy:.2f}[/yellow]")
+    table.add_row("  Completeness:", f"[yellow]{completeness:.2f}[/yellow]")
+    table.add_row("  Relevance:", f"[yellow]{relevance:.2f}[/yellow]")
+    table.add_row("  Clarity:", f"[yellow]{clarity:.2f}[/yellow]")
+    table.add_row("")
+    table.add_row("[bold]Action:[/bold]", f"[cyan]{action}[/cyan]")
+    table.add_row("[bold]Confidence:[/bold]", f"[yellow]{confidence:.2f}[/yellow]")
+    
+    panel = Panel(
+        table,
+        title=f"[bold {border_style}]🔍 Reflection Evaluation - Iteration {iteration}[/bold {border_style}]",
+        border_style=border_style,
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
+    
+    _bg_logger.info(
+        f"Reflection evaluation: iteration {iteration}, score {overall_score:.2f}, action {action}"
+    )
+
+
+def reflection_improvement_started(iteration: int, feedback: str) -> None:
+    """
+    Prints a formatted panel when starting to improve response based on reflection.
+    
+    Args:
+        iteration: Current reflection iteration
+        feedback: Feedback from evaluator
+    """
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    feedback_esc = escape_rich_markup(feedback)
+    if len(feedback_esc) > 200:
+        feedback_esc = feedback_esc[:197] + "..."
+    
+    table.add_row("[bold]Iteration:[/bold]", f"[cyan]{iteration}[/cyan]")
+    table.add_row("[bold]Status:[/bold]", "[yellow]🔄 Generating Improved Response[/yellow]")
+    table.add_row("")
+    table.add_row("[bold]Feedback:[/bold]", f"[dim]{feedback_esc}[/dim]")
+    
+    panel = Panel(
+        table,
+        title="[bold yellow]✨ Reflection Improvement Started[/bold yellow]",
+        border_style="yellow",
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
+    
+    _bg_logger.info(f"Reflection improvement started: iteration {iteration}")
+
+
+def reflection_completed(
+    final_score: float,
+    total_iterations: int,
+    termination_reason: str
+) -> None:
+    """
+    Prints a formatted panel when reflection process completes.
+    
+    Args:
+        final_score: Final evaluation score
+        total_iterations: Total number of iterations performed
+        termination_reason: Reason for termination (acceptance_threshold_met, max_iterations_reached, etc.)
+    """
+    # Determine border style based on final score
+    if final_score >= 0.8:
+        border_style = "green"
+        status_emoji = "✅"
+    elif final_score >= 0.6:
+        border_style = "yellow"
+        status_emoji = "⚠️"
+    else:
+        border_style = "red"
+        status_emoji = "❌"
+    
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    table.add_row("[bold]Status:[/bold]", f"[{border_style}]{status_emoji} Reflection Complete[/]")
+    table.add_row("[bold]Final Score:[/bold]", f"[{border_style}]{final_score:.2f}[/]")
+    table.add_row("[bold]Total Iterations:[/bold]", f"[cyan]{total_iterations}[/cyan]")
+    table.add_row("[bold]Termination Reason:[/bold]", f"[dim]{termination_reason}[/dim]")
+    
+    panel = Panel(
+        table,
+        title=f"[bold {border_style}]🎯 Reflection Process Completed[/bold {border_style}]",
+        border_style=border_style,
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
+    
+    _bg_logger.info(
+        f"Reflection completed: score {final_score:.2f}, iterations {total_iterations}, reason {termination_reason}"
+    )
