@@ -39,7 +39,7 @@ class DeepSeekOllamaOCR(OCRProvider):
         config: Optional[OCRConfig] = None,
         host: str = 'http://localhost:11434',
         model: str = 'deepseek-ocr:3b',
-        prompt: str = '<image>\nFree OCR.',
+        prompt: str = r"\nFree OCR.",
         timeout: float = 60.0,
         **kwargs
     ):
@@ -49,7 +49,7 @@ class DeepSeekOllamaOCR(OCRProvider):
             config: OCRConfig object
             host: Ollama server host (default: 'http://localhost:11434')
             model: Model name (default: 'deepseek-ocr:3b')
-            prompt: OCR prompt template (default: '<image>\nFree OCR.')
+            prompt: OCR prompt template (default: r"\nFree OCR.")
             timeout: Timeout in seconds for streaming response (default: 60.0)
             **kwargs: Additional configuration arguments
         """
