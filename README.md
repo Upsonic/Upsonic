@@ -29,6 +29,15 @@
 Upsonic is an AI agent development framework used by fintech and banks. Upsonic tested at their scale against attacks and reasoning puzzles.
 
 
+### Installing via Smithery
+
+To install GPT Computer Assistant for Claude Desktop automatically via [Smithery](https://smithery.ai/server/gpt-computer-assistant):
+
+```bash
+npx -y @smithery/cli install gpt-computer-assistant --client claude
+```
+
+### Manual Installation
 ```bash
 pip install upsonic
 
