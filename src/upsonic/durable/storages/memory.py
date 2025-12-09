@@ -55,12 +55,18 @@ class InMemoryDurableStorage(DurableExecutionStorage):
         
         state["saved_at"] = datetime.now(timezone.utc).isoformat()
         
+        # CRITICAL: Serialize with cloudpickle to create a true copy!
+        # Using cloudpickle is consistent with the rest of the durable feature
+        # and handles complex objects (functions, closures, etc.) correctly.
+        import cloudpickle
+        state_copy = cloudpickle.loads(cloudpickle.dumps(state))
+        
         if hasattr(self._lock, '__aenter__'):
             async with self._lock:
-                self._storage[execution_id] = state
+                self._storage[execution_id] = state_copy
         else:
             with self._lock:
-                self._storage[execution_id] = state
+                self._storage[execution_id] = state_copy
     
     async def load_state_async(
         self, 
@@ -77,12 +83,18 @@ class InMemoryDurableStorage(DurableExecutionStorage):
         """
         self._ensure_lock()
         
+        # CRITICAL: Return a cloudpickle copy to avoid reference issues!
+        # Using cloudpickle is consistent with the rest of the durable feature.
+        import cloudpickle
+        
         if hasattr(self._lock, '__aenter__'):
             async with self._lock:
-                return self._storage.get(execution_id)
+                state = self._storage.get(execution_id)
+                return cloudpickle.loads(cloudpickle.dumps(state)) if state else None
         else:
             with self._lock:
-                return self._storage.get(execution_id)
+                state = self._storage.get(execution_id)
+                return cloudpickle.loads(cloudpickle.dumps(state)) if state else None
     
     async def delete_state_async(
         self, 
@@ -147,17 +159,20 @@ class InMemoryDurableStorage(DurableExecutionStorage):
         result = []
         
         for execution_id, state in self._storage.items():
-            if status and state.get("status") != status:
+            # Extract metadata from the state wrapper
+            metadata = state.get("metadata", {})
+            
+            if status and metadata.get("status") != status:
                 continue
             
             result.append({
                 "execution_id": execution_id,
-                "status": state.get("status"),
-                "step_name": state.get("step_name"),
-                "step_index": state.get("step_index"),
-                "timestamp": state.get("timestamp"),
+                "status": metadata.get("status"),
+                "step_name": metadata.get("step_name"),
+                "step_index": metadata.get("step_index"),
+                "timestamp": metadata.get("timestamp"),
                 "saved_at": state.get("saved_at"),
-                "error": state.get("error"),
+                "error": metadata.get("error"),
             })
         
         result.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
@@ -203,10 +218,13 @@ class InMemoryDurableStorage(DurableExecutionStorage):
         to_delete = []
         
         for execution_id, state in self._storage.items():
-            if state.get("status") not in ["completed", "failed"]:
+            # Extract metadata from the state wrapper
+            metadata = state.get("metadata", {})
+            
+            if metadata.get("status") not in ["completed", "failed"]:
                 continue
             
-            timestamp_str = state.get("timestamp")
+            timestamp_str = metadata.get("timestamp")
             if not timestamp_str:
                 continue
             
@@ -280,8 +298,10 @@ class InMemoryDurableStorage(DurableExecutionStorage):
         total = len(self._storage)
         by_status = {}
         
-        for state in self._storage.values():
-            status = state.get("status", "unknown")
+        for exec_id, state in self._storage.items():
+            # Extract metadata from the state wrapper
+            metadata = state.get("metadata", {})
+            status = metadata.get("status", "unknown")
             by_status[status] = by_status.get(status, 0) + 1
         
         return {

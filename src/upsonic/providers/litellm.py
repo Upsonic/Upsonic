@@ -1,6 +1,7 @@
 from __future__ import annotations as _annotations
 
 from typing import overload
+import os
 
 from httpx import AsyncClient as AsyncHTTPClient
 from openai import AsyncOpenAI
@@ -20,6 +21,7 @@ from upsonic.profiles.moonshotai import moonshotai_model_profile
 from upsonic.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIModelProfile, openai_model_profile
 from upsonic.profiles.qwen import qwen_model_profile
 from upsonic.providers import Provider
+from upsonic.utils.package.exception import UserError
 
 try:
     from openai import AsyncOpenAI
@@ -88,7 +90,7 @@ class LiteLLMProvider(Provider[AsyncOpenAI]):
         self,
         *,
         api_key: str | None = None,
-        api_base: str | None = None,
+        base_url: str | None = None,
     ) -> None: ...
 
     @overload
@@ -96,7 +98,7 @@ class LiteLLMProvider(Provider[AsyncOpenAI]):
         self,
         *,
         api_key: str | None = None,
-        api_base: str | None = None,
+        base_url: str | None = None,
         http_client: AsyncHTTPClient,
     ) -> None: ...
 
@@ -107,7 +109,7 @@ class LiteLLMProvider(Provider[AsyncOpenAI]):
         self,
         *,
         api_key: str | None = None,
-        api_base: str | None = None,
+        base_url: str | None = None,
         openai_client: AsyncOpenAI | None = None,
         http_client: AsyncHTTPClient | None = None,
     ) -> None:
@@ -115,22 +117,32 @@ class LiteLLMProvider(Provider[AsyncOpenAI]):
 
         Args:
             api_key: API key for the model provider. If None, LiteLLM will try to get it from environment variables.
-            api_base: Base URL for the model provider. Use this for custom endpoints or self-hosted models.
+            base_url: Base URL for the model provider. Use this for custom endpoints or self-hosted models.
             openai_client: Pre-configured OpenAI client. If provided, other parameters are ignored.
             http_client: Custom HTTP client to use.
         """
-        if openai_client is not None:
-            self._client = openai_client
-            return
 
+        if openai_client is not None:
+            assert base_url is None, 'Cannot provide both `openai_client` and `base_url`'
+            assert http_client is None, 'Cannot provide both `openai_client` and `http_client`'
+            assert api_key is None, 'Cannot provide both `openai_client` and `api_key`'
+            self._client = openai_client
+        else:
+            base_url = base_url or os.getenv('LITELLM_BASE_URL')
+            if not base_url:
+                raise UserError(
+                    'Set the `LITELLM_BASE_URL` environment variable or pass it via `LiteLLMProvider(base_url=...)`'
+                    'to use the LiteLLM provider. Example: http://localhost:4000/v1'
+                )
+        api_key = api_key or os.getenv('LITELLM_API_KEY') or 'litellm-placeholder'
         # Create OpenAI client that will be used with LiteLLM's completion function
         # The actual API calls will be intercepted and routed through LiteLLM
         if http_client is not None:
             self._client = AsyncOpenAI(
-                base_url=api_base, api_key=api_key or 'litellm-placeholder', http_client=http_client
+                base_url=base_url, api_key=api_key, http_client=http_client
             )
         else:
             http_client = cached_async_http_client(provider='litellm')
             self._client = AsyncOpenAI(
-                base_url=api_base, api_key=api_key or 'litellm-placeholder', http_client=http_client
+                base_url=base_url, api_key=api_key, http_client=http_client
             )

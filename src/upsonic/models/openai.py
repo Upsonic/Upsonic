@@ -296,6 +296,8 @@ class OpenAIChatModel(Model):
             'nebius',
             'ovhcloud',
             'gateway',
+            'vllm',
+            'nvidia',
         ]
         | Provider[AsyncOpenAI] = 'openai',
         profile: ModelProfileSpec | None = None,
@@ -327,6 +329,8 @@ class OpenAIChatModel(Model):
             'nebius',
             'ovhcloud',
             'gateway',
+            'vllm',
+            'nvidia',
         ]
         | Provider[AsyncOpenAI] = 'openai',
         profile: ModelProfileSpec | None = None,
@@ -357,6 +361,8 @@ class OpenAIChatModel(Model):
             'nebius',
             'ovhcloud',
             'gateway',
+            'vllm',
+            'nvidia',
         ]
         | Provider[AsyncOpenAI] = 'openai',
         profile: ModelProfileSpec | None = None,

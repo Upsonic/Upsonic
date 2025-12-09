@@ -1,4 +1,4 @@
-import json
+import cloudpickle
 import sqlite3
 import asyncio
 from typing import Optional, Dict, Any, List
@@ -12,11 +12,14 @@ class SQLiteDurableStorage(DurableExecutionStorage):
     SQLite-based storage backend for durable execution.
     
     This storage backend uses SQLite for persistent, queryable storage.
+    Uses cloudpickle (BLOB) for state serialization to support complex Python objects.
+    
     Benefits:
     - ACID transactions for data safety
     - Efficient querying and filtering
     - Lightweight with no external dependencies
     - Suitable for production use
+    - Full Python object serialization via cloudpickle
     
     Example:
         ```python
@@ -54,7 +57,7 @@ class SQLiteDurableStorage(DurableExecutionStorage):
                     timestamp TEXT NOT NULL,
                     saved_at TEXT NOT NULL,
                     error TEXT,
-                    state_data TEXT NOT NULL
+                    state_data BLOB NOT NULL
                 )
             ''')
             
@@ -106,31 +109,59 @@ class SQLiteDurableStorage(DurableExecutionStorage):
         state["saved_at"] = datetime.now(timezone.utc).isoformat()
         state["execution_id"] = execution_id
         
-        # Serialize state to JSON
-        state_json = json.dumps(state)
+        # Extract metadata for indexed columns
+        metadata = state.get("metadata", {})
+        status = metadata.get("status", "running")
+        step_index = metadata.get("step_index", 0)
+        step_name = metadata.get("step_name", "unknown")
+        timestamp = metadata.get("timestamp", datetime.now(timezone.utc).isoformat())
+        error = metadata.get("error")
+        
+        # Serialize entire state to cloudpickle (consistent with serializer.py)
+        state_blob = cloudpickle.dumps(state)
         
         if hasattr(self._lock, '__aenter__'):
             async with self._lock:
-                await self._save_state_internal_async(execution_id, state, state_json)
+                await self._save_state_internal_async(
+                    execution_id, status, step_index, step_name, 
+                    timestamp, state.get("saved_at"), error, state_blob
+                )
         else:
             with self._lock:
-                self._save_state_internal_sync(execution_id, state, state_json)
+                self._save_state_internal_sync(
+                    execution_id, status, step_index, step_name,
+                    timestamp, state.get("saved_at"), error, state_blob
+                )
     
     async def _save_state_internal_async(
         self, 
         execution_id: str, 
-        state: ExecutionState,
-        state_json: str
+        status: str,
+        step_index: int,
+        step_name: str,
+        timestamp: str,
+        saved_at: str,
+        error: Optional[str],
+        state_blob: bytes
     ):
         """Async internal save method."""
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self._save_state_internal_sync, execution_id, state, state_json)
+        await loop.run_in_executor(
+            None, self._save_state_internal_sync,
+            execution_id, status, step_index, step_name,
+            timestamp, saved_at, error, state_blob
+        )
     
     def _save_state_internal_sync(
         self, 
         execution_id: str, 
-        state: ExecutionState,
-        state_json: str
+        status: str,
+        step_index: int,
+        step_name: str,
+        timestamp: str,
+        saved_at: str,
+        error: Optional[str],
+        state_blob: bytes
     ):
         """Sync internal save method."""
         conn = self._get_connection()
@@ -142,13 +173,13 @@ class SQLiteDurableStorage(DurableExecutionStorage):
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 execution_id,
-                state.get("status", "running"),
-                state.get("step_index", 0),
-                state.get("step_name", "unknown"),
-                state.get("timestamp", datetime.now(timezone.utc).isoformat()),
-                state.get("saved_at"),
-                state.get("error"),
-                state_json
+                status,
+                step_index,
+                step_name,
+                timestamp,
+                saved_at,
+                error,
+                state_blob
             ))
             conn.commit()
         finally:
@@ -195,7 +226,11 @@ class SQLiteDurableStorage(DurableExecutionStorage):
             
             row = cursor.fetchone()
             if row:
-                return json.loads(row['state_data'])
+                return cloudpickle.loads(row['state_data'])
+            return None
+        except Exception as e:
+            from upsonic.utils.printing import warning_log
+            warning_log(f"Could not deserialize state for {execution_id}: {e}", "SQLiteDurableStorage")
             return None
         finally:
             conn.close()
@@ -399,4 +434,3 @@ class SQLiteDurableStorage(DurableExecutionStorage):
             conn.execute('VACUUM')
         finally:
             conn.close()
-

@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
 
 from .storage import DurableExecutionStorage, ExecutionState
-from .serializer import DurableStateSerializer
+from . import serializer
 
 
 class DurableExecution:
@@ -70,7 +70,6 @@ class DurableExecution:
         self.execution_id = execution_id or self._generate_execution_id()
         self.auto_cleanup = auto_cleanup
         self.debug = debug
-        self._serializer = DurableStateSerializer()
     
     @staticmethod
     def _generate_execution_id() -> str:
@@ -109,7 +108,8 @@ class DurableExecution:
             error: Error message if any
             agent_state: Additional agent state to preserve
         """
-        state = self._serializer.serialize_state(
+        # Serialize state using cloudpickle
+        state_bytes = serializer.serialize_state(
             task=task,
             context=context,
             step_index=step_index,
@@ -119,7 +119,19 @@ class DurableExecution:
             agent_state=agent_state
         )
         
-        await self.storage.save_state_async(self.execution_id, ExecutionState(state))
+        # Storage expects ExecutionState (dict-like), so we wrap the bytes
+        # with metadata for storage layer
+        state_wrapper = ExecutionState({
+            "pickle_data": state_bytes,  # cloudpickle serialized data
+            "metadata": {
+                "step_index": step_index,
+                "step_name": step_name,
+                "status": status,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        })
+        
+        await self.storage.save_state_async(self.execution_id, state_wrapper)
         
         if self.debug:
             from upsonic.utils.printing import info_log
@@ -166,8 +178,10 @@ class DurableExecution:
         
         Returns:
             Dictionary with state components:
+                - version: str (serialization version)
+                - timestamp: str (ISO format timestamp)
                 - task: Task object (fully deserialized)
-                - context_data: Dict (serialized context data, needs reconstruction)
+                - context: StepContext object (fully deserialized)
                 - step_index: int
                 - step_name: str
                 - status: str
@@ -177,16 +191,28 @@ class DurableExecution:
             None if no checkpoint found
             
         Note:
-            The context is returned as serialized data (context_data) and must be
-            reconstructed using DurableStateSerializer.reconstruct_context() with
-            the current agent and model instances.
+            With cloudpickle, both task and context are fully reconstructed.
+            The context will need agent/model references updated via
+            serializer.reconstruct_context() before use.
         """
-        state = await self.storage.load_state_async(self.execution_id)
+        state_wrapper = await self.storage.load_state_async(self.execution_id)
         
-        if state is None:
+        if state_wrapper is None:
             return None
         
-        deserialized = self._serializer.deserialize_state(state)
+        # Extract the cloudpickle serialized data from the wrapper
+        state_bytes = state_wrapper.get("pickle_data")
+        if state_bytes is None:
+            # Backward compatibility: if no pickle_data key, might be old JSON format
+            from upsonic.utils.printing import warning_log
+            warning_log(
+                f"Checkpoint {self.execution_id} is in old JSON format, cannot deserialize",
+                "DurableExecution"
+            )
+            return None
+        
+        # Deserialize using cloudpickle
+        deserialized = serializer.deserialize_state(state_bytes)
         
         if self.debug:
             from upsonic.utils.printing import info_log
@@ -233,7 +259,11 @@ class DurableExecution:
             # Just update status to completed
             state = await self.storage.load_state_async(self.execution_id)
             if state:
-                state["status"] = "completed"
+                # Update status in metadata (where it's actually stored)
+                if "metadata" not in state:
+                    state["metadata"] = {}
+                
+                state["metadata"]["status"] = "completed"
                 await self.storage.save_state_async(self.execution_id, state)
             
             if self.debug:
@@ -268,8 +298,11 @@ class DurableExecution:
         """
         state = await self.storage.load_state_async(self.execution_id)
         if state:
-            state["status"] = "failed"
-            state["error"] = error
+            # Update status and error in metadata (where it's actually stored)
+            if "metadata" not in state:
+                state["metadata"] = {}
+            state["metadata"]["status"] = "failed"
+            state["metadata"]["error"] = error
             await self.storage.save_state_async(self.execution_id, state)
         
         if self.debug:
@@ -313,18 +346,70 @@ class DurableExecution:
     
     async def _get_execution_info_async(self) -> Optional[Dict[str, Any]]:
         """Async helper for get_execution_info."""
-        state = await self.storage.load_state_async(self.execution_id)
-        if not state:
+        state_wrapper = await self.storage.load_state_async(self.execution_id)
+        if not state_wrapper:
             return None
+        
+        # Get metadata from the wrapper (this should always exist)
+        metadata = state_wrapper.get("metadata")
+        if not metadata:
+            # Fallback: try to extract from cloudpickle data
+            pickle_data = state_wrapper.get("pickle_data")
+            if pickle_data:
+                try:
+                    import cloudpickle
+                    actual_state = cloudpickle.loads(pickle_data)
+                    # Create metadata from actual state
+                    metadata = {
+                        "status": actual_state.get("status"),
+                        "step_index": actual_state.get("step_index"),
+                        "step_name": actual_state.get("step_name"),
+                        "timestamp": actual_state.get("timestamp"),
+                        "error": actual_state.get("error"),
+                    }
+                except Exception as e:
+                    # If we can't deserialize, return minimal info
+                    return {
+                        "execution_id": self.execution_id,
+                        "status": "unknown",
+                        "step_index": None,
+                        "step_name": None,
+                        "timestamp": state_wrapper.get("saved_at"),
+                        "saved_at": state_wrapper.get("saved_at"),
+                        "error": f"Could not deserialize: {e}",
+                    }
+            else:
+                # No metadata and no pickle_data
+                return {
+                    "execution_id": self.execution_id,
+                    "status": "unknown",
+                    "step_index": None,
+                    "step_name": None,
+                    "timestamp": state_wrapper.get("saved_at"),
+                    "saved_at": state_wrapper.get("saved_at"),
+                    "error": "No metadata available",
+                }
+        
+        # Also try to get error from pickle_data if not in metadata
+        error_msg = metadata.get("error")
+        if not error_msg:
+            pickle_data = state_wrapper.get("pickle_data")
+            if pickle_data:
+                try:
+                    import cloudpickle
+                    actual_state = cloudpickle.loads(pickle_data)
+                    error_msg = actual_state.get("error")
+                except:
+                    pass
         
         return {
             "execution_id": self.execution_id,
-            "status": state.get("status"),
-            "step_index": state.get("step_index"),
-            "step_name": state.get("step_name"),
-            "timestamp": state.get("timestamp"),
-            "saved_at": state.get("saved_at"),
-            "error": state.get("error"),
+            "status": metadata.get("status", "unknown"),
+            "step_index": metadata.get("step_index"),
+            "step_name": metadata.get("step_name"),
+            "timestamp": metadata.get("timestamp"),
+            "saved_at": state_wrapper.get("saved_at"),
+            "error": error_msg,
         }
     
     @staticmethod

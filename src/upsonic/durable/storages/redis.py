@@ -1,4 +1,4 @@
-import json
+import cloudpickle
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta, timezone
 from ..storage import DurableExecutionStorage, ExecutionState
@@ -9,11 +9,14 @@ class RedisDurableStorage(DurableExecutionStorage):
     Redis-based storage backend for durable execution.
     
     This storage backend uses Redis for distributed, scalable storage.
+    Uses cloudpickle for state serialization to support complex Python objects.
+    
     Benefits:
     - High performance and low latency
     - Distributed storage for multi-instance deployments
     - Built-in TTL support for automatic cleanup
     - Pub/sub capabilities for real-time monitoring
+    - Full Python object serialization via cloudpickle
     
     Requires redis-py package: `pip install redis`
     
@@ -57,12 +60,13 @@ class RedisDurableStorage(DurableExecutionStorage):
             )
         
         self.prefix = prefix
+        # Don't use decode_responses since we're storing binary cloudpickle data
         self._redis = redis.Redis(
             host=host,
             port=port,
             db=db,
             password=password,
-            decode_responses=True,  # Automatically decode bytes to strings
+            decode_responses=False,  # Keep as bytes for cloudpickle
             **redis_kwargs
         )
         
@@ -102,8 +106,15 @@ class RedisDurableStorage(DurableExecutionStorage):
         state["saved_at"] = datetime.now(timezone.utc).isoformat()
         state["execution_id"] = execution_id
         
-        # Serialize state to JSON
-        state_json = json.dumps(state)
+        # Extract metadata for indexing
+        metadata = state.get("metadata", {})
+        status = metadata.get("status", "running")
+        step_index = metadata.get("step_index", 0)
+        step_name = metadata.get("step_name", "unknown")
+        timestamp = metadata.get("timestamp", datetime.now(timezone.utc).isoformat())
+        
+        # Serialize state to cloudpickle (consistent with serializer.py)
+        state_blob = cloudpickle.dumps(state)
         
         # Redis keys
         key = self._make_key(execution_id)
@@ -115,27 +126,26 @@ class RedisDurableStorage(DurableExecutionStorage):
                 # Use pipeline for atomic operations
                 pipe = self._redis.pipeline()
                 
-                # Save full state
-                pipe.set(key, state_json)
+                # Save full state as binary cloudpickle
+                pipe.set(key, state_blob)
                 
-                # Save lightweight metadata for listing (Redis doesn't accept None values)
-                metadata = {
-                    "execution_id": execution_id,
-                    "status": state.get("status") or "running",
-                    "step_index": str(state.get("step_index", 0)),
-                    "step_name": state.get("step_name") or "unknown",
-                    "timestamp": state.get("timestamp") or "",
-                    "saved_at": state.get("saved_at") or "",
-                    "error": state.get("error") or "",
+                # Save lightweight metadata for listing
+                # Hash fields must be strings for compatibility
+                metadata_dict = {
+                    b"execution_id": execution_id.encode('utf-8'),
+                    b"status": status.encode('utf-8'),
+                    b"step_index": str(step_index).encode('utf-8'),
+                    b"step_name": step_name.encode('utf-8'),
+                    b"timestamp": timestamp.encode('utf-8'),
+                    b"saved_at": state.get("saved_at", "").encode('utf-8'),
                 }
-                metadata = {k: v for k, v in metadata.items() if v is not None}
-                pipe.hset(metadata_key, mapping=metadata)
+                pipe.hset(metadata_key, mapping=metadata_dict)
                 
-                status = state.get("status", "running")
+                # Update status index
                 index_key = self._make_index_key(status)
-                pipe.sadd(index_key, execution_id)
+                pipe.sadd(index_key, execution_id.encode('utf-8'))
                 
-                results = pipe.execute()
+                pipe.execute()
             except Exception as e:
                 import sys
                 print(f"ERROR: Redis save failed: {e}", file=sys.stderr)
@@ -159,15 +169,17 @@ class RedisDurableStorage(DurableExecutionStorage):
         import asyncio
         
         key = self._make_key(execution_id)
-        state_json = await asyncio.to_thread(self._redis.get, key)
+        state_blob = await asyncio.to_thread(self._redis.get, key)
         
-        if state_json is None:
+        if state_blob is None:
             return None
         
         try:
-            state = json.loads(state_json)
+            state = cloudpickle.loads(state_blob)
             return ExecutionState(state)
-        except json.JSONDecodeError:
+        except Exception as e:
+            from upsonic.utils.printing import warning_log
+            warning_log(f"Could not deserialize state for {execution_id}: {e}", "RedisDurableStorage")
             return None
     
     async def delete_state_async(
@@ -197,9 +209,10 @@ class RedisDurableStorage(DurableExecutionStorage):
             pipe.delete(metadata_key)
             
             if state:
-                status = state.get("status", "running")
+                metadata = state.get("metadata", {})
+                status = metadata.get("status", "running")
                 index_key = self._make_index_key(status)
-                pipe.srem(index_key, execution_id)
+                pipe.srem(index_key, execution_id.encode('utf-8'))
             
             results = pipe.execute()
             
@@ -231,11 +244,16 @@ class RedisDurableStorage(DurableExecutionStorage):
                 # Use index for efficient filtering
                 index_key = self._make_index_key(status)
                 execution_ids = self._redis.smembers(index_key)
+                # Decode bytes to strings
+                execution_ids = [eid.decode('utf-8') if isinstance(eid, bytes) else eid for eid in execution_ids]
             else:
                 # Scan all metadata keys
                 pattern = f"{self.prefix}meta:*"
                 execution_ids = set()
                 for key in self._redis.scan_iter(match=pattern):
+                    # Decode key if it's bytes
+                    if isinstance(key, bytes):
+                        key = key.decode('utf-8')
                     # Extract execution_id from key
                     exec_id = key[len(f"{self.prefix}meta:"):]
                     execution_ids.add(exec_id)
@@ -243,13 +261,26 @@ class RedisDurableStorage(DurableExecutionStorage):
             # Fetch metadata for each execution
             for execution_id in execution_ids:
                 metadata_key = self._make_metadata_key(execution_id)
-                metadata = self._redis.hgetall(metadata_key)
+                metadata_raw = self._redis.hgetall(metadata_key)
+                
+                # Decode metadata (keys and values are bytes)
+                metadata = {}
+                for k, v in metadata_raw.items():
+                    key_str = k.decode('utf-8') if isinstance(k, bytes) else k
+                    val_str = v.decode('utf-8') if isinstance(v, bytes) else v
+                    metadata[key_str] = val_str
                 
                 if metadata:
+                    step_index_str = metadata.get("step_index", "0")
+                    try:
+                        step_index = int(step_index_str)
+                    except ValueError:
+                        step_index = 0
+                    
                     result.append({
                         "execution_id": metadata.get("execution_id", execution_id),
                         "status": metadata.get("status"),
-                    "step_index": int(metadata.get("step_index", 0)),
+                        "step_index": step_index,
                     "step_name": metadata.get("step_name"),
                     "timestamp": metadata.get("timestamp"),
                     "saved_at": metadata.get("saved_at"),
@@ -285,11 +316,19 @@ class RedisDurableStorage(DurableExecutionStorage):
         
         for status in ["completed", "failed"]:
             index_key = self._make_index_key(status)
-            execution_ids = await asyncio.to_thread(self._redis.smembers, index_key)
+            execution_ids_raw = await asyncio.to_thread(self._redis.smembers, index_key)
+            execution_ids = [eid.decode('utf-8') if isinstance(eid, bytes) else eid for eid in execution_ids_raw]
             
             for execution_id in execution_ids:
                 metadata_key = self._make_metadata_key(execution_id)
-                metadata = await asyncio.to_thread(self._redis.hgetall, metadata_key)
+                metadata_raw = await asyncio.to_thread(self._redis.hgetall, metadata_key)
+                
+                # Decode metadata
+                metadata = {}
+                for k, v in metadata_raw.items():
+                    key_str = k.decode('utf-8') if isinstance(k, bytes) else k
+                    val_str = v.decode('utf-8') if isinstance(v, bytes) else v
+                    metadata[key_str] = val_str
                 
                 timestamp_str = metadata.get("timestamp")
                 if not timestamp_str:
@@ -377,12 +416,20 @@ class RedisDurableStorage(DurableExecutionStorage):
         
         # Scan all execution states
         pattern = f"{self.prefix}meta:*"
-        for metadata_key in self._redis.scan_iter(match=pattern):
-            metadata = self._redis.hgetall(metadata_key)
+        for metadata_key_raw in self._redis.scan_iter(match=pattern):
+            metadata_key = metadata_key_raw.decode('utf-8') if isinstance(metadata_key_raw, bytes) else metadata_key_raw
+            metadata_raw = self._redis.hgetall(metadata_key)
+            
+            # Decode metadata
+            metadata = {}
+            for k, v in metadata_raw.items():
+                key_str = k.decode('utf-8') if isinstance(k, bytes) else k
+                val_str = v.decode('utf-8') if isinstance(v, bytes) else v
+                metadata[key_str] = val_str
+            
             status = metadata.get("status")
             execution_id = metadata.get("execution_id")
             
             if status and execution_id:
                 index_key = self._make_index_key(status)
-                self._redis.sadd(index_key, execution_id)
-
+                self._redis.sadd(index_key, execution_id.encode('utf-8'))
