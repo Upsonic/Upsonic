@@ -7334,6 +7334,7 @@ source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "anyio" },
+    { name = "cloudpickle" },
     { name = "genai-prices" },
     { name = "griffe" },
     { name = "httpx" },
@@ -7496,6 +7497,7 @@ requires-dist = [
     { name = "botocore", marker = "extra == 'models'", specifier = ">=1.40.45" },
     { name = "celery", marker = "extra == 'web'", specifier = ">=5.5.3" },
     { name = "chromadb", marker = "extra == 'vectordb'", specifier = ">=1.0.20" },
+    { name = "cloudpickle", specifier = ">=3.1.2" },
     { name = "cohere", marker = "extra == 'models'", specifier = ">=5.18.0" },
     { name = "docling", marker = "extra == 'loaders'", specifier = ">=2.55.1" },
     { name = "duckduckgo-search", marker = "extra == 'tools'", specifier = ">=8.1.1" },
