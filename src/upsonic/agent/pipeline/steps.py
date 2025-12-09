@@ -462,6 +462,10 @@ class ModelExecutionStep(Step):
                 
                 context.response = final_response
                 
+                # Add the final response to messages for proper conversation history
+                context.messages.append(final_response)
+                context.agent._current_messages = context.messages
+                
                 # Store memory handler reference for later steps
                 context._memory_handler = memory_handler
             

@@ -1788,7 +1788,7 @@ class Agent(BaseAgent):
                 state=state
             )
             
-            final_context = await pipeline.execute(context)
+            await pipeline.execute(context)
             sentry_sdk.flush()
             
             return self._run_result.output
@@ -2303,7 +2303,7 @@ class Agent(BaseAgent):
                 continuation_response_with_tool_calls=response_with_tool_calls  # The response that triggered pause
             )
             
-            final_context = await pipeline.execute(context)
+            await pipeline.execute(context)
             sentry_sdk.flush()
             
             return self._run_result.output
@@ -2357,11 +2357,18 @@ class Agent(BaseAgent):
             raise ValueError(f"No checkpoint found for execution: {durable_execution_id}")
         
         # Extract state from checkpoint
+        # With cloudpickle, we get fully deserialized task and context data
         task = checkpoint['task']
-        context_data = checkpoint['context_data']  # Serialized context data
+        context_data = checkpoint['context_data']  # Context data dict (not full context)
         step_index = checkpoint['step_index']
         step_name = checkpoint['step_name']
         agent_state = checkpoint.get('agent_state', {})
+        
+        # CRITICAL: Reconnect the task's durable_execution to use the current storage!
+        # The deserialized task's durable_execution might have a stale storage reference.
+        if task.durable_execution:
+            task.durable_execution.storage = storage
+            task.durable_execution.execution_id = durable_execution_id
         
         from upsonic.utils.printing import info_log, warning_log
         checkpoint_status = checkpoint.get('status', 'unknown')
@@ -2401,9 +2408,16 @@ class Agent(BaseAgent):
         else:
             current_model = self.model
         
-        # Reconstruct context with current agent and model
-        from upsonic.durable.serializer import DurableStateSerializer
-        context = DurableStateSerializer.reconstruct_context(
+        # Set current task on agent (needed for model request building)
+        self.current_task = task
+        
+        # This is for if its different agent being used!
+        self._setup_task_tools(task)
+        
+        # Reconstruct context with current agent and model references
+        # Create a new StepContext with the current agent/model and restore state
+        from upsonic.durable import serializer
+        context = serializer.reconstruct_context(
             context_data,
             task=task,
             agent=self,
@@ -2434,7 +2448,7 @@ class Agent(BaseAgent):
             ResponseProcessingStep(),
             ReflectionStep(),
             MemoryMessageTrackingStep(),
-            AgentPolicyStep(),  # Move before CallManagementStep
+            AgentPolicyStep(),
             CallManagementStep(),
             TaskManagementStep(),
             ReliabilityStep(),
@@ -2446,11 +2460,9 @@ class Agent(BaseAgent):
         if checkpoint_status == "failed":
             # Retry the failed step with the restored context
             resume_from_index = step_index
-            completed_count = step_index
         else:
             # Continue from next step after successful checkpoint
             resume_from_index = step_index + 1
-            completed_count = resume_from_index
         
         remaining_steps = all_steps[resume_from_index:]
         
@@ -2490,7 +2502,7 @@ class Agent(BaseAgent):
                 debug=debug or self.debug
             )
             
-            final_context = await pipeline.execute(context)
+            await pipeline.execute(context)
             sentry_sdk.flush()
             
             return self._run_result.output

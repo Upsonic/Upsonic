@@ -12,8 +12,21 @@ import asyncio
 import json
 from hashlib import md5
 from math import sqrt
-from typing import Any, Dict, List, Optional, Union, Literal, cast
+from typing import Any, Dict, List, Optional, Union, Literal, cast, TYPE_CHECKING
 from uuid import uuid4
+
+if TYPE_CHECKING:
+    from sqlalchemy import (
+        Column, String, Text, Integer, BigInteger, Float, Boolean, DateTime, 
+        Index, MetaData, Table, create_engine, text, select, 
+        delete as sa_delete, update as sa_update, func, desc
+    )
+    from sqlalchemy.dialects import postgresql
+    from sqlalchemy.engine import Engine
+    from sqlalchemy.orm import Session, scoped_session, sessionmaker
+    from sqlalchemy.inspection import inspect
+    from sqlalchemy.sql.expression import bindparam
+    from pgvector.sqlalchemy import Vector
 
 try:
     from sqlalchemy import (
@@ -26,23 +39,36 @@ try:
     from sqlalchemy.orm import Session, scoped_session, sessionmaker
     from sqlalchemy.inspection import inspect
     from sqlalchemy.sql.expression import bindparam
-except ImportError:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="sqlalchemy psycopg",
-        install_command="pip install sqlalchemy psycopg",
-        feature_name="PGVector provider"
-    )
-
-try:
     from pgvector.sqlalchemy import Vector
+    _PGVECTOR_AVAILABLE = True
 except ImportError:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="pgvector",
-        install_command="pip install pgvector",
-        feature_name="PGVector provider"
-    )
+    Column = None  # type: ignore
+    String = None  # type: ignore
+    Text = None  # type: ignore
+    Integer = None  # type: ignore
+    BigInteger = None  # type: ignore
+    Float = None  # type: ignore
+    Boolean = None  # type: ignore
+    DateTime = None  # type: ignore
+    Index = None  # type: ignore
+    MetaData = None  # type: ignore
+    Table = None  # type: ignore
+    create_engine = None  # type: ignore
+    text = None  # type: ignore
+    select = None  # type: ignore
+    sa_delete = None  # type: ignore
+    sa_update = None  # type: ignore
+    func = None  # type: ignore
+    desc = None  # type: ignore
+    postgresql = None  # type: ignore
+    Engine = None  # type: ignore
+    Session = None  # type: ignore
+    scoped_session = None  # type: ignore
+    sessionmaker = None  # type: ignore
+    inspect = None  # type: ignore
+    bindparam = None  # type: ignore
+    Vector = None  # type: ignore
+    _PGVECTOR_AVAILABLE = False
 
 from upsonic.vectordb.base import BaseVectorDBProvider
 from upsonic.vectordb.config import PgVectorConfig, HNSWIndexConfig, IVFIndexConfig, DistanceMetric
@@ -84,6 +110,14 @@ class PgVectorProvider(BaseVectorDBProvider):
         Args:
             config: Either a PgVectorConfig object or a dictionary to create one
         """
+        if not _PGVECTOR_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="sqlalchemy psycopg pgvector",
+                install_command='pip install "upsonic[rag]"',
+                feature_name="PGVector vector database provider"
+            )
+        
         # Convert dict to PgVectorConfig if needed
         if isinstance(config, dict):
             config = PgVectorConfig.from_dict(config)
