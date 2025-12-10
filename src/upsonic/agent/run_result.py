@@ -8,17 +8,32 @@ with comprehensive message tracking and output management capabilities.
 import asyncio
 import time
 import threading
+import uuid
 from queue import Queue, Empty
 from dataclasses import dataclass, field
-from typing import List, Generic, AsyncIterator, Iterator, Optional, Any, TYPE_CHECKING, Dict
+from typing import List, Generic, AsyncIterator, Iterator, Optional, Any, TYPE_CHECKING, Dict, Union
 from contextlib import asynccontextmanager
 
 from upsonic.messages.messages import ModelMessage, ModelResponseStreamEvent, TextPart, PartStartEvent, PartDeltaEvent, FinalResultEvent
 from upsonic.output import OutputDataT
+from upsonic.agent.run_input import RunInput
+from upsonic.agent.run_events import (
+    RunStatus,
+    BaseAgentRunEvent,
+    AgentRunEvent,
+    RunStartedEvent,
+    RunContentEvent,
+    RunContentCompletedEvent,
+    RunCompletedEvent,
+    RunErrorEvent,
+    ToolCallStartedEvent,
+    ToolCallCompletedEvent,
+)
 
 if TYPE_CHECKING:
     from upsonic.tasks.tasks import Task
     from upsonic.messages.messages import ModelResponse
+    from upsonic.usage import RequestUsage
 
 
 @dataclass
@@ -29,12 +44,20 @@ class RunResult(Generic[OutputDataT]):
     This class encapsulates:
     - The actual output/response from the agent
     - All messages exchanged during all runs
+    - Run metadata (ID, agent info, status)
+    - Input capture for reproducibility
     - Methods to access message history
     
     Attributes:
         output: The actual output from the agent execution
+        run_id: Unique identifier for this run
+        agent_id: Unique identifier for the agent
+        agent_name: Display name of the agent
+        input: The RunInput that initiated this run
+        status: Current status of the run
         _all_messages: Internal storage for all messages across all runs
         _run_boundaries: Indices marking the start of each run
+        _events: Agent run events captured during execution
         
     Example:
         ```python
@@ -42,17 +65,37 @@ class RunResult(Generic[OutputDataT]):
         print(result.output)  # Access the actual response
         print(result.all_messages())  # Get all messages
         print(result.new_messages())  # Get last run's messages
+        print(result.run_id)  # Get the unique run ID
+        print(result.status)  # Check run status
         ```
     """
     
     output: OutputDataT
     """The actual output/response from the agent execution."""
     
+    run_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    """Unique identifier for this run."""
+    
+    agent_id: str = ""
+    """Unique identifier for the agent."""
+    
+    agent_name: str = ""
+    """Display name of the agent."""
+    
+    input: Optional[RunInput] = None
+    """The RunInput that initiated this run."""
+    
+    status: RunStatus = RunStatus.completed
+    """Current status of the run."""
+    
     _all_messages: List[ModelMessage] = field(default_factory=list)
     """Internal storage for all messages across all runs."""
     
     _run_boundaries: List[int] = field(default_factory=list)
     """Indices marking where each run starts in the message list."""
+    
+    _events: List[BaseAgentRunEvent] = field(default_factory=list)
+    """Agent run events captured during execution."""
     
     def all_messages(self) -> List[ModelMessage]:
         """
@@ -132,6 +175,52 @@ class RunResult(Generic[OutputDataT]):
         """
         self._run_boundaries.append(len(self._all_messages))
     
+    def add_event(self, event: BaseAgentRunEvent) -> None:
+        """
+        Add an agent run event to the event history.
+        
+        Args:
+            event: An AgentRunEvent to add.
+        """
+        self._events.append(event)
+    
+    def get_events(self) -> List[BaseAgentRunEvent]:
+        """
+        Get all agent run events.
+        
+        Returns:
+            List of all agent run events captured during execution.
+        """
+        return self._events.copy()
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert RunResult to a dictionary representation.
+        
+        Returns:
+            Dict[str, Any]: Dictionary representation of the RunResult
+        """
+        result: Dict[str, Any] = {
+            "run_id": self.run_id,
+            "agent_id": self.agent_id,
+            "agent_name": self.agent_name,
+            "status": self.status.value,
+        }
+        
+        if self.output is not None:
+            if hasattr(self.output, 'model_dump'):
+                result["output"] = self.output.model_dump(exclude_none=True)
+            else:
+                result["output"] = self.output
+        
+        if self.input is not None:
+            result["input"] = self.input.to_dict()
+        
+        if self._events:
+            result["events"] = [event.to_dict() for event in self._events]
+        
+        return result
+    
     def __str__(self) -> str:
         """String representation returns the output as string."""
         return str(self.output)
@@ -182,11 +271,29 @@ class StreamRunResult(Generic[OutputDataT]):
     _task: Optional['Task'] = None
     """The task being executed."""
     
+    run_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    """Unique identifier for this run."""
+    
+    agent_id: str = ""
+    """Unique identifier for the agent."""
+    
+    agent_name: str = ""
+    """Display name of the agent."""
+    
+    input: Optional[RunInput] = None
+    """The RunInput that initiated this run."""
+    
+    status: RunStatus = RunStatus.pending
+    """Current status of the run."""
+    
     _accumulated_text: str = field(default_factory=str)
     """Text content accumulated during streaming."""
     
     _streaming_events: List[ModelResponseStreamEvent] = field(default_factory=list)
-    """All streaming events received during execution."""
+    """All streaming events received during execution (model-level)."""
+    
+    _agent_events: List[BaseAgentRunEvent] = field(default_factory=list)
+    """Agent-level run events captured during streaming."""
     
     _final_output: Optional[OutputDataT] = None
     """The final output after streaming completes."""
@@ -221,6 +328,12 @@ class StreamRunResult(Generic[OutputDataT]):
     _retry: int = 1
     """Number of retries for streaming."""
     
+    _event_queue: Optional[asyncio.Queue] = field(default=None, repr=False)
+    """Queue for real-time event dispatch during streaming."""
+    
+    _event_queue_enabled: bool = False
+    """Whether real-time event queue is enabled."""
+    
     def __post_init__(self):
         """Initialize the stream run result."""
         if not self._run_boundaries:
@@ -245,19 +358,65 @@ class StreamRunResult(Generic[OutputDataT]):
         
         return False
     
-    async def stream_output(self) -> AsyncIterator[str]:
+    def get_agent_events(self) -> List[BaseAgentRunEvent]:
         """
-        Stream text content from the agent response.
+        Get all agent-level run events captured during streaming.
+        
+        Returns:
+            List[BaseAgentRunEvent]: All captured agent events
+        """
+        return self._agent_events.copy()
+    
+    def add_agent_event(self, event: BaseAgentRunEvent) -> None:
+        """
+        Add an agent run event, dispatching it in real-time if streaming is active.
+        
+        This method stores the event and also puts it in the event queue
+        if real-time streaming is enabled (full_stream=True).
+        
+        Args:
+            event: The agent event to add
+        """
+        self._agent_events.append(event)
+        
+        # Put in queue for real-time dispatch if enabled
+        if self._event_queue_enabled and self._event_queue is not None:
+            try:
+                self._event_queue.put_nowait(event)
+            except asyncio.QueueFull:
+                pass  # Skip if queue is full
+    
+    async def stream_output(
+        self, 
+        full_stream: bool = False
+    ) -> AsyncIterator[Union[str, BaseAgentRunEvent]]:
+        """
+        Stream content from the agent response.
+        
+        Args:
+            full_stream: If False (default), yields only text content chunks.
+                        If True, yields all agent events including tool calls,
+                        thinking events, and content events.
         
         Yields:
-            str: Incremental text content as it becomes available
+            When full_stream=False: str - Incremental text content
+            When full_stream=True: BaseAgentRunEvent - All agent events
             
         Example:
             ```python
+            # Standard text streaming (backward compatible)
             async with agent.stream(task) as result:
                 async for text_chunk in result.stream_output():
                     print(text_chunk, end='', flush=True)
                 print()  # New line after streaming
+            
+            # Full event streaming
+            async with agent.stream(task) as result:
+                async for event in result.stream_output(full_stream=True):
+                    if event.event == "ToolCallStarted":
+                        print(f"Tool: {event.tool_name}")
+                    elif event.event == "RunContent":
+                        print(event.content, end='', flush=True)
             ```
         """
         if not self._context_entered:
@@ -266,31 +425,163 @@ class StreamRunResult(Generic[OutputDataT]):
         if not self._agent or not self._task:
             raise RuntimeError("No agent or task available for streaming")
         
+        # Update status to running
+        self.status = RunStatus.running
+        
+        # Emit run started event
+        run_started = RunStartedEvent(
+            agent_id=self.agent_id,
+            agent_name=self.agent_name,
+            run_id=self.run_id,
+            model=str(getattr(self._model, 'name', self._model)) if self._model else "",
+        )
+        self._agent_events.append(run_started)
+        if full_stream:
+            yield run_started
+        
         try:
             # Get streaming parameters
             state = getattr(self, '_state', None)
             graph_execution_id = getattr(self, '_graph_execution_id', None)
             
-            # Always execute the stream to get real-time events
-            # Events are collected in _streaming_events during iteration
-            async for text_chunk in self._agent._stream_text_output(
-                self._task,
-                self._model,
-                self._debug,
-                self._retry,
-                state,
-                graph_execution_id,
-                stream_result=self
-            ):
-                yield text_chunk
+            if full_stream:
+                # Use index-based tracking to yield new events as they're added
+                # This is more reliable than queue as it handles timing issues
+                last_yielded_idx = len(self._agent_events)
+                
+                # Stream model events and yield new agent events as they appear
+                async for event in self._agent._stream_events_output(
+                    self._task,
+                    self._model,
+                    self._debug,
+                    self._retry,
+                    state,
+                    graph_execution_id,
+                    stream_result=self
+                ):
+                    # Yield any new agent events that were added (from _emit_event)
+                    while last_yielded_idx < len(self._agent_events):
+                        yield self._agent_events[last_yielded_idx]
+                        last_yielded_idx += 1
+                    
+                    # Convert model-level events to agent-level events
+                    # Skip ToolCallPart - we emit proper ToolCallStarted/Completed from _emit_event
+                    agent_event = self._convert_to_agent_event(event)
+                    if agent_event:
+                        self._agent_events.append(agent_event)
+                        yield agent_event
+                        last_yielded_idx += 1
+                
+                # Yield any remaining events after model stream completes
+                while last_yielded_idx < len(self._agent_events):
+                    yield self._agent_events[last_yielded_idx]
+                    last_yielded_idx += 1
+            else:
+                # Yield only text content (backward compatible)
+                async for text_chunk in self._agent._stream_text_output(
+                    self._task,
+                    self._model,
+                    self._debug,
+                    self._retry,
+                    state,
+                    graph_execution_id,
+                    stream_result=self
+                ):
+                    # Create content event and store it
+                    content_event = RunContentEvent(
+                        agent_id=self.agent_id,
+                        agent_name=self.agent_name,
+                        run_id=self.run_id,
+                        content=text_chunk,
+                    )
+                    self._agent_events.append(content_event)
+                    yield text_chunk
             
             self._end_time = time.time()
+            self.status = RunStatus.completed
+            
+            # Emit run completed event
+            run_completed = RunCompletedEvent(
+                agent_id=self.agent_id,
+                agent_name=self.agent_name,
+                run_id=self.run_id,
+                content=self._final_output,
+                duration_ms=int((self._end_time - self._start_time) * 1000) if self._start_time else None,
+            )
+            self._agent_events.append(run_completed)
+            if full_stream:
+                yield run_completed
             
         except Exception as e:
             # Ensure completion state is set even on error
             self._is_complete = True
             self._end_time = time.time()
+            self.status = RunStatus.error
+            
+            # Emit error event
+            error_event = RunErrorEvent(
+                agent_id=self.agent_id,
+                agent_name=self.agent_name,
+                run_id=self.run_id,
+                error_type=type(e).__name__,
+                error_message=str(e),
+            )
+            self._agent_events.append(error_event)
+            if full_stream:
+                yield error_event
+            
             raise
+    
+    def _convert_to_agent_event(self, model_event: ModelResponseStreamEvent) -> Optional[BaseAgentRunEvent]:
+        """
+        Convert a model-level streaming event to an agent-level event.
+        
+        Args:
+            model_event: The model-level streaming event
+            
+        Returns:
+            BaseAgentRunEvent or None if the event doesn't map to an agent event
+        """
+        from upsonic.messages.messages import PartStartEvent, PartDeltaEvent, TextPart, ToolCallPart, ThinkingPart, TextPartDelta
+        from upsonic.agent.run_events import ThinkingStartedEvent, ThinkingStepEvent
+        
+        if isinstance(model_event, PartStartEvent):
+            part = model_event.part
+            if isinstance(part, TextPart):
+                return RunContentEvent(
+                    agent_id=self.agent_id,
+                    agent_name=self.agent_name,
+                    run_id=self.run_id,
+                    content=part.content,
+                )
+            elif isinstance(part, ThinkingPart):
+                # ThinkingPart starts thinking/reasoning
+                return ThinkingStartedEvent(
+                    agent_id=self.agent_id,
+                    agent_name=self.agent_name,
+                    run_id=self.run_id,
+                )
+            # ToolCallPart is NOT converted here - we emit proper ToolCallStarted/Completed
+            # from _emit_event in Agent._execute_tool_calls with full args and results
+        elif isinstance(model_event, PartDeltaEvent):
+            delta = model_event.delta
+            if isinstance(delta, TextPartDelta):
+                return RunContentEvent(
+                    agent_id=self.agent_id,
+                    agent_name=self.agent_name,
+                    run_id=self.run_id,
+                    content=delta.content_delta,
+                )
+            # Check for thinking delta
+            if hasattr(delta, 'content_delta') and hasattr(delta, '__class__') and 'Thinking' in delta.__class__.__name__:
+                return ThinkingStepEvent(
+                    agent_id=self.agent_id,
+                    agent_name=self.agent_name,
+                    run_id=self.run_id,
+                    thinking_content=getattr(delta, 'content_delta', ''),
+                )
+        
+        return None
     
     async def stream_events(self) -> AsyncIterator[ModelResponseStreamEvent]:
         """
@@ -479,7 +770,7 @@ class StreamRunResult(Generic[OutputDataT]):
         return self._accumulated_text
     
     def get_streaming_events(self) -> List[ModelResponseStreamEvent]:
-        """Get all streaming events received so far."""
+        """Get all model-level streaming events received so far."""
         return self._streaming_events.copy()
     
     def get_text_events(self) -> List[ModelResponseStreamEvent]:

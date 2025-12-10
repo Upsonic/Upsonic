@@ -46,8 +46,20 @@ def _get_create_deep_agent():
 def _get_AgentRunResult():
     return _lazy_import("upsonic.agent.run_result", "AgentRunResult")()
 
+def _get_RunResult():
+    return _lazy_import("upsonic.agent.run_result", "RunResult")()
+
+def _get_StreamRunResult():
+    return _lazy_import("upsonic.agent.run_result", "StreamRunResult")()
+
 def _get_OutputDataT():
     return _lazy_import("upsonic.agent.run_result", "OutputDataT")()
+
+def _get_RunInput():
+    return _lazy_import("upsonic.agent.run_input", "RunInput")()
+
+def _get_run_events_component(name: str):
+    return _lazy_import("upsonic.agent.run_events", name)()
 
 def _get_Graph():
     return _lazy_import("upsonic.graph.graph", "Graph")()
@@ -286,8 +298,22 @@ def __getattr__(name: str) -> Any:
         return _get_create_deep_agent()
     elif name == "AgentRunResult":
         return _get_AgentRunResult()
+    elif name == "RunResult":
+        return _get_RunResult()
+    elif name == "StreamRunResult":
+        return _get_StreamRunResult()
     elif name == "OutputDataT":
         return _get_OutputDataT()
+    elif name == "RunInput":
+        return _get_RunInput()
+    elif name in ("RunStatus", "RunEvent", "BaseAgentRunEvent", "AgentRunEvent",
+                  "RunStartedEvent", "RunContentEvent", "RunContentCompletedEvent",
+                  "RunCompletedEvent", "RunErrorEvent", "RunCancelledEvent",
+                  "RunPausedEvent", "RunContinuedEvent", "ToolCallStartedEvent",
+                  "ToolCallCompletedEvent", "ThinkingStartedEvent", "ThinkingStepEvent",
+                  "ThinkingCompletedEvent", "CacheHitEvent", "CacheMissEvent",
+                  "PolicyCheckStartedEvent", "PolicyCheckCompletedEvent"):
+        return _get_run_events_component(name)
     elif name == "Graph":
         return _get_Graph()
     elif name == "DecisionFunc":
@@ -345,8 +371,36 @@ __all__ = [
     "Task", 
     "KnowledgeBase", 
     "Agent",
+    # Run result classes
     "AgentRunResult",
+    "RunResult",
+    "StreamRunResult",
     "OutputDataT",
+    # Run input
+    "RunInput",
+    # Run events
+    "RunStatus",
+    "RunEvent",
+    "BaseAgentRunEvent",
+    "AgentRunEvent",
+    "RunStartedEvent",
+    "RunContentEvent",
+    "RunContentCompletedEvent",
+    "RunCompletedEvent",
+    "RunErrorEvent",
+    "RunCancelledEvent",
+    "RunPausedEvent",
+    "RunContinuedEvent",
+    "ToolCallStartedEvent",
+    "ToolCallCompletedEvent",
+    "ThinkingStartedEvent",
+    "ThinkingStepEvent",
+    "ThinkingCompletedEvent",
+    "CacheHitEvent",
+    "CacheMissEvent",
+    "PolicyCheckStartedEvent",
+    "PolicyCheckCompletedEvent",
+    # Other components
     "Graph",
     "DecisionFunc",
     "DecisionLLM",

@@ -12,6 +12,7 @@ from upsonic.utils.logging_config import sentry_sdk
 from upsonic import _utils
 from upsonic.agent.base import BaseAgent
 from upsonic.agent.run_result import RunResult, StreamRunResult
+from upsonic.agent.run_input import RunInput
 from upsonic._utils import now_utc
 from upsonic.utils.retry import retryable
 from upsonic.utils.validators import validate_attachments_exist
@@ -489,6 +490,44 @@ class Agent(BaseAgent):
         Useful when you want to start a new conversation thread without creating a new agent.
         """
         self._stream_run_result = StreamRunResult()
+    
+    def _emit_event(self, event_data: dict) -> None:
+        """
+        Emit an agent run event to both run result and stream run result.
+        
+        Uses lazy import via agent_run_event_from_dict to avoid import overhead
+        at startup. Events are stored in both _run_result._events and 
+        _stream_run_result._agent_events for access after execution.
+        
+        Args:
+            event_data: Dictionary representation of the event with required fields:
+                - event: Event type string (e.g., "ToolCallStarted")
+                - agent_id: Agent identifier
+                - agent_name: Agent display name
+                - run_id: Run identifier
+                - Additional event-specific fields
+        """
+        # Lazy import to avoid circular imports and reduce startup time
+        from upsonic.agent.run_events import agent_run_event_from_dict
+        
+        # Set agent identification if not provided
+        if not event_data.get("agent_id"):
+            event_data["agent_id"] = self.agent_id
+        if not event_data.get("agent_name"):
+            event_data["agent_name"] = self.name or self.get_agent_id()
+        if not event_data.get("run_id") and hasattr(self._stream_run_result, 'run_id'):
+            event_data["run_id"] = self._stream_run_result.run_id
+        
+        # Create event from dict
+        event = agent_run_event_from_dict(event_data)
+        
+        # Add to run result
+        if hasattr(self._run_result, 'add_event'):
+            self._run_result.add_event(event)
+        
+        # Add to stream run result
+        if hasattr(self._stream_run_result, 'add_agent_event'):
+            self._stream_run_result.add_agent_event(event)
     
     def _validate_tools_with_policy_pre(
         self, 
@@ -1035,6 +1074,18 @@ class Agent(BaseAgent):
         results = []
         
         for tool_call in sequential_calls:
+            tool_args = tool_call.args_as_dict()
+            
+            # Emit ToolCallStarted event
+            self._emit_event({
+                "event": "ToolCallStarted",
+                "tool_name": tool_call.tool_name,
+                "tool_call_id": tool_call.tool_call_id,
+                "tool_args": tool_args,
+            })
+            
+            tool_start_time = time.time()
+            
             # POST-EXECUTION TOOL CALL VALIDATION
             if hasattr(self, 'tool_policy_post_manager') and self.tool_policy_post_manager.has_policies():
                 tool_def = tool_defs.get(tool_call.tool_name)
@@ -1042,7 +1093,7 @@ class Agent(BaseAgent):
                     "name": tool_call.tool_name,
                     "description": tool_def.description if tool_def else "",
                     "parameters": tool_def.parameters_json_schema if tool_def else {},
-                    "arguments": tool_call.args_as_dict(),
+                    "arguments": tool_args,
                     "call_id": tool_call.tool_call_id
                 }
                 
@@ -1052,6 +1103,17 @@ class Agent(BaseAgent):
                 )
                 
                 if validation_result.should_block():
+                    # Emit ToolCallCompleted with error
+                    tool_duration_ms = int((time.time() - tool_start_time) * 1000)
+                    self._emit_event({
+                        "event": "ToolCallCompleted",
+                        "tool_name": tool_call.tool_name,
+                        "tool_call_id": tool_call.tool_call_id,
+                        "tool_result": None,
+                        "duration_ms": tool_duration_ms,
+                        "error": validation_result.get_final_message(),
+                    })
+                    
                     # Handle blocking based on action type
                     # If DisallowedOperation was raised by a RAISE action policy, re-raise it
                     if validation_result.disallowed_exception:
@@ -1069,10 +1131,21 @@ class Agent(BaseAgent):
             try:
                 result = await self.tool_manager.execute_tool(
                     tool_name=tool_call.tool_name,
-                    args=tool_call.args_as_dict(),
+                    args=tool_args,
                     metrics=self._tool_metrics,
                     tool_call_id=tool_call.tool_call_id
                 )
+                
+                tool_duration_ms = int((time.time() - tool_start_time) * 1000)
+                
+                # Emit ToolCallCompleted event with result
+                self._emit_event({
+                    "event": "ToolCallCompleted",
+                    "tool_name": tool_call.tool_name,
+                    "tool_call_id": tool_call.tool_call_id,
+                    "tool_result": result.content,
+                    "duration_ms": tool_duration_ms,
+                })
                 
                 self._tool_call_count += 1
                 if hasattr(self, '_tool_metrics') and self._tool_metrics:
@@ -1087,8 +1160,29 @@ class Agent(BaseAgent):
                 results.append(tool_return)
                 
             except ExternalExecutionPause as e:
+                # Emit RunPaused event before re-raising
+                self._emit_event({
+                    "event": "RunPaused",
+                    "pause_reason": "ExternalExecutionPause",
+                    "tools_awaiting_execution": [{
+                        "tool_name": tool_call.tool_name,
+                        "tool_call_id": tool_call.tool_call_id,
+                    }],
+                })
                 raise e
             except Exception as e:
+                tool_duration_ms = int((time.time() - tool_start_time) * 1000)
+                
+                # Emit ToolCallCompleted with error
+                self._emit_event({
+                    "event": "ToolCallCompleted",
+                    "tool_name": tool_call.tool_name,
+                    "tool_call_id": tool_call.tool_call_id,
+                    "tool_result": None,
+                    "duration_ms": tool_duration_ms,
+                    "error": str(e),
+                })
+                
                 error_return = ToolReturnPart(
                     tool_name=tool_call.tool_name,
                     content=f"Error executing tool: {str(e)}",
@@ -1100,6 +1194,18 @@ class Agent(BaseAgent):
         if parallel_calls:
             async def execute_single_tool(tool_call: "ToolCallPart") -> "ToolReturnPart":
                 """Execute a single tool call and return the result."""
+                tool_args = tool_call.args_as_dict()
+                
+                # Emit ToolCallStarted event
+                self._emit_event({
+                    "event": "ToolCallStarted",
+                    "tool_name": tool_call.tool_name,
+                    "tool_call_id": tool_call.tool_call_id,
+                    "tool_args": tool_args,
+                })
+                
+                tool_start_time = time.time()
+                
                 # POST-EXECUTION TOOL CALL VALIDATION (for parallel execution)
                 if hasattr(self, 'tool_policy_post_manager') and self.tool_policy_post_manager.has_policies():
                     tool_def = tool_defs.get(tool_call.tool_name)
@@ -1107,7 +1213,7 @@ class Agent(BaseAgent):
                         "name": tool_call.tool_name,
                         "description": tool_def.description if tool_def else "",
                         "parameters": tool_def.parameters_json_schema if tool_def else {},
-                        "arguments": tool_call.args_as_dict(),
+                        "arguments": tool_args,
                         "call_id": tool_call.tool_call_id
                     }
                     
@@ -1117,6 +1223,18 @@ class Agent(BaseAgent):
                     )
                     
                     if validation_result.should_block():
+                        tool_duration_ms = int((time.time() - tool_start_time) * 1000)
+                        
+                        # Emit ToolCallCompleted with error
+                        self._emit_event({
+                            "event": "ToolCallCompleted",
+                            "tool_name": tool_call.tool_name,
+                            "tool_call_id": tool_call.tool_call_id,
+                            "tool_result": None,
+                            "duration_ms": tool_duration_ms,
+                            "error": validation_result.get_final_message(),
+                        })
+                        
                         # Handle blocking based on action type
                         # If DisallowedOperation was raised by a RAISE action policy, re-raise it
                         if validation_result.disallowed_exception:
@@ -1133,10 +1251,21 @@ class Agent(BaseAgent):
                 try:
                     result = await self.tool_manager.execute_tool(
                         tool_name=tool_call.tool_name,
-                        args=tool_call.args_as_dict(),
+                        args=tool_args,
                         metrics=self._tool_metrics,
                         tool_call_id=tool_call.tool_call_id
                     )
+                    
+                    tool_duration_ms = int((time.time() - tool_start_time) * 1000)
+                    
+                    # Emit ToolCallCompleted event with result
+                    self._emit_event({
+                        "event": "ToolCallCompleted",
+                        "tool_name": tool_call.tool_name,
+                        "tool_call_id": tool_call.tool_call_id,
+                        "tool_result": result.content,
+                        "duration_ms": tool_duration_ms,
+                    })
                     
                     return ToolReturnPart(
                         tool_name=result.tool_name,
@@ -1146,8 +1275,29 @@ class Agent(BaseAgent):
                     )
                     
                 except ExternalExecutionPause:
+                    # Emit RunPaused event before re-raising
+                    self._emit_event({
+                        "event": "RunPaused",
+                        "pause_reason": "ExternalExecutionPause",
+                        "tools_awaiting_execution": [{
+                            "tool_name": tool_call.tool_name,
+                            "tool_call_id": tool_call.tool_call_id,
+                        }],
+                    })
                     raise
                 except Exception as e:
+                    tool_duration_ms = int((time.time() - tool_start_time) * 1000)
+                    
+                    # Emit ToolCallCompleted with error
+                    self._emit_event({
+                        "event": "ToolCallCompleted",
+                        "tool_name": tool_call.tool_name,
+                        "tool_call_id": tool_call.tool_call_id,
+                        "tool_result": None,
+                        "duration_ms": tool_duration_ms,
+                        "error": str(e),
+                    })
+                    
                     return ToolReturnPart(
                         tool_name=tool_call.tool_name,
                         content=f"Error executing tool: {str(e)}",
@@ -1289,6 +1439,13 @@ class Agent(BaseAgent):
                 input_preview=(task._original_input or task.description)[:100] if (task._original_input or task.description) else None
             )
             
+            # Emit CacheHit event
+            self._emit_event({
+                "event": "CacheHit",
+                "cache_method": task.cache_method,
+                "similarity": similarity,
+            })
+            
             return cached_response
         else:
             from upsonic.utils.printing import cache_miss
@@ -1296,6 +1453,13 @@ class Agent(BaseAgent):
                 cache_method=task.cache_method,
                 input_preview=(task._original_input or task.description)[:100] if (task._original_input or task.description) else None
             )
+            
+            # Emit CacheMiss event
+            self._emit_event({
+                "event": "CacheMiss",
+                "cache_method": task.cache_method,
+            })
+            
             return None
     
     async def _apply_user_policy(self, task: "Task") -> tuple[Optional["Task"], bool]:
@@ -1310,11 +1474,25 @@ class Agent(BaseAgent):
         
         from upsonic.safety_engine.models import PolicyInput
         
+        # Emit PolicyCheckStarted event
+        self._emit_event({
+            "event": "PolicyCheckStarted",
+            "policy_type": "user",
+        })
+        
         policy_input = PolicyInput(input_texts=[task.description])
         result = await self.user_policy_manager.execute_policies_async(
             policy_input,
             check_type="User Input Check"
         )
+        
+        # Emit PolicyCheckCompleted event
+        self._emit_event({
+            "event": "PolicyCheckCompleted",
+            "policy_type": "user",
+            "action_taken": result.action_taken,
+            "blocked": result.should_block(),
+        })
         
         if result.should_block():
             # Re-raise DisallowedOperation if it was caught by PolicyManager
@@ -1661,11 +1839,25 @@ class Agent(BaseAgent):
             response_text = str(task.response)
         
         if response_text:
+            # Emit PolicyCheckStarted event
+            self._emit_event({
+                "event": "PolicyCheckStarted",
+                "policy_type": "agent",
+            })
+            
             agent_policy_input = PolicyInput(input_texts=[response_text])
             result = await self.agent_policy_manager.execute_policies_async(
                 agent_policy_input,
                 check_type="Agent Output Check"
             )
+            
+            # Emit PolicyCheckCompleted event
+            self._emit_event({
+                "event": "PolicyCheckCompleted",
+                "policy_type": "agent",
+                "action_taken": result.action_taken,
+                "blocked": result.should_block(),
+            })
             
             # Apply the result
             if result.should_block():
@@ -1943,6 +2135,11 @@ class Agent(BaseAgent):
         self._stream_run_result._debug = debug
         self._stream_run_result._retry = retry
         
+        # Set agent identification for events
+        self._stream_run_result.agent_id = self.agent_id
+        self._stream_run_result.agent_name = self.name or self.get_agent_id()
+        self._stream_run_result.input = RunInput.from_task(task)
+        
         self._stream_run_result._state = state
         self._stream_run_result._graph_execution_id = graph_execution_id
         
@@ -2122,6 +2319,11 @@ class Agent(BaseAgent):
         self._stream_run_result._model = model
         self._stream_run_result._debug = debug
         self._stream_run_result._retry = retry
+        
+        # Set agent identification for events
+        self._stream_run_result.agent_id = self.agent_id
+        self._stream_run_result.agent_name = self.name or self.get_agent_id()
+        self._stream_run_result.input = RunInput.from_task(task)
         
         return self._stream_run_result
     
