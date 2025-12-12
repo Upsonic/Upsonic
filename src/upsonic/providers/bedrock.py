@@ -176,6 +176,9 @@ class BedrockProvider(Provider[BaseClient]):
         else:
             read_timeout = aws_read_timeout or float(os.getenv('AWS_READ_TIMEOUT', 300))
             connect_timeout = aws_connect_timeout or float(os.getenv('AWS_CONNECT_TIMEOUT', 60))
+            # Explicitly read region from environment if not provided
+            if region_name is None:
+                region_name = os.getenv('AWS_DEFAULT_REGION') or os.getenv('AWS_REGION')
             config: dict[str, Any] = {
                 'read_timeout': read_timeout,
                 'connect_timeout': connect_timeout,
@@ -190,9 +193,9 @@ class BedrockProvider(Provider[BaseClient]):
                     config['signature_version'] = 'bearer'
                 else:
                     session = boto3.Session(
-                        aws_access_key_id=aws_access_key_id,
-                        aws_secret_access_key=aws_secret_access_key,
-                        aws_session_token=aws_session_token,
+                        aws_access_key_id=aws_access_key_id or os.getenv('AWS_ACCESS_KEY_ID'),
+                        aws_secret_access_key=aws_secret_access_key or os.getenv('AWS_SECRET_ACCESS_KEY'),
+                        aws_session_token=aws_session_token or os.getenv('AWS_SESSION_TOKEN'),
                         region_name=region_name,
                         profile_name=profile_name,
                     )
