@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import os
 import typing
 from collections.abc import AsyncIterator, Iterable, Iterator, Mapping
 from contextlib import asynccontextmanager
@@ -13,6 +14,12 @@ import anyio
 import anyio.to_thread
 from botocore.exceptions import ClientError
 from typing_extensions import ParamSpec, assert_never
+
+try:
+    import boto3
+    BOTO3_AVAILABLE = True
+except ImportError:
+    BOTO3_AVAILABLE = False
 
 from upsonic.messages import (
     AudioUrl,
@@ -215,6 +222,7 @@ class BedrockConverseModel(Model):
 
     _model_name: BedrockModelName = field(repr=False)
     _provider: Provider[BaseClient] = field(repr=False)
+    _inference_profile_arn: str | None = field(repr=False, default=None)
 
     def __init__(
         self,
@@ -251,8 +259,120 @@ class BedrockConverseModel(Model):
 
     @property
     def model_name(self) -> str:
-        """The model name."""
-        return self._model_name
+        """The model name or inference profile ARN."""
+        return self._inference_profile_arn or self._model_name
+    
+    def _find_inference_profile_for_model(self, model_id: str) -> str | None:
+        """Find an inference profile that contains the given model ID, or create one if needed."""
+        if not BOTO3_AVAILABLE:
+            return None
+        
+        try:
+            # Get region from client
+            region = self.client.meta.region_name
+            
+            # Create Bedrock control plane client (not runtime)
+            session = boto3.Session(
+                aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+                aws_session_token=os.getenv('AWS_SESSION_TOKEN'),
+                region_name=region,
+            )
+            bedrock_client = session.client('bedrock', region_name=region)
+            
+            # Try to list inference profiles
+            try:
+                # Try different possible API method names
+                if hasattr(bedrock_client, 'list_inference_profiles'):
+                    response = bedrock_client.list_inference_profiles()
+                elif hasattr(bedrock_client, 'list_inference_profile'):
+                    response = bedrock_client.list_inference_profile()
+                else:
+                    # API might not be available, try to create one
+                    return self._create_inference_profile_for_model(bedrock_client, model_id, region)
+                
+                profiles = response.get('inferenceProfileSummaries', []) or response.get('inferenceProfiles', [])
+                
+                # Find a profile that contains this model
+                for profile in profiles:
+                    profile_arn = profile.get('inferenceProfileArn', '') or profile.get('arn', '')
+                    profile_id = profile.get('inferenceProfileId', '') or profile.get('id', '')
+                    
+                    if not profile_arn or not profile_id:
+                        continue
+                    
+                    # Get profile details to check models
+                    try:
+                        if hasattr(bedrock_client, 'get_inference_profile'):
+                            profile_details = bedrock_client.get_inference_profile(
+                                inferenceProfileIdentifier=profile_id
+                            )
+                        else:
+                            continue
+                        
+                        model_units = profile_details.get('modelUnits', []) or profile_details.get('models', [])
+                        
+                        # Check if any model unit contains our model
+                        for model_unit in model_units:
+                            model_identifier = model_unit.get('modelIdentifier', '') or model_unit.get('modelId', '')
+                            # Check if model ID matches (with or without version)
+                            if model_id in model_identifier or model_identifier in model_id:
+                                return profile_arn
+                    except ClientError:
+                        # Skip if we can't get profile details
+                        continue
+                
+                # No profile found, try to create one
+                return self._create_inference_profile_for_model(bedrock_client, model_id, region)
+            except (ClientError, AttributeError):
+                # If list API doesn't exist or fails, try to create one
+                return self._create_inference_profile_for_model(bedrock_client, model_id, region)
+        except Exception:
+            # Fail silently and return None
+            return None
+        
+        return None
+    
+    def _create_inference_profile_for_model(self, bedrock_client: Any, model_id: str, region: str) -> str | None:
+        """Create an inference profile for the given model ID."""
+        try:
+            # Generate a profile name based on model ID
+            profile_name = f"upsonic-auto-{model_id.replace('.', '-').replace(':', '-')[:50]}"
+            
+            # Try to create inference profile
+            try:
+                if hasattr(bedrock_client, 'create_inference_profile'):
+                    response = bedrock_client.create_inference_profile(
+                        inferenceProfileName=profile_name,
+                        modelUnits=[
+                            {
+                                'modelIdentifier': model_id,
+                                'initialCapacity': 1,
+                            }
+                        ]
+                    )
+                elif hasattr(bedrock_client, 'create_inference_profile_v2'):
+                    response = bedrock_client.create_inference_profile_v2(
+                        name=profile_name,
+                        modelUnits=[
+                            {
+                                'modelIdentifier': model_id,
+                            }
+                        ]
+                    )
+                else:
+                    return None
+                
+                return response.get('inferenceProfileArn') or response.get('arn')
+            except ClientError as e:
+                # If creation fails (e.g., permission denied), return None
+                error_code = e.response.get('Error', {}).get('Code', '')
+                if error_code in ('AccessDenied', 'UnauthorizedOperation'):
+                    return None
+                # For other errors, also return None (profile might already exist)
+                return None
+        except Exception:
+            return None
 
     @property
     def system(self) -> str:
@@ -457,6 +577,65 @@ class BedrockConverseModel(Model):
                 model_response = await anyio.to_thread.run_sync(functools.partial(self.client.converse, **params))
         except ClientError as e:
             status_code = e.response.get('ResponseMetadata', {}).get('HTTPStatusCode', 500)
+            error_message = e.response.get('Error', {}).get('Message', '')
+            
+            # Check if this is an inference profile requirement error
+            if 'inference profile' in error_message.lower() and 'on-demand throughput' in error_message.lower():
+                # Try to automatically find or create an inference profile
+                if not self._inference_profile_arn:
+                    inference_profile_arn = self._find_inference_profile_for_model(self._model_name)
+                    if inference_profile_arn:
+                        # Update to use inference profile and retry
+                        self._inference_profile_arn = inference_profile_arn
+                        # Retry the request with inference profile
+                        params['modelId'] = inference_profile_arn
+                        try:
+                            if stream:
+                                model_response = await anyio.to_thread.run_sync(
+                                    functools.partial(self.client.converse_stream, **params)
+                                )
+                            else:
+                                model_response = await anyio.to_thread.run_sync(
+                                    functools.partial(self.client.converse, **params)
+                                )
+                            return model_response
+                        except ClientError as retry_e:
+                            # If retry also fails, try fallback model
+                            retry_status = retry_e.response.get('ResponseMetadata', {}).get('HTTPStatusCode', 500)
+                            retry_error = retry_e.response.get('Error', {}).get('Message', '')
+                            # Fall through to try fallback model
+                            error_message = retry_error
+                
+                # If we couldn't find/create an inference profile, try Amazon Titan as fallback
+                # Amazon Titan models typically don't require inference profiles
+                if 'anthropic' in self._model_name.lower() or 'claude' in self._model_name.lower():
+                    # Try Amazon Titan Text Express as fallback
+                    fallback_model = 'amazon.titan-text-express-v1'
+                    params['modelId'] = fallback_model
+                    try:
+                        if stream:
+                            model_response = await anyio.to_thread.run_sync(
+                                functools.partial(self.client.converse_stream, **params)
+                            )
+                        else:
+                            model_response = await anyio.to_thread.run_sync(
+                                functools.partial(self.client.converse, **params)
+                            )
+                        # Success with fallback - update model name
+                        self._model_name = fallback_model
+                        return model_response
+                    except ClientError:
+                        # Fallback also failed, raise original error
+                        pass
+                
+                # If we couldn't find an inference profile and fallback failed, raise helpful error
+                raise UserError(
+                    f"Model '{self._model_name}' requires an inference profile, but none could be found or created automatically. "
+                    f"Please create an inference profile in AWS Bedrock console that includes this model, then use its ARN:\n"
+                    f"   BedrockConverseModel(model_name='arn:aws:bedrock:REGION:ACCOUNT:inference-profile/PROFILE-NAME')\n\n"
+                    f"Original error: {error_message}"
+                ) from e
+            
             raise ModelHTTPError(status_code=status_code, model_name=self.model_name, body=e.response) from e
         return model_response
 
