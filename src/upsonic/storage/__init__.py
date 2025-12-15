@@ -1,10 +1,9 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
-from .base import Storage
-from .types import SessionId, UserId
-
 if TYPE_CHECKING:
+    from .base import Storage
+    from .types import SessionId, UserId
     from .providers import (
         InMemoryStorage,
         JSONStorage,
@@ -18,6 +17,17 @@ if TYPE_CHECKING:
         UserProfile
     )
     from .memory import Memory
+
+def _get_base_classes():
+    """Lazy import of base classes."""
+    from .base import Storage
+    from .types import SessionId, UserId
+    
+    return {
+        'Storage': Storage,
+        'SessionId': SessionId,
+        'UserId': UserId,
+    }
 
 def _get_provider_classes():
     """Lazy import of provider classes."""
@@ -61,19 +71,30 @@ def _get_memory_classes():
 
 def __getattr__(name: str) -> Any:
     """Lazy loading of heavy modules and classes."""
+    # Base classes
+    base_classes = _get_base_classes()
+    if name in base_classes:
+        return base_classes[name]
+    
+    # Provider classes
     provider_classes = _get_provider_classes()
     if name in provider_classes:
         return provider_classes[name]
     
+    # Session classes
     session_classes = _get_session_classes()
     if name in session_classes:
         return session_classes[name]
     
+    # Memory classes
     memory_classes = _get_memory_classes()
     if name in memory_classes:
         return memory_classes[name]
     
-    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+    raise AttributeError(
+        f"module '{__name__}' has no attribute '{name}'. "
+        f"Please import from the appropriate sub-module."
+    )
 __all__ = [
     "Storage",
 

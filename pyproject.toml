@@ -1,6 +1,6 @@
 [project]
 name = "upsonic"
-version = "0.68.3"
+version = "0.69.0"
 description = "Agent Framework For Fintech"
 readme = "README.md"
 authors = [
@@ -135,9 +135,12 @@ ocr = [
     "pytesseract>=0.3.13",
     "rapidocr-onnxruntime>=1.4.4",
 ]
-ocr-gpu = []
+
 custom-tools = [
     "slack-sdk>=3.38.0",
+]
+safety-engine = [
+    "detoxify>=0.5.2",
 ]
 
 [project.scripts]

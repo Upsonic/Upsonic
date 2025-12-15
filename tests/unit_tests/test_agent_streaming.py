@@ -13,7 +13,8 @@ from upsonic.storage.providers.in_memory import InMemoryStorage
 from upsonic.models import Model
 from upsonic.messages.messages import (
     ModelRequest, ModelResponse, TextPart, PartStartEvent, 
-    PartDeltaEvent, FinalResultEvent, UserPromptPart, SystemPromptPart
+    PartDeltaEvent, FinalResultEvent, UserPromptPart, SystemPromptPart,
+    TextPartDelta
 )
 
 
@@ -61,8 +62,8 @@ class MockModel(Model):
         # Create mock streaming events
         events = [
             PartStartEvent(index=0, part=TextPart(content="Hello")),
-            PartDeltaEvent(index=0, delta=Mock(content_delta=" world")),
-            PartDeltaEvent(index=0, delta=Mock(content_delta="!")),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta=" world")),
+            PartDeltaEvent(index=0, delta=TextPartDelta(content_delta="!")),
             FinalResultEvent(tool_name=None, tool_call_id=None)
         ]
         
@@ -258,8 +259,10 @@ class TestAgentStreaming:
             # Should have received various event types
             assert len(events) > 0
             event_types = [type(event).__name__ for event in events]
-            assert "PartStartEvent" in event_types
-            assert "FinalResultEvent" in event_types
+            # PartStartEvent is converted to TextDeltaEvent by the pipeline
+            assert "TextDeltaEvent" in event_types
+            # FinalResultEvent is converted to FinalOutputEvent by the pipeline
+            assert "FinalOutputEvent" in event_types
     
     @pytest.mark.asyncio
     async def test_stream_events_outside_context_error(self, agent, simple_task):

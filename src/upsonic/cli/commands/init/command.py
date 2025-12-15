@@ -7,9 +7,8 @@ def init_command() -> int:
     Initialize a new Upsonic agent project.
     
     Prompts the user for an agent name and creates:
-    - src/io.py: Input/output schema definitions
     - src/main.py: Main agent file
-    - upsonic_configs.json: Configuration file with agent name
+    - upsonic_configs.json: Configuration file with agent settings
     
     Returns:
         Exit code (0 for success, non-zero for failure).
@@ -39,14 +38,8 @@ def init_command() -> int:
         src_dir = current_dir / "src"
         
         # Check if src directory already exists and has files
-        io_py_path = src_dir / "io.py"
         main_py_path = src_dir / "main.py"
         config_json_path = current_dir / "upsonic_configs.json"
-        
-        if io_py_path.exists():
-            if not confirm_overwrite(io_py_path):
-                print_cancelled()
-                return 1
         
         if main_py_path.exists():
             if not confirm_overwrite(main_py_path):
@@ -61,40 +54,17 @@ def init_command() -> int:
         # Create src directory if it doesn't exist
         src_dir.mkdir(exist_ok=True)
         
-        # Create io.py
-        io_py_content = """inputs = [
-    {
-        "name": "question",
-        "description": "The mail to analyze",
-        "type": "string",
-        "default": None,
-        "required": True
-    }
-]
-
-outputs = [
-    {
-        "name": "answer",
-        "description": "The action list to the person",
-        "type": "string"
-    }
-]
-"""
-        
-        io_py_path.write_text(io_py_content, encoding="utf-8")
-        print_file_created(io_py_path)
-        
-        # Create main.py (renamed from agent.py)
+        # Create main.py
         main_py_content = """from upsonic import Task, Agent
 
 
 async def main(inputs):
-    question = inputs.get("question")
-    answering_task = Task(f"Answer the user question {question}")
+    user_query = inputs.get("user_query")
+    answering_task = Task(f"Answer the user question {user_query}")
     agent = Agent()
     result = await agent.print_do_async(answering_task)
     return {
-        "answer": result
+        "bot_response": result
     }
 """
         
@@ -118,6 +88,11 @@ async def main(inputs):
                     "type": "number",
                     "description": "The number of runners for the Upsonic API",
                     "default": 1
+                },
+                "NEW_FEATURE_FLAG": {
+                    "type": "string",
+                    "description": "New feature flag added in version 2.0",
+                    "default": "enabled"
                 }
             },
             "machine_spec": {
@@ -126,7 +101,7 @@ async def main(inputs):
                 "storage": 1024
             },
             "agent_name": agent_name,
-            "description": "An Upsonic AI agent that processes user inputs and generates intelligent responses",
+            "description": "UPDATED VERSION 2.0 - An enhanced Upsonic AI agent with improved response generation",
             "icon": "book",
             "language": "book",
             "streamlit": False,
@@ -147,9 +122,9 @@ async def main(inputs):
                     "redis>=5.0.0"
                 ],
                 "streamlit": [
-                    "streamlit==1.40.0",
-                    "pandas",
-                    "numpy==2.2.6"
+                    "streamlit==1.32.2",
+                    "pandas==2.2.1",
+                    "numpy==1.26.4"
                 ],
                 "development": [
                     "watchdog",
@@ -159,20 +134,24 @@ async def main(inputs):
                     "streamlit-autorefresh"
                 ]
             },
+            "entrypoints": {
+                "api_file": "src/main.py",
+                "streamlit_file": "streamlit_app.py"
+            },
             "input_schema": {
                 "inputs": {
-                    "question": {
+                    "user_query": {
                         "type": "string",
-                        "description": "The question of the User",
+                        "description": "User's input question for the agent",
                         "required": True,
                         "default": None
                     }
                 }
             },
             "output_schema": {
-                "answer": {
+                "bot_response": {
                     "type": "string",
-                    "description": "Answer of the agent"
+                    "description": "Agent's generated response"
                 }
             }
         }
@@ -184,7 +163,7 @@ async def main(inputs):
         print_file_created(config_json_path)
         
         # Print success message with created files
-        print_init_success(agent_name, [str(io_py_path), str(main_py_path), str(config_json_path)])
+        print_init_success(agent_name, [str(main_py_path), str(config_json_path)])
         return 0
         
     except KeyboardInterrupt:
@@ -195,4 +174,3 @@ async def main(inputs):
         from upsonic.cli.printer import print_error
         print_error(f"An error occurred: {str(e)}")
         return 1
-

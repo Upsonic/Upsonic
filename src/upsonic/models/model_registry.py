@@ -925,6 +925,10 @@ MODEL_REGISTRY: Dict[str, ModelMetadata] = {
     "o1-pro": O1_PRO,
     "openai/o1-mini": O1_MINI,
     "o1-mini": O1_MINI,
+
+    # Azure (using OpenAI metadata)
+    "azure/gpt-4o": GPT_4O,
+    "azure/gpt-4o-mini": GPT_4O_MINI,
     
     # Anthropic
     "anthropic/claude-4-opus-20250514": CLAUDE_4_OPUS,

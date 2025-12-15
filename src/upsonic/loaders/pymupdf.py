@@ -37,13 +37,15 @@ class PyMuPDFLoader(BaseLoader):
     processing options driven by the PyMuPDFLoaderConfig.
     """
 
-    def __init__(self, config: PyMuPDFLoaderConfig):
+    def __init__(self, config: Optional[PyMuPDFLoaderConfig] = None):
         """
         Initializes the PyMuPDFLoader with its specific configuration.
 
         Args:
             config: A PyMuPDFLoaderConfig object with settings for PDF processing.
         """
+        if config is None:
+            config = PyMuPDFLoaderConfig()
         if not _PYMUPDF_AVAILABLE:
             from upsonic.utils.printing import import_error
             import_error(

@@ -13,6 +13,7 @@ from .fraud_detection_policies import *
 from .phishing_policies import *
 from .insider_threat_policies import *
 from .tool_safety_policies import *
+from .profanity_policies import *
 
 __all__ = [
     # Original policies
@@ -134,4 +135,64 @@ __all__ = [
     "MaliciousToolCallBlockPolicy_LLM",
     "MaliciousToolCallRaiseExceptionPolicy",
     "MaliciousToolCallRaiseExceptionPolicy_LLM",
+    
+    # Profanity Detection Policies - Block Policies
+    "ProfanityBlockPolicy",
+    "ProfanityBlockPolicy_Original",
+    "ProfanityBlockPolicy_Multilingual",
+    "ProfanityBlockPolicy_OriginalSmall",
+    "ProfanityBlockPolicy_UnbiasedSmall",
+    "ProfanityBlockPolicy_LowThreshold",
+    "ProfanityBlockPolicy_HighThreshold",
+    "ProfanityBlockPolicy_CPU",
+    "ProfanityBlockPolicy_GPU",
+    "ProfanityBlockPolicy_Original_GPU",
+    "ProfanityBlockPolicy_Multilingual_GPU",
+    "ProfanityBlockPolicy_OriginalSmall_GPU",
+    "ProfanityBlockPolicy_UnbiasedSmall_GPU",
+    
+    # Profanity Detection Policies - Block Policies LLM
+    "ProfanityBlockPolicy_LLM",
+    "ProfanityBlockPolicy_LLM_Original",
+    "ProfanityBlockPolicy_LLM_Multilingual",
+    "ProfanityBlockPolicy_LLM_OriginalSmall",
+    "ProfanityBlockPolicy_LLM_UnbiasedSmall",
+    "ProfanityBlockPolicy_LLM_LowThreshold",
+    "ProfanityBlockPolicy_LLM_HighThreshold",
+    "ProfanityBlockPolicy_LLM_CPU",
+    "ProfanityBlockPolicy_LLM_GPU",
+    "ProfanityBlockPolicy_LLM_Original_GPU",
+    "ProfanityBlockPolicy_LLM_Multilingual_GPU",
+    "ProfanityBlockPolicy_LLM_OriginalSmall_GPU",
+    "ProfanityBlockPolicy_LLM_UnbiasedSmall_GPU",
+    
+    # Profanity Detection Policies - Raise Exception Policies
+    "ProfanityRaiseExceptionPolicy",
+    "ProfanityRaiseExceptionPolicy_Original",
+    "ProfanityRaiseExceptionPolicy_Multilingual",
+    "ProfanityRaiseExceptionPolicy_OriginalSmall",
+    "ProfanityRaiseExceptionPolicy_UnbiasedSmall",
+    "ProfanityRaiseExceptionPolicy_LowThreshold",
+    "ProfanityRaiseExceptionPolicy_HighThreshold",
+    "ProfanityRaiseExceptionPolicy_CPU",
+    "ProfanityRaiseExceptionPolicy_GPU",
+    "ProfanityRaiseExceptionPolicy_Original_GPU",
+    "ProfanityRaiseExceptionPolicy_Multilingual_GPU",
+    "ProfanityRaiseExceptionPolicy_OriginalSmall_GPU",
+    "ProfanityRaiseExceptionPolicy_UnbiasedSmall_GPU",
+    
+    # Profanity Detection Policies - Raise Exception Policies LLM
+    "ProfanityRaiseExceptionPolicy_LLM",
+    "ProfanityRaiseExceptionPolicy_LLM_Original",
+    "ProfanityRaiseExceptionPolicy_LLM_Multilingual",
+    "ProfanityRaiseExceptionPolicy_LLM_OriginalSmall",
+    "ProfanityRaiseExceptionPolicy_LLM_UnbiasedSmall",
+    "ProfanityRaiseExceptionPolicy_LLM_LowThreshold",
+    "ProfanityRaiseExceptionPolicy_LLM_HighThreshold",
+    "ProfanityRaiseExceptionPolicy_LLM_CPU",
+    "ProfanityRaiseExceptionPolicy_LLM_GPU",
+    "ProfanityRaiseExceptionPolicy_LLM_Original_GPU",
+    "ProfanityRaiseExceptionPolicy_LLM_Multilingual_GPU",
+    "ProfanityRaiseExceptionPolicy_LLM_OriginalSmall_GPU",
+    "ProfanityRaiseExceptionPolicy_LLM_UnbiasedSmall_GPU",
 ]

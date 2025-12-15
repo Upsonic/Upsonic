@@ -4,11 +4,14 @@ Concrete Step Implementations
 This module contains all the concrete step implementations for the agent pipeline.
 Each step handles a specific part of the agent execution flow. All steps must execute;
 there is no skipping. If any error occurs, it's raised immediately to the user.
+
+Steps emit events for streaming visibility, allowing users to track execution progress
+and state changes in real-time.
 """
 
 import asyncio
 import time
-from typing import Any, Optional, AsyncIterator
+from typing import Any, Optional, AsyncIterator, List
 from .step import Step, StepResult, StepStatus
 from .context import StepContext
 
@@ -23,6 +26,19 @@ class InitializationStep(Step):
     @property
     def description(self) -> str:
         return "Initialize agent for execution"
+    
+    def get_step_events(self, context: StepContext, result: StepResult) -> List[Any]:
+        """Emit agent initialization event."""
+        from upsonic.agent.events import AgentInitializedEvent
+        
+        agent_id = "unknown"
+        if hasattr(context.agent, 'get_agent_id'):
+            agent_id = context.agent.get_agent_id()
+        
+        return [AgentInitializedEvent(
+            agent_id=agent_id,
+            is_streaming=context.is_streaming
+        )]
     
     async def execute(self, context: StepContext) -> StepResult:
         """Initialize agent state for new execution."""
@@ -62,7 +78,14 @@ class CacheCheckStep(Step):
     
     async def execute(self, context: StepContext) -> StepResult:
         """Check cache for existing response."""
+        from upsonic.agent.events import CacheCheckEvent, CacheHitEvent, CacheMissEvent
+        
         if not context.task.enable_cache or context.task.is_paused:
+            # Emit event for cache disabled
+            if context.is_streaming:
+                self._emit_event(CacheCheckEvent(
+                    cache_enabled=False
+                ), context)
             return StepResult(
                 status=StepStatus.SUCCESS,
                 message="Caching not enabled or task paused",
@@ -89,6 +112,7 @@ class CacheCheckStep(Step):
             )
         
         input_text = context.task._original_input or context.task.description
+        input_preview = input_text[:100] if input_text else None
         cached_response = await context.task.get_cached_response(input_text, context.model)
         
         if cached_response is not None:
@@ -112,6 +136,22 @@ class CacheCheckStep(Step):
             # Early return flag - we'll handle this specially
             context.task._cached_result = True
             
+            # Emit cache hit events
+            if context.is_streaming:
+                cached_preview = str(cached_response)[:100] if cached_response else None
+                self._emit_event(CacheCheckEvent(
+                    cache_enabled=True,
+                    cache_method=context.task.cache_method,
+                    cache_hit=True,
+                    similarity=similarity,
+                    input_preview=input_preview
+                ), context)
+                self._emit_event(CacheHitEvent(
+                    cache_method=context.task.cache_method,
+                    similarity=similarity,
+                    cached_response_preview=cached_preview
+                ), context)
+            
             return StepResult(
                 status=StepStatus.SUCCESS,
                 message="Cache hit - using cached response",
@@ -124,6 +164,19 @@ class CacheCheckStep(Step):
                 input_preview=(context.task._original_input or context.task.description)[:100] 
                     if (context.task._original_input or context.task.description) else None
             )
+            
+            # Emit cache miss events
+            if context.is_streaming:
+                self._emit_event(CacheCheckEvent(
+                    cache_enabled=True,
+                    cache_method=context.task.cache_method,
+                    cache_hit=False,
+                    input_preview=input_preview
+                ), context)
+                self._emit_event(CacheMissEvent(
+                    cache_method=context.task.cache_method,
+                    reason="No matching cache entry found"
+                ), context)
             
             return StepResult(
                 status=StepStatus.SUCCESS,
@@ -145,6 +198,8 @@ class UserPolicyStep(Step):
     
     async def execute(self, context: StepContext) -> StepResult:
         """Apply user policy to task input."""
+        from upsonic.agent.events import PolicyCheckEvent
+        
         if not context.agent.user_policy_manager.has_policies() or not context.task.description or context.task.is_paused:
             return StepResult(
                 status=StepStatus.SUCCESS,
@@ -160,6 +215,9 @@ class UserPolicyStep(Step):
                 execution_time=0.0
             )
         
+        policy_count = len(context.agent.user_policy_manager._policies) if hasattr(context.agent.user_policy_manager, '_policies') else 0
+        original_content = context.task.description
+        
         # Use the agent's _apply_user_policy method (consistent with AgentPolicyStep)
         processed_task, should_continue = await context.agent._apply_user_policy(context.task)
         context.task = processed_task
@@ -170,18 +228,44 @@ class UserPolicyStep(Step):
             context.agent._run_result.output = context.final_output
             context.task._policy_blocked = True
             
+            if context.is_streaming:
+                self._emit_event(PolicyCheckEvent(
+                    policy_type='user_policy',
+                    action='block',
+                    policies_checked=policy_count,
+                    content_modified=False,
+                    blocked_reason="Content blocked by user policy"
+                ), context)
+            
             return StepResult(
                 status=StepStatus.SUCCESS,
                 message="User input blocked by policy",
                 execution_time=0.0
             )
-        elif context.task.description != (context.task._original_input or context.task.description):
+        elif context.task.description != original_content:
             # Content was modified (REPLACE/ANONYMIZE)
+            if context.is_streaming:
+                self._emit_event(PolicyCheckEvent(
+                    policy_type='user_policy',
+                    action='modify',
+                    policies_checked=policy_count,
+                    content_modified=True
+                ), context)
+            
             return StepResult(
                 status=StepStatus.SUCCESS,
                 message="User input modified by policy",
                 execution_time=0.0
             )
+        
+        # Content passed without modification
+        if context.is_streaming:
+            self._emit_event(PolicyCheckEvent(
+                policy_type='user_policy',
+                action='pass',
+                policies_checked=policy_count,
+                content_modified=False
+            ), context)
         
         return StepResult(
             status=StepStatus.SUCCESS,
@@ -203,11 +287,26 @@ class ModelSelectionStep(Step):
     
     async def execute(self, context: StepContext) -> StepResult:
         """Select the appropriate model."""
+        from upsonic.agent.events import ModelSelectedEvent
+        
+        is_override = context.model is not None
+        
         if context.model:
             from upsonic.models import infer_model
             context.model = infer_model(context.model)
         else:
             context.model = context.agent.model
+        
+        # Get provider name if available
+        provider = getattr(context.model, 'system', None) or getattr(context.model, '_provider', None)
+        provider_name = str(provider.name) if hasattr(provider, 'name') else str(provider) if provider else None
+        
+        if context.is_streaming:
+            self._emit_event(ModelSelectedEvent(
+                model_name=context.model.model_name,
+                provider=provider_name,
+                is_override=is_override
+            ), context)
         
         return StepResult(
             status=StepStatus.SUCCESS,
@@ -253,12 +352,36 @@ class ToolSetupStep(Step):
     
     async def execute(self, context: StepContext) -> StepResult:
         """Setup tools for the task."""
+        from upsonic.agent.events import ToolsConfiguredEvent
+        
         # Setup task-specific tools
         context.agent._setup_task_tools(context.task)
         
         # Set current task on PlanningToolKit if it exists (for write_todos)
         if hasattr(context.agent, '_planning_toolkit') and context.agent._planning_toolkit:
             context.agent._planning_toolkit.set_current_task(context.task)
+        
+        # Get tool information for event
+        tool_names = []
+        has_mcp = False
+        
+        if hasattr(context.agent, '_tool_manager') and context.agent._tool_manager:
+            tool_defs = context.agent._tool_manager.get_tool_definitions()
+            tool_names = [t.name for t in tool_defs]
+            
+            # Check for MCP handlers
+            from upsonic.tools.mcp import MCPHandler, MultiMCPHandler
+            all_tools = context.agent.tools or []
+            if context.task and hasattr(context.task, 'tools') and context.task.tools:
+                all_tools = list(all_tools) + list(context.task.tools)
+            has_mcp = any(isinstance(t, (MCPHandler, MultiMCPHandler)) for t in all_tools)
+        
+        if context.is_streaming:
+            self._emit_event(ToolsConfiguredEvent(
+                tool_count=len(tool_names),
+                tool_names=tool_names,
+                has_mcp_handlers=has_mcp
+            ), context)
         
         return StepResult(
             status=StepStatus.SUCCESS,
@@ -339,6 +462,8 @@ class MessageBuildStep(Step):
     
     async def execute(self, context: StepContext) -> StepResult:
         """Build model request messages with memory manager."""
+        from upsonic.agent.events import MessagesBuiltEvent
+        
         # Skip if we have cached result or policy blocked
         if hasattr(context.task, '_cached_result') and context.task._cached_result:
             return StepResult(
@@ -360,6 +485,14 @@ class MessageBuildStep(Step):
             context.messages = context.continuation_messages
             context.agent._current_messages = context.continuation_messages
             
+            if context.is_streaming:
+                self._emit_event(MessagesBuiltEvent(
+                    message_count=len(context.messages),
+                    has_system_prompt=False,
+                    has_memory_messages=True,
+                    is_continuation=True
+                ), context)
+            
             return StepResult(
                 status=StepStatus.SUCCESS,
                 message=f"Restored {len(context.messages)} messages from continuation",
@@ -379,6 +512,23 @@ class MessageBuildStep(Step):
             
             # Store memory handler reference for later steps
             context._memory_handler = memory_handler
+            
+            # Determine message characteristics
+            has_system = False
+            has_memory = len(memory_handler.get_message_history()) > 0
+            from upsonic.messages import ModelRequest, SystemPromptPart
+            if messages:
+                first_msg = messages[0]
+                if isinstance(first_msg, ModelRequest):
+                    has_system = any(isinstance(p, SystemPromptPart) for p in first_msg.parts)
+            
+            if context.is_streaming:
+                self._emit_event(MessagesBuiltEvent(
+                    message_count=len(messages),
+                    has_system_prompt=has_system,
+                    has_memory_messages=has_memory,
+                    is_continuation=False
+                ), context)
         
         return StepResult(
             status=StepStatus.SUCCESS,
@@ -400,6 +550,14 @@ class ModelExecutionStep(Step):
     
     async def execute(self, context: StepContext) -> StepResult:
         """Execute model request with guardrail support and memory manager."""
+        from upsonic.agent.events import (
+            ModelRequestStartEvent, 
+            ModelResponseEvent,
+            ToolCallEvent,
+            ToolResultEvent,
+            ExternalToolPauseEvent
+        )
+        
         # Skip if we have cached result or policy blocked
         if hasattr(context.task, '_cached_result') and context.task._cached_result:
             return StepResult(
@@ -416,6 +574,19 @@ class ModelExecutionStep(Step):
         
         from upsonic.tools.processor import ExternalExecutionPause
         from upsonic.agent.context_managers import MemoryManager
+        
+        # Emit model request start event
+        if context.is_streaming:
+            has_tools = bool(context.agent.tools or (context.task and context.task.tools))
+            tool_limit = getattr(context.agent, 'tool_call_limit', None)
+            
+            self._emit_event(ModelRequestStartEvent(
+                model_name=context.model.model_name,
+                is_streaming=False,
+                has_tools=has_tools,
+                tool_call_count=context.agent._tool_call_count,
+                tool_call_limit=tool_limit
+            ), context)
         
         try:
             if context.is_continuation and context.continuation_tool_results:
@@ -468,6 +639,20 @@ class ModelExecutionStep(Step):
                 
                 # Store memory handler reference for later steps
                 context._memory_handler = memory_handler
+                
+                # Emit model response event
+                if context.is_streaming:
+                    from upsonic.messages import TextPart, ToolCallPart
+                    has_text = any(isinstance(p, TextPart) for p in final_response.parts)
+                    tool_calls = [p for p in final_response.parts if isinstance(p, ToolCallPart)]
+                    
+                    self._emit_event(ModelResponseEvent(
+                        model_name=context.model.model_name,
+                        has_text=has_text,
+                        has_tool_calls=len(tool_calls) > 0,
+                        tool_call_count=len(tool_calls),
+                        finish_reason=final_response.finish_reason
+                    ), context)
             
             return StepResult(
                 status=StepStatus.SUCCESS,
@@ -487,6 +672,14 @@ class ModelExecutionStep(Step):
             
             context.final_output = context.task.response
             context.agent._run_result.output = context.final_output
+            
+            # Emit external tool pause event
+            if context.is_streaming:
+                self._emit_event(ExternalToolPauseEvent(
+                    tool_name=e.external_call.tool_name,
+                    tool_call_id=e.external_call.tool_call_id,
+                    tool_args=e.external_call.args_as_dict() if hasattr(e.external_call, 'args_as_dict') else {}
+                ), context)
             
             # CRITICAL: We need to extract the response with tool_calls that triggered the pause
             # This response was generated but not yet added to messages when the exception was thrown
@@ -575,7 +768,13 @@ class ReflectionStep(Step):
     
     async def execute(self, context: StepContext) -> StepResult:
         """Apply reflection to improve output."""
+        from upsonic.agent.events import ReflectionEvent
+        
         if not (context.agent.reflection_processor and context.agent.reflection):
+            if context.is_streaming:
+                self._emit_event(ReflectionEvent(
+                    reflection_applied=False
+                ), context)
             return StepResult(
                 status=StepStatus.SUCCESS,
                 message="Reflection not enabled",
@@ -602,6 +801,9 @@ class ReflectionStep(Step):
                 execution_time=0.0
             )
         
+        original_output = context.final_output
+        original_preview = str(original_output)[:100] if original_output else None
+        
         improved_output = await context.agent.reflection_processor.process_with_reflection(
             context.agent,
             context.task,
@@ -609,6 +811,17 @@ class ReflectionStep(Step):
         )
         context.task._response = improved_output
         context.final_output = improved_output
+        
+        improved_preview = str(improved_output)[:100] if improved_output else None
+        improvement_made = str(original_output) != str(improved_output)
+        
+        if context.is_streaming:
+            self._emit_event(ReflectionEvent(
+                reflection_applied=True,
+                improvement_made=improvement_made,
+                original_preview=original_preview,
+                improved_preview=improved_preview
+            ), context)
         
         return StepResult(
             status=StepStatus.SUCCESS,
@@ -713,6 +926,8 @@ class MemoryMessageTrackingStep(Step):
     
     async def execute(self, context: StepContext) -> StepResult:
         """Track messages in memory handler using async context."""
+        from upsonic.agent.events import MemoryUpdateEvent
+        
         # Skip if cache hit or policy blocked
         if hasattr(context.task, '_cached_result') and context.task._cached_result:
             return StepResult(
@@ -733,16 +948,34 @@ class MemoryMessageTrackingStep(Step):
         memory_manager = MemoryManager(context.agent.memory)
         async with memory_manager.manage_memory() as memory_handler:
             # Add new messages to run result
+            # Note: context.response is already in context.messages (added in ModelExecutionStep)
+            # So we only need to add the new messages slice, not the response separately
             history_length = len(memory_handler.get_message_history())
             new_messages_start = history_length
             
+            messages_added = 0
             if context.messages and new_messages_start < len(context.messages):
-                context.agent._run_result.add_messages(context.messages[new_messages_start:])
-            if context.response:
-                context.agent._run_result.add_message(context.response)
+                # This includes the final response since it was appended in ModelExecutionStep
+                new_messages = context.messages[new_messages_start:]
+                context.agent._run_result.add_messages(new_messages)
+                messages_added = len(new_messages)
             
             # Process response in memory
             memory_handler.process_response(context.agent._run_result)
+            
+            # Get memory type
+            if context.is_streaming:
+                memory_type = None
+                if context.agent.memory:
+                    if hasattr(context.agent.memory, 'full_session_memory') and context.agent.memory.full_session_memory:
+                        memory_type = 'full_session'
+                    else:
+                        memory_type = 'session'
+                
+                self._emit_event(MemoryUpdateEvent(
+                    messages_added=messages_added,
+                    memory_type=memory_type
+                ), context)
         
         return StepResult(
             status=StepStatus.SUCCESS,
@@ -764,7 +997,13 @@ class ReliabilityStep(Step):
     
     async def execute(self, context: StepContext) -> StepResult:
         """Apply reliability layer with async context manager."""
+        from upsonic.agent.events import ReliabilityEvent
+        
         if not context.agent.reliability_layer:
+            if context.is_streaming:
+                self._emit_event(ReliabilityEvent(
+                    reliability_applied=False
+                ), context)
             return StepResult(
                 status=StepStatus.SUCCESS,
                 message="No reliability layer",
@@ -787,6 +1026,8 @@ class ReliabilityStep(Step):
         
         from upsonic.agent.context_managers import ReliabilityManager
         
+        original_output = context.final_output
+        
         # Use reliability manager with async context
         reliability_manager = ReliabilityManager(
             context.task,
@@ -799,6 +1040,14 @@ class ReliabilityStep(Step):
             context.task = processed_task
             context.final_output = processed_task.response
         
+        modifications_made = str(original_output) != str(context.final_output)
+        
+        if context.is_streaming:
+            self._emit_event(ReliabilityEvent(
+                reliability_applied=True,
+                modifications_made=modifications_made
+            ), context)
+        
         return StepResult(
             status=StepStatus.SUCCESS,
             message="Reliability applied",
@@ -807,7 +1056,15 @@ class ReliabilityStep(Step):
 
 
 class AgentPolicyStep(Step):
-    """Apply agent output policy."""
+    """Apply agent output policy with optional feedback loop.
+    
+    When agent_policy_feedback is enabled in the agent, this step will:
+    1. Check the agent's response against policies
+    2. If a violation occurs and retries are available, generate feedback
+    3. Inject the feedback as a user message and re-execute the model
+    4. Repeat until policy passes or loop count is exhausted
+    5. Apply the final action (block/modify) if still failing after loops
+    """
     
     @property
     def name(self) -> str:
@@ -818,7 +1075,9 @@ class AgentPolicyStep(Step):
         return "Apply agent output safety policy"
     
     async def execute(self, context: StepContext) -> StepResult:
-        """Apply agent policy to output."""
+        """Apply agent policy to output with feedback loop support."""
+        from upsonic.agent.events import PolicyCheckEvent, PolicyFeedbackEvent
+        
         if not context.agent.agent_policy_manager.has_policies() or not context.task.response:
             return StepResult(
                 status=StepStatus.SUCCESS,
@@ -840,19 +1099,136 @@ class AgentPolicyStep(Step):
                 execution_time=0.0
             )
         
-        processed_task = await context.agent._apply_agent_policy(context.task)
-        context.task = processed_task
-        context.final_output = processed_task.response
+        policy_count = len(context.agent.agent_policy_manager.policies) if hasattr(context.agent.agent_policy_manager, 'policies') else 0
+        original_response = context.task.response
+        
+        # Reset retry counter at start of new execution
+        context.agent.agent_policy_manager.reset_retry_count()
         
         # Update the run result output as well
         context.agent._run_result.output = context.final_output
+        # Feedback loop: keep trying until policy passes or retries exhausted
+        max_iterations = context.agent.agent_policy_manager.feedback_loop_count + 1  # +1 for initial check
+        iteration = 0
+        
+        while iteration < max_iterations:
+            iteration += 1
+            
+            # Apply agent policy - returns (task, feedback_message_or_none)
+            processed_task, feedback_message = await context.agent._apply_agent_policy(context.task)
+            
+            if feedback_message is None:
+                # Policy passed or final action applied (no retry needed)
+                context.task = processed_task
+                context.final_output = processed_task.response
+                context.agent._run_result.output = context.final_output
+                
+                # Emit event for policy check result
+                if context.is_streaming:
+                    if context.task.response != original_response:
+                        self._emit_event(PolicyCheckEvent(
+                            policy_type='agent_policy',
+                            action='modify',
+                            policies_checked=policy_count,
+                            content_modified=True
+                        ), context)
+                    else:
+                        self._emit_event(PolicyCheckEvent(
+                            policy_type='agent_policy',
+                            action='pass',
+                            policies_checked=policy_count,
+                            content_modified=False
+                        ), context)
+                
+                return StepResult(
+                    status=StepStatus.SUCCESS,
+                    message=f"Agent policies applied after {iteration} iteration(s)",
+                    execution_time=0.0
+                )
+            
+            # Feedback generated - need to re-execute the model
+            if context.agent.debug:
+                from upsonic.utils.printing import policy_feedback_retry
+                policy_feedback_retry(
+                    policy_type="agent_policy",
+                    retry_count=iteration,
+                    max_retries=max_iterations - 1
+                )
+            if context.is_streaming:
+                self._emit_event(PolicyFeedbackEvent(
+                    policy_type='agent_policy',
+                    feedback_message=feedback_message,
+                    retry_count=iteration,
+                    max_retries=context.agent.agent_policy_manager.feedback_loop_count
+                ), context)
+            # Increment retry counter in policy manager
+            context.agent.agent_policy_manager.increment_retry_count()
+            
+            # Re-execute the model with feedback message injected
+            await self._rerun_model_with_feedback(context, feedback_message)
+            
+            # Task response is now updated with new model output
+            # Loop back to check policy again
+        
+        # Should not reach here, but just in case
         
         return StepResult(
             status=StepStatus.SUCCESS,
-            message="Agent policies applied",
+            message="Agent policies applied (exhausted retries)",
             execution_time=0.0
         )
 
+    async def _rerun_model_with_feedback(self, context: StepContext, feedback_message: str) -> None:
+        """Re-execute the model with the feedback message as a user prompt.
+        
+        This injects the feedback as a correction prompt and re-runs the model,
+        updating the task response with the new output.
+        """
+        from upsonic.messages import UserPromptPart, ModelRequest, TextPart
+        from upsonic.agent.context_managers import MemoryManager
+        
+        # Create a correction prompt from the feedback
+        correction_prompt = (
+            f"[POLICY VIOLATION FEEDBACK]\n\n"
+            f"{feedback_message}\n\n"
+            f"Please revise your response to comply with the policy requirements."
+        )
+        
+        # Add the previous response and correction as messages
+        if context.response:
+            context.messages.append(context.response)
+        
+        correction_part = UserPromptPart(content=correction_prompt)
+        correction_message = ModelRequest(parts=[correction_part])
+        context.messages.append(correction_message)
+        
+        # Update current messages reference in agent
+        context.agent._current_messages = context.messages
+        
+        # Re-execute model request
+        model_params = context.agent._build_model_request_parameters(context.task)
+        model_params = context.model.customize_request_parameters(model_params)
+        
+        response = await context.model.request(
+            messages=context.messages,
+            model_settings=context.model.settings,
+            model_request_parameters=model_params
+        )
+        
+        # Handle response (including any tool calls)
+        final_response = await context.agent._handle_model_response(
+            response,
+            context.messages
+        )
+        
+        context.response = final_response
+        context.messages.append(final_response)
+        context.agent._current_messages = context.messages
+        
+        # Extract and update task output
+        output = context.agent._extract_output(final_response, context.task)
+        context.task._response = output
+        context.final_output = output
 
 class CacheStorageStep(Step):
     """Store the response in cache."""
@@ -867,6 +1243,8 @@ class CacheStorageStep(Step):
     
     async def execute(self, context: StepContext) -> StepResult:
         """Store response in cache."""
+        from upsonic.agent.events import CacheStoredEvent
+        
         if not (context.task.enable_cache and context.task.response):
             return StepResult(
                 status=StepStatus.SUCCESS,
@@ -890,6 +1268,12 @@ class CacheStorageStep(Step):
         
         input_text = context.task._original_input or context.task.description
         await context.task.store_cache_entry(input_text, context.task.response)
+        
+        if context.is_streaming:
+            self._emit_event(CacheStoredEvent(
+                cache_method=context.task.cache_method,
+                duration_minutes=context.task.cache_duration_minutes
+            ), context)
         
         if context.agent.debug:
             from upsonic.utils.printing import cache_stored
@@ -918,6 +1302,11 @@ class StreamModelExecutionStep(Step):
     def description(self) -> str:
         return "Execute model request with streaming"
     
+    @property
+    def supports_streaming(self) -> bool:
+        """This step supports streaming and yields events during execution."""
+        return True
+    
     async def execute(self, context: StepContext) -> StepResult:
         """This is not used in streaming mode - execute_stream is used instead."""
         return StepResult(
@@ -927,27 +1316,43 @@ class StreamModelExecutionStep(Step):
         )
     
     async def execute_stream(self, context: StepContext) -> AsyncIterator[Any]:
-        """Execute model request in streaming mode and yield events."""
-        from upsonic.messages import PartStartEvent, PartDeltaEvent, TextPart, FinalResultEvent, ToolCallPart, ModelRequest
+        """Execute model request in streaming mode and yield Agent events only."""
+        from upsonic.messages import PartStartEvent, PartDeltaEvent, TextPart, ToolCallPart, ModelRequest
+        from upsonic.agent.events import (
+            ModelRequestStartEvent,
+            TextDeltaEvent,
+            TextCompleteEvent,
+            ToolCallEvent,
+            ToolResultEvent,
+            FinalOutputEvent,
+            convert_llm_event_to_agent_event,
+        )
         
         start_time = time.time()
         accumulated_text = ""
         first_token_time = None
         
+        # Emit model request start event
+        has_tools = bool(context.agent.tools or (context.task and context.task.tools))
+        tool_limit = getattr(context.agent, 'tool_call_limit', None)
+        
+        yield ModelRequestStartEvent(
+            model_name=context.model.model_name,
+            is_streaming=True,
+            has_tools=has_tools,
+            tool_call_count=context.agent._tool_call_count,
+            tool_call_limit=tool_limit
+        )
+        
         # Skip if we have cached result or policy blocked
         if hasattr(context.task, '_cached_result') and context.task._cached_result:
-            # Stream cached response character by character to simulate real streaming
+            # Stream cached response as TextDeltaEvents
             cached_content = str(context.final_output)
             
-            # Yield PartStartEvent to begin the text part
-            yield PartStartEvent(index=0, part=TextPart(content=""))
-            
-            # Stream the cached content character by character
-            for i, char in enumerate(cached_content):
-                # Create a delta event for each character
-                from upsonic.messages import PartDeltaEvent, TextPartDelta
-                delta = TextPartDelta(content_delta=char)
-                yield PartDeltaEvent(index=0, delta=delta)
+            # Stream the cached content character by character as Agent events
+            for char in cached_content:
+                yield TextDeltaEvent(content=char)
+                accumulated_text += char
                 
                 # Update stream result if available
                 if context.stream_result:
@@ -956,8 +1361,9 @@ class StreamModelExecutionStep(Step):
                         first_token_time = time.time()
                         context.stream_result._first_token_time = first_token_time
             
-            # Yield final result event
-            yield FinalResultEvent(tool_name=None, tool_call_id=None)
+            # Yield text complete and final output events
+            yield TextCompleteEvent(content=cached_content)
+            yield FinalOutputEvent(output=cached_content, output_type='cached')
             
             # Update final output and completion status
             if context.stream_result:
@@ -973,7 +1379,8 @@ class StreamModelExecutionStep(Step):
             return
         
         if hasattr(context.task, '_policy_blocked') and context.task._policy_blocked:
-            yield FinalResultEvent(tool_name=None, tool_call_id=None)
+            # Emit final output for blocked content
+            yield FinalOutputEvent(output=None, output_type='blocked')
             
             self._last_result = StepResult(
                 status=StepStatus.SUCCESS,
@@ -987,18 +1394,21 @@ class StreamModelExecutionStep(Step):
         model_params = context.model.customize_request_parameters(model_params)
         
         # Stream the model response with recursive tool call handling
-        final_result_received = False
         try:
             # Use recursive helper method to handle tool calls properly
             async for event in self._stream_with_tool_calls(context, model_params, accumulated_text, first_token_time):
                 yield event
-                if isinstance(event, FinalResultEvent):
-                    final_result_received = True
             
             # Extract output and update context
             output = context.agent._extract_output(context.response, context.task)
             context.task._response = output
             context.final_output = output
+            
+            # Yield final output event
+            yield FinalOutputEvent(
+                output=output,
+                output_type='structured' if not isinstance(output, str) else 'text'
+            )
             
             # Update stream result if available
             if context.stream_result:
@@ -1021,12 +1431,20 @@ class StreamModelExecutionStep(Step):
             raise
 
     async def _stream_with_tool_calls(self, context: StepContext, model_params, accumulated_text: str, first_token_time) -> AsyncIterator[Any]:
-        """Recursively handle streaming with tool calls, similar to non-streaming _handle_model_response."""
-        from upsonic.messages import PartStartEvent, PartDeltaEvent, TextPart, FinalResultEvent, ToolCallPart, ModelRequest
+        """Recursively handle streaming with tool calls, yielding only Agent events."""
+        from upsonic.messages import PartStartEvent, PartDeltaEvent, TextPart, ToolCallPart, ModelRequest
+        from upsonic.agent.events import (
+            TextDeltaEvent,
+            TextCompleteEvent,
+            ThinkingDeltaEvent,
+            ToolCallDeltaEvent,
+            ToolCallEvent,
+            ToolResultEvent,
+            convert_llm_event_to_agent_event,
+        )
         
         # Check if we've reached tool call limit
         if hasattr(context.agent, '_tool_limit_reached') and context.agent._tool_limit_reached:
-            yield FinalResultEvent(tool_name=None, tool_call_id=None)
             return
         
         # Stream the model response
@@ -1036,34 +1454,32 @@ class StreamModelExecutionStep(Step):
             model_request_parameters=model_params
         ) as stream:
             async for event in stream:
-                # Store event in context
+                # Store raw LLM event in context for internal tracking
                 context.streaming_events.append(event)
                 
-                # Update stream result if available
-                if context.stream_result:
-                    context.stream_result._streaming_events.append(event)
-                    
-                    # Track text accumulation and timing
-                    text_content = None
-                    if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
-                        text_content = event.part.content
-                    elif isinstance(event, PartDeltaEvent) and hasattr(event.delta, 'content_delta'):
-                        text_content = event.delta.content_delta
-                    
-                    if text_content:
+                # Convert LLM event to Agent event and yield
+                agent_event = convert_llm_event_to_agent_event(event, accumulated_text=accumulated_text)
+                
+                if agent_event:
+                    # Track text accumulation
+                    if isinstance(agent_event, TextDeltaEvent):
+                        accumulated_text += agent_event.content
                         if first_token_time is None:
                             first_token_time = time.time()
-                            context.stream_result._first_token_time = first_token_time
-                        
-                        accumulated_text += text_content
-                        context.stream_result._accumulated_text = accumulated_text
-                
-                # Yield the event
-                yield event
+                            if context.stream_result:
+                                context.stream_result._first_token_time = first_token_time
+                        if context.stream_result:
+                            context.stream_result._accumulated_text = accumulated_text
+                    
+                    yield agent_event
         
         # Get the final response from the stream
         final_response = stream.get()
         context.response = final_response
+        
+        # Emit text complete event if we accumulated text
+        if accumulated_text:
+            yield TextCompleteEvent(content=accumulated_text)
         
         # Check for tool calls
         tool_calls = [
@@ -1072,8 +1488,31 @@ class StreamModelExecutionStep(Step):
         ]
         
         if tool_calls:
+            # Emit tool call events
+            for i, tc in enumerate(tool_calls):
+                yield ToolCallEvent(
+                    tool_name=tc.tool_name,
+                    tool_call_id=tc.tool_call_id,
+                    tool_args=tc.args_as_dict(),
+                    tool_index=i,
+                    is_parallel=len(tool_calls) > 1
+                )
+            
             # Execute tool calls
             tool_results = await context.agent._execute_tool_calls(tool_calls)
+            
+            # Emit tool result events
+            for tc, result in zip(tool_calls, tool_results):
+                result_preview = str(result.content)[:100] if hasattr(result, 'content') else None
+                is_error = hasattr(result, 'content') and isinstance(result.content, str) and 'error' in result.content.lower()
+                
+                yield ToolResultEvent(
+                    tool_name=tc.tool_name,
+                    tool_call_id=tc.tool_call_id,
+                    result=result.content if hasattr(result, 'content') else None,
+                    result_preview=result_preview,
+                    is_error=is_error
+                )
             
             # Check for tool limit reached
             if hasattr(context.agent, '_tool_limit_reached') and context.agent._tool_limit_reached:
@@ -1089,6 +1528,9 @@ class StreamModelExecutionStep(Step):
                 )
                 limit_message = ModelRequest(parts=[limit_notification])
                 context.messages.append(limit_message)
+                
+                # Reset accumulated_text for new streaming round
+                accumulated_text = ""
                 
                 # Continue streaming with limit notification
                 async for event in self._stream_with_tool_calls(context, model_params, accumulated_text, first_token_time):
@@ -1128,19 +1570,18 @@ class StreamModelExecutionStep(Step):
                     finish_reason="stop"
                 )
                 context.response = stop_response
-                yield FinalResultEvent(tool_name=None, tool_call_id=None)
                 return
             
             # Add tool calls and results to messages
             context.messages.append(final_response)
             context.messages.append(ModelRequest(parts=tool_results))
             
+            # Reset accumulated_text for new streaming round
+            accumulated_text = ""
+            
             # Recursively continue streaming with tool results
             async for event in self._stream_with_tool_calls(context, model_params, accumulated_text, first_token_time):
                 yield event
-        else:
-            # No tool calls, we're done
-            yield FinalResultEvent(tool_name=None, tool_call_id=None)
 
 
 class StreamMemoryMessageTrackingStep(Step):
@@ -1156,6 +1597,8 @@ class StreamMemoryMessageTrackingStep(Step):
     
     async def execute(self, context: StepContext) -> StepResult:
         """Track messages in memory handler and stream result."""
+        from upsonic.agent.events import MemoryUpdateEvent
+        
         # Skip if cache hit or policy blocked
         if hasattr(context.task, '_cached_result') and context.task._cached_result:
             return StepResult(
@@ -1176,18 +1619,36 @@ class StreamMemoryMessageTrackingStep(Step):
         memory_manager = MemoryManager(context.agent.memory)
         async with memory_manager.manage_memory() as memory_handler:
             # Add new messages to stream result
+            # Note: In streaming, context.response should already be in context.messages
+            # So we only need to add the new messages slice, not the response separately
             history_length = len(memory_handler.get_message_history())
             new_messages_start = history_length
             
+            messages_added = 0
             if context.messages and new_messages_start < len(context.messages):
                 if context.stream_result:
-                    context.stream_result.add_messages(context.messages[new_messages_start:])
-            if context.response and context.stream_result:
-                context.stream_result.add_message(context.response)
+                    # This includes the final response if it was appended to messages
+                    new_messages = context.messages[new_messages_start:]
+                    context.stream_result.add_messages(new_messages)
+                    messages_added = len(new_messages)
             
             # Process response in memory
             if context.stream_result:
                 memory_handler.process_response(context.stream_result)
+            
+            # Get memory type
+            if context.is_streaming:
+                memory_type = None
+                if context.agent.memory:
+                    if hasattr(context.agent.memory, 'full_session_memory') and context.agent.memory.full_session_memory:
+                        memory_type = 'full_session'
+                    else:
+                        memory_type = 'session'
+                
+                self._emit_event(MemoryUpdateEvent(
+                    messages_added=messages_added,
+                    memory_type=memory_type
+                ), context)
         
         return StepResult(
             status=StepStatus.SUCCESS,
@@ -1209,6 +1670,8 @@ class StreamFinalizationStep(Step):
     
     async def execute(self, context: StepContext) -> StepResult:
         """Finalize streaming execution."""
+        from upsonic.agent.events import ExecutionCompleteEvent
+        
         # Ensure final_output is set from task response if not already set
         if context.final_output is None and context.task:
             context.final_output = context.task.response
@@ -1217,6 +1680,25 @@ class StreamFinalizationStep(Step):
         if context.stream_result:
             if context.stream_result._final_output is None:
                 context.stream_result._final_output = context.final_output
+        
+        # Determine output type
+        output_type = 'text'
+        if hasattr(context.task, '_cached_result') and context.task._cached_result:
+            output_type = 'cached'
+        elif hasattr(context.task, '_policy_blocked') and context.task._policy_blocked:
+            output_type = 'blocked'
+        elif context.final_output and not isinstance(context.final_output, str):
+            output_type = 'structured'
+        
+        if context.is_streaming:
+            output_preview = str(context.final_output)[:100] if context.final_output else None
+            
+            self._emit_event(ExecutionCompleteEvent(
+                output_type=output_type,
+                has_output=context.final_output is not None,
+                output_preview=output_preview,
+                total_tool_calls=context.agent._tool_call_count
+            ), context)
         
         # End the task
         context.task.task_end()
@@ -1241,6 +1723,8 @@ class FinalizationStep(Step):
     
     async def execute(self, context: StepContext) -> StepResult:
         """Finalize execution."""
+        from upsonic.agent.events import ExecutionCompleteEvent
+        
         # Ensure final_output is set from task response if not already set
         if context.final_output is None and context.task:
             context.final_output = context.task.response
@@ -1250,6 +1734,27 @@ class FinalizationStep(Step):
 
         # End the task to calculate duration
         context.task.task_end()
+
+        # Determine output type
+        output_type = 'text'
+        if hasattr(context.task, '_cached_result') and context.task._cached_result:
+            output_type = 'cached'
+        elif hasattr(context.task, '_policy_blocked') and context.task._policy_blocked:
+            output_type = 'blocked'
+        elif context.final_output and not isinstance(context.final_output, str):
+            output_type = 'structured'
+        
+        if context.is_streaming:
+            output_preview = str(context.final_output)[:100] if context.final_output else None
+            total_duration = getattr(context.task, '_duration', None)
+            
+            self._emit_event(ExecutionCompleteEvent(
+                output_type=output_type,
+                has_output=context.final_output is not None,
+                output_preview=output_preview,
+                total_tool_calls=context.agent._tool_call_count,
+                total_duration=total_duration
+            ), context)
 
         # Print summary if needed
         if context.task and not context.task.not_main_task:

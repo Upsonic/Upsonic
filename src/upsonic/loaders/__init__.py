@@ -1,8 +1,9 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
-from .base import BaseLoader
-from .config import LoaderConfig, LoaderConfigFactory
+if TYPE_CHECKING:
+    from .base import BaseLoader
+    from .config import LoaderConfig, LoaderConfigFactory
 
 if TYPE_CHECKING:
     from .config import (
@@ -124,21 +125,43 @@ def _get_factory_functions():
         'with_factory': with_factory,
     }
 
+def _get_base_classes():
+    """Lazy import of base loader classes."""
+    from .base import BaseLoader
+    from .config import LoaderConfig, LoaderConfigFactory
+    
+    return {
+        'BaseLoader': BaseLoader,
+        'LoaderConfig': LoaderConfig,
+        'LoaderConfigFactory': LoaderConfigFactory,
+    }
+
 def __getattr__(name: str) -> Any:
     """Lazy loading of heavy modules and classes."""
+    # Base classes
+    base_classes = _get_base_classes()
+    if name in base_classes:
+        return base_classes[name]
+    
+    # Loader classes
     loader_classes = _get_loader_classes()
     if name in loader_classes:
         return loader_classes[name]
     
+    # Config classes
     config_classes = _get_config_classes()
     if name in config_classes:
         return config_classes[name]
     
+    # Factory functions
     factory_functions = _get_factory_functions()
     if name in factory_functions:
         return factory_functions[name]
     
-    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+    raise AttributeError(
+        f"module '{__name__}' has no attribute '{name}'. "
+        f"Please import from the appropriate sub-module."
+    )
 
 
 __all__ = [

@@ -8,6 +8,7 @@ from typing import Optional
 _COMMAND_HANDLERS = {
     'init': lambda args: _handle_init(args),
     'add': lambda args: _handle_add(args),
+    'remove': lambda args: _handle_remove(args),
     'install': lambda args: _handle_install(args),
     'run': lambda args: _handle_run(args),
     'zip': lambda args: _handle_zip(args),
@@ -40,6 +41,22 @@ def _handle_add(args: list[str]) -> int:
         return 1
     from upsonic.cli.commands import add_command
     return add_command(args[1], args[2])
+
+
+def _handle_remove(args: list[str]) -> int:
+    """Handle 'remove' command with lazy import."""
+    # Check for help flag
+    if len(args) >= 2 and args[1] in ("--help", "-h"):
+        from upsonic.cli.printer import print_help_remove
+        print_help_remove()
+        return 0
+    
+    if len(args) < 3:
+        from upsonic.cli.printer import print_error
+        print_error("Usage: upsonic remove <library> <section>\nExample: upsonic remove requests api")
+        return 1
+    from upsonic.cli.commands import remove_command
+    return remove_command(args[1], args[2])
 
 
 def _handle_install(args: list[str]) -> int:

@@ -10,7 +10,7 @@ import time
 import threading
 from queue import Queue, Empty
 from dataclasses import dataclass, field
-from typing import List, Generic, AsyncIterator, Iterator, Optional, Any, TYPE_CHECKING, Dict
+from typing import List, Generic, AsyncIterator, Iterator, Optional, Any, TYPE_CHECKING, Dict, Union
 from contextlib import asynccontextmanager
 
 from upsonic.messages.messages import ModelMessage, ModelResponseStreamEvent, TextPart, PartStartEvent, PartDeltaEvent, FinalResultEvent
@@ -19,6 +19,7 @@ from upsonic.output import OutputDataT
 if TYPE_CHECKING:
     from upsonic.tasks.tasks import Task
     from upsonic.messages.messages import ModelResponse
+    from upsonic.agent.events import AgentEvent, AgentStreamEvent
 
 
 @dataclass
@@ -152,13 +153,32 @@ class StreamRunResult(Generic[OutputDataT]):
     - Access to streaming events as they occur
     - Final result accumulation after streaming completes
     - Integration with agent message tracking system
+    - **Comprehensive pipeline events** for full visibility into agent execution
+    
+    The stream_events() method yields all pipeline events including:
+    - Pipeline start/end events
+    - Step start/end events  
+    - Step-specific events (cache, policy, tools, model selection, etc.)
+    - LLM streaming events (text deltas, tool calls, thinking)
+    - Tool call and result events
+    - Final output events
     
     Usage:
         ```python
-        async with agent.run_stream(task) as result:
-            async for output in result.stream():
-                print(output, end='', flush=True)
-            final_result = result.get_final_output()
+        # Stream text output only (simple use case)
+        async with agent.stream(task) as result:
+            async for text in result.stream_output():
+                print(text, end='', flush=True)
+        
+        # Stream all events for full pipeline visibility
+        async with agent.stream(task) as result:
+            async for event in result.stream_events():
+                if isinstance(event, StepStartEvent):
+                    print(f"Starting: {event.step_name}")
+                elif isinstance(event, ToolCallEvent):
+                    print(f"Calling: {event.tool_name}")
+                elif isinstance(event, TextDeltaEvent):
+                    print(event.content, end='')
         ```
     
     Attributes:
@@ -185,8 +205,8 @@ class StreamRunResult(Generic[OutputDataT]):
     _accumulated_text: str = field(default_factory=str)
     """Text content accumulated during streaming."""
     
-    _streaming_events: List[ModelResponseStreamEvent] = field(default_factory=list)
-    """All streaming events received during execution."""
+    _streaming_events: List["AgentEvent"] = field(default_factory=list)
+    """All Agent events received during execution."""
     
     _final_output: Optional[OutputDataT] = None
     """The final output after streaming completes."""
@@ -249,6 +269,9 @@ class StreamRunResult(Generic[OutputDataT]):
         """
         Stream text content from the agent response.
         
+        This method extracts and yields only text content, ideal for simple
+        use cases where you just want the final text output.
+        
         Yields:
             str: Incremental text content as it becomes available
             
@@ -271,8 +294,8 @@ class StreamRunResult(Generic[OutputDataT]):
             state = getattr(self, '_state', None)
             graph_execution_id = getattr(self, '_graph_execution_id', None)
             
-            # Always execute the stream to get real-time events
-            # Events are collected in _streaming_events during iteration
+            # Use _stream_text_output which extracts text and optionally tracks events
+            # Note: Text accumulation is handled by the pipeline, we just extract and yield text here
             async for text_chunk in self._agent._stream_text_output(
                 self._task,
                 self._model,
@@ -280,11 +303,12 @@ class StreamRunResult(Generic[OutputDataT]):
                 self._retry,
                 state,
                 graph_execution_id,
-                stream_result=self
+                stream_result=self  # Pass stream_result so events are tracked for stats
             ):
                 yield text_chunk
             
             self._end_time = time.time()
+            self._is_complete = True
             
         except Exception as e:
             # Ensure completion state is set even on error
@@ -292,24 +316,45 @@ class StreamRunResult(Generic[OutputDataT]):
             self._end_time = time.time()
             raise
     
-    async def stream_events(self) -> AsyncIterator[ModelResponseStreamEvent]:
+    async def stream_events(self) -> AsyncIterator["AgentStreamEvent"]:
         """
-        Stream raw events from the agent response.
+        Stream all Agent events from the execution pipeline.
         
-        This provides access to the full stream events including tool calls,
-        thinking events, and other non-text content.
+        This method provides comprehensive visibility into the entire execution,
+        yielding only Agent events (not raw LLM events):
+        - Pipeline start/end events
+        - Step start/end events (initialization, cache, policy, model, etc.)
+        - Step-specific events with rich metadata
+        - Text streaming events (TextDeltaEvent, TextCompleteEvent)
+        - Tool call and result events
+        - Final output events
+        
+        This is the recommended method for applications that need full
+        control and visibility over the agent execution.
         
         Yields:
-            ModelResponseStreamEvent: Raw streaming events
+            AgentStreamEvent: All pipeline and agent events
             
         Example:
             ```python
-            async with agent.run_stream(task) as result:
+            from upsonic import (
+                StepStartEvent, StepEndEvent, 
+                TextDeltaEvent, ToolCallEvent, ToolResultEvent,
+                PipelineStartEvent, PipelineEndEvent
+            )
+            
+            async with agent.stream(task) as result:
                 async for event in result.stream_events():
-                    if isinstance(event, PartStartEvent):
-                        print(f"New part: {type(event.part).__name__}")
-                    elif isinstance(event, FinalResultEvent):
-                        print("Final result available")
+                    if isinstance(event, PipelineStartEvent):
+                        print(f"Pipeline starting with {event.total_steps} steps")
+                    elif isinstance(event, StepStartEvent):
+                        print(f"  [{event.step_index+1}] Starting: {event.step_name}")
+                    elif isinstance(event, ToolCallEvent):
+                        print(f"  Calling tool: {event.tool_name}")
+                    elif isinstance(event, TextDeltaEvent):
+                        print(event.content, end='', flush=True)
+                    elif isinstance(event, PipelineEndEvent):
+                        print(f"\\nCompleted in {event.total_duration:.2f}s")
             ```
         """
         if not self._context_entered:
@@ -322,8 +367,7 @@ class StreamRunResult(Generic[OutputDataT]):
             state = getattr(self, '_state', None)
             graph_execution_id = getattr(self, '_graph_execution_id', None)
             
-            # Always execute the stream to get real-time events
-            # Events are collected in _streaming_events during iteration
+            # Stream all Agent events from the pipeline
             async for event in self._agent._stream_events_output(
                 self._task,
                 self._model,
@@ -333,9 +377,20 @@ class StreamRunResult(Generic[OutputDataT]):
                 graph_execution_id,
                 stream_result=self
             ):
+                # Store event
+                self._streaming_events.append(event)
+                
+                # Track text accumulation for TextDeltaEvent
+                from upsonic.agent.events import TextDeltaEvent
+                if isinstance(event, TextDeltaEvent):
+                    self._accumulated_text += event.content
+                    if self._first_token_time is None:
+                        self._first_token_time = time.time()
+                
                 yield event
             
             self._end_time = time.time()
+            self._is_complete = True
             
         except Exception as e:
             # Ensure completion state is set even on error
@@ -399,21 +454,21 @@ class StreamRunResult(Generic[OutputDataT]):
         if exception_holder[0]:
             raise exception_holder[0]
     
-    def stream_events_sync(self) -> Iterator[ModelResponseStreamEvent]:
+    def stream_events_sync(self) -> Iterator["AgentStreamEvent"]:
         """
-        Stream raw events from the agent response synchronously.
+        Stream all Agent events from the execution pipeline synchronously.
         
         This is a synchronous wrapper around stream_events().
         
         Yields:
-            ModelResponseStreamEvent: Raw streaming events
+            AgentStreamEvent: All pipeline and agent events
             
         Example:
             ```python
             result = agent.stream(task)
             for event in result.stream_events_sync():
-                if isinstance(event, PartStartEvent):
-                    print(f"New part: {type(event.part).__name__}")
+                if isinstance(event, StepStartEvent):
+                    print(f"Starting: {event.step_name}")
             ```
         """
         queue: Queue = Queue()
@@ -461,9 +516,14 @@ class StreamRunResult(Generic[OutputDataT]):
         Get the final accumulated output after streaming completes.
         
         Returns:
-            The final output, or None if streaming hasn't completed
+            The final output, or accumulated text if final output is not set
         """
-        return self._final_output
+        if self._final_output is not None:
+            return self._final_output
+        # Return accumulated text if available
+        if self._accumulated_text:
+            return self._accumulated_text  # type: ignore
+        return None
     
     @property
     def output(self) -> Optional[OutputDataT]:
@@ -478,21 +538,33 @@ class StreamRunResult(Generic[OutputDataT]):
         """Get all text accumulated so far."""
         return self._accumulated_text
     
-    def get_streaming_events(self) -> List[ModelResponseStreamEvent]:
-        """Get all streaming events received so far."""
+    def get_streaming_events(self) -> List["AgentEvent"]:
+        """Get all Agent events received so far."""
         return self._streaming_events.copy()
     
-    def get_text_events(self) -> List[ModelResponseStreamEvent]:
-        """Get only text-related streaming events."""
-        return [event for event in self._streaming_events 
-                if isinstance(event, (PartStartEvent, PartDeltaEvent)) 
-                and hasattr(event, 'part') and isinstance(event.part, TextPart) 
-                or hasattr(event, 'delta') and hasattr(event.delta, 'content_delta')]
+    def get_text_events(self) -> List[Any]:
+        """Get only text-related Agent events."""
+        from upsonic.agent.events import TextDeltaEvent, TextCompleteEvent
+        
+        return [e for e in self._streaming_events if isinstance(e, (TextDeltaEvent, TextCompleteEvent))]
     
-    def get_tool_events(self) -> List[ModelResponseStreamEvent]:
-        """Get only tool-related streaming events."""
-        return [event for event in self._streaming_events 
-                if isinstance(event, PartStartEvent) and hasattr(event.part, 'tool_name')]
+    def get_tool_events(self) -> List[Any]:
+        """Get only tool-related Agent events."""
+        from upsonic.agent.events import ToolCallEvent, ToolResultEvent, ToolCallDeltaEvent
+        
+        return [e for e in self._streaming_events if isinstance(e, (ToolCallEvent, ToolResultEvent, ToolCallDeltaEvent))]
+    
+    def get_step_events(self) -> List[Any]:
+        """Get only step-related events (StepStartEvent, StepEndEvent)."""
+        from upsonic.agent.events import StepStartEvent, StepEndEvent
+        
+        return [e for e in self._streaming_events if isinstance(e, (StepStartEvent, StepEndEvent))]
+    
+    def get_pipeline_events(self) -> List[Any]:
+        """Get only pipeline-level events (PipelineStartEvent, PipelineEndEvent)."""
+        from upsonic.agent.events import PipelineStartEvent, PipelineEndEvent
+        
+        return [e for e in self._streaming_events if isinstance(e, (PipelineStartEvent, PipelineEndEvent))]
     
     def get_streaming_stats(self) -> Dict[str, Any]:
         """Get detailed statistics about the streaming session."""
@@ -501,18 +573,25 @@ class StreamRunResult(Generic[OutputDataT]):
         
         text_events = self.get_text_events()
         tool_events = self.get_tool_events()
+        step_events = self.get_step_events()
+        pipeline_events = self.get_pipeline_events()
+        
+        # Count event types
+        event_types: Dict[str, int] = {}
+        for event in self._streaming_events:
+            type_name = type(event).__name__
+            event_types[type_name] = event_types.get(type_name, 0) + 1
         
         return {
             'total_events': len(self._streaming_events),
             'text_events': len(text_events),
             'tool_events': len(tool_events),
+            'step_events': len(step_events),
+            'pipeline_events': len(pipeline_events),
             'accumulated_chars': len(self._accumulated_text),
             'is_complete': self._is_complete,
             'has_final_output': self._final_output is not None,
-            'event_types': {
-                type(event).__name__: sum(1 for e in self._streaming_events if type(e) == type(event))
-                for event in self._streaming_events
-            }
+            'event_types': event_types
         }
     
     def get_performance_metrics(self) -> Dict[str, Optional[float]]:

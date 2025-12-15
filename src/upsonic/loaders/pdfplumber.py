@@ -46,13 +46,15 @@ class PdfPlumberLoader(BaseLoader):
     layouts, making it ideal for enterprise document processing in AI systems.
     """
 
-    def __init__(self, config: PdfPlumberLoaderConfig):
+    def __init__(self, config: Optional[PdfPlumberLoaderConfig] = None):
         """
         Initializes the PdfPlumberLoader with its specific configuration.
 
         Args:
             config: A PdfPlumberLoaderConfig object with settings for PDF processing.
         """
+        if config is None:
+            config = PdfPlumberLoaderConfig()
         if not _PDFPLUMBER_AVAILABLE:
             from upsonic.utils.printing import import_error
             import_error(

@@ -55,6 +55,19 @@ class ToolSafetyAnalysisResponse(BaseModel):
     suspicious_args: List[str] = []
     recommendation: str
 
+class PolicyFeedbackResponse(BaseModel):
+    """Response format for policy feedback generation.
+    
+    Used when a policy violation occurs and feedback_enabled is True.
+    Generates constructive feedback to help users/agents understand
+    what violated the policy and how to correct it.
+    """
+    feedback_message: str  # The constructive feedback message for the user/agent
+    suggested_approach: str  # Suggestion for how to proceed or rephrase
+    violation_type: str  # Type of violation detected (e.g., "CRYPTO", "PII", "ADULT_CONTENT")
+    severity: str  # "warning", "moderate", "critical"
+
+
 
 class UpsonicLLMProvider:
     """Upsonic-based LLM provider for AI Safety Engine"""
@@ -721,3 +734,154 @@ class UpsonicLLMProvider:
         
         else:
             return {"error": "Unknown analysis type"}
+
+    def generate_policy_feedback(
+        self,
+        original_content: str,
+        policy_name: str,
+        violation_reason: str,
+        policy_type: str,
+        action_type: str,
+        language: str = "en"
+    ) -> str:
+        """
+        Generate constructive feedback for a policy violation.
+        
+        This method creates helpful, user-friendly feedback explaining what
+        violated the policy and how to correct it.
+        
+        Args:
+            original_content: The content that violated the policy
+            policy_name: Name of the violated policy
+            violation_reason: Details about why the policy was violated
+            policy_type: Either "user_policy" or "agent_policy"
+            action_type: The action that would be taken (BLOCK, REPLACE, ANONYMIZE, RAISE)
+            language: ISO 639-1 language code for the feedback
+            
+        Returns:
+            str: Constructive feedback message
+        """
+        language_instruction = ""
+        if language == "tr":
+            language_instruction = " Respond in Turkish."
+        elif language == "en":
+            language_instruction = " Respond in English."
+        else:
+            language_instruction = f" Respond in the language with code '{language}'."
+        
+        if policy_type == "user_policy":
+            context = (
+                "You are providing feedback to a user whose input violated a safety policy. "
+                "Be helpful and constructive. Explain what was wrong and suggest how they can "
+                "rephrase or modify their request to comply with the policy."
+            )
+        else:  # agent_policy
+            context = (
+                "You are providing feedback to an AI agent whose response violated a safety policy. "
+                "The agent will receive this feedback and try again. Be clear about what was wrong "
+                "and provide specific guidance on how to generate a compliant response."
+            )
+        
+        # Truncate content if too long
+        content_preview = original_content[:500] + "..." if len(original_content) > 500 else original_content
+        
+        prompt = (
+            f"{context}{language_instruction}\n\n"
+            f"Policy Name: {policy_name}\n"
+            f"Violation Reason: {violation_reason}\n"
+            f"Action That Would Be Taken: {action_type}\n"
+            f"Content Preview: {content_preview}\n\n"
+            f"Generate constructive feedback that:\n"
+            f"1. Explains clearly what aspect of the content violated the policy\n"
+            f"2. Provides specific suggestions for how to modify the content\n"
+            f"3. Is professional and helpful, not harsh or accusatory\n"
+            f"4. Does NOT include the original problematic content in your response"
+        )
+        
+        task = Task(prompt, response_format=PolicyFeedbackResponse)
+        
+        try:
+            result = self.agent.do(task)
+            # Combine feedback message with suggested approach for comprehensive feedback
+            return f"{result.feedback_message}\n\nSuggested approach: {result.suggested_approach}"
+        except Exception as e:
+            # Fallback to generic feedback message
+            return (
+                f"Your content was flagged by the '{policy_name}' policy. "
+                f"Reason: {violation_reason}. Please modify your content to comply with this policy."
+            )
+    
+    async def generate_policy_feedback_async(
+        self,
+        original_content: str,
+        policy_name: str,
+        violation_reason: str,
+        policy_type: str,
+        action_type: str,
+        language: str = "en"
+    ) -> str:
+        """
+        Async version of generate_policy_feedback.
+        
+        Generate constructive feedback for a policy violation asynchronously.
+        
+        Args:
+            original_content: The content that violated the policy
+            policy_name: Name of the violated policy
+            violation_reason: Details about why the policy was violated
+            policy_type: Either "user_policy" or "agent_policy"
+            action_type: The action that would be taken (BLOCK, REPLACE, ANONYMIZE, RAISE)
+            language: ISO 639-1 language code for the feedback
+            
+        Returns:
+            str: Constructive feedback message
+        """
+        language_instruction = ""
+        if language == "tr":
+            language_instruction = " Respond in Turkish."
+        elif language == "en":
+            language_instruction = " Respond in English."
+        else:
+            language_instruction = f" Respond in the language with code '{language}'."
+        
+        if policy_type == "user_policy":
+            context = (
+                "You are providing feedback to a user whose input violated a safety policy. "
+                "Be helpful and constructive. Explain what was wrong and suggest how they can "
+                "rephrase or modify their request to comply with the policy."
+            )
+        else:  # agent_policy
+            context = (
+                "You are providing feedback to an AI agent whose response violated a safety policy. "
+                "The agent will receive this feedback and try again. Be clear about what was wrong "
+                "and provide specific guidance on how to generate a compliant response."
+            )
+        
+        # Truncate content if too long
+        content_preview = original_content[:500] + "..." if len(original_content) > 500 else original_content
+        
+        prompt = (
+            f"{context}{language_instruction}\n\n"
+            f"Policy Name: {policy_name}\n"
+            f"Violation Reason: {violation_reason}\n"
+            f"Action That Would Be Taken: {action_type}\n"
+            f"Content Preview: {content_preview}\n\n"
+            f"Generate constructive feedback that:\n"
+            f"1. Explains clearly what aspect of the content violated the policy\n"
+            f"2. Provides specific suggestions for how to modify the content\n"
+            f"3. Is professional and helpful, not harsh or accusatory\n"
+            f"4. Does NOT include the original problematic content in your response"
+        )
+        
+        task = Task(prompt, response_format=PolicyFeedbackResponse)
+        
+        try:
+            result = await self.agent.do_async(task)
+            # Combine feedback message with suggested approach for comprehensive feedback
+            return f"{result.feedback_message}\n\nSuggested approach: {result.suggested_approach}"
+        except Exception:
+            # Fallback to generic feedback message
+            return (
+                f"Your content was flagged by the '{policy_name}' policy. "
+                f"Reason: {violation_reason}. Please modify your content to comply with this policy."
+            )

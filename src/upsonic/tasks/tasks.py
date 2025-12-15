@@ -701,6 +701,16 @@ class Task(BaseModel):
         return None
 
     @property
+    def cache_hit(self) -> bool:
+        """
+        Check if the last response was retrieved from cache.
+        
+        Returns:
+            bool: True if the response came from cache, False otherwise
+        """
+        return self._cache_hit
+
+    @property
     def tool_calls(self) -> List[Dict[str, Any]]:
         """
         Get all tool calls made during this task's execution.

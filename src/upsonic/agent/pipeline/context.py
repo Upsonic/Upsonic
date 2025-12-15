@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from upsonic.models import Model, ModelRequest, ModelResponse
     from upsonic.agent.context_managers import MemoryManager
     from upsonic.graph.graph import State
+    from upsonic.agent.events import AgentEvent
 
 
 class StepContext(BaseModel):
@@ -33,6 +34,10 @@ class StepContext(BaseModel):
         # Execution mode
         is_streaming: Whether this is a streaming execution
         stream_result: StreamRunResult reference for streaming mode
+        
+        # Event tracking
+        emitted_events: Events emitted during execution
+        emit_step_events: Whether to emit step-level events (for streaming)
         
         # Continuation mode (for resuming from external execution pause)
         is_continuation: Whether this is continuing from a paused state
@@ -57,6 +62,11 @@ class StepContext(BaseModel):
     is_streaming: bool = Field(default=False, description="Whether this is streaming execution")
     stream_result: Any = Field(default=None, description="StreamRunResult reference for streaming mode")
     
+    # Event tracking for comprehensive streaming
+    emitted_events: List[Any] = Field(default_factory=list, description="Events emitted during execution")
+    emit_step_events: bool = Field(default=True, description="Whether to emit step-level events")
+    accumulated_text: str = Field(default="", description="Accumulated text during streaming")
+    
     # Continuation-specific attributes
     is_continuation: bool = Field(default=False, description="Whether this is continuing from a paused state")
     continuation_messages: List[Any] = Field(default_factory=list, description="Messages to restore when continuing")
@@ -75,4 +85,44 @@ class StepContext(BaseModel):
     plan_context: Optional[str] = Field(default=None, description="Formatted plan for system prompt injection")
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
-
+    
+    def emit_event(self, event: "AgentEvent") -> None:
+        """
+        Emit an event during pipeline execution.
+        
+        Events are collected and can be yielded during streaming.
+        
+        Args:
+            event: The event to emit
+        """
+        self.emitted_events.append(event)
+        
+        # Also add to streaming events if streaming
+        if self.is_streaming:
+            self.streaming_events.append(event)
+    
+    def get_emitted_events(self) -> List["AgentEvent"]:
+        """
+        Get all events emitted during execution.
+        
+        Returns:
+            List of emitted events
+        """
+        return list(self.emitted_events)
+    
+    def clear_emitted_events(self) -> None:
+        """Clear the emitted events list."""
+        self.emitted_events.clear()
+    
+    def pop_pending_events(self) -> List["AgentEvent"]:
+        """
+        Get and clear all pending events.
+        
+        This is useful for streaming to get events that haven't been yielded yet.
+        
+        Returns:
+            List of pending events (list is cleared after this call)
+        """
+        events = list(self.emitted_events)
+        self.emitted_events.clear()
+        return events

@@ -1,7 +1,7 @@
 import asyncio
 import re
 from pathlib import Path
-from typing import List, Union
+from typing import List, Optional, Union
 
 from upsonic.schemas.data_models import Document
 from upsonic.loaders.base import BaseLoader
@@ -25,13 +25,15 @@ class TextLoader(BaseLoader):
     filtering the extracted text.
     """
 
-    def __init__(self, config: TextLoaderConfig):
+    def __init__(self, config: Optional[TextLoaderConfig] = None):
         """
         Initializes the TextLoader with its specific configuration.
 
         Args:
             config: A TextLoaderConfig object with settings for text processing.
         """
+        if config is None:
+            config = TextLoaderConfig()
         if not _AIOFILES_AVAILABLE:
             from upsonic.utils.printing import import_error
             import_error(

@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
 
 from .storage import DurableExecutionStorage, ExecutionState
-from . import serializer
+from .serializer import serialize_state, deserialize_state, reconstruct_context
 
 
 class DurableExecution:
@@ -109,7 +109,7 @@ class DurableExecution:
             agent_state: Additional agent state to preserve
         """
         # Serialize state using cloudpickle
-        state_bytes = serializer.serialize_state(
+        state_bytes = serialize_state(
             task=task,
             context=context,
             step_index=step_index,
@@ -193,7 +193,7 @@ class DurableExecution:
         Note:
             With cloudpickle, both task and context are fully reconstructed.
             The context will need agent/model references updated via
-            serializer.reconstruct_context() before use.
+            reconstruct_context() before use.
         """
         state_wrapper = await self.storage.load_state_async(self.execution_id)
         
@@ -212,7 +212,7 @@ class DurableExecution:
             return None
         
         # Deserialize using cloudpickle
-        deserialized = serializer.deserialize_state(state_bytes)
+        deserialized = deserialize_state(state_bytes)
         
         if self.debug:
             from upsonic.utils.printing import info_log

@@ -3,9 +3,12 @@ Pipeline Manager - Orchestrates step execution.
 
 The PipelineManager is responsible for executing a sequence of steps
 in order, managing the context flow, and handling the overall execution.
+It also supports comprehensive event streaming for full visibility into
+the execution pipeline.
 """
 
-from typing import List, Optional, Dict, Any, AsyncIterator
+import time
+from typing import List, Optional, Dict, Any, AsyncIterator, Union
 from upsonic.agent.pipeline.step import Step
 from .step import Step, StepResult, StepStatus
 from .context import StepContext
@@ -26,6 +29,7 @@ class PipelineManager:
     - Managing the shared context
     - Handling errors and early termination
     - Providing execution statistics
+    - Emitting events for streaming visibility
     
     Usage:
         ```python
@@ -37,6 +41,13 @@ class PipelineManager:
         
         context = StepContext(task=task, agent=agent)
         result = await manager.execute(context)
+        
+        # Or for streaming with events:
+        async for event in manager.execute_stream(context):
+            if isinstance(event, StepStartEvent):
+                print(f"Starting: {event.step_name}")
+            elif isinstance(event, TextDeltaEvent):
+                print(event.content, end='')
         ```
     """
     
@@ -330,16 +341,21 @@ class PipelineManager:
     
     async def execute_stream(self, context: StepContext) -> AsyncIterator[Any]:
         """
-        Execute the pipeline in streaming mode.
+        Execute the pipeline in streaming mode with comprehensive event emission.
         
-        Runs all steps in sequence, but yields streaming events when
-        they become available from streaming steps.
+        Runs all steps in sequence, yielding events for:
+        - Pipeline start/end
+        - Step start/end
+        - Step-specific events (cache, policy, tools, etc.)
+        - LLM streaming events (text deltas, tool calls)
+        
+        This provides complete visibility into the execution pipeline.
         
         Args:
             context: The initial context with is_streaming=True
             
         Yields:
-            Streaming events from the model
+            AgentEvent: Various event types providing visibility into execution
             
         Returns:
             StepContext: The final context after all steps (implicitly through context mutation)
@@ -347,66 +363,142 @@ class PipelineManager:
         Raises:
             Exception: Any exception from step execution is raised with proper error message
         """
+        # Safety check: Only yield events if streaming is explicitly enabled
+        if not context.is_streaming:
+            # If streaming is not enabled, fall back to regular execution
+            # This should never happen if called correctly, but provides safety
+            await self.execute(context)
+            return
+            
+        from upsonic.agent.events import (
+            PipelineStartEvent,
+            PipelineEndEvent,
+            StepStartEvent,
+            StepEndEvent,
+            convert_llm_event_to_agent_event,
+        )
+        
         self._execution_stats = {
             "total_steps": len(self.steps),
             "executed_steps": 0,
             "step_results": {}
         }
         
+        pipeline_start_time = time.time()
+        
+        # Get task description for event
+        task_description = None
+        if hasattr(context, 'task') and context.task:
+            task_description = str(getattr(context.task, 'description', ''))[:200]
+        
+        # Emit pipeline start event
+        yield PipelineStartEvent(
+            total_steps=len(self.steps),
+            is_streaming=True,
+            task_description=task_description
+        )
+        
         if self.debug:
             from upsonic.utils.printing import pipeline_started
             pipeline_started(len(self.steps))
         
+        final_status = 'success'
+        error_message = None
+        
         try:
-            for step in self.steps:
+            for step_index, step in enumerate(self.steps):
+                # Track current step for error handling
+                self._current_step_index = step_index
+                self._current_step = step
+                
+                # Emit step start event
+                yield StepStartEvent(
+                    step_name=step.name,
+                    step_description=step.description,
+                    step_index=step_index,
+                    total_steps=len(self.steps)
+                )
+                
                 if self.debug:
                     from upsonic.utils.printing import pipeline_step_started
                     pipeline_step_started(step.name, step.description)
                 
-                # Check if this step supports streaming
-                if hasattr(step, 'execute_stream') and context.is_streaming:
-                    # Execute streaming step and yield events
+                step_start_time = time.time()
+                result = None
+                
+                # Check if this step supports streaming (has custom execute_stream implementation)
+                if step.supports_streaming and context.is_streaming:
+                    # Execute streaming step and yield only Agent events
                     async for event in step.execute_stream(context):
-                        yield event
+                        # Only yield AgentEvent instances - LLM events are converted inside steps
+                        from upsonic.agent.events import AgentEvent, TextDeltaEvent
+                        
+                        if isinstance(event, AgentEvent):
+                            # Update accumulated text for text events
+                            if isinstance(event, TextDeltaEvent):
+                                context.accumulated_text += event.content
+                            yield event
+                        # Skip raw LLM events - they should be converted to Agent events in the step
                     
                     # Get the result after streaming completes
                     result = getattr(step, '_last_result', StepResult(
                         status=StepStatus.SUCCESS,
                         message=f"Streaming step {step.name} completed",
-                        execution_time=0.0
+                        execution_time=time.time() - step_start_time
                     ))
                 else:
                     # Regular step execution
                     result = await step.run(context)
+                    
+                    # Yield any step-specific events from the result
+                    if result.events:
+                        for event in result.events:
+                            yield event
+                    
+                    # Yield any events emitted to context during execution
+                    pending_events = context.pop_pending_events()
+                    for event in pending_events:
+                        yield event
                 
                 # Record statistics
                 self._execution_stats["step_results"][step.name] = {
-                    "status": result.status.value,
-                    "message": result.message,
-                    "execution_time": result.execution_time
+                    "status": result.status.value if result else "success",
+                    "message": result.message if result else None,
+                    "execution_time": result.execution_time if result else time.time() - step_start_time
                 }
                 
                 self._execution_stats["executed_steps"] += 1
+                
+                # Emit step end event
+                yield StepEndEvent(
+                    step_name=step.name,
+                    step_index=step_index,
+                    status=result.status.value if result else 'success',
+                    message=result.message if result else f"{step.name} completed",
+                    execution_time=result.execution_time if result else time.time() - step_start_time
+                )
                 
                 if self.debug:
                     from upsonic.utils.printing import pipeline_step_completed
                     pipeline_step_completed(
                         step.name, 
-                        result.status.value, 
-                        result.execution_time, 
-                        result.message
+                        result.status.value if result else 'success', 
+                        result.execution_time if result else 0.0, 
+                        result.message if result else None
                     )
                 
                 # Handle PENDING status (like external execution pause)
-                if result.status == StepStatus.PENDING:
+                if result and result.status == StepStatus.PENDING:
+                    final_status = 'paused'
                     if self.debug:
                         from upsonic.utils.printing import pipeline_paused
                         pipeline_paused(step.name)
                     break
             
+            total_time = time.time() - pipeline_start_time
+            
             if self.debug:
                 from upsonic.utils.printing import pipeline_completed, pipeline_timeline
-                total_time = sum(r["execution_time"] for r in self._execution_stats["step_results"].values())
                 pipeline_completed(
                     self._execution_stats['executed_steps'],
                     len(self.steps),
@@ -420,6 +512,9 @@ class PipelineManager:
                 )
             
         except Exception as e:
+            final_status = 'error'
+            error_message = str(e)
+            
             # Get error result if it was stored
             error_result = getattr(context, '_error_result', None)
             
@@ -443,6 +538,18 @@ class PipelineManager:
             
             # Re-raise the original exception
             raise
+        
+        finally:
+            total_time = time.time() - pipeline_start_time
+            
+            # Emit pipeline end event
+            yield PipelineEndEvent(
+                total_steps=len(self.steps),
+                executed_steps=self._execution_stats['executed_steps'],
+                total_duration=total_time,
+                status=final_status,
+                error_message=error_message
+            )
     
     def get_execution_stats(self) -> Dict[str, Any]:
         """
@@ -544,4 +651,3 @@ class PipelineManager:
         """String representation of the pipeline."""
         step_names = [step.name for step in self.steps]
         return f"PipelineManager(steps={step_names})"
-

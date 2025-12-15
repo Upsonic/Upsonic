@@ -91,6 +91,11 @@ class ToolProcessor:
                 # Process function tool
                 tool = self._process_function_tool(tool_item)
                 processed_tools[tool.name] = tool
+
+            elif inspect.ismethod(tool_item):
+                # Process bound method (e.g., from YFinanceTools.functions())
+                tool = self._process_function_tool(tool_item)
+                processed_tools[tool.name] = tool
                 
             elif inspect.isclass(tool_item):
                 # Check if it's a ToolKit

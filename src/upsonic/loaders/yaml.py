@@ -1,7 +1,7 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Union, Generator
+from typing import Any, Dict, Generator, List, Optional, Union
 
 try:
     import yaml
@@ -32,13 +32,15 @@ class YAMLLoader(BaseLoader):
     YAML files and offers multiple ways to serialize the output content.
     """
 
-    def __init__(self, config: YAMLLoaderConfig):
+    def __init__(self, config: Optional[YAMLLoaderConfig] = None):
         """
         Initializes the YAMLLoader with its specific configuration.
 
         Args:
             config: A YAMLLoaderConfig object with settings for YAML processing.
         """
+        if config is None:
+            config = YAMLLoaderConfig()
         if not _YAML_AVAILABLE:
             from upsonic.utils.printing import import_error
             import_error(

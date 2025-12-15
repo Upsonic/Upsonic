@@ -1,7 +1,7 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 try:
     import jq
@@ -24,8 +24,10 @@ class JSONLoader(BaseLoader):
     metadata from complex JSON structures, allowing it to adapt to any format.
     """
 
-    def __init__(self, config: JSONLoaderConfig):
+    def __init__(self, config: Optional[JSONLoaderConfig] = None):
         """Initializes the JSONLoader with its specific configuration."""
+        if config is None:
+            config = JSONLoaderConfig()
         if not _JQ_AVAILABLE:
             from upsonic.utils.printing import import_error
             import_error(

@@ -158,7 +158,8 @@ class PlanningToolKit(ToolKit):
             if is_first_call:
                 # Validate with TodoList (enforces min 2 todos)
                 todo_list = TodoList(todos=[Todo(**t) for t in todos])
-                print(f"Todo list: {todo_list}")
+                from upsonic.utils.printing import planning_todo_list
+                planning_todo_list(todo_list, debug=True)
                 new_todos = todo_list.todos
             else:
                 # For updates, just validate individual todos (no minimum requirement)
@@ -243,6 +244,15 @@ class PlanningToolKit(ToolKit):
                 
                 if status_parts:
                     response += f" ({', '.join(status_parts)})"
+                # Print update visualization
+                from upsonic.utils.printing import planning_todo_update
+                planning_todo_update(
+                    self._current_task._task_todos,
+                    updated_count,
+                    added_count,
+                    status_counts,
+                    debug=True
+                )
                 
                 return response
                 

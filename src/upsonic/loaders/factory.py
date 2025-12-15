@@ -59,34 +59,90 @@ class LoaderFactory:
     
     @staticmethod
     def _get_default_loader_configs() -> List[Tuple[Type[BaseLoader], List[str]]]:
-        """Get the default loader configurations with lazy imports."""
-        from .csv import CSVLoader
-        from .pdf import PdfLoader
-        from .pymupdf import PyMuPDFLoader
-        from .pdfplumber import PdfPlumberLoader
-        from .docx import DOCXLoader
-        from .json import JSONLoader
-        from .xml import XMLLoader
-        from .yaml import YAMLLoader
-        from .markdown import MarkdownLoader
-        from .html import HTMLLoader
-        from .text import TextLoader
+        """Get the default loader configurations with lazy imports.
+        Each loader import is wrapped in try/except to handle cases where
+        optional dependencies are not installed. This ensures auto-detection
+        works even when some loaders cannot be imported.
+        """
+        loaders = []
+        try:
+             # CSVLoader - requires aiofiles
+            from .csv import CSVLoader
+            loaders.append((CSVLoader, ['.csv']))
+        except ImportError as e:
+            logger.debug(f"CSVLoader not available: {e}")
         
-        loaders = [
-            (CSVLoader, ['.csv']),
-            (PdfLoader, ['.pdf']),
-            (PyMuPDFLoader, ['.pdf']),  # Alternative PDF loader with PyMuPDF
-            (PdfPlumberLoader, ['.pdf']),  # Alternative PDF loader with pdfplumber (superior tables)
-            (DOCXLoader, ['.docx']),
-            (JSONLoader, ['.json', '.jsonl']),
-            (XMLLoader, ['.xml']),
-            (YAMLLoader, ['.yaml', '.yml']),
-            (MarkdownLoader, ['.md', '.markdown']),
-            (HTMLLoader, ['.html', '.htm', '.xhtml']),
-            (TextLoader, ['.txt', '.rst', '.log', '.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.cs', '.go', '.rs', '.php', '.rb', '.css', '.ini'])
-        ]
+        # PdfLoader - requires pypdf
+        try:
+            from .pdf import PdfLoader
+            loaders.append((PdfLoader, ['.pdf']))
+        except ImportError as e:
+            logger.debug(f"PdfLoader not available: {e}")
         
-        # Try to import DoclingLoader (optional dependency)
+        # PyMuPDFLoader - requires pymupdf
+        try:
+            from .pymupdf import PyMuPDFLoader
+            loaders.append((PyMuPDFLoader, ['.pdf']))
+        except ImportError as e:
+            logger.debug(f"PyMuPDFLoader not available: {e}")
+        
+        # PdfPlumberLoader - requires pdfplumber
+        try:
+            from .pdfplumber import PdfPlumberLoader
+            loaders.append((PdfPlumberLoader, ['.pdf']))
+        except ImportError as e:
+            logger.debug(f"PdfPlumberLoader not available: {e}")
+        
+        # DOCXLoader - requires python-docx
+        try:
+            from .docx import DOCXLoader
+            loaders.append((DOCXLoader, ['.docx']))
+        except ImportError as e:
+            logger.debug(f"DOCXLoader not available: {e}")
+        
+        # JSONLoader - requires jq
+        try:
+            from .json import JSONLoader
+            loaders.append((JSONLoader, ['.json', '.jsonl']))
+        except ImportError as e:
+            logger.debug(f"JSONLoader not available: {e}")
+        
+        # XMLLoader - requires lxml
+        try:
+            from .xml import XMLLoader
+            loaders.append((XMLLoader, ['.xml']))
+        except (ImportError, AttributeError) as e:
+            logger.debug(f"XMLLoader not available: {e}")
+        
+        # YAMLLoader - requires pyyaml and jq
+        try:
+            from .yaml import YAMLLoader
+            loaders.append((YAMLLoader, ['.yaml', '.yml']))
+        except ImportError as e:
+            logger.debug(f"YAMLLoader not available: {e}")
+        
+        # MarkdownLoader - requires python-frontmatter
+        try:
+            from .markdown import MarkdownLoader
+            loaders.append((MarkdownLoader, ['.md', '.markdown']))
+        except ImportError as e:
+            logger.debug(f"MarkdownLoader not available: {e}")
+        
+        # HTMLLoader - requires aiohttp, requests, beautifulsoup4
+        try:
+            from .html import HTMLLoader
+            loaders.append((HTMLLoader, ['.html', '.htm', '.xhtml']))
+        except ImportError as e:
+            logger.debug(f"HTMLLoader not available: {e}")
+        
+        # TextLoader - requires aiofiles (minimal dependencies)
+        try:
+            from .text import TextLoader
+            loaders.append((TextLoader, ['.txt', '.rst', '.log', '.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.cs', '.go', '.rs', '.php', '.rb', '.css', '.ini']))
+        except ImportError as e:
+            logger.debug(f"TextLoader not available: {e}")
+        
+        # DoclingLoader - optional advanced loader
         try:
             from .docling import DoclingLoader
             # Docling supports a wide range of formats, register with high priority
@@ -98,8 +154,8 @@ class LoaderFactory:
                 '.csv',
                 '.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.webp'
             ]))
-        except ImportError:
-            pass  # Docling not installed, skip registration
+        except ImportError as e:
+            logger.debug(f"DoclingLoader not available: {e}")
         
         return loaders
     

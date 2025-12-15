@@ -39,13 +39,15 @@ class PdfLoader(BaseLoader):
     process large numbers of documents concurrently.
     """
 
-    def __init__(self, config: PdfLoaderConfig):
+    def __init__(self, config: Optional[PdfLoaderConfig] = None):
         """
         Initializes the PdfLoader with its specific configuration.
 
         Args:
             config: A PdfLoaderConfig object with settings for PDF processing.
         """
+        if config is None:
+            config = PdfLoaderConfig()
         if not _PYPDF_AVAILABLE:
             from upsonic.utils.printing import import_error
             import_error(

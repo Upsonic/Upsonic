@@ -1,33 +1,84 @@
-from upsonic.uel.runnable import Runnable
-from upsonic.uel.sequence import RunnableSequence
-from upsonic.uel.prompt import ChatPromptTemplate
-from upsonic.uel.passthrough import RunnablePassthrough
-from upsonic.uel.parallel import RunnableParallel
-from upsonic.uel.lambda_runnable import RunnableLambda
-from upsonic.uel.branch import RunnableBranch
-from upsonic.uel.decorator import chain
-from upsonic.uel.output_parser import BaseOutputParser, StrOutputParser, PydanticOutputParser
+from __future__ import annotations
+from typing import TYPE_CHECKING, Any
 
-# Provide itemgetter that works with pipe operator
-import operator
-_original_itemgetter = operator.itemgetter
+if TYPE_CHECKING:
+    from .runnable import Runnable
+    from .sequence import RunnableSequence
+    from .prompt import ChatPromptTemplate
+    from .passthrough import RunnablePassthrough
+    from .parallel import RunnableParallel
+    from .lambda_runnable import RunnableLambda
+    from .branch import RunnableBranch
+    from .decorator import chain
+    from .output_parser import BaseOutputParser, StrOutputParser, PydanticOutputParser
 
-def itemgetter(*items):
-    """Create an itemgetter that supports the pipe operator.
+def _get_uel_classes():
+    """Lazy import of UEL classes."""
+    from .runnable import Runnable
+    from .sequence import RunnableSequence
+    from .prompt import ChatPromptTemplate
+    from .passthrough import RunnablePassthrough
+    from .parallel import RunnableParallel
+    from .lambda_runnable import RunnableLambda
+    from .branch import RunnableBranch
+    from .decorator import chain
+    from .output_parser import BaseOutputParser, StrOutputParser, PydanticOutputParser
     
-    This is a drop-in replacement for operator.itemgetter that works with UEL chains.
-    It returns a RunnableLambda, so it can be used directly in chains with the pipe operator.
+    return {
+        'Runnable': Runnable,
+        'RunnableSequence': RunnableSequence,
+        'ChatPromptTemplate': ChatPromptTemplate,
+        'RunnablePassthrough': RunnablePassthrough,
+        'RunnableParallel': RunnableParallel,
+        'RunnableLambda': RunnableLambda,
+        'RunnableBranch': RunnableBranch,
+        'chain': chain,
+        'BaseOutputParser': BaseOutputParser,
+        'StrOutputParser': StrOutputParser,
+        'PydanticOutputParser': PydanticOutputParser,
+    }
+
+def _get_itemgetter():
+    """Lazy import of itemgetter function."""
+    import operator
+    from .lambda_runnable import RunnableLambda
     
-    Example:
-        ```python
-        from upsonic.uel import itemgetter
+    _original_itemgetter = operator.itemgetter
+    
+    def itemgetter(*items):
+        """Create an itemgetter that supports the pipe operator.
         
-        chain = itemgetter("key") | (lambda x: f"Value: {x}")
-        result = chain.invoke({"key": "test"})  # Returns "Value: test"
-        ```
-    """
-    getter = _original_itemgetter(*items)
-    return RunnableLambda(getter)
+        This is a drop-in replacement for operator.itemgetter that works with UEL chains.
+        It returns a RunnableLambda, so it can be used directly in chains with the pipe operator.
+        
+        Example:
+            ```python
+            from upsonic.uel import itemgetter
+            
+            chain = itemgetter("key") | (lambda x: f"Value: {x}")
+            result = chain.invoke({"key": "test"})  # Returns "Value: test"
+            ```
+        """
+        getter = _original_itemgetter(*items)
+        return RunnableLambda(getter)
+    
+    return itemgetter
+
+def __getattr__(name: str) -> Any:
+    """Lazy loading of heavy modules and classes."""
+    # UEL classes
+    uel_classes = _get_uel_classes()
+    if name in uel_classes:
+        return uel_classes[name]
+    
+    # Itemgetter function
+    if name == "itemgetter":
+        return _get_itemgetter()
+    
+    raise AttributeError(
+        f"module '{__name__}' has no attribute '{name}'. "
+        f"Please import from the appropriate sub-module."
+    )
 
 __all__ = [
     'Runnable',

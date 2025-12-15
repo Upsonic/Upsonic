@@ -18,29 +18,81 @@ if TYPE_CHECKING:
         create_gemini_cloud_embedding
     )
 
-from .base import (
-    EmbeddingProvider,
-    EmbeddingConfig,
-    EmbeddingMode,
-    EmbeddingMetrics
-)
+if TYPE_CHECKING:
+    from .base import (
+        EmbeddingProvider,
+        EmbeddingConfig,
+        EmbeddingMode,
+        EmbeddingMetrics
+    )
+    from .factory import (
+        create_embedding_provider, 
+        list_available_providers,
+        get_provider_info,
+        create_best_available_embedding,
+        auto_detect_best_embedding,
+        get_embedding_recommendations,
+        create_openai_embedding,
+        create_azure_openai_embedding, 
+        create_bedrock_embedding,
+        create_huggingface_embedding,
+        create_fastembed_provider,
+        create_ollama_embedding,
+        create_gemini_embedding,
+        create_gemini_vertex_embedding,
+    )
 
-from .factory import (
-    create_embedding_provider, 
-    list_available_providers,
-    get_provider_info,
-    create_best_available_embedding,
-    auto_detect_best_embedding,
-    get_embedding_recommendations,
-    create_openai_embedding,
-    create_azure_openai_embedding, 
-    create_bedrock_embedding,
-    create_huggingface_embedding,
-    create_fastembed_provider,
-    create_ollama_embedding,
-    create_gemini_embedding,
-    create_gemini_vertex_embedding,
-)
+def _get_base_classes():
+    """Lazy import of base embedding classes."""
+    from .base import (
+        EmbeddingProvider,
+        EmbeddingConfig,
+        EmbeddingMode,
+        EmbeddingMetrics
+    )
+    
+    return {
+        'EmbeddingProvider': EmbeddingProvider,
+        'EmbeddingConfig': EmbeddingConfig,
+        'EmbeddingMode': EmbeddingMode,
+        'EmbeddingMetrics': EmbeddingMetrics,
+    }
+
+def _get_factory_functions():
+    """Lazy import of factory functions."""
+    from .factory import (
+        create_embedding_provider, 
+        list_available_providers,
+        get_provider_info,
+        create_best_available_embedding,
+        auto_detect_best_embedding,
+        get_embedding_recommendations,
+        create_openai_embedding,
+        create_azure_openai_embedding, 
+        create_bedrock_embedding,
+        create_huggingface_embedding,
+        create_fastembed_provider,
+        create_ollama_embedding,
+        create_gemini_embedding,
+        create_gemini_vertex_embedding,
+    )
+    
+    return {
+        'create_embedding_provider': create_embedding_provider,
+        'list_available_providers': list_available_providers,
+        'get_provider_info': get_provider_info,
+        'create_best_available_embedding': create_best_available_embedding,
+        'auto_detect_best_embedding': auto_detect_best_embedding,
+        'get_embedding_recommendations': get_embedding_recommendations,
+        'create_openai_embedding': create_openai_embedding,
+        'create_azure_openai_embedding': create_azure_openai_embedding,
+        'create_bedrock_embedding': create_bedrock_embedding,
+        'create_huggingface_embedding': create_huggingface_embedding,
+        'create_fastembed_provider': create_fastembed_provider,
+        'create_ollama_embedding': create_ollama_embedding,
+        'create_gemini_embedding': create_gemini_embedding,
+        'create_gemini_vertex_embedding': create_gemini_vertex_embedding,
+    }
 def _get_openai_embedding():
     from .openai_provider import OpenAIEmbedding
     return OpenAIEmbedding
@@ -172,6 +224,17 @@ def _get_create_arctic_embedding():
 
 def __getattr__(name: str) -> Any:
     """Lazy loading of provider classes and functions."""
+    # Base classes
+    base_classes = _get_base_classes()
+    if name in base_classes:
+        return base_classes[name]
+    
+    # Factory functions
+    factory_functions = _get_factory_functions()
+    if name in factory_functions:
+        return factory_functions[name]
+    
+    # Provider classes (lazy loaded)
     lazy_loaders = {
         "OpenAIEmbedding": _get_openai_embedding,
         "OpenAIEmbeddingConfig": _get_openai_embedding_config,
@@ -210,7 +273,10 @@ def __getattr__(name: str) -> Any:
     if name in lazy_loaders:
         return lazy_loaders[name]()
     
-    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+    raise AttributeError(
+        f"module '{__name__}' has no attribute '{name}'. "
+        f"Please import from the appropriate sub-module."
+    )
 
 
 __all__ = [

@@ -64,7 +64,7 @@ class DoclingLoader(BaseLoader):
         >>> documents = loader.load("path/to/document.pdf")
     """
 
-    def __init__(self, config: DoclingLoaderConfig):
+    def __init__(self, config: Optional[DoclingLoaderConfig] = None):
         """
         Initialize the Docling loader.
         
@@ -75,6 +75,8 @@ class DoclingLoader(BaseLoader):
         Raises:
             ImportError: If the docling package is not installed.
         """
+        if config is None:
+            config = DoclingLoaderConfig()
         if not DOCLING_AVAILABLE:
             raise ImportError(
                 "The docling package is required to use DoclingLoader. "

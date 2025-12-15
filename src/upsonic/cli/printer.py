@@ -263,7 +263,7 @@ def print_unknown_command(command: str) -> None:
     console.print()
     panel = Panel(
         f"[bold red]Unknown command:[/bold red] [yellow]{_escape_rich_markup(command)}[/yellow]\n\n"
-        "[bold]Available commands:[/bold] [cyan]init[/cyan], [cyan]add[/cyan], [cyan]install[/cyan], [cyan]run[/cyan], [cyan]zip[/cyan]",
+        "[bold]Available commands:[/bold] [cyan]init[/cyan], [cyan]add[/cyan], [cyan]remove[/cyan], [cyan]install[/cyan], [cyan]run[/cyan], [cyan]zip[/cyan]",
         title="[bold red]❌ Error[/bold red]",
         border_style="red",
         box=box.ROUNDED,
@@ -283,6 +283,24 @@ def print_dependency_added(library: str, section: str) -> None:
     panel = Panel(
         f"[bold green]✓ Added[/bold green] [cyan]{_escape_rich_markup(library)}[/cyan] to [bold]dependencies.{_escape_rich_markup(section)}[/bold]",
         title="[bold green]✅ Dependency Added[/bold green]",
+        border_style="green",
+        box=box.ROUNDED,
+    )
+    console.print(panel)
+    console.print()
+
+
+def print_dependency_removed(library: str, section: str) -> None:
+    """Print success message when a dependency is removed."""
+    rich = _get_rich_imports()
+    console = rich['console']
+    Panel = rich['Panel']
+    box = rich['box']
+    
+    console.print()
+    panel = Panel(
+        f"[bold green]✓ Removed[/bold green] [cyan]{_escape_rich_markup(library)}[/cyan] from [bold]dependencies.{_escape_rich_markup(section)}[/bold]",
+        title="[bold green]✅ Dependency Removed[/bold green]",
         border_style="green",
         box=box.ROUNDED,
     )
@@ -352,6 +370,10 @@ def print_help_general() -> None:
         "Add a dependency to upsonic_configs.json"
     )
     table.add_row(
+        "[bold]remove[/bold]",
+        "Remove a dependency from upsonic_configs.json"
+    )
+    table.add_row(
         "[bold]install[/bold]",
         "Install dependencies from upsonic_configs.json"
     )
@@ -391,7 +413,6 @@ def print_help_init() -> None:
         "[bold]Description:[/bold]\n"
         "Initialize a new Upsonic agent project in the current directory.\n"
         "This command will prompt you for an agent name and create the following files:\n\n"
-        "  • [cyan]src/io.py[/cyan] - Input/output schema definitions\n"
         "  • [cyan]src/main.py[/cyan] - Main agent file with async main() function\n"
         "  • [cyan]upsonic_configs.json[/cyan] - Configuration file with agent settings\n\n"
         "[bold]Usage:[/bold]\n"
@@ -400,7 +421,7 @@ def print_help_init() -> None:
         "  • Prompts for an agent name\n"
         "  • Creates project structure with default templates\n"
         "  • Sets up configuration with default dependencies\n"
-        "  • Configures input/output schemas\n\n"
+        "  • Configures input/output schemas in config file\n\n"
         "[bold]Note:[/bold] If files already exist, you will be prompted to overwrite them."
     )
     
@@ -447,6 +468,41 @@ def print_help_add() -> None:
     panel = Panel(
         help_text,
         title="[bold cyan]➕ upsonic add[/bold cyan]",
+        border_style="cyan",
+        box=box.ROUNDED,
+        padding=(1, 2),
+    )
+    console.print(panel)
+    console.print()
+
+
+def print_help_remove() -> None:
+    """Print help for remove command."""
+    rich = _get_rich_imports()
+    console = rich['console']
+    Panel = rich['Panel']
+    box = rich['box']
+    
+    console.print()
+    
+    help_text = (
+        "[bold]Description:[/bold]\n"
+        "Remove a dependency from the upsonic_configs.json file.\n\n"
+        "[bold]Usage:[/bold]\n"
+        "  [cyan]upsonic remove <library> <section>[/cyan]\n\n"
+        "[bold]Arguments:[/bold]\n"
+        "  [bold]library[/bold]  Library name to remove (exact match or package name)\n"
+        "              Example: [cyan]requests[/cyan] or [cyan]requests==2.31.0[/cyan]\n"
+        "  [bold]section[/bold]  Dependency section name (api, streamlit, or development)\n\n"
+        "[bold]Examples:[/bold]\n"
+        "  [cyan]upsonic remove requests api[/cyan]          # Removes requests (any version)\n"
+        "  [cyan]upsonic remove pandas streamlit[/cyan]      # Removes pandas\n\n"
+        "[bold]Note:[/bold] Requires upsonic_configs.json to exist."
+    )
+    
+    panel = Panel(
+        help_text,
+        title="[bold cyan]➖ upsonic remove[/bold cyan]",
         border_style="cyan",
         box=box.ROUNDED,
         padding=(1, 2),

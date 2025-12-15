@@ -23,13 +23,15 @@ try:
         RRFRanker,
         WeightedRanker,
     )
+    _MILVUS_AVAILABLE = True
 except ImportError:
-    from upsonic.utils.printing import import_error
-    import_error(
-        package_name="pymilvus",
-        install_command="pip install pymilvus>=2.6.0",
-        feature_name="Milvus provider"
-    )
+    AsyncMilvusClient = None  # type: ignore
+    MilvusClient = None  # type: ignore
+    DataType = None  # type: ignore
+    AnnSearchRequest = None  # type: ignore
+    RRFRanker = None  # type: ignore
+    WeightedRanker = None  # type: ignore
+    _MILVUS_AVAILABLE = False
 
 from upsonic.vectordb.base import BaseVectorDBProvider
 from upsonic.vectordb.config import MilvusConfig, Mode
@@ -69,6 +71,14 @@ class MilvusProvider(BaseVectorDBProvider):
         Args:
             config: MilvusConfig object or dict that will be converted to MilvusConfig
         """
+        if not _MILVUS_AVAILABLE:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="pymilvus",
+                install_command='pip install "upsonic[rag]"',
+                feature_name="Milvus vector database provider"
+            )
+        
         # Convert dict to MilvusConfig if necessary
         if isinstance(config, dict):
             config = MilvusConfig.from_dict(config)

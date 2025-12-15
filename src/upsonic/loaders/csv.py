@@ -2,7 +2,7 @@ import asyncio
 import csv
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 try:
     import aiofiles
@@ -26,8 +26,10 @@ class CSVLoader(BaseLoader):
     document is synthesized from the row's columns based on the configuration.
     """
 
-    def __init__(self, config: CSVLoaderConfig):
+    def __init__(self, config: Optional[CSVLoaderConfig] = None):
         """Initializes the CSVLoader with its specific configuration."""
+        if config is None:
+            config = CSVLoaderConfig()
         if not _AIOFILES_AVAILABLE:
             from upsonic.utils.printing import import_error
             import_error(

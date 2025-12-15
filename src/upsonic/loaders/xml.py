@@ -1,6 +1,6 @@
 import asyncio
 from pathlib import Path
-from typing import List, Union
+from typing import List, Optional, Union
 
 try:
     from lxml import etree
@@ -24,13 +24,15 @@ class XMLLoader(BaseLoader):
     of the lxml library for robust and efficient parsing.
     """
 
-    def __init__(self, config: XMLLoaderConfig):
+    def __init__(self, config: Optional[XMLLoaderConfig] = None):
         """
         Initializes the XMLLoader with its specific configuration.
 
         Args:
             config: An XMLLoaderConfig object with settings for XML processing.
         """
+        if config is None:
+            config = XMLLoaderConfig()
         if not _LXML_AVAILABLE:
             from upsonic.utils.printing import import_error
             import_error(
@@ -164,7 +166,7 @@ class XMLLoader(BaseLoader):
 
 
     @staticmethod
-    def _strip_namespaces(root_element: etree._Element):
+    def _strip_namespaces(root_element: "etree._Element"):
         """
         Recursively removes namespace information from all elements in the tree.
         """

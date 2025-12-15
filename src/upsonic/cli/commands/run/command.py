@@ -55,8 +55,15 @@ def run_command(host: str = "0.0.0.0", port: int = 8000) -> int:
         agent_name = config_data.get("agent_name", "Upsonic Agent")
         description = config_data.get("description", "An Upsonic AI agent")
 
-        # Load main.py from src directory
-        agent_py_file = config_data.get("agent_py", "src/main.py")
+        # Load agent file from src directory
+        # Priority: entrypoints.api_file
+        entrypoints = config_data.get("entrypoints", {})
+        agent_py_file = entrypoints.get("api_file")
+        
+        if not agent_py_file:
+            print_error("entrypoints.api_file not found in upsonic_configs.json")
+            return 1
+            
         agent_py_path = current_dir / agent_py_file
         if not agent_py_path.exists():
             print_error(f"Agent file not found: {agent_py_path}")

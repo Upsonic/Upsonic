@@ -38,8 +38,10 @@ class MarkdownLoader(BaseLoader):
     in the MarkdownLoaderConfig to deliver precisely tailored output.
     """
 
-    def __init__(self, config: MarkdownLoaderConfig):
+    def __init__(self, config: Optional[MarkdownLoaderConfig] = None):
         """Initializes the MarkdownLoader with its specific configuration."""
+        if config is None:
+            config = MarkdownLoaderConfig()
         if not _FRONTMATTER_AVAILABLE:
             from upsonic.utils.printing import import_error
             import_error(

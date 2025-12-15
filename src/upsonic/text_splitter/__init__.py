@@ -1,10 +1,11 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
-from .base import (
-    BaseChunker,
-    BaseChunkingConfig
-)
+if TYPE_CHECKING:
+    from .base import (
+        BaseChunker,
+        BaseChunkingConfig
+    )
 
 if TYPE_CHECKING:
     from .character import CharacterChunker, CharacterChunkingConfig
@@ -100,17 +101,39 @@ def _get_factory_functions():
         'ChunkingUseCase': ChunkingUseCase,
     }
 
+def _get_base_classes():
+    """Lazy import of base chunker classes."""
+    from .base import (
+        BaseChunker,
+        BaseChunkingConfig
+    )
+    
+    return {
+        'BaseChunker': BaseChunker,
+        'BaseChunkingConfig': BaseChunkingConfig,
+    }
+
 def __getattr__(name: str) -> Any:
     """Lazy loading of heavy modules and classes."""
+    # Base classes
+    base_classes = _get_base_classes()
+    if name in base_classes:
+        return base_classes[name]
+    
+    # Chunker classes
     chunker_classes = _get_chunker_classes()
     if name in chunker_classes:
         return chunker_classes[name]
     
+    # Factory functions
     factory_functions = _get_factory_functions()
     if name in factory_functions:
         return factory_functions[name]
     
-    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+    raise AttributeError(
+        f"module '{__name__}' has no attribute '{name}'. "
+        f"Please import from the appropriate sub-module."
+    )
 
 __all__ = [
     "BaseChunker",

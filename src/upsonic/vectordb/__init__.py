@@ -1,38 +1,27 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
-from .base import (
-    BaseVectorDBProvider,
-)
-
-from .config import (
-    # Base configs
-    BaseVectorDBConfig,
-    DistanceMetric,
-    IndexType,
-    Mode,
-    ConnectionConfig,
-    
-    # Index configs
-    HNSWIndexConfig,
-    IVFIndexConfig,
-    FlatIndexConfig,
-    
-    # Payload configs
-    PayloadFieldConfig,
-    
-    # Provider configs
-    ChromaConfig,
-    FaissConfig,
-    QdrantConfig,
-    PineconeConfig,
-    MilvusConfig,
-    WeaviateConfig,
-    PgVectorConfig,
-    
-    # Factory function
-    create_config,
-)
+if TYPE_CHECKING:
+    from .base import BaseVectorDBProvider
+    from .config import (
+        BaseVectorDBConfig,
+        DistanceMetric,
+        IndexType,
+        Mode,
+        ConnectionConfig,
+        HNSWIndexConfig,
+        IVFIndexConfig,
+        FlatIndexConfig,
+        PayloadFieldConfig,
+        ChromaConfig,
+        FaissConfig,
+        QdrantConfig,
+        PineconeConfig,
+        MilvusConfig,
+        WeaviateConfig,
+        PgVectorConfig,
+        create_config,
+    )
 
 if TYPE_CHECKING:
     from .providers.chroma import ChromaProvider
@@ -54,13 +43,77 @@ _PROVIDER_MAP = {
     'PgVectorProvider': '.providers.pgvector',
 }
 
-# Cache for lazily imported providers
+# Cache for lazily imported providers and configs
 _provider_cache: dict[str, Any] = {}
+_config_cache: dict[str, Any] = {}
 
+def _get_base_classes():
+    """Lazy import of base classes."""
+    from .base import BaseVectorDBProvider
+    return {
+        'BaseVectorDBProvider': BaseVectorDBProvider,
+    }
+
+def _get_config_classes():
+    """Lazy import of config classes."""
+    if _config_cache:
+        return _config_cache
+    
+    from .config import (
+        BaseVectorDBConfig,
+        DistanceMetric,
+        IndexType,
+        Mode,
+        ConnectionConfig,
+        HNSWIndexConfig,
+        IVFIndexConfig,
+        FlatIndexConfig,
+        PayloadFieldConfig,
+        ChromaConfig,
+        FaissConfig,
+        QdrantConfig,
+        PineconeConfig,
+        MilvusConfig,
+        WeaviateConfig,
+        PgVectorConfig,
+        create_config,
+    )
+    
+    _config_cache.update({
+        'BaseVectorDBConfig': BaseVectorDBConfig,
+        'DistanceMetric': DistanceMetric,
+        'IndexType': IndexType,
+        'Mode': Mode,
+        'ConnectionConfig': ConnectionConfig,
+        'HNSWIndexConfig': HNSWIndexConfig,
+        'IVFIndexConfig': IVFIndexConfig,
+        'FlatIndexConfig': FlatIndexConfig,
+        'PayloadFieldConfig': PayloadFieldConfig,
+        'ChromaConfig': ChromaConfig,
+        'FaissConfig': FaissConfig,
+        'QdrantConfig': QdrantConfig,
+        'PineconeConfig': PineconeConfig,
+        'MilvusConfig': MilvusConfig,
+        'WeaviateConfig': WeaviateConfig,
+        'PgVectorConfig': PgVectorConfig,
+        'create_config': create_config,
+    })
+    
+    return _config_cache
 
 def __getattr__(name: str) -> Any:
-    """Lazy import of provider classes."""
-    # Check cache first
+    """Lazy import of provider and config classes."""
+    # Check base classes first
+    base_classes = _get_base_classes()
+    if name in base_classes:
+        return base_classes[name]
+    
+    # Check config classes
+    config_classes = _get_config_classes()
+    if name in config_classes:
+        return config_classes[name]
+    
+    # Check provider cache
     if name in _provider_cache:
         return _provider_cache[name]
     
@@ -81,7 +134,10 @@ def __getattr__(name: str) -> Any:
                 f"Failed to import provider: {e}"
             ) from e
     
-    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+    raise AttributeError(
+        f"module '{__name__}' has no attribute '{name}'. "
+        f"Please import from the appropriate sub-module."
+    )
 
 
 __all__ = [

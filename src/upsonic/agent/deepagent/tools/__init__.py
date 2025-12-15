@@ -20,9 +20,38 @@ Subagent Tools:
 All tools integrate with the backend system and use proper security validation.
 """
 
-from .filesystem_toolkit import FilesystemToolKit
-from .planning_toolkit import PlanningToolKit, Todo, TodoList
-from .subagent_toolkit import SubagentToolKit
+from __future__ import annotations
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .filesystem_toolkit import FilesystemToolKit
+    from .planning_toolkit import PlanningToolKit, Todo, TodoList
+    from .subagent_toolkit import SubagentToolKit
+
+def _get_toolkit_classes():
+    """Lazy import of toolkit classes."""
+    from .filesystem_toolkit import FilesystemToolKit
+    from .planning_toolkit import PlanningToolKit, Todo, TodoList
+    from .subagent_toolkit import SubagentToolKit
+    
+    return {
+        'FilesystemToolKit': FilesystemToolKit,
+        'PlanningToolKit': PlanningToolKit,
+        'Todo': Todo,
+        'TodoList': TodoList,
+        'SubagentToolKit': SubagentToolKit,
+    }
+
+def __getattr__(name: str) -> Any:
+    """Lazy loading of heavy modules and classes."""
+    toolkit_classes = _get_toolkit_classes()
+    if name in toolkit_classes:
+        return toolkit_classes[name]
+    
+    raise AttributeError(
+        f"module '{__name__}' has no attribute '{name}'. "
+        f"Please import from the appropriate sub-module."
+    )
 
 __all__ = [
     "FilesystemToolKit",

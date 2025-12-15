@@ -103,6 +103,12 @@ class Team:
         Asynchronous version of the multi_agent method.
         """
         if self.mode == "sequential":
+            # Set shared memory on all agents if memory is provided
+            if self.memory:
+                for agent in agent_configurations:
+                    if agent.memory is None:
+                        agent.memory = self.memory
+
             context_sharing = ContextSharing()
             task_assignment = TaskAssignment()
             combiner_model = self.model

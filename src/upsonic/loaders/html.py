@@ -1,7 +1,7 @@
 import asyncio
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 import hashlib
 
 try:
@@ -43,8 +43,10 @@ class HTMLLoader(BaseLoader):
     filtering, and formatting the extracted content.
     """
 
-    def __init__(self, config: HTMLLoaderConfig):
+    def __init__(self, config: Optional[HTMLLoaderConfig] = None):
         """Initializes the HTMLLoader with its specific configuration."""
+        if config is None:
+            config = HTMLLoaderConfig()
         if not _AIOHTTP_AVAILABLE:
             from upsonic.utils.printing import import_error
             import_error(

@@ -8,7 +8,7 @@ from upsonic import Agent, Task
 from upsonic.agent.run_result import RunResult
 from upsonic.models import ModelResponse, TextPart
 
-from upsonic import (
+from upsonic.safety_engine import (
     RuleBase,
     ActionBase,
     Policy,

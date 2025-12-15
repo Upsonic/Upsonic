@@ -1,6 +1,6 @@
 import asyncio
 from pathlib import Path
-from typing import List, Union
+from typing import List, Optional, Union
 
 try:
     import docx
@@ -29,8 +29,10 @@ class DOCXLoader(BaseLoader):
     Each .docx file is loaded as a single Document object.
     """
 
-    def __init__(self, config: DOCXLoaderConfig):
+    def __init__(self, config: Optional[DOCXLoaderConfig] = None):
         """Initializes the DOCXLoader with its specific configuration."""
+        if config is None:
+            config = DOCXLoaderConfig()
         if not _DOCX_AVAILABLE:
             from upsonic.utils.printing import import_error
             import_error(
