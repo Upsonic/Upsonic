@@ -1175,6 +1175,8 @@ class Agent(BaseAgent):
     ) -> "ModelResponse":
         """Handle model response including tool calls."""
         from upsonic.messages import ToolCallPart, ToolReturnPart, TextPart, UserPromptPart, ModelRequest, ModelResponse
+        from upsonic.output import DEFAULT_OUTPUT_TOOL_NAME
+        import json
         
         if hasattr(self, '_tool_limit_reached') and self._tool_limit_reached:
             return response
@@ -1185,6 +1187,28 @@ class Agent(BaseAgent):
         ]
         
         if tool_calls:
+            # If the model emitted an output tool call, treat it as the final structured output.
+            # (Do not attempt to execute it via ToolManager.)
+            current_task = getattr(self, 'current_task', None)
+            if (
+                current_task is not None
+                and getattr(current_task, 'response_format', None) not in (None, str)
+                and len(tool_calls) == 1
+                and tool_calls[0].tool_name == DEFAULT_OUTPUT_TOOL_NAME
+            ):
+                args = tool_calls[0].args_as_dict()
+                final_text = json.dumps(args, ensure_ascii=False)
+                return ModelResponse(
+                    parts=[TextPart(content=final_text)],
+                    model_name=response.model_name,
+                    timestamp=response.timestamp,
+                    usage=response.usage,
+                    provider_name=response.provider_name,
+                    provider_response_id=response.provider_response_id,
+                    provider_details=response.provider_details,
+                    finish_reason="stop",
+                )
+
             tool_results = await self._execute_tool_calls(tool_calls)
             
             if hasattr(self, '_tool_limit_reached') and self._tool_limit_reached:

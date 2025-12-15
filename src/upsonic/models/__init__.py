@@ -1548,6 +1548,7 @@ def infer_model(  # noqa: C901
         from .bedrock import BedrockConverseModel
 
         return BedrockConverseModel(model_name, provider=provider)
+
     elif model_kind == 'huggingface':
         from .huggingface import HuggingFaceModel
 

@@ -5,7 +5,7 @@ import os
 import typing
 from collections.abc import AsyncIterator, Iterable, Iterator, Mapping
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from itertools import count
 from typing import TYPE_CHECKING, Any, Generic, Literal, cast, overload
@@ -51,6 +51,7 @@ from upsonic.providers import Provider, infer_provider
 from upsonic.providers.bedrock import BedrockModelProfile
 from upsonic.models.settings import ModelSettings
 from upsonic.tools import ToolDefinition
+from upsonic.output import DEFAULT_OUTPUT_TOOL_NAME
 from upsonic import _utils, usage
 from upsonic.profiles import ModelProfileSpec
 if TYPE_CHECKING:
@@ -405,6 +406,32 @@ class BedrockConverseModel(Model):
         response = await self._messages_create(messages, False, settings, model_request_parameters)
         model_response = await self._process_response(response)
         return model_response
+
+    def prepare_request(
+        self,
+        model_settings: ModelSettings | None,
+        model_request_parameters: ModelRequestParameters,
+    ) -> tuple[ModelSettings | None, ModelRequestParameters]:
+        # Bedrock Converse doesn't support `response_format/json_schema` in the request payload.
+        # To support structured outputs, translate native schema output into an output tool.
+        if model_request_parameters.output_mode == 'native' and model_request_parameters.output_object is not None:
+            output_object = model_request_parameters.output_object
+            output_tool = ToolDefinition(
+                name=DEFAULT_OUTPUT_TOOL_NAME,
+                description=output_object.description,
+                parameters_json_schema=output_object.json_schema,
+                kind='output',
+                strict=output_object.strict,
+            )
+            model_request_parameters = replace(
+                model_request_parameters,
+                output_mode='tool',
+                output_tools=[output_tool],
+                output_object=None,
+                allow_text_output=False,
+            )
+
+        return super().prepare_request(model_settings, model_request_parameters)
 
     async def count_tokens(
         self,
