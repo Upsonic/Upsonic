@@ -8,9 +8,9 @@ Supports feedback loop mechanism where policies can provide constructive
 feedback before applying blocking actions.
 """
 
-from typing import List, Optional, Union, Tuple, TYPE_CHECKING
+from typing import List, Optional, Union, TYPE_CHECKING
 from upsonic.safety_engine.base import Policy
-from upsonic.safety_engine.models import PolicyInput, RuleOutput, PolicyOutput
+from upsonic.safety_engine.models import PolicyInput, RuleOutput
 from upsonic.safety_engine.exceptions import DisallowedOperation
 
 if TYPE_CHECKING:
@@ -162,6 +162,7 @@ class PolicyManager:
         2. Applies the most restrictive action across all policies
         3. Aggregates transformations (replacements/anonymizations)
         4. Handles exceptions properly
+        5. Generates feedback if enabled and policy violation detected
         
         Args:
             policy_input: Input to evaluate

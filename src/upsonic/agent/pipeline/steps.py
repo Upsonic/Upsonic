@@ -1105,8 +1105,6 @@ class AgentPolicyStep(Step):
         # Reset retry counter at start of new execution
         context.agent.agent_policy_manager.reset_retry_count()
         
-        # Update the run result output as well
-        context.agent._run_result.output = context.final_output
         # Feedback loop: keep trying until policy passes or retries exhausted
         max_iterations = context.agent.agent_policy_manager.feedback_loop_count + 1  # +1 for initial check
         iteration = 0
