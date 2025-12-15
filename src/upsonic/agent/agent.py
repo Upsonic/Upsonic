@@ -1,7 +1,5 @@
 import asyncio
 import copy
-import inspect
-import time
 import uuid
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Dict, List, Literal, Optional, Union, TYPE_CHECKING
@@ -9,40 +7,33 @@ from typing import Any, AsyncIterator, Dict, List, Literal, Optional, Union, TYP
 PromptCompressor = None
 
 from upsonic.utils.logging_config import sentry_sdk
-from upsonic import _utils
 from upsonic.agent.base import BaseAgent
 from upsonic.agent.run_result import RunResult, StreamRunResult
 from upsonic._utils import now_utc
 from upsonic.utils.retry import retryable
-from upsonic.utils.validators import validate_attachments_exist
 from upsonic.tools.processor import ExternalExecutionPause
-from upsonic.messages import FinalResultEvent
 
 if TYPE_CHECKING:
-    from upsonic.models import Model, ModelRequest, ModelMessage, ModelRequestParameters, ModelResponse
-    from upsonic.messages import ModelResponseStreamEvent, FinalResultEvent, PartStartEvent, PartDeltaEvent, TextPart, ToolCallPart, ToolReturnPart
+    from upsonic.models import Model, ModelRequest, ModelRequestParameters, ModelResponse
+    from upsonic.messages import ModelResponseStreamEvent, ToolCallPart, ToolReturnPart
     from upsonic.tasks.tasks import Task
     from upsonic.storage.memory.memory import Memory
     from upsonic.canvas.canvas import Canvas
     from upsonic.models.settings import ModelSettings
     from upsonic.profiles import ModelProfile
-    from upsonic.reflection import ReflectionConfig, ReflectionProcessor
+    from upsonic.reflection import ReflectionConfig
     from upsonic.safety_engine.base import Policy
-    from upsonic.safety_engine.exceptions import DisallowedOperation
-    from upsonic.safety_engine.models import PolicyInput, RuleOutput
-    from upsonic.tools import ToolManager, ToolMetrics, ToolDefinition
+    from upsonic.tools import ToolDefinition
     from upsonic.usage import RequestUsage
     from upsonic.agent.context_managers import (
-        CallManager, ContextManager, ReliabilityManager, 
-        MemoryManager, SystemPromptManager, TaskManager
+        MemoryManager
     )
     from upsonic.graph.graph import State
-    from ..db.database import DatabaseBase
+    from upsonic.db.database import DatabaseBase
     from upsonic.models.model_selector import ModelRecommendation
 else:
     Model = "Model"
     ModelRequest = "ModelRequest"
-    ModelMessage = "ModelMessage"
     ModelRequestParameters = "ModelRequestParameters"
     ModelResponse = "ModelResponse"
     Task = "Task"
@@ -51,24 +42,13 @@ else:
     ModelSettings = "ModelSettings"
     ModelProfile = "ModelProfile"
     ReflectionConfig = "ReflectionConfig"
-    ReflectionProcessor = "ReflectionProcessor"
     Policy = "Policy"
-    DisallowedOperation = "DisallowedOperation"
-    PolicyInput = "PolicyInput"
-    RuleOutput = "RuleOutput"
-    ToolManager = "ToolManager"
-    ToolMetrics = "ToolMetrics"
     ToolDefinition = "ToolDefinition"
     RequestUsage = "RequestUsage"
-    validate_attachments_exist = "validate_attachments_exist"
-    CallManager = "CallManager"
-    ContextManager = "ContextManager"
-    ReliabilityManager = "ReliabilityManager"
     MemoryManager = "MemoryManager"
-    SystemPromptManager = "SystemPromptManager"
-    TaskManager = "TaskManager"
     State = "State"
     ModelRecommendation = "ModelRecommendation"
+    DatabaseBase = "DatabaseBase"
 
 RetryMode = Literal["raise", "return_false"]
 
@@ -582,8 +562,6 @@ class Agent(BaseAgent):
             
             if validation_result.should_block():
                 # Handle blocking based on action type
-                from upsonic.safety_engine.exceptions import DisallowedOperation
-                
                 # If DisallowedOperation was raised by a RAISE action policy, re-raise it
                 if validation_result.disallowed_exception:
                     raise validation_result.disallowed_exception
@@ -1544,7 +1522,7 @@ class Agent(BaseAgent):
             result = self._prompt_compressor.compress_prompt(
                 context.split('\n'),
                 instruction=instruction,
-                ratio=ratio
+                rate=ratio
             )
             return result['compressed_prompt']
         except Exception as e:
