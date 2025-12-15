@@ -1424,7 +1424,7 @@ def infer_model(  # noqa: C901
     # Check for custom_provider from environment variable
     custom_provider = os.getenv("LLM_CUSTOM_PROVIDER") if os.getenv("LLM_CUSTOM_PROVIDER", None) else None
     
-    env_set_model = os.getenv("LLM_MODEL_KEY").split(":")[0] if os.getenv("LLM_MODEL_KEY", None) else "openai/gpt-4o"
+    env_set_model = os.getenv("LLM_MODEL_KEY") if os.getenv("LLM_MODEL_KEY", None) else "openai/gpt-4o"
     bypass_llm_model = None
     try:
         from celery import current_task
