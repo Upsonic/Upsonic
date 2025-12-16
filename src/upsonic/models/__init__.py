@@ -24,7 +24,7 @@ from typing_extensions import TypeAliasType, TypedDict
 
 from upsonic import _utils
 from upsonic._json_schema import JsonSchemaTransformer
-from upsonic.output import OutputObjectDefinition
+from upsonic.output import OutputObjectDefinition, DEFAULT_OUTPUT_TOOL_NAME
 from upsonic._output import PromptedOutputSchema
 from upsonic._parts_manager import ModelResponsePartsManager
 from upsonic.tools.builtin_tools import AbstractBuiltinTool
@@ -1042,11 +1042,12 @@ class Model(Runnable[Any, Any]):
         
         output_mode = 'text'
         output_object = None
+        output_tools = []
         allow_text_output = True
         
         if self._response_format and self._response_format != str and self._response_format is not str:
             if isinstance(self._response_format, type) and issubclass(self._response_format, BaseModel):
-                output_mode = 'native'
+                output_mode = 'auto'
                 allow_text_output = False
                 
                 schema = self._response_format.model_json_schema()
@@ -1056,12 +1057,23 @@ class Model(Runnable[Any, Any]):
                     description=self._response_format.__doc__,
                     strict=True
                 )
+                
+                # Create output tool for tool-based structured output
+                from upsonic.tools import ToolDefinition
+                output_tools = [ToolDefinition(
+                    name=DEFAULT_OUTPUT_TOOL_NAME,
+                    parameters_json_schema=schema,
+                    description=self._response_format.__doc__ or f"Return the final result as a {self._response_format.__name__}",
+                    kind='output',
+                    strict=True
+                )]
         
         return ModelRequestParameters(
             function_tools=tool_definitions,
             builtin_tools=builtin_tools,
             output_mode=output_mode,
             output_object=output_object,
+            output_tools=output_tools,
             allow_text_output=allow_text_output
         )
 
@@ -1589,6 +1601,205 @@ _OPENAI_CHAT_PROVIDERS = {
 _GOOGLE_PROVIDERS = {'google-gla', 'google-vertex'}
 
 
+# --- Model ID Normalization ---
+
+def _get_known_providers() -> set:
+    """Extract all known provider names from KnownModelName."""
+    providers = set()
+    # Access the Literal type arguments from KnownModelName
+    try:
+        from typing import get_args
+        known_names = get_args(KnownModelName.__value__)
+        for name in known_names:
+            if '/' in name and name != 'test':
+                provider = name.split('/')[0]
+                providers.add(provider)
+    except Exception:
+        # Fallback to common providers
+        providers = {'openai', 'anthropic', 'bedrock', 'google-gla', 'google-vertex', 
+                     'mistral', 'groq', 'cohere', 'grok', 'deepseek', 'cerebras'}
+    return providers
+
+
+def _build_model_alias_index() -> dict:
+    """Build an index mapping simplified model names to full model IDs.
+    
+    For each known model, extracts a simplified version that users can use.
+    Returns: {
+        "provider/simplified-name": {
+            "version": "provider/full-model-id",
+            ...
+        }
+    }
+    """
+    import re
+    from typing import get_args
+    
+    alias_index = {}
+    
+    try:
+        known_names = get_args(KnownModelName.__value__)
+    except Exception:
+        return alias_index
+    
+    for full_id in known_names:
+        if '/' not in full_id or full_id == 'test':
+            continue
+            
+        provider, model_name = full_id.split('/', maxsplit=1)
+        
+        # Handle Bedrock models: anthropic.claude-3-5-sonnet-20241022-v2:0 -> claude-3-5-sonnet
+        if provider == 'bedrock':
+            # Pattern: [region.]vendor.model-name-date-version:revision
+            # Example: anthropic.claude-3-5-sonnet-20241022-v2:0
+            # Example: us.anthropic.claude-3-5-sonnet-20241022-v2:0 (cross-region profile)
+            
+            # Check if this is a regional prefix model (us., eu., global.)
+            has_region_prefix = any(model_name.startswith(p) for p in ('us.', 'eu.', 'global.'))
+            
+            # Remove vendor prefix if present (e.g., anthropic. -> "")
+            if '.' in model_name:
+                parts = model_name.split('.')
+                # Get the part after vendor (e.g., claude-3-5-sonnet-20241022-v2:0)
+                model_part = parts[-1] if len(parts) > 1 else model_name
+                # Extract base model name and version (remove date and version suffix)
+                base_match = re.match(r'^(.+?)(?:-\d{8})?(-v\d+)?(?::\d+)?$', model_part)
+                if base_match:
+                    simplified = base_match.group(1)
+                    version_match = base_match.group(2)
+                    version = version_match.lstrip('-') if version_match else 'latest'
+                else:
+                    continue
+            else:
+                continue
+            
+            alias_key = f"{provider}/{simplified}"
+            if alias_key not in alias_index:
+                alias_index[alias_key] = {}
+            
+            # Prefer non-prefixed models (direct models) over regional inference profiles
+            # Only add if: (1) version not set, or (2) this is non-prefixed and existing is prefixed
+            if version not in alias_index[alias_key]:
+                alias_index[alias_key][version] = full_id
+            elif not has_region_prefix:
+                # Non-prefixed model takes priority - overwrite prefixed one
+                alias_index[alias_key][version] = full_id
+            
+            # Set as latest: prefer non-prefixed models
+            if 'latest' not in alias_index[alias_key]:
+                alias_index[alias_key]['latest'] = full_id
+            elif not has_region_prefix:
+                # Non-prefixed model takes priority for latest
+                alias_index[alias_key]['latest'] = full_id
+        else:
+            # For other providers: extract base model name
+            # Example: gpt-4o-2024-05-13 -> gpt-4o
+            # Example: claude-3-5-sonnet-latest -> claude-3-5-sonnet
+            
+            # Try to extract date suffix
+            date_match = re.match(r'^(.+?)(?:-\d{4}-\d{2}-\d{2})?(-\d{8})?$', model_name)
+            if date_match and date_match.group(2):
+                simplified = date_match.group(1)
+                version = date_match.group(2).lstrip('-')
+            elif '-latest' in model_name:
+                simplified = model_name.replace('-latest', '')
+                version = 'latest'
+            else:
+                simplified = model_name
+                version = 'latest'
+            
+            alias_key = f"{provider}/{simplified}"
+            if alias_key not in alias_index:
+                alias_index[alias_key] = {}
+            alias_index[alias_key][version] = full_id
+            # Set as latest if not already set
+            if 'latest' not in alias_index[alias_key]:
+                alias_index[alias_key]['latest'] = full_id
+    
+    # Clean up internal tracking keys
+    for key in alias_index:
+        alias_index[key].pop('_max_version', None)
+    
+    return alias_index
+
+
+# Cache the indexes
+_KNOWN_PROVIDERS_CACHE = None
+_MODEL_ALIAS_INDEX_CACHE = None
+
+
+def _get_cached_known_providers() -> set:
+    """Get cached known providers set."""
+    global _KNOWN_PROVIDERS_CACHE
+    if _KNOWN_PROVIDERS_CACHE is None:
+        _KNOWN_PROVIDERS_CACHE = _get_known_providers()
+    return _KNOWN_PROVIDERS_CACHE
+
+
+def _get_cached_model_alias_index() -> dict:
+    """Get cached model alias index."""
+    global _MODEL_ALIAS_INDEX_CACHE
+    if _MODEL_ALIAS_INDEX_CACHE is None:
+        _MODEL_ALIAS_INDEX_CACHE = _build_model_alias_index()
+    return _MODEL_ALIAS_INDEX_CACHE
+
+
+def normalize_model_id(model_id: str) -> str:
+    """Normalize a simplified model ID to its full format.
+    
+    Supports formats like:
+    - bedrock/claude-3-5-sonnet:v2 -> bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0
+    - openai/gpt-4o:latest -> openai/gpt-4o
+    - ollama/llama3.1:8b -> ollama/llama3.1:8b (pass-through, unknown provider)
+    
+    Args:
+        model_id: The model ID to normalize (e.g., "bedrock/claude-3-5-sonnet:v2")
+        
+    Returns:
+        The normalized full model ID, or the original if no alias found or provider unknown.
+    """
+    if '/' not in model_id:
+        return model_id
+    
+    # Check if already a known model (exact match)
+    try:
+        from typing import get_args
+        known_names = get_args(KnownModelName.__value__)
+        if model_id in known_names:
+            return model_id
+    except Exception:
+        pass
+    
+    # Parse provider and model:version
+    provider, rest = model_id.split('/', maxsplit=1)
+    
+    # Check if provider is known
+    known_providers = _get_cached_known_providers()
+    if provider not in known_providers:
+        # Unknown provider (like ollama), pass through as-is
+        return model_id
+    
+    # Parse model name and version
+    if ':' in rest:
+        model_name, version = rest.rsplit(':', maxsplit=1)
+    else:
+        model_name = rest
+        version = 'latest'  # Default to latest
+    
+    # Look up in alias index
+    alias_index = _get_cached_model_alias_index()
+    alias_key = f"{provider}/{model_name}"
+    
+    if alias_key in alias_index:
+        versions = alias_index[alias_key]
+        if version in versions:
+            return versions[version]
+        elif 'latest' in versions:
+            return versions['latest']
+    
+    # No alias found, return original
+    return model_id
+
 def infer_model(  # noqa: C901
     model: Model | KnownModelName | str, provider_factory: Callable[[str], Provider[Any]] = infer_provider
 ) -> Model:
@@ -1629,6 +1840,10 @@ def infer_model(  # noqa: C901
 
     if isinstance(model, Model):
         return model
+
+    # Normalize simplified model IDs to full format
+    # e.g., "bedrock/claude-3-5-sonnet:v2" -> "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0"
+    model = normalize_model_id(model)
 
     try:
         provider_name, model_name = model.split('/', maxsplit=1)

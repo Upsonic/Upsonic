@@ -413,7 +413,7 @@ def print_help_init() -> None:
         "[bold]Description:[/bold]\n"
         "Initialize a new Upsonic agent project in the current directory.\n"
         "This command will prompt you for an agent name and create the following files:\n\n"
-        "  • [cyan]src/main.py[/cyan] - Main agent file with async main() function\n"
+        "  • [cyan]main.py[/cyan] - Main agent file with async main() function\n"
         "  • [cyan]upsonic_configs.json[/cyan] - Configuration file with agent settings\n\n"
         "[bold]Usage:[/bold]\n"
         "  [cyan]upsonic init[/cyan]\n\n"
@@ -582,7 +582,7 @@ def print_help_run() -> None:
         "  • Supports both [cyan]multipart/form-data[/cyan] and [cyan]application/json[/cyan]\n"
         "  • Dynamic schema generation from config\n"
         "  • Interactive API testing via Swagger UI\n\n"
-        "[bold]Note:[/bold] Requires upsonic_configs.json and src/main.py to exist."
+        "[bold]Note:[/bold] Requires upsonic_configs.json and main.py to exist."
     )
     
     panel = Panel(

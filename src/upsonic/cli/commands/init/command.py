@@ -7,7 +7,7 @@ def init_command() -> int:
     Initialize a new Upsonic agent project.
     
     Prompts the user for an agent name and creates:
-    - src/main.py: Main agent file
+    - main.py: Main agent file
     - upsonic_configs.json: Configuration file with agent settings
     
     Returns:
@@ -34,11 +34,8 @@ def init_command() -> int:
         # Get current directory
         current_dir = Path.cwd()
         
-        # Create src directory
-        src_dir = current_dir / "src"
-        
-        # Check if src directory already exists and has files
-        main_py_path = src_dir / "main.py"
+        # Check if main.py already exists
+        main_py_path = current_dir / "main.py"
         config_json_path = current_dir / "upsonic_configs.json"
         
         if main_py_path.exists():
@@ -50,9 +47,6 @@ def init_command() -> int:
             if not confirm_overwrite(config_json_path):
                 print_cancelled()
                 return 1
-        
-        # Create src directory if it doesn't exist
-        src_dir.mkdir(exist_ok=True)
         
         # Create main.py
         main_py_content = """from upsonic import Task, Agent
@@ -101,7 +95,7 @@ async def main(inputs):
                 "storage": 1024
             },
             "agent_name": agent_name,
-            "description": "UPDATED VERSION 2.0 - An enhanced Upsonic AI agent with improved response generation",
+            "description": "Upsonic AI Agent",
             "icon": "book",
             "language": "book",
             "streamlit": False,
@@ -119,7 +113,8 @@ async def main(inputs):
                     "psutil>=5.9.8",
                     "fire>=0.7.0",
                     "ruamel.yaml>=0.18.5",
-                    "redis>=5.0.0"
+                    "redis>=5.0.0",
+                    "pip"
                 ],
                 "streamlit": [
                     "streamlit==1.32.2",
@@ -135,7 +130,7 @@ async def main(inputs):
                 ]
             },
             "entrypoints": {
-                "api_file": "src/main.py",
+                "api_file": "main.py",
                 "streamlit_file": "streamlit_app.py"
             },
             "input_schema": {

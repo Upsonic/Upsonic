@@ -50,6 +50,9 @@ else:
     ModelRecommendation = "ModelRecommendation"
     DatabaseBase = "DatabaseBase"
 
+# Constants for structured output
+from upsonic.output import DEFAULT_OUTPUT_TOOL_NAME
+
 RetryMode = Literal["raise", "return_false"]
 
 
@@ -978,11 +981,12 @@ class Agent(BaseAgent):
         
         output_mode = 'text'
         output_object = None
+        output_tools = []
         allow_text_output = True
         
         if task.response_format and task.response_format != str and task.response_format is not str:
             if isinstance(task.response_format, type) and issubclass(task.response_format, BaseModel):
-                output_mode = 'native'
+                output_mode = 'auto'
                 allow_text_output = False
                 
                 schema = task.response_format.model_json_schema()
@@ -992,14 +996,41 @@ class Agent(BaseAgent):
                     description=task.response_format.__doc__,
                     strict=True
                 )
+                
+                # Create output tool for tool-based structured output
+                output_tools = self._build_output_tools(task.response_format, schema)
         
         return ModelRequestParameters(
             function_tools=tool_definitions,
             builtin_tools=builtin_tools,
             output_mode=output_mode,
             output_object=output_object,
+            output_tools=output_tools,
             allow_text_output=allow_text_output
         )
+    
+    def _build_output_tools(self, response_format: type, schema: dict) -> list:
+        """Build output tools for tool-based structured output.
+        
+        Creates a ToolDefinition that the model can use to return structured data
+        when native JSON schema output is not supported.
+        
+        Args:
+            response_format: The Pydantic model class for the response
+            schema: The JSON schema for the response format
+            
+        Returns:
+            List containing a single ToolDefinition for structured output
+        """
+        from upsonic.tools import ToolDefinition
+        
+        return [ToolDefinition(
+            name=DEFAULT_OUTPUT_TOOL_NAME,
+            parameters_json_schema=schema,
+            description=response_format.__doc__ or f"Return the final result as a {response_format.__name__}",
+            kind='output',
+            strict=True
+        )]
     
     async def _execute_tool_calls(self, tool_calls: List["ToolCallPart"]) -> List["ToolReturnPart"]:
         """
@@ -1189,8 +1220,17 @@ class Agent(BaseAgent):
             if isinstance(part, ToolCallPart)
         ]
         
-        if tool_calls:
-            tool_results = await self._execute_tool_calls(tool_calls)
+        # Filter out output tool calls - these are used for structured output
+        # and should not be executed as regular tools
+        output_tool_names = {DEFAULT_OUTPUT_TOOL_NAME}
+        regular_tool_calls = [tc for tc in tool_calls if tc.tool_name not in output_tool_names]
+        
+        # If all tool calls are output tools, return response directly (structured output)
+        if tool_calls and not regular_tool_calls:
+            return response
+        
+        if regular_tool_calls:
+            tool_results = await self._execute_tool_calls(regular_tool_calls)
             
             if hasattr(self, '_tool_limit_reached') and self._tool_limit_reached:
                 tool_request = ModelRequest(parts=tool_results)
@@ -1828,14 +1868,9 @@ class Agent(BaseAgent):
             
             return self._run_result.output
     
-    def _extract_output(self, response: "ModelResponse", task: "Task") -> Any:
-        """Extract output from model response based on task response format.
-        
-        For image generation tasks, if the response contains images, returns the bytes
-        of the first image (or list of bytes for multiple images). Otherwise, extracts 
-        text content based on the task's response format.
-        """
-        from upsonic.messages import TextPart
+    def _extract_output(self, task: "Task", response: "ModelResponse") -> Any:
+        """Extract the output from a model response."""
+        from upsonic.messages import TextPart, ToolCallPart
         
         # Check for image outputs first
         images = response.images
@@ -1845,6 +1880,20 @@ class Agent(BaseAgent):
                 return images[0].data
             else:
                 return [img.data for img in images]
+        
+        # Check for tool call output from structured output tool
+        if task.response_format and task.response_format != str and task.response_format is not str:
+            tool_call_parts = [part for part in response.parts if isinstance(part, ToolCallPart)]
+            for tool_call in tool_call_parts:
+                # Look for the output tool
+                if tool_call.tool_name == DEFAULT_OUTPUT_TOOL_NAME:
+                    try:
+                        args = tool_call.args_as_dict()
+                        if hasattr(task.response_format, 'model_validate'):
+                            return task.response_format.model_validate(args)
+                        return args
+                    except Exception:
+                        pass
         
         # Extract text parts for non-image responses
         text_parts = [part.content for part in response.parts if isinstance(part, TextPart)]

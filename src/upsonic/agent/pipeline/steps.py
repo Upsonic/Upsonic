@@ -744,7 +744,7 @@ class ResponseProcessingStep(Step):
                 execution_time=0.0
             )
         
-        output = context.agent._extract_output(context.response, context.task)
+        output = context.agent._extract_output(context.task, context.response)
         context.task._response = output
         context.final_output = output
         
