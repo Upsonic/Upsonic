@@ -169,7 +169,7 @@ def function_schema(  # noqa: C901
         if missing_annotations:
             errors.append(
                 f"Tool function '{function.__name__}' has parameters without type annotations: "
-                f"{", ".join(missing_annotations)}"
+                f'{", ".join(missing_annotations)}'
             )
 
     var_kwargs_schema: core_schema.CoreSchema | None = None
