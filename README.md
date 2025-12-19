@@ -1,14 +1,38 @@
 
+# What is Upsonic
+Upsonic is the AI Agent Development Framework and AgentOS that used by the fintech and banks.
+
+
+<img src="https://github.com/user-attachments/assets/fbe7219f-55bc-4748-ac4a-dd2fb2b8d9e5" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## OLD
 
 <img src="https://github.com/user-attachments/assets/cb6539cc-cea2-4a1c-8c26-762868828ac9" >
+
+
+
 <br>
 <br>
-<a name="readme-top"></a>
-
-<div align="center">
 
 
-</div>
+
 
 
   <p>
