@@ -11,27 +11,23 @@ import re
 import time
 from pathlib import Path
 from typing import (
-    Any, Callable, Dict, Generator, List, Optional, Tuple, Type, Union, TYPE_CHECKING
+    Any, Callable, Dict, List, TYPE_CHECKING
 )
 
 from upsonic.tools.base import (
-    Tool, ToolDefinition, ToolKit, ToolResult
+    Tool, ToolKit
 )
 from upsonic.tools.config import ToolConfig
-from upsonic.tools.metrics import ToolMetrics
 from upsonic.tools.schema import (
-    FunctionSchema,
     function_schema,
     SchemaGenerationError,
     GenerateToolJsonSchema,
 )
-from upsonic.tools.wrappers import FunctionTool, AgentTool
-from upsonic.tools.deferred import DeferredExecutionManager, ExternalToolCall
+from upsonic.tools.wrappers import FunctionTool
+from upsonic.tools.deferred import ExternalToolCall
 
 if TYPE_CHECKING:
-    from upsonic.tools.base import Tool, ToolConfig, ToolMetadata
-    from upsonic.tools.orchestration import PlanStep
-
+    from upsonic.tools.base import Tool, ToolConfig
 
 class ToolValidationError(Exception):
     """Error raised when tool validation fails."""
@@ -60,6 +56,8 @@ class ToolProcessor:
         self.class_instance_to_tools: Dict[int, List[str]] = {}  # class instance id -> tool names
         # Track KnowledgeBase instances that need setup_async() called
         self.knowledge_base_instances: Dict[int, Any] = {}  # instance id -> KnowledgeBase instance
+        # Track raw tool object IDs for deduplication (prevents re-processing same objects)
+        self._raw_tool_ids: set = set()
     
     def process_tools(
         self,
@@ -177,11 +175,14 @@ class ToolProcessor:
         mcp_tools = handler.get_tools()
         tools_dict = {tool.name: tool for tool in mcp_tools}
         
-        # Track which tools belong to this handler
+        # Track which tools belong to this handler (avoid duplicates)
         handler_id = id(handler)
         if handler_id not in self.mcp_handler_to_tools:
             self.mcp_handler_to_tools[handler_id] = []
-        self.mcp_handler_to_tools[handler_id].extend(tools_dict.keys())
+        existing_tools = set(self.mcp_handler_to_tools[handler_id])
+        for tool_name in tools_dict.keys():
+            if tool_name not in existing_tools:
+                self.mcp_handler_to_tools[handler_id].append(tool_name)
         
         return tools_dict
     
@@ -230,12 +231,15 @@ class ToolProcessor:
                 tool = self._process_function_tool(method)
                 tools[tool.name] = tool
         
-        # Track which tools belong to this toolkit instance
+        # Track which tools belong to this toolkit instance (avoid duplicates)
         if tools:
             toolkit_id = id(toolkit)
             if toolkit_id not in self.class_instance_to_tools:
                 self.class_instance_to_tools[toolkit_id] = []
-            self.class_instance_to_tools[toolkit_id].extend(tools.keys())
+            existing_tools = set(self.class_instance_to_tools[toolkit_id])
+            for tool_name in tools.keys():
+                if tool_name not in existing_tools:
+                    self.class_instance_to_tools[toolkit_id].append(tool_name)
         
         return tools
     
@@ -256,12 +260,15 @@ class ToolProcessor:
                 # Skip invalid methods
                 continue
         
-        # Track which tools belong to this class instance
+        # Track which tools belong to this class instance (avoid duplicates)
         if tools:
             instance_id = id(instance)
             if instance_id not in self.class_instance_to_tools:
                 self.class_instance_to_tools[instance_id] = []
-            self.class_instance_to_tools[instance_id].extend(tools.keys())
+            existing_tools = set(self.class_instance_to_tools[instance_id])
+            for tool_name in tools.keys():
+                if tool_name not in existing_tools:
+                    self.class_instance_to_tools[instance_id].append(tool_name)
         
         return tools
     
@@ -529,7 +536,7 @@ class ToolProcessor:
         Register new tools (similar to process_tools but only processes new tools).
         
         This method:
-        1. Filters out tools that are already registered (object-level comparison)
+        1. Filters out tools that are already registered (object-level comparison using raw tool IDs)
         2. Processes only new tools
         3. Registers them
         4. Returns the newly registered tools
@@ -543,17 +550,19 @@ class ToolProcessor:
         if not tools:
             return {}
         
-        # Track registered tool objects by their identity (object-level comparison)
-        registered_tool_objects = set(id(t) for t in self.registered_tools.values())
-        
-        # Filter out already registered tools (same object instance)
+        # Filter out already registered tools using raw tool object IDs
+        # This correctly tracks the original objects (functions, class instances, etc.)
+        # not the processed Tool wrappers
         tools_to_register = []
         for tool in tools:
             if tool is None:
                 continue
-            # Check if this exact object is already registered
-            if id(tool) not in registered_tool_objects:
+            tool_id = id(tool)
+            # Check if this exact raw tool object was already registered
+            if tool_id not in self._raw_tool_ids:
                 tools_to_register.append(tool)
+                # Track this raw tool ID immediately to prevent duplicates
+                self._raw_tool_ids.add(tool_id)
         
         # Process only new tools
         if not tools_to_register:
@@ -573,7 +582,8 @@ class ToolProcessor:
         
         This method:
         1. Removes tools from registered_tools
-        2. Removes from MCP handler tracking
+        2. Removes from MCP handler tracking (mcp_handler_to_tools)
+        3. Removes from class instance tracking (class_instance_to_tools)
         
         Args:
             tool_names: List of tool names to unregister
@@ -588,13 +598,38 @@ class ToolProcessor:
                 # If this is an MCP tool, remove from handler tracking
                 if hasattr(tool, 'handler'):
                     # This is an MCPTool - remove from tracking
-                    handler_id = id(tool.handler)
+                    handler = tool.handler
+                    handler_id = id(handler)
                     if handler_id in self.mcp_handler_to_tools:
                         if tool_name in self.mcp_handler_to_tools[handler_id]:
                             self.mcp_handler_to_tools[handler_id].remove(tool_name)
-                        # If no more tools from this handler, cleanup tracking
+                        # If no more tools from this handler, cleanup tracking and remove handler
                         if not self.mcp_handler_to_tools[handler_id]:
                             del self.mcp_handler_to_tools[handler_id]
+                            # Also remove from mcp_handlers list
+                            if handler in self.mcp_handlers:
+                                self.mcp_handlers.remove(handler)
+                            # Remove from raw tool IDs tracking
+                            if handler_id in self._raw_tool_ids:
+                                self._raw_tool_ids.discard(handler_id)
+                
+                # If this is a class instance tool (method), remove from class instance tracking
+                if hasattr(tool, 'function') and hasattr(tool.function, '__self__'):
+                    # This is a bound method - get the instance
+                    instance = tool.function.__self__
+                    instance_id = id(instance)
+                    if instance_id in self.class_instance_to_tools:
+                        if tool_name in self.class_instance_to_tools[instance_id]:
+                            self.class_instance_to_tools[instance_id].remove(tool_name)
+                        # If no more tools from this instance, cleanup tracking
+                        if not self.class_instance_to_tools[instance_id]:
+                            del self.class_instance_to_tools[instance_id]
+                            # Also cleanup KnowledgeBase instances if applicable
+                            if instance_id in self.knowledge_base_instances:
+                                del self.knowledge_base_instances[instance_id]
+                            # Remove from raw tool IDs tracking
+                            if instance_id in self._raw_tool_ids:
+                                self._raw_tool_ids.discard(instance_id)
                 
                 # Remove from registered tools
                 del self.registered_tools[tool_name]
@@ -647,6 +682,10 @@ class ToolProcessor:
             # Remove handler from mcp_handlers list
             if handler in self.mcp_handlers:
                 self.mcp_handlers.remove(handler)
+            
+            # Remove from raw tool IDs tracking
+            if handler_id in self._raw_tool_ids:
+                self._raw_tool_ids.discard(handler_id)
         
         return removed_tool_names
     
@@ -688,5 +727,13 @@ class ToolProcessor:
             # Remove from class instance tracking
             if instance_id in self.class_instance_to_tools:
                 del self.class_instance_to_tools[instance_id]
+            
+            # Also cleanup KnowledgeBase instances if applicable
+            if instance_id in self.knowledge_base_instances:
+                del self.knowledge_base_instances[instance_id]
+            
+            # Remove from raw tool IDs tracking
+            if instance_id in self._raw_tool_ids:
+                self._raw_tool_ids.discard(instance_id)
         
         return removed_tool_names

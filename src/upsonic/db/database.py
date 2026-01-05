@@ -1,9 +1,23 @@
 from __future__ import annotations
-from typing import Optional, Type, Union, Dict, Any, List, Literal, Generic, TypeVar
+from typing import Optional, Type, Union, Dict, Any, List, Literal, Generic, TypeVar, TYPE_CHECKING
 from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    import aiosqlite
+    from mem0 import Memory as Mem0Memory, AsyncMemoryClient as Mem0AsyncMemoryClient
+    from ..storage.providers.mem0 import Mem0Storage
+    from ..storage.providers.postgres import PostgresStorage
+    from ..storage.providers.redis import RedisStorage
+    from ..storage.providers.sqlite import SqliteStorage
+    from ..storage.providers.mongo import MongoStorage
+    from ..storage.providers.in_memory import InMemoryStorage
+    from ..storage.providers.json import JSONStorage
+    from motor.motor_asyncio import AsyncIOMotorDatabase, AsyncIOMotorClient
+    from redis.asyncio import Redis
 
 from ..storage.base import Storage
 from ..storage.memory.memory import Memory
+from ..models import Model
 from ..storage.providers import (
     InMemoryStorage,
     JSONStorage,
@@ -13,18 +27,14 @@ from ..storage.providers import (
     SqliteStorage,
     MongoStorage
 )
-from ..models import Model
 
-# Generic type variable for storage providers
+
 StorageType = TypeVar('StorageType', bound=Storage)
 
 
 class DatabaseBase(Generic[StorageType]):
     """
     Base class for all database classes that combine storage providers with memory.
-    
-    This class provides a common interface and type safety for all database implementations.
-    It uses generic types to ensure type safety while allowing different storage backends.
     """
     
     def __init__(
@@ -32,18 +42,20 @@ class DatabaseBase(Generic[StorageType]):
         storage: StorageType,
         memory: Memory
     ):
-        """
-        Initialize the database with storage and memory components.
-        
-        Args:
-            storage: The storage provider instance
-            memory: The memory instance
-        """
         self.storage = storage
         self.memory = memory
     
+    @property
+    def session_id(self) -> Optional[str]:
+        """Get session_id from memory."""
+        return self.memory.session_id if self.memory else None
+    
+    @property
+    def user_id(self) -> Optional[str]:
+        """Get user_id from memory."""
+        return self.memory.user_id if self.memory else None
+    
     def __repr__(self) -> str:
-        """String representation of the database instance."""
         return f"{self.__class__.__name__}(storage={type(self.storage).__name__}, memory={type(self.memory).__name__})"
 
 
@@ -54,11 +66,9 @@ class SqliteDatabase(DatabaseBase[SqliteStorage]):
     
     def __init__(
         self,
-        # SqliteStorage attributes
-        sessions_table_name: str,
-        profiles_table_name: str,
+        db: Optional[aiosqlite.Connection] = None,
         db_file: Optional[str] = None,
-        # Memory attributes
+        agent_sessions_table_name: Optional[str] = None,
         session_id: Optional[str] = None,
         user_id: Optional[str] = None,
         full_session_memory: bool = False,
@@ -69,17 +79,16 @@ class SqliteDatabase(DatabaseBase[SqliteStorage]):
         num_last_messages: Optional[int] = None,
         model: Optional[Union[Model, str]] = None,
         debug: bool = False,
+        debug_level: int = 1,
         feed_tool_call_results: bool = False,
         user_memory_mode: Literal['update', 'replace'] = 'update'
     ):
-        # Initialize storage
         storage = SqliteStorage(
-            sessions_table_name=sessions_table_name,
-            profiles_table_name=profiles_table_name,
-            db_file=db_file
+            db=db,
+            db_file=db_file,
+            agent_sessions_table_name=agent_sessions_table_name
         )
         
-        # Initialize memory
         memory = Memory(
             storage=storage,
             session_id=session_id,
@@ -92,11 +101,11 @@ class SqliteDatabase(DatabaseBase[SqliteStorage]):
             num_last_messages=num_last_messages,
             model=model,
             debug=debug,
+            debug_level=debug_level,
             feed_tool_call_results=feed_tool_call_results,
             user_memory_mode=user_memory_mode
         )
         
-        # Call parent constructor
         super().__init__(storage=storage, memory=memory)
 
 
@@ -107,12 +116,10 @@ class PostgresDatabase(DatabaseBase[PostgresStorage]):
     
     def __init__(
         self,
-        # PostgresStorage attributes
-        sessions_table_name: str,
-        profiles_table_name: str,
-        db_url: str,
+        pool: Optional[aiosqlite.Pool] = None,
+        db_url: Optional[str] = None,
         schema: str = "public",
-        # Memory attributes
+        agent_sessions_table_name: Optional[str] = None,
         session_id: Optional[str] = None,
         user_id: Optional[str] = None,
         full_session_memory: bool = False,
@@ -123,18 +130,17 @@ class PostgresDatabase(DatabaseBase[PostgresStorage]):
         num_last_messages: Optional[int] = None,
         model: Optional[Union[Model, str]] = None,
         debug: bool = False,
+        debug_level: int = 1,
         feed_tool_call_results: bool = False,
         user_memory_mode: Literal['update', 'replace'] = 'update'
     ):
-        # Initialize storage
         storage = PostgresStorage(
-            sessions_table_name=sessions_table_name,
-            profiles_table_name=profiles_table_name,
+            pool=pool,
             db_url=db_url,
-            schema=schema
+            schema=schema,
+            agent_sessions_table_name=agent_sessions_table_name
         )
         
-        # Initialize memory
         memory = Memory(
             storage=storage,
             session_id=session_id,
@@ -147,11 +153,11 @@ class PostgresDatabase(DatabaseBase[PostgresStorage]):
             num_last_messages=num_last_messages,
             model=model,
             debug=debug,
+            debug_level=debug_level,
             feed_tool_call_results=feed_tool_call_results,
             user_memory_mode=user_memory_mode
         )
         
-        # Call parent constructor
         super().__init__(storage=storage, memory=memory)
 
 
@@ -162,12 +168,12 @@ class MongoDatabase(DatabaseBase[MongoStorage]):
     
     def __init__(
         self,
-        # MongoStorage attributes
-        db_url: str,
-        database_name: str,
-        sessions_collection_name: str = "interaction_sessions",
-        profiles_collection_name: str = "user_profiles",
-        # Memory attributes
+        database: Optional['AsyncIOMotorDatabase'] = None,
+        client: Optional['AsyncIOMotorClient'] = None,
+        db_url: Optional[str] = None,
+        database_name: Optional[str] = None,
+        agent_sessions_collection_name: Optional[str] = None,
+        cultural_knowledge_collection_name: Optional[str] = None,
         session_id: Optional[str] = None,
         user_id: Optional[str] = None,
         full_session_memory: bool = False,
@@ -178,18 +184,18 @@ class MongoDatabase(DatabaseBase[MongoStorage]):
         num_last_messages: Optional[int] = None,
         model: Optional[Union[Model, str]] = None,
         debug: bool = False,
+        debug_level: int = 1,
         feed_tool_call_results: bool = False,
         user_memory_mode: Literal['update', 'replace'] = 'update'
     ):
-        # Initialize storage
         storage = MongoStorage(
+            database=database,
+            client=client,
             db_url=db_url,
-            database_name=database_name,
-            sessions_collection_name=sessions_collection_name,
-            profiles_collection_name=profiles_collection_name
+            database_name=database_name or "upsonic",
+            sessions_collection_name=agent_sessions_collection_name
         )
         
-        # Initialize memory
         memory = Memory(
             storage=storage,
             session_id=session_id,
@@ -202,11 +208,11 @@ class MongoDatabase(DatabaseBase[MongoStorage]):
             num_last_messages=num_last_messages,
             model=model,
             debug=debug,
+            debug_level=debug_level,
             feed_tool_call_results=feed_tool_call_results,
             user_memory_mode=user_memory_mode
         )
         
-        # Call parent constructor
         super().__init__(storage=storage, memory=memory)
 
 
@@ -217,15 +223,14 @@ class RedisDatabase(DatabaseBase[RedisStorage]):
     
     def __init__(
         self,
-        # RedisStorage attributes
-        prefix: str,
+        redis_client: Optional['Redis'] = None,
+        prefix: Optional[str] = None,
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,
         password: Optional[str] = None,
         ssl: bool = False,
         expire: Optional[int] = None,
-        # Memory attributes
         session_id: Optional[str] = None,
         user_id: Optional[str] = None,
         full_session_memory: bool = False,
@@ -236,11 +241,12 @@ class RedisDatabase(DatabaseBase[RedisStorage]):
         num_last_messages: Optional[int] = None,
         model: Optional[Union[Model, str]] = None,
         debug: bool = False,
+        debug_level: int = 1,
         feed_tool_call_results: bool = False,
         user_memory_mode: Literal['update', 'replace'] = 'update'
     ):
-        # Initialize storage
         storage = RedisStorage(
+            redis_client=redis_client,
             prefix=prefix,
             host=host,
             port=port,
@@ -250,7 +256,6 @@ class RedisDatabase(DatabaseBase[RedisStorage]):
             expire=expire
         )
         
-        # Initialize memory
         memory = Memory(
             storage=storage,
             session_id=session_id,
@@ -263,11 +268,11 @@ class RedisDatabase(DatabaseBase[RedisStorage]):
             num_last_messages=num_last_messages,
             model=model,
             debug=debug,
+            debug_level=debug_level,
             feed_tool_call_results=feed_tool_call_results,
             user_memory_mode=user_memory_mode
         )
         
-        # Call parent constructor
         super().__init__(storage=storage, memory=memory)
 
 
@@ -278,10 +283,7 @@ class InMemoryDatabase(DatabaseBase[InMemoryStorage]):
     
     def __init__(
         self,
-        # InMemoryStorage attributes
         max_sessions: Optional[int] = None,
-        max_profiles: Optional[int] = None,
-        # Memory attributes
         session_id: Optional[str] = None,
         user_id: Optional[str] = None,
         full_session_memory: bool = False,
@@ -292,16 +294,14 @@ class InMemoryDatabase(DatabaseBase[InMemoryStorage]):
         num_last_messages: Optional[int] = None,
         model: Optional[Union[Model, str]] = None,
         debug: bool = False,
+        debug_level: int = 1,
         feed_tool_call_results: bool = False,
         user_memory_mode: Literal['update', 'replace'] = 'update'
     ):
-        # Initialize storage
         storage = InMemoryStorage(
-            max_sessions=max_sessions,
-            max_profiles=max_profiles
+            max_sessions=max_sessions
         )
         
-        # Initialize memory
         memory = Memory(
             storage=storage,
             session_id=session_id,
@@ -314,11 +314,11 @@ class InMemoryDatabase(DatabaseBase[InMemoryStorage]):
             num_last_messages=num_last_messages,
             model=model,
             debug=debug,
+            debug_level=debug_level,
             feed_tool_call_results=feed_tool_call_results,
             user_memory_mode=user_memory_mode
         )
         
-        # Call parent constructor
         super().__init__(storage=storage, memory=memory)
 
 
@@ -329,10 +329,8 @@ class JSONDatabase(DatabaseBase[JSONStorage]):
     
     def __init__(
         self,
-        # JSONStorage attributes
         directory_path: str,
         pretty_print: bool = True,
-        # Memory attributes
         session_id: Optional[str] = None,
         user_id: Optional[str] = None,
         full_session_memory: bool = False,
@@ -343,16 +341,15 @@ class JSONDatabase(DatabaseBase[JSONStorage]):
         num_last_messages: Optional[int] = None,
         model: Optional[Union[Model, str]] = None,
         debug: bool = False,
+        debug_level: int = 1,
         feed_tool_call_results: bool = False,
         user_memory_mode: Literal['update', 'replace'] = 'update'
     ):
-        # Initialize storage
         storage = JSONStorage(
             directory_path=directory_path,
             pretty_print=pretty_print
         )
         
-        # Initialize memory
         memory = Memory(
             storage=storage,
             session_id=session_id,
@@ -365,11 +362,11 @@ class JSONDatabase(DatabaseBase[JSONStorage]):
             num_last_messages=num_last_messages,
             model=model,
             debug=debug,
+            debug_level=debug_level,
             feed_tool_call_results=feed_tool_call_results,
             user_memory_mode=user_memory_mode
         )
         
-        # Call parent constructor
         super().__init__(storage=storage, memory=memory)
 
 
@@ -380,7 +377,7 @@ class Mem0Database(DatabaseBase[Mem0Storage]):
     
     def __init__(
         self,
-        # Mem0Storage attributes
+        client: Optional[Union['Mem0Memory', 'Mem0AsyncMemoryClient']] = None,
         api_key: Optional[str] = None,
         org_id: Optional[str] = None,
         project_id: Optional[str] = None,
@@ -392,7 +389,6 @@ class Mem0Database(DatabaseBase[Mem0Storage]):
         cache_ttl: int = 300,
         output_format: str = "v1.1",
         version: str = "v2",
-        # Memory attributes
         session_id: Optional[str] = None,
         user_id: Optional[str] = None,
         full_session_memory: bool = False,
@@ -403,11 +399,12 @@ class Mem0Database(DatabaseBase[Mem0Storage]):
         num_last_messages: Optional[int] = None,
         model: Optional[Union[Model, str]] = None,
         debug: bool = False,
+        debug_level: int = 1,
         feed_tool_call_results: bool = False,
         user_memory_mode: Literal['update', 'replace'] = 'update'
     ):
-        # Initialize storage
         storage = Mem0Storage(
+            client=client,
             api_key=api_key,
             org_id=org_id,
             project_id=project_id,
@@ -421,7 +418,6 @@ class Mem0Database(DatabaseBase[Mem0Storage]):
             version=version
         )
         
-        # Initialize memory
         memory = Memory(
             storage=storage,
             session_id=session_id,
@@ -434,9 +430,9 @@ class Mem0Database(DatabaseBase[Mem0Storage]):
             num_last_messages=num_last_messages,
             model=model,
             debug=debug,
+            debug_level=debug_level,
             feed_tool_call_results=feed_tool_call_results,
             user_memory_mode=user_memory_mode
         )
         
-        # Call parent constructor
         super().__init__(storage=storage, memory=memory)

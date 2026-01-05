@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Dict, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, List
 import json
 
 # Heavy imports moved to lazy loading for faster startup
@@ -9,18 +9,13 @@ if TYPE_CHECKING:
     from upsonic.agent.agent import Agent
     from upsonic.tasks.tasks import Task
     from upsonic.agent.context_managers.memory_manager import MemoryManager
-    from upsonic.context.agent import turn_agent_to_string
-    from upsonic.context.default_prompt import default_prompt
-    from upsonic.tools import Thought, AnalysisResult
+    from upsonic.agent.context_managers.culture_manager_context import CultureContextManager
 else:
     # Use string annotations to avoid importing heavy modules
     Agent = "Agent"
     Task = "Task"
     MemoryManager = "MemoryManager"
-    turn_agent_to_string = "turn_agent_to_string"
-    default_prompt = "default_prompt"
-    Thought = "Thought"
-    AnalysisResult = "AnalysisResult"
+    CultureContextManager = "CultureContextManager"
 
 
 class SystemPromptManager:
@@ -32,7 +27,11 @@ class SystemPromptManager:
         self.task = task
         self.system_prompt: str = ""
 
-    def _build_system_prompt(self, memory_handler: Optional["MemoryManager"]) -> str:
+    def _build_system_prompt(
+        self, 
+        memory_handler: Optional["MemoryManager"] = None,
+        culture_handler: Optional["CultureContextManager"] = None,
+    ) -> str:
         """Builds the complete system prompt string by assembling its components."""
         from upsonic.tools import Thought, AnalysisResult
         from upsonic.context.agent import turn_agent_to_string
@@ -217,6 +216,12 @@ class SystemPromptManager:
             if system_injection:
                 prompt_parts.append(system_injection)
 
+        # Inject cultural knowledge context if available
+        if culture_handler:
+            culture_context = culture_handler.get_culture_context()
+            if culture_context:
+                prompt_parts.append(culture_context)
+
         if self.agent.system_prompt:
             base_prompt = self.agent.system_prompt
         
@@ -283,18 +288,107 @@ class SystemPromptManager:
             The final system prompt string.
         """
         return self.system_prompt
+    
+    def should_include_system_prompt(self, message_history: List[Any]) -> bool:
+        """
+        Determines whether the system prompt should be included in the current request.
+        
+        The system prompt should be included if:
+        1. There are no messages in history (first request), OR
+        2. The first message doesn't have a system prompt, OR
+        3. The system prompt contains dynamic content (like user profile) that should always be included
+        
+        Args:
+            message_history: List of previous messages in the conversation
+            
+        Returns:
+            True if system prompt should be included, False otherwise
+        """
+        from upsonic.messages import SystemPromptPart, ModelRequest
+        
+        # If no messages, always include system prompt
+        if not message_history:
+            return True
+        
+        # Check if first message has a system prompt
+        has_system_prompt_in_history = False
+        if message_history and isinstance(message_history[0], ModelRequest):
+            has_system_prompt_in_history = any(
+                isinstance(part, SystemPromptPart) 
+                for part in message_history[0].parts
+            )
+        
+        # If first message doesn't have system prompt, we should add it
+        if not has_system_prompt_in_history:
+            return True
+        
+        # If system prompt contains dynamic content (user profile, culture, etc.), 
+        # always include it to ensure latest information is available
+        system_prompt = self.get_system_prompt()
+        if system_prompt:
+            # Check if system prompt contains dynamic content markers
+            has_user_profile = "<UserProfile>" in system_prompt
+            has_culture_context = "<CulturalKnowledge>" in system_prompt or "<CultureContext>" in system_prompt
+            
+            # Always include if it has dynamic content that may have changed
+            if has_user_profile or has_culture_context:
+                return True
+        
+        # Default: don't include if first message already has system prompt
+        # (to avoid duplicate system prompts)
+        return False
+
+    async def aprepare(
+        self, 
+        memory_handler: Optional["MemoryManager"] = None,
+        culture_handler: Optional["CultureContextManager"] = None,
+    ) -> None:
+        """
+        Prepare the system prompt before the LLM call.
+        
+        Args:
+            memory_handler: Optional MemoryManager for memory injection
+            culture_handler: Optional CultureContextManager for culture injection
+        """
+        self.system_prompt = self._build_system_prompt(memory_handler, culture_handler)
+    
+    async def afinalize(self) -> None:
+        """Finalize system prompt after the LLM call."""
+        pass
+    
+    def prepare(
+        self, 
+        memory_handler: Optional["MemoryManager"] = None,
+        culture_handler: Optional["CultureContextManager"] = None,
+    ) -> None:
+        """Synchronous version of aprepare."""
+        import asyncio
+        asyncio.get_event_loop().run_until_complete(self.aprepare(memory_handler, culture_handler))
+    
+    def finalize(self) -> None:
+        """Synchronous version of afinalize."""
+        import asyncio
+        asyncio.get_event_loop().run_until_complete(self.afinalize())
 
     @asynccontextmanager
-    async def manage_system_prompt(self, memory_handler: Optional["MemoryManager"] = None):
+    async def manage_system_prompt(
+        self, 
+        memory_handler: Optional["MemoryManager"] = None,
+        culture_handler: Optional["CultureContextManager"] = None,
+    ):
         """
         The asynchronous context manager for building the system prompt.
 
-        Upon entering the `async with` block, this manager builds the
-        system prompt and makes it available via the `get_system_prompt` method.
+        Note: This context manager is kept for backward compatibility.
+        For step-based architecture, use aprepare() and afinalize() directly.
+        
+        Args:
+            memory_handler: Optional MemoryManager for memory injection
+            culture_handler: Optional CultureContextManager for culture injection
         """
-        self.system_prompt = self._build_system_prompt(memory_handler)
+        await self.aprepare(memory_handler, culture_handler)
             
         try:
             yield self
         finally:
-            pass
+            await self.afinalize()

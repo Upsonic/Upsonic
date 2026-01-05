@@ -5,13 +5,12 @@ from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 if TYPE_CHECKING:
     from upsonic.models import Model
     from upsonic.usage import RequestUsage
-    from upsonic.agent.run_result import RunResult, StreamRunResult
+    from upsonic.run.agent.output import AgentRunOutput
 
 from upsonic.utils.printing import (
     get_estimated_cost,
     get_estimated_cost_from_usage,
-    get_estimated_cost_from_run_result,
-    get_estimated_cost_from_stream_result,
+    get_estimated_cost_from_agent_run_output,
     _get_model_name,
     _get_model_pricing
 )
@@ -68,13 +67,13 @@ class CostTracker:
             )
         )
     
-    def add_run_result(self, run_result: "RunResult", model: Optional["Model"] = None) -> None:
+    def add_run_result(self, run_result: "AgentRunOutput", model: Optional["Model"] = None) -> None:
         """Add cost information from a RunResult object."""
         if not run_result:
             return
         
         # Use the same cost calculation as printing.py
-        cost_string = get_estimated_cost_from_run_result(run_result, model)
+        cost_string = get_estimated_cost_from_agent_run_output(run_result, model)
         estimated_cost = self._extract_cost_from_string(cost_string)
         
         # Calculate total tokens from the run result
@@ -104,13 +103,13 @@ class CostTracker:
             )
         )
     
-    def add_stream_result(self, stream_result: "StreamRunResult", model: Optional["Model"] = None) -> None:
-        """Add cost information from a StreamRunResult object."""
+    def add_stream_result(self, stream_result: "AgentRunOutput", model: Optional["Model"] = None) -> None:
+        """Add cost information from a AgentRunOutput object."""
         if not stream_result:
             return
         
         # Use the same cost calculation as printing.py
-        cost_string = get_estimated_cost_from_stream_result(stream_result, model)
+        cost_string = get_estimated_cost_from_agent_run_output(stream_result, model)
         estimated_cost = self._extract_cost_from_string(cost_string)
         
         # Calculate total tokens from the stream result
@@ -256,32 +255,18 @@ class CostTracker:
         return get_estimated_cost_from_usage(usage, model)
     
     @staticmethod
-    def calculate_cost_from_run_result(run_result: "RunResult", model: Union["Model", str]) -> str:
+    def calculate_cost_from_agent_run_output(agent_run_output: "AgentRunOutput", model: Union["Model", str]) -> str:
         """
-        Calculate cost from RunResult using printing.py logic.
+        Calculate cost from AgentRunOutput using printing.py logic.
         
         Args:
-            run_result: RunResult object
+            agent_run_output: AgentRunOutput object
             model: Model instance or identifier
             
         Returns:
             Formatted cost string
         """
-        return get_estimated_cost_from_run_result(run_result, model)
-    
-    @staticmethod
-    def calculate_cost_from_stream_result(stream_result: "StreamRunResult", model: Union["Model", str]) -> str:
-        """
-        Calculate cost from StreamRunResult using printing.py logic.
-        
-        Args:
-            stream_result: StreamRunResult object
-            model: Model instance or identifier
-            
-        Returns:
-            Formatted cost string
-        """
-        return get_estimated_cost_from_stream_result(stream_result, model)
+        return get_estimated_cost_from_agent_run_output(agent_run_output, model)
     
     @staticmethod
     def get_model_pricing(model_name: str) -> Optional[Dict[str, float]]:

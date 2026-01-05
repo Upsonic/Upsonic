@@ -9,6 +9,7 @@ if TYPE_CHECKING:
         AsyncIOMotorDatabase,
         AsyncIOMotorCollection,
     )
+    from upsonic.culture.cultural_knowledge import CulturalKnowledge
 
 try:
     from motor.motor_asyncio import (
@@ -26,7 +27,7 @@ except ImportError:
 from pydantic import BaseModel
 
 from upsonic.storage.base import Storage
-from upsonic.storage.session.sessions import InteractionSession, UserProfile
+from upsonic.session.agent import AgentSession
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -40,7 +41,7 @@ class MongoStorage(Storage):
     
     This storage provider is designed to be flexible and dynamic:
     - Can accept a pre-existing motor database or client, or create one from connection details
-    - Only creates InteractionSession/UserProfile collections/indexes when they are actually used
+    - Only creates AgentSession collections/indexes when they are actually used
     - Supports generic Pydantic models for custom storage needs
     - Can be used for both custom purposes and built-in chat/profile features simultaneously
     """
@@ -51,8 +52,8 @@ class MongoStorage(Storage):
         client: Optional['AsyncIOMotorClient'] = None,
         db_url: Optional[str] = None,
         database_name: Optional[str] = None,
-        sessions_collection_name: str = "interaction_sessions",
-        profiles_collection_name: str = "user_profiles",
+        sessions_collection_name: str = "agent_sessions",
+        cultural_knowledge_collection_name: str = "cultural_knowledge",
     ):
         """
         Initializes the async MongoDB storage provider.
@@ -65,10 +66,10 @@ class MongoStorage(Storage):
             db_url: The full MongoDB connection string (e.g., "mongodb://localhost:27017").
                 Required if database and client are not provided.
             database_name: The name of the database to use. Required if database is not provided.
-            sessions_collection_name: The name of the collection for InteractionSession.
-                Only used if InteractionSession objects are stored. Defaults to "interaction_sessions".
-            profiles_collection_name: The name of the collection for UserProfile.
-                Only used if UserProfile objects are stored. Defaults to "user_profiles".
+            sessions_collection_name: The name of the collection for AgentSession.
+                Only used if AgentSession objects are stored. Defaults to "agent_sessions".
+            cultural_knowledge_collection_name: The name of the collection for CulturalKnowledge.
+                Only used if CulturalKnowledge objects are stored. Defaults to "cultural_knowledge".
         """
         if not _MOTOR_AVAILABLE:
             from upsonic.utils.printing import import_error
@@ -80,12 +81,10 @@ class MongoStorage(Storage):
 
         super().__init__()
         
-        # Store database/client and track ownership for lifecycle management
         self._db: Optional[AsyncIOMotorDatabase] = database
         self._client: Optional[AsyncIOMotorClient] = client
-        self._owns_client = (database is None and client is None)  # True if we create it
+        self._owns_client = (database is None and client is None)
         
-        # Connection details for creating our own client/db if needed
         if not database and not client and not db_url:
             raise ValueError("Either 'database', 'client', or 'db_url' must be provided")
         if not database and not database_name:
@@ -94,13 +93,11 @@ class MongoStorage(Storage):
         self.db_url = db_url
         self.database_name = database_name
         
-        # Collection names for InteractionSession/UserProfile (lazy initialization)
         self.sessions_collection_name = sessions_collection_name
-        self.profiles_collection_name = profiles_collection_name
+        self.cultural_knowledge_collection_name = cultural_knowledge_collection_name
         
-        # Track which built-in collections have been initialized
         self._sessions_collection_initialized = False
-        self._profiles_collection_initialized = False
+        self._cultural_knowledge_collection_initialized = False
 
 
 
@@ -119,7 +116,7 @@ class MongoStorage(Storage):
     def read(self, object_id: str, model_type: Type[T]) -> Optional[T]:
         return self._run_async_from_sync(self.read_async(object_id, model_type))
 
-    def upsert(self, data: Union[InteractionSession, UserProfile]) -> None:
+    def upsert(self, data: BaseModel) -> None:
         return self._run_async_from_sync(self.upsert_async(data))
 
     def delete(self, object_id: str, model_type: Type[BaseModel]) -> None:
@@ -131,27 +128,18 @@ class MongoStorage(Storage):
 
 
     async def connect_async(self) -> None:
-        """
-        Establishes connection to the database.
-        If user provided a database or client, this is a no-op or minimal setup.
-        Otherwise, creates a new client and database.
-        """
         if await self.is_connected_async():
             return
         
         if not self._owns_client:
-            # User provided database or client
             if self._db:
-                # Database already set
                 self._connected = True
                 return
             elif self._client:
-                # Client provided, get database from it
                 self._db = self._client[self.database_name]
                 self._connected = True
                 return
         
-        # Create our own client and database
         try:
             self._client = AsyncIOMotorClient(self.db_url)
             await self._client.admin.command("ismaster")
@@ -166,12 +154,7 @@ class MongoStorage(Storage):
             ) from e
 
     async def disconnect_async(self) -> None:
-        """
-        Closes the database connection.
-        If user provided the database or client, this is a no-op (user manages lifecycle).
-        """
         if not self._owns_client:
-            # User manages their own database/client lifecycle
             return
         
         if self._client:
@@ -184,19 +167,10 @@ class MongoStorage(Storage):
         return self._client is not None and self._db is not None
 
     async def create_async(self) -> None:
-        """
-        Creates database schema.
-        Note: InteractionSession and UserProfile collections/indexes are created lazily
-        only when first accessed. This allows the storage to be used for
-        generic purposes without creating unused infrastructure.
-        """
-        # Ensure connection exists, but don't create any collections/indexes yet
-        # Collections/indexes will be created on-demand when accessed
         if not await self.is_connected_async():
             await self.connect_async()
     
     async def _ensure_sessions_collection(self) -> None:
-        """Lazily creates the sessions collection and indexes on first access."""
         if self._sessions_collection_initialized:
             return
         
@@ -209,9 +183,8 @@ class MongoStorage(Storage):
         await sessions_collection.create_index("user_id")
         self._sessions_collection_initialized = True
     
-    async def _ensure_profiles_collection(self) -> None:
-        """Lazily creates the profiles collection on first access."""
-        if self._profiles_collection_initialized:
+    async def _ensure_cultural_knowledge_collection(self) -> None:
+        if self._cultural_knowledge_collection_initialized:
             return
         
         if self._db is None:
@@ -219,68 +192,74 @@ class MongoStorage(Storage):
                 "Cannot create collection without a database connection. Call connect() first."
             )
         
-        # Profiles collection doesn't need any special indexes beyond _id
-        # Just mark as initialized
-        self._profiles_collection_initialized = True
+        collection = self._db[self.cultural_knowledge_collection_name]
+        await collection.create_index("name")
+        self._cultural_knowledge_collection_initialized = True
 
     async def read_async(self, object_id: str, model_type: Type[T]) -> Optional[T]:
-        # Ensure collection exists - lazy initialization for built-in types
-        if model_type is InteractionSession:
+        import base64
+        if model_type.__name__ == "AgentSession":
             await self._ensure_sessions_collection()
-        elif model_type is UserProfile:
-            await self._ensure_profiles_collection()
-        # Generic models don't need explicit initialization
         
-        collection = self._get_collection_for_model(model_type)
+        collection = await self._get_collection_for_model_async(model_type)
         id_field_name = self._get_id_field(model_type)
         doc = await collection.find_one({"_id": object_id})
         if doc:
-            doc[id_field_name] = doc.pop("_id")
-            return model_type.model_validate(doc)
+            if model_type.__name__ == "AgentSession" and "data" in doc:
+                # Use deserialize: base64 decode then deserialize
+                serialized_bytes = base64.b64decode(doc["data"].encode('utf-8'))
+                return model_type.deserialize(serialized_bytes)
+            else:
+                doc[id_field_name] = doc.pop("_id")
+                if hasattr(model_type, 'from_dict'):
+                    return model_type.from_dict(doc)
+                return model_type.model_validate(doc)
         return None
 
     async def upsert_async(self, data: BaseModel) -> None:
-        # Ensure collection exists - lazy initialization for built-in types
-        if isinstance(data, InteractionSession):
+        import base64
+        if type(data).__name__ == "AgentSession":
             await self._ensure_sessions_collection()
-        elif isinstance(data, UserProfile):
-            await self._ensure_profiles_collection()
-        # Generic models don't need explicit initialization
         
-        collection = self._get_collection_for_model(type(data))
+        collection = await self._get_collection_for_model_async(type(data))
         id_field_name = self._get_id_field(data)
         object_id = getattr(data, id_field_name)
         
-        # Update timestamp if field exists
         if hasattr(data, 'updated_at'):
             data.updated_at = time.time()
         
-        doc = data.model_dump()
-        doc["_id"] = doc.pop(id_field_name)
+        if type(data).__name__ == "AgentSession":
+            # Use serialize: serialize to bytes, then base64 encode
+            serialized_bytes = data.serialize()
+            serialized_str = base64.b64encode(serialized_bytes).decode('utf-8')
+            doc = {
+                "_id": object_id,
+                "data": serialized_str,
+                "created_at": data.created_at or time.time(),
+                "updated_at": data.updated_at or time.time()
+            }
+        elif hasattr(data, 'to_dict'):
+            doc = data.to_dict()
+            doc["_id"] = doc.pop(id_field_name)
+        else:
+            doc = data.model_dump()
+            doc["_id"] = doc.pop(id_field_name)
         await collection.replace_one({"_id": object_id}, doc, upsert=True)
 
     async def delete_async(self, object_id: str, model_type: Type[BaseModel]) -> None:
-        # Ensure collection exists - lazy initialization for built-in types
-        if model_type is InteractionSession:
+        if model_type.__name__ == "AgentSession":
             await self._ensure_sessions_collection()
-        elif model_type is UserProfile:
-            await self._ensure_profiles_collection()
-        # For generic models, only delete if collection exists
         
-        collection = self._get_collection_for_model(model_type)
+        collection = await self._get_collection_for_model_async(model_type)
         await collection.delete_one({"_id": object_id})
     
     async def list_all_async(self, model_type: Type[T]) -> List[T]:
-        """List all objects of a specific type."""
+        import base64
         try:
-            # Ensure collection exists - lazy initialization for built-in types
-            if model_type is InteractionSession:
+            if model_type.__name__ == "AgentSession":
                 await self._ensure_sessions_collection()
-            elif model_type is UserProfile:
-                await self._ensure_profiles_collection()
-            # Generic models don't need explicit initialization
             
-            collection = self._get_collection_for_model(model_type)
+            collection = await self._get_collection_for_model_async(model_type)
             id_field_name = self._get_id_field(model_type)
             
             results = []
@@ -288,9 +267,16 @@ class MongoStorage(Storage):
             
             async for doc in cursor:
                 try:
-                    # Convert MongoDB's _id back to model's ID field
-                    doc[id_field_name] = doc.pop("_id")
-                    obj = model_type.model_validate(doc)
+                    if model_type.__name__ == "AgentSession" and "data" in doc:
+                        # Use deserialize: base64 decode then deserialize
+                        serialized_bytes = base64.b64decode(doc["data"].encode('utf-8'))
+                        obj = model_type.deserialize(serialized_bytes)
+                    else:
+                        doc[id_field_name] = doc.pop("_id")
+                        if hasattr(model_type, 'from_dict'):
+                            obj = model_type.from_dict(doc)
+                        else:
+                            obj = model_type.model_validate(doc)
                     results.append(obj)
                 except Exception:
                     continue
@@ -300,10 +286,6 @@ class MongoStorage(Storage):
             return []
 
     async def drop_async(self) -> None:
-        """
-        Drops all collections managed by this storage provider.
-        Only drops InteractionSession/UserProfile collections if they were actually created.
-        """
         if self._db is None:
             return
         
@@ -312,55 +294,64 @@ class MongoStorage(Storage):
         except Exception:
             pass
         try:
-            await self._db.drop_collection(self.profiles_collection_name)
+            await self._db.drop_collection(self.cultural_knowledge_collection_name)
         except Exception:
             pass
         
-        # Reset initialization flags
         self._sessions_collection_initialized = False
-        self._profiles_collection_initialized = False
+        self._cultural_knowledge_collection_initialized = False
 
-    async def read_sessions_for_user_async(self, user_id: str) -> List[InteractionSession]:
-        """
-        Retrieves all interaction sessions associated with a specific user ID,
-        leveraging the secondary index on the `user_id` field for high performance.
 
-        Args:
-            user_id: The ID of the user whose sessions are to be retrieved.
 
-        Returns:
-            A list of InteractionSession objects, which may be empty if the user
-            has no sessions.
-        """
-        # Ensure sessions collection exists
-        await self._ensure_sessions_collection()
+    async def _get_collection_for_model_async(
+        self, model_type: Type[BaseModel]
+    ) -> AsyncIOMotorCollection:
+        """Get collection with auto-reconnect if connection is lost."""
+        await self._ensure_connection()
         
-        collection = self._get_collection_for_model(InteractionSession)
-        cursor = collection.find({"user_id": user_id})
-        sessions = []
-        id_field_name = self._get_id_field(InteractionSession)
+        if model_type.__name__ == "AgentSession":
+            return self._db[self.sessions_collection_name]
+        else:
+            collection_name = f"{model_type.__name__.lower()}_storage"
+            return self._db[collection_name]
+    
+    async def _ensure_connection(self) -> None:
+        """Ensure database connection is valid, reconnect if needed."""
+        needs_reconnect = False
         
-        async for doc in cursor:
-            doc[id_field_name] = doc.pop("_id")
-            sessions.append(InteractionSession.model_validate(doc))
+        if self._db is None:
+            needs_reconnect = True
+        elif self._client is not None:
+            # Check if connection is still valid with a ping
+            try:
+                await self._client.admin.command("ping")
+            except Exception:
+                needs_reconnect = True
+        
+        if needs_reconnect:
+            # Close existing connection if it exists
+            if self._client is not None:
+                try:
+                    self._client.close()
+                except Exception:
+                    pass
+                self._client = None
+                self._db = None
             
-        return sessions
-
-
-
+            # Reconnect
+            await self.connect_async()
+    
     def _get_collection_for_model(
         self, model_type: Type[BaseModel]
     ) -> AsyncIOMotorCollection:
+        """Get collection (sync version - does not auto-reconnect)."""
         if self._db is None:
             raise ConnectionError(
                 "Not connected to the database. Call connect() or connect_async() first."
             )
-        if model_type is InteractionSession:
+        if model_type.__name__ == "AgentSession":
             return self._db[self.sessions_collection_name]
-        elif model_type is UserProfile:
-            return self._db[self.profiles_collection_name]
         else:
-            # Generic model support: collection name is {model_name}_storage
             collection_name = f"{model_type.__name__.lower()}_storage"
             return self._db[collection_name]
 
@@ -369,14 +360,82 @@ class MongoStorage(Storage):
         model_type = (
             model_or_type if isinstance(model_or_type, type) else type(model_or_type)
         )
-        if model_type is InteractionSession:
+        if model_type.__name__ == "AgentSession":
             return "session_id"
-        elif model_type is UserProfile:
-            return "user_id"
         else:
-            # Generic model: auto-detect primary key
             if hasattr(model_type, 'model_fields'):
                 for field_name in ['path', 'id', 'key', 'name']:
                     if field_name in model_type.model_fields:
                         return field_name
             return "id"
+
+    # =========================================================================
+    # Cultural Knowledge Methods
+    # =========================================================================
+
+    async def read_cultural_knowledge_async(self, knowledge_id: str) -> Optional["CulturalKnowledge"]:
+        from upsonic.culture.cultural_knowledge import CulturalKnowledge
+        
+        await self._ensure_cultural_knowledge_collection()
+        
+        collection = self._db[self.cultural_knowledge_collection_name]
+        doc = await collection.find_one({"_id": knowledge_id})
+        
+        if doc:
+            doc["id"] = doc.pop("_id")
+            return CulturalKnowledge.from_dict(doc)
+        return None
+
+    async def upsert_cultural_knowledge_async(self, knowledge: "CulturalKnowledge") -> None:
+        await self._ensure_cultural_knowledge_collection()
+        
+        knowledge.bump_updated_at()
+        
+        collection = self._db[self.cultural_knowledge_collection_name]
+        
+        doc = knowledge.to_dict()
+        doc["_id"] = doc.pop("id")
+        
+        await collection.replace_one({"_id": doc["_id"]}, doc, upsert=True)
+
+    async def delete_cultural_knowledge_async(self, knowledge_id: str) -> None:
+        await self._ensure_cultural_knowledge_collection()
+        
+        collection = self._db[self.cultural_knowledge_collection_name]
+        await collection.delete_one({"_id": knowledge_id})
+
+    async def list_all_cultural_knowledge_async(
+        self, 
+        name: Optional[str] = None
+    ) -> List["CulturalKnowledge"]:
+        from upsonic.culture.cultural_knowledge import CulturalKnowledge
+        
+        try:
+            await self._ensure_cultural_knowledge_collection()
+            
+            collection = self._db[self.cultural_knowledge_collection_name]
+            
+            if name:
+                query = {"name": {"$regex": name, "$options": "i"}}
+            else:
+                query = {}
+            
+            results = []
+            cursor = collection.find(query)
+            
+            async for doc in cursor:
+                try:
+                    doc["id"] = doc.pop("_id")
+                    results.append(CulturalKnowledge.from_dict(doc))
+                except Exception:
+                    continue
+            
+            return results
+        except Exception:
+            return []
+
+    async def clear_cultural_knowledge_async(self) -> None:
+        await self._ensure_cultural_knowledge_collection()
+        
+        collection = self._db[self.cultural_knowledge_collection_name]
+        await collection.delete_many({})

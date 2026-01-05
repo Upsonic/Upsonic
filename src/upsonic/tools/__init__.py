@@ -16,6 +16,8 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 
+from upsonic.utils.printing import warning_log
+
 if TYPE_CHECKING:
     from upsonic.tasks.tasks import Task
     from upsonic.tools.base import (
@@ -445,7 +447,8 @@ class ToolManager:
                     args=args,
                     tool_call_id=tool_call_id
                 )
-                e.external_call = external_call
+                # Always use external_calls (list) for consistency
+                e.external_calls = [external_call]
                 raise e
             
             from upsonic.tools.base import ToolResult
@@ -453,8 +456,9 @@ class ToolManager:
                 tool_name=tool_name,
                 content=str(e),
                 tool_call_id=tool_call_id,
-        success=False,
-                error=str(e)
+                success=False,
+                error=str(e),
+                execution_time=time.time() - start_time if start_time else None
             )
     
     def get_tool_definitions(self) -> List['ToolDefinition']:
@@ -576,13 +580,30 @@ class ToolManager:
                 class_instances.append(tool_identifier)
                 original_objects_to_remove.add(tool_identifier)
             
-            # Class (not instance)
+            # Class (not instance) - find all instances of this class
             elif inspect.isclass(tool_identifier):
-                # Find instance of this class in processor tracking
-                for instance_id, tool_list in self.processor.class_instance_to_tools.items():
-                    # This is a bit tricky - we need to find the actual instance
-                    # Skip for now, user should pass instance
-                    pass
+                # Find instances of this class by looking at registered tools
+                found_instances = set()
+                for name, registered_tool in registered_tools.items():
+                    # Check if this tool has a function with __self__ (bound method)
+                    if hasattr(registered_tool, 'function') and hasattr(registered_tool.function, '__self__'):
+                        instance = registered_tool.function.__self__
+                        # Check if the instance is of the specified class
+                        if isinstance(instance, tool_identifier):
+                            found_instances.add(instance)
+                
+                # Add all found instances to class_instances for removal
+                for instance in found_instances:
+                    if instance not in class_instances:
+                        class_instances.append(instance)
+                        original_objects_to_remove.add(instance)
+                
+                if not found_instances:
+                    warning_log(
+                        f"No instances of class {tool_identifier.__name__} found in registered tools. "
+                        f"Pass the instance directly instead of the class.",
+                        "ToolManager"
+                    )
             
             # Regular class instance or other object
             else:

@@ -446,8 +446,9 @@ class CompiledStateGraph(Runnable[Dict[str, Any], Dict[str, Any]]):
             next_nodes = existing_checkpoint.next_nodes
             parent_checkpoint_id = existing_checkpoint.checkpoint_id
             
-            # If input provided, merge it and restart from START
-            if input:
+            # If input provided (including empty dict), merge it and restart from START
+            # Use `is not None` instead of truthiness check since {} is falsy but valid input
+            if input is not None:
                 state = self._merge_state(state, input)
                 # If the previous execution ended (next_nodes is END), restart from START
                 if END in next_nodes or not next_nodes:

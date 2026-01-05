@@ -52,6 +52,11 @@ class ContextManager:
             context_injection = memory_handler.get_context_injection()
             if context_injection:
                 final_context_parts.append(context_injection)
+            
+            # Add metadata injection (agent metadata + session metadata)
+            metadata_injection = memory_handler.get_metadata_injection()
+            if metadata_injection:
+                final_context_parts.append(metadata_injection)
 
         if self.task.context:
 
@@ -208,17 +213,44 @@ class ContextManager:
         """Public getter to retrieve the constructed context prompt."""
         return self.context_prompt
 
+    async def aprepare(self, memory_handler: Optional["MemoryManager"] = None) -> None:
+        """
+        Prepare the context prompt before the LLM call.
+        
+        Args:
+            memory_handler: Optional MemoryManager for memory injection
+        """
+        self.context_prompt = await self._build_context_prompt(memory_handler)
+        self.task.context_formatted = self.context_prompt
+    
+    async def afinalize(self) -> None:
+        """Finalize context after the LLM call."""
+        pass
+    
+    def prepare(self, memory_handler: Optional["MemoryManager"] = None) -> None:
+        """Synchronous version of aprepare."""
+        import asyncio
+        asyncio.get_event_loop().run_until_complete(self.aprepare(memory_handler))
+    
+    def finalize(self) -> None:
+        """Synchronous version of afinalize."""
+        import asyncio
+        asyncio.get_event_loop().run_until_complete(self.afinalize())
+
     @asynccontextmanager
     async def manage_context(self, memory_handler: Optional["MemoryManager"] = None):
-        """The asynchronous context manager for building the task-specific context."""
-        self.context_prompt = await self._build_context_prompt(memory_handler)
-
-        self.task.context_formatted = self.context_prompt
+        """
+        The asynchronous context manager for building the task-specific context.
+        
+        Note: This context manager is kept for backward compatibility.
+        For step-based architecture, use aprepare() and afinalize() directly.
+        """
+        await self.aprepare(memory_handler)
             
         try:
             yield self
         finally:
-            pass
+            await self.afinalize()
 
     async def get_knowledge_base_health_status(self) -> Dict[str, Any]:
         """Get health status of all KnowledgeBase instances in the context."""

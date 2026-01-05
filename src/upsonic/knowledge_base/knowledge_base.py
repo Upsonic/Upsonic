@@ -2,6 +2,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import re
+import types
 from typing import List, Optional, Dict, Any, Union, Literal
 from pathlib import Path
 
@@ -19,6 +21,7 @@ from upsonic.utils.package.exception import (
     UpsertError,
 )
 from upsonic.tools import ToolKit, tool
+from upsonic.tools.config import ToolConfig
 
 
 class KnowledgeBase(ToolKit):
@@ -109,8 +112,6 @@ class KnowledgeBase(ToolKit):
         self._validate_sources_exist(sources)
         self.description: str = description or f"Knowledge base for {name}"
         self.topics: List[str] = topics or []
-        # Set dynamic docstring for search method with description
-        self._update_search_docstring()
 
         # Core components
         self.sources: List[Union[str, Path]] = self._resolve_sources(sources)
@@ -140,6 +141,11 @@ class KnowledgeBase(ToolKit):
         self._is_closed: bool = False
         self._setup_lock: asyncio.Lock = asyncio.Lock()
         self._processing_stats: Dict[str, Any] = {}  # Track processing statistics
+        
+        # Create dynamically named search tool method
+        # This allows multiple KnowledgeBase instances to have unique tool names
+        # e.g., search_technical_docs, search_user_guides instead of all being "search"
+        self._create_dynamic_search_tool()
 
         info_log(
             f"Initialized KnowledgeBase '{self.name}' with {len(self.sources)} sources, "
@@ -147,17 +153,60 @@ class KnowledgeBase(ToolKit):
             context="KnowledgeBase"
         )
 
-    def _update_search_docstring(self) -> None:
+    def _sanitize_tool_name(self, name: str) -> str:
         """
-        Update the search method's docstring to include the knowledge base description.
+        Sanitize a string for use as a tool name component.
+        
+        Tool names must be valid Python identifiers (alphanumeric + underscores).
+        
+        Args:
+            name: The name to sanitize
+            
+        Returns:
+            A sanitized string suitable for use in a tool name
         """
+        # Replace non-alphanumeric characters with underscores
+        sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+        # Collapse multiple underscores
+        sanitized = re.sub(r'_+', '_', sanitized)
+        # Remove leading/trailing underscores
+        sanitized = sanitized.strip('_')
+        # Ensure it doesn't start with a number
+        if sanitized and sanitized[0].isdigit():
+            sanitized = f"kb_{sanitized}"
+        return sanitized.lower() if sanitized else "unnamed"
+    
+    def _create_dynamic_search_tool(self) -> None:
+        """
+        Create a dynamically named search tool method based on the KnowledgeBase name.
+        
+        This method creates a unique tool for each KnowledgeBase instance, allowing
+        multiple KnowledgeBases to be used as tools without name collisions.
+        
+        For example:
+        - KnowledgeBase(name="technical_docs") -> search_technical_docs tool
+        - KnowledgeBase(name="user_guides") -> search_user_guides tool
+        
+        The tool is created as an instance method with:
+        - Unique name based on self.name
+        - Docstring including the KB description
+        - @tool decorator attributes for ToolProcessor detection
+        """
+        # Generate unique tool name
+        sanitized_name = self._sanitize_tool_name(self.name)
+        tool_name = f"search_{sanitized_name}"
+        
+        # Store the tool name for external reference
+        self._search_tool_name = tool_name
+        
+        # Build dynamic docstring with KB-specific information
         topics_str = ", ".join(self.topics) if self.topics else "general"
-        base_docstring = """Search the knowledge base for relevant information using semantic similarity.
+        docstring = f"""Search the '{self.name}' knowledge base for relevant information.
 
-        This tool performs intelligent retrieval from the indexed knowledge base for the topics: {topics}.
+        This tool performs intelligent retrieval from the '{self.name}' knowledge base.
+        Topics covered: {topics_str}
 
-        Description about knowledge base which the informations will be retrieved from:
-            {description}
+        Description: {self.description}
 
         Args:
             query: The question, topic, or search query to find relevant information.
@@ -167,16 +216,64 @@ class KnowledgeBase(ToolKit):
 
         Returns:
             A formatted string containing the most relevant information found in the
-            knowledge base. Results are ranked by relevance and presented in a readable
-            format. Returns "No relevant information found in the knowledge base."
+            '{self.name}' knowledge base. Results are ranked by relevance and presented
+            in a readable format. Returns "No relevant information found in the knowledge base."
             if no matches are found.
         """
-        # Use __func__ to access the underlying function object for docstring update
-        if hasattr(self.search, '__func__'):
-            self.search.__func__.__doc__ = base_docstring.format(
-                description=self.description,
-                topics=topics_str
-            )
+        
+        # Create the search implementation as a closure that captures self
+        kb_instance = self
+        
+        async def dynamic_search(self_placeholder, query: str) -> str:
+            """Dynamically generated search method."""
+            return await kb_instance._search_impl(query)
+        
+        # Set the function name and docstring
+        dynamic_search.__name__ = tool_name
+        dynamic_search.__qualname__ = f"KnowledgeBase.{tool_name}"
+        dynamic_search.__doc__ = docstring
+        
+        # Add type annotations for proper schema generation
+        dynamic_search.__annotations__ = {'query': str, 'return': str}
+        
+        # Apply tool decorator attributes (same as @tool decorator does)
+        # These are set on the function before binding - bound methods will
+        # automatically delegate attribute lookups to the underlying function
+        dynamic_search._upsonic_is_tool = True
+        dynamic_search._upsonic_tool_config = ToolConfig()
+        
+        # Bind the function to this instance as a method
+        bound_method = types.MethodType(dynamic_search, self)
+        
+        # Set as instance attribute so inspect.getmembers finds it
+        setattr(self, tool_name, bound_method)
+        
+        debug_log(
+            f"Created dynamic search tool '{tool_name}' for KnowledgeBase '{self.name}'",
+            context="KnowledgeBase"
+        )
+    
+    async def _search_impl(self, query: str) -> str:
+        """
+        Internal search implementation called by the dynamic search tool.
+        
+        This method contains the actual search logic, separate from the tool interface.
+        
+        Args:
+            query: The search query
+            
+        Returns:
+            Formatted search results as a string
+        """
+        results = await self.query_async(query)
+        if not results:
+            return "No relevant information found in the knowledge base."
+        
+        formatted_results = []
+        for i, result in enumerate(results, 1):
+            formatted_results.append(f"Result {i}:\n{result.text}")
+            
+        return "\n\n".join(formatted_results)
 
     def _validate_sources_exist(self, sources: Union[str, Path, List[Union[str, Path]]]) -> None:
         """
@@ -1035,53 +1132,25 @@ class KnowledgeBase(ToolKit):
             error_log(f"Query failed: {e}", context="KnowledgeBase")
             raise
 
-    @tool
     async def search(self, query: str) -> str:
         """
         Search the knowledge base for relevant information using semantic similarity.
-
-        This tool performs intelligent retrieval from the indexed knowledge base, using
-        vector similarity search to find the most relevant chunks of information that
-        match the query. The search leverages embeddings to understand semantic meaning,
-        making it effective for finding information even when exact keywords don't match.
+        
+        This is a convenience method that wraps the internal search implementation.
+        When used as a tool, the dynamically named method (e.g., search_technical_docs)
+        is used instead to avoid name collisions with other KnowledgeBase instances.
 
         Args:
             query: The question, topic, or search query to find relevant information.
                   Can be a natural language question, a topic description, or keywords.
-                  Examples: "What is machine learning?", "How does authentication work?",
-                  "Python best practices", "API documentation for user management".
 
         Returns:
             A formatted string containing the most relevant information found in the
             knowledge base. Results are ranked by relevance and presented in a readable
             format. Returns "No relevant information found in the knowledge base."
             if no matches are found.
-
-        Use Cases:
-            - **Question Answering**: Answer specific questions from documentation or
-              knowledge sources. Example: "What are the system requirements?"
-            
-            - **Information Retrieval**: Find relevant sections or topics from large
-              document collections. Example: "Find information about error handling"
-            
-            - **Code Documentation Lookup**: Search through codebases or technical docs
-              for specific functionality. Example: "How to implement authentication?"
-            
-            - **Research Assistance**: Retrieve relevant information for research or
-              analysis tasks. Example: "What are the best practices for database design?"
-            
-            - **Context Gathering**: Collect relevant context before generating responses
-              or performing tasks. Example: "Find all mentions of security protocols"
         """
-        results = await self.query_async(query)
-        if not results:
-            return "No relevant information found in the knowledge base."
-        
-        formatted_results = []
-        for i, result in enumerate(results, 1):
-            formatted_results.append(f"Result {i}:\n{result.text}")
-            
-        return "\n\n".join(formatted_results)
+        return await self._search_impl(query)
 
     async def _perform_search(
         self,

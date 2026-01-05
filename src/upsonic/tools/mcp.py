@@ -151,10 +151,21 @@ class MCPTool(Tool):
     def __init__(
         self,
         handler: 'MCPHandler',
-        tool_info: mcp_types.Tool
+        tool_info: mcp_types.Tool,
+        tool_name_prefix: Optional[str] = None
     ):
         self.handler = handler
         self.tool_info = tool_info
+        # Store the original tool name for MCP server calls
+        self.original_name = tool_info.name
+        # Apply prefix if provided
+        self.tool_name_prefix = tool_name_prefix
+        
+        # Compute the prefixed name for registration
+        if tool_name_prefix:
+            prefixed_name = f"{tool_name_prefix}_{tool_info.name}"
+        else:
+            prefixed_name = tool_info.name
         
         from upsonic.tools.schema import FunctionSchema
         
@@ -177,7 +188,7 @@ class MCPTool(Tool):
         
         # Create metadata with MCP tool info
         metadata = ToolMetadata(
-            name=tool_info.name,
+            name=prefixed_name,
             description=tool_info.description,
             kind='mcp',
             is_async=True,
@@ -188,9 +199,12 @@ class MCPTool(Tool):
         metadata.custom['mcp_server'] = handler.server_name
         metadata.custom['mcp_type'] = handler.connection_type
         metadata.custom['mcp_transport'] = handler.transport
+        metadata.custom['mcp_original_name'] = self.original_name
+        if tool_name_prefix:
+            metadata.custom['mcp_tool_name_prefix'] = tool_name_prefix
         
         super().__init__(
-            name=tool_info.name,
+            name=prefixed_name,
             description=tool_info.description,
             schema=mcp_schema,
             metadata=metadata
@@ -205,8 +219,9 @@ class MCPTool(Tool):
     
     async def execute(self, **kwargs: Any) -> Any:
         """Execute the MCP tool with enhanced error handling."""
-        # Call tool through MCP handler
-        result = await self.handler.call_tool(self.name, kwargs)
+        # Call tool through MCP handler using the ORIGINAL tool name
+        # (MCP server expects the original name, not the prefixed one)
+        result = await self.handler.call_tool(self.original_name, kwargs)
         return result
 
 
@@ -222,6 +237,7 @@ class MCPHandler:
     - Tool filtering (include/exclude)
     - Proper resource cleanup
     - Lazy connection support
+    - Tool name prefixing for avoiding collisions
     """
     
     def __init__(
@@ -237,6 +253,7 @@ class MCPHandler:
         timeout_seconds: int = 5,
         include_tools: Optional[List[str]] = None,
         exclude_tools: Optional[List[str]] = None,
+        tool_name_prefix: Optional[str] = None,
     ):
         """
         Initialize MCP handler.
@@ -252,6 +269,8 @@ class MCPHandler:
             timeout_seconds: Read timeout in seconds
             include_tools: Optional list of tool names to include (None = all)
             exclude_tools: Optional list of tool names to exclude (None = none)
+            tool_name_prefix: Optional prefix for tool names to avoid collisions
+                             when using multiple MCP servers with same tools
         """
         self.session: Optional[ClientSession] = session
         self.tools: List[MCPTool] = []
@@ -259,6 +278,7 @@ class MCPHandler:
         self.timeout_seconds = timeout_seconds
         self.include_tools = include_tools
         self.exclude_tools = exclude_tools
+        self.tool_name_prefix = tool_name_prefix
         self._initialized = False
         self._context = None
         self._session_context = None
@@ -285,6 +305,10 @@ class MCPHandler:
                 transport = 'stdio'
             else:
                 raise ValueError("Config must have either 'url' or 'command' attribute")
+            
+            # Extract tool_name_prefix from legacy config if not provided
+            if tool_name_prefix is None and hasattr(config, 'tool_name_prefix'):
+                self.tool_name_prefix = config.tool_name_prefix
         
         # Determine connection type and server name
         if url:
@@ -525,9 +549,13 @@ class MCPHandler:
             self.tools = []
             for tool_info in filtered_tools:
                 try:
-                    tool = MCPTool(self, tool_info)
+                    tool = MCPTool(self, tool_info, tool_name_prefix=self.tool_name_prefix)
                     self.tools.append(tool)
-                    console.print(f"  - {tool.name}: {tool.description}")
+                    # Show both prefixed name and original name if prefix is used
+                    if self.tool_name_prefix:
+                        console.print(f"  - {tool.name} (original: {tool.original_name}): {tool.description}")
+                    else:
+                        console.print(f"  - {tool.name}: {tool.description}")
                 except Exception as e:
                     console.print(f"[yellow]Warning: Failed to register tool {tool_info.name}: {e}[/yellow]")
             
@@ -590,7 +618,7 @@ class MCPHandler:
         Returns:
             Dictionary with server information
         """
-        return {
+        info = {
             'server_name': self.server_name,
             'connection_type': self.connection_type,
             'transport': self.transport,
@@ -598,8 +626,13 @@ class MCPHandler:
             'tools': [t.name for t in self.tools],
             'timeout_seconds': self.timeout_seconds,
             'initialized': self._initialized,
-            'has_filters': bool(self.include_tools or self.exclude_tools)
+            'has_filters': bool(self.include_tools or self.exclude_tools),
+            'tool_name_prefix': self.tool_name_prefix
         }
+        # Include original tool names if prefix is used
+        if self.tool_name_prefix:
+            info['original_tool_names'] = [t.original_name for t in self.tools]
+        return info
     
     def get_tools(self) -> List[MCPTool]:
         """
@@ -845,6 +878,7 @@ class MultiMCPHandler:
     - Server introspection and debugging
     - Tool filtering across all servers
     - Proper cleanup delegation to individual handlers
+    - Tool name prefixing for avoiding collisions
     """
     
     def __init__(
@@ -860,6 +894,8 @@ class MultiMCPHandler:
         timeout_seconds: int = 5,
         include_tools: Optional[List[str]] = None,
         exclude_tools: Optional[List[str]] = None,
+        tool_name_prefix: Optional[str] = None,
+        tool_name_prefixes: Optional[List[str]] = None,
     ):
         """
         Initialize multi-MCP handler.
@@ -873,6 +909,11 @@ class MultiMCPHandler:
             timeout_seconds: Read timeout in seconds
             include_tools: Optional list of tool names to include
             exclude_tools: Optional list of tool names to exclude
+            tool_name_prefix: Single prefix to apply to all servers (will be
+                             combined with server index, e.g., "db_0_", "db_1_")
+            tool_name_prefixes: List of prefixes, one for each server. Length must
+                               match the number of servers. Takes precedence over
+                               tool_name_prefix if both are provided.
         """
         if server_params_list is None and commands is None and urls is None:
             raise ValueError("Must provide commands, urls, or server_params_list")
@@ -880,6 +921,8 @@ class MultiMCPHandler:
         self.timeout_seconds = timeout_seconds
         self.include_tools = include_tools
         self.exclude_tools = exclude_tools
+        self.tool_name_prefix = tool_name_prefix
+        self.tool_name_prefixes = tool_name_prefixes
         self._initialized = False
         # Track handlers and tools (each handler manages its own connection)
         self.tools: List[MCPTool] = []
@@ -933,15 +976,34 @@ class MultiMCPHandler:
         
         console.print(f"[cyan]🔌 Connecting to {len(self.server_params_list)} MCP server(s)...[/cyan]")
         
+        # Validate tool_name_prefixes length if provided
+        if self.tool_name_prefixes is not None:
+            if len(self.tool_name_prefixes) != len(self.server_params_list):
+                raise ValueError(
+                    f"tool_name_prefixes length ({len(self.tool_name_prefixes)}) must match "
+                    f"number of servers ({len(self.server_params_list)})"
+                )
+        
         # Create MCPHandler for each server and connect
         for idx, server_params in enumerate(self.server_params_list):
             try:
+                # Determine the prefix for this server
+                if self.tool_name_prefixes is not None:
+                    # Use the specific prefix for this server index
+                    prefix = self.tool_name_prefixes[idx]
+                elif self.tool_name_prefix is not None:
+                    # Use the base prefix combined with server index
+                    prefix = f"{self.tool_name_prefix}_{idx}"
+                else:
+                    prefix = None
+                
                 # Create a proper MCPHandler instance for this server
                 handler = MCPHandler(
                     server_params=server_params,
                     timeout_seconds=self.timeout_seconds,
                     include_tools=self.include_tools,
-                    exclude_tools=self.exclude_tools
+                    exclude_tools=self.exclude_tools,
+                    tool_name_prefix=prefix
                 )
                 
                 # Connect handler (this discovers tools automatically)
@@ -951,7 +1013,8 @@ class MultiMCPHandler:
                 self.handlers.append(handler)
                 self.tools.extend(handler.tools)
                 
-                console.print(f"[green]  ✅ Server {idx+1}: {handler.server_name} - {len(handler.tools)} tools[/green]")
+                prefix_info = f" (prefix: {prefix})" if prefix else ""
+                console.print(f"[green]  ✅ Server {idx+1}: {handler.server_name}{prefix_info} - {len(handler.tools)} tools[/green]")
                 
             except Exception as e:
                 console.print(f"[yellow]  ⚠️  Server {idx+1} connection failed: {e}[/yellow]")
@@ -1094,12 +1157,17 @@ class MultiMCPHandler:
         """
         info = []
         for idx, handler in enumerate(self.handlers):
+            handler_tools = [t for t in self.tools if t.handler == handler]
             server_info = {
                 'index': idx,
                 'server_name': getattr(handler, 'server_name', f'server_{idx}'),
                 'connection_type': getattr(handler, 'connection_type', 'unknown'),
                 'transport': getattr(handler, 'transport', 'unknown'),
-                'tools': [t.name for t in self.tools if t.handler == handler]
+                'tool_name_prefix': getattr(handler, 'tool_name_prefix', None),
+                'tools': [t.name for t in handler_tools],
             }
+            # Include original tool names if prefix is used
+            if handler.tool_name_prefix:
+                server_info['original_tool_names'] = [t.original_name for t in handler_tools]
             info.append(server_info)
         return info

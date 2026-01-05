@@ -28,7 +28,9 @@ class Team:
                  response_format: Any = str,  
                  ask_other_team_members: bool = False,
                  mode: Literal["sequential", "coordinate", "route"] = "sequential",
-                 memory: Optional[Memory] = None
+                 memory: Optional[Memory] = None,
+                 debug: bool = False,
+                 debug_level: int = 1
                  ):
         """
         Initialize the Team with agents and optionally tasks.
@@ -40,6 +42,9 @@ class Team:
             model: The model provider instance for any internal agents (leader, router).
             ask_other_team_members: A flag to automatically add other agents as tools.
             mode: The operational mode for the team ('sequential', 'coordinate', or 'route').
+            memory: Memory instance for team operations.
+            debug: Enable debug logging.
+            debug_level: Debug level (1 = standard, 2 = detailed). Only used when debug=True
         """
         self.agents = agents
         self.tasks = tasks if isinstance(tasks, list) else [tasks] if tasks is not None else []
@@ -48,6 +53,8 @@ class Team:
         self.ask_other_team_members = ask_other_team_members
         self.mode = mode
         self.memory = memory
+        self.debug = debug
+        self.debug_level = debug_level if debug else 1
         
         # The leader_agent is an internal construct, not passed by the user.
         self.leader_agent: Optional[Agent] = None
@@ -127,12 +134,45 @@ class Team:
                 selected_agent_name = await task_assignment.select_agent_for_task(
                     current_task, selection_context, agents_registry, agent_names, agent_configurations
                 )
+                
+                # Level 2: Detailed team task assignment information
+                if self.debug and self.debug_level >= 2:
+                    from upsonic.utils.printing import debug_log_level2
+                    debug_log_level2(
+                        f"Team task assignment (task {task_index + 1}/{len(tasks)})",
+                        "Team",
+                        debug=self.debug,
+                        debug_level=self.debug_level,
+                        task_index=task_index,
+                        total_tasks=len(tasks),
+                        task_description=current_task.description[:300] if hasattr(current_task, 'description') else None,
+                        selected_agent=selected_agent_name,
+                        available_agents=agent_names,
+                        context_keys=list(selection_context.keys()) if isinstance(selection_context, dict) else None,
+                        previous_results_count=len(all_results)
+                    )
+                
                 if selected_agent_name:
                     context_sharing.enhance_task_context(
                         current_task, tasks, task_index, agent_configurations, all_results
                     )
                     result = await agents_registry[selected_agent_name].do_async(current_task)
                     all_results.append(current_task)
+                    
+                    # Level 2: Task execution completion
+                    if self.debug and self.debug_level >= 2:
+                        from upsonic.utils.printing import debug_log_level2
+                        debug_log_level2(
+                            f"Team task completed (task {task_index + 1}/{len(tasks)})",
+                            "Team",
+                            debug=self.debug,
+                            debug_level=self.debug_level,
+                            task_index=task_index,
+                            agent_name=selected_agent_name,
+                            result_preview=str(result)[:500] if result else None,
+                            task_duration=getattr(current_task, 'duration', None),
+                            task_cost=getattr(current_task, 'total_cost', None)
+                        )
             if not result_combiner.should_combine_results(all_results):
                 return result_combiner.get_single_result(all_results)
             return await result_combiner.combine_results(

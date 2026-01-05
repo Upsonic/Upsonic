@@ -1,32 +1,19 @@
 import asyncio
 import time
-import uuid
-from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, AsyncIterator, Dict, List, Optional, Union, Callable, Literal, TYPE_CHECKING, overload
+from typing import Any, AsyncIterator, Dict, List, Optional, Union, Literal, TYPE_CHECKING, overload
 
 from upsonic.tasks.tasks import Task
 from upsonic.storage.memory.memory import Memory
 from upsonic.storage.base import Storage
 from upsonic.storage.providers.in_memory import InMemoryStorage
-from upsonic.messages.messages import ModelMessage, ModelRequest, ModelResponse, UserPromptPart, TextPart
-from upsonic.agent.run_result import RunResult, StreamRunResult
-from .cost_calculator import CostTracker, format_cost, format_tokens
+from upsonic.messages.messages import ModelResponse
 from .session_manager import SessionManager, SessionState
 from .message import ChatMessage
 
 if TYPE_CHECKING:
     from upsonic.agent.agent import Agent
-    from upsonic.models import Model
-    from upsonic.schemas import UserTraits
-    from upsonic.storage.session.sessions import InteractionSession, UserProfile
 else:
     Agent = "Agent"
-    Model = "Model"
-    UserTraits = "UserTraits"
-    InteractionSession = "InteractionSession"
-    UserProfile = "UserProfile"
 
 
 class Chat:
@@ -99,6 +86,7 @@ class Chat:
         user_memory_mode: Literal['update', 'replace'] = 'update',
         # Chat configuration
         debug: bool = False,
+        debug_level: int = 1,
         max_concurrent_invocations: int = 1,
         retry_attempts: int = 3,
         retry_delay: float = 1.0,
@@ -120,6 +108,7 @@ class Chat:
             feed_tool_call_results: Include tool calls in memory
             user_memory_mode: How to update user profiles ('update' or 'replace')
             debug: Enable debug logging
+            debug_level: Debug level (1 = standard, 2 = detailed). Only used when debug=True
             max_concurrent_invocations: Maximum concurrent invoke calls
             retry_attempts: Number of retry attempts for failed calls
             retry_delay: Delay between retry attempts
@@ -144,6 +133,7 @@ class Chat:
         self.user_id = user_id.strip()
         self.agent = agent
         self.debug = debug
+        self.debug_level = debug_level if debug else 1
         
         # Initialize storage
         self._storage = storage or InMemoryStorage()
@@ -161,6 +151,7 @@ class Chat:
             num_last_messages=num_last_messages,
             model=agent.model,
             debug=debug,
+            debug_level=debug_level,
             feed_tool_call_results=feed_tool_call_results,
             user_memory_mode=user_memory_mode
         )
@@ -173,6 +164,7 @@ class Chat:
             session_id=session_id,
             user_id=user_id,
             debug=debug,
+            debug_level=debug_level,
             max_concurrent_invocations=max_concurrent_invocations
         )
         
@@ -185,8 +177,23 @@ class Chat:
         
         
         if self.debug:
-            from upsonic.utils.printing import debug_log
-            debug_log(f"Chat initialized: session_id={session_id}, user_id={user_id}", "Chat")
+            from upsonic.utils.printing import debug_log, debug_log_level2
+            debug_log(f"Chat initialized: session_id={session_id}, user_id={user_id}", "Chat", debug=self.debug, debug_level=self.debug_level)
+            if self.debug_level >= 2:
+                debug_log_level2(
+                    "Chat detailed initialization",
+                    "Chat",
+                    debug=self.debug,
+                    debug_level=self.debug_level,
+                    session_id=session_id,
+                    user_id=user_id,
+                    agent_name=getattr(agent, 'name', 'Unknown'),
+                    agent_model=getattr(agent.model, 'model_name', 'Unknown'),
+                    full_session_memory=full_session_memory,
+                    summary_memory=summary_memory,
+                    user_analysis_memory=user_analysis_memory,
+                    max_concurrent_invocations=max_concurrent_invocations
+                )
     
     @property
     def state(self) -> SessionState:
@@ -288,13 +295,45 @@ class Chat:
                 
                 if attempt < self._retry_attempts:
                     if self.debug:
-                        from upsonic.utils.printing import debug_log
+                        from upsonic.utils.printing import debug_log, debug_log_level2
                         debug_log(f"Attempt {attempt + 1} failed: {e}. Retrying in {self._retry_delay}s...", "Chat")
+                        
+                        # Level 2: Detailed retry information
+                        if self.debug_level >= 2:
+                            backoff_delay = self._retry_delay * (2 ** attempt)
+                            debug_log_level2(
+                                f"Chat retry attempt {attempt + 1}/{self._retry_attempts + 1}",
+                                "Chat",
+                                debug=self.debug,
+                                debug_level=self.debug_level,
+                                attempt_number=attempt + 1,
+                                max_attempts=self._retry_attempts + 1,
+                                error_type=type(e).__name__,
+                                error_message=str(e),
+                                backoff_delay=backoff_delay,
+                                is_retryable=self._is_retryable_error(e),
+                                session_id=self.session_id,
+                                user_id=self.user_id
+                            )
                     await asyncio.sleep(self._retry_delay * (2 ** attempt))  # Exponential backoff
                 else:
                     if self.debug:
-                        from upsonic.utils.printing import debug_log
+                        from upsonic.utils.printing import debug_log, debug_log_level2
                         debug_log(f"All {self._retry_attempts + 1} attempts failed. Last error: {e}", "Chat")
+                        
+                        # Level 2: Final retry failure details
+                        if self.debug_level >= 2:
+                            debug_log_level2(
+                                "Chat retry exhausted",
+                                "Chat",
+                                debug=self.debug,
+                                debug_level=self.debug_level,
+                                total_attempts=self._retry_attempts + 1,
+                                final_error_type=type(e).__name__,
+                                final_error_message=str(e),
+                                session_id=self.session_id,
+                                user_id=self.user_id
+                            )
         
         self._transition_state(SessionState.ERROR)
         raise last_exception
@@ -436,27 +475,71 @@ class Chat:
     async def _invoke_blocking_async(self, task: Task, response_start_time: float, **kwargs) -> str:
         """Handle blocking invocation."""
         async def _execute():
+            # Level 2: Log invocation start details
+            if self.debug and self.debug_level >= 2:
+                from upsonic.utils.printing import debug_log_level2
+                debug_log_level2(
+                    "Chat invocation starting",
+                    "Chat",
+                    debug=self.debug,
+                    debug_level=self.debug_level,
+                    session_id=self.session_id,
+                    user_id=self.user_id,
+                    task_description=task.description[:300] if task.description else None,
+                    agent_name=getattr(self.agent, 'name', 'Unknown'),
+                    agent_model=getattr(self.agent.model, 'model_name', 'Unknown'),
+                    current_message_count=len(self.all_messages),
+                    session_state=self.state.value if hasattr(self.state, 'value') else str(self.state)
+                )
+            
             # Execute agent with retry logic
             result = await self.agent.do_async(task, debug=self.debug, **kwargs)
             
             # Extract response - result is the actual output, not a RunResult
             response_text = str(result)
             
-            # Get the RunResult from the agent to access messages
-            run_result = self.agent.get_run_result()
+            # Get the AgentRunOutput from the agent to access messages
+            run_result = self.agent.get_run_output()
             
             # Update cost tracking
+            total_input_tokens = 0
+            total_output_tokens = 0
             for message in run_result.new_messages():
                 if isinstance(message, ModelResponse) and message.usage:
                     self._session_manager.add_usage(message.usage, self.agent.model)
+                    total_input_tokens += message.usage.input_tokens
+                    total_output_tokens += message.usage.output_tokens
             
             # Update in-memory history (only add assistant messages to avoid duplicates)
+            assistant_messages_added = 0
             for message in run_result.new_messages():
                 # Only process ModelResponse messages (assistant responses)
                 if hasattr(message, 'kind') and message.kind == 'response':
                     chat_message = ChatMessage.from_model_message(message)
                     if chat_message.role == "assistant":
                         self._session_manager.add_message(chat_message)
+                        assistant_messages_added += 1
+            
+            # Level 2: Log invocation completion details
+            if self.debug and self.debug_level >= 2:
+                from upsonic.utils.printing import debug_log_level2
+                import time
+                execution_time = time.time() - response_start_time
+                debug_log_level2(
+                    "Chat invocation completed",
+                    "Chat",
+                    debug=self.debug,
+                    debug_level=self.debug_level,
+                    session_id=self.session_id,
+                    execution_time=execution_time,
+                    response_preview=response_text[:500],
+                    input_tokens=total_input_tokens,
+                    output_tokens=total_output_tokens,
+                    messages_added=assistant_messages_added,
+                    total_messages=len(self.all_messages),
+                    total_cost=self.total_cost,
+                    session_duration=self.session_duration
+                )
             
             return response_text
         
@@ -479,26 +562,24 @@ class Chat:
         async def _execute_streaming():
             accumulated_text = ""
             
-            # Get streaming result from agent
-            stream_result = await self.agent.stream_async(task, debug=self.debug, **kwargs)
-            
-            async with stream_result:
-                async for chunk in stream_result.stream_output():
+            # Stream directly from agent using astream() which yields text chunks
+            async for chunk in self.agent.astream(task, debug=self.debug, **kwargs):
+                if isinstance(chunk, str):
                     accumulated_text += chunk
                     yield chunk
             
-            # Get final result for cost tracking and history
-            final_output = stream_result.get_final_output()
+            # Get run output from agent for cost tracking and history
+            run_result = self.agent.get_run_output()
             
             # Update cost tracking
-            if hasattr(stream_result, 'new_messages'):
-                for message in stream_result.new_messages():
+            if run_result:
+                for message in run_result.new_messages():
                     if isinstance(message, ModelResponse) and message.usage:
                         self._session_manager.add_usage(message.usage, self.agent.model)
             
             # Update in-memory history (only add assistant messages to avoid duplicates)
-            if hasattr(stream_result, 'new_messages'):
-                for message in stream_result.new_messages():
+            if run_result:
+                for message in run_result.new_messages():
                     # Only process ModelResponse messages (assistant responses)
                     if hasattr(message, 'kind') and message.kind == 'response':
                         chat_message = ChatMessage.from_model_message(message)

@@ -10,7 +10,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .context import StepContext
     from .step import Step, StepResult, StepStatus
     from .manager import PipelineManager
     from .steps import (
@@ -29,6 +28,7 @@ if TYPE_CHECKING:
         CallManagementStep,
         TaskManagementStep,
         MemoryMessageTrackingStep,
+        CultureUpdateStep,
         ReliabilityStep,
         AgentPolicyStep,
         CacheStorageStep,
@@ -40,12 +40,10 @@ if TYPE_CHECKING:
 
 def _get_pipeline_base_classes():
     """Lazy import of base pipeline classes."""
-    from .context import StepContext
     from .step import Step, StepResult, StepStatus
     from .manager import PipelineManager
     
     return {
-        'StepContext': StepContext,
         'Step': Step,
         'StepResult': StepResult,
         'StepStatus': StepStatus,
@@ -70,6 +68,7 @@ def _get_pipeline_step_classes():
         CallManagementStep,
         TaskManagementStep,
         MemoryMessageTrackingStep,
+        CultureUpdateStep,
         ReliabilityStep,
         AgentPolicyStep,
         CacheStorageStep,
@@ -95,6 +94,7 @@ def _get_pipeline_step_classes():
         'CallManagementStep': CallManagementStep,
         'TaskManagementStep': TaskManagementStep,
         'MemoryMessageTrackingStep': MemoryMessageTrackingStep,
+        'CultureUpdateStep': CultureUpdateStep,
         'ReliabilityStep': ReliabilityStep,
         'AgentPolicyStep': AgentPolicyStep,
         'CacheStorageStep': CacheStorageStep,
@@ -122,7 +122,6 @@ def __getattr__(name: str) -> Any:
     )
 
 __all__ = [
-    "StepContext",
     "Step",
     "StepResult",
     "StepStatus",
@@ -142,6 +141,7 @@ __all__ = [
     "CallManagementStep",
     "TaskManagementStep",
     "MemoryMessageTrackingStep",
+    "CultureUpdateStep",
     "ReliabilityStep",
     "AgentPolicyStep",
     "CacheStorageStep",

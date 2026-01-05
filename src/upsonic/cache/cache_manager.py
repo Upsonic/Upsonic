@@ -213,7 +213,8 @@ class CacheManager:
             return None
             
         except Exception as e:
-            warning_log(f"Batch LLM comparison failed: {e}", context="CacheManager")
+            from upsonic.utils.printing import warning_log
+            warning_log(f"Batch LLM comparison failed: {e}", "CacheManager")
             return None
     
     async def get_cached_response(

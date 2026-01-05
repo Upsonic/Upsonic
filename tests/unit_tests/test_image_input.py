@@ -5,7 +5,7 @@ from PIL import Image
 import tempfile
 import os
 from upsonic import Task, Agent
-from upsonic.agent.run_result import RunResult
+from upsonic.run.agent.output import AgentRunOutput
 from upsonic.models import ModelResponse, TextPart
 from pydantic import BaseModel
 

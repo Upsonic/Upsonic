@@ -1,4 +1,4 @@
-from typing import Any, Dict, Literal, Optional, Union, TYPE_CHECKING
+from typing import Any, Dict, Literal, Optional, Set, Union, TYPE_CHECKING
 from decimal import Decimal
 
 if TYPE_CHECKING:
@@ -6,9 +6,10 @@ if TYPE_CHECKING:
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-# Align and Text imports removed - not currently used
 import platform
 import sys
+import shutil
+import json
 from rich.markup import escape
 
 # Setup background logging (console disabled, only file/Sentry)
@@ -118,6 +119,859 @@ def _get_model_name(model: Union["Model", str]) -> str:
         return model_name
     else:
         return str(model)
+
+
+def _get_terminal_width() -> int:
+    """Get terminal width, defaulting to 120 if unavailable."""
+    try:
+        width, _ = shutil.get_terminal_size()
+        # Use 95% of terminal width for tables to leave some margin
+        return max(80, int(width * 0.95))
+    except (OSError, AttributeError):
+        return 120
+
+
+def _format_pydantic_model(model_instance: Any) -> str:
+    """Format a Pydantic model instance for display."""
+    try:
+        from pydantic import BaseModel
+        if isinstance(model_instance, BaseModel):
+            # Get model JSON schema for better display
+            try:
+                json_data = model_instance.model_dump(mode='json')
+                return json.dumps(json_data, indent=2, ensure_ascii=False)
+            except Exception:
+                return str(model_instance)
+        return str(model_instance)
+    except ImportError:
+        return str(model_instance)
+
+
+def display_pydantic_structured_output(
+    result: Any,
+    model_name: str,
+    response_format: Any,
+    execution_time: float,
+    usage: dict,
+    debug: bool = False
+) -> None:
+    """
+    Display Pydantic structured output in a magnificent, full-width table.
+    
+    Args:
+        result: The Pydantic model instance result
+        model_name: Name of the model used
+        response_format: The Pydantic model class
+        execution_time: Execution time in seconds
+        usage: Token usage dictionary
+        debug: Whether to show full details
+    """
+    try:
+        from pydantic import BaseModel
+    except ImportError:
+        # Fallback if pydantic is not available
+        display_llm_result_table(result, model_name, response_format, execution_time, usage, debug=debug)
+        return
+    
+    terminal_width = _get_terminal_width()
+    
+    # Determine if result is a Pydantic model
+    is_pydantic = isinstance(result, BaseModel) if hasattr(BaseModel, '__instancecheck__') else (
+        hasattr(result, 'model_dump') or hasattr(result, 'dict')
+    )
+    
+    # Create main result table
+    result_table = Table(
+        show_header=True,
+        header_style="bold bright_cyan",
+        box=None,
+        show_lines=True,
+        expand=True,
+        width=terminal_width - 4
+    )
+    
+    result_table.add_column("Field", style="bold cyan", width=min(30, terminal_width // 4))
+    result_table.add_column("Type", style="dim yellow", width=min(20, terminal_width // 6))
+    result_table.add_column("Value", style="green", width=terminal_width - 60)
+    
+    if is_pydantic:
+        # Extract model fields and values
+        try:
+            if hasattr(result, 'model_dump'):
+                data = result.model_dump(mode='json')
+            elif hasattr(result, 'dict'):
+                data = result.dict()
+            else:
+                data = dict(result) if hasattr(result, '__dict__') else {}
+            
+            # Get field types from model
+            if hasattr(response_format, 'model_fields'):
+                fields_info = response_format.model_fields
+            elif hasattr(response_format, '__fields__'):
+                fields_info = response_format.__fields__
+            else:
+                fields_info = {}
+            
+            for field_name, field_value in data.items():
+                # Get field type
+                field_type = "Unknown"
+                if field_name in fields_info:
+                    field_info = fields_info[field_name]
+                    if hasattr(field_info, 'annotation'):
+                        field_type = str(field_info.annotation).replace('typing.', '').replace('<class \'', '').replace('\'>', '')
+                    elif isinstance(field_info, dict) and 'type' in field_info:
+                        field_type = str(field_info['type'])
+                
+                # Format value
+                if isinstance(field_value, (dict, list)):
+                    value_str = json.dumps(field_value, indent=2, ensure_ascii=False)
+                    if len(value_str) > 500 and not debug:
+                        value_str = value_str[:500] + "\n... (truncated)"
+                else:
+                    value_str = str(field_value)
+                    if len(value_str) > 200 and not debug:
+                        value_str = value_str[:200] + "..."
+                
+                result_table.add_row(
+                    escape_rich_markup(field_name),
+                    escape_rich_markup(field_type),
+                    escape_rich_markup(value_str)
+                )
+        except Exception as e:
+            # Fallback to string representation
+            result_table.add_row(
+                "Result",
+                "Pydantic Model",
+                escape_rich_markup(str(result))
+            )
+    else:
+        # Not a Pydantic model, show as JSON if possible
+        try:
+            if isinstance(result, (dict, list)):
+                json_str = json.dumps(result, indent=2, ensure_ascii=False)
+            else:
+                json_str = str(result)
+            
+            if len(json_str) > 1000 and not debug:
+                json_str = json_str[:1000] + "\n... (truncated)"
+            
+            result_table.add_row(
+                "Result",
+                type(result).__name__,
+                escape_rich_markup(json_str)
+            )
+        except Exception:
+            result_table.add_row(
+                "Result",
+                type(result).__name__,
+                escape_rich_markup(str(result))
+            )
+    
+    # Create metadata table
+    metadata_table = Table(show_header=False, box=None, expand=True, width=terminal_width - 4)
+    
+    model_name_esc = escape_rich_markup(model_name)
+    format_name = response_format.__name__ if hasattr(response_format, '__name__') else str(response_format)
+    format_name_esc = escape_rich_markup(format_name)
+    
+    estimated_cost = get_estimated_cost(
+        usage.get('input_tokens', 0),
+        usage.get('output_tokens', 0),
+        model_name
+    )
+    
+    metadata_table.add_row("[bold cyan]Model:[/bold cyan]", f"[bright_cyan]{model_name_esc}[/bright_cyan]")
+    metadata_table.add_row("[bold yellow]Response Format:[/bold yellow]", f"[bright_yellow]{format_name_esc}[/bright_yellow]")
+    metadata_table.add_row("[bold green]Execution Time:[/bold green]", f"[bright_green]{execution_time:.3f}s[/bright_green]")
+    metadata_table.add_row("[bold blue]Input Tokens:[/bold blue]", f"[bright_blue]{usage.get('input_tokens', 0):,}[/bright_blue]")
+    metadata_table.add_row("[bold blue]Output Tokens:[/bold blue]", f"[bright_blue]{usage.get('output_tokens', 0):,}[/bright_blue]")
+    metadata_table.add_row("[bold magenta]Estimated Cost:[/bold magenta]", f"[bright_magenta]{estimated_cost}[/bright_magenta]")
+    
+    # Create main panel with nested tables
+    from rich.layout import Layout
+    from rich.console import Group
+    
+    content = Group(
+        Panel(
+            metadata_table,
+            title="[bold bright_cyan]📊 Execution Metadata[/bold bright_cyan]",
+            border_style="bright_cyan",
+            expand=False
+        ),
+        Panel(
+            result_table,
+            title=f"[bold bright_green]✨ Structured Output: {format_name_esc}[/bold bright_green]",
+            border_style="bright_green",
+            expand=True
+        )
+    )
+    
+    main_panel = Panel(
+        content,
+        title="[bold bright_white]🎯 Pydantic Structured Output[/bold bright_white]",
+        border_style="bright_white",
+        expand=True,
+        width=terminal_width
+    )
+    
+    console.print(main_panel)
+    spacing()
+
+
+def display_llm_result_table(
+    result: Any,
+    model_name: str,
+    response_format: Any,
+    execution_time: float,
+    usage: dict,
+    tool_usage: list = None,
+    debug: bool = False
+) -> None:
+    """
+    Display LLM result in a magnificent, full-width table.
+    
+    Args:
+        result: The result from LLM
+        model_name: Name of the model used
+        response_format: Response format (str, Pydantic model, etc.)
+        execution_time: Execution time in seconds
+        usage: Token usage dictionary
+        tool_usage: List of tool usage dictionaries
+        debug: Whether to show full details
+    """
+    try:
+        from pydantic import BaseModel
+    except ImportError:
+        BaseModel = None
+    
+    terminal_width = _get_terminal_width()
+    
+    # Check if result is Pydantic structured output
+    is_pydantic = isinstance(result, BaseModel) if hasattr(BaseModel, '__instancecheck__') else (
+        hasattr(result, 'model_dump') or hasattr(result, 'dict')
+    )
+    
+    # Create main result display
+    if is_pydantic:
+        # Use the specialized Pydantic display function
+        display_pydantic_structured_output(
+            result, model_name, response_format, execution_time, usage, debug
+        )
+        return
+    
+    # Create comprehensive result table
+    result_table = Table(show_header=False, box=None, expand=True, width=terminal_width - 4)
+    
+    model_name_esc = escape_rich_markup(model_name)
+    format_name = str(response_format) if response_format else "str"
+    format_name_esc = escape_rich_markup(format_name)
+    
+    # Format result
+    result_str = str(result)
+    if not debug and len(result_str) > 2000:
+        result_str = result_str[:2000] + "\n\n... (truncated, use debug=True for full output)"
+    result_esc = escape_rich_markup(result_str)
+    
+    estimated_cost = get_estimated_cost(
+        usage.get('input_tokens', 0),
+        usage.get('output_tokens', 0),
+        model_name
+    )
+    
+    # Add rows to result table
+    result_table.add_row("[bold bright_cyan]🤖 Model:[/bold bright_cyan]", f"[bright_cyan]{model_name_esc}[/bright_cyan]")
+    result_table.add_row("")
+    result_table.add_row("[bold bright_yellow]📝 Response Format:[/bold bright_yellow]", f"[bright_yellow]{format_name_esc}[/bright_yellow]")
+    result_table.add_row("")
+    result_table.add_row("[bold bright_green]✨ Result:[/bold bright_green]")
+    result_table.add_row(f"[green]{result_esc}[/green]")
+    result_table.add_row("")
+    result_table.add_row("[bold bright_blue]⏱️  Execution Time:[/bold bright_blue]", f"[bright_blue]{execution_time:.3f}s[/bright_blue]")
+    result_table.add_row("[bold bright_blue]📥 Input Tokens:[/bold bright_blue]", f"[bright_blue]{usage.get('input_tokens', 0):,}[/bright_blue]")
+    result_table.add_row("[bold bright_blue]📤 Output Tokens:[/bold bright_blue]", f"[bright_blue]{usage.get('output_tokens', 0):,}[/bright_blue]")
+    result_table.add_row("[bold bright_magenta]💰 Estimated Cost:[/bold bright_magenta]", f"[bright_magenta]{estimated_cost}[/bright_magenta]")
+    
+    # Create panel
+    main_panel = Panel(
+        result_table,
+        title="[bold bright_white]🎯 LLM Result[/bold bright_white]",
+        border_style="bright_white",
+        expand=True,
+        width=terminal_width
+    )
+    
+    console.print(main_panel)
+    spacing()
+
+
+def display_tool_calls_table(
+    tool_usage: list,
+    debug: bool = False
+) -> None:
+    """
+    Display tool calls in a clear, readable format.
+    
+    Uses vertical layout per tool for maximum readability:
+    - Tool name and index as header
+    - Parameters formatted as key: value pairs
+    - Results displayed with full width
+    
+    Args:
+        tool_usage: List of tool usage dictionaries with tool_name, params, tool_result
+                   tool_result follows func_dict structure from ToolProcessor
+        debug: Whether to show full details
+    """
+    if not tool_usage or len(tool_usage) == 0:
+        return
+    
+    terminal_width = _get_terminal_width()
+    
+    # Create a table for all tool calls with vertical layout
+    from rich.console import Group
+    
+    tool_sections = []
+    
+    for idx, tool in enumerate(tool_usage, 1):
+        tool_name = str(tool.get('tool_name', 'Unknown'))
+        
+        # Create table for this tool's details
+        tool_table = Table(
+            show_header=False,
+            box=None,
+            expand=True,
+            width=terminal_width - 8,
+            padding=(0, 1)
+        )
+        tool_table.add_column("Label", style="bold cyan", width=12)
+        tool_table.add_column("Value", style="white")
+        
+        # Format parameters - each parameter as its own row
+        params = tool.get('params', {})
+        
+        # Handle params that might be a JSON string
+        if isinstance(params, str):
+            try:
+                params = json.loads(params)
+            except (json.JSONDecodeError, TypeError):
+                pass  # Keep as string if not valid JSON
+        
+        if isinstance(params, dict) and params:
+            first_param = True
+            for k, v in params.items():
+                v_str = str(v)
+                # Wrap long lines for readability (no truncation)
+                if len(v_str) > 80:
+                    lines = [v_str[i:i+80] for i in range(0, len(v_str), 80)]
+                    v_str = "\n".join(lines)
+                
+                # First param gets the "Parameters" label, rest get empty label
+                label = "[bold]Parameters[/bold]" if first_param else ""
+                tool_table.add_row(label, f"[yellow]{k}[/yellow]: {escape_rich_markup(v_str)}")
+                tool_table.add_row("", "")  # Space after each parameter
+                first_param = False
+        elif isinstance(params, dict):
+            tool_table.add_row("[bold]Parameters[/bold]", "[dim](none)[/dim]")
+        else:
+            # Fallback for non-dict params
+            tool_table.add_row("[bold]Parameters[/bold]", escape_rich_markup(str(params)))
+        
+        tool_table.add_row("", "")  # Empty row for spacing
+        
+        # Format result - extract from func_dict structure
+        raw_result = tool.get('tool_result', '')
+        
+        # Extract actual result from func_dict if it's a dict with 'func' key
+        if isinstance(raw_result, dict):
+            if 'func' in raw_result:
+                result = raw_result['func']
+            elif 'func_cache' in raw_result:
+                result = raw_result['func_cache']
+            else:
+                result = raw_result
+        else:
+            result = raw_result
+        
+        # Format the extracted result
+        if isinstance(result, dict) and result:
+            result_lines = []
+            for k, v in result.items():
+                v_str = str(v)
+                if len(v_str) > 200 and not debug:
+                    v_str = v_str[:200] + "..."
+                # Handle lists nicely
+                if isinstance(v, list):
+                    if len(v) <= 5:
+                        v_str = ", ".join(str(x) for x in v)
+                    else:
+                        v_str = ", ".join(str(x) for x in v[:5]) + f" ... (+{len(v)-5} more)"
+                result_lines.append(f"[green]{k}[/green]: {escape_rich_markup(v_str)}")
+            result_str = "\n".join(result_lines)
+        elif isinstance(result, list):
+            if len(result) <= 10:
+                result_str = "\n".join(f"• {escape_rich_markup(str(item))}" for item in result)
+            else:
+                items = [f"• {escape_rich_markup(str(item))}" for item in result[:10]]
+                result_str = "\n".join(items) + f"\n... (+{len(result)-10} more)"
+        else:
+            result_str = escape_rich_markup(str(result))
+            if len(result_str) > 1000 and not debug:
+                result_str = result_str[:1000] + "\n... (truncated)"
+        
+        tool_table.add_row("[bold]Result[/bold]", result_str)
+        
+        # Create panel for this tool
+        tool_panel = Panel(
+            tool_table,
+            title=f"[bold bright_cyan]#{idx} {escape_rich_markup(tool_name)}[/bold bright_cyan]",
+            border_style="cyan",
+            expand=True
+        )
+        tool_sections.append(tool_panel)
+    
+    # Combine all tool panels
+    content = Group(*tool_sections)
+    
+    # Create main panel
+    main_panel = Panel(
+        content,
+        title=f"[bold bright_white]🔧 Tool Calls ({len(tool_usage)} executed)[/bold bright_white]",
+        border_style="bright_white",
+        expand=True,
+        width=terminal_width
+    )
+    
+    console.print(main_panel)
+    spacing()
+
+
+def display_graph_tree(
+    graph: Any,
+    executed_node_ids: Set[str],
+    pruned_node_ids: Set[str],
+    executing_node_id: Optional[str] = None,
+    failed_node_ids: Set[str] = None
+) -> None:
+    """
+    Display graph structure as a magnificent tree-based table that updates in real-time.
+    
+    Args:
+        graph: The Graph instance
+        executed_node_ids: Set of node IDs that have been executed
+        pruned_node_ids: Set of node IDs that have been pruned
+        executing_node_id: ID of node currently executing (optional)
+        failed_node_ids: Set of node IDs that failed (optional)
+    """
+    if failed_node_ids is None:
+        failed_node_ids = set()
+    
+    # Try to import graph node types first
+    try:
+        from upsonic.graph.graph import TaskNode, DecisionFunc, DecisionLLM
+    except ImportError:
+        # If import fails, we'll use type checking instead
+        TaskNode = None
+        DecisionFunc = None
+        DecisionLLM = None
+    
+    terminal_width = _get_terminal_width()
+    
+    # Build tree structure from graph
+    def build_tree_structure():
+        """Build a tree representation of the graph in execution order (sequential from first to last)."""
+        # Get all nodes in order (maintains insertion order - this is the execution order)
+        all_nodes = {node.id: node for node in graph.nodes}
+        node_order = [node.id for node in graph.nodes]  # Preserve insertion order - this is the key!
+        
+        # Helper function to extract branch node IDs recursively
+        def extract_branch_nodes(branch, parent_decision_id):
+            """Recursively extract all node IDs from a branch."""
+            branch_ids = {}
+            if not branch:
+                return branch_ids
+            
+            # Handle TaskChain
+            if hasattr(branch, 'nodes') and isinstance(branch.nodes, list):
+                for n in branch.nodes:
+                    if hasattr(n, 'id'):
+                        branch_ids[n.id] = parent_decision_id
+            # Handle single node (TaskNode, DecisionFunc, DecisionLLM)
+            elif hasattr(branch, 'id'):
+                branch_ids[branch.id] = parent_decision_id
+                # If it's a decision node, also get its branches
+                if DecisionFunc is not None and isinstance(branch, DecisionFunc):
+                    if branch.true_branch:
+                        branch_ids.update(extract_branch_nodes(branch.true_branch, branch.id))
+                    if branch.false_branch:
+                        branch_ids.update(extract_branch_nodes(branch.false_branch, branch.id))
+                elif DecisionLLM is not None and isinstance(branch, DecisionLLM):
+                    if branch.true_branch:
+                        branch_ids.update(extract_branch_nodes(branch.true_branch, branch.id))
+                    if branch.false_branch:
+                        branch_ids.update(extract_branch_nodes(branch.false_branch, branch.id))
+            
+            return branch_ids
+        
+        # Collect all branch nodes from DecisionFunc and DecisionLLM nodes
+        branch_nodes_map = {}  # Map branch node IDs to their parent decision node ID
+        
+        for node in graph.nodes:
+            if DecisionFunc is not None and isinstance(node, DecisionFunc):
+                if node.true_branch:
+                    branch_nodes_map.update(extract_branch_nodes(node.true_branch, node.id))
+                if node.false_branch:
+                    branch_nodes_map.update(extract_branch_nodes(node.false_branch, node.id))
+            elif DecisionLLM is not None and isinstance(node, DecisionLLM):
+                if node.true_branch:
+                    branch_nodes_map.update(extract_branch_nodes(node.true_branch, node.id))
+                if node.false_branch:
+                    branch_nodes_map.update(extract_branch_nodes(node.false_branch, node.id))
+        
+        branch_node_ids = set(branch_nodes_map.keys())
+        
+        # Build tree showing nodes in sequential order (as they appear in graph.nodes)
+        tree_nodes = []
+        
+        def get_node_info(node_id: str):
+            """Get node type and description."""
+            if node_id not in all_nodes:
+                return "Unknown", node_id
+            
+            node = all_nodes[node_id]
+            node_type = "Unknown"
+            node_desc = node_id
+            
+            if TaskNode is not None and isinstance(node, TaskNode):
+                node_type = "Task"
+                node_desc = node.task.description[:50] if hasattr(node, 'task') and node.task.description else node_id
+            elif DecisionFunc is not None and isinstance(node, DecisionFunc):
+                node_type = "Decision (Func)"
+                node_desc = getattr(node, 'description', node_id)[:50]
+            elif DecisionLLM is not None and isinstance(node, DecisionLLM):
+                node_type = "Decision (LLM)"
+                node_desc = getattr(node, 'description', node_id)[:50]
+            else:
+                # Fallback: check by class name
+                class_name = node.__class__.__name__
+                if 'TaskNode' in class_name:
+                    node_type = "Task"
+                    node_desc = getattr(node, 'task', {}).description[:50] if hasattr(node, 'task') else node_id
+                elif 'DecisionFunc' in class_name:
+                    node_type = "Decision (Func)"
+                    node_desc = getattr(node, 'description', node_id)[:50]
+                elif 'DecisionLLM' in class_name:
+                    node_type = "Decision (LLM)"
+                    node_desc = getattr(node, 'description', node_id)[:50]
+            
+            return node_type, node_desc
+        
+        def get_node_status(node_id: str):
+            """Get node status."""
+            if node_id == executing_node_id:
+                return "[bold yellow]⚡ Executing[/bold yellow]"
+            elif node_id in failed_node_ids:
+                return "[bold red]✗ Failed[/bold red]"
+            elif node_id in executed_node_ids:
+                return "[bold green]✓ Completed[/bold green]"
+            elif node_id in pruned_node_ids:
+                return "[dim]⊘ Pruned[/dim]"
+            else:
+                return "[dim]○ Pending[/dim]"
+        
+        def get_exec_info(node_id: str):
+            """Get execution info if completed."""
+            if node_id not in executed_node_ids or node_id not in all_nodes:
+                return ""
+            
+            node = all_nodes[node_id]
+            task = None
+            if TaskNode is not None and isinstance(node, TaskNode):
+                task = node.task
+            elif hasattr(node, 'task'):
+                task = node.task
+            
+            if task and hasattr(task, 'duration') and task.duration:
+                exec_info = f" ({task.duration:.2f}s"
+                if hasattr(task, 'total_cost') and task.total_cost:
+                    exec_info += f", ${task.total_cost:.4f}"
+                exec_info += ")"
+                return exec_info
+            return ""
+        
+        # Display nodes in sequential order (as they appear in graph.nodes)
+        # This ensures first-to-last ordering as nodes were added
+        
+        # Find which nodes have parents (are children of other nodes)
+        nodes_with_parents = set()
+        for target_ids in graph.edges.values():
+            nodes_with_parents.update(target_ids)
+        
+        # Display all nodes in the order they appear in graph.nodes
+        for idx, node_id in enumerate(node_order):
+            
+            node = all_nodes[node_id]
+            node_type, node_desc = get_node_info(node_id)
+            status = get_node_status(node_id)
+            exec_info = get_exec_info(node_id)
+            
+            # Determine if this node has a parent
+            # IMPORTANT: Only decision branch nodes should be children (depth=1)
+            # Sequential nodes connected via graph.edges should be siblings (depth=0)
+            has_parent = node_id in nodes_with_parents
+            is_branch_node = node_id in branch_node_ids
+            depth = 0
+            parent_id = None
+            
+            # ONLY check if it's a branch from a decision node (DecisionFunc/DecisionLLM)
+            # Sequential tasks should NOT be nested - they're siblings at the same level
+            if is_branch_node and node_id in branch_nodes_map:
+                parent_id = branch_nodes_map[node_id]
+                parent_idx = node_order.index(parent_id) if parent_id in node_order else -1
+                if parent_idx >= 0 and parent_idx < idx:
+                    depth = 1
+            # DO NOT set depth=1 for nodes connected via graph.edges - they're sequential siblings!
+            
+            # Determine if this is the last node at this level
+            # Check if there are more nodes at the same depth after this one
+            is_last = True
+            if depth == 0:
+                # For root level (all sequential tasks and decision nodes), 
+                # check if there are more nodes after this one
+                remaining_nodes = [nid for nid in node_order[idx+1:] if nid not in branch_node_ids]
+                is_last = len(remaining_nodes) == 0
+            else:
+                # For child nodes (decision branches only), check siblings
+                # Get parent_id (should already be set for branch nodes)
+                if not parent_id and is_branch_node and node_id in branch_nodes_map:
+                    parent_id = branch_nodes_map[node_id]
+                
+                # Get all siblings from decision branches only
+                siblings = []
+                if parent_id and parent_id in all_nodes:
+                    parent_node = all_nodes[parent_id]
+                    if DecisionFunc is not None and isinstance(parent_node, DecisionFunc):
+                        if parent_node.true_branch:
+                            branch_id = parent_node.true_branch.id if hasattr(parent_node.true_branch, 'id') else None
+                            if branch_id:
+                                siblings.append(branch_id)
+                                # If it's a TaskChain, get all nodes
+                                if hasattr(parent_node.true_branch, 'nodes'):
+                                    for n in parent_node.true_branch.nodes:
+                                        if hasattr(n, 'id') and n.id != branch_id:
+                                            siblings.append(n.id)
+                        if parent_node.false_branch:
+                            branch_id = parent_node.false_branch.id if hasattr(parent_node.false_branch, 'id') else None
+                            if branch_id:
+                                siblings.append(branch_id)
+                                # If it's a TaskChain, get all nodes
+                                if hasattr(parent_node.false_branch, 'nodes'):
+                                    for n in parent_node.false_branch.nodes:
+                                        if hasattr(n, 'id') and n.id != branch_id:
+                                            siblings.append(n.id)
+                    elif DecisionLLM is not None and isinstance(parent_node, DecisionLLM):
+                        if parent_node.true_branch:
+                            branch_id = parent_node.true_branch.id if hasattr(parent_node.true_branch, 'id') else None
+                            if branch_id:
+                                siblings.append(branch_id)
+                                # If it's a TaskChain, get all nodes
+                                if hasattr(parent_node.true_branch, 'nodes'):
+                                    for n in parent_node.true_branch.nodes:
+                                        if hasattr(n, 'id') and n.id != branch_id:
+                                            siblings.append(n.id)
+                        if parent_node.false_branch:
+                            branch_id = parent_node.false_branch.id if hasattr(parent_node.false_branch, 'id') else None
+                            if branch_id:
+                                siblings.append(branch_id)
+                                # If it's a TaskChain, get all nodes
+                                if hasattr(parent_node.false_branch, 'nodes'):
+                                    for n in parent_node.false_branch.nodes:
+                                        if hasattr(n, 'id') and n.id != branch_id:
+                                            siblings.append(n.id)
+                
+                # Sort siblings by node_order
+                siblings_ordered = [sid for sid in node_order if sid in siblings]
+                
+                if siblings_ordered:
+                    last_sibling = siblings_ordered[-1]
+                    is_last = (node_id == last_sibling)
+            
+            # Build prefix based on depth and position
+            if depth == 0:
+                prefix = ""
+                connector = "└── " if is_last else "├── "
+            else:
+                # For child nodes, use proper tree connectors
+                prefix = "│   " if not is_last else "    "
+                connector = "└── " if is_last else "├── "
+            
+            tree_line = f"{prefix}{connector}[bold cyan]{node_id[:20]}[/bold cyan] [[dim]{node_type}[/dim]] {status}{exec_info}"
+            tree_nodes.append((depth, tree_line, node_desc))
+        
+        return tree_nodes
+    
+    # Try to import graph node types
+    try:
+        from upsonic.graph.graph import TaskNode, DecisionFunc, DecisionLLM
+    except ImportError:
+        # If import fails, we'll use type checking instead
+        TaskNode = None
+        DecisionFunc = None
+        DecisionLLM = None
+    
+    # Build tree structure
+    tree_nodes = build_tree_structure()
+    
+    if not tree_nodes:
+        return
+    
+    # Create tree table
+    tree_table = Table(
+        show_header=True,
+        header_style="bold bright_cyan",
+        box=None,
+        show_lines=False,
+        expand=True,
+        width=terminal_width - 4
+    )
+    
+    tree_table.add_column("Graph Structure", style="cyan", width=terminal_width - 4)
+    
+    # Add tree nodes to table
+    for depth, tree_line, node_desc in tree_nodes:
+        tree_table.add_row(tree_line)
+    
+    # Create summary
+    # When TaskChain is added to graph via graph.add(), all nodes (including branch nodes) are added to graph.nodes
+    # So len(graph.nodes) should be the correct total count
+    total_nodes = len(graph.nodes)
+    
+    completed = len(executed_node_ids)
+    pruned = len(pruned_node_ids)
+    failed = len(failed_node_ids)
+    executing = 1 if executing_node_id else 0
+    
+    # Calculate pending: total - completed - pruned - failed - executing
+    # CRITICAL: executing node should NOT be counted in pending (it's already counted in executing)
+    # This prevents double-counting: if a node is executing, it shouldn't also be in pending
+    pending = total_nodes - completed - pruned - failed - executing
+    
+    # Ensure pending is not negative (safety check)
+    if pending < 0:
+        pending = 0
+    
+    summary_table = Table(show_header=False, box=None, expand=True, width=terminal_width - 4)
+    summary_table.add_row("[bold bright_cyan]📊 Graph Execution Summary[/bold bright_cyan]", "")
+    summary_table.add_row("")
+    summary_table.add_row("[bold]Total Nodes:[/bold]", f"[cyan]{total_nodes}[/cyan]")
+    summary_table.add_row("[bold green]✓ Completed:[/bold green]", f"[green]{completed}[/green]")
+    summary_table.add_row("[bold yellow]⚡ Executing:[/bold yellow]", f"[yellow]{executing}[/yellow]")
+    summary_table.add_row("[dim]○ Pending:[/dim]", f"[dim]{pending}[/dim]")
+    summary_table.add_row("[dim]⊘ Pruned:[/dim]", f"[dim]{pruned}[/dim]")
+    if failed > 0:
+        summary_table.add_row("[bold red]✗ Failed:[/bold red]", f"[red]{failed}[/red]")
+    
+    # Create combined panel
+    from rich.console import Group
+    
+    content = Group(
+        Panel(
+            summary_table,
+            title="[bold bright_cyan]📊 Execution Status[/bold bright_cyan]",
+            border_style="bright_cyan",
+            expand=False
+        ),
+        Panel(
+            tree_table,
+            title="[bold bright_green]🌳 Graph Tree Structure[/bold bright_green]",
+            border_style="bright_green",
+            expand=True
+        )
+    )
+    
+    main_panel = Panel(
+        content,
+        title="[bold bright_white]🎯 Graph Execution Tree[/bold bright_white]",
+        border_style="bright_white",
+        expand=True,
+        width=terminal_width
+    )
+    
+    # Print tree (will update on each call)
+    console.print(main_panel)
+    spacing()
+
+
+def display_tool_results_table(
+    tool_results: list,
+    debug: bool = False
+) -> None:
+    """
+    Display tool results in a magnificent, full-width table.
+    
+    Args:
+        tool_results: List of tool result dictionaries
+        debug: Whether to show full details
+    """
+    if not tool_results or len(tool_results) == 0:
+        return
+    
+    terminal_width = _get_terminal_width()
+    
+    # Create comprehensive tool results table
+    result_table = Table(
+        show_header=True,
+        header_style="bold bright_green",
+        box=None,
+        show_lines=True,
+        expand=True,
+        width=terminal_width - 4
+    )
+    
+    result_table.add_column("#", style="dim", width=min(8, terminal_width // 20), justify="center")
+    result_table.add_column("Tool Name", style="bold bright_cyan", width=min(25, terminal_width // 5))
+    result_table.add_column("Result", style="bright_green", width=terminal_width - 50)
+    result_table.add_column("Status", style="bright_yellow", width=min(15, terminal_width // 8), justify="center")
+    
+    for idx, result in enumerate(tool_results, 1):
+        tool_name = escape_rich_markup(str(result.get('tool_name', 'Unknown')))
+        
+        # Format result
+        result_content = result.get('result', result.get('content', ''))
+        if isinstance(result_content, (dict, list)):
+            result_str = json.dumps(result_content, indent=2, ensure_ascii=False)
+        else:
+            result_str = str(result_content)
+        
+        if len(result_str) > 1000 and not debug:
+            result_str = result_str[:1000] + "\n... (truncated)"
+        result_esc = escape_rich_markup(result_str)
+        
+        # Determine status
+        status = result.get('status', 'success')
+        if status == 'success' or status is True:
+            status_display = "[bright_green]✓ Success[/bright_green]"
+        elif status == 'error' or status is False:
+            status_display = "[bright_red]✗ Error[/bright_red]"
+        else:
+            status_display = f"[dim]{status}[/dim]"
+        
+        result_table.add_row(
+            str(idx),
+            tool_name,
+            result_esc,
+            status_display
+        )
+    
+    # Create panel
+    result_panel = Panel(
+        result_table,
+        title=f"[bold bright_green]✅ Tool Results ({len(tool_results)} results)[/bold bright_green]",
+        border_style="bright_green",
+        expand=True,
+        width=terminal_width
+    )
+    
+    console.print(result_panel)
+    spacing()
 
 
 def _get_model_pricing(model_name: str) -> Optional[Dict[str, float]]:
@@ -285,14 +1139,14 @@ def get_estimated_cost_from_usage(usage: Union[Dict[str, int], Any], model: Unio
         return "~$0.0000"
 
 
-def get_estimated_cost_from_run_result(run_result: Any, model: Union["Model", str]) -> str:
-    """Calculate estimated cost from a RunResult object."""
+def get_estimated_cost_from_agent_run_output(agent_run_output: Any, model: Union["Model", str]) -> str:
+    """Calculate estimated cost from an AgentRunOutput object."""
     try:
         total_input_tokens = 0
         total_output_tokens = 0
         
-        if hasattr(run_result, 'all_messages'):
-            messages = run_result.all_messages()
+        if hasattr(agent_run_output, 'all_messages'):
+            messages = agent_run_output.all_messages()
             for message in messages:
                 # Only ModelResponse objects have usage information
                 if hasattr(message, 'usage') and message.usage and hasattr(message, 'kind') and message.kind == 'response':
@@ -303,46 +1157,18 @@ def get_estimated_cost_from_run_result(run_result: Any, model: Union["Model", st
         return get_estimated_cost(total_input_tokens, total_output_tokens, model)
         
     except Exception as e:
-        console.print(f"[yellow]Warning: Cost calculation from RunResult failed: {e}[/yellow]")
-        return "~$0.0000"
-
-
-def get_estimated_cost_from_stream_result(stream_result: Any, model: Union["Model", str]) -> str:
-    """Calculate estimated cost from a StreamRunResult object."""
-    try:
-        total_input_tokens = 0
-        total_output_tokens = 0
-        
-        if hasattr(stream_result, 'all_messages'):
-            messages = stream_result.all_messages()
-            for message in messages:
-                # Only ModelResponse objects have usage information
-                if hasattr(message, 'usage') and message.usage and hasattr(message, 'kind') and message.kind == 'response':
-                    usage = message.usage
-                    total_input_tokens += usage.input_tokens
-                    total_output_tokens += usage.output_tokens
-        
-        return get_estimated_cost(total_input_tokens, total_output_tokens, model)
-        
-    except Exception as e:
-        console.print(f"[yellow]Warning: Cost calculation from StreamRunResult failed: {e}[/yellow]")
+        console.print(f"[yellow]Warning: Cost calculation from AgentRunOutput failed: {e}[/yellow]")
         return "~$0.0000"
 
 
 def get_estimated_cost_from_agent(agent: Any, run_type: str = "last") -> str:
     """Calculate estimated cost from an Agent's run results."""
     try:
-        if run_type in ["last", "non_stream"]:
-            if hasattr(agent, 'get_run_result'):
-                run_result = agent.get_run_result()
-                if run_result and hasattr(run_result, 'all_messages') and run_result.all_messages():
-                    return get_estimated_cost_from_run_result(run_result, agent.model)
-        
-        if run_type in ["last", "stream"]:
-            if hasattr(agent, 'get_stream_run_result'):
-                stream_result = agent.get_stream_run_result()
-                if stream_result and hasattr(stream_result, 'all_messages') and stream_result.all_messages():
-                    return get_estimated_cost_from_stream_result(stream_result, agent.model)
+        # Try to get from run output
+        if hasattr(agent, 'get_run_output'):
+            run_output = agent.get_run_output()
+            if run_output and hasattr(run_output, 'all_messages') and run_output.all_messages():
+                return get_estimated_cost_from_agent_run_output(run_output, agent.model)
         
         return "~$0.0000"
         
@@ -411,48 +1237,11 @@ def connected_to_server(server_type: str, status: str, total_time: float = None)
     spacing()
 
 def call_end(result: Any, model: Any, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, debug: bool = False, price_id: str = None):
+    # Display tool calls in magnificent table
     if tool_usage and len(tool_usage) > 0:
-        tool_table = Table(show_header=True, expand=True, box=None)
-        tool_table.width = 60
-        
-        tool_table.add_column("[bold]Tool Name[/bold]", justify="left")
-        tool_table.add_column("[bold]Parameters[/bold]", justify="left")
-        tool_table.add_column("[bold]Result[/bold]", justify="left")
-
-        for tool in tool_usage:
-            tool_name = escape_rich_markup(str(tool.get('tool_name', '')))
-            params = escape_rich_markup(str(tool.get('params', '')))
-            result_str = escape_rich_markup(str(tool.get('tool_result', '')))
-            
-            if len(params) > 50:
-                params = params[:47] + "..."
-            if len(result_str) > 50:
-                result_str = result_str[:47] + "..."
-                
-            tool_table.add_row(
-                f"[cyan]{tool_name}[/cyan]",
-                f"[yellow]{params}[/yellow]",
-                f"[green]{result_str}[/green]"
-            )
-
-        tool_panel = Panel(
-            tool_table,
-            title=f"[bold cyan]Tool Usage Summary ({len(tool_usage)} tools)[/bold cyan]",
-            border_style="cyan",
-            expand=True,
-            width=70
-        )
-
-        console.print(tool_panel)
-        spacing()
-
-    table = Table(show_header=False, expand=True, box=None)
-    table.width = 60
-
-    display_model_name = escape_rich_markup(model.model_name)
-    response_format = escape_rich_markup(response_format)
-    price_id_display = escape_rich_markup(price_id) if price_id else None
-
+        display_tool_calls_table(tool_usage, debug=debug)
+    
+    # Handle price_id tracking
     if price_id:
         estimated_cost = get_estimated_cost(usage['input_tokens'], usage['output_tokens'], model)
         if price_id not in price_id_summary:
@@ -473,24 +1262,41 @@ def call_end(result: Any, model: Any, response_format: str, start_time: float, e
         except Exception as e:
             if debug:
                 pass  # Error calculating cost
-
-    result_str = str(result)
-    if not debug:
-        result_str = result_str[:370]
-    if len(result_str) < len(str(result)):
-        result_str += "..."
-
-    table.add_row("[bold]Result:[/bold]", f"[green]{escape_rich_markup(result_str)}[/green]")
-    panel = Panel(
-        table,
-        title="[bold white]Task Result[/bold white]",
-        border_style="white",
-        expand=True,
-        width=70
+    
+    # Display LLM result in magnificent table
+    execution_time = end_time - start_time
+    model_name = _get_model_name(model)
+    
+    # Check if response_format is a Pydantic model
+    from pydantic import BaseModel
+    is_pydantic_format = (
+        response_format != str and 
+        response_format is not str and
+        isinstance(response_format, type) and
+        issubclass(response_format, BaseModel) if hasattr(BaseModel, '__subclasscheck__') else False
     )
-
-    console.print(panel)
-    spacing()
+    
+    if is_pydantic_format and isinstance(result, BaseModel):
+        # Use specialized Pydantic display
+        display_pydantic_structured_output(
+            result=result,
+            model_name=model_name,
+            response_format=response_format,
+            execution_time=execution_time,
+            usage=usage,
+            debug=debug
+        )
+    else:
+        # Use general LLM result display
+        display_llm_result_table(
+            result=result,
+            model_name=model_name,
+            response_format=response_format,
+            execution_time=execution_time,
+            usage=usage,
+            tool_usage=tool_usage,
+            debug=debug
+        )
 
     # Sentry logging (kullanıcı model call sonucunu gördü)
     execution_time = end_time - start_time
@@ -519,48 +1325,11 @@ def call_end(result: Any, model: Any, response_format: str, start_time: float, e
 
 
 def agent_end(result: Any, model: Any, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, tool_count: int, context_count: int, debug: bool = False, price_id:str = None):
+    # Display tool calls in magnificent table
     if tool_usage and len(tool_usage) > 0:
-        tool_table = Table(show_header=True, expand=True, box=None)
-        tool_table.width = 60
-        
-        tool_table.add_column("[bold]Tool Name[/bold]", justify="left")
-        tool_table.add_column("[bold]Parameters[/bold]", justify="left")
-        tool_table.add_column("[bold]Result[/bold]", justify="left")
-
-        for tool in tool_usage:
-            tool_name = escape_rich_markup(str(tool.get('tool_name', '')))
-            params = escape_rich_markup(str(tool.get('params', '')))
-            result_str = escape_rich_markup(str(tool.get('tool_result', '')))
-            
-            if len(params) > 50:
-                params = params[:47] + "..."
-            if len(result_str) > 50:
-                result_str = result_str[:47] + "..."
-                
-            tool_table.add_row(
-                f"[cyan]{tool_name}[/cyan]",
-                f"[yellow]{params}[/yellow]",
-                f"[green]{result_str}[/green]"
-            )
-
-        tool_panel = Panel(
-            tool_table,
-            title=f"[bold cyan]Tool Usage Summary ({len(tool_usage)} tools)[/bold cyan]",
-            border_style="cyan",
-            expand=True,
-            width=70
-        )
-
-        console.print(tool_panel)
-        spacing()
-
-    table = Table(show_header=False, expand=True, box=None)
-    table.width = 60
-
-    display_model_name = escape_rich_markup(model.model_name)
-    response_format = escape_rich_markup(response_format)
-    price_id = escape_rich_markup(price_id) if price_id else None
-
+        display_tool_calls_table(tool_usage, debug=debug)
+    
+    # Handle price_id tracking
     if price_id:
         estimated_cost = get_estimated_cost(usage['input_tokens'], usage['output_tokens'], model)
         if price_id not in price_id_summary:
@@ -579,34 +1348,78 @@ def agent_end(result: Any, model: Any, response_format: str, start_time: float, 
                 price_id_summary[price_id]['estimated_cost'] = Decimal(str(price_id_summary[price_id]['estimated_cost'])) + Decimal(cost_str)
         except Exception as e:
             console.print(f"[bold red]Warning: Could not parse cost value: {estimated_cost}. Error: {e}[/bold red]")
-
-    table.add_row("[bold]LLM Model:[/bold]", f"{display_model_name}")
-    table.add_row("")
-    result_str = str(result)
-    if not debug:
-        result_str = result_str[:370]
-    if len(result_str) < len(str(result)):
-        result_str += "..."
-
-    table.add_row("[bold]Result:[/bold]", f"[green]{escape_rich_markup(result_str)}[/green]")
-    table.add_row("")
-    table.add_row("[bold]Response Format:[/bold]", f"{response_format}")
     
-    table.add_row("[bold]Tools:[/bold]", f"{tool_count} [bold]Context Used:[/bold]", f"{context_count}")
-    table.add_row("[bold]Estimated Cost:[/bold]", f"{get_estimated_cost(usage['input_tokens'], usage['output_tokens'], model)}$")
-    time_taken = end_time - start_time
-    time_taken_str = f"{time_taken:.2f} seconds"
-    table.add_row("[bold]Time Taken:[/bold]", f"{time_taken_str}")
-    panel = Panel(
-        table,
-        title="[bold white]Upsonic - Agent Result[/bold white]",
-        border_style="white",
-        expand=True,
-        width=70
+    # Display LLM result in magnificent table
+    execution_time = end_time - start_time
+    model_name = _get_model_name(model)
+    
+    # Check if response_format is a Pydantic model
+    from pydantic import BaseModel
+    is_pydantic_format = (
+        response_format != str and 
+        response_format is not str and
+        isinstance(response_format, type) and
+        issubclass(response_format, BaseModel) if hasattr(BaseModel, '__subclasscheck__') else False
     )
-
-    console.print(panel)
-    spacing()
+    
+    if is_pydantic_format and isinstance(result, BaseModel):
+        # Use specialized Pydantic display
+        display_pydantic_structured_output(
+            result=result,
+            model_name=model_name,
+            response_format=response_format,
+            execution_time=execution_time,
+            usage=usage,
+            debug=debug
+        )
+    else:
+        # Use general LLM result display with additional agent context
+        terminal_width = _get_terminal_width()
+        result_table = Table(show_header=False, box=None, expand=True, width=terminal_width - 4)
+        
+        model_name_esc = escape_rich_markup(model_name)
+        format_name = str(response_format) if response_format else "str"
+        format_name_esc = escape_rich_markup(format_name)
+        
+        # Format result
+        result_str = str(result)
+        if not debug and len(result_str) > 2000:
+            result_str = result_str[:2000] + "\n\n... (truncated, use debug=True for full output)"
+        result_esc = escape_rich_markup(result_str)
+        
+        estimated_cost = get_estimated_cost(
+            usage.get('input_tokens', 0),
+            usage.get('output_tokens', 0),
+            model
+        )
+        
+        # Add rows to result table
+        result_table.add_row("[bold bright_cyan]🤖 Model:[/bold bright_cyan]", f"[bright_cyan]{model_name_esc}[/bright_cyan]")
+        result_table.add_row("")
+        result_table.add_row("[bold bright_yellow]📝 Response Format:[/bold bright_yellow]", f"[bright_yellow]{format_name_esc}[/bright_yellow]")
+        result_table.add_row("")
+        result_table.add_row("[bold bright_green]✨ Result:[/bold bright_green]")
+        result_table.add_row(f"[green]{result_esc}[/green]")
+        result_table.add_row("")
+        result_table.add_row("[bold bright_blue]🔧 Tools Used:[/bold bright_blue]", f"[bright_blue]{tool_count}[/bright_blue]")
+        result_table.add_row("[bold bright_blue]📚 Context Used:[/bold bright_blue]", f"[bright_blue]{context_count}[/bright_blue]")
+        result_table.add_row("")
+        result_table.add_row("[bold bright_blue]⏱️  Execution Time:[/bold bright_blue]", f"[bright_blue]{execution_time:.3f}s[/bright_blue]")
+        result_table.add_row("[bold bright_blue]📥 Input Tokens:[/bold bright_blue]", f"[bright_blue]{usage.get('input_tokens', 0):,}[/bright_blue]")
+        result_table.add_row("[bold bright_blue]📤 Output Tokens:[/bold bright_blue]", f"[bright_blue]{usage.get('output_tokens', 0):,}[/bright_blue]")
+        result_table.add_row("[bold bright_magenta]💰 Estimated Cost:[/bold bright_magenta]", f"[bright_magenta]{estimated_cost}[/bright_magenta]")
+        
+        # Create panel
+        main_panel = Panel(
+            result_table,
+            title="[bold bright_white]🎯 Upsonic Agent - Result[/bold bright_white]",
+            border_style="bright_white",
+            expand=True,
+            width=terminal_width
+        )
+        
+        console.print(main_panel)
+        spacing()
 
     # Sentry logging (kullanıcı agent sonucunu gördü)
     execution_time = end_time - start_time
@@ -1292,14 +2105,36 @@ def error_log(message: str, context: str = "Upsonic") -> None:
     _bg_logger.error(f"[{context}] {message}")
 
 
-def debug_log(message: str, context: str = "Upsonic") -> None:
+def _should_debug(debug: bool, debug_level: int = 1, min_level: int = 1) -> bool:
+    """
+    Helper function to check if debug should be enabled based on debug flag and level.
+    
+    Args:
+        debug: Whether debug is enabled
+        debug_level: Current debug level (1 or 2)
+        min_level: Minimum level required for this check (1 or 2)
+    
+    Returns:
+        True if debug should be enabled for this level
+    """
+    if not debug:
+        return False
+    return debug_level >= min_level
+
+
+def debug_log(message: str, context: str = "Upsonic", debug: bool = False, debug_level: int = 1) -> None:
     """
     Prints a debug log message.
 
     Args:
         message: The log message
         context: The context/module name
+        debug: Whether debug is enabled
+        debug_level: Debug level (1 or 2)
     """
+    if not _should_debug(debug, debug_level, min_level=1):
+        return
+    
     message_esc = escape_rich_markup(message)
     context_esc = escape_rich_markup(context)
 
@@ -1310,6 +2145,212 @@ def debug_log(message: str, context: str = "Upsonic") -> None:
     _bg_logger.debug(f"[{context}] {message}")
 
     # NOT: Debug loglar Sentry'e gönderilmez, sadece user-facing important loglar gider
+
+
+def debug_log_level2(message: str, context: str = "Upsonic", debug: bool = False, debug_level: int = 1, **details: Any) -> None:
+    """
+    Prints a detailed debug log message (level 2 only).
+    Shows comprehensive information including all provided details.
+
+    Args:
+        message: The log message
+        context: The context/module name
+        debug: Whether debug is enabled
+        debug_level: Debug level (1 or 2)
+        **details: Additional details to display (only shown at level 2)
+    """
+    if not _should_debug(debug, debug_level, min_level=2):
+        return
+    
+    message_esc = escape_rich_markup(message)
+    context_esc = escape_rich_markup(context)
+    
+    # Create detailed table for level 2
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 80
+    table.add_row("[bold]Message:[/bold]", f"[cyan]{message_esc}[/cyan]")
+    
+    # Add all details
+    if details:
+        table.add_row("")  # Spacing
+        table.add_row("[bold yellow]📋 Details:[/bold yellow]", "")
+        for key, value in details.items():
+            key_esc = escape_rich_markup(str(key))
+            value_str = str(value)
+            # For level 2, show full details (no truncation)
+            if len(value_str) > 500:
+                # Still truncate very long values but show more
+                value_str = value_str[:500] + "... (truncated)"
+            value_esc = escape_rich_markup(value_str)
+            table.add_row(f"  ├─ [bold]{key_esc}:[/bold]", f"[dim]{value_esc}[/dim]")
+    
+    panel = Panel(
+        table,
+        title=f"[bold dim][DEBUG LEVEL 2][/bold dim] [{context_esc}]",
+        border_style="dim",
+        expand=True,
+        width=90
+    )
+    
+    console.print(panel)
+    spacing()
+    
+    # Background logging
+    detail_str = ", ".join([f"{k}={v}" for k, v in details.items()]) if details else ""
+    _bg_logger.debug(f"[{context}] {message}" + (f" | {detail_str}" if detail_str else ""))
+
+
+
+def culture_info(message: str, debug: bool = False) -> None:
+    """
+    Prints a culture-related info log message.
+    Only prints if debug is True.
+    
+    Args:
+        message: The log message
+        debug: Whether to print the message (only prints if True)
+    """
+    if not debug:
+        return
+    
+    message_esc = escape_rich_markup(message)
+    console.print(f"[blue][CULTURE][/blue] {message_esc}")
+    _bg_logger.info(f"[Culture] {message}")
+
+
+def culture_debug(message: str, debug: bool = False) -> None:
+    """
+    Prints a culture-related debug log message.
+    Only prints if debug is True.
+    
+    Args:
+        message: The log message
+        debug: Whether to print the message (only prints if True)
+    """
+    if not debug:
+        return
+    
+    message_esc = escape_rich_markup(message)
+    console.print(f"[dim][CULTURE DEBUG][/dim] {message_esc}")
+    _bg_logger.debug(f"[Culture] {message}")
+
+
+def culture_warning(message: str, debug: bool = False) -> None:
+    """
+    Prints a culture-related warning log message.
+    Always prints warnings regardless of debug flag.
+    
+    Args:
+        message: The log message
+        debug: Unused, warnings always print
+    """
+    message_esc = escape_rich_markup(message)
+    console.print(f"[yellow][CULTURE WARNING][/yellow] {message_esc}")
+    _bg_logger.warning(f"[Culture] {message}")
+
+
+def culture_error(message: str, debug: bool = False) -> None:
+    """
+    Prints a culture-related error log message.
+    Always prints errors regardless of debug flag.
+    
+    Args:
+        message: The log message
+        debug: Unused, errors always print
+    """
+    message_esc = escape_rich_markup(message)
+    console.print(f"[red][CULTURE ERROR][/red] {message_esc}")
+    _bg_logger.error(f"[Culture] {message}")
+
+
+def culture_knowledge_added(knowledge_name: str, knowledge_id: str, debug: bool = False) -> None:
+    """
+    Prints a message when cultural knowledge is added.
+    Only prints if debug is True.
+    
+    Args:
+        knowledge_name: Name of the added knowledge
+        knowledge_id: ID of the added knowledge
+        debug: Whether to print the message
+    """
+    if not debug:
+        return
+    
+    name_esc = escape_rich_markup(knowledge_name or "Unnamed")
+    id_esc = escape_rich_markup(knowledge_id)
+    console.print(f"[green][CULTURE +][/green] Added knowledge: [cyan]{name_esc}[/cyan] (id: {id_esc})")
+    _bg_logger.info(f"[Culture] Added knowledge: {knowledge_name} (id: {knowledge_id})")
+
+
+def culture_knowledge_updated(knowledge_name: str, knowledge_id: str, debug: bool = False) -> None:
+    """
+    Prints a message when cultural knowledge is updated.
+    Only prints if debug is True.
+    
+    Args:
+        knowledge_name: Name of the updated knowledge
+        knowledge_id: ID of the updated knowledge
+        debug: Whether to print the message
+    """
+    if not debug:
+        return
+    
+    name_esc = escape_rich_markup(knowledge_name or "Unnamed")
+    id_esc = escape_rich_markup(knowledge_id)
+    console.print(f"[blue][CULTURE ~][/blue] Updated knowledge: [cyan]{name_esc}[/cyan] (id: {id_esc})")
+    _bg_logger.info(f"[Culture] Updated knowledge: {knowledge_name} (id: {knowledge_id})")
+
+
+def culture_knowledge_deleted(knowledge_id: str, debug: bool = False) -> None:
+    """
+    Prints a message when cultural knowledge is deleted.
+    Only prints if debug is True.
+    
+    Args:
+        knowledge_id: ID of the deleted knowledge
+        debug: Whether to print the message
+    """
+    if not debug:
+        return
+    
+    id_esc = escape_rich_markup(knowledge_id)
+    console.print(f"[yellow][CULTURE -][/yellow] Deleted knowledge: {id_esc}")
+    _bg_logger.info(f"[Culture] Deleted knowledge: {knowledge_id}")
+
+
+def culture_extraction_started(debug: bool = False) -> None:
+    """
+    Prints a message when culture extraction starts.
+    Only prints if debug is True.
+    
+    Args:
+        debug: Whether to print the message
+    """
+    if not debug:
+        return
+    
+    console.print("[dim][CULTURE][/dim] Starting cultural knowledge extraction...")
+    _bg_logger.debug("[Culture] Starting cultural knowledge extraction")
+
+
+def culture_extraction_completed(knowledge_updated: bool, debug: bool = False) -> None:
+    """
+    Prints a message when culture extraction completes.
+    Only prints if debug is True.
+    
+    Args:
+        knowledge_updated: Whether any knowledge was updated
+        debug: Whether to print the message
+    """
+    if not debug:
+        return
+    
+    if knowledge_updated:
+        console.print("[green][CULTURE][/green] Cultural knowledge extraction completed - knowledge was updated")
+    else:
+        console.print("[dim][CULTURE][/dim] Cultural knowledge extraction completed - no changes needed")
+    _bg_logger.debug(f"[Culture] Extraction completed, updated: {knowledge_updated}")
+
     
 def import_error(package_name: str, install_command: str = None, feature_name: str = None) -> None:
     """

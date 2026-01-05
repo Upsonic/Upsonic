@@ -3,7 +3,9 @@ from __future__ import annotations as _annotations
 from collections.abc import Callable
 from dataclasses import dataclass, fields, replace
 from textwrap import dedent
+from typing import Any, Dict, Optional, Type
 
+import pydantic
 from typing_extensions import Self
 
 from upsonic._json_schema import InlineDefsJsonSchemaTransformer, JsonSchemaTransformer
@@ -75,7 +77,76 @@ class ModelProfile:
             if f.name in field_names and getattr(profile, f.name) != f.default
         }
         return replace(self, **non_default_attrs)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary with raw values (no serialization)."""
+        return {
+            "supports_tools": self.supports_tools,
+            "supports_json_schema_output": self.supports_json_schema_output,
+            "supports_json_object_output": self.supports_json_object_output,
+            "supports_image_output": self.supports_image_output,
+            "default_structured_output_mode": self.default_structured_output_mode,
+            "prompted_output_template": self.prompted_output_template,
+            "thinking_tags": self.thinking_tags,
+            "ignore_streamed_leading_whitespace": self.ignore_streamed_leading_whitespace,
+            "json_schema_transformer": self.json_schema_transformer,
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ModelProfile":
+        """Reconstruct from dictionary (accepts raw Python objects)."""
+        thinking_tags = data.get("thinking_tags", ('<think>', '</think>'))
+        if isinstance(thinking_tags, list):
+            thinking_tags = tuple(thinking_tags)
+        
+        # Handle json_schema_transformer - can be class reference or string name
+        json_schema_transformer = data.get("json_schema_transformer")
+        if isinstance(json_schema_transformer, str):
+            if json_schema_transformer == "InlineDefsJsonSchemaTransformer":
+                json_schema_transformer = InlineDefsJsonSchemaTransformer
+            else:
+                json_schema_transformer = None
+        
+        return cls(
+            supports_tools=data.get("supports_tools", True),
+            supports_json_schema_output=data.get("supports_json_schema_output", False),
+            supports_json_object_output=data.get("supports_json_object_output", False),
+            supports_image_output=data.get("supports_image_output", False),
+            default_structured_output_mode=data.get("default_structured_output_mode", 'tool'),
+            prompted_output_template=data.get("prompted_output_template", ModelProfile.prompted_output_template),
+            json_schema_transformer=json_schema_transformer,
+            thinking_tags=thinking_tags,  # type: ignore
+            ignore_streamed_leading_whitespace=data.get("ignore_streamed_leading_whitespace", False),
+        )
+    
+    def _to_serializable_dict(self) -> Dict[str, Any]:
+        """Convert to JSON-serializable dictionary for storage."""
+        result: Dict[str, Any] = {
+            "supports_tools": self.supports_tools,
+            "supports_json_schema_output": self.supports_json_schema_output,
+            "supports_json_object_output": self.supports_json_object_output,
+            "supports_image_output": self.supports_image_output,
+            "default_structured_output_mode": self.default_structured_output_mode,
+            "prompted_output_template": self.prompted_output_template,
+            "thinking_tags": list(self.thinking_tags),
+            "ignore_streamed_leading_whitespace": self.ignore_streamed_leading_whitespace,
+        }
+        if self.json_schema_transformer is not None:
+            result["json_schema_transformer"] = self.json_schema_transformer.__name__
+        return result
+    
+    def serialize(self) -> bytes:
+        """Serialize to bytes using Pydantic TypeAdapter."""
+        return ModelProfileTypeAdapter.dump_json(self._to_serializable_dict())
+    
+    @classmethod
+    def deserialize(cls, data: bytes) -> "ModelProfile":
+        """Deserialize from bytes using Pydantic TypeAdapter."""
+        dict_data = ModelProfileTypeAdapter.validate_json(data)
+        return cls.from_dict(dict_data)
 
+
+ModelProfileTypeAdapter = pydantic.TypeAdapter(Dict[str, Any])
 
 ModelProfileSpec = ModelProfile | Callable[[str], ModelProfile | None]
 

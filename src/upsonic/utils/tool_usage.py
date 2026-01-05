@@ -21,6 +21,34 @@ def tool_usage(model_response, task):
                     elif hasattr(part, 'tool_call_id') and hasattr(part, 'content') and part.tool_call_id in tool_calls_map:
                         tool_calls_map[part.tool_call_id]["tool_result"] = part.content
 
+        # If no tool calls found in messages, check AgentRunOutput.tools as fallback
+        # This handles cases where ToolCallPart is not in messages but ToolExecution objects exist
+        if not tool_calls_map and hasattr(model_response, 'tools') and model_response.tools:
+            for tool_exec in model_response.tools:
+                if tool_exec.tool_call_id and tool_exec.tool_name:
+                    tool_calls_map[tool_exec.tool_call_id] = {
+                        "tool_name": tool_exec.tool_name,
+                        "params": tool_exec.tool_args or {},
+                        "tool_result": tool_exec.result
+                    }
+        # Also try to match tool returns from messages with tool executions
+        elif tool_calls_map and hasattr(model_response, 'tools') and model_response.tools:
+            # Match tool returns from messages with tool executions to get complete info
+            for tool_exec in model_response.tools:
+                if tool_exec.tool_call_id in tool_calls_map:
+                    # Update with tool execution info if available
+                    if tool_exec.tool_args:
+                        tool_calls_map[tool_exec.tool_call_id]["params"] = tool_exec.tool_args
+                    if tool_exec.result and not tool_calls_map[tool_exec.tool_call_id].get("tool_result"):
+                        tool_calls_map[tool_exec.tool_call_id]["tool_result"] = tool_exec.result
+                elif tool_exec.tool_call_id and tool_exec.tool_name:
+                    # Tool execution exists but not in messages - add it
+                    tool_calls_map[tool_exec.tool_call_id] = {
+                        "tool_name": tool_exec.tool_name,
+                        "params": tool_exec.tool_args or {},
+                        "tool_result": tool_exec.result
+                    }
+
         # Convert to list format
         tool_usage_value = list(tool_calls_map.values())
         # Store tool calls in the task

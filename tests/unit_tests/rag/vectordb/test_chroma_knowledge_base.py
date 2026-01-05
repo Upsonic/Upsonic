@@ -60,15 +60,14 @@ class TestChromaKnowledgeBaseIntegration:
     @pytest.fixture
     def knowledge_base(self, chroma_provider, mock_embedding_provider, mock_chunker, mock_loader):
         """Create a Knowledge Base with ChromaProvider."""
-        with patch('upsonic.knowledge_base.knowledge_base.KnowledgeBase._update_search_docstring'):
-            return KnowledgeBase(
-                sources=["test_source.txt"],
-                embedding_provider=mock_embedding_provider,
-                vectordb=chroma_provider,
-                splitters=mock_chunker,
-                loaders=mock_loader,
-                name="test_kb"
-            )
+        return KnowledgeBase(
+            sources=["test_source.txt"],
+            embedding_provider=mock_embedding_provider,
+            vectordb=chroma_provider,
+            splitters=mock_chunker,
+            loaders=mock_loader,
+            name="test_kb"
+        )
     
     def test_chroma_provider_initialization(self, chroma_provider, chroma_config):
         """Test ChromaProvider initialization."""

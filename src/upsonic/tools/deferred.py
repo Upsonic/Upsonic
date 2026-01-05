@@ -31,6 +31,33 @@ class ExternalToolCall:
     def args(self) -> Dict[str, Any]:
         """Backward compatibility alias for tool_args."""
         return self.tool_args
+    
+    def args_as_dict(self) -> Dict[str, Any]:
+        """Get arguments as dictionary."""
+        return self.tool_args
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "tool_name": self.tool_name,
+            "tool_args": self.tool_args,
+            "tool_call_id": self.tool_call_id,
+            "result": self.result,
+            "error": self.error,
+            "metadata": self.metadata,
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ExternalToolCall":
+        """Reconstruct from dictionary."""
+        return cls(
+            tool_name=data["tool_name"],
+            tool_args=data.get("tool_args", {}),
+            tool_call_id=data["tool_call_id"],
+            result=data.get("result"),
+            error=data.get("error"),
+            metadata=data.get("metadata", {}),
+        )
 
 
 class DeferredExecutionManager:

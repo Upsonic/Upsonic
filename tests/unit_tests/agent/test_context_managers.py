@@ -100,12 +100,13 @@ class MockMemory:
             "message_history": [],
             "context_injection": "test context",
             "system_prompt_injection": "test system prompt",
+            "metadata_injection": "",
         }
 
-    async def prepare_inputs_for_task(self):
+    async def prepare_inputs_for_task(self, agent_metadata=None):
         return self.prepared_inputs
 
-    async def update_memories_after_task(self, model_response):
+    async def update_memories_after_task(self, model_response=None, agent_run_output=None):
         return None
 
 
@@ -436,7 +437,7 @@ class TestSystemPromptManager:
         assert manager.get_system_prompt() == "test prompt"
 
     @pytest.mark.asyncio
-    @patch("upsonic.agent.context_managers.system_prompt_manager.default_prompt")
+    @patch("upsonic.context.default_prompt.default_prompt")
     async def test_system_prompt_manager_context_manager_no_memory(
         self, mock_default_prompt
     ):
@@ -594,6 +595,7 @@ class TestMemoryManager:
             "message_history": [],
             "context_injection": "",
             "system_prompt_injection": "",
+            "metadata_injection": "",
         }
         assert manager._model_response is None
 
@@ -606,6 +608,7 @@ class TestMemoryManager:
             "message_history": [],
             "context_injection": "",
             "system_prompt_injection": "",
+            "metadata_injection": "",
         }
 
     def test_memory_manager_get_message_history(self):
@@ -674,11 +677,16 @@ class TestMemoryManager:
         memory.update_memories_after_task = AsyncMock()
         manager = MemoryManager(memory)
         mock_response = MockModelResponse()
+        from upsonic.run.agent.output import AgentRunOutput
+        mock_agent_run_output = AgentRunOutput(run_id="test-run", session_id="test-session")
 
         async with manager.manage_memory():
-            manager.process_response(mock_response)
+            manager.process_response(mock_response, agent_run_output=mock_agent_run_output)
 
-        memory.update_memories_after_task.assert_called_once_with(mock_response)
+        memory.update_memories_after_task.assert_called_once_with(
+            model_response=mock_response,
+            agent_run_output=mock_agent_run_output
+        )
 
     @pytest.mark.asyncio
     async def test_memory_manager_context_manager_no_response_no_update(self):

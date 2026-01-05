@@ -231,6 +231,10 @@ def print_usage() -> None:
         "Add a dependency to upsonic_configs.json"
     )
     table.add_row(
+        "[bold]remove[/bold]",
+        "Remove a dependency from upsonic_configs.json"
+    )
+    table.add_row(
         "[bold]install[/bold]",
         "Install dependencies from upsonic_configs.json"
     )

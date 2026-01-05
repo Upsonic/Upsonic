@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import base64
 import time
 from pydantic import BaseModel
@@ -5,30 +7,26 @@ from typing import Any, List, Dict, Optional, Type, Union, Callable, Literal, TY
 from upsonic.exceptions import FileNotFoundError
 
 if TYPE_CHECKING:
-    from upsonic.utils.printing import get_price_id_total_cost
-    from upsonic.messages.messages import BinaryContent
-    from upsonic.schemas.data_models import RAGSearchResult
     from upsonic.tools import ExternalToolCall
-    from upsonic.embeddings.factory import auto_detect_best_embedding
-else:
-    # Use string annotations to avoid importing heavy modules
-    get_price_id_total_cost = "get_price_id_total_cost"
-    BinaryContent = "BinaryContent"
-    RAGSearchResult = "RAGSearchResult"
-    ExternalToolCall = "ExternalToolCall"
-    auto_detect_best_embedding = "auto_detect_best_embedding"
+    from upsonic.run.agent.output import AgentRunOutput
+    from upsonic.run.tools.tools import ToolExecution
+    from upsonic.agent.deepagent.tools.planning_toolkit import TodoList
 
 
 CacheMethod = Literal["vector_search", "llm_call"]
 CacheEntry = Dict[str, Any]
 
 class Task(BaseModel):
+    model_config = {
+        "arbitrary_types_allowed": True
+    }
+    
     description: str
     attachments: Optional[List[str]] = None
     tools: list[Any] = None
     response_format: Union[Type[BaseModel], type[str], None] = str
     response_lang: Optional[str] = "en"
-    _response: Any = None
+    _response: Optional[Union[str, bytes]] = None
     context: Any = None
     _context_formatted: Optional[str] = None
     price_id_: Optional[str] = None
@@ -43,30 +41,25 @@ class Task(BaseModel):
     guardrail: Optional[Callable] = None
     guardrail_retries: Optional[int] = None
     is_paused: bool = False
-    _tools_awaiting_external_execution: List["ExternalToolCall"] = []
+    _tools_awaiting_external_execution: List[Any] = []
     
     enable_cache: bool = False
     cache_method: Literal["vector_search", "llm_call"] = "vector_search"
     cache_threshold: float = 0.7
     cache_embedding_provider: Optional[Any] = None
     cache_duration_minutes: int = 60
-    _cache_manager: Optional[Any] = None  # Will be set by Agent
+    _cache_manager: Optional[Any] = None
     _cache_hit: bool = False
     _original_input: Optional[str] = None
     _last_cache_entry: Optional[Dict[str, Any]] = None
     
-    # Durable execution support
-    durable_execution: Optional[Any] = None  # DurableExecution instance
-    durable_checkpoint_enabled: bool = False
+    _run_output: Optional["AgentRunOutput"] = None
 
-    # DeepAgent planning support
-    _task_todos: Optional[List[Any]] = None  # List of Todo objects for task planning
+    _task_todos: Optional[Any] = None
     
-    # Task-specific tool tracking (similar to Agent's registered_agent_tools)
-    registered_task_tools: Dict[str, Any] = {}  # Maps tool names to wrapped Tool objects
+    registered_task_tools: Dict[str, Any] = {}
     task_builtin_tools: List[Any] = []
         
-    # Vector search parameters (override config defaults when provided)
     vector_search_top_k: Optional[int] = None
     vector_search_alpha: Optional[float] = None
     vector_search_fusion_method: Optional[Literal['rrf', 'weighted']] = None
@@ -279,7 +272,7 @@ class Task(BaseModel):
         attachments: Optional[List[str]] = None,
         tools: list[Any] = None,
         response_format: Union[Type[BaseModel], type[str], None] = str,
-        response: Any = None,
+        response: Optional[Union[str, bytes]] = None,
         context: Any = None,
         _context_formatted: Optional[str] = None,
         price_id_: Optional[str] = None,
@@ -300,8 +293,7 @@ class Task(BaseModel):
         cache_threshold: float = 0.7,
         cache_embedding_provider: Optional[Any] = None,
         cache_duration_minutes: int = 60,
-        durable_execution: Optional[Any] = None,
-        _task_todos: Optional[List[Any]] = None,
+        _task_todos: Optional[TodoList] = None,
         vector_search_top_k: Optional[int] = None,
         vector_search_alpha: Optional[float] = None,
         vector_search_fusion_method: Optional[Literal['rrf', 'weighted']] = None,
@@ -375,8 +367,6 @@ class Task(BaseModel):
             "_cache_hit": False,
             "_original_input": description,
             "_last_cache_entry": None,
-            "durable_execution": durable_execution,
-            "durable_checkpoint_enabled": durable_execution is not None,
             "_task_todos": _task_todos or [],
             "registered_task_tools": {},  # Initialize empty tool registry
             "vector_search_top_k": vector_search_top_k,
@@ -393,6 +383,11 @@ class Task(BaseModel):
         if self.start_time is None or self.end_time is None:
             return None
         return self.end_time - self.start_time
+
+    @property
+    def id(self) -> str:
+        """Get the task ID. Auto-generates one if not set."""
+        return self.task_id
 
     def validate_tools(self):
         """
@@ -522,17 +517,46 @@ class Task(BaseModel):
         """
         return self._tools_awaiting_external_execution
     
+    
     @property
-    def durable_execution_id(self) -> Optional[str]:
+    def run_output(self) -> Optional["AgentRunOutput"]:
         """
-        Get the durable execution ID for this task.
+        Get the AgentRunOutput for this task if available.
         
         Returns:
-            The execution ID if durable execution is enabled, None otherwise
+            The AgentRunOutput if set, None otherwise
         """
-        if self.durable_execution:
-            return self.durable_execution.execution_id
-        return None
+        return self._run_output
+    
+    def set_run_output(self, run_output: "AgentRunOutput") -> None:
+        """
+        Set the run output for this task.
+        
+        Args:
+            run_output: The AgentRunOutput to associate with this task
+        """
+        self._run_output = run_output
+    
+    @property
+    def run_output_tools_requiring_confirmation(self) -> List["ToolExecution"]:
+        """Get tools requiring confirmation from run output."""
+        if self._run_output:
+            return self._run_output.tools_requiring_confirmation
+        return []
+    
+    @property
+    def run_output_tools_requiring_user_input(self) -> List["ToolExecution"]:
+        """Get tools requiring user input from run output."""
+        if self._run_output:
+            return self._run_output.tools_requiring_user_input
+        return []
+    
+    @property
+    def run_output_tools_awaiting_external_execution(self) -> List["ToolExecution"]:
+        """Get tools awaiting external execution from run output."""
+        if self._run_output:
+            return self._run_output.tools_awaiting_external_execution
+        return []
     
     @context_formatted.setter
     def context_formatted(self, value: Optional[str]):
@@ -896,3 +920,179 @@ class Task(BaseModel):
         if self._cache_manager:
             self._cache_manager.clear_cache()
         self._cache_hit = False
+    
+    def _serialize_callable(self, obj: Any) -> Any:
+        """Serialize a callable or object to a comparable format using cloudpickle."""
+        if obj is None:
+            return None
+        try:
+            import cloudpickle
+            import base64
+            # Serialize to bytes and encode to base64 string
+            pickled = cloudpickle.dumps(obj)
+            return {"__callable_pickled__": base64.b64encode(pickled).decode('utf-8')}
+        except Exception:
+            # If can't pickle, return string representation
+            return {"__callable_repr__": repr(obj)}
+    
+    def _serialize_tools(self, tools: Optional[List[Any]]) -> Optional[List[Any]]:
+        """Serialize a list of tools (which may be callables or class instances)."""
+        if tools is None:
+            return None
+        return [self._serialize_callable(t) for t in tools]
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary (pure transformation). Callables are serialized for comparison."""
+        return {
+            "description": self.description,
+            "attachments": self.attachments,
+            "tools": self._serialize_tools(self.tools),
+            "response_format": str(self.response_format) if self.response_format else None,
+            "response_lang": self.response_lang,
+            "context": self.context,
+            "price_id_": self.price_id_,
+            "task_id_": self.task_id_,
+            "not_main_task": self.not_main_task,
+            "start_time": self.start_time,
+            "end_time": self.end_time,
+            "agent": self._serialize_callable(self.agent) if self.agent else None,
+            "enable_thinking_tool": self.enable_thinking_tool,
+            "enable_reasoning_tool": self.enable_reasoning_tool,
+            "guardrail": self._serialize_callable(self.guardrail),
+            "guardrail_retries": self.guardrail_retries,
+            "is_paused": self.is_paused,
+            "enable_cache": self.enable_cache,
+            "cache_method": self.cache_method,
+            "cache_threshold": self.cache_threshold,
+            "cache_duration_minutes": self.cache_duration_minutes,
+            "vector_search_top_k": self.vector_search_top_k,
+            "vector_search_alpha": self.vector_search_alpha,
+            "vector_search_fusion_method": self.vector_search_fusion_method,
+            "vector_search_similarity_threshold": self.vector_search_similarity_threshold,
+            "vector_search_filter": self.vector_search_filter,
+            "_response": self._response,
+            "_context_formatted": self._context_formatted,
+            "_tool_calls": self._tool_calls,
+            "_tools_awaiting_external_execution": self._tools_awaiting_external_execution,
+            "_cache_hit": self._cache_hit,
+            "_original_input": self._original_input,
+            "registered_task_tools": {k: self._serialize_callable(v) for k, v in self.registered_task_tools.items()} if self.registered_task_tools else {},
+            "task_builtin_tools": self._serialize_tools(self.task_builtin_tools),
+        }
+    
+    @classmethod
+    def _deserialize_callable(cls, obj: Any) -> Any:
+        """Deserialize a callable from the serialized format."""
+        if obj is None:
+            return None
+        if isinstance(obj, dict):
+            if "__callable_pickled__" in obj:
+                try:
+                    import cloudpickle
+                    import base64
+                    pickled_bytes = base64.b64decode(obj["__callable_pickled__"].encode('utf-8'))
+                    return cloudpickle.loads(pickled_bytes)
+                except Exception:
+                    return None
+            elif "__callable_repr__" in obj:
+                # Can't restore from repr, return None
+                return None
+        return obj
+    
+    @classmethod
+    def _deserialize_tools(cls, tools: Optional[List[Any]]) -> Optional[List[Any]]:
+        """Deserialize a list of tools from the serialized format."""
+        if tools is None:
+            return None
+        return [cls._deserialize_callable(t) for t in tools]
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Task":
+        """Reconstruct from dictionary (pure transformation)."""
+        # Deserialize callables first
+        tools = cls._deserialize_tools(data.get("tools"))
+        guardrail = cls._deserialize_callable(data.get("guardrail"))
+        agent = cls._deserialize_callable(data.get("agent"))
+        
+        # Handle response_format (could be a string representation of a class)
+        response_format = data.get("response_format")
+        if isinstance(response_format, str) and response_format.startswith("<class"):
+            # It was serialized as str(class), default to str
+            response_format = str
+        
+        # Filter to only fields that Task accepts in constructor (exclude computed fields)
+        valid_fields = {
+            "description", "attachments", "response_lang",
+            "context", "price_id_", "task_id_", "not_main_task", "start_time", "end_time",
+            "enable_thinking_tool", "enable_reasoning_tool",
+            "guardrail_retries", "is_paused", "enable_cache", "cache_method",
+            "cache_threshold", "cache_duration_minutes", "vector_search_top_k",
+            "vector_search_alpha", "vector_search_fusion_method",
+            "vector_search_similarity_threshold", "vector_search_filter"
+        }
+        filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+        
+        # Convert float timestamps to int (required by Pydantic validation)
+        if "start_time" in filtered_data and filtered_data["start_time"] is not None:
+            filtered_data["start_time"] = int(filtered_data["start_time"])
+        if "end_time" in filtered_data and filtered_data["end_time"] is not None:
+            filtered_data["end_time"] = int(filtered_data["end_time"])
+        
+        # Add deserialized fields
+        filtered_data["tools"] = tools
+        filtered_data["guardrail"] = guardrail
+        filtered_data["agent"] = agent
+        filtered_data["response_format"] = response_format
+        
+        task = cls(**filtered_data)
+        
+        # Restore computed/private fields
+        registered_task_tools = data.get("registered_task_tools")
+        if registered_task_tools:
+            if isinstance(registered_task_tools, dict):
+                # Deserialize each tool in the dict
+                task.registered_task_tools = {
+                    k: cls._deserialize_callable(v) for k, v in registered_task_tools.items()
+                }
+            else:
+                task.registered_task_tools = registered_task_tools
+        
+        task_builtin_tools = data.get("task_builtin_tools")
+        if task_builtin_tools:
+            task.task_builtin_tools = cls._deserialize_tools(task_builtin_tools)
+        
+        if data.get("_response") is not None:
+            task._response = data["_response"]
+        if data.get("_context_formatted") is not None:
+            task._context_formatted = data["_context_formatted"]
+        if data.get("_tool_calls") is not None:
+            task._tool_calls = data["_tool_calls"]
+        if data.get("_tools_awaiting_external_execution") is not None:
+            task._tools_awaiting_external_execution = data["_tools_awaiting_external_execution"]
+        if data.get("_cache_hit") is not None:
+            task._cache_hit = data["_cache_hit"]
+        if data.get("_original_input") is not None:
+            task._original_input = data["_original_input"]
+        
+        return task
+    
+    def serialize(self) -> bytes:
+        """Serialize to bytes for storage."""
+        import cloudpickle
+        return cloudpickle.dumps(self.to_dict())
+    
+    @classmethod
+    def deserialize(cls, data: bytes) -> "Task":
+        """Deserialize from bytes."""
+        import cloudpickle
+        dict_data = cloudpickle.loads(data)
+        return cls.from_dict(dict_data)
+
+
+def _rebuild_task_model():
+    """Rebuild Task model after all dependencies are imported."""
+    try:
+        Task.model_rebuild()
+    except Exception:
+        pass
+_rebuild_task_model()

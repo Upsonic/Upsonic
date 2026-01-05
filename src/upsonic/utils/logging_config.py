@@ -45,7 +45,7 @@ import logging
 import os
 import sys
 import atexit
-from typing import Optional, Dict, Literal
+from typing import Optional, Dict, Literal, Any
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -431,6 +431,27 @@ def get_current_log_levels() -> Dict[str, str]:
     return levels
 
 
+def memory_debug_log(memory_debug: bool, msg: str, data: Any = None) -> None:
+    """Print debug log for memory operations if debug is enabled.
+    
+    Args:
+        memory_debug: Whether memory debugging is enabled
+        msg: Debug message to print
+        data: Optional data to display (list or other object)
+    """
+    if memory_debug:
+        print(f"  🔍 [MEMORY DEBUG] {msg}")
+        if data is not None:
+            if isinstance(data, list):
+                print(f"      Count: {len(data)} items")
+                for i, item in enumerate(data[:5]):
+                    item_str = str(item)[:100] + "..." if len(str(item)) > 100 else str(item)
+                    print(f"      [{i}] {item_str}")
+                if len(data) > 5:
+                    print(f"      ... and {len(data) - 5} more")
+            else:
+                data_str = str(data)[:200] + "..." if len(str(data)) > 200 else str(data)
+                print(f"      {data_str}")
 
 
 # Library import edildiğinde otomatik konfigüre et

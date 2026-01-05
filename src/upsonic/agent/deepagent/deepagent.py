@@ -163,6 +163,9 @@ class DeepAgent(Agent):
         # Combine user tools + deep tools
         all_tools = deep_tools + (list(tools) if tools else [])
         
+        # Store debug_level before calling super() to pass it through
+        self._debug_level = kwargs.pop('debug_level', 1) if debug else 1
+        
         # Initialize base Agent
         super().__init__(
             model=model,
@@ -170,6 +173,7 @@ class DeepAgent(Agent):
             memory=memory,
             db=db,
             debug=debug,
+            debug_level=self._debug_level,
             tools=all_tools,
             system_prompt=enhanced_system_prompt,
             tool_call_limit=tool_call_limit,

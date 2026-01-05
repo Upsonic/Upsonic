@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Optional
+from typing import Any, Dict, Optional
+
+import pydantic
 
 from upsonic._utils import dataclasses_no_defaults_repr
 
@@ -28,4 +30,28 @@ class ToolMetrics:
         """Increment the tool call count."""
         self.tool_call_count += 1
     
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary with raw values (no serialization)."""
+        return dataclasses.asdict(self)
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ToolMetrics":
+        """Reconstruct from dictionary."""
+        return cls(
+            tool_call_count=data.get("tool_call_count", 0),
+            tool_call_limit=data.get("tool_call_limit"),
+        )
+    
+    def serialize(self) -> bytes:
+        """Serialize to bytes using Pydantic TypeAdapter."""
+        return ToolMetricsTypeAdapter.dump_json(self)
+    
+    @classmethod
+    def deserialize(cls, data: bytes) -> "ToolMetrics":
+        """Deserialize from bytes using Pydantic TypeAdapter."""
+        return ToolMetricsTypeAdapter.validate_json(data)
+    
     __repr__ = dataclasses_no_defaults_repr
+
+
+ToolMetricsTypeAdapter = pydantic.TypeAdapter(ToolMetrics)

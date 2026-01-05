@@ -8,8 +8,7 @@ if TYPE_CHECKING:
         call_end,
         get_estimated_cost,
         get_estimated_cost_from_usage,
-        get_estimated_cost_from_run_result,
-        get_estimated_cost_from_stream_result,
+        get_estimated_cost_from_agent_run_output,
         get_estimated_cost_from_agent
     )
 
@@ -21,8 +20,7 @@ def _get_utils_classes():
         call_end,
         get_estimated_cost,
         get_estimated_cost_from_usage,
-        get_estimated_cost_from_run_result,
-        get_estimated_cost_from_stream_result,
+        get_estimated_cost_from_agent_run_output,
         get_estimated_cost_from_agent
     )
     
@@ -32,8 +30,7 @@ def _get_utils_classes():
         'call_end': call_end,
         'get_estimated_cost': get_estimated_cost,
         'get_estimated_cost_from_usage': get_estimated_cost_from_usage,
-        'get_estimated_cost_from_run_result': get_estimated_cost_from_run_result,
-        'get_estimated_cost_from_stream_result': get_estimated_cost_from_stream_result,
+        'get_estimated_cost_from_agent_run_output': get_estimated_cost_from_agent_run_output,
         'get_estimated_cost_from_agent': get_estimated_cost_from_agent,
     }
 
@@ -54,7 +51,6 @@ __all__ = [
     "call_end",
     "get_estimated_cost",
     "get_estimated_cost_from_usage",
-    "get_estimated_cost_from_run_result",
-    "get_estimated_cost_from_stream_result",
+    "get_estimated_cost_from_agent_run_output",
     "get_estimated_cost_from_agent",
 ]

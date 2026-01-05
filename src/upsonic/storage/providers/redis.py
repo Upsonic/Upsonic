@@ -2,16 +2,17 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Optional, Dict, Any, Type, Union, TypeVar, TYPE_CHECKING
+from typing import List, Optional, Dict, Any, Type, Union, TypeVar, TYPE_CHECKING
 
 from pydantic import BaseModel
 
 from upsonic.storage.base import Storage
-from upsonic.storage.session.sessions import InteractionSession, UserProfile
+from upsonic.session.agent import AgentSession
 
 if TYPE_CHECKING:
     from redis.asyncio import Redis
     from redis.exceptions import ConnectionError as RedisConnectionError
+    from upsonic.culture.cultural_knowledge import CulturalKnowledge
 
 try:
     from redis.asyncio import Redis
@@ -32,7 +33,7 @@ class RedisStorage(Storage):
     
     This storage provider is designed to be flexible and dynamic:
     - Can accept a pre-existing Redis client or create one from connection details
-    - Uses key prefixes to organize data (sessions, profiles, generic models)
+    - Uses key prefixes to organize data (sessions, generic models)
     - Supports generic Pydantic models for custom storage needs
     - Can be used for both custom purposes and built-in chat/profile features simultaneously
     """
@@ -76,26 +77,20 @@ class RedisStorage(Storage):
         self.prefix = prefix
         self.expire = expire
         
-        # Store client and track ownership for lifecycle management
-        self._owns_client = (redis_client is None)  # True if we create it, False if user provided
+        self._owns_client = (redis_client is None)
         
         if redis_client:
             self.redis_client: Redis = redis_client
         else:
-            # Create our own client (configured but not connected on initialization)
             self.redis_client: Redis = Redis(
                 host=host, port=port, db=db, password=password,
                 ssl=ssl, decode_responses=True
             )
 
     def _get_primary_key_field(self, model_type: Type[BaseModel]) -> str:
-        """Determine the primary key field for a model type."""
-        if model_type is InteractionSession:
+        if model_type.__name__ == "AgentSession":
             return "session_id"
-        elif model_type is UserProfile:
-            return "user_id"
         
-        # Auto-detect for generic types
         if hasattr(model_type, 'model_fields'):
             for field_name in ['path', 'id', 'key', 'name']:
                 if field_name in model_type.model_fields:
@@ -103,12 +98,9 @@ class RedisStorage(Storage):
         return "id"
     
     def _get_key(self, object_id: str, model_type: Type[BaseModel]) -> str:
-        if model_type is InteractionSession:
+        if model_type.__name__ == "AgentSession":
             return f"{self.prefix}:session:{object_id}"
-        elif model_type is UserProfile:
-            return f"{self.prefix}:profile:{object_id}"
         else:
-            # Generic model: prefix:model:model_type_name:object_id
             model_name = model_type.__name__.lower()
             return f"{self.prefix}:model:{model_name}:{object_id}"
     
@@ -125,7 +117,7 @@ class RedisStorage(Storage):
     def disconnect(self) -> None: return self._run_async_from_sync(self.disconnect_async())
     def create(self) -> None: return self._run_async_from_sync(self.create_async())
     def read(self, object_id: str, model_type: Type[T]) -> Optional[T]: return self._run_async_from_sync(self.read_async(object_id, model_type))
-    def upsert(self, data: Union[InteractionSession, UserProfile]) -> None: return self._run_async_from_sync(self.upsert_async(data))
+    def upsert(self, data: BaseModel) -> None: return self._run_async_from_sync(self.upsert_async(data))
     def delete(self, object_id: str, model_type: Type[BaseModel]) -> None: return self._run_async_from_sync(self.delete_async(object_id, model_type))
     def drop(self) -> None: return self._run_async_from_sync(self.drop_async())
     
@@ -152,85 +144,128 @@ class RedisStorage(Storage):
             raise ConnectionError(f"Failed to connect to Redis: {e}") from e
 
     async def disconnect_async(self) -> None:
-        """
-        Closes the Redis client connection.
-        If user provided the client, this is a no-op (user manages lifecycle).
-        """
         if not self._owns_client:
-            # User manages their own client lifecycle
             return
         
         await self.redis_client.close()
-        self._connected = False
+    
+    async def _ensure_connection(self) -> None:
+        """Ensure connection is valid, reconnect if needed."""
+        if not await self.is_connected_async():
+            # If we own the client and it's disconnected, recreate it
+            if self._owns_client:
+                # Get connection details from old client
+                connection_kwargs = {}
+                if hasattr(self.redis_client, 'connection_pool'):
+                    pool = self.redis_client.connection_pool
+                    if hasattr(pool, 'connection_kwargs'):
+                        connection_kwargs = pool.connection_kwargs.copy()
+                
+                # Close old client if possible
+                try:
+                    await self.redis_client.close()
+                except Exception:
+                    pass
+                
+                # Recreate client
+                if connection_kwargs:
+                    self.redis_client = Redis(**connection_kwargs)
+                else:
+                    # Fallback - just try to reconnect
+                    pass
+            
+            await self.connect_async()
 
     async def create_async(self) -> None:
-        await self.connect_async()
+        await self._ensure_connection()
 
     async def read_async(self, object_id: str, model_type: Type[T]) -> Optional[T]:
+        import base64
+        await self._ensure_connection()
         key = self._get_key(object_id, model_type)
         data_str = await self.redis_client.get(key)
         if data_str is None:
             return None
         try:
-            data_dict = self._deserialize(data_str)
-            
-            # Try from_dict first, fallback to model_validate
-            if hasattr(model_type, 'from_dict'):
-                return model_type.from_dict(data_dict)
+            if model_type.__name__ == "AgentSession":
+                # Use deserialize: base64 decode then deserialize
+                data_dict = self._deserialize(data_str)
+                if "data" in data_dict:
+                    serialized_bytes = base64.b64decode(data_dict["data"].encode('utf-8'))
+                    return model_type.deserialize(serialized_bytes)
+                else:
+                    # Fallback to old format
+                    if hasattr(model_type, 'from_dict'):
+                        return model_type.from_dict(data_dict)
+                    return model_type.model_validate(data_dict)
             else:
-                return model_type.model_validate(data_dict)
+                data_dict = self._deserialize(data_str)
+                if hasattr(model_type, 'from_dict'):
+                    return model_type.from_dict(data_dict)
+                else:
+                    return model_type.model_validate(data_dict)
         except (json.JSONDecodeError, TypeError) as e:
             from upsonic.utils.printing import warning_log
             warning_log(f"Could not parse key {key}. Error: {e}", "RedisStorage")
             return None
 
     async def upsert_async(self, data: BaseModel) -> None:
+        import base64
+        await self._ensure_connection()
         if hasattr(data, 'updated_at'):
             data.updated_at = time.time()
         
-        data_dict = data.model_dump(mode="json")
-        json_string = self._serialize(data_dict)
-
-        if isinstance(data, InteractionSession):
-            key = self._get_key(data.session_id, InteractionSession)
-        elif isinstance(data, UserProfile):
-            key = self._get_key(data.user_id, UserProfile)
+        if type(data).__name__ == "AgentSession":
+            # Use serialize: serialize to bytes, then base64 encode
+            serialized_bytes = data.serialize()
+            serialized_str = base64.b64encode(serialized_bytes).decode('utf-8')
+            data_dict = {
+                "data": serialized_str,
+                "session_id": data.session_id,
+                "created_at": data.created_at or time.time(),
+                "updated_at": data.updated_at or time.time()
+            }
+            key = self._get_key(data.session_id, type(data))
         else:
-            # Generic model support
+            data_dict = data.model_dump(mode="json")
             primary_key_field = self._get_primary_key_field(type(data))
             object_id = getattr(data, primary_key_field)
             key = self._get_key(object_id, type(data))
         
+        json_string = self._serialize(data_dict)
         await self.redis_client.set(key, json_string, ex=self.expire)
 
     async def delete_async(self, object_id: str, model_type: Type[BaseModel]) -> None:
+        await self._ensure_connection()
         key = self._get_key(object_id, model_type)
         await self.redis_client.delete(key)
     
     async def list_all_async(self, model_type: Type[T]) -> list[T]:
-        """List all objects of a specific type."""
-        if model_type is InteractionSession:
+        import base64
+        await self._ensure_connection()
+        if model_type.__name__ == "AgentSession":
             pattern = f"{self.prefix}:session:*"
-        elif model_type is UserProfile:
-            pattern = f"{self.prefix}:profile:*"
         else:
-            # Generic model
             model_name = model_type.__name__.lower()
             pattern = f"{self.prefix}:model:{model_name}:*"
         
         results = []
         
-        # Scan for all matching keys
         async for key in self.redis_client.scan_iter(match=pattern):
             try:
                 data_str = await self.redis_client.get(key)
                 if data_str:
                     data_dict = self._deserialize(data_str)
                     
-                    if hasattr(model_type, 'from_dict'):
-                        obj = model_type.from_dict(data_dict)
+                    if model_type.__name__ == "AgentSession" and "data" in data_dict:
+                        # Use deserialize: base64 decode then deserialize
+                        serialized_bytes = base64.b64decode(data_dict["data"].encode('utf-8'))
+                        obj = model_type.deserialize(serialized_bytes)
                     else:
-                        obj = model_type.model_validate(data_dict)
+                        if hasattr(model_type, 'from_dict'):
+                            obj = model_type.from_dict(data_dict)
+                        else:
+                            obj = model_type.model_validate(data_dict)
                     
                     results.append(obj)
             except Exception:
@@ -239,7 +274,77 @@ class RedisStorage(Storage):
         return results
 
     async def drop_async(self) -> None:
-        """Asynchronously deletes ALL keys associated with this provider's prefix."""
         keys_to_delete = [key async for key in self.redis_client.scan_iter(match=f"{self.prefix}:*")]
+        if keys_to_delete:
+            await self.redis_client.delete(*keys_to_delete)
+
+    # =========================================================================
+    # Cultural Knowledge Methods
+    # =========================================================================
+
+    def _get_culture_key(self, knowledge_id: str) -> str:
+        return f"{self.prefix}:culture:{knowledge_id}"
+
+    async def read_cultural_knowledge_async(self, knowledge_id: str) -> Optional["CulturalKnowledge"]:
+        from upsonic.culture.cultural_knowledge import CulturalKnowledge
+        
+        key = self._get_culture_key(knowledge_id)
+        data_str = await self.redis_client.get(key)
+        
+        if data_str is None:
+            return None
+        
+        try:
+            data_dict = self._deserialize(data_str)
+            return CulturalKnowledge.from_dict(data_dict)
+        except (json.JSONDecodeError, TypeError) as e:
+            from upsonic.utils.printing import warning_log
+            warning_log(f"Could not parse cultural knowledge key {key}. Error: {e}", "RedisStorage")
+            return None
+
+    async def upsert_cultural_knowledge_async(self, knowledge: "CulturalKnowledge") -> None:
+        knowledge.bump_updated_at()
+        
+        data_dict = knowledge.to_dict()
+        json_string = self._serialize(data_dict)
+        
+        key = self._get_culture_key(knowledge.id)
+        await self.redis_client.set(key, json_string, ex=self.expire)
+
+    async def delete_cultural_knowledge_async(self, knowledge_id: str) -> None:
+        key = self._get_culture_key(knowledge_id)
+        await self.redis_client.delete(key)
+
+    async def list_all_cultural_knowledge_async(
+        self, 
+        name: Optional[str] = None
+    ) -> List["CulturalKnowledge"]:
+        from upsonic.culture.cultural_knowledge import CulturalKnowledge
+        
+        pattern = f"{self.prefix}:culture:*"
+        results = []
+        
+        async for key in self.redis_client.scan_iter(match=pattern):
+            try:
+                data_str = await self.redis_client.get(key)
+                if data_str:
+                    data_dict = self._deserialize(data_str)
+                    knowledge = CulturalKnowledge.from_dict(data_dict)
+                    
+                    if name is not None:
+                        if knowledge.name is None:
+                            continue
+                        if name.lower() not in knowledge.name.lower():
+                            continue
+                    
+                    results.append(knowledge)
+            except Exception:
+                continue
+        
+        return results
+
+    async def clear_cultural_knowledge_async(self) -> None:
+        pattern = f"{self.prefix}:culture:*"
+        keys_to_delete = [key async for key in self.redis_client.scan_iter(match=pattern)]
         if keys_to_delete:
             await self.redis_client.delete(*keys_to_delete)

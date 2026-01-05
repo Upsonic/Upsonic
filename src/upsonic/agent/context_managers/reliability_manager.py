@@ -39,9 +39,35 @@ class ReliabilityManager:
         self.processed_task = processed_result
         return processed_result
     
+    async def aprepare(self) -> None:
+        """Prepare the reliability layer before the LLM call."""
+        pass
+    
+    async def afinalize(self) -> None:
+        """Finalize the reliability layer after the LLM call."""
+        pass
+    
+    def prepare(self) -> None:
+        """Synchronous version of aprepare."""
+        import asyncio
+        asyncio.get_event_loop().run_until_complete(self.aprepare())
+    
+    def finalize(self) -> None:
+        """Synchronous version of afinalize."""
+        import asyncio
+        asyncio.get_event_loop().run_until_complete(self.afinalize())
+    
     @asynccontextmanager
     async def manage_reliability(self):
+        """
+        Async context manager for reliability layer lifecycle.
+        
+        Note: This context manager is kept for backward compatibility.
+        For step-based architecture, use aprepare() and afinalize() directly.
+        """
+        await self.aprepare()
+        
         try:
             yield self
         finally:
-            pass 
+            await self.afinalize()

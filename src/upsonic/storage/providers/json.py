@@ -3,15 +3,15 @@ import json
 import time
 import shutil
 from pathlib import Path
-from typing import Optional, Dict, Any, Type, Union, TypeVar
+from typing import List, Optional, Dict, Any, Type, Union, TypeVar, TYPE_CHECKING
 
 from pydantic import BaseModel
 
 from upsonic.storage.base import Storage
-from upsonic.storage.session.sessions import (
-    InteractionSession,
-    UserProfile
-)
+from upsonic.session.agent import AgentSession
+
+if TYPE_CHECKING:
+    from upsonic.culture.cultural_knowledge import CulturalKnowledge
 
 T = TypeVar('T', bound=BaseModel)
 
@@ -25,7 +25,7 @@ class JSONStorage(Storage):
     `asyncio.to_thread` to ensure file I/O operations are non-blocking.
     
     This storage provider is designed to be flexible and dynamic:
-    - Only creates InteractionSession/UserProfile directories when they are actually used
+    - Only creates AgentSession directories when they are actually used
     - Supports generic Pydantic models for custom storage needs
     - Can be used for both custom purposes and built-in chat/profile features simultaneously
     """
@@ -41,27 +41,21 @@ class JSONStorage(Storage):
         super().__init__()
         self.base_path = Path(directory_path or "data").resolve()
         self.sessions_path = self.base_path / "sessions"
-        self.profiles_path = self.base_path / "profiles"
-        self.generic_path = self.base_path / "generic"  # For arbitrary models
+        self.generic_path = self.base_path / "generic"
+        self.cultural_knowledge_path = self.base_path / "cultural_knowledge"
         self._pretty_print = pretty_print
         self._json_indent = 4 if self._pretty_print else None
         self._lock: Optional[asyncio.Lock] = None
         
-        # Create base directory but not subdirectories yet (lazy initialization)
         self.base_path.mkdir(parents=True, exist_ok=True)
         
-        # Track which built-in directories have been initialized
         self._sessions_dir_initialized = False
-        self._profiles_dir_initialized = False
+        self._cultural_knowledge_dir_initialized = False
         
         self._connected = True
 
     @property
     def lock(self) -> asyncio.Lock:
-        """
-        Lazily initializes and returns an asyncio.Lock, ensuring it is always
-        bound to the currently running event loop.
-        """
         try:
             current_loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -74,13 +68,9 @@ class JSONStorage(Storage):
         return self._lock
 
     def _get_primary_key_field(self, model_type: Type[BaseModel]) -> str:
-        """Determine the primary key field for a model type."""
-        if model_type is InteractionSession:
+        if model_type.__name__ == "AgentSession":
             return "session_id"
-        elif model_type is UserProfile:
-            return "user_id"
         
-        # Auto-detect for generic types
         if hasattr(model_type, 'model_fields'):
             for field_name in ['path', 'id', 'key', 'name']:
                 if field_name in model_type.model_fields:
@@ -88,29 +78,19 @@ class JSONStorage(Storage):
         return "id"
     
     def _encode_id_for_filename(self, object_id: str) -> str:
-        """
-        Encode object ID to be safe for filename.
-        
-        Handles IDs that contain slashes (like file paths).
-        """
         import urllib.parse
         return urllib.parse.quote(object_id, safe='')
     
     def _decode_id_from_filename(self, filename: str) -> str:
-        """Decode filename back to object ID."""
         import urllib.parse
-        # Remove .json extension
         if filename.endswith('.json'):
             filename = filename[:-5]
         return urllib.parse.unquote(filename)
     
     def _get_path(self, object_id: str, model_type: Type[BaseModel]) -> Path:
-        if model_type is InteractionSession:
+        if model_type.__name__ == "AgentSession":
             return self.sessions_path / f"{object_id}.json"
-        elif model_type is UserProfile:
-            return self.profiles_path / f"{object_id}.json"
         else:
-            # Generic model: generic/{model_type_name}/{encoded_id}.json
             model_folder = self.generic_path / model_type.__name__.lower()
             model_folder.mkdir(parents=True, exist_ok=True)
             encoded_id = self._encode_id_for_filename(object_id)
@@ -134,7 +114,7 @@ class JSONStorage(Storage):
         return self._run_async_from_sync(self.create_async())
     def read(self, object_id: str, model_type: Type[T]) -> Optional[T]:
         return self._run_async_from_sync(self.read_async(object_id, model_type))
-    def upsert(self, data: Union[InteractionSession, UserProfile]) -> None:
+    def upsert(self, data: BaseModel) -> None:
         return self._run_async_from_sync(self.upsert_async(data))
     def delete(self, object_id: str, model_type: Type[BaseModel]) -> None:
         return self._run_async_from_sync(self.delete_async(object_id, model_type))
@@ -155,39 +135,26 @@ class JSONStorage(Storage):
         self._connected = False
 
     async def create_async(self) -> None:
-        """
-        Creates storage directories.
-        Note: InteractionSession and UserProfile directories are created lazily
-        only when first accessed. This allows the storage to be used for
-        generic purposes without creating unused infrastructure.
-        """
-        # Ensure base directory exists, but don't create subdirectories yet
-        # Subdirectories will be created on-demand when accessed
         await asyncio.to_thread(self.base_path.mkdir, parents=True, exist_ok=True)
     
     async def _ensure_sessions_dir(self) -> None:
-        """Lazily creates the sessions directory on first access."""
         if self._sessions_dir_initialized:
             return
         
         await asyncio.to_thread(self.sessions_path.mkdir, parents=True, exist_ok=True)
         self._sessions_dir_initialized = True
     
-    async def _ensure_profiles_dir(self) -> None:
-        """Lazily creates the profiles directory on first access."""
-        if self._profiles_dir_initialized:
+    async def _ensure_cultural_knowledge_dir(self) -> None:
+        if self._cultural_knowledge_dir_initialized:
             return
         
-        await asyncio.to_thread(self.profiles_path.mkdir, parents=True, exist_ok=True)
-        self._profiles_dir_initialized = True
+        await asyncio.to_thread(self.cultural_knowledge_path.mkdir, parents=True, exist_ok=True)
+        self._cultural_knowledge_dir_initialized = True
 
     async def read_async(self, object_id: str, model_type: Type[T]) -> Optional[T]:
-        # Ensure directory exists - lazy initialization for built-in types
-        if model_type is InteractionSession:
+        import base64
+        if model_type.__name__ == "AgentSession":
             await self._ensure_sessions_dir()
-        elif model_type is UserProfile:
-            await self._ensure_profiles_dir()
-        # Generic models create their own directories in _get_path
         
         file_path = self._get_path(object_id, model_type)
         async with self.lock:
@@ -197,7 +164,12 @@ class JSONStorage(Storage):
                 content = await asyncio.to_thread(file_path.read_text, encoding="utf-8")
                 data = self._deserialize(content)
                 
-                # Try from_dict first, fallback to model_validate
+                # Check for new serialized format
+                if isinstance(data, dict) and "__serialized__" in data:
+                    serialized_bytes = base64.b64decode(data["__serialized__"].encode('utf-8'))
+                    return model_type.deserialize(serialized_bytes)
+                
+                # Fallback to old format
                 if hasattr(model_type, 'from_dict'):
                     return model_type.from_dict(data)
                 else:
@@ -208,25 +180,23 @@ class JSONStorage(Storage):
                 return None
 
     async def upsert_async(self, data: BaseModel) -> None:
+        import base64
         if hasattr(data, 'updated_at'):
             data.updated_at = time.time()
         
-        data_dict = data.model_dump(mode="json")
-        json_string = self._serialize(data_dict)
-
-        if isinstance(data, InteractionSession):
-            # Ensure sessions directory exists before upserting
+        if type(data).__name__ == "AgentSession":
             await self._ensure_sessions_dir()
-            file_path = self._get_path(data.session_id, InteractionSession)
-        elif isinstance(data, UserProfile):
-            # Ensure profiles directory exists before upserting
-            await self._ensure_profiles_dir()
-            file_path = self._get_path(data.user_id, UserProfile)
+            # Use serialize() to get bytes, then base64 encode
+            serialized_bytes = data.serialize()
+            data_dict = {"__serialized__": base64.b64encode(serialized_bytes).decode('utf-8')}
+            file_path = self._get_path(data.session_id, type(data))
         else:
-            # Generic model support - _get_path creates directory if needed
+            data_dict = data.model_dump(mode="json")
             primary_key_field = self._get_primary_key_field(type(data))
             object_id = getattr(data, primary_key_field)
             file_path = self._get_path(object_id, type(data))
+        
+        json_string = self._serialize(data_dict)
         
         async with self.lock:
             try:
@@ -235,12 +205,8 @@ class JSONStorage(Storage):
                 raise IOError(f"Failed to write file to {file_path}: {e}")
 
     async def delete_async(self, object_id: str, model_type: Type[BaseModel]) -> None:
-        # Ensure directory exists - lazy initialization for built-in types
-        if model_type is InteractionSession:
+        if model_type.__name__ == "AgentSession":
             await self._ensure_sessions_dir()
-        elif model_type is UserProfile:
-            await self._ensure_profiles_dir()
-        # For generic models, only delete if directory exists
         
         file_path = self._get_path(object_id, model_type)
         async with self.lock:
@@ -252,25 +218,17 @@ class JSONStorage(Storage):
                     error_log(f"Could not delete file {file_path}. Reason: {e}", "JSONStorage")
     
     async def list_all_async(self, model_type: Type[T]) -> list[T]:
-        """List all objects of a specific type."""
         async with self.lock:
-            if model_type is InteractionSession:
-                # Ensure sessions directory exists
+            if model_type.__name__ == "AgentSession":
                 await self._ensure_sessions_dir()
                 folder = self.sessions_path
-            elif model_type is UserProfile:
-                # Ensure profiles directory exists
-                await self._ensure_profiles_dir()
-                folder = self.profiles_path
             else:
-                # Generic model
                 folder = self.generic_path / model_type.__name__.lower()
                 if not await asyncio.to_thread(folder.exists):
                     return []
             
             results = []
             
-            # Iterate through all .json files
             try:
                 files = await asyncio.to_thread(list, folder.glob("*.json"))
                 
@@ -293,20 +251,107 @@ class JSONStorage(Storage):
             return results
 
     async def drop_async(self) -> None:
-        """
-        Drops all directories managed by this storage provider.
-        Only drops InteractionSession/UserProfile directories if they were actually created.
-        """
         async with self.lock:
             if await asyncio.to_thread(self.sessions_path.exists): 
                 await asyncio.to_thread(shutil.rmtree, self.sessions_path)
-            if await asyncio.to_thread(self.profiles_path.exists): 
-                await asyncio.to_thread(shutil.rmtree, self.profiles_path)
             if await asyncio.to_thread(self.generic_path.exists):
                 await asyncio.to_thread(shutil.rmtree, self.generic_path)
+            if await asyncio.to_thread(self.cultural_knowledge_path.exists):
+                await asyncio.to_thread(shutil.rmtree, self.cultural_knowledge_path)
         
-        # Reset initialization flags
         self._sessions_dir_initialized = False
-        self._profiles_dir_initialized = False
+        self._cultural_knowledge_dir_initialized = False
         
         await self.create_async()
+
+    # =========================================================================
+    # Cultural Knowledge Methods
+    # =========================================================================
+
+    async def read_cultural_knowledge_async(self, knowledge_id: str) -> Optional["CulturalKnowledge"]:
+        from upsonic.culture.cultural_knowledge import CulturalKnowledge
+        
+        await self._ensure_cultural_knowledge_dir()
+        file_path = self.cultural_knowledge_path / f"{knowledge_id}.json"
+        
+        async with self.lock:
+            if not await asyncio.to_thread(file_path.exists):
+                return None
+            try:
+                content = await asyncio.to_thread(file_path.read_text, encoding="utf-8")
+                data = self._deserialize(content)
+                return CulturalKnowledge.from_dict(data)
+            except (json.JSONDecodeError, TypeError) as e:
+                from upsonic.utils.printing import warning_log
+                warning_log(f"Could not parse cultural knowledge file {file_path}. Error: {e}", "JSONStorage")
+                return None
+
+    async def upsert_cultural_knowledge_async(self, knowledge: "CulturalKnowledge") -> None:
+        await self._ensure_cultural_knowledge_dir()
+        
+        knowledge.bump_updated_at()
+        
+        data_dict = knowledge.to_dict()
+        json_string = self._serialize(data_dict)
+        
+        file_path = self.cultural_knowledge_path / f"{knowledge.id}.json"
+        
+        async with self.lock:
+            try:
+                await asyncio.to_thread(file_path.write_text, json_string, encoding="utf-8")
+            except IOError as e:
+                raise IOError(f"Failed to write cultural knowledge file to {file_path}: {e}")
+
+    async def delete_cultural_knowledge_async(self, knowledge_id: str) -> None:
+        await self._ensure_cultural_knowledge_dir()
+        file_path = self.cultural_knowledge_path / f"{knowledge_id}.json"
+        
+        async with self.lock:
+            if await asyncio.to_thread(file_path.exists):
+                try:
+                    await asyncio.to_thread(file_path.unlink)
+                except OSError as e:
+                    from upsonic.utils.printing import error_log
+                    error_log(f"Could not delete cultural knowledge file {file_path}. Reason: {e}", "JSONStorage")
+
+    async def list_all_cultural_knowledge_async(
+        self, 
+        name: Optional[str] = None
+    ) -> List["CulturalKnowledge"]:
+        from upsonic.culture.cultural_knowledge import CulturalKnowledge
+        
+        await self._ensure_cultural_knowledge_dir()
+        
+        results = []
+        
+        async with self.lock:
+            try:
+                files = await asyncio.to_thread(list, self.cultural_knowledge_path.glob("*.json"))
+                
+                for file_path in files:
+                    try:
+                        content = await asyncio.to_thread(file_path.read_text, encoding="utf-8")
+                        data = self._deserialize(content)
+                        knowledge = CulturalKnowledge.from_dict(data)
+                        
+                        if name is not None:
+                            if knowledge.name is None:
+                                continue
+                            if name.lower() not in knowledge.name.lower():
+                                continue
+                        
+                        results.append(knowledge)
+                    except Exception:
+                        continue
+            except Exception:
+                return []
+        
+        return results
+
+    async def clear_cultural_knowledge_async(self) -> None:
+        await self._ensure_cultural_knowledge_dir()
+        
+        async with self.lock:
+            if await asyncio.to_thread(self.cultural_knowledge_path.exists):
+                await asyncio.to_thread(shutil.rmtree, self.cultural_knowledge_path)
+                await asyncio.to_thread(self.cultural_knowledge_path.mkdir, parents=True, exist_ok=True)

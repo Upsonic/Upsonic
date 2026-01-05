@@ -6,6 +6,7 @@ if TYPE_CHECKING:
     from .agentic import PropositionList, Topic, TopicAssignmentList, RefinedTopic
     from .data_models import Document, Chunk, RAGSearchResult
     from .vector_schemas import VectorSearchResult
+    from .kb_filter import KBFilterExpr
 
 def _get_schema_classes():
     """Lazy import of schema classes."""
@@ -13,6 +14,7 @@ def _get_schema_classes():
     from .agentic import PropositionList, Topic, TopicAssignmentList, RefinedTopic
     from .data_models import Document, Chunk, RAGSearchResult
     from .vector_schemas import VectorSearchResult
+    from .kb_filter import KBFilterExpr
     
     return {
         'UserTraits': UserTraits,
@@ -24,6 +26,7 @@ def _get_schema_classes():
         'Chunk': Chunk,
         'RAGSearchResult': RAGSearchResult,
         'VectorSearchResult': VectorSearchResult,
+        'KBFilterExpr': KBFilterExpr,
     }
 
 def __getattr__(name: str) -> Any:
@@ -47,4 +50,5 @@ __all__ = [
     "Chunk",
     "RAGSearchResult",
     "VectorSearchResult",
+    "KBFilterExpr",
 ]

@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import time
 import json
-from typing import Optional, Type, Union, TypeVar, TYPE_CHECKING
+from typing import List, Optional, Type, Union, TypeVar, TYPE_CHECKING
 
 if TYPE_CHECKING:
     import asyncpg
+    from upsonic.culture.cultural_knowledge import CulturalKnowledge
 
 try:
     import asyncpg
@@ -17,7 +18,7 @@ except ImportError:
 from pydantic import BaseModel
 
 from upsonic.storage.base import Storage
-from upsonic.storage.session.sessions import InteractionSession, UserProfile
+from upsonic.session.agent import AgentSession
 
 T = TypeVar('T', bound=BaseModel)
 
@@ -28,7 +29,7 @@ class PostgresStorage(Storage):
     
     This storage provider is designed to be flexible and dynamic:
     - Can accept a pre-existing asyncpg connection pool or create one from connection details
-    - Only creates InteractionSession/UserProfile tables when they are actually used
+    - Only creates AgentSession tables when they are actually used
     - Supports generic Pydantic models for custom storage needs
     - Can be used for both custom purposes and built-in chat/profile features simultaneously
     """
@@ -38,8 +39,8 @@ class PostgresStorage(Storage):
         pool: Optional['asyncpg.Pool'] = None,
         db_url: Optional[str] = None,
         schema: str = "public",
-        sessions_table_name: Optional[str] = None,
-        profiles_table_name: Optional[str] = None
+        agent_sessions_table_name: Optional[str] = None,
+        cultural_knowledge_table_name: Optional[str] = None,
     ):
         """
         Initializes the async PostgreSQL storage provider.
@@ -51,10 +52,10 @@ class PostgresStorage(Storage):
             db_url: An asyncpg-compatible database URL (e.g., "postgresql://user:pass@host:port/db").
                 Required if pool is not provided. Ignored if pool is provided.
             schema: The PostgreSQL schema to use for the tables. Defaults to "public".
-            sessions_table_name: The name of the table for InteractionSession storage.
-                Only used if InteractionSession objects are stored. Defaults to "sessions".
-            profiles_table_name: The name of the table for UserProfile storage.
-                Only used if UserProfile objects are stored. Defaults to "profiles".
+            agent_sessions_table_name: The name of the table for AgentSession storage.
+                Only used if AgentSession objects are stored. Defaults to "agent_sessions".
+            cultural_knowledge_table_name: The name of the table for CulturalKnowledge storage.
+                Only used if CulturalKnowledge objects are stored. Defaults to "cultural_knowledge".
         """
         if not _ASYNCPG_AVAILABLE:
             from upsonic.utils.printing import import_error
@@ -66,23 +67,19 @@ class PostgresStorage(Storage):
 
         super().__init__()
         
-        # Store pool and track ownership for lifecycle management
         self._pool = pool
-        self._owns_pool = (pool is None)  # True if we create it, False if user provided
+        self._owns_pool = (pool is None)
         
-        # Connection details for creating our own pool if needed
         if not pool and not db_url:
             raise ValueError("Either 'pool' or 'db_url' must be provided")
         self.db_url = db_url
         self.schema = schema
         
-        # Table names for InteractionSession/UserProfile (lazy initialization)
-        self.sessions_table_name = f'"{schema}"."{sessions_table_name or "sessions"}"'
-        self.profiles_table_name = f'"{schema}"."{profiles_table_name or "profiles"}"'
+        self.agent_sessions_table_name = f'"{schema}"."{agent_sessions_table_name or "agent_sessions"}"'
+        self.cultural_knowledge_table_name = f'"{schema}"."{cultural_knowledge_table_name or "cultural_knowledge"}"'
         
-        # Track which built-in tables have been initialized
-        self._sessions_table_initialized = False
-        self._profiles_table_initialized = False
+        self._agent_sessions_table_initialized = False
+        self._cultural_knowledge_table_initialized = False
 
 
 
@@ -96,7 +93,7 @@ class PostgresStorage(Storage):
         return self._run_async_from_sync(self.create_async())
     def read(self, object_id: str, model_type: Type[T]) -> Optional[T]:
         return self._run_async_from_sync(self.read_async(object_id, model_type))
-    def upsert(self, data: Union[InteractionSession, UserProfile]) -> None:
+    def upsert(self, data: BaseModel) -> None:
         return self._run_async_from_sync(self.upsert_async(data))
     def delete(self, object_id: str, model_type: Type[BaseModel]) -> None:
         return self._run_async_from_sync(self.delete_async(object_id, model_type))
@@ -109,23 +106,15 @@ class PostgresStorage(Storage):
         return self._pool is not None and not self._pool._closing
     
     async def connect_async(self) -> None:
-        """
-        Establishes connection pool to the database.
-        If user provided a pool, this is a no-op.
-        Otherwise, creates a new pool using db_url.
-        """
         if await self.is_connected_async():
             return
         
         if not self._owns_pool:
-            # User provided pool, already set in __init__
             self._connected = True
             return
         
-        # Create our own pool
         try:
             self._pool = await asyncpg.create_pool(self.db_url)
-            # Ensure schema exists (but not tables yet - those are lazy)
             await self._ensure_schema()
             self._connected = True
         except Exception as e:
@@ -133,12 +122,7 @@ class PostgresStorage(Storage):
             raise ConnectionError(f"Failed to connect to PostgreSQL: {e}") from e
 
     async def disconnect_async(self) -> None:
-        """
-        Closes the database connection pool.
-        If user provided the pool, this is a no-op (user manages lifecycle).
-        """
         if not self._owns_pool:
-            # User manages their own pool lifecycle
             return
         
         if self._pool:
@@ -147,69 +131,88 @@ class PostgresStorage(Storage):
         self._connected = False
 
     async def _get_pool(self):
-        """Helper to lazily initialize the connection pool."""
-        if not await self.is_connected_async():
+        """Get connection pool with auto-reconnect if needed."""
+        needs_reconnect = False
+        
+        if self._pool is None:
+            needs_reconnect = True
+        elif self._pool._closing:
+            needs_reconnect = True
+        else:
+            # Test connection with a simple query
+            try:
+                async with self._pool.acquire() as conn:
+                    await conn.fetchval("SELECT 1")
+            except Exception:
+                needs_reconnect = True
+        
+        if needs_reconnect:
+            # Close existing pool if it exists
+            if self._pool is not None:
+                try:
+                    await self._pool.close()
+                except Exception:
+                    pass
+                self._pool = None
+            
+            # Reconnect
             await self.connect_async()
+        
         return self._pool
     
     async def _ensure_schema(self) -> None:
-        """Ensures the schema exists."""
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             await conn.execute(f"CREATE SCHEMA IF NOT EXISTS {self.schema}")
 
     async def create_async(self) -> None:
-        """
-        Creates database schema.
-        Note: InteractionSession and UserProfile tables are created lazily
-        only when first accessed. This allows the storage to be used for
-        generic purposes without creating unused infrastructure.
-        """
-        # Ensure connection and schema exist, but don't create any tables yet
-        # Tables will be created on-demand when accessed
         await self._ensure_schema()
     
-    async def _ensure_sessions_table(self) -> None:
-        """Lazily creates the sessions table on first access."""
-        if self._sessions_table_initialized:
+    async def _ensure_agent_sessions_table(self) -> None:
+        if self._agent_sessions_table_initialized:
             return
         
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             await conn.execute(f"""
-                CREATE TABLE IF NOT EXISTS {self.sessions_table_name} (
-                    session_id TEXT PRIMARY KEY, user_id TEXT, agent_id TEXT,
-                    team_session_id TEXT, chat_history TEXT, summary TEXT,
-                    session_data TEXT, extra_data TEXT, created_at REAL, updated_at REAL
+                CREATE TABLE IF NOT EXISTS {self.agent_sessions_table_name} (
+                    session_id TEXT PRIMARY KEY,
+                    data TEXT NOT NULL,
+                    created_at REAL,
+                    updated_at REAL
                 )
             """)
-        self._sessions_table_initialized = True
+        self._agent_sessions_table_initialized = True
     
-    async def _ensure_profiles_table(self) -> None:
-        """Lazily creates the profiles table on first access."""
-        if self._profiles_table_initialized:
+    async def _ensure_cultural_knowledge_table(self) -> None:
+        if self._cultural_knowledge_table_initialized:
             return
         
         pool = await self._get_pool()
         async with pool.acquire() as conn:
             await conn.execute(f"""
-                CREATE TABLE IF NOT EXISTS {self.profiles_table_name} (
-                    user_id TEXT PRIMARY KEY, profile_data TEXT,
-                    created_at REAL, updated_at REAL
+                CREATE TABLE IF NOT EXISTS {self.cultural_knowledge_table_name} (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    content TEXT,
+                    summary TEXT,
+                    categories TEXT,
+                    notes TEXT,
+                    metadata TEXT,
+                    input TEXT,
+                    agent_id TEXT,
+                    team_id TEXT,
+                    created_at BIGINT,
+                    updated_at BIGINT
                 )
             """)
-        self._profiles_table_initialized = True
+        self._cultural_knowledge_table_initialized = True
 
     def _get_table_info(self, model_type: Type[BaseModel]) -> Optional[tuple[str, str]]:
-        """Get table name and primary key for a model type."""
-        if model_type is InteractionSession:
-            return (self.sessions_table_name, "session_id")
-        elif model_type is UserProfile:
-            return (self.profiles_table_name, "user_id")
+        if model_type.__name__ == "AgentSession":
+            return (self.agent_sessions_table_name, "session_id")
         else:
-            # Generic model
             table_name = f'"{self.schema}"."{model_type.__name__.lower()}_storage"'
-            # Auto-detect primary key
             if hasattr(model_type, 'model_fields'):
                 for field in ['path', 'id', 'key', 'name']:
                     if field in model_type.model_fields:
@@ -217,14 +220,13 @@ class PostgresStorage(Storage):
             return (table_name, "id")
     
     async def _ensure_table(self, model_type: Type[BaseModel]) -> str:
-        """Ensure table exists for model type."""
         table_info = self._get_table_info(model_type)
         if table_info is None:
             raise TypeError(f"Cannot determine table for {model_type.__name__}")
         
         table_name, key_col = table_info
         
-        if model_type not in [InteractionSession, UserProfile]:
+        if model_type.__name__ != "AgentSession":
             pool = await self._get_pool()
             async with pool.acquire() as conn:
                 await conn.execute(f"""
@@ -239,78 +241,61 @@ class PostgresStorage(Storage):
         return table_name
     
     async def read_async(self, object_id: str, model_type: Type[T]) -> Optional[T]:
+        import base64
         table_info = self._get_table_info(model_type)
         if table_info is None:
             return None
         
         table, key_col = table_info
         
-        # Ensure table exists - lazy initialization for built-in types
-        if model_type is InteractionSession:
-            await self._ensure_sessions_table()
-        elif model_type is UserProfile:
-            await self._ensure_profiles_table()
+        if model_type.__name__ == "AgentSession":
+            await self._ensure_agent_sessions_table()
         else:
-            # Generic models - create table if needed
             await self._ensure_table(model_type)
         
         pool = await self._get_pool()
-        sql = f"SELECT * FROM {table} WHERE {key_col} = $1"
+        sql = f"SELECT data FROM {table} WHERE {key_col} = $1"
         async with pool.acquire() as conn:
             row = await conn.fetchrow(sql, object_id)
             if row:
-                data = dict(row)
+                data_str = row['data']
                 
-                if model_type in [InteractionSession, UserProfile]:
-                    # Handle known types
-                    for key in ['chat_history', 'session_data', 'extra_data', 'profile_data']:
-                        if key in data and isinstance(data[key], str):
-                            try:
-                                data[key] = json.loads(data[key])
-                            except Exception:
-                                pass
-                    if hasattr(model_type, 'from_dict'):
-                        return model_type.from_dict(data)
-                    else:
-                        return model_type.model_validate(data)
+                if model_type.__name__ == "AgentSession":
+                    # Use deserialize: base64 decode then deserialize
+                    serialized_bytes = base64.b64decode(data_str.encode('utf-8'))
+                    return model_type.deserialize(serialized_bytes)
                 else:
-                    # Generic model
-                    if 'data' in data and isinstance(data['data'], str):
-                        obj_data = json.loads(data['data'])
+                    if 'data' in row and isinstance(row['data'], str):
+                        obj_data = json.loads(row['data'])
                         return model_type.model_validate(obj_data)
         return None
+
     async def upsert_async(self, data: BaseModel) -> None:
+        import base64
         if hasattr(data, 'updated_at'):
             data.updated_at = time.time()
 
-        if isinstance(data, InteractionSession):
-            # Ensure sessions table exists before upserting
-            await self._ensure_sessions_table()
+        if type(data).__name__ == "AgentSession":
+            await self._ensure_agent_sessions_table()
             
-            table = self.sessions_table_name
-            sql = f"""
-                INSERT INTO {table} (session_id, user_id, agent_id, team_session_id, chat_history, summary, session_data, extra_data, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                ON CONFLICT(session_id) DO UPDATE SET
-                    user_id=EXCLUDED.user_id, agent_id=EXCLUDED.agent_id, team_session_id=EXCLUDED.team_session_id,
-                    chat_history=EXCLUDED.chat_history, summary=EXCLUDED.summary, session_data=EXCLUDED.session_data,
-                    extra_data=EXCLUDED.extra_data, updated_at=EXCLUDED.updated_at
-            """
-            params = (data.session_id, data.user_id, data.agent_id, data.team_session_id, json.dumps(data.chat_history), data.summary, json.dumps(data.session_data), json.dumps(data.extra_data), data.created_at, data.updated_at)
-        elif isinstance(data, UserProfile):
-            # Ensure profiles table exists before upserting
-            await self._ensure_profiles_table()
+            # Use serialize: serialize to bytes, then base64 encode for TEXT storage
+            serialized_bytes = data.serialize()
+            serialized_str = base64.b64encode(serialized_bytes).decode('utf-8')
             
-            table = self.profiles_table_name
+            table = self.agent_sessions_table_name
             sql = f"""
-                INSERT INTO {table} (user_id, profile_data, created_at, updated_at)
+                INSERT INTO {table} (session_id, data, created_at, updated_at)
                 VALUES ($1, $2, $3, $4)
-                ON CONFLICT(user_id) DO UPDATE SET
-                    profile_data=EXCLUDED.profile_data, updated_at=EXCLUDED.updated_at
+                ON CONFLICT(session_id) DO UPDATE SET
+                    data=EXCLUDED.data, updated_at=EXCLUDED.updated_at
             """
-            params = (data.user_id, json.dumps(data.profile_data), data.created_at, data.updated_at)
+            params = (
+                data.session_id,
+                serialized_str,
+                data.created_at or time.time(),
+                data.updated_at or time.time()
+            )
         else:
-            # Generic model support - ensure table exists
             table_name = await self._ensure_table(type(data))
             _, key_col = self._get_table_info(type(data))
             
@@ -338,15 +323,8 @@ class PostgresStorage(Storage):
         
         table, key_col = table_info
         
-        # Ensure table exists - lazy initialization for built-in types
-        if model_type is InteractionSession:
-            await self._ensure_sessions_table()
-        elif model_type is UserProfile:
-            await self._ensure_profiles_table()
-        else:
-            # For generic models, only delete if table exists
-            # No need to create table just to delete from it
-            pass
+        if model_type.__name__ == "AgentSession":
+            await self._ensure_agent_sessions_table()
             
         pool = await self._get_pool()
         sql = f"DELETE FROM {table} WHERE {key_col} = $1"
@@ -354,71 +332,165 @@ class PostgresStorage(Storage):
             await conn.execute(sql, object_id)
     
     async def list_all_async(self, model_type: Type[T]) -> list[T]:
-        """List all objects of a specific type."""
+        import base64
         table_info = self._get_table_info(model_type)
         if table_info is None:
             return []
         
         table_name, key_col = table_info
         
-        # Ensure table exists - lazy initialization for built-in types
-        if model_type is InteractionSession:
-            await self._ensure_sessions_table()
-        elif model_type is UserProfile:
-            await self._ensure_profiles_table()
+        if model_type.__name__ == "AgentSession":
+            await self._ensure_agent_sessions_table()
         else:
-            # Generic models - create table if needed
             await self._ensure_table(model_type)
         
         pool = await self._get_pool()
-        sql = f"SELECT * FROM {table_name}"
+        sql = f"SELECT data FROM {table_name}"
         results = []
         
         async with pool.acquire() as conn:
             rows = await conn.fetch(sql)
             
             for row in rows:
-                data = dict(row)
+                data_str = row['data']
                 
-                if model_type in [InteractionSession, UserProfile]:
-                    # Handle known types
-                    for key in ['chat_history', 'session_data', 'extra_data', 'profile_data']:
-                        if key in data and isinstance(data[key], str):
-                            try:
-                                data[key] = json.loads(data[key])
-                            except Exception:
-                                pass
-                    
-                    if hasattr(model_type, 'from_dict'):
-                        obj = model_type.from_dict(data)
-                    else:
-                        obj = model_type.model_validate(data)
+                if model_type.__name__ == "AgentSession":
+                    # Use deserialize: base64 decode then deserialize
+                    try:
+                        serialized_bytes = base64.b64decode(data_str.encode('utf-8'))
+                        obj = model_type.deserialize(serialized_bytes)
+                        results.append(obj)
+                    except Exception:
+                        continue
                 else:
-                    # Generic model
-                    if 'data' in data and isinstance(data['data'], str):
+                    if isinstance(data_str, str):
                         try:
-                            obj_data = json.loads(data['data'])
+                            obj_data = json.loads(data_str)
                             obj = model_type.model_validate(obj_data)
+                            results.append(obj)
                         except Exception:
                             continue
-                    else:
-                        continue
-                
-                results.append(obj)
         
         return results
 
     async def drop_async(self) -> None:
-        """
-        Drops all tables managed by this storage provider.
-        Only drops InteractionSession/UserProfile tables if they were actually created.
-        """
         pool = await self._get_pool()
         async with pool.acquire() as conn:
-            await conn.execute(f"DROP TABLE IF EXISTS {self.sessions_table_name}")
-            await conn.execute(f"DROP TABLE IF EXISTS {self.profiles_table_name}")
+            await conn.execute(f"DROP TABLE IF EXISTS {self.agent_sessions_table_name}")
+            await conn.execute(f"DROP TABLE IF EXISTS {self.cultural_knowledge_table_name}")
         
-        # Reset initialization flags
-        self._sessions_table_initialized = False
-        self._profiles_table_initialized = False
+        self._agent_sessions_table_initialized = False
+        self._cultural_knowledge_table_initialized = False
+
+    # =========================================================================
+    # Cultural Knowledge Methods
+    # =========================================================================
+
+    async def read_cultural_knowledge_async(self, knowledge_id: str) -> Optional["CulturalKnowledge"]:
+        from upsonic.culture.cultural_knowledge import CulturalKnowledge
+        
+        await self._ensure_cultural_knowledge_table()
+        
+        pool = await self._get_pool()
+        sql = f"SELECT * FROM {self.cultural_knowledge_table_name} WHERE id = $1"
+        
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(sql, knowledge_id)
+            if row:
+                data = dict(row)
+                for key in ['categories', 'notes', 'metadata']:
+                    if key in data and isinstance(data[key], str):
+                        try:
+                            data[key] = json.loads(data[key])
+                        except:
+                            pass
+                return CulturalKnowledge.from_dict(data)
+        return None
+
+    async def upsert_cultural_knowledge_async(self, knowledge: "CulturalKnowledge") -> None:
+        await self._ensure_cultural_knowledge_table()
+        
+        knowledge.bump_updated_at()
+        
+        pool = await self._get_pool()
+        
+        sql = f"""
+            INSERT INTO {self.cultural_knowledge_table_name} 
+            (id, name, content, summary, categories, notes, metadata, input, agent_id, team_id, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            ON CONFLICT(id) DO UPDATE SET
+                name=EXCLUDED.name, content=EXCLUDED.content, summary=EXCLUDED.summary,
+                categories=EXCLUDED.categories, notes=EXCLUDED.notes, metadata=EXCLUDED.metadata,
+                input=EXCLUDED.input, agent_id=EXCLUDED.agent_id, team_id=EXCLUDED.team_id,
+                updated_at=EXCLUDED.updated_at
+        """
+        
+        params = (
+            knowledge.id,
+            knowledge.name,
+            knowledge.content,
+            knowledge.summary,
+            json.dumps(knowledge.categories) if knowledge.categories else None,
+            json.dumps(knowledge.notes) if knowledge.notes else None,
+            json.dumps(knowledge.metadata) if knowledge.metadata else None,
+            knowledge.input,
+            knowledge.agent_id,
+            knowledge.team_id,
+            knowledge.created_at,
+            knowledge.updated_at,
+        )
+        
+        async with pool.acquire() as conn:
+            await conn.execute(sql, *params)
+
+    async def delete_cultural_knowledge_async(self, knowledge_id: str) -> None:
+        await self._ensure_cultural_knowledge_table()
+        
+        pool = await self._get_pool()
+        sql = f"DELETE FROM {self.cultural_knowledge_table_name} WHERE id = $1"
+        
+        async with pool.acquire() as conn:
+            await conn.execute(sql, knowledge_id)
+
+    async def list_all_cultural_knowledge_async(
+        self, 
+        name: Optional[str] = None
+    ) -> List["CulturalKnowledge"]:
+        from upsonic.culture.cultural_knowledge import CulturalKnowledge
+        
+        await self._ensure_cultural_knowledge_table()
+        
+        pool = await self._get_pool()
+        
+        if name:
+            sql = f"SELECT * FROM {self.cultural_knowledge_table_name} WHERE name ILIKE $1"
+            params = (f"%{name}%",)
+        else:
+            sql = f"SELECT * FROM {self.cultural_knowledge_table_name}"
+            params = ()
+        
+        results = []
+        
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(sql, *params)
             
+            for row in rows:
+                data = dict(row)
+                for key in ['categories', 'notes', 'metadata']:
+                    if key in data and isinstance(data[key], str):
+                        try:
+                            data[key] = json.loads(data[key])
+                        except:
+                            pass
+                results.append(CulturalKnowledge.from_dict(data))
+        
+        return results
+
+    async def clear_cultural_knowledge_async(self) -> None:
+        await self._ensure_cultural_knowledge_table()
+        
+        pool = await self._get_pool()
+        sql = f"DELETE FROM {self.cultural_knowledge_table_name}"
+        
+        async with pool.acquire() as conn:
+            await conn.execute(sql)

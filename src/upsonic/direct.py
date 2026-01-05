@@ -156,14 +156,56 @@ class Direct:
         
         return self._model
     
-    def _build_messages_from_task(self, task: Task) -> list:
-        """Build messages from a Task object."""
-        from upsonic.messages import ModelRequest, UserPromptPart, BinaryContent
+    async def _build_messages_from_task(self, task: Task, state: Optional[Any] = None) -> list:
+        """Build messages from a Task object.
+        
+        Args:
+            task: Task object to build messages from
+            state: Optional state object for Graph execution (used to get previous task outputs)
+            
+        Returns:
+            List of ModelRequest objects
+        """
+        from upsonic.messages import ModelRequest, UserPromptPart, BinaryContent, SystemPromptPart
+        from upsonic.context.sources import TaskOutputSource
         import mimetypes
+        
+        parts = []
+        
+        # Build context from task.context if present (similar to Agent's ContextManager)
+        context_parts = []
+        if task.context:
+            for item in task.context:
+                if isinstance(item, TaskOutputSource) and state:
+                    # Get output from previous task in graph
+                    try:
+                        source_output = state.get_task_output(item.task_description_or_id)
+                        if source_output is not None:
+                            # Format the output
+                            output_str = self._format_task_output(source_output)
+                            context_parts.append(
+                                f"<PreviousTaskNodeOutput id='{item.task_description_or_id}'>\n{output_str}\n</PreviousTaskNodeOutput>"
+                            )
+                            # Debug: Log that we're using previous task output
+                            from upsonic.utils.printing import info_log
+                            info_log(f"Direct: Using output from previous task '{item.task_description_or_id}' (length: {len(output_str)} chars)", "Direct")
+                        else:
+                            from upsonic.utils.printing import warning_log
+                            warning_log(f"Direct: No output found for task '{item.task_description_or_id}'", "Direct")
+                    except Exception as e:
+                        from upsonic.utils.printing import warning_log
+                        warning_log(f"Error processing TaskOutputSource '{item.task_description_or_id}': {str(e)}", "Direct")
+                elif isinstance(item, str):
+                    context_parts.append(item)
+        
+        # Add context as system prompt if we have context parts
+        if context_parts:
+            context_str = "<Context>\n" + "\n\n".join(context_parts) + "\n</Context>"
+            parts.append(SystemPromptPart(content=context_str))
         
         # Start with the task description
         user_part = UserPromptPart(content=task.description)
-        parts = [user_part]
+        parts.append(user_part)
         
         # Add attachments if present
         if task.attachments:
@@ -182,6 +224,25 @@ class Direct:
                     print(f"Warning: Could not load attachment {attachment_path}: {e}")
         
         return [ModelRequest(parts=parts)]
+    
+    def _format_task_output(self, source_output: Any) -> str:
+        """Format task output with serialization (same as Agent's ContextManager)."""
+        try:
+            import json
+            if hasattr(source_output, 'model_dump_json'):
+                return source_output.model_dump_json(indent=2)
+            elif hasattr(source_output, 'model_dump'):
+                return json.dumps(source_output.model_dump(), default=str, indent=2)
+            elif hasattr(source_output, 'to_dict'):
+                return json.dumps(source_output.to_dict(), default=str, indent=2)
+            elif hasattr(source_output, '__dict__'):
+                return json.dumps(source_output.__dict__, default=str, indent=2)
+            else:
+                return str(source_output)
+        except Exception as e:
+            from upsonic.utils.printing import error_log
+            error_log(f"Error formatting task output: {str(e)}", "Direct")
+            return str(source_output)
     
     def _build_request_parameters(self, task: Task):
         """Build model request parameters from task."""
@@ -275,12 +336,21 @@ class Direct:
         except RuntimeError:
             return asyncio.run(self.do_async(task, show_output=show_output))
     
-    async def do_async(self, task: Task, show_output: bool = True) -> Any:
+    async def do_async(
+        self, 
+        task: Task, 
+        show_output: bool = True,
+        state: Optional[Any] = None,
+        *,
+        graph_execution_id: Optional[str] = None
+    ) -> Any:
         """Execute a task asynchronously.
         
         Args:
             task: Task object containing description, context, and response format
             show_output: Whether to show visual output (default: True)
+            state: Optional state object (for Graph compatibility, not used by Direct)
+            graph_execution_id: Optional graph execution ID (for Graph compatibility, not used by Direct)
             
         Returns:
             The model's response (extracted output)
@@ -309,8 +379,8 @@ class Direct:
         start_time = time.time()
         
         try:
-            # Build messages from task
-            messages = self._build_messages_from_task(task)
+            # Build messages from task (pass state for Graph context support)
+            messages = await self._build_messages_from_task(task, state=state)
             
             # Build request parameters
             model_params = self._build_request_parameters(task)

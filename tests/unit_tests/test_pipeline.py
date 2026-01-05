@@ -4,11 +4,12 @@ Tests for the Agent Pipeline Architecture
 
 import pytest
 from upsonic.agent.pipeline import (
-    Step, StepResult, StepStatus, StepContext,
+    Step, StepResult, StepStatus,
     PipelineManager,
     InitializationStep, CacheCheckStep, UserPolicyStep, ModelSelectionStep,
     ValidationStep, FinalizationStep
 )
+from upsonic.run.agent.context import AgentRunContext
 
 
 class MockTask:
@@ -51,6 +52,9 @@ class MockModel:
 class MockAgent:
     """Mock agent for testing."""
     def __init__(self):
+        from upsonic.run.agent.output import AgentRunOutput
+        from upsonic.run.base import RunStatus
+        
         self.debug = False
         self.user_policy = None
         self.agent_policy = None
@@ -60,6 +64,20 @@ class MockAgent:
         self._cache_manager = None
         self.tool_call_count = 0
         self._tool_call_count = 0
+        self._tool_limit_reached = False
+        self.run_id = "test-run-id"
+        self.agent_id = "test-agent"
+        self.name = "test-agent"
+        self.session_id = "test-session"
+        self.user_id = None
+        self._agent_run_output = AgentRunOutput(
+            run_id=self.run_id,
+            agent_id=self.agent_id,
+            agent_name=self.name,
+            session_id=self.session_id,
+            status=RunStatus.running
+        )
+        self._agent_run_context = None
         self._run_result = type('obj', (object,), {
             'start_new_run': lambda self: None,
             'output': None
@@ -110,19 +128,22 @@ class TestStep:
             def name(self) -> str:
                 return "custom"
             
-            async def execute(self, context: StepContext) -> StepResult:
+            async def execute(self, context: AgentRunContext, task, agent, model) -> StepResult:
                 return StepResult(
-                    status=StepStatus.SUCCESS,
+                    status=StepStatus.COMPLETED,
                     execution_time=0.0
                 )
         
         step = CustomStep()
         assert step.name == "custom"
         
-        context = StepContext(task=MockTask(), agent=MockAgent())
-        result = await step.run(context)
+        task = MockTask()
+        agent = MockAgent()
+        model = MockModel()
+        context = AgentRunContext(run_id="test-run", session_id="test-session", task=task)
+        result = await step.run(context, task, agent, model, step_number=0)
         
-        assert result.status == StepStatus.SUCCESS
+        assert result.status == StepStatus.COMPLETED
         assert result.execution_time >= 0.0  # Time should be set
     
     @pytest.mark.asyncio
@@ -133,33 +154,38 @@ class TestStep:
             def name(self) -> str:
                 return "error"
             
-            async def execute(self, context: StepContext) -> StepResult:
+            async def execute(self, context: AgentRunContext, task, agent, model) -> StepResult:
                 raise ValueError("Test error")
         
         step = ErrorStep()
-        context = StepContext(task=MockTask(), agent=MockAgent())
+        task = MockTask()
+        agent = MockAgent()
+        model = MockModel()
+        context = AgentRunContext(run_id="test-run", session_id="test-session", task=task)
         
         with pytest.raises(ValueError):
-            await step.run(context)
+            await step.run(context, task, agent, model, step_number=0)
 
 
 # ============================================================================
-# Test StepContext
+# Test AgentRunContext
 # ============================================================================
 
-class TestStepContext:
-    """Test the StepContext model."""
+class TestAgentRunContext:
+    """Test the AgentRunContext model."""
     
     def test_context_creation(self):
         """Test creating a context."""
-        context = StepContext(
-            task=MockTask(),
-            agent=MockAgent()
+        task = MockTask()
+        context = AgentRunContext(
+            run_id="test-run",
+            session_id="test-session",
+            task=task
         )
         
         assert context.task is not None
-        assert context.agent is not None
-        assert context.model is None  # Optional
+        assert context.run_id == "test-run"
+        assert context.session_id == "test-session"
         assert len(context.messages) == 0
 
 
@@ -178,9 +204,9 @@ class TestPipelineManager:
             def name(self) -> str:
                 return "step1"
             
-            async def execute(self, context: StepContext) -> StepResult:
+            async def execute(self, context: AgentRunContext, task, agent, model) -> StepResult:
                 return StepResult(
-                    status=StepStatus.SUCCESS,
+                    status=StepStatus.COMPLETED,
                     execution_time=0.0
                 )
         
@@ -189,14 +215,17 @@ class TestPipelineManager:
             def name(self) -> str:
                 return "step2"
             
-            async def execute(self, context: StepContext) -> StepResult:
+            async def execute(self, context: AgentRunContext, task, agent, model) -> StepResult:
                 return StepResult(
-                    status=StepStatus.SUCCESS,
+                    status=StepStatus.COMPLETED,
                     execution_time=0.0
                 )
         
-        pipeline = PipelineManager(steps=[Step1(), Step2()])
-        context = StepContext(task=MockTask(), agent=MockAgent())
+        task = MockTask()
+        agent = MockAgent()
+        model = MockModel()
+        pipeline = PipelineManager(steps=[Step1(), Step2()], task=task, agent=agent, model=model)
+        context = AgentRunContext(run_id="test-run", session_id="test-session", task=task)
         
         result = await pipeline.execute(context)
         
@@ -212,7 +241,7 @@ class TestPipelineManager:
             def name(self) -> str:
                 return "step1"
             
-            async def execute(self, context: StepContext) -> StepResult:
+            async def execute(self, context: AgentRunContext, task, agent, model) -> StepResult:
                 raise ValueError("Step 1 error")
         
         class Step2(Step):
@@ -220,11 +249,14 @@ class TestPipelineManager:
             def name(self) -> str:
                 return "step2"
             
-            async def execute(self, context: StepContext) -> StepResult:
-                return StepResult(status=StepStatus.SUCCESS, execution_time=0.0)
+            async def execute(self, context: AgentRunContext, task, agent, model) -> StepResult:
+                return StepResult(status=StepStatus.COMPLETED, execution_time=0.0)
         
-        pipeline = PipelineManager(steps=[Step1(), Step2()])
-        context = StepContext(task=MockTask(), agent=MockAgent())
+        task = MockTask()
+        agent = MockAgent()
+        model = MockModel()
+        pipeline = PipelineManager(steps=[Step1(), Step2()], task=task, agent=agent, model=model)
+        context = AgentRunContext(run_id="test-run", session_id="test-session", task=task)
         
         with pytest.raises(ValueError):
             await pipeline.execute(context)
@@ -243,8 +275,8 @@ class TestPipelineManager:
             def name(self) -> str:
                 return self.step_name
             
-            async def execute(self, context: StepContext) -> StepResult:
-                return StepResult(status=StepStatus.SUCCESS, execution_time=0.0)
+            async def execute(self, context: AgentRunContext, task, agent, model) -> StepResult:
+                return StepResult(status=StepStatus.COMPLETED, execution_time=0.0)
         
         pipeline = PipelineManager()
         
@@ -276,11 +308,14 @@ class TestPipelineManager:
             def name(self) -> str:
                 return "success"
             
-            async def execute(self, context: StepContext) -> StepResult:
-                return StepResult(status=StepStatus.SUCCESS, execution_time=0.0)
+            async def execute(self, context: AgentRunContext, task, agent, model) -> StepResult:
+                return StepResult(status=StepStatus.COMPLETED, execution_time=0.0)
         
-        pipeline = PipelineManager(steps=[SuccessStep()])
-        context = StepContext(task=MockTask(), agent=MockAgent())
+        task = MockTask()
+        agent = MockAgent()
+        model = MockModel()
+        pipeline = PipelineManager(steps=[SuccessStep()], task=task, agent=agent, model=model)
+        context = AgentRunContext(run_id="test-run", session_id="test-session", task=task)
         
         await pipeline.execute(context)
         
@@ -304,42 +339,42 @@ class TestBuiltinSteps:
         step = InitializationStep()
         agent = MockAgent()
         task = MockTask()
-        context = StepContext(task=task, agent=agent)
+        model = MockModel()
+        context = AgentRunContext(run_id="test-run", session_id="test-session", task=task)
         
-        result = await step.run(context)
+        result = await step.run(context, task, agent, model, step_number=0)
         
-        assert result.status == StepStatus.SUCCESS
+        assert result.status == StepStatus.COMPLETED
         assert result.execution_time >= 0.0
     
     @pytest.mark.asyncio
     async def test_model_selection_step(self):
         """Test model selection step."""
         step = ModelSelectionStep()
-        context = StepContext(
-            task=MockTask(),
-            agent=MockAgent(),
-            model=None
-        )
+        task = MockTask()
+        agent = MockAgent()
+        model = MockModel()
+        context = AgentRunContext(run_id="test-run", session_id="test-session", task=task)
         
-        result = await step.run(context)
+        pipeline = PipelineManager(steps=[step], task=task, agent=agent, model=model)
+        result = await step.run(context, task, agent, model, step_number=0)
         
-        assert result.status == StepStatus.SUCCESS
-        assert context.model is not None
+        assert result.status == StepStatus.COMPLETED
         assert result.execution_time >= 0.0
     
     @pytest.mark.asyncio
     async def test_validation_step(self):
         """Test validation step."""
         step = ValidationStep()
-        context = StepContext(
-            task=MockTask(),
-            agent=MockAgent()
-        )
+        task = MockTask()
+        agent = MockAgent()
+        model = MockModel()
+        context = AgentRunContext(run_id="test-run", session_id="test-session", task=task)
         
-        result = await step.run(context)
+        result = await step.run(context, task, agent, model, step_number=0)
         
         # Should succeed for valid task
-        assert result.status == StepStatus.SUCCESS
+        assert result.status == StepStatus.COMPLETED
         assert result.execution_time >= 0.0
     
     @pytest.mark.asyncio
@@ -349,16 +384,14 @@ class TestBuiltinSteps:
         task = MockTask()
         task.response = "Test response"
         agent = MockAgent()
+        model = MockModel()
         
-        context = StepContext(
-            task=task,
-            agent=agent
-        )
+        context = AgentRunContext(run_id="test-run", session_id="test-session", task=task)
         context.final_output = "Test output"
         
-        result = await step.run(context)
+        result = await step.run(context, task, agent, model, step_number=0)
         
-        assert result.status == StepStatus.SUCCESS
+        assert result.status == StepStatus.COMPLETED
         assert result.execution_time >= 0.0
 
 
@@ -372,18 +405,25 @@ class TestIntegration:
     @pytest.mark.asyncio
     async def test_full_pipeline(self):
         """Test a complete pipeline execution."""
+        task = MockTask()
+        agent = MockAgent()
+        model = MockModel()
         pipeline = PipelineManager(
             steps=[
                 InitializationStep(),
                 ModelSelectionStep(),
                 ValidationStep(),
                 FinalizationStep(),
-            ]
+            ],
+            task=task,
+            agent=agent,
+            model=model
         )
         
-        context = StepContext(
-            task=MockTask(),
-            agent=MockAgent()
+        context = AgentRunContext(
+            run_id="test-run",
+            session_id="test-session",
+            task=task
         )
         
         result = await pipeline.execute(context)

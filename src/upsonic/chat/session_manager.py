@@ -77,6 +77,7 @@ class SessionManager:
         session_id: str,
         user_id: str,
         debug: bool = False,
+        debug_level: int = 1,
         max_concurrent_invocations: int = 1
     ):
         """
@@ -86,11 +87,13 @@ class SessionManager:
             session_id: Unique session identifier
             user_id: User identifier
             debug: Enable debug logging
+            debug_level: Debug level (1 = standard, 2 = detailed). Only used when debug=True
             max_concurrent_invocations: Maximum concurrent invocations allowed
         """
         self.session_id = session_id
         self.user_id = user_id
         self.debug = debug
+        self.debug_level = debug_level if debug else 1
         
         # Session state
         self._state = SessionState.IDLE
@@ -115,8 +118,18 @@ class SessionManager:
         )
         
         if self.debug:
-            from upsonic.utils.printing import debug_log
-            debug_log(f"SessionManager initialized: session_id={session_id}, user_id={user_id}", "SessionManager")
+            from upsonic.utils.printing import debug_log, debug_log_level2
+            debug_log(f"SessionManager initialized: session_id={session_id}, user_id={user_id}", "SessionManager", debug=self.debug, debug_level=self.debug_level)
+            if self.debug_level >= 2:
+                debug_log_level2(
+                    "SessionManager detailed initialization",
+                    "SessionManager",
+                    debug=self.debug,
+                    debug_level=self.debug_level,
+                    session_id=session_id,
+                    user_id=user_id,
+                    max_concurrent_invocations=max_concurrent_invocations
+                )
     
     # State Management
     @property

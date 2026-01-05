@@ -2,7 +2,7 @@ from unittest import TestCase
 from unittest.mock import patch, AsyncMock, MagicMock
 from contextlib import asynccontextmanager
 from upsonic import Agent, Task
-from upsonic.agent.run_result import RunResult
+from upsonic.run.agent.output import AgentRunOutput
 from upsonic.models import ModelResponse, TextPart
 from upsonic.messages import ToolCallPart
 from upsonic.tools import tool

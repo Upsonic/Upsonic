@@ -7,6 +7,7 @@ from typing import Optional, Type, Union, TypeVar, TYPE_CHECKING, List
 
 if TYPE_CHECKING:
     import aiosqlite
+    from upsonic.culture.cultural_knowledge import CulturalKnowledge
 
 try:
     import aiosqlite
@@ -19,7 +20,7 @@ except ImportError:
 from pydantic import BaseModel
 
 from upsonic.storage.base import Storage
-from upsonic.storage.session.sessions import InteractionSession, UserProfile
+from upsonic.session.agent import AgentSession
 
 T = TypeVar('T', bound=BaseModel)
 
@@ -30,7 +31,7 @@ class SqliteStorage(Storage):
     
     This storage provider is designed to be flexible and dynamic:
     - Can accept a pre-existing aiosqlite connection or create one from connection details
-    - Only creates InteractionSession/UserProfile tables when they are actually used
+    - Only creates AgentSession tables when they are actually used
     - Supports generic Pydantic models for custom storage needs
     - Can be used for both custom purposes and built-in chat/profile features simultaneously
     """
@@ -39,8 +40,8 @@ class SqliteStorage(Storage):
         self,
         db: Optional['aiosqlite.Connection'] = None,
         db_file: Optional[str] = None,
-        sessions_table_name: Optional[str] = None,
-        profiles_table_name: Optional[str] = None,
+        agent_sessions_table_name: Optional[str] = None,
+        cultural_knowledge_table_name: Optional[str] = None,
     ):
         """
         Initializes the async SQLite storage provider.
@@ -51,10 +52,10 @@ class SqliteStorage(Storage):
                 connection lifecycle management when providing their own connection.
             db_file: Path to a local database file. If None and db is None, uses in-memory DB.
                 Ignored if db is provided.
-            sessions_table_name: Name of the table for InteractionSession storage.
-                Only used if InteractionSession objects are stored. Defaults to "sessions".
-            profiles_table_name: Name of the table for UserProfile storage.
-                Only used if UserProfile objects are stored. Defaults to "profiles".
+            agent_sessions_table_name: Name of the table for AgentSession storage.
+                Defaults to "agent_sessions".
+            cultural_knowledge_table_name: Name of the table for CulturalKnowledge storage.
+                Only used if CulturalKnowledge objects are stored. Defaults to "cultural_knowledge".
         """
         if not _AIOSQLITE_AVAILABLE:
             from upsonic.utils.printing import import_error
@@ -66,24 +67,20 @@ class SqliteStorage(Storage):
 
         super().__init__()
         
-        # Store connection and track ownership for lifecycle management
         self._db: Optional[aiosqlite.Connection] = db
-        self._owns_connection = (db is None)  # True if we create it, False if user provided
+        self._owns_connection = (db is None)
         
-        # Connection details for creating our own connection if needed
         self.db_path = ":memory:"
         if db_file and not db:
             db_path_obj = Path(db_file).resolve()
             db_path_obj.parent.mkdir(parents=True, exist_ok=True)
             self.db_path = str(db_path_obj)
         
-        # Table names for InteractionSession/UserProfile (lazy initialization)
-        self.sessions_table_name = sessions_table_name or "sessions"
-        self.profiles_table_name = profiles_table_name or "profiles"
+        self.agent_sessions_table_name = agent_sessions_table_name or "agent_sessions"
+        self.cultural_knowledge_table_name = cultural_knowledge_table_name or "cultural_knowledge"
         
-        # Track which built-in tables have been initialized
-        self._sessions_table_initialized = False
-        self._profiles_table_initialized = False
+        self._agent_sessions_table_initialized = False
+        self._cultural_knowledge_table_initialized = False
 
 
     
@@ -92,7 +89,7 @@ class SqliteStorage(Storage):
     def disconnect(self) -> None: return self._run_async_from_sync(self.disconnect_async())
     def create(self) -> None: return self._run_async_from_sync(self.create_async())
     def read(self, object_id: str, model_type: Type[T]) -> Optional[T]: return self._run_async_from_sync(self.read_async(object_id, model_type))
-    def upsert(self, data: Union[InteractionSession, UserProfile]) -> None: return self._run_async_from_sync(self.upsert_async(data))
+    def upsert(self, data: BaseModel) -> None: return self._run_async_from_sync(self.upsert_async(data))
     def delete(self, object_id: str, model_type: Type[BaseModel]) -> None: return self._run_async_from_sync(self.delete_async(object_id, model_type))
     def drop(self) -> None: return self._run_async_from_sync(self.drop_async())
 
@@ -102,31 +99,19 @@ class SqliteStorage(Storage):
         return self._db is not None
 
     async def connect_async(self) -> None:
-        """
-        Establishes connection to the database.
-        If user provided a connection, this is a no-op.
-        Otherwise, creates a new connection using db_path.
-        """
         if await self.is_connected_async():
             return
         
         if not self._owns_connection:
-            # User provided connection, already set in __init__
             self._connected = True
             return
         
-        # Create our own connection
         self._db = await aiosqlite.connect(self.db_path)
-        self._db.row_factory = aiosqlite.Row  # Important for dict-like access
+        self._db.row_factory = aiosqlite.Row
         self._connected = True
 
     async def disconnect_async(self) -> None:
-        """
-        Closes the database connection.
-        If user provided the connection, this is a no-op (user manages lifecycle).
-        """
         if not self._owns_connection:
-            # User manages their own connection lifecycle
             return
         
         if self._db:
@@ -135,79 +120,102 @@ class SqliteStorage(Storage):
         self._connected = False
 
     async def _get_connection(self) -> aiosqlite.Connection:
-        """Helper to lazily initialize the database connection."""
-        if not await self.is_connected_async():
+        # Check if connection needs to be established or re-established
+        needs_reconnect = False
+        
+        if self._db is None:
+            needs_reconnect = True
+        else:
+            # Check if aiosqlite connection's internal thread is still running
+            # The _running attribute indicates if the background thread is active
+            if hasattr(self._db, '_running') and not self._db._running:
+                needs_reconnect = True
+            elif hasattr(self._db, '_connection') and self._db._connection is None:
+                needs_reconnect = True
+            else:
+                # Try a simple query to verify connection is usable
+                try:
+                    async with self._db.execute("SELECT 1") as cursor:
+                        await cursor.fetchone()
+                except Exception:
+                    needs_reconnect = True
+        
+        if needs_reconnect:
+            # Close existing connection if it exists
+            if self._db is not None:
+                try:
+                    await self._db.close()
+                except Exception:
+                    pass
+                self._db = None
+            
+            # Create new connection
             await self.connect_async()
+        
         return self._db
 
     async def create_async(self) -> None:
-        """
-        Creates database schema.
-        Note: InteractionSession and UserProfile tables are created lazily
-        only when first accessed. This allows the storage to be used for
-        generic purposes without creating unused infrastructure.
-        """
-        # Ensure connection exists, but don't create any tables yet
-        # Tables will be created on-demand when accessed
         await self._get_connection()
     
-    async def _ensure_sessions_table(self) -> None:
-        """Lazily creates the sessions table on first access."""
-        if self._sessions_table_initialized:
+    async def _ensure_agent_sessions_table(self) -> None:
+        if self._agent_sessions_table_initialized:
             return
         
         db = await self._get_connection()
         await db.execute(f"""
-            CREATE TABLE IF NOT EXISTS {self.sessions_table_name} (
-                session_id TEXT PRIMARY KEY, user_id TEXT, agent_id TEXT,
-                team_session_id TEXT, chat_history TEXT, summary TEXT,
-                session_data TEXT, extra_data TEXT, created_at REAL, updated_at REAL
+            CREATE TABLE IF NOT EXISTS {self.agent_sessions_table_name} (
+                session_id TEXT PRIMARY KEY,
+                agent_id TEXT,
+                user_id TEXT,
+                workflow_id TEXT,
+                session_data TEXT,
+                metadata TEXT,
+                user_profile TEXT,
+                agent_data TEXT,
+                runs TEXT,
+                summary TEXT,
+                messages TEXT,
+                created_at INTEGER,
+                updated_at INTEGER
             )
         """)
         await db.commit()
-        self._sessions_table_initialized = True
+        self._agent_sessions_table_initialized = True
     
-    async def _ensure_profiles_table(self) -> None:
-        """Lazily creates the profiles table on first access."""
-        if self._profiles_table_initialized:
+    async def _ensure_cultural_knowledge_table(self) -> None:
+        if self._cultural_knowledge_table_initialized:
             return
         
         db = await self._get_connection()
         await db.execute(f"""
-            CREATE TABLE IF NOT EXISTS {self.profiles_table_name} (
-                user_id TEXT PRIMARY KEY, profile_data TEXT,
-                created_at REAL, updated_at REAL
+            CREATE TABLE IF NOT EXISTS {self.cultural_knowledge_table_name} (
+                id TEXT PRIMARY KEY,
+                name TEXT,
+                content TEXT,
+                summary TEXT,
+                categories TEXT,
+                notes TEXT,
+                metadata TEXT,
+                input TEXT,
+                agent_id TEXT,
+                team_id TEXT,
+                created_at INTEGER,
+                updated_at INTEGER
             )
         """)
         await db.commit()
-        self._profiles_table_initialized = True
+        self._cultural_knowledge_table_initialized = True
 
     def _get_table_info_for_model(self, model_type: Type[BaseModel]) -> Optional[tuple[str, str]]:
-        """
-        Get table name and primary key column for a model type.
-        
-        Args:
-            model_type: Pydantic model class
-            
-        Returns:
-            Tuple of (table_name, key_column) or None if not supported
-        """
-        if model_type is InteractionSession:
-            return (self.sessions_table_name, "session_id")
-        elif model_type is UserProfile:
-            return (self.profiles_table_name, "user_id")
+        if model_type.__name__ == "AgentSession" or (hasattr(model_type, '__mro__') and any(c.__name__ == "AgentSession" for c in model_type.__mro__)):
+            return (self.agent_sessions_table_name, "session_id")
         else:
-            # Generic support for arbitrary models
-            # Use model class name as table name and "path" as key
             table_name = f"{model_type.__name__.lower()}_storage"
-            # Determine primary key field - look for common patterns
             if hasattr(model_type, 'model_fields'):
                 fields = model_type.model_fields
-                # Try common ID field names
                 for id_field in ['path', 'id', 'key', 'name']:
                     if id_field in fields:
                         return (table_name, id_field)
-            # Fallback to generic "id"
             return (table_name, "id")
     
     async def read_async(self, object_id: str, model_type: Type[T]) -> Optional[T]:
@@ -216,38 +224,39 @@ class SqliteStorage(Storage):
             return None
         
         table, key_col = table_info
+
+        # Get connection first to ensure it's established
+        db = await self._get_connection()
         
-        # Ensure table exists - lazy initialization for built-in types
-        if model_type is InteractionSession:
-            await self._ensure_sessions_table()
-        elif model_type is UserProfile:
-            await self._ensure_profiles_table()
+        if model_type.__name__ == "AgentSession":
+            await self._ensure_agent_sessions_table()
         else:
-            # Generic models - create table if needed
             await self._ensure_table_for_model(model_type)
 
-        db = await self._get_connection()
         sql = f"SELECT * FROM {table} WHERE {key_col} = ?"
         async with db.execute(sql, (object_id,)) as cursor:
             row = await cursor.fetchone()
             if row:
                 data = dict(row)
                 
-                if model_type in [InteractionSession, UserProfile]:
-                    # Handle known types with special fields
-                    for key, value in data.items():
-                        if key in ['chat_history', 'session_data', 'extra_data', 'profile_data'] and isinstance(value, str):
-                            try:
-                                data[key] = json.loads(value)
-                            except:
-                                pass
+                if model_type.__name__ == "AgentSession":
+                    import base64
+                    # Use deserialize() method from runs column (base64 encoded)
+                    # This is the primary and only reliable method for AgentSession
+                    runs_data = data.get('runs')
+                    if runs_data and isinstance(runs_data, str):
+                        try:
+                            # runs column contains base64-encoded serialized AgentSession
+                            serialized_bytes = base64.b64decode(runs_data.encode('utf-8'))
+                            return model_type.deserialize(serialized_bytes)
+                        except Exception as e:
+                            from upsonic.utils.printing import warning_log
+                            warning_log(f"Failed to deserialize AgentSession from SQLite: {e}", "SqliteStorage")
+                            return None
                     
-                    if hasattr(model_type, 'from_dict'):
-                        return model_type.from_dict(data)
-                    else:
-                        return model_type.model_validate(data)
+                    # If runs column is empty/None, session doesn't exist in new format
+                    return None
                 else:
-                    # Generic model - data stored as JSON in 'data' column
                     if 'data' in data and isinstance(data['data'], str):
                         try:
                             obj_data = json.loads(data['data'])
@@ -257,27 +266,14 @@ class SqliteStorage(Storage):
         return None
 
     async def _ensure_table_for_model(self, model_type: Type[BaseModel]) -> str:
-        """
-        Ensure table exists for a model type and return table name.
-        
-        For arbitrary models, creates a generic JSON storage table.
-        
-        Args:
-            model_type: Pydantic model class
-            
-        Returns:
-            Table name
-        """
         table_info = self._get_table_info_for_model(model_type)
         if table_info is None:
             raise TypeError(f"Cannot determine table for model: {model_type.__name__}")
         
         table_name, key_col = table_info
         
-        # For non-standard models, create generic JSON storage table
-        if model_type not in [InteractionSession, UserProfile]:
+        if model_type.__name__ != "AgentSession":
             db = await self._get_connection()
-            # Create generic table: key + data (JSON) + timestamps
             await db.execute(f"""
                 CREATE TABLE IF NOT EXISTS {table_name} (
                     {key_col} TEXT PRIMARY KEY,
@@ -291,53 +287,56 @@ class SqliteStorage(Storage):
         return table_name
     
     async def upsert_async(self, data: BaseModel) -> None:
-        # Update timestamp if it exists
         if hasattr(data, 'updated_at'):
             data.updated_at = time.time()
         
-        if isinstance(data, InteractionSession):
-            # Ensure sessions table exists before upserting
-            await self._ensure_sessions_table()
+        if type(data).__name__ == "AgentSession":
+            await self._ensure_agent_sessions_table()
             
-            table = self.sessions_table_name
+            import base64
+            # Use serialize() method to get bytes, then base64 encode for SQLite TEXT storage
+            serialized_bytes = data.serialize()
+            serialized_str = base64.b64encode(serialized_bytes).decode('utf-8')
+            
+            table = self.agent_sessions_table_name
             sql = f"""
-                INSERT INTO {table} (session_id, user_id, agent_id, team_session_id, chat_history, summary, session_data, extra_data, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO {table} (
+                    session_id, agent_id, user_id, workflow_id,
+                    session_data, metadata, user_profile, agent_data, runs, summary, messages,
+                    created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(session_id) DO UPDATE SET
-                    user_id=excluded.user_id, agent_id=excluded.agent_id, team_session_id=excluded.team_session_id,
-                    chat_history=excluded.chat_history, summary=excluded.summary, session_data=excluded.session_data,
-                    extra_data=excluded.extra_data, updated_at=excluded.updated_at
+                    agent_id=excluded.agent_id, user_id=excluded.user_id, workflow_id=excluded.workflow_id,
+                    session_data=excluded.session_data, metadata=excluded.metadata, user_profile=excluded.user_profile,
+                    agent_data=excluded.agent_data, runs=excluded.runs, summary=excluded.summary, messages=excluded.messages,
+                    updated_at=excluded.updated_at
             """
+            # Store key fields for querying + base64-encoded serialized data in runs column
             params = (
-                data.session_id, data.user_id, data.agent_id, data.team_session_id,
-                json.dumps(data.chat_history), data.summary, json.dumps(data.session_data),
-                json.dumps(data.extra_data), data.created_at, data.updated_at
+                data.session_id,
+                data.agent_id,
+                data.user_id,
+                data.workflow_id,
+                None,  # session_data
+                None,  # metadata  
+                None,  # user_profile
+                None,  # agent_data
+                serialized_str,  # Full serialized AgentSession (base64)
+                data.summary,
+                None,  # messages
+                data.created_at,
+                int(data.updated_at) if data.updated_at else None
             )
-        elif isinstance(data, UserProfile):
-            # Ensure profiles table exists before upserting
-            await self._ensure_profiles_table()
-            
-            table = self.profiles_table_name
-            sql = f"""
-                INSERT INTO {table} (user_id, profile_data, created_at, updated_at)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(user_id) DO UPDATE SET
-                    profile_data=excluded.profile_data, updated_at=excluded.updated_at
-            """
-            params = (data.user_id, json.dumps(data.profile_data), data.created_at, data.updated_at)
         else:
-            # Generic model support - ensure table exists
             table_name = await self._ensure_table_for_model(type(data))
             table_info = self._get_table_info_for_model(type(data))
             _, key_col = table_info
             
-            # Get the key value
             key_value = getattr(data, key_col)
             
-            # Serialize entire model as JSON
             data_json = data.model_dump_json()
             
-            # Get timestamps
             created_at = getattr(data, 'created_at', time.time())
             updated_at = getattr(data, 'updated_at', time.time())
             
@@ -360,15 +359,8 @@ class SqliteStorage(Storage):
         
         table, key_col = table_info
         
-        # Ensure table exists - lazy initialization for built-in types
-        if model_type is InteractionSession:
-            await self._ensure_sessions_table()
-        elif model_type is UserProfile:
-            await self._ensure_profiles_table()
-        else:
-            # For generic models, only delete if table exists
-            # No need to create table just to delete from it
-            pass
+        if model_type.__name__ == "AgentSession":
+            await self._ensure_agent_sessions_table()
 
         db = await self._get_connection()
         sql = f"DELETE FROM {table} WHERE {key_col} = ?"
@@ -376,42 +368,26 @@ class SqliteStorage(Storage):
         await db.commit()
     
     async def list_all_async(self, model_type: Type[T]) -> List[T]:
-        """
-        List all objects of a specific type from storage.
-        
-        Args:
-            model_type: The Pydantic model class to query
-            
-        Returns:
-            List of all objects of the specified type
-        """
         table_info = self._get_table_info_for_model(model_type)
         if table_info is None:
             return []
         
         table_name, key_col = table_info
         
-        # Ensure table exists - lazy initialization for built-in types
-        if model_type is InteractionSession:
-            await self._ensure_sessions_table()
-        elif model_type is UserProfile:
-            await self._ensure_profiles_table()
+        if model_type.__name__ == "AgentSession":
+            await self._ensure_agent_sessions_table()
         else:
-            # Generic models - create table if needed
             await self._ensure_table_for_model(model_type)
         
         db = await self._get_connection()
         
-        # Check if table exists
         async with db.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
             (table_name,)
         ) as cursor:
             if not await cursor.fetchone():
-                # Table doesn't exist yet
                 return []
         
-        # Query all rows
         sql = f"SELECT * FROM {table_name}"
         results = []
         
@@ -419,51 +395,162 @@ class SqliteStorage(Storage):
             async for row in cursor:
                 data = dict(row)
                 
-                if model_type in [InteractionSession, UserProfile]:
-                    # Handle known types
-                    for key, value in data.items():
-                        if key in ['chat_history', 'session_data', 'extra_data', 'profile_data'] and isinstance(value, str):
-                            try:
-                                data[key] = json.loads(value)
-                            except:
-                                pass
-                    
-                    if hasattr(model_type, 'from_dict'):
-                        obj = model_type.from_dict(data)
+                if model_type.__name__ == "AgentSession":
+                    import base64
+                    # Use deserialize() method from runs column (base64 encoded)
+                    runs_data = data.get('runs')
+                    if runs_data and isinstance(runs_data, str):
+                        try:
+                            # runs column contains base64-encoded serialized AgentSession
+                            serialized_bytes = base64.b64decode(runs_data.encode('utf-8'))
+                            obj = model_type.deserialize(serialized_bytes)
+                            results.append(obj)
+                        except Exception:
+                            # Skip invalid entries
+                            continue
                     else:
-                        obj = model_type.model_validate(data)
+                        # Skip entries without serialized data
+                        continue
                 else:
-                    # Generic model - data is stored as JSON
                     if 'data' in data and isinstance(data['data'], str):
                         try:
                             obj_data = json.loads(data['data'])
                             obj = model_type.model_validate(obj_data)
+                            results.append(obj)
                         except Exception:
                             continue
                     else:
-                        # Try to parse the whole row
                         try:
                             obj = model_type.model_validate(data)
+                            results.append(obj)
                         except Exception:
                             continue
-                
-                results.append(obj)
         
         return results
 
     async def drop_async(self) -> None:
-        """
-        Drops all tables managed by this storage provider.
-        Only drops InteractionSession/UserProfile tables if they were actually created.
-        """
         db = await self._get_connection()
         
-        # Drop built-in tables (they may or may not exist)
-        await db.execute(f"DROP TABLE IF EXISTS {self.sessions_table_name}")
-        await db.execute(f"DROP TABLE IF EXISTS {self.profiles_table_name}")
+        await db.execute(f"DROP TABLE IF EXISTS {self.agent_sessions_table_name}")
+        await db.execute(f"DROP TABLE IF EXISTS {self.cultural_knowledge_table_name}")
         
-        # Reset initialization flags
-        self._sessions_table_initialized = False
-        self._profiles_table_initialized = False
+        self._agent_sessions_table_initialized = False
+        self._cultural_knowledge_table_initialized = False
         
+        await db.commit()
+
+    # =========================================================================
+    # Cultural Knowledge Methods
+    # =========================================================================
+
+    async def read_cultural_knowledge_async(self, knowledge_id: str) -> Optional["CulturalKnowledge"]:
+        from upsonic.culture.cultural_knowledge import CulturalKnowledge
+        
+        await self._ensure_cultural_knowledge_table()
+        
+        db = await self._get_connection()
+        sql = f"SELECT * FROM {self.cultural_knowledge_table_name} WHERE id = ?"
+        
+        async with db.execute(sql, (knowledge_id,)) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                data = dict(row)
+                for key in ['categories', 'notes', 'metadata']:
+                    if key in data and isinstance(data[key], str):
+                        try:
+                            data[key] = json.loads(data[key])
+                        except:
+                            pass
+                return CulturalKnowledge.from_dict(data)
+        return None
+
+    async def upsert_cultural_knowledge_async(self, knowledge: "CulturalKnowledge") -> None:
+        await self._ensure_cultural_knowledge_table()
+        
+        knowledge.bump_updated_at()
+        
+        db = await self._get_connection()
+        
+        sql = f"""
+            INSERT INTO {self.cultural_knowledge_table_name} 
+            (id, name, content, summary, categories, notes, metadata, input, agent_id, team_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name=excluded.name, content=excluded.content, summary=excluded.summary,
+                categories=excluded.categories, notes=excluded.notes, metadata=excluded.metadata,
+                input=excluded.input, agent_id=excluded.agent_id, team_id=excluded.team_id,
+                updated_at=excluded.updated_at
+        """
+        
+        params = (
+            knowledge.id,
+            knowledge.name,
+            knowledge.content,
+            knowledge.summary,
+            json.dumps(knowledge.categories) if knowledge.categories else None,
+            json.dumps(knowledge.notes) if knowledge.notes else None,
+            json.dumps(knowledge.metadata) if knowledge.metadata else None,
+            knowledge.input,
+            knowledge.agent_id,
+            knowledge.team_id,
+            knowledge.created_at,
+            knowledge.updated_at,
+        )
+        
+        await db.execute(sql, params)
+        await db.commit()
+
+    async def delete_cultural_knowledge_async(self, knowledge_id: str) -> None:
+        await self._ensure_cultural_knowledge_table()
+        
+        db = await self._get_connection()
+        sql = f"DELETE FROM {self.cultural_knowledge_table_name} WHERE id = ?"
+        await db.execute(sql, (knowledge_id,))
+        await db.commit()
+
+    async def list_all_cultural_knowledge_async(
+        self, 
+        name: Optional[str] = None
+    ) -> List["CulturalKnowledge"]:
+        from upsonic.culture.cultural_knowledge import CulturalKnowledge
+        
+        await self._ensure_cultural_knowledge_table()
+        
+        db = await self._get_connection()
+        
+        async with db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (self.cultural_knowledge_table_name,)
+        ) as cursor:
+            if not await cursor.fetchone():
+                return []
+        
+        if name:
+            sql = f"SELECT * FROM {self.cultural_knowledge_table_name} WHERE name LIKE ?"
+            params = (f"%{name}%",)
+        else:
+            sql = f"SELECT * FROM {self.cultural_knowledge_table_name}"
+            params = ()
+        
+        results = []
+        
+        async with db.execute(sql, params) as cursor:
+            async for row in cursor:
+                data = dict(row)
+                for key in ['categories', 'notes', 'metadata']:
+                    if key in data and isinstance(data[key], str):
+                        try:
+                            data[key] = json.loads(data[key])
+                        except:
+                            pass
+                results.append(CulturalKnowledge.from_dict(data))
+        
+        return results
+
+    async def clear_cultural_knowledge_async(self) -> None:
+        await self._ensure_cultural_knowledge_table()
+        
+        db = await self._get_connection()
+        sql = f"DELETE FROM {self.cultural_knowledge_table_name}"
+        await db.execute(sql)
         await db.commit()

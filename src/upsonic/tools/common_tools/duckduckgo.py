@@ -77,7 +77,7 @@ def duckduckgo_search_tool(duckduckgo_client: DDGS | None = None, max_results: i
     if not _DDGS_AVAILABLE:
         from upsonic.utils.printing import import_error
         import_error(
-            package_name="duckduckgo-search",
+            package_name="ddgs",
             install_command='pip install "upsonic[tools]"',
             feature_name="DuckDuckGo search tool"
         )

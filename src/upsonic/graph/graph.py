@@ -17,11 +17,15 @@ from rich.table import Table
 
 from ..agent.base import BaseAgent
 try:
+    from ..direct import Direct
+except ImportError:
+    Direct = None
+try:
     from ..storage.base import Storage
 except ImportError:
     Storage = None
 from ..tasks.tasks import Task
-from ..utils.printing import console, escape_rich_markup, spacing
+from ..utils.printing import console, escape_rich_markup, spacing, display_graph_tree
 
 # This import is essential for the Graph's topological duty.
 from ..context.sources import TaskOutputSource
@@ -395,10 +399,12 @@ class Graph(BaseModel):
         max_parallel_tasks: Maximum number of tasks to execute in parallel
         show_progress: Whether to display a progress bar during execution
     """
-    default_agent: Optional[BaseAgent] = None
+    default_agent: Optional[Union[BaseAgent, Direct if Direct is not None else Any]] = None  # Accepts BaseAgent or Direct
     parallel_execution: bool = False
     max_parallel_tasks: int = 4
     show_progress: bool = True
+    debug: bool = False
+    debug_level: int = 1
     
     nodes: List[Union[TaskNode, DecisionFunc, DecisionLLM]] = Field(default_factory=list)
     edges: Dict[str, List[str]] = Field(default_factory=dict)
@@ -411,14 +417,22 @@ class Graph(BaseModel):
     def __init__(self, **data):
         if 'default_agent' in data and data['default_agent'] is not None:
             agent = data['default_agent']
-            if not isinstance(agent, BaseAgent):
-                 raise TypeError("default_agent must be an instance of a class that inherits from BaseAgent.")
+            # Accept both BaseAgent and Direct instances
+            is_base_agent = isinstance(agent, BaseAgent)
+            is_direct = Direct is not None and isinstance(agent, Direct)
+            if not (is_base_agent or is_direct):
+                raise TypeError("default_agent must be an instance of a class that inherits from BaseAgent or be a Direct instance.")
             if not hasattr(agent, 'do_async') or not callable(getattr(agent, 'do_async')):
                 raise ValueError("default_agent must have a 'do_async' method.")
         if 'storage' in data:
             self.storage = data.pop('storage')
             if self.storage and not isinstance(self.storage, Storage):
                 raise TypeError("storage must be an instance of a class that inherits from Storage.")
+        # Set debug_level based on debug flag
+        if 'debug' in data and 'debug_level' not in data:
+            data['debug_level'] = data.get('debug_level', 1) if data.get('debug', False) else 1
+        elif 'debug_level' in data and not data.get('debug', False):
+            data['debug_level'] = 1
         super().__init__(**data)
 
     def add(self, tasks_chain: Union[Task, TaskNode, TaskChain, DecisionFunc, DecisionLLM]) -> 'Graph':
@@ -488,11 +502,43 @@ class Graph(BaseModel):
                 console.print(panel)
                 spacing()
             
+            # Level 2: Detailed graph task execution information
+            if self.debug and self.debug_level >= 2:
+                from upsonic.utils.printing import debug_log_level2
+                debug_log_level2(
+                    f"Graph task execution: {node.id}",
+                    "Graph",
+                    debug=self.debug,
+                    debug_level=self.debug_level,
+                    node_id=node.id,
+                    task_description=task.description[:300],
+                    runner_type=runner.__class__.__name__ if hasattr(runner, '__class__') else type(runner).__name__,
+                    runner_name=getattr(runner, 'name', 'Unknown'),
+                    task_tools=[t.__class__.__name__ if hasattr(t, '__class__') else str(t) for t in (task.tools or [])],
+                    state_keys=list(state.keys()) if hasattr(state, 'keys') else None,
+                    graph_execution_id=graph_execution_id
+                )
+            
             # Delegate execution to the standardized agent pipeline, passing the state.
             if hasattr(runner, 'do_async'):
                 output = await runner.do_async(task, state=state, graph_execution_id=graph_execution_id)
             else:
                 output = runner.do(task)
+            
+            # Level 2: Task completion details
+            if self.debug and self.debug_level >= 2:
+                from upsonic.utils.printing import debug_log_level2
+                debug_log_level2(
+                    f"Graph task completed: {node.id}",
+                    "Graph",
+                    debug=self.debug,
+                    debug_level=self.debug_level,
+                    node_id=node.id,
+                    execution_time=task.duration or 0.0,
+                    output_preview=str(output)[:500] if output else None,
+                    total_cost=task.total_cost,
+                    state_updated_keys=list(state.keys()) if hasattr(state, 'keys') else None
+                )
             
             # The task object is now mutated in place by the pipeline.
             if verbose:
@@ -602,6 +648,47 @@ class Graph(BaseModel):
         predecessor_ids = {n_id for n_id, next_ids in self.edges.items() if node.id in next_ids}
         return [n for n in self.nodes if n.id in predecessor_ids]
     
+    def _get_task_predecessors_through_decisions(
+        self, 
+        decision_node: Union[DecisionFunc, DecisionLLM], 
+        executed_node_ids: Set[str]
+    ) -> List[TaskNode]:
+        """
+        Traces back through decision nodes to find the actual TaskNode predecessors.
+        
+        When a TaskNode follows a DecisionFunc/DecisionLLM, we need to inject context
+        from the TaskNode that preceded the decision, not the decision node itself
+        (since decision nodes don't produce outputs stored in state).
+        
+        Args:
+            decision_node: The decision node to trace back from
+            executed_node_ids: Set of already executed node IDs
+            
+        Returns:
+            List of TaskNode predecessors that have been executed
+        """
+        task_predecessors = []
+        visited = set()
+        queue = [decision_node]
+        
+        while queue:
+            current = queue.pop(0)
+            if current.id in visited:
+                continue
+            visited.add(current.id)
+            
+            preds = self._get_predecessors(current)
+            for pred in preds:
+                if isinstance(pred, TaskNode):
+                    # Found a TaskNode - check if it was executed
+                    if pred.id in executed_node_ids:
+                        task_predecessors.append(pred)
+                elif isinstance(pred, (DecisionFunc, DecisionLLM)):
+                    # Another decision node - continue tracing back
+                    queue.append(pred)
+        
+        return task_predecessors
+    
     def _get_start_nodes(self) -> List[Union[TaskNode, DecisionFunc, DecisionLLM]]:
         """
         Gets the starting nodes of the graph (those with no predecessors).
@@ -657,6 +744,7 @@ class Graph(BaseModel):
         execution_queue = list(start_nodes)
         queued_node_ids = {n.id for n in start_nodes}
         executed_node_ids, pruned_node_ids = set(), set()
+        failed_node_ids = set()
         all_nodes_count = self._count_all_possible_nodes()
         
         progress_context = Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TextColumn("[progress.percentage]{task.percentage:>3.0f}%"), TimeElapsedColumn(), console=console) if show_progress else None
@@ -665,29 +753,83 @@ class Graph(BaseModel):
             progress_context.start()
             overall_task = progress_context.add_task("[bold blue]Graph Execution", total=all_nodes_count)
 
+        # Display initial tree if debug is enabled
+        if self.debug and self.debug_level >= 2:
+            display_graph_tree(
+                graph=self,
+                executed_node_ids=executed_node_ids,
+                pruned_node_ids=pruned_node_ids,
+                executing_node_id=None,
+                failed_node_ids=failed_node_ids
+            )
+
         try:
             while execution_queue:
                 node = execution_queue.pop(0)
+                
+                # Update tree display before execution
+                if self.debug and self.debug_level >= 2:
+                    display_graph_tree(
+                        graph=self,
+                        executed_node_ids=executed_node_ids,
+                        pruned_node_ids=pruned_node_ids,
+                        executing_node_id=node.id,
+                        failed_node_ids=failed_node_ids
+                    )
+                
                 if isinstance(node, TaskNode):
                     node.task.context = []
                     predecessors = self._get_predecessors(node)
                     if predecessors:
                         existing_source_ids = {s.task_description_or_id for s in node.task.context if isinstance(s, TaskOutputSource)}
                         for pred in predecessors:
-                            if pred.id in executed_node_ids and pred.id not in existing_source_ids:
+                            # If predecessor is a decision node, trace back to find actual TaskNodes
+                            if isinstance(pred, (DecisionFunc, DecisionLLM)):
+                                # Get the TaskNode predecessors of the decision node
+                                task_predecessors = self._get_task_predecessors_through_decisions(pred, executed_node_ids)
+                                for task_pred in task_predecessors:
+                                    if task_pred.id not in existing_source_ids:
+                                        source = TaskOutputSource(task_description_or_id=task_pred.id)
+                                        node.task.context.append(source)
+                                        existing_source_ids.add(task_pred.id)
+                                        if verbose:
+                                            console.print(f"[dim]Auto-injecting source for node '{task_pred.id}' into task {escape_rich_markup(node.task.description)}[/dim]")
+                            elif pred.id in executed_node_ids and pred.id not in existing_source_ids:
                                 source = TaskOutputSource(task_description_or_id=pred.id)
                                 node.task.context.append(source)
                                 if verbose:
                                     console.print(f"[dim]Auto-injecting source for node '{pred.id}' into task {escape_rich_markup(node.task.description)}[/dim]")
-                    output = await self._execute_task(node, self.state, verbose, graph_execution_id=graph_execution_id)
-                    self.state.update(node.id, output)
-                    executed_node_ids.add(node.id)
+                    try:
+                        output = await self._execute_task(node, self.state, verbose, graph_execution_id=graph_execution_id)
+                        self.state.update(node.id, output)
+                        executed_node_ids.add(node.id)
+                    except Exception as e:
+                        failed_node_ids.add(node.id)
+                        if verbose:
+                            console.print(f"[bold red]Node '{node.id}' failed: {escape_rich_markup(str(e))}[/bold red]")
+                        raise
                 elif isinstance(node, (DecisionFunc, DecisionLLM)):
-                    # Pass the state to the evaluation method
-                    branch_to_follow = await self._evaluate_decision(node, self.state, verbose)
-                    executed_node_ids.add(node.id)
-                    pruned_branch = node.false_branch if branch_to_follow == node.true_branch else node.true_branch
-                    pruned_node_ids.update(self._get_all_branch_node_ids(pruned_branch))
+                    try:
+                        # Pass the state to the evaluation method
+                        branch_to_follow = await self._evaluate_decision(node, self.state, verbose)
+                        executed_node_ids.add(node.id)
+                        pruned_branch = node.false_branch if branch_to_follow == node.true_branch else node.true_branch
+                        pruned_node_ids.update(self._get_all_branch_node_ids(pruned_branch))
+                    except Exception as e:
+                        failed_node_ids.add(node.id)
+                        if verbose:
+                            console.print(f"[bold red]Decision node '{node.id}' failed: {escape_rich_markup(str(e))}[/bold red]")
+                        raise
+
+                # Update tree display after execution
+                if self.debug and self.debug_level >= 2:
+                    display_graph_tree(
+                        graph=self,
+                        executed_node_ids=executed_node_ids,
+                        pruned_node_ids=pruned_node_ids,
+                        executing_node_id=None,
+                        failed_node_ids=failed_node_ids
+                    )
 
                 successors = self._get_next_nodes(node)
                 for next_node in successors:
@@ -705,6 +847,16 @@ class Graph(BaseModel):
             if progress_context:
                 progress_context.update(overall_task, completed=all_nodes_count)
                 progress_context.stop()
+        
+        # Display final tree
+        if self.debug and self.debug_level >= 2:
+            display_graph_tree(
+                graph=self,
+                executed_node_ids=executed_node_ids,
+                pruned_node_ids=pruned_node_ids,
+                executing_node_id=None,
+                failed_node_ids=failed_node_ids
+            )
         
         if verbose:
             console.print("[bold green]Graph Execution Completed[/bold green]")

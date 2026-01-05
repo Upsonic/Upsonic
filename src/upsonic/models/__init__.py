@@ -55,6 +55,7 @@ from upsonic.models.settings import ModelSettings, merge_model_settings
 from upsonic.tools import ToolDefinition
 from upsonic.usage import RequestUsage
 from upsonic.uel import Runnable
+from upsonic.utils.logging_config import memory_debug_log
 
 if TYPE_CHECKING:
     from upsonic.messages import ToolReturnPart
@@ -611,6 +612,8 @@ class Model(Runnable[Any, Any]):
     
     # UEL integration attributes
     _memory: Any = None  # Memory instance for chat history
+    _memory_mode: str = "auto"  # Memory mode: "auto", "always", "never"
+    _memory_debug: bool = False  # Enable debug logging for memory operations
     _tools: list[Any] | None = None  # List of tools to bind
     _tool_manager: Any = None  # ToolManager instance
     _tool_metrics: Any = None  # ToolMetrics for tool execution tracking
@@ -752,7 +755,9 @@ class Model(Runnable[Any, Any]):
     def add_memory(
         self, 
         history: bool = False, 
-        memory: Any = None
+        memory: Any = None,
+        mode: str = "auto",
+        debug: bool = False
     ) -> "Model":
         """Add memory/chat history to the model for UEL chains.
         
@@ -761,10 +766,28 @@ class Model(Runnable[Any, Any]):
         Args:
             history: If True, creates an in-memory storage for chat history
             memory: Optional Memory instance to use for chat history management
+            mode: Memory loading mode:
+                - "auto": Skip loading memory if input already contains conversation history
+                         (e.g., from ChatPromptTemplate placeholder). Still saves to memory.
+                         Saves only the new exchange (last request + response).
+                - "always": Always prepend memory history to input messages.
+                         Saves only the new exchange.
+                - "never": Never load from memory, only save to memory.
+                         Saves only the new exchange.
+                - "record_all": Like "auto" for loading, but saves ALL messages including
+                         placeholder history. WARNING: Can cause duplicate history in
+                         multi-chain scenarios. Use only for single-chain audit/logging.
+            debug: If True, prints debug information about memory operations
             
         Returns:
             Self for method chaining
         """
+        if mode not in ("auto", "always", "never", "record_all"):
+            raise ValueError(f"Invalid memory mode: {mode}. Must be 'auto', 'always', 'never', or 'record_all'")
+        
+        self._memory_mode = mode
+        self._memory_debug = debug
+        
         if memory is not None:
             self._memory = memory
         elif history:
@@ -892,9 +915,13 @@ class Model(Runnable[Any, Any]):
         
         try:
             from upsonic.agent.context_managers import CallManager
-            from upsonic.agent.run_result import RunResult
+            from upsonic.run.agent.output import AgentRunOutput
             
-            run_result = RunResult(output=output)
+            run_output = AgentRunOutput(
+                run_id=str(__import__('uuid').uuid4()),
+                content=output,
+                messages=[]
+            )
             call_manager = CallManager(
                 self,  # model
                 task,
@@ -903,18 +930,22 @@ class Model(Runnable[Any, Any]):
             )
             
             async with call_manager.manage_call() as call_handler:
-                call_handler.process_response(run_result)
+                call_handler.process_response(run_output)
         except Exception:
             pass
         
         try:
             from upsonic.agent.context_managers import TaskManager
-            from upsonic.agent.run_result import RunResult
+            from upsonic.run.agent.output import AgentRunOutput
             
-            run_result_tm = RunResult(output=output)
+            run_output_tm = AgentRunOutput(
+                run_id=str(__import__('uuid').uuid4()),
+                content=output,
+                messages=[]
+            )
             task_manager = TaskManager(task, None)
             async with task_manager.manage_task() as task_handler:
-                task_handler.process_response(run_result_tm)
+                task_handler.process_response(run_output_tm)
         except Exception:
             pass
         
@@ -948,11 +979,42 @@ class Model(Runnable[Any, Any]):
         else:
             raise ValueError(f"Unsupported input type: {type(input)}")
     
+    def _input_contains_conversation_history(
+        self,
+        messages: list["ModelMessage"]
+    ) -> bool:
+        """Check if input messages already contain a conversation history.
+        
+        This detects if the input was constructed from a ChatPromptTemplate
+        with placeholder-based history injection. A conversation history is
+        present if there are multiple ModelRequest/ModelResponse pairs.
+        
+        Args:
+            messages: The input messages to check
+            
+        Returns:
+            True if messages contain conversation history (more than one exchange)
+        """
+        from upsonic.messages import ModelRequest, ModelResponse
+        
+        if len(messages) <= 1:
+            return False
+        
+        request_count = sum(1 for m in messages if isinstance(m, ModelRequest))
+        response_count = sum(1 for m in messages if isinstance(m, ModelResponse))
+        
+        return request_count > 1 or response_count >= 1
+    
     async def _build_messages_with_memory(
         self, 
         messages: list["ModelMessage"]
     ) -> list["ModelMessage"]:
         """Build messages including chat history from memory.
+        
+        Respects the memory_mode setting:
+        - "auto": Skip loading if input already contains conversation history
+        - "always": Always prepend memory history
+        - "never": Never load from memory
         
         Ensures that only the very first SystemPromptPart is kept in the
         final message list, removing any duplicate system prompts that might
@@ -967,11 +1029,39 @@ class Model(Runnable[Any, Any]):
         from upsonic.agent.context_managers import MemoryManager
         from upsonic.messages import ModelRequest, SystemPromptPart
         
+        memory_debug_log(self._memory_debug, f"Mode: {self._memory_mode}")
+        
+        input_has_placeholder_history = self._input_contains_conversation_history(messages)
+        memory_debug_log(self._memory_debug, f"Input has placeholder history: {input_has_placeholder_history}")
+        memory_debug_log(self._memory_debug, "Input messages:", messages)
+        
+        should_load_memory = True
+        
+        if self._memory_mode == "never":
+            should_load_memory = False
+            memory_debug_log(self._memory_debug, "Mode is 'never' → SKIP loading memory")
+        elif self._memory_mode in ("auto", "record_all"):
+            if input_has_placeholder_history:
+                should_load_memory = False
+                memory_debug_log(self._memory_debug, f"Mode is '{self._memory_mode}' + placeholder detected → SKIP loading memory")
+            else:
+                memory_debug_log(self._memory_debug, f"Mode is '{self._memory_mode}' + no placeholder → LOAD memory")
+        else:
+            memory_debug_log(self._memory_debug, "Mode is 'always' → LOAD memory")
+        
+        if not should_load_memory:
+            memory_debug_log(self._memory_debug, "Final messages sent to model:", messages)
+            return list(messages)
+        
         memory_manager = MemoryManager(self._memory)
         async with memory_manager.manage_memory() as memory_handler:
             message_history = memory_handler.get_message_history()
             
+            memory_debug_log(self._memory_debug, "Loaded from memory:", message_history)
+            
             combined_messages = message_history + list(messages)
+            
+            memory_debug_log(self._memory_debug, "Combined messages (memory + input):", combined_messages)
             
             if not combined_messages:
                 return combined_messages
@@ -984,6 +1074,7 @@ class Model(Runnable[Any, Any]):
                 )
             
             if not has_system_prompt_in_first:
+                memory_debug_log(self._memory_debug, "Final messages sent to model:", combined_messages)
                 return combined_messages
             
 
@@ -1003,6 +1094,7 @@ class Model(Runnable[Any, Any]):
                         from dataclasses import replace
                         combined_messages[i] = replace(msg, parts=filtered_parts)
             
+            memory_debug_log(self._memory_debug, "Final messages sent to model:", combined_messages)
             return combined_messages
     
     def _setup_tools_for_invoke(self) -> None:
@@ -1293,31 +1385,72 @@ class Model(Runnable[Any, Any]):
     ) -> None:
         """Save messages and response to memory.
         
+        Handles all cases:
+        - mode="auto" with placeholder: saves only last request + response
+        - mode="auto" without placeholder: saves only new messages (after loaded history)
+        - mode="always": saves only new messages (after loaded history)
+        - mode="never": saves last request + response (since history wasn't loaded)
+        
         Args:
             messages: Messages that were sent
             response: Model response to save
         """
         from upsonic.agent.context_managers import MemoryManager
-        from upsonic.agent.run_result import RunResult
+        from upsonic.run.agent.output import AgentRunOutput
+        from upsonic.messages import ModelRequest
         
         if not self._memory:
             return
         
+        memory_debug_log(self._memory_debug, "=== SAVING TO MEMORY ===")
+        
+        input_has_placeholder_history = self._input_contains_conversation_history(messages)
+        memory_was_loaded = self._memory_mode == "always" or (
+            self._memory_mode == "auto" and not input_has_placeholder_history
+        )
+        
+        memory_debug_log(self._memory_debug, f"Input has placeholder: {input_has_placeholder_history}")
+        memory_debug_log(self._memory_debug, f"Memory was loaded: {memory_was_loaded}")
+        memory_debug_log(self._memory_debug, f"Mode: {self._memory_mode}")
+        
         memory_manager = MemoryManager(self._memory)
         async with memory_manager.manage_memory() as memory_handler:
-            run_result = RunResult(output=None)
+            run_output = AgentRunOutput(
+                run_id=str(__import__('uuid').uuid4()),
+                content=None,
+                messages=[]
+            )
             
-            # Add messages to run result
-            # Note: We only add new messages (those not already in history)
-            # The messages list already includes history, so we need to identify new ones
-            history_length = len(memory_handler.get_message_history())
-            if len(messages) > history_length:
-                new_messages = messages[history_length:]
-                run_result.add_messages(new_messages)
+            if self._memory_mode == "record_all":
+                memory_debug_log(self._memory_debug, "Mode is 'record_all' → Saving ALL messages including placeholder history")
+                memory_debug_log(self._memory_debug, "⚠️  WARNING: This may cause duplicates in multi-chain scenarios!")
+                run_output.add_messages(list(messages))
+                memory_debug_log(self._memory_debug, "Saving all messages:", messages)
+            elif input_has_placeholder_history or not memory_was_loaded:
+                memory_debug_log(self._memory_debug, "Saving ONLY last request + response (placeholder/never mode)")
+                last_request = None
+                for msg in reversed(messages):
+                    if isinstance(msg, ModelRequest):
+                        last_request = msg
+                        break
+                
+                if last_request:
+                    run_output.add_message(last_request)
+                    memory_debug_log(self._memory_debug, "Saving last request:", [last_request])
+            else:
+                memory_debug_log(self._memory_debug, "Saving new messages after history")
+                history_length = len(memory_handler.get_message_history())
+                memory_debug_log(self._memory_debug, f"History length: {history_length}, Total messages: {len(messages)}")
+                if len(messages) > history_length:
+                    new_messages = messages[history_length:]
+                    run_output.add_messages(new_messages)
+                    memory_debug_log(self._memory_debug, "Saving new messages:", new_messages)
             
-            run_result.add_message(response)
+            run_output.add_message(response)
+            memory_debug_log(self._memory_debug, "Saving response:", [response])
             
-            memory_handler.process_response(run_result)
+            memory_handler.process_response(run_output)
+            memory_debug_log(self._memory_debug, "=== MEMORY SAVE COMPLETE ===")
 
     @property
     @abstractmethod

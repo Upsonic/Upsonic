@@ -11,20 +11,6 @@ from .config import LoaderConfig, LoaderConfigFactory
 
 if TYPE_CHECKING:
     from upsonic.schemas.data_models import Document
-    from .config import (
-        TextLoaderConfig, CSVLoaderConfig, PdfLoaderConfig, DOCXLoaderConfig,
-        JSONLoaderConfig, XMLLoaderConfig, YAMLLoaderConfig, MarkdownLoaderConfig,
-        HTMLLoaderConfig
-    )
-    from .text import TextLoader
-    from .csv import CSVLoader
-    from .pdf import PdfLoader
-    from .docx import DOCXLoader
-    from .json import JSONLoader
-    from .xml import XMLLoader
-    from .yaml import YAMLLoader
-    from .markdown import MarkdownLoader
-    from .html import HTMLLoader
 
 logger = get_logger(__name__)
 
