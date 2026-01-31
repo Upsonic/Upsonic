@@ -1,0 +1,10 @@
+# Overhead Analysis Results
+
+Benchmark sonuçları bu klasöre JSON formatında kaydedilir.
+
+Format: `{test_name}_{timestamp}.json`
+
+Örnek:
+- Simple_Text_Query_20260127_143022.json
+- Math_Problem_20260127_143045.json
+
