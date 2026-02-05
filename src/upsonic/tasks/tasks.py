@@ -54,6 +54,11 @@ class Task(BaseModel):
 
     _task_todos: Optional[Any] = None
     
+    # Anonymization map for reversible PII protection
+    # Stores mappings: {idx: {"original": "...", "anonymous": "...", "pii_type": "..."}}
+    # Used to de-anonymize LLM responses before returning to user
+    _anonymization_map: Optional[Dict[int, Dict[str, str]]] = None
+    
     registered_task_tools: Dict[str, Any] = {}
     task_builtin_tools: List[Any] = []
         

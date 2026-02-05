@@ -9,6 +9,11 @@ if TYPE_CHECKING:
     from .base import RuleBase, ActionBase, Policy
     from .models import RuleInput, RuleOutput, ActionResult, PolicyInput, PolicyOutput
     from .exceptions import DisallowedOperation
+    from .anonymization import (
+        anonymize_content, anonymize_contents,
+        deanonymize_content, deanonymize_contents,
+        Anonymizer, AnonymizationResult
+    )
     from .policies import *
 
 def _get_base_classes():
@@ -39,6 +44,23 @@ def _get_exception_classes():
     
     return {
         'DisallowedOperation': DisallowedOperation,
+    }
+
+def _get_anonymization_classes():
+    """Lazy import of anonymization utilities."""
+    from .anonymization import (
+        anonymize_content, anonymize_contents,
+        deanonymize_content, deanonymize_contents,
+        Anonymizer, AnonymizationResult
+    )
+    
+    return {
+        'anonymize_content': anonymize_content,
+        'anonymize_contents': anonymize_contents,
+        'deanonymize_content': deanonymize_content,
+        'deanonymize_contents': deanonymize_contents,
+        'Anonymizer': Anonymizer,
+        'AnonymizationResult': AnonymizationResult,
     }
 
 def _get_policy_classes():
@@ -409,6 +431,10 @@ def __getattr__(name: str) -> Any:
     if name in exception_classes:
         return exception_classes[name]
     
+    anonymization_classes = _get_anonymization_classes()
+    if name in anonymization_classes:
+        return anonymization_classes[name]
+    
     policy_classes = _get_policy_classes()
     if name in policy_classes:
         return policy_classes[name]
@@ -427,6 +453,14 @@ __all__ = [
     "PolicyInput",
     "PolicyOutput",
     "DisallowedOperation",
+    
+    # Anonymization utilities
+    "anonymize_content",
+    "anonymize_contents",
+    "deanonymize_content",
+    "deanonymize_contents",
+    "Anonymizer",
+    "AnonymizationResult",
     
     # Original policies
     "AdultContentBlockPolicy",

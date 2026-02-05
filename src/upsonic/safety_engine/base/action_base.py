@@ -287,7 +287,19 @@ class ActionBase(ABC):
         )
     
     def anonymize_triggered_keywords(self) -> PolicyOutput:
-        """Anonymize triggered keywords with unique replacements"""
+        """
+        Anonymize triggered keywords with random values.
+        
+        Replaces sensitive data with random characters while preserving format:
+        - Digits are replaced with random digits
+        - Letters are replaced with random letters
+        - Special characters are preserved
+        
+        The transformation_map stores the mapping for de-anonymization.
+        
+        Returns:
+            PolicyOutput with anonymized content and transformation_map
+        """
         original_content = self.original_content or []
         triggered_keywords = self.rule_result.triggered_keywords if self.rule_result else []
         
@@ -295,6 +307,9 @@ class ActionBase(ABC):
         for text in original_content:
             transformed_text = text
             for keyword in triggered_keywords:
+                # Skip PII_KEYWORD indicators - they are just detection markers, not actual data
+                if keyword.startswith("PII_KEYWORD:"):
+                    continue
                 # Support typed keywords like "CREDIT_CARD:xxxx" by stripping the type prefix
                 target = keyword.split(":", 1)[1] if ":" in keyword else keyword
                 # Generate unique replacement maintaining character types
@@ -303,10 +318,8 @@ class ActionBase(ABC):
                 pattern = re.compile(re.escape(target), re.IGNORECASE)
                 transformed_text = pattern.sub(replacement, transformed_text)
             transformed_content.append(transformed_text)
-        
-        # Apply translation if needed
 
-        translated_message = self._translate("Keywords anonymized with unique replacements", self.detected_language)
+        translated_message = self._translate("Content anonymized with random values", self.detected_language)
         
         return PolicyOutput(
             output_texts=transformed_content,
@@ -319,16 +332,22 @@ class ActionBase(ABC):
         )
 
     async def anonymize_triggered_keywords_async(self) -> PolicyOutput:
+        """Async version of anonymize_triggered_keywords"""
         original_content = self.original_content or []
         triggered_keywords = self.rule_result.triggered_keywords if self.rule_result else []
         transformed_content = []
         for text in original_content:
             transformed_text = text
             for keyword in triggered_keywords:
-                replacement = self._generate_unique_replacement(keyword)
-                transformed_text = transformed_text.replace(keyword, replacement)
+                # Skip PII_KEYWORD indicators
+                if keyword.startswith("PII_KEYWORD:"):
+                    continue
+                target = keyword.split(":", 1)[1] if ":" in keyword else keyword
+                replacement = self._generate_unique_replacement(target)
+                pattern = re.compile(re.escape(target), re.IGNORECASE)
+                transformed_text = pattern.sub(replacement, transformed_text)
             transformed_content.append(transformed_text)
-        translated_message = await self._translate_async("Keywords anonymized with unique replacements", self.detected_language)
+        translated_message = await self._translate_async("Content anonymized with random values", self.detected_language)
         return PolicyOutput(
             output_texts=transformed_content,
             action_output={

@@ -21,6 +21,7 @@ class PolicyResult:
     """Aggregated result from multiple policy executions.
     
     Extended with feedback loop support to track retry state and feedback messages.
+    Also includes transformation_map for reversible anonymization support.
     """
     
     def __init__(self):
@@ -38,6 +39,10 @@ class PolicyResult:
         self.original_content: Optional[str] = None  # Content that violated policy
         self.violated_policy_name: Optional[str] = None  # Name of the first violated policy
         self.violation_reason: Optional[str] = None  # Reason for violation
+        
+        # Transformation map for reversible anonymization
+        # Maps anonymous values back to originals: {idx: {"original": "...", "anonymous": "...", "pii_type": "..."}}
+        self.transformation_map: Optional[dict] = None
     
     def should_block(self) -> bool:
         """Check if content should be blocked.
@@ -257,6 +262,15 @@ class PolicyManager:
                         result.final_output = current_texts[0]
                     else:
                         result.final_output = ""
+                    
+                    # Collect transformation_map for reversible anonymization
+                    if policy_output.transformation_map:
+                        if result.transformation_map is None:
+                            result.transformation_map = {}
+                        # Merge transformation maps (renumber keys to avoid conflicts)
+                        base_idx = len(result.transformation_map)
+                        for key, value in policy_output.transformation_map.items():
+                            result.transformation_map[base_idx + key] = value
                     
                     # For REPLACE/ANONYMIZE, we consider this a "violation" that could benefit from feedback
                     # However, we still apply the transformation - feedback is for agent to understand why

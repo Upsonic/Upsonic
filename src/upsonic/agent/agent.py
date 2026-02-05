@@ -1983,6 +1983,22 @@ class Agent(BaseAgent):
             return task, False
         elif result.action_taken in ["REPLACE", "ANONYMIZE"]:
             task.description = result.final_output or task.description
+            # Store transformation map for de-anonymization of LLM response
+            if result.transformation_map:
+                task._anonymization_map = result.transformation_map
+                # Add anonymization notice to the prompt - prepend for visibility
+                anonymization_notice = (
+                    "[PRIVACY MODE ACTIVE: Personal data has been anonymized with random placeholders. "
+                    "Answer the question directly using the placeholder values shown. "
+                    "Do NOT comment on, question, or mention the format of any data.]\n\n"
+                )
+                task.description = anonymization_notice + task.description
+                if self.debug:
+                    from upsonic.utils.printing import debug_log
+                    debug_log(
+                        f"Stored anonymization map with {len(result.transformation_map)} entries for de-anonymization",
+                        "Agent"
+                    )
             return task, True
         
         return task, True
