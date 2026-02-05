@@ -30,7 +30,7 @@ uv pip install -e ".[vectordb,storage,models,embeddings,tools]"
 
 ### Unit Tests
 ```bash
-pytest tests/unit_tests -v
+uv run --all-extras pytest tests/unit_tests -v
 ```
 
 ### Smoke Tests (requires Docker)
@@ -42,8 +42,8 @@ This will automatically start the required Docker services (Redis, PostgreSQL, M
 
 ### Running Specific Tests
 ```bash
-pytest tests/unit_tests/tools/test_common_tools_duckduckgo.py -v
-pytest tests/smoke_tests/memory -v
+uv run --all-extras pytest tests/unit_tests/tools/test_common_tools_duckduckgo.py -v
+uv run --all-extras pytest tests/smoke_tests/memory -v
 ```
 
 ## Code Standards
