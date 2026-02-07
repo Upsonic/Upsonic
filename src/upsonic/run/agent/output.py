@@ -155,6 +155,9 @@ class AgentRunOutput:
     pause_reason: Optional[Literal["external_tool"]] = None  # "external_tool" only now
     error_details: Optional[str] = None
     
+    # --- Context management ---
+    _context_window_full: bool = False
+    
     # --- Message tracking (internal) ---
     # _run_boundaries tracks where each run starts in chat_history
     # This allows extracting new messages from just this run
@@ -644,6 +647,7 @@ class AgentRunOutput:
             "updated_at": self.updated_at,
             "output": self.output,
             "thinking_content": self.thinking_content,
+            "_context_window_full": self._context_window_full,
         }
         
         # task: use to_dict with serialize_flag
@@ -1067,6 +1071,7 @@ class AgentRunOutput:
             _run_boundaries=data.get("_run_boundaries", []),
             pause_reason=data.get("pause_reason"),
             error_details=data.get("error_details"),
+            _context_window_full=data.get("_context_window_full", False),
         )
     
     def __str__(self) -> str:

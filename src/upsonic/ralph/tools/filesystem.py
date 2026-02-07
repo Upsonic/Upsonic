@@ -441,7 +441,7 @@ class RalphFilesystemToolKit(ToolKit):
             
             if result.stdout:
                 output_parts.append(f"STDOUT:\n{result.stdout}")
-            
+                
             if result.stderr:
                 output_parts.append(f"STDERR:\n{result.stderr}")
             

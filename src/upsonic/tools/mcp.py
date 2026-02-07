@@ -32,6 +32,27 @@ except ImportError:
     HAS_STREAMABLE_HTTP = False
 
 
+_MCP_SECURITY_WARNING_EMITTED = False
+
+
+def _emit_mcp_security_warning() -> None:
+    """
+    Emit a one-time security warning before MCP tool initialization.
+    Must be called before any MCP connection/initialization starts.
+    """
+    global _MCP_SECURITY_WARNING_EMITTED
+    if _MCP_SECURITY_WARNING_EMITTED:
+        return
+    _MCP_SECURITY_WARNING_EMITTED = True
+
+    from upsonic.utils.printing import console
+
+    console.print(
+        "[yellow]⚠️  MCP Security: Only connect to MCP servers you trust. "
+        "Stdio servers run arbitrary processes on your machine; "
+        "do not use commands or config from untrusted sources.[/yellow]"
+    )
+
 
 def prepare_command(command: str) -> List[str]:
     """
@@ -239,7 +260,12 @@ class MCPHandler:
     - Lazy connection support
     - Tool name prefixing for avoiding collisions
     """
-    
+
+    def __new__(cls, *args: Any, **kwargs: Any) -> "MCPHandler":
+        """Emit MCP security warning before any initialization."""
+        _emit_mcp_security_warning()
+        return super().__new__(cls)
+
     def __init__(
         self,
         config: Type = None,
@@ -422,9 +448,9 @@ class MCPHandler:
         """Initialize and connect to the MCP server."""
         if self._initialized:
             return
-        
+
         from upsonic.utils.printing import console
-        
+
         if self.session is not None:
             await self._initialize_with_session()
             return
@@ -880,7 +906,12 @@ class MultiMCPHandler:
     - Proper cleanup delegation to individual handlers
     - Tool name prefixing for avoiding collisions
     """
-    
+
+    def __new__(cls, *args: Any, **kwargs: Any) -> "MultiMCPHandler":
+        """Emit MCP security warning before any initialization (before __init__)."""
+        _emit_mcp_security_warning()
+        return super().__new__(cls)
+
     def __init__(
         self,
         commands: Optional[List[str]] = None,
@@ -971,9 +1002,9 @@ class MultiMCPHandler:
         """Initialize and connect to all MCP servers."""
         if self._initialized:
             return
-        
+
         from upsonic.utils.printing import console
-        
+
         console.print(f"[cyan]🔌 Connecting to {len(self.server_params_list)} MCP server(s)...[/cyan]")
         
         # Validate tool_name_prefixes length if provided

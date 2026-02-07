@@ -2,29 +2,53 @@
 Upsonic Interfaces Module
 
 This module provides a comprehensive interface system for integrating AI agents
-with external communication platforms like WhatsApp, Slack, and more.
+with external communication platforms like WhatsApp, Slack, Gmail, and more.
 
 Public API:
     - Interface: Base class for custom interfaces
     - InterfaceManager: Central manager for orchestrating interfaces
+    - InterfaceMode: Operating mode enum (TASK or CHAT)
     - WhatsAppInterface: WhatsApp Business API integration
+    - SlackInterface: Slack API integration
     - GmailInterface: Gmail API integration
+    - TelegramInterface: Telegram Bot API integration
     - InterfaceSettings: Configuration settings
     - WebSocketManager: WebSocket connection manager
 
-Example:
+Operating Modes:
+    - TASK: Each message is processed as an independent task (stateless)
+    - CHAT: Messages are accumulated in a conversation session (stateful)
+            Users can send "/reset" to clear their conversation history.
+
+Example - Task Mode (default):
     ```python
     from upsonic import Agent
     from upsonic.interfaces import InterfaceManager, WhatsAppInterface
     
-    # Create an agent
     agent = Agent("openai/gpt-4o")
     
-    # Create WhatsApp interface
-    whatsapp = WhatsAppInterface(agent=agent)
+    # Task mode - each message is independent
+    whatsapp = WhatsAppInterface(agent=agent, mode="task")
     
-    # Create and start the interface manager
     manager = InterfaceManager(interfaces=[whatsapp])
+    manager.serve(port=8000)
+    ```
+
+Example - Chat Mode:
+    ```python
+    from upsonic import Agent
+    from upsonic.interfaces import InterfaceManager, GmailInterface, InterfaceMode
+    
+    agent = Agent("openai/gpt-4o")
+    
+    # Chat mode - conversations persist per user
+    gmail = GmailInterface(
+        agent=agent,
+        mode=InterfaceMode.CHAT,
+        reset_command="/reset"  # Users can reset by sending this
+    )
+    
+    manager = InterfaceManager(interfaces=[gmail])
     manager.serve(port=8000)
     ```
 """
@@ -38,6 +62,7 @@ if TYPE_CHECKING:
     from .whatsapp.whatsapp import WhatsAppInterface
     from .slack.slack import SlackInterface
     from .gmail.gmail import GmailInterface
+    from .telegram.telegram import TelegramInterface
     from .settings import InterfaceSettings
     from .websocket_manager import WebSocketManager, WebSocketConnection
     from .auth import (
@@ -45,6 +70,8 @@ if TYPE_CHECKING:
         validate_websocket_token,
     )
     from .schemas import (
+        InterfaceMode,
+        InterfaceResetCommand,
         HealthCheckResponse,
         ErrorResponse,
         WebSocketMessage,
@@ -52,6 +79,7 @@ if TYPE_CHECKING:
         WebSocketStatusResponse,
     )
     from .whatsapp.schemas import WhatsAppWebhookPayload
+    from .telegram.schemas import TelegramWebhookPayload
 
 def _get_interface_classes():
     """Lazy import of interface classes."""
@@ -60,6 +88,7 @@ def _get_interface_classes():
     from .whatsapp.whatsapp import WhatsAppInterface
     from .slack.slack import SlackInterface
     from .gmail.gmail import GmailInterface
+    from .telegram.telegram import TelegramInterface
     from .settings import InterfaceSettings
     from .websocket_manager import WebSocketManager, WebSocketConnection
     
@@ -67,6 +96,7 @@ def _get_interface_classes():
     Whatsapp = WhatsAppInterface  # Shortened alias
     Slack = SlackInterface
     Gmail = GmailInterface
+    Telegram = TelegramInterface
     
     return {
         'Interface': Interface,
@@ -77,6 +107,8 @@ def _get_interface_classes():
         'Slack': Slack,
         'GmailInterface': GmailInterface,
         'Gmail': Gmail,
+        'TelegramInterface': TelegramInterface,
+        'Telegram': Telegram,
         'InterfaceSettings': InterfaceSettings,
         'WebSocketManager': WebSocketManager,
         'WebSocketConnection': WebSocketConnection,
@@ -97,6 +129,8 @@ def _get_auth_functions():
 def _get_schema_classes():
     """Lazy import of schema classes."""
     from .schemas import (
+        InterfaceMode,
+        InterfaceResetCommand,
         HealthCheckResponse,
         ErrorResponse,
         WebSocketMessage,
@@ -104,14 +138,18 @@ def _get_schema_classes():
         WebSocketStatusResponse,
     )
     from .whatsapp.schemas import WhatsAppWebhookPayload
+    from .telegram.schemas import TelegramWebhookPayload
     
     return {
+        'InterfaceMode': InterfaceMode,
+        'InterfaceResetCommand': InterfaceResetCommand,
         'HealthCheckResponse': HealthCheckResponse,
         'ErrorResponse': ErrorResponse,
         'WebSocketMessage': WebSocketMessage,
         'WebSocketConnectionInfo': WebSocketConnectionInfo,
         'WebSocketStatusResponse': WebSocketStatusResponse,
         'WhatsAppWebhookPayload': WhatsAppWebhookPayload,
+        'TelegramWebhookPayload': TelegramWebhookPayload,
     }
 
 def __getattr__(name: str) -> Any:
@@ -142,6 +180,10 @@ __all__ = [
     "InterfaceManager",
     "InterfaceSettings",
     
+    # Mode configuration
+    "InterfaceMode",
+    "InterfaceResetCommand",
+    
     # Interface implementations
     "WhatsAppInterface",
     "Whatsapp",  # Alias
@@ -149,6 +191,8 @@ __all__ = [
     "Slack",
     "GmailInterface",
     "Gmail",
+    "TelegramInterface",
+    "Telegram",  # Alias
     
     # WebSocket
     "WebSocketManager",
@@ -162,6 +206,7 @@ __all__ = [
     "HealthCheckResponse",
     "ErrorResponse",
     "WhatsAppWebhookPayload",
+    "TelegramWebhookPayload",
     "WebSocketMessage",
     "WebSocketConnectionInfo",
     "WebSocketStatusResponse",

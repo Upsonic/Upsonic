@@ -921,11 +921,6 @@ def display_tool_results_table(
     spacing()
 
 
-def _get_model_pricing(model_name: str) -> Optional[Dict[str, float]]:
-    """Get comprehensive pricing data for a model."""
-    from upsonic.utils.usage import get_model_pricing
-    return get_model_pricing(model_name)
-
 
 def get_estimated_cost_from_usage(usage: Union[Dict[str, int], Any], model: Union["Model", str]) -> str:
     """Calculate estimated cost from usage data."""

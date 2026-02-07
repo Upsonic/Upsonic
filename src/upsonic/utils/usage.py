@@ -1,178 +1,251 @@
-"""
-Usage and cost calculation utilities for the Upsonic framework.
-
-This module provides functions for calculating and estimating costs based on
-token usage and model pricing data. These are pure calculation utilities
-without any console/terminal printing dependencies.
-"""
-from typing import TYPE_CHECKING, Any, Dict, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 if TYPE_CHECKING:
     from upsonic.model_base import Model
     from upsonic.usage import RequestUsage, RunUsage
 
 
-# =============================================================================
-# Model Pricing Data
-# =============================================================================
 
-MODEL_PRICING: Dict[str, Dict[str, float]] = {
-    # OpenAI GPT-4o family
-    'gpt-4o': {'input_cost_per_1m': 2.50, 'output_cost_per_1m': 10.00},
-    'gpt-4o-2024-05-13': {'input_cost_per_1m': 2.50, 'output_cost_per_1m': 10.00},
-    'gpt-4o-2024-08-06': {'input_cost_per_1m': 2.50, 'output_cost_per_1m': 10.00},
-    'gpt-4o-2024-11-20': {'input_cost_per_1m': 2.50, 'output_cost_per_1m': 10.00},
-    'gpt-4o-mini': {'input_cost_per_1m': 0.15, 'output_cost_per_1m': 0.60},
-    'gpt-4o-mini-2024-07-18': {'input_cost_per_1m': 0.15, 'output_cost_per_1m': 0.60},
+MODEL_CONTEXT_WINDOWS: Dict[str, Optional[int]] = {
+    # GPT-5 family
+    'gpt-5.2': 400000,
+    'gpt-5.1': 400000,
+    'gpt-5': 400000,
+    'gpt-5-mini': 400000,
+    'gpt-5-nano': 400000,
+    'gpt-5.2-chat-latest': 128000,
+    'gpt-5.1-chat-latest': 128000,
+    'gpt-5-chat-latest': 128000,
+    'gpt-5.1-codex-max': 400000,
+    'gpt-5.1-codex': 400000,
+    'gpt-5.1-codex-mini': 400000,
+    'gpt-5-codex': 400000,
+    'gpt-5.2-pro': 400000,
+    'gpt-5-pro': 400000,
+    'gpt-5-search-api': 128000,
     
-    # OpenAI GPT-4 family
-    'gpt-4-turbo': {'input_cost_per_1m': 10.00, 'output_cost_per_1m': 30.00},
-    'gpt-4-turbo-2024-04-09': {'input_cost_per_1m': 10.00, 'output_cost_per_1m': 30.00},
-    'gpt-4': {'input_cost_per_1m': 30.00, 'output_cost_per_1m': 60.00},
-    'gpt-4-0613': {'input_cost_per_1m': 30.00, 'output_cost_per_1m': 60.00},
-    'gpt-4-32k': {'input_cost_per_1m': 60.00, 'output_cost_per_1m': 120.00},
-    'gpt-4-32k-0613': {'input_cost_per_1m': 60.00, 'output_cost_per_1m': 120.00},
+    # GPT-4.1 family
+    'gpt-4.1': 1047576,
+    'gpt-4.1-mini': 1047576,
+    'gpt-4.1-nano': 1047576,
     
-    # OpenAI GPT-3.5 family
-    'gpt-3.5-turbo': {'input_cost_per_1m': 0.50, 'output_cost_per_1m': 1.50},
-    'gpt-3.5-turbo-1106': {'input_cost_per_1m': 0.50, 'output_cost_per_1m': 1.50},
-    'gpt-3.5-turbo-16k': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 4.00},
-    'gpt-3.5-turbo-16k-0613': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 4.00},
+    # GPT-4o family
+    'gpt-4o': 128000,
+    'gpt-4o-2024-05-13': 128000,
+    'gpt-4o-mini': 128000,
+    'gpt-4o-search-preview': 128000,
+    'gpt-4o-mini-search-preview': 128000,
     
-    # OpenAI GPT-5 family (future)
-    'gpt-5': {'input_cost_per_1m': 5.00, 'output_cost_per_1m': 15.00},
-    'gpt-5-2025-08-07': {'input_cost_per_1m': 5.00, 'output_cost_per_1m': 15.00},
-    'gpt-5-mini': {'input_cost_per_1m': 0.30, 'output_cost_per_1m': 1.20},
-    'gpt-5-mini-2025-08-07': {'input_cost_per_1m': 0.30, 'output_cost_per_1m': 1.20},
-    'gpt-5-nano': {'input_cost_per_1m': 0.10, 'output_cost_per_1m': 0.40},
-    'gpt-5-nano-2025-08-07': {'input_cost_per_1m': 0.10, 'output_cost_per_1m': 0.40},
+    # GPT Realtime models
+    'gpt-realtime': 32000,
+    'gpt-realtime-mini': 32000,
+    'gpt-4o-realtime-preview': 32000,
+    'gpt-4o-mini-realtime-preview': 16000,
     
-    # OpenAI GPT-4.1 family
-    'gpt-4.1': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 12.00},
-    'gpt-4.1-2025-04-14': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 12.00},
-    'gpt-4.1-mini': {'input_cost_per_1m': 0.20, 'output_cost_per_1m': 0.80},
-    'gpt-4.1-mini-2025-04-14': {'input_cost_per_1m': 0.20, 'output_cost_per_1m': 0.80},
-    'gpt-4.1-nano': {'input_cost_per_1m': 0.08, 'output_cost_per_1m': 0.32},
-    'gpt-4.1-nano-2025-04-14': {'input_cost_per_1m': 0.08, 'output_cost_per_1m': 0.32},
+    # GPT Audio models
+    'gpt-audio': 128000,
+    'gpt-audio-mini': 128000,
+    'gpt-4o-audio-preview': 128000,
+    'gpt-4o-mini-audio-preview': 128000,
     
-    # OpenAI O-series reasoning models
-    'o1': {'input_cost_per_1m': 15.00, 'output_cost_per_1m': 60.00},
-    'o1-2024-12-17': {'input_cost_per_1m': 15.00, 'output_cost_per_1m': 60.00},
-    'o1-mini': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 12.00},
-    'o1-mini-2024-09-12': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 12.00},
-    'o1-preview': {'input_cost_per_1m': 15.00, 'output_cost_per_1m': 60.00},
-    'o1-preview-2024-09-12': {'input_cost_per_1m': 15.00, 'output_cost_per_1m': 60.00},
-    'o1-pro': {'input_cost_per_1m': 60.00, 'output_cost_per_1m': 180.00},
-    'o1-pro-2025-03-19': {'input_cost_per_1m': 60.00, 'output_cost_per_1m': 180.00},
-    'o3': {'input_cost_per_1m': 20.00, 'output_cost_per_1m': 80.00},
-    'o3-2025-04-16': {'input_cost_per_1m': 20.00, 'output_cost_per_1m': 80.00},
-    'o3-mini': {'input_cost_per_1m': 4.00, 'output_cost_per_1m': 16.00},
-    'o3-mini-2025-01-31': {'input_cost_per_1m': 4.00, 'output_cost_per_1m': 16.00},
-    'o3-pro': {'input_cost_per_1m': 80.00, 'output_cost_per_1m': 240.00},
-    'o3-pro-2025-06-10': {'input_cost_per_1m': 80.00, 'output_cost_per_1m': 240.00},
-    'o3-deep-research': {'input_cost_per_1m': 100.00, 'output_cost_per_1m': 300.00},
-    'o3-deep-research-2025-06-26': {'input_cost_per_1m': 100.00, 'output_cost_per_1m': 300.00},
+    # O-series reasoning models
+    'o1': 200000,
+    'o1-pro': 200000,
+    'o1-mini': 128000,
+    'o3': 200000,
+    'o3-pro': 200000,
+    'o3-mini': 200000,
+    'o3-deep-research': 200000,
+    'o4-mini': 200000,
+    'o4-mini-deep-research': 200000,
     
-    # Anthropic Claude family
-    'claude-3-5-sonnet-20241022': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 15.00},
-    'claude-3-5-sonnet-latest': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 15.00},
-    'claude-3-5-sonnet-20240620': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 15.00},
-    'claude-3-5-haiku-20241022': {'input_cost_per_1m': 0.80, 'output_cost_per_1m': 4.00},
-    'claude-3-5-haiku-latest': {'input_cost_per_1m': 0.80, 'output_cost_per_1m': 4.00},
-    'claude-3-7-sonnet-20250219': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 15.00},
-    'claude-3-7-sonnet-latest': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 15.00},
-    'claude-3-opus-20240229': {'input_cost_per_1m': 15.00, 'output_cost_per_1m': 75.00},
-    'claude-3-opus-latest': {'input_cost_per_1m': 15.00, 'output_cost_per_1m': 75.00},
-    'claude-3-haiku-20240307': {'input_cost_per_1m': 0.25, 'output_cost_per_1m': 1.25},
-    'claude-4-opus-20250514': {'input_cost_per_1m': 20.00, 'output_cost_per_1m': 100.00},
-    'claude-4-sonnet-20250514': {'input_cost_per_1m': 4.00, 'output_cost_per_1m': 20.00},
-    'claude-opus-4-0': {'input_cost_per_1m': 20.00, 'output_cost_per_1m': 100.00},
-    'claude-opus-4-1-20250805': {'input_cost_per_1m': 20.00, 'output_cost_per_1m': 100.00},
-    'claude-opus-4-20250514': {'input_cost_per_1m': 20.00, 'output_cost_per_1m': 100.00},
-    'claude-sonnet-4-0': {'input_cost_per_1m': 4.00, 'output_cost_per_1m': 20.00},
-    'claude-sonnet-4-20250514': {'input_cost_per_1m': 4.00, 'output_cost_per_1m': 20.00},
+    # Codex and special models
+    'codex-mini-latest': 200000,
+    'computer-use-preview': 8192,
     
-    # Google Gemini family
-    'gemini-2.0-flash': {'input_cost_per_1m': 0.075, 'output_cost_per_1m': 0.30},
-    'gemini-2.0-flash-lite': {'input_cost_per_1m': 0.0375, 'output_cost_per_1m': 0.15},
-    'gemini-2.5-flash': {'input_cost_per_1m': 0.075, 'output_cost_per_1m': 0.30},
-    'gemini-2.5-flash-lite': {'input_cost_per_1m': 0.0375, 'output_cost_per_1m': 0.15},
-    'gemini-2.5-pro': {'input_cost_per_1m': 1.25, 'output_cost_per_1m': 5.00},
-    'gemini-1.5-pro': {'input_cost_per_1m': 1.25, 'output_cost_per_1m': 5.00},
-    'gemini-1.5-flash': {'input_cost_per_1m': 0.075, 'output_cost_per_1m': 0.30},
-    'gemini-1.0-pro': {'input_cost_per_1m': 0.50, 'output_cost_per_1m': 1.50},
+    # Image models (no text context window)
+    'gpt-image-1.5': None,
+    'chatgpt-image-latest': None,
+    'gpt-image-1': None,
+    'gpt-image-1-mini': None,
     
-    # Groq / Meta Llama
-    'llama-3.3-70b-versatile': {'input_cost_per_1m': 0.59, 'output_cost_per_1m': 0.79},
-    'llama-3.1-8b-instant': {'input_cost_per_1m': 0.05, 'output_cost_per_1m': 0.05},
-    'llama3-70b-8192': {'input_cost_per_1m': 0.59, 'output_cost_per_1m': 0.79},
-    'llama3-8b-8192': {'input_cost_per_1m': 0.05, 'output_cost_per_1m': 0.05},
-    'mixtral-8x7b-32768': {'input_cost_per_1m': 0.24, 'output_cost_per_1m': 0.24},
-    'gemma2-9b-it': {'input_cost_per_1m': 0.10, 'output_cost_per_1m': 0.10},
+    'claude-3-5-sonnet-20241022': 200000,
+    'claude-3-5-sonnet-latest': 200000,
+    'claude-3-5-sonnet-20240620': 200000,
+    'claude-3-5-haiku-20241022': 200000,
+    'claude-3-5-haiku-latest': 200000,
+    'claude-3-7-sonnet-20250219': 200000,
+    'claude-3-7-sonnet-latest': 200000,
+    'claude-3-opus-20240229': 200000,
+    'claude-3-opus-latest': 200000,
+    'claude-3-haiku-20240307': 200000,
+    'claude-4-opus-20250514': 200000,
+    'claude-4-sonnet-20250514': 200000,
+    'claude-opus-4-0': 200000,
+    'claude-opus-4-1-20250805': 200000,
+    'claude-opus-4-20250514': 200000,
+    'claude-sonnet-4-0': 200000,
+    'claude-sonnet-4-20250514': 200000,
     
-    # Mistral
-    'mistral-large-latest': {'input_cost_per_1m': 2.00, 'output_cost_per_1m': 6.00},
-    'mistral-small-latest': {'input_cost_per_1m': 1.00, 'output_cost_per_1m': 3.00},
-    'codestral-latest': {'input_cost_per_1m': 0.20, 'output_cost_per_1m': 0.20},
+    'gemini-3-pro-preview': 1048576,
+    'gemini-3-pro-image-preview': 65536,
+    'gemini-3-flash-preview': 1048576,
+    'gemini-2.5-flash': 1048576,
+    'gemini-2.5-flash-preview-09-2025': 1048576,
+    'gemini-2.5-flash-image': 65536,
+    'gemini-2.5-flash-lite': 1048576,
+    'gemini-2.5-flash-lite-preview-09-2025': 1048576,
+    'gemini-2.5-pro': 1048576,
+    'gemini-2.0-flash': 1048576,
+    'gemini-2.0-flash-lite': 1048576,
+    'gemini-1.5-pro': 1048576,
+    'gemini-1.5-flash': 1048576,
+    'gemini-1.0-pro': 32000,
     
-    # Cohere
-    'command': {'input_cost_per_1m': 1.00, 'output_cost_per_1m': 2.00},
-    'command-light': {'input_cost_per_1m': 0.30, 'output_cost_per_1m': 0.30},
-    'command-r': {'input_cost_per_1m': 0.50, 'output_cost_per_1m': 1.50},
-    'command-r-plus': {'input_cost_per_1m': 3.00, 'output_cost_per_1m': 15.00},
+    'llama-3-8b': 8000,
+    'llama-3-70b': 8000,
+    'llama-3.1-8b': 128000,
+    'llama-3.1-8b-instant': 128000,
+    'llama-3.1-70b': 128000,
+    'llama-3.1-405b': 128000,
+    'llama-3.2-1b': 128000,
+    'llama-3.2-3b': 128000,
+    'llama-3.2-11b-vision': 128000,
+    'llama-3.2-90b-vision': 128000,
+    'llama-3.3-70b': 128000,
+    'llama-3.3-70b-versatile': 128000,
+    'llama3-70b-8192': 8192,
+    'llama3-8b-8192': 8192,
+    'llama-4-maverick': 128000,
+    'llama-4-maverick-17b-128e-instruct': 128000,
+    'llama-4-scout': 10000000,
+    'llama-4-scout-17b-16e-instruct': 10000000,
+    'meta-llama/Llama-3.3-70B-Instruct': 128000,
+    'meta-llama/Llama-4-Maverick-17B-128E-Instruct': 128000,
+    'meta-llama/Llama-4-Scout-17B-16E-Instruct': 10000000,
     
-    # DeepSeek
-    'deepseek-chat': {'input_cost_per_1m': 0.14, 'output_cost_per_1m': 0.28},
-    'deepseek-reasoner': {'input_cost_per_1m': 0.55, 'output_cost_per_1m': 2.19},
+    'grok-3': 131000,
+    'grok-3-mini': None,
+    'grok-3-fast': 131000,
+    'grok-3-mini-fast': None,
+    'grok-4': 256000,
+    'grok-4-0709': 256000,
+    'grok-4-fast-reasoning': None,
+    'grok-4.1': 256000,
+    'grok-4-1-fast-reasoning': 2000000,
+    'grok-4-1-fast-non-reasoning': 2000000,
+    'grok-code-fast-1': 2000000,
     
-    # xAI Grok
-    'grok-4': {'input_cost_per_1m': 0.01, 'output_cost_per_1m': 0.03},
-    'grok-4-0709': {'input_cost_per_1m': 0.01, 'output_cost_per_1m': 0.03},
-    'grok-3': {'input_cost_per_1m': 0.01, 'output_cost_per_1m': 0.03},
-    'grok-3-mini': {'input_cost_per_1m': 0.01, 'output_cost_per_1m': 0.03},
-    'grok-3-fast': {'input_cost_per_1m': 0.01, 'output_cost_per_1m': 0.03},
-    'grok-3-mini-fast': {'input_cost_per_1m': 0.01, 'output_cost_per_1m': 0.03},
+    'qwen-max': 32000,
+    'qwen-plus': 1000000,
+    'qwen-turbo': 1000000,
+    'qwen-flash': 1000000,
+    'qwen-long': 10000000,
+    'qwen3-0.6b': 32000,
+    'qwen3-1.7b': 32000,
+    'qwen3-4b': 32000,
+    'qwen3-8b': 128000,
+    'qwen3-14b': 128000,
+    'qwen3-32b': 128000,
+    'qwen-3-32b': 128000,
+    'qwen3-235b-a22b': 128000,
+    'qwen-3-235b-a22b-instruct-2507': 128000,
+    'qwen3-235b-a22b-thinking': 128000,
+    'qwen-3-235b-a22b-thinking-2507': 128000,
+    'qwen3-coder-plus': 1000000,
+    'qwen-3-coder-480b': 1000000,
+    'qwen-vl-plus': None,
+    'qwen-vl-max': None,
+    'qwen-audio-turbo': None,
+    'Qwen/QwQ-32B': 128000,
+    'Qwen/Qwen2.5-72B-Instruct': 128000,
+    'Qwen/Qwen3-235B-A22B': 128000,
+    'Qwen/Qwen3-32B': 128000,
     
-    # Moonshot / Kimi
-    'moonshot-v1-8k': {'input_cost_per_1m': 0.012, 'output_cost_per_1m': 0.012},
-    'moonshot-v1-32k': {'input_cost_per_1m': 0.024, 'output_cost_per_1m': 0.024},
-    'moonshot-v1-128k': {'input_cost_per_1m': 0.06, 'output_cost_per_1m': 0.06},
-    'kimi-latest': {'input_cost_per_1m': 0.012, 'output_cost_per_1m': 0.012},
-    'kimi-thinking-preview': {'input_cost_per_1m': 0.012, 'output_cost_per_1m': 0.012},
+    'deepseek-v2-base': 128000,
+    'deepseek-v2-chat': 128000,
+    'deepseek-v3-base': 128000,
+    'deepseek-v3': 64000,
+    'deepseek-chat': 64000,
+    'deepseek-v3.1': 128000,
+    'deepseek-v3.2-exp': 128000,
+    'deepseek-r1': 128000,
+    'deepseek-reasoner': 64000,
+    'deepseek-r1-zero': 128000,
+    'deepseek-r1-distill-qwen-1.5b': 128000,
+    'deepseek-r1-distill-qwen-7b': 128000,
+    'deepseek-r1-distill-llama-8b': 128000,
+    'deepseek-r1-distill-qwen-14b': 128000,
+    'deepseek-r1-distill-qwen-32b': 128000,
+    'deepseek-r1-distill-llama-70b': 128000,
+    'deepseek-coder-1.3b': 16000,
+    'deepseek-coder-6.7b': 16000,
+    'deepseek-coder-33b': 16000,
+    'deepseek-coder-v2-lite-base': 128000,
+    'deepseek-coder-v2-base': 128000,
+    'deepseek-coder-v2-instruct': 128000,
+    'deepseek-math-v2': 128000,
+    'deepseek-prover-v2-7b': 128000,
+    'deepseek-prover-v2-671b': 128000,
+    'deepseek-vl-7b-chat': None,
+    'deepseek-ocr-3b': None,
+    'janus-pro-7b': None,
+    'deepseek-ai/DeepSeek-R1': 128000,
     
-    # Open source / Cerebras / Hugging Face
-    'gpt-oss-120b': {'input_cost_per_1m': 0.10, 'output_cost_per_1m': 0.10},
-    'llama3.1-8b': {'input_cost_per_1m': 0.05, 'output_cost_per_1m': 0.05},
-    'llama-3.3-70b': {'input_cost_per_1m': 0.20, 'output_cost_per_1m': 0.20},
-    'llama-4-scout-17b-16e-instruct': {'input_cost_per_1m': 0.15, 'output_cost_per_1m': 0.15},
-    'llama-4-maverick-17b-128e-instruct': {'input_cost_per_1m': 0.15, 'output_cost_per_1m': 0.15},
-    'qwen-3-235b-a22b-instruct-2507': {'input_cost_per_1m': 0.30, 'output_cost_per_1m': 0.30},
-    'qwen-3-32b': {'input_cost_per_1m': 0.10, 'output_cost_per_1m': 0.10},
-    'qwen-3-coder-480b': {'input_cost_per_1m': 0.50, 'output_cost_per_1m': 0.50},
-    'qwen-3-235b-a22b-thinking-2507': {'input_cost_per_1m': 0.30, 'output_cost_per_1m': 0.30},
-    
-    # HuggingFace / Together AI paths
-    'Qwen/QwQ-32B': {'input_cost_per_1m': 0.10, 'output_cost_per_1m': 0.10},
-    'Qwen/Qwen2.5-72B-Instruct': {'input_cost_per_1m': 0.20, 'output_cost_per_1m': 0.20},
-    'Qwen/Qwen3-235B-A22B': {'input_cost_per_1m': 0.30, 'output_cost_per_1m': 0.30},
-    'Qwen/Qwen3-32B': {'input_cost_per_1m': 0.10, 'output_cost_per_1m': 0.10},
-    'deepseek-ai/DeepSeek-R1': {'input_cost_per_1m': 0.55, 'output_cost_per_1m': 2.19},
-    'meta-llama/Llama-3.3-70B-Instruct': {'input_cost_per_1m': 0.20, 'output_cost_per_1m': 0.20},
-    'meta-llama/Llama-4-Maverick-17B-128E-Instruct': {'input_cost_per_1m': 0.15, 'output_cost_per_1m': 0.15},
-    'meta-llama/Llama-4-Scout-17B-16E-Instruct': {'input_cost_per_1m': 0.15, 'output_cost_per_1m': 0.15},
-    
-    # Test model
-    'test': {'input_cost_per_1m': 0.00, 'output_cost_per_1m': 0.00},
+    'mistral-7b-v0.1': 8000,
+    'open-mistral-7b': 8000,
+    'mistral-7b-v0.2': 32000,
+    'mistral-7b-v0.3': 32000,
+    'mistral-small': 32000,
+    'mistral-small-latest': 128000,
+    'mistral-small-2409': 128000,
+    'mistral-small-3-1': 128000,
+    'mistral-small-2506': 128000,
+    'mistral-medium-3': 128000,
+    'mistral-medium-3-1': 128000,
+    'mistral-large': 32000,
+    'mistral-large-latest': 128000,
+    'mistral-large-2407': 128000,
+    'mistral-large-2411': 131000,
+    'mistral-large-3': 256000,
+    'mistral-nemo': 128000,
+    'mixtral-8x7b': 32000,
+    'open-mixtral-8x7b': 32000,
+    'mixtral-8x7b-32768': 32768,
+    'mixtral-8x22b': 64000,
+    'open-mixtral-8x22b': 64000,
+    'mixtral-8x22b-v0.3': 64000,
+    'ministral-3b-2410': 128000,
+    'ministral-8b-2410': 128000,
+    'ministral-14b': 128000,
+    'codestral-2405': 256000,
+    'codestral-latest': 256000,
+    'codestral-2501': 256000,
+    'codestral-2508': 256000,
+    'codestral-mamba': None,
+    'devstral-small-2507': None,
+    'devstral-medium-2507': None,
+    'mathstral-7b-v0.1': 32000,
+    'pixtral-12b-2409': 128000,
+    'pixtral-large-2411': 131000,
+    'magistral-small-2507': None,
+    'magistral-medium-2507': None,
+    'voxtral-small-2507': 32000,
+    'voxtral-mini-2507': None,
+    'command': 4096,
+    'command-light': 4096,
+    'command-r': 128000,
+    'command-r-plus': 128000,
+    'gemma2-9b-it': 8192,
+    'gpt-oss-120b': None,
+    'llama3.1-8b': 128000,
+
+    'test': None,
 }
 
-# Default pricing for unknown models
-DEFAULT_PRICING: Dict[str, float] = {
-    'input_cost_per_1m': 0.50,
-    'output_cost_per_1m': 1.50
-}
+DEFAULT_CONTEXT_WINDOW: Optional[int] = None
 
-# Provider prefixes to strip from model names
-PROVIDER_PREFIXES = [
+PROVIDER_PREFIXES: list[str] = [
     'anthropic:',
     'google-gla:',
     'google-vertex:',
@@ -189,10 +262,6 @@ PROVIDER_PREFIXES = [
     'openai:',
 ]
 
-
-# =============================================================================
-# Helper Functions
-# =============================================================================
 
 def get_model_name(model: Union["Model", str]) -> str:
     """
@@ -219,16 +288,15 @@ def get_model_name(model: Union["Model", str]) -> str:
         return str(model)
 
 
-def get_model_pricing(model_name: str) -> Dict[str, float]:
+def normalize_model_name(model_name: str) -> str:
     """
-    Get pricing data for a model.
+    Normalize a model name by stripping provider prefixes.
     
     Args:
-        model_name: The model name to look up pricing for.
+        model_name: The model name to normalize.
     
     Returns:
-        Dictionary with 'input_cost_per_1m' and 'output_cost_per_1m' keys.
-        Returns default pricing if model is not found.
+        The normalized model name without provider prefixes.
     """
     # Handle case where model_name might be a coroutine (in tests)
     if hasattr(model_name, '__await__'):
@@ -243,12 +311,24 @@ def get_model_pricing(model_name: str) -> Dict[str, float]:
             model_name = model_name[len(prefix):]
             break
     
-    return MODEL_PRICING.get(model_name, DEFAULT_PRICING)
+    return model_name
 
 
-# =============================================================================
-# Cost Calculation Functions
-# =============================================================================
+def get_model_context_window(model: Union["Model", str]) -> Optional[int]:
+    """
+    Get the context window size for a model.
+    
+    Args:
+        model: Model instance or model name string.
+    
+    Returns:
+        The context window size in tokens, or None if unknown.
+    """
+    model_name = get_model_name(model)
+    normalized_name = normalize_model_name(model_name)
+    
+    return MODEL_CONTEXT_WINDOWS.get(normalized_name, DEFAULT_CONTEXT_WINDOW)
+
 
 def calculate_cost(
     input_tokens: int,
@@ -261,9 +341,7 @@ def calculate_cost(
     """
     Calculate the cost in dollars based on token usage and model.
     
-    This is the primary cost calculation function that returns a float value.
-    It first attempts to use genai_prices library for accurate pricing,
-    then falls back to built-in pricing data.
+    Uses the genai_prices library for accurate pricing calculations.
     
     Args:
         input_tokens: Number of input/prompt tokens.
@@ -275,6 +353,9 @@ def calculate_cost(
     
     Returns:
         The calculated cost as a float (in dollars).
+    
+    Raises:
+        ImportError: If genai_prices library is not installed.
     """
     if input_tokens is None or output_tokens is None:
         return 0.0
@@ -288,51 +369,31 @@ def calculate_cost(
     except (ValueError, TypeError):
         return 0.0
     
-    # Try genai_prices first for accurate pricing
-    try:
-        from genai_prices import calculate_cost as genai_calculate_cost
-        from upsonic.usage import RequestUsage
-        
-        usage = RequestUsage(
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            cache_write_tokens=cache_write_tokens,
-            cache_read_tokens=cache_read_tokens,
-        )
-        
-        model_name = get_model_name(model)
-        cost = genai_calculate_cost(usage, model_name)
-        
-        # Add reasoning token cost if applicable (o1/o3 models)
-        if reasoning_tokens > 0:
-            pricing = get_model_pricing(model_name)
-            # Reasoning tokens are typically priced at output rate
-            reasoning_cost = (reasoning_tokens / 1_000_000) * pricing['output_cost_per_1m']
-            cost += reasoning_cost
-        
-        return float(cost)
-    except ImportError:
-        pass
-    except Exception:
-        pass
-    
-    # Fall back to built-in pricing
+    from genai_prices import calc_price
+    from upsonic.usage import RequestUsage
+
+    usage = RequestUsage(
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cache_write_tokens=cache_write_tokens,
+        cache_read_tokens=cache_read_tokens,
+    )
+
     model_name = get_model_name(model)
-    pricing = get_model_pricing(model_name)
-    
-    input_cost = (input_tokens / 1_000_000) * pricing['input_cost_per_1m']
-    output_cost = (output_tokens / 1_000_000) * pricing['output_cost_per_1m']
-    
-    # Cache tokens typically have different pricing (usually discounted)
-    # For simplicity, we use 50% of input rate for cache reads, 100% for writes
-    cache_read_cost = (cache_read_tokens / 1_000_000) * (pricing['input_cost_per_1m'] * 0.5)
-    cache_write_cost = (cache_write_tokens / 1_000_000) * pricing['input_cost_per_1m']
-    
-    # Reasoning tokens are typically priced at output rate
-    reasoning_cost = (reasoning_tokens / 1_000_000) * pricing['output_cost_per_1m']
-    
-    total_cost = input_cost + output_cost + cache_read_cost + cache_write_cost + reasoning_cost
-    return total_cost
+    price_calc = calc_price(usage, model_name)
+    cost = float(price_calc.total_price)
+
+    if reasoning_tokens > 0:
+        reasoning_usage = RequestUsage(
+            input_tokens=0,
+            output_tokens=reasoning_tokens,
+            cache_write_tokens=0,
+            cache_read_tokens=0,
+        )
+        reasoning_price = calc_price(reasoning_usage, model_name)
+        cost += float(reasoning_price.total_price)
+
+    return cost
 
 
 def calculate_cost_from_usage(
@@ -438,10 +499,6 @@ def calculate_cost_from_agent(agent: Any) -> float:
     return 0.0
 
 
-# =============================================================================
-# Formatted String Functions (for display)
-# =============================================================================
-
 def format_cost(cost: float, approximate: bool = True) -> str:
     """
     Format a cost value as a string.
@@ -470,9 +527,6 @@ def get_estimated_cost(
 ) -> str:
     """
     Calculate and format estimated cost as a string.
-    
-    This function is provided for backward compatibility and display purposes.
-    For programmatic use, prefer calculate_cost() which returns a float.
     
     Args:
         input_tokens: Number of input/prompt tokens.
@@ -534,4 +588,3 @@ def get_estimated_cost_from_agent(agent: Any) -> str:
     """
     cost = calculate_cost_from_agent(agent)
     return format_cost(cost, approximate=True)
-

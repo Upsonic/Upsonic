@@ -1,6 +1,6 @@
 [project]
 name = "upsonic"
-version = "0.71.6"
+version = "0.72.0"
 description = "Agent Framework For Fintech"
 readme = "README.md"
 authors = [
@@ -213,7 +213,6 @@ tools = [
     "beautifulsoup4>=4.14.2",
     "ddgs>=9.10.0",
     "genai-prices>=0.0.29",
-    "llmlingua>=0.2.2",
     "pandas>=2.3.2",
     "tavily-python>=0.7.12",
     "yfinance>=0.2.66",

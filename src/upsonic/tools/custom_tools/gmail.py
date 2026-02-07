@@ -47,6 +47,8 @@ import base64
 import mimetypes
 import re
 from datetime import datetime, timedelta
+from email.header import Header
+from email.utils import formataddr, parseaddr
 from functools import wraps
 from os import getenv
 from pathlib import Path
@@ -130,6 +132,44 @@ def validate_email(email: str) -> bool:
     return bool(re.match(pattern, extracted_email))
 
 
+def encode_email_address(email_string: str) -> str:
+    """
+    Encode an email address with proper RFC 2047 encoding for non-ASCII characters.
+    
+    This handles email addresses in formats like:
+    - "Display Name" <user@example.com>
+    - Display Name <user@example.com>
+    - user@example.com
+    
+    The display name is encoded using RFC 2047 if it contains non-ASCII characters,
+    while the email address itself is kept as-is (email addresses must be ASCII).
+    
+    Args:
+        email_string: The email string which may contain a display name with non-ASCII chars
+        
+    Returns:
+        Properly encoded email address string safe for email headers
+    """
+    email_string = email_string.strip()
+    
+    # Parse the email address using standard library
+    display_name, email_addr = parseaddr(email_string)
+    
+    # If no display name, just return the email address
+    if not display_name:
+        return email_addr if email_addr else email_string
+    
+    # Check if display name contains non-ASCII characters
+    try:
+        display_name.encode('ascii')
+        # ASCII-only, can use as-is
+        return formataddr((display_name, email_addr))
+    except UnicodeEncodeError:
+        # Contains non-ASCII, need to encode the display name
+        encoded_name = Header(display_name, 'utf-8').encode()
+        return formataddr((encoded_name, email_addr))
+
+
 class GmailTools:
     # Default scopes for Gmail API access
     DEFAULT_SCOPES = [
@@ -168,8 +208,8 @@ class GmailTools:
         if not _GOOGLE_API_AVAILABLE:
             from upsonic.utils.printing import import_error
             import_error(
-                package_name="google-api-python-client google-auth-httplib2 google-auth-oauthlib",
-                install_command="pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib",
+                package_name="upsonic[gmail-interface]",
+                install_command="pip install upsonic[gmail-interface]",
                 feature_name="Gmail tools"
             )
 
@@ -914,13 +954,16 @@ class GmailTools:
         else:
             message = MIMEText(body, "html")
 
-        # Set headers
-        message["to"] = ", ".join(to)
+        # Set headers with proper encoding for non-ASCII characters
+        # Encode each recipient email address to handle non-ASCII display names
+        encoded_to = [encode_email_address(addr.strip()) for addr in to]
+        message["to"] = ", ".join(encoded_to)
         message["from"] = "me"
         message["subject"] = subject
 
         if cc:
-            message["Cc"] = ", ".join(cc)
+            encoded_cc = [encode_email_address(addr.strip()) for addr in cc]
+            message["Cc"] = ", ".join(encoded_cc)
 
         # Add reply headers if this is a response
         if thread_id and message_id:

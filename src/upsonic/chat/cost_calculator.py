@@ -17,7 +17,6 @@ from upsonic.utils.usage import (
     get_estimated_cost_from_usage,
     get_estimated_cost_from_run_output,
     get_model_name,
-    get_model_pricing
 )
 
 
@@ -126,19 +125,7 @@ class CostTracker:
                 return float(cost_string)
         except (ValueError, TypeError):
             return 0.0
-    
-    @staticmethod
-    def get_pricing(model_name: str) -> Dict[str, float]:
-        """
-        Get pricing information for a model.
-        
-        Args:
-            model_name: Name of the model
-            
-        Returns:
-            Dictionary with pricing information
-        """
-        return get_model_pricing(model_name)
+
     
     @staticmethod
     def get_name(model: Optional[Union["Model", str]]) -> str:

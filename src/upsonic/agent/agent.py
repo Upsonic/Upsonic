@@ -15,7 +15,6 @@ from upsonic.utils.retry import retryable
 from upsonic.tools.processor import ExternalExecutionPause
 from upsonic.run.cancel import register_run, cleanup_run, raise_if_cancelled, cancel_run as cancel_run_func, is_cancelled
 from upsonic.session.base import SessionType
-# Constants for structured output
 from upsonic.output import DEFAULT_OUTPUT_TOOL_NAME
 
 if TYPE_CHECKING:
@@ -126,8 +125,9 @@ class Agent(BaseAgent):
         company_name: Optional[str] = None,
         system_prompt: Optional[str] = None,
         reflection: bool = False,
-        compression_strategy: Literal["none", "simple", "llmlingua"] = "none",
-        compression_settings: Optional[Dict[str, Any]] = None,
+        context_management: bool = False,
+        context_management_keep_recent: int = 5,
+        context_management_model: Optional[str] = None,
         reliability_layer: Optional[Any] = None,
         agent_id_: Optional[str] = None,
         canvas: Optional["Canvas"] = None,
@@ -168,6 +168,8 @@ class Agent(BaseAgent):
         culture: Optional["Culture"] = None,
         # Agent metadata (passed to prompt)
         metadata: Optional[Dict[str, Any]] = None,
+        # Workspace settings
+        workspace: Optional[str] = None,
     ):
         """
         Initialize the Agent with comprehensive configuration options.
@@ -185,10 +187,15 @@ class Agent(BaseAgent):
             company_description: Company description for context
             system_prompt: Custom system prompt
             reflection: Reflection capabilities (default is False)
-            compression_strategy: The method for context compression ('none', 'simple', 'llmlingua').
-            compression_settings: A dictionary of settings for the chosen strategy.
-                - For "simple": {"max_length": 2000}
-                - For "llmlingua": {"ratio": 0.5, "model_name": "...", "instruction": "..."}
+            context_management: Enable automatic context window management (default True).
+                When enabled, the middleware automatically prunes tool call history and
+                summarizes old messages when the context approaches the model's limit.
+            context_management_keep_recent: Number of recent tool-call events /
+                messages to preserve when the context management middleware prunes or
+                summarizes the history (default 5).
+            context_management_model: Optional model identifier (e.g. 'openai/gpt-4.1')
+                with a larger context window to use specifically for context compression /
+                summarization. If None, the agent's primary model is used.
             reliability_layer: Reliability layer for robustness
             agent_id_: Specific agent ID
             canvas: Canvas instance for visual interactions
@@ -229,6 +236,9 @@ class Agent(BaseAgent):
             
             culture: Culture instance defining agent behavior and communication guidelines.
                 Includes description, add_system_prompt, repeat, and repeat_interval settings.
+            workspace: Path to workspace folder containing Agents.md file with agent configuration.
+                When set, the Agents.md content is included in system prompt and a greeting 
+                message is generated before the first task/chat, integrated into message history.
         """
         from upsonic.models import infer_model
         self.model = infer_model(model)
@@ -288,25 +298,24 @@ class Agent(BaseAgent):
         self.use_llm_for_selection = use_llm_for_selection
         self._model_recommendation: Optional[Any] = None  # Store last recommendation
 
-        self.compression_strategy = compression_strategy
-        self.compression_settings = compression_settings or {}
-        self._prompt_compressor = None
-        
-        if self.compression_strategy == "llmlingua":
-            try:
-                from llmlingua import PromptCompressor
-            except ImportError:
-                from upsonic.utils.printing import import_error
-                import_error(
-                    package_name="llmlingua",
-                    install_command="pip install llmlingua",
-                    feature_name="llmlingua compression strategy"
-                )
+        self.context_management: bool = context_management
+        self.context_management_keep_recent: int = context_management_keep_recent
+        self.context_management_model: Optional[str] = context_management_model
+        self._context_management_middleware: Optional[Any] = None
 
-            model_name = self.compression_settings.get(
-                "model_name", "microsoft/llmlingua-2-xlm-roberta-large-meetingbank"
+        if self.context_management:
+            from upsonic.agent.context_managers import ContextManagementMiddleware
+            from upsonic.models import infer_model as _infer_model
+
+            compression_model: Optional[Any] = None
+            if self.context_management_model is not None:
+                compression_model = _infer_model(self.context_management_model)
+
+            self._context_management_middleware = ContextManagementMiddleware(
+                model=self.model,
+                keep_recent_count=self.context_management_keep_recent,
+                context_compression_model=compression_model,
             )
-            self._prompt_compressor = PromptCompressor(model_name=model_name, use_llmlingua2=True)
 
         self.reliability_layer = reliability_layer
         
@@ -429,6 +438,122 @@ class Agent(BaseAgent):
         self._setup_policy_models()
 
         self.session_type = SessionType.AGENT
+        
+        # Workspace settings
+        self.workspace: Optional[str] = workspace
+        self._workspace_greeting_executed: bool = False
+        self._workspace_agents_md_content: Optional[str] = None
+        
+        # Pre-load workspace Agents.md content if workspace is set
+        if self.workspace:
+            self._workspace_agents_md_content = self._read_workspace_agents_md()
+    
+    def _read_workspace_agents_md(self) -> Optional[str]:
+        """Read the Agents.md file from the workspace folder.
+        
+        Returns:
+            Content of the Agents.md file, or None if not found.
+        """
+        import os
+        
+        if not self.workspace:
+            return None
+        
+        agents_md_path = os.path.join(self.workspace, "Agents.md")
+        
+        try:
+            with open(agents_md_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            return content
+        except FileNotFoundError:
+            if self.debug:
+                from upsonic.utils.printing import warning_log
+                warning_log(
+                    f"Agents.md not found at {agents_md_path}", 
+                    "Workspace"
+                )
+            return None
+        except Exception as e:
+            if self.debug:
+                from upsonic.utils.printing import error_log
+                error_log(
+                    f"Error reading Agents.md from {agents_md_path}: {str(e)}", 
+                    "Workspace"
+                )
+            return None
+    
+    async def execute_workspace_greeting_async(
+        self,
+        return_output: bool = False,
+    ) -> Any:
+        """Execute the workspace greeting as a proper agent run.
+        
+        This method is called before the first task/chat when workspace is set.
+        It makes an LLM request with a greeting prompt and returns the result
+        just like do_async.
+        
+        Args:
+            return_output: If True, return full AgentRunOutput. If False, return content only.
+            
+        Returns:
+            Same as do_async - Task content or AgentRunOutput based on return_output.
+        """
+        if not self.workspace or self._workspace_greeting_executed:
+            return None
+        
+        from upsonic.tasks.tasks import Task
+        
+        # Build the greeting prompt
+        greeting_prompt = (
+            "A new session was started. Say hi briefly (1-2 sentences) and ask what the user wants to do next. "
+            "If the runtime model differs from default_model in the system prompt, mention the default model in the greeting. "
+            "Do not mention internal steps, files, tools, or reasoning."
+        )
+        
+        # Create a greeting task
+        greeting_task = Task(description=greeting_prompt)
+        
+        # Mark greeting as executed BEFORE calling do_async to prevent recursion
+        self._workspace_greeting_executed = True
+        
+        # Execute the greeting using do_async
+        result = await self.do_async(
+            task=greeting_task,
+            return_output=return_output,
+            _print_method_default=False
+        )
+        print("Greeting result: ", result)
+        
+        return result
+    
+    def execute_workspace_greeting(
+        self,
+        return_output: bool = False,
+    ) -> Any:
+        """Synchronous version of execute_workspace_greeting_async.
+        
+        Args:
+            return_output: If True, return full AgentRunOutput. If False, return content only.
+            
+        Returns:
+            Same as do - Task content or AgentRunOutput based on return_output.
+        """
+        import asyncio
+        
+        if not self.workspace or self._workspace_greeting_executed:
+            return None
+        
+        try:
+            loop = asyncio.get_running_loop()
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(
+                    asyncio.run, 
+                    self.execute_workspace_greeting_async(return_output)
+                )
+                return future.result()
+        except RuntimeError:
+            return asyncio.run(self.execute_workspace_greeting_async(return_output))
     
     def _setup_policy_models(self) -> None:
         """Setup model references for safety policies."""
@@ -1236,12 +1361,19 @@ class Agent(BaseAgent):
         task: "Task", 
         memory_handler: Optional["MemoryManager"], 
         state: Optional["State"] = None,
-    ) -> List["ModelRequest"]:
-        """Build the complete message history for the model request."""
+    ) -> tuple[List["ModelRequest"], Optional["ModelResponse"]]:
+        """Build the complete message history for the model request.
+
+        Returns:
+            A tuple of (messages, context_full_response).
+            context_full_response is None when the context fits within the
+            model's window, or a ModelResponse with a fixed message when
+            the context is full after all reduction strategies.
+        """
         from upsonic.agent.context_managers import SystemPromptManager, ContextManager
         from upsonic.messages import SystemPromptPart, UserPromptPart, ModelRequest
         
-        messages = []
+        messages: List["ModelRequest"] = []
         message_history = memory_handler.get_message_history()
         messages.extend(message_history)
         
@@ -1249,13 +1381,7 @@ class Agent(BaseAgent):
         context_manager = ContextManager(self, task, state)
         
         async with system_prompt_manager.manage_system_prompt(memory_handler) as sp_handler, \
-                   context_manager.manage_context(memory_handler) as ctx_handler:
-            
-            if self.compression_strategy != "none" and ctx_handler:
-                context_prompt = ctx_handler.get_context_prompt()
-                if context_prompt:
-                    compressed_context = self._compress_context(context_prompt)
-                    task.context_formatted = compressed_context
+                   context_manager.manage_context(memory_handler) as _ctx_handler:
             
             if hasattr(self, '_agent_run_output') and self._agent_run_output and self._agent_run_output.input:
                 run_input = self._agent_run_output.input
@@ -1271,7 +1397,6 @@ class Agent(BaseAgent):
             
             parts = []
             
-            # Use SystemPromptManager to determine if system prompt should be included
             if sp_handler.should_include_system_prompt(messages):
                 system_prompt = sp_handler.get_system_prompt()
                 if system_prompt:
@@ -1282,7 +1407,18 @@ class Agent(BaseAgent):
             
             current_request = ModelRequest(parts=parts)
             messages.append(current_request)
-        return messages
+
+        # Apply context management middleware
+        context_full_response: Optional["ModelResponse"] = None
+        if self.context_management and self._context_management_middleware:
+            managed_msgs, ctx_full = await self._context_management_middleware.apply(messages)
+            messages = managed_msgs
+            if ctx_full:
+                context_full_response = self._context_management_middleware._build_context_full_response(
+                    model_name=self.model.model_name
+                )
+
+        return messages, context_full_response
     
     async def _build_model_request_with_input(
         self, 
@@ -1291,18 +1427,25 @@ class Agent(BaseAgent):
         current_input: Any, 
         temporary_message_history: List["ModelRequest"],
         state: Optional["State"] = None,
-    ) -> List["ModelRequest"]:
-        """Build model request with custom input and message history for guardrail retries."""
+    ) -> tuple[List["ModelRequest"], Optional["ModelResponse"]]:
+        """Build model request with custom input and message history for guardrail retries.
+
+        Returns:
+            A tuple of (messages, context_full_response).
+            context_full_response is None when the context fits within the
+            model's window, or a ModelResponse with a fixed message when
+            the context is full after all reduction strategies.
+        """
         from upsonic.agent.context_managers import SystemPromptManager, ContextManager
         from upsonic.messages import SystemPromptPart, UserPromptPart, ModelRequest
         
-        messages = list(temporary_message_history)
+        messages: List["ModelRequest"] = list(temporary_message_history)
         
         system_prompt_manager = SystemPromptManager(self, task)
         context_manager = ContextManager(self, task, state)
         
         async with system_prompt_manager.manage_system_prompt(memory_handler) as sp_handler, \
-                   context_manager.manage_context(memory_handler) as ctx_handler:
+                   context_manager.manage_context(memory_handler) as _ctx_handler:
             
             user_part = UserPromptPart(content=current_input)
             
@@ -1318,14 +1461,18 @@ class Agent(BaseAgent):
             
             current_request = ModelRequest(parts=parts)
             messages.append(current_request)
-            
-            if self.compression_strategy != "none" and ctx_handler:
-                context_prompt = ctx_handler.get_context_prompt()
-                if context_prompt:
-                    compressed_context = self._compress_context(context_prompt)
-                    task.context_formatted = compressed_context
-        
-        return messages
+
+        # Apply context management middleware
+        context_full_response: Optional["ModelResponse"] = None
+        if self.context_management and self._context_management_middleware:
+            managed_msgs, ctx_full = await self._context_management_middleware.apply(messages)
+            messages = managed_msgs
+            if ctx_full:
+                context_full_response = self._context_management_middleware._build_context_full_response(
+                    model_name=self.model.model_name
+                )
+
+        return messages, context_full_response
     
     def _build_model_request_parameters(self, task: "Task") -> "ModelRequestParameters":
         """Build model request parameters including tools and structured output."""
@@ -1751,6 +1898,16 @@ class Agent(BaseAgent):
                 limit_message = ModelRequest(parts=[limit_notification])
                 messages.append(limit_message)
                 
+                # Apply context management middleware before model request
+                if self.context_management and self._context_management_middleware:
+                    managed_msgs, ctx_full = await self._context_management_middleware.apply(messages)
+                    messages.clear()
+                    messages.extend(managed_msgs)
+                    if ctx_full:
+                        return self._context_management_middleware._build_context_full_response(
+                            model_name=self.model.model_name
+                        )
+                
                 model_params = self._build_model_request_parameters(getattr(self, 'current_task', None))
                 model_params = self.model.customize_request_parameters(model_params)
                 
@@ -1793,6 +1950,16 @@ class Agent(BaseAgent):
                     finish_reason="stop"
                 )
                 return stop_response
+            
+            # Apply context management middleware before follow-up model request
+            if self.context_management and self._context_management_middleware:
+                managed_msgs, ctx_full = await self._context_management_middleware.apply(messages)
+                messages.clear()
+                messages.extend(managed_msgs)
+                if ctx_full:
+                    return self._context_management_middleware._build_context_full_response(
+                        model_name=self.model.model_name
+                    )
             
             model_params = self._build_model_request_parameters(getattr(self, 'current_task', None))
             model_params = self.model.customize_request_parameters(model_params)
@@ -2039,7 +2206,10 @@ class Agent(BaseAgent):
             max_retries = 1
 
         while not validation_passed and retry_counter < max_retries:
-            messages = await self._build_model_request_with_input(task, memory_handler, current_input, temporary_message_history, state)
+            messages, context_full_response = await self._build_model_request_with_input(task, memory_handler, current_input, temporary_message_history, state)
+            
+            if context_full_response is not None:
+                return context_full_response
             
             model_params = self._build_model_request_parameters(task)
             model_params = self.model.customize_request_parameters(model_params)
@@ -2151,102 +2321,6 @@ class Agent(BaseAgent):
                 return error_response
                 
         return final_model_response
-    
-    def _compress_context(self, context: str) -> str:
-        """Compress context based on the selected strategy."""
-        if self.compression_strategy == "simple":
-            return self._compress_simple(context)
-        elif self.compression_strategy == "llmlingua":
-            return self._compress_llmlingua(context)
-        return context
-
-    def _compress_simple(self, context: str) -> str:
-        """Compress context using simple whitespace removal and truncation."""
-        if not context:
-            return ""
-        
-        original_length = len(context)
-        compressed = " ".join(context.split())
-        
-        max_length = self.compression_settings.get("max_length", 2000)
-        
-        if len(compressed) > max_length:
-            part_size = max_length // 2 - 20
-            compressed = compressed[:part_size] + " ... [COMPRESSED] ... " + compressed[-part_size:]
-        
-        if self.debug and self.debug_level >= 2:
-            from upsonic.utils.printing import debug_log_level2
-            compression_ratio = len(compressed) / original_length if original_length > 0 else 1.0
-            debug_log_level2(
-                "Context compression (simple)",
-                "Agent",
-                debug=self.debug,
-                debug_level=self.debug_level,
-                compression_strategy="simple",
-                original_length=original_length,
-                compressed_length=len(compressed),
-                compression_ratio=compression_ratio,
-                max_length=max_length,
-                was_truncated=len(compressed) > max_length
-            )
-        
-        return compressed
-        
-
-    def _compress_llmlingua(self, context: str) -> str:
-        """Compress context using the LLMLingua library."""
-        if not context or not self._prompt_compressor:
-            return context
-
-        original_length = len(context)
-        ratio = self.compression_settings.get("ratio", 0.5)
-        instruction = self.compression_settings.get("instruction", "")
-
-        try:
-            result = self._prompt_compressor.compress_prompt(
-                context.split('\n'),
-                instruction=instruction,
-                rate=ratio
-            )
-            compressed = result['compressed_prompt']
-            
-            if self.debug and self.debug_level >= 2:
-                from upsonic.utils.printing import debug_log_level2
-                compression_ratio = len(compressed) / original_length if original_length > 0 else 1.0
-                debug_log_level2(
-                    "Context compression (llmlingua)",
-                    "Agent",
-                    debug=self.debug,
-                    debug_level=self.debug_level,
-                    compression_strategy="llmlingua",
-                    original_length=original_length,
-                    compressed_length=len(compressed),
-                    compression_ratio=compression_ratio,
-                    target_ratio=ratio,
-                    instruction=instruction[:200] if instruction else None,
-                    compression_stats=result.get('stats', {})
-                )
-            
-            return compressed
-        except Exception as e:
-            if self.debug:
-                from upsonic.utils.printing import compression_fallback, debug_log_level2
-                compression_fallback("llmlingua", "simple", str(e))
-                
-                # Level 2: Compression fallback details
-                if self.debug_level >= 2:
-                    debug_log_level2(
-                        "Context compression fallback",
-                        "Agent",
-                        debug=self.debug,
-                        debug_level=self.debug_level,
-                        original_strategy="llmlingua",
-                        fallback_strategy="simple",
-                        error_type=type(e).__name__,
-                        error_message=str(e),
-                        original_length=original_length
-                    )
-            return self._compress_simple(context)
     
     async def recommend_model_for_task_async(
         self,

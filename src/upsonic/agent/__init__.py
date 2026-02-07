@@ -8,6 +8,11 @@ if TYPE_CHECKING:
     from .agent import Agent
     from .base import BaseAgent
     from .deepagent import DeepAgent
+    from .autonomous_agent import (
+        AutonomousAgent,
+        AutonomousFilesystemToolKit,
+        AutonomousShellToolKit,
+    )
     from upsonic.run.events.events import (
         AgentEvent,
         PipelineStartEvent,
@@ -56,6 +61,21 @@ def _get_agent_classes():
         'Agent': Agent,
         'BaseAgent': BaseAgent,
         'DeepAgent': DeepAgent,
+    }
+
+
+def _get_autonomous_agent_classes():
+    """Lazy import of autonomous agent classes."""
+    from .autonomous_agent import (
+        AutonomousAgent,
+        AutonomousFilesystemToolKit,
+        AutonomousShellToolKit,
+    )
+    
+    return {
+        'AutonomousAgent': AutonomousAgent,
+        'AutonomousFilesystemToolKit': AutonomousFilesystemToolKit,
+        'AutonomousShellToolKit': AutonomousShellToolKit,
     }
 def _get_event_classes():
     """Lazy import of event classes."""
@@ -143,6 +163,11 @@ def __getattr__(name: str) -> Any:
     if name in agent_classes:
         return agent_classes[name]
     
+    # Autonomous agent classes
+    autonomous_classes = _get_autonomous_agent_classes()
+    if name in autonomous_classes:
+        return autonomous_classes[name]
+    
     # Event classes
     event_classes = _get_event_classes()
     if name in event_classes:
@@ -158,6 +183,11 @@ __all__ = [
     'Agent',
     'BaseAgent',
     'DeepAgent',
+    
+    # Autonomous agent classes
+    'AutonomousAgent',
+    'AutonomousFilesystemToolKit',
+    'AutonomousShellToolKit',
     
     # Base event
     'AgentEvent',

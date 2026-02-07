@@ -965,6 +965,7 @@ class Task(BaseModel):
             "_original_input": self._original_input,
             "_run_id": self._run_id,
             "_last_cache_entry": self._last_cache_entry,
+            "_anonymization_map": self._anonymization_map,
         }
         
         # Handle status (RunStatus enum)
@@ -1205,6 +1206,8 @@ class Task(BaseModel):
             task._run_id = data["_run_id"]
         if data.get("_last_cache_entry") is not None:
             task._last_cache_entry = data["_last_cache_entry"]
+        if data.get("_anonymization_map") is not None:
+            task._anonymization_map = data["_anonymization_map"]
         
         # Restore agent, cache_embedding_provider, _cache_manager if present
         if data.get("agent") is not None:

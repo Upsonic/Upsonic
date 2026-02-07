@@ -17,9 +17,8 @@ if TYPE_CHECKING:
         calculate_cost_from_run_output,
         calculate_cost_from_agent,
         get_model_name,
-        get_model_pricing,
+        get_model_context_window,
         format_cost,
-        MODEL_PRICING,
     )
 
 def _get_utils_classes():
@@ -39,9 +38,8 @@ def _get_utils_classes():
         calculate_cost_from_run_output,
         calculate_cost_from_agent,
         get_model_name,
-        get_model_pricing,
+        get_model_context_window,
         format_cost,
-        MODEL_PRICING,
     )
     
     return {
@@ -59,9 +57,8 @@ def _get_utils_classes():
         'calculate_cost_from_agent': calculate_cost_from_agent,
         # Helper functions
         'get_model_name': get_model_name,
-        'get_model_pricing': get_model_pricing,
+        'get_model_context_window': get_model_context_window,
         'format_cost': format_cost,
-        'MODEL_PRICING': MODEL_PRICING,
     }
 
 def __getattr__(name: str) -> Any:
@@ -91,7 +88,6 @@ __all__ = [
     "calculate_cost_from_agent",
     # Helper functions
     "get_model_name",
-    "get_model_pricing",
+    "get_model_context_window",
     "format_cost",
-    "MODEL_PRICING",
 ]

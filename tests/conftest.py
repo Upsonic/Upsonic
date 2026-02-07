@@ -1,14 +1,16 @@
 """Pytest configuration to handle DisallowedOperation exceptions gracefully."""
-import os
 import pytest
 import sys
 from pathlib import Path
 
-# Load environment variables from .env file before any tests run
+_root = Path(__file__).resolve().parent.parent
+_src = _root / "src"
+if _src.exists() and str(_src) not in sys.path:
+    sys.path.insert(0, str(_src))
+
 try:
     from dotenv import load_dotenv
-    # Load .env from project root
-    env_path = Path(__file__).parent.parent / ".env"
+    env_path = _root / ".env"
     if env_path.exists():
         load_dotenv(env_path)
         print(f"✓ Loaded environment variables from: {env_path}")
@@ -17,7 +19,7 @@ try:
 except ImportError:
     print("⚠️  python-dotenv not installed. Install with: pip install python-dotenv")
 
-from upsonic.safety_engine.exceptions import DisallowedOperation
+from upsonic.safety_engine.exceptions import DisallowedOperation  # noqa: E402
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
@@ -40,7 +42,7 @@ def pytest_runtest_makereport(item, call):
         if is_disallowed:
             # Print the error message
             print(f"\n⚠️  DisallowedOperation caught in {item.name}: {exc_value}", file=sys.stderr)
-            print(f"   Handling gracefully - test will not fail\n", file=sys.stderr)
+            print("   Handling gracefully - test will not fail\n", file=sys.stderr)
             
             # Modify the report to mark as passed while preserving structure
             report.outcome = "passed"

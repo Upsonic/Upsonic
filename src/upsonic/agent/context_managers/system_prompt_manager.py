@@ -224,6 +224,10 @@ class SystemPromptManager:
                 if culture_formatted:
                     has_culture = True
 
+        # Add workspace Agents.md content if available (high priority, before other prompts)
+        if hasattr(self.agent, '_workspace_agents_md_content') and self.agent._workspace_agents_md_content:
+            prompt_parts.append(f"<AgentConfiguration>\n{self.agent._workspace_agents_md_content}\n</AgentConfiguration>")
+        
         if self.agent.system_prompt is not None:
             base_prompt = self.agent.system_prompt
         

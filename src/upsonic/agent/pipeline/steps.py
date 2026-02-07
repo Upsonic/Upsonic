@@ -861,13 +861,17 @@ class MessageBuildStep(Step):
             context.start_new_run()
             
             # Now build the full messages including the new request
-            messages = await agent._build_model_request(
+            messages, context_full_response = await agent._build_model_request(
                 task,
                 memory_manager,
                 None,
             )
             context.chat_history = messages
-            
+
+            if context_full_response is not None:
+                context.response = context_full_response
+                context._context_window_full = True
+
             if agent.debug and agent.debug_level >= 2:
                 from upsonic.utils.printing import debug_log_level2
                 from upsonic.utils.messages import analyze_model_request_messages
@@ -980,6 +984,16 @@ class ModelExecutionStep(Step):
                     step_number=step_number,
                     status=StepStatus.COMPLETED,
                     message="Skipped due to policy block",
+                    execution_time=time.time() - start_time,
+                )
+                return step_result
+            if getattr(context, '_context_window_full', False):
+                context.chat_history.append(context.response)
+                step_result = StepResult(
+                    name=self.name,
+                    step_number=step_number,
+                    status=StepStatus.COMPLETED,
+                    message="Skipped due to context window full",
                     execution_time=time.time() - start_time,
                 )
                 return step_result

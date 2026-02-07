@@ -6,11 +6,45 @@ used across all interfaces. Interface-specific schemas are in their respective m
 """
 
 from datetime import datetime
+from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, ConfigDict
 
 from upsonic._utils import now_utc
+
+
+class InterfaceMode(str, Enum):
+    """
+    Operating mode for interfaces.
+    
+    Determines how incoming messages are processed:
+    - TASK: Each message is treated as an independent task (stateless)
+    - CHAT: Messages are accumulated in a conversation session (stateful)
+    """
+    TASK = "task"
+    CHAT = "chat"
+
+
+class InterfaceResetCommand:
+    """
+    Reset command configuration for chat mode.
+    
+    Attributes:
+        command: The command string that triggers a chat reset (default: "/reset")
+        case_sensitive: Whether the command matching is case-sensitive (default: False)
+    """
+    command: str = "/reset"
+    case_sensitive: bool = False
+    
+    def matches(self, text: str) -> bool:
+        """Check if the given text matches the reset command."""
+        if not text:
+            return False
+        text_to_check = text.strip()
+        if self.case_sensitive:
+            return text_to_check == self.command
+        return text_to_check.lower() == self.command.lower()
 
 
 class HealthCheckResponse(BaseModel):
