@@ -260,6 +260,7 @@ build-backend = "hatchling.build"
 
 [tool.uv]
 default-groups = ["dev"]
+required-version = ">=0.10.0"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/upsonic"]
