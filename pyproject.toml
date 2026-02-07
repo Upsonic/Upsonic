@@ -22,7 +22,7 @@ dependencies = [
     "sentry-sdk[opentelemetry]>=2.35.0",
     "toml>=0.10.2",
     "uv>=0.5.20",
-    "mcp[cli]==1.9.4",
+    "mcp[cli]>=1.26.0",
     "python-dotenv>=1.0.1",
     "uvicorn>=0.34.0",
     "nest-asyncio>=1.6.0",
@@ -33,7 +33,7 @@ dependencies = [
     "griffe>=1.14.0",
     "typing-inspection>=0.4.1",
     "httpx>=0.28.1",
-    "aiohttp>=3.12.15",
+    "aiohttp>=3.13.3",
     "requests>=2.32.5",
     "openai>=2.2.0",
     "genai-prices>=0.0.38",
@@ -131,7 +131,7 @@ models = [
     "outlines>=1.2.9",
 ]
 embeddings = [
-    "aiohttp>=3.12.15",
+    "aiohttp>=3.13.3",
     "anthropic>=0.69.0",
     "azure-core>=1.35.1",
     "azure-identity>=1.25.0",
@@ -158,7 +158,7 @@ docx-loader = [
     "python-docx>=1.2.0",
 ]
 html-loader = [
-    "aiohttp>=3.12.15",
+    "aiohttp>=3.13.3",
     "beautifulsoup4>=4.14.2",
     "requests>=2.32.5",
 ]
@@ -193,7 +193,7 @@ yaml-loader = [
 ]
 loaders = [
     "aiofiles>=24.1.0",
-    "aiohttp>=3.12.15",
+    "aiohttp>=3.13.3",
     "beautifulsoup4>=4.14.2",
     "docling>=2.55.1",
     "jq>=1.10.0",
