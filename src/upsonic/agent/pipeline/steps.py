@@ -75,12 +75,11 @@ class InitializationStep(Step):
             
             if context.is_streaming:
                 from upsonic.utils.agent.events import ayield_agent_initialized_event
-                async for event in ayield_agent_initialized_event(
+                context.events.append(await ayield_agent_initialized_event(
                     run_id=context.run_id,
                     agent_id=agent.agent_id,
                     is_streaming=context.is_streaming
-                ):
-                    context.events.append(event)
+                ))
             
             step_result = StepResult(
                 name=self.name,
@@ -142,11 +141,10 @@ class CacheCheckStep(Step):
             if not task.enable_cache or task.is_paused:
                 if context.is_streaming:
                     from upsonic.utils.agent.events import ayield_cache_check_event
-                    async for event in ayield_cache_check_event(
+                    context.events.append(await ayield_cache_check_event(
                         run_id=context.run_id,
                         cache_enabled=False
-                    ):
-                        context.events.append(event)
+                    ))
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -223,19 +221,17 @@ class CacheCheckStep(Step):
                 
                 if context.is_streaming:
                     from upsonic.utils.agent.events import ayield_cache_check_event, ayield_cache_hit_event
-                    async for event in ayield_cache_check_event(
+                    context.events.append(await ayield_cache_check_event(
                         run_id=context.run_id,
                         cache_enabled=True,
                         cache_method=task.cache_method
-                    ):
-                        context.events.append(event)
-                    async for event in ayield_cache_hit_event(
+                    ))
+                    context.events.append(await ayield_cache_hit_event(
                         run_id=context.run_id,
                         cache_method=task.cache_method,
                         similarity=similarity,
                         cached_response_preview=str(cached_response)[:100] if cached_response else None
-                    ):
-                        context.events.append(event)
+                    ))
                 
                 step_result = StepResult(
                     name=self.name,
@@ -255,17 +251,15 @@ class CacheCheckStep(Step):
                 
                 if context.is_streaming:
                     from upsonic.utils.agent.events import ayield_cache_check_event, ayield_cache_miss_event
-                    async for event in ayield_cache_check_event(
+                    context.events.append(await ayield_cache_check_event(
                         run_id=context.run_id,
                         cache_enabled=True,
                         cache_method=task.cache_method
-                    ):
-                        context.events.append(event)
-                    async for event in ayield_cache_miss_event(
+                    ))
+                    context.events.append(await ayield_cache_miss_event(
                         run_id=context.run_id,
                         cache_method=task.cache_method
-                    ):
-                        context.events.append(event)
+                    ))
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -326,15 +320,14 @@ class UserPolicyStep(Step):
             if not agent.user_policy_manager.has_policies() or not task.description or task.is_paused:
                 if context.is_streaming:
                     from upsonic.utils.agent.events import ayield_policy_check_event
-                    async for event in ayield_policy_check_event(
+                    context.events.append(await ayield_policy_check_event(
                         run_id=context.run_id or "",
                         policy_type='user_policy',
                         action='ALLOW',
                         policies_checked=policy_count,
                         content_modified=False,
                         blocked_reason=None
-                    ):
-                        context.events.append(event)
+                    ))
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -468,12 +461,11 @@ class ModelSelectionStep(Step):
             
             if context.is_streaming:
                 from upsonic.utils.agent.events import ayield_model_selected_event
-                async for event in ayield_model_selected_event(
+                context.events.append(await ayield_model_selected_event(
                     run_id=context.run_id,
                     model_name=model.model_name,
                     model_provider=provider_name or "unknown"
-                ):
-                    context.events.append(event)
+                ))
             
             step_result = StepResult(
                 name=self.name,
@@ -573,13 +565,12 @@ class ToolSetupStep(Step):
             
             if context.is_streaming:
                 from upsonic.utils.agent.events import ayield_tools_configured_event
-                async for event in ayield_tools_configured_event(
+                context.events.append(await ayield_tools_configured_event(
                     run_id=context.run_id or "",
                     tool_count=len(tool_names),
                     tool_names=tool_names,
                     has_mcp_handlers=has_mcp
-                ):
-                    context.events.append(event)
+                ))
             
             step_result = StepResult(
                 name=self.name,
@@ -662,14 +653,13 @@ class StorageConnectionStep(Step):
             
             if context.is_streaming:
                 from upsonic.utils.agent.events import ayield_storage_connection_event
-                async for event in ayield_storage_connection_event(
+                context.events.append(await ayield_storage_connection_event(
                     run_id=context.run_id or "",
                     storage_type=storage_type,
                     is_connected=is_connected,
                     has_memory=has_memory,
                     session_id=session_id
-                ):
-                    context.events.append(event)
+                ))
             
             step_result = StepResult(
                 name=self.name,
@@ -758,13 +748,12 @@ class LLMManagerStep(Step):
             
             if context.is_streaming:
                 from upsonic.utils.agent.events import ayield_llm_prepared_event
-                async for event in ayield_llm_prepared_event(
+                context.events.append(await ayield_llm_prepared_event(
                     run_id=context.run_id or "",
                     default_model=default_model_name,
                     requested_model=requested_model_name,
                     model_changed=model_changed
-                ):
-                    context.events.append(event)
+                ))
             
             step_result = StepResult(
                 name=self.name,
@@ -916,14 +905,13 @@ class MessageBuildStep(Step):
                     
             if context.is_streaming:
                 from upsonic.utils.agent.events import ayield_messages_built_event
-                async for event in ayield_messages_built_event(
+                context.events.append(await ayield_messages_built_event(
                     run_id=context.run_id or "",
                     message_count=len(messages),
                     has_system_prompt=has_system,
                     has_memory_messages=has_memory,
                     is_continuation=False
-                ):
-                    context.events.append(event)
+                ))
             
             step_result = StepResult(
                 name=self.name,
@@ -1017,15 +1005,14 @@ class ModelExecutionStep(Step):
                 has_tools = bool(agent.tools or (task and task.tools))
                 tool_limit = getattr(agent, 'tool_call_limit', None)
                 from upsonic.utils.agent.events import ayield_model_request_start_event
-                async for event in ayield_model_request_start_event(
+                context.events.append(await ayield_model_request_start_event(
                     run_id=context.run_id or "",
                     model_name=model.model_name,
                     is_streaming=False,
                     has_tools=has_tools,
                     tool_call_count=context.tool_call_count,
                     tool_call_limit=tool_limit
-                ):
-                    context.events.append(event)
+                ))
             
             memory_manager = None
             if pipeline_manager:
@@ -1152,15 +1139,14 @@ class ModelExecutionStep(Step):
                 has_text = any(isinstance(p, TextPart) for p in final_response.parts)
                 tool_calls = [p for p in final_response.parts if isinstance(p, ToolCallPart)]
                 from upsonic.utils.agent.events import ayield_model_response_event
-                async for event in ayield_model_response_event(
+                context.events.append(await ayield_model_response_event(
                     run_id=context.run_id or "",
                     model_name=model.model_name,
                     has_text=has_text,
                     has_tool_calls=len(tool_calls) > 0,
                     tool_call_count=len(tool_calls),
                     finish_reason=final_response.finish_reason
-                ):
-                    context.events.append(event)
+                ))
             
             agent_tool_calls = getattr(agent, '_tool_call_count', 0)
             prev_tool_calls = context.tool_call_count
@@ -1363,11 +1349,10 @@ class ReflectionStep(Step):
             if not (agent.reflection_processor and agent.reflection):
                 if context.is_streaming:
                     from upsonic.utils.agent.events import ayield_reflection_event
-                    async for event in ayield_reflection_event(
+                    context.events.append(await ayield_reflection_event(
                         run_id=context.run_id or "",
                         reflection_applied=False
-                    ):
-                        context.events.append(event)
+                    ))
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -1473,14 +1458,13 @@ class ReflectionStep(Step):
             
             if context.is_streaming:
                 from upsonic.utils.agent.events import ayield_reflection_event
-                async for event in ayield_reflection_event(
+                context.events.append(await ayield_reflection_event(
                     run_id=context.run_id or "",
                     reflection_applied=True,
                     improvement_made=improvement_made,
                     original_preview=original_preview,
                     improved_preview=improved_preview
-                ):
-                    context.events.append(event)
+                ))
             
             step_result = StepResult(
                 name=self.name,
@@ -1858,12 +1842,11 @@ class MemorySaveStep(Step):
                 
                 from upsonic.utils.agent.events import ayield_memory_update_event
                 messages_count = len(context.messages) if context.messages else 0
-                async for event in ayield_memory_update_event(
+                context.events.append(await ayield_memory_update_event(
                     run_id=context.run_id or "",
                     messages_added=messages_count,
                     memory_type=memory_type
-                ):
-                    context.events.append(event)
+                ))
             
             
             # Finalize memory manager (this saves the session)
@@ -1959,11 +1942,10 @@ class ReliabilityStep(Step):
             if not agent.reliability_layer:
                 if context.is_streaming:
                     from upsonic.utils.agent.events import ayield_reliability_event
-                    async for event in ayield_reliability_event(
+                    context.events.append(await ayield_reliability_event(
                         run_id=context.run_id or "",
                         reliability_applied=False
-                    ):
-                        context.events.append(event)
+                    ))
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -2033,12 +2015,11 @@ class ReliabilityStep(Step):
             
             if context.is_streaming:
                 from upsonic.utils.agent.events import ayield_reliability_event
-                async for event in ayield_reliability_event(
+                context.events.append(await ayield_reliability_event(
                     run_id=context.run_id or "",
                     reliability_applied=True,
                     modifications_made=modifications_made
-                ):
-                    context.events.append(event)
+                ))
             
             step_result = StepResult(
                 name=self.name,
@@ -2107,15 +2088,14 @@ class AgentPolicyStep(Step):
             if not agent.agent_policy_manager.has_policies() or not task.response:
                 if context.is_streaming:
                     from upsonic.utils.agent.events import ayield_policy_check_event
-                    async for event in ayield_policy_check_event(
+                    context.events.append(await ayield_policy_check_event(
                         run_id=context.run_id or "",
                         policy_type='agent_policy',
                         action='ALLOW',
                         policies_checked=policy_count,
                         content_modified=False,
                         blocked_reason=None
-                    ):
-                        context.events.append(event)
+                    ))
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -2319,12 +2299,11 @@ class CacheStorageStep(Step):
             if not (task.enable_cache and task.response):
                 if context.is_streaming:
                     from upsonic.utils.agent.events import ayield_cache_stored_event
-                    async for event in ayield_cache_stored_event(
+                    context.events.append(await ayield_cache_stored_event(
                         run_id=context.run_id or "",
                         cache_method='disabled',
                         duration_minutes=None
-                    ):
-                        context.events.append(event)
+                    ))
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -2358,12 +2337,11 @@ class CacheStorageStep(Step):
             
             if context.is_streaming:
                 from upsonic.utils.agent.events import ayield_cache_stored_event
-                async for event in ayield_cache_stored_event(
+                context.events.append(await ayield_cache_stored_event(
                     run_id=context.run_id or "",
                     cache_method=task.cache_method,
                     duration_minutes=task.cache_duration_minutes
-                ):
-                    context.events.append(event)
+                ))
             
             if agent.debug:
                 from upsonic.utils.printing import cache_stored, debug_log_level2
@@ -2860,12 +2838,11 @@ class StreamMemoryMessageTrackingStep(Step):
                 # No memory configured - still emit event for visibility
                 if context.is_streaming:
                     from upsonic.utils.agent.events import ayield_memory_update_event
-                    async for event in ayield_memory_update_event(
+                    context.events.append(await ayield_memory_update_event(
                         run_id=context.run_id or "",
                         memory_type=None,
                         messages_added=messages_count
-                    ):
-                        context.events.append(event)
+                    ))
                 
                 step_result = StepResult(
                     name=self.name,
@@ -2897,12 +2874,11 @@ class StreamMemoryMessageTrackingStep(Step):
             
             if context.is_streaming:
                 from upsonic.utils.agent.events import ayield_memory_update_event
-                async for event in ayield_memory_update_event(
+                context.events.append(await ayield_memory_update_event(
                     run_id=context.run_id or "",
                     memory_type=memory_type,
                     messages_added=messages_count
-                ):
-                    context.events.append(event)
+                ))
             
             step_result = StepResult(
                 name=self.name,
@@ -2980,15 +2956,14 @@ class StreamFinalizationStep(Step):
             if context.is_streaming:
                 output_preview = str(context.output)[:100] if context.output else None
                 from upsonic.utils.agent.events import ayield_execution_complete_event
-                async for event in ayield_execution_complete_event(
+                context.events.append(await ayield_execution_complete_event(
                     run_id=context.run_id or "",
                     output_type=output_type,
                     has_output=context.output is not None,
                     output_preview=output_preview,
                     total_tool_calls=context.tool_call_count,
                     total_duration=task.duration if task.duration else None
-                ):
-                    context.events.append(event)
+                ))
                 # RunCompletedEvent is emitted by manager after pipeline end
             
             step_result = StepResult(
@@ -3068,15 +3043,14 @@ class FinalizationStep(Step):
                 output_preview = str(context.output)[:100] if context.output else None
                 total_duration = task.duration if task.duration else None
                 from upsonic.utils.agent.events import ayield_execution_complete_event
-                async for event in ayield_execution_complete_event(
+                context.events.append(await ayield_execution_complete_event(
                     run_id=context.run_id or "",
                     output_type=output_type,
                     has_output=context.output is not None,
                     output_preview=output_preview,
                     total_tool_calls=context.tool_call_count,
                     total_duration=total_duration
-                ):
-                    context.events.append(event)
+                ))
 
             if task and not task.not_main_task:
                 from upsonic.utils.printing import print_price_id_summary, price_id_summary

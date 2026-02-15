@@ -1,8 +1,14 @@
 """
 Agent Event Yielding Utilities
 
-This module provides utility functions for yielding events during agent execution.
-Each function creates and yields a specific event type.
+This module provides utility functions for creating events during agent execution.
+Each function creates and returns a specific event type.
+
+Note: These were previously async generators (yield-based) but have been converted
+to regular coroutines (return-based) to avoid RuntimeError during event loop shutdown.
+Async generators that yield a single value cause issues with shutdown_asyncgens()
+especially in sync contexts like Celery workers where asyncio.run() opens/closes
+the event loop per call.
 """
 
 from typing import Any, AsyncIterator, Dict, Iterator, List, Literal, Optional
@@ -51,9 +57,9 @@ async def ayield_pipeline_start_event(
     total_steps: int,
     task_description: Optional[str] = None,
     is_streaming: bool = True,
-) -> AsyncIterator[PipelineStartEvent]:
-    """Yield a PipelineStartEvent."""
-    yield PipelineStartEvent(
+) -> PipelineStartEvent:
+    """Return a PipelineStartEvent."""
+    return PipelineStartEvent(
         run_id=run_id,
         total_steps=total_steps,
         task_description=task_description,
@@ -83,9 +89,9 @@ async def ayield_pipeline_end_event(
     total_steps: int,
     message: Optional[str] = None,
     executed_steps: int = 0,
-) -> AsyncIterator[PipelineEndEvent]:
-    """Yield a PipelineEndEvent."""
-    yield PipelineEndEvent(
+) -> PipelineEndEvent:
+    """Return a PipelineEndEvent."""
+    return PipelineEndEvent(
         run_id=run_id,
         status=status,
         total_duration=total_duration,
@@ -122,9 +128,9 @@ async def ayield_step_start_event(
     step_description: str,
     step_index: int,
     total_steps: int,
-) -> AsyncIterator[StepStartEvent]:
-    """Yield a StepStartEvent."""
-    yield StepStartEvent(
+) -> StepStartEvent:
+    """Return a StepStartEvent."""
+    return StepStartEvent(
         run_id=run_id,
         step_name=step_name,
         step_description=step_description,
@@ -157,9 +163,9 @@ async def ayield_step_end_event(
     status: str,
     execution_time: float,
     message: Optional[str] = None,
-) -> AsyncIterator[StepEndEvent]:
-    """Yield a StepEndEvent."""
-    yield StepEndEvent(
+) -> StepEndEvent:
+    """Return a StepEndEvent."""
+    return StepEndEvent(
         run_id=run_id,
         step_name=step_name,
         step_index=step_index,
@@ -191,9 +197,9 @@ def yield_step_end_event(
 async def ayield_text_delta_event(
     run_id: str,
     content: str,
-) -> AsyncIterator[TextDeltaEvent]:
-    """Yield a TextDeltaEvent."""
-    yield TextDeltaEvent(
+) -> TextDeltaEvent:
+    """Return a TextDeltaEvent."""
+    return TextDeltaEvent(
         run_id=run_id,
         content=content,
     )
@@ -214,9 +220,9 @@ async def ayield_text_complete_event(
     run_id: str,
     content: str,
     part_index: int = 0,
-) -> AsyncIterator[TextCompleteEvent]:
-    """Yield a TextCompleteEvent."""
-    yield TextCompleteEvent(
+) -> TextCompleteEvent:
+    """Return a TextCompleteEvent."""
+    return TextCompleteEvent(
         run_id=run_id,
         content=content,
         part_index=part_index,
@@ -244,9 +250,9 @@ async def ayield_tool_call_event(
     tool_args: Dict[str, Any],
     tool_call_id: Optional[str] = None,
     tool_index: int = 0,
-) -> AsyncIterator[ToolCallEvent]:
-    """Yield a ToolCallEvent."""
-    yield ToolCallEvent(
+) -> ToolCallEvent:
+    """Return a ToolCallEvent."""
+    return ToolCallEvent(
         run_id=run_id,
         tool_name=tool_name,
         tool_args=tool_args,
@@ -281,9 +287,9 @@ async def ayield_tool_result_event(
     tool_call_id: Optional[str] = None,
     result_preview: Optional[str] = None,
     execution_time: Optional[float] = None,
-) -> AsyncIterator[ToolResultEvent]:
-    """Yield a ToolResultEvent."""
-    yield ToolResultEvent(
+) -> ToolResultEvent:
+    """Return a ToolResultEvent."""
+    return ToolResultEvent(
         run_id=run_id,
         tool_name=tool_name,
         tool_args=tool_args,
@@ -324,9 +330,9 @@ async def ayield_cache_check_event(
     run_id: str,
     cache_enabled: bool,
     cache_method: Optional[str] = None,
-) -> AsyncIterator[CacheCheckEvent]:
-    """Yield a CacheCheckEvent."""
-    yield CacheCheckEvent(
+) -> CacheCheckEvent:
+    """Return a CacheCheckEvent."""
+    return CacheCheckEvent(
         run_id=run_id,
         cache_enabled=cache_enabled,
         cache_method=cache_method,
@@ -351,9 +357,9 @@ async def ayield_cache_hit_event(
     cache_method: str,
     similarity: Optional[float] = None,
     cached_response_preview: Optional[str] = None,
-) -> AsyncIterator[CacheHitEvent]:
-    """Yield a CacheHitEvent."""
-    yield CacheHitEvent(
+) -> CacheHitEvent:
+    """Return a CacheHitEvent."""
+    return CacheHitEvent(
         run_id=run_id,
         cache_method=cache_method,
         similarity=similarity,
@@ -379,9 +385,9 @@ def yield_cache_hit_event(
 async def ayield_cache_miss_event(
     run_id: str,
     cache_method: str,
-) -> AsyncIterator[CacheMissEvent]:
-    """Yield a CacheMissEvent."""
-    yield CacheMissEvent(run_id=run_id, cache_method=cache_method)
+) -> CacheMissEvent:
+    """Return a CacheMissEvent."""
+    return CacheMissEvent(run_id=run_id, cache_method=cache_method)
 
 
 def yield_cache_miss_event(
@@ -396,9 +402,9 @@ async def ayield_external_tool_pause_event(
     tool_name: str,
     tool_call_id: str,
     tool_args: Dict[str, Any],
-) -> AsyncIterator[ExternalToolPauseEvent]:
-    """Yield a ExternalToolPauseEvent."""
-    yield ExternalToolPauseEvent(run_id=run_id, tool_name=tool_name, tool_call_id=tool_call_id, tool_args=tool_args)
+) -> ExternalToolPauseEvent:
+    """Return a ExternalToolPauseEvent."""
+    return ExternalToolPauseEvent(run_id=run_id, tool_name=tool_name, tool_call_id=tool_call_id, tool_args=tool_args)
     
 def yield_external_tool_pause_event(
     run_id: str,
@@ -413,9 +419,9 @@ async def ayield_cache_stored_event(
     run_id: str,
     cache_method: str,
     duration_minutes: Optional[int] = None,
-) -> AsyncIterator[CacheStoredEvent]:
-    """Yield a CacheStoredEvent."""
-    yield CacheStoredEvent(
+) -> CacheStoredEvent:
+    """Return a CacheStoredEvent."""
+    return CacheStoredEvent(
         run_id=run_id,
         cache_method=cache_method,
         duration_minutes=duration_minutes,
@@ -441,9 +447,9 @@ async def ayield_agent_initialized_event(
     run_id: str,
     agent_id: str,
     is_streaming: bool = False,
-) -> AsyncIterator[AgentInitializedEvent]:
-    """Yield an AgentInitializedEvent."""
-    yield AgentInitializedEvent(
+) -> AgentInitializedEvent:
+    """Return an AgentInitializedEvent."""
+    return AgentInitializedEvent(
         run_id=run_id,
         agent_id=agent_id,
         is_streaming=is_streaming,
@@ -469,9 +475,9 @@ async def ayield_model_selected_event(
     run_id: str,
     model_name: str,
     model_provider: str,
-) -> AsyncIterator[ModelSelectedEvent]:
-    """Yield a ModelSelectedEvent."""
-    yield ModelSelectedEvent(
+) -> ModelSelectedEvent:
+    """Return a ModelSelectedEvent."""
+    return ModelSelectedEvent(
         run_id=run_id,
         model_name=model_name,
         provider=model_provider,
@@ -498,9 +504,9 @@ async def ayield_model_request_start_event(
     has_tools: bool = False,
     tool_call_count: int = 0,
     tool_call_limit: Optional[int] = None,
-) -> AsyncIterator[ModelRequestStartEvent]:
-    """Yield a ModelRequestStartEvent."""
-    yield ModelRequestStartEvent(
+) -> ModelRequestStartEvent:
+    """Return a ModelRequestStartEvent."""
+    return ModelRequestStartEvent(
         run_id=run_id,
         model_name=model_name,
         is_streaming=is_streaming,
@@ -536,9 +542,9 @@ async def ayield_model_response_event(
     has_tool_calls: bool = False,
     tool_call_count: int = 0,
     finish_reason: Optional[str] = None,
-) -> AsyncIterator[ModelResponseEvent]:
-    """Yield a ModelResponseEvent."""
-    yield ModelResponseEvent(
+) -> ModelResponseEvent:
+    """Return a ModelResponseEvent."""
+    return ModelResponseEvent(
         run_id=run_id,
         model_name=model_name,
         has_text=has_text,
@@ -572,9 +578,9 @@ async def ayield_tools_configured_event(
     tool_count: int,
     tool_names: Optional[List[str]] = None,
     has_mcp_handlers: bool = False,
-) -> AsyncIterator[ToolsConfiguredEvent]:
-    """Yield a ToolsConfiguredEvent."""
-    yield ToolsConfiguredEvent(
+) -> ToolsConfiguredEvent:
+    """Return a ToolsConfiguredEvent."""
+    return ToolsConfiguredEvent(
         run_id=run_id,
         tool_count=tool_count,
         tool_names=tool_names or [],
@@ -603,9 +609,9 @@ async def ayield_messages_built_event(
     has_system_prompt: bool = False,
     has_memory_messages: bool = False,
     is_continuation: bool = False,
-) -> AsyncIterator[MessagesBuiltEvent]:
-    """Yield a MessagesBuiltEvent."""
-    yield MessagesBuiltEvent(
+) -> MessagesBuiltEvent:
+    """Return a MessagesBuiltEvent."""
+    return MessagesBuiltEvent(
         run_id=run_id,
         message_count=message_count,
         has_system_prompt=has_system_prompt,
@@ -637,9 +643,9 @@ async def ayield_run_started_event(
     run_id: str,
     agent_id: Optional[str] = None,
     task_description: Optional[str] = None,
-) -> AsyncIterator[RunStartedEvent]:
-    """Yield a RunStartedEvent."""
-    yield RunStartedEvent(
+) -> RunStartedEvent:
+    """Return a RunStartedEvent."""
+    return RunStartedEvent(
         run_id=run_id,
         agent_id=agent_id,
         task_description=task_description,
@@ -663,9 +669,9 @@ async def ayield_run_completed_event(
     run_id: str,
     agent_id: Optional[str] = None,
     output_preview: Optional[str] = None,
-) -> AsyncIterator[RunCompletedEvent]:
-    """Yield a RunCompletedEvent."""
-    yield RunCompletedEvent(
+) -> RunCompletedEvent:
+    """Return a RunCompletedEvent."""
+    return RunCompletedEvent(
         run_id=run_id,
         agent_id=agent_id,
         output_preview=output_preview,
@@ -689,9 +695,9 @@ async def ayield_run_cancelled_event(
     run_id: str,
     message: Optional[str] = None,
     step_name: Optional[str] = None,
-) -> AsyncIterator[RunCancelledEvent]:
-    """Yield a RunCancelledEvent."""
-    yield RunCancelledEvent(
+) -> RunCancelledEvent:
+    """Return a RunCancelledEvent."""
+    return RunCancelledEvent(
         run_id=run_id,
         message=message,
         step_name=step_name,
@@ -715,9 +721,9 @@ async def ayield_run_paused_event(
     run_id: str,
     reason: str,
     requirements: Optional[List[Any]] = None,
-) -> AsyncIterator[RunPausedEvent]:
-    """Yield a RunPausedEvent."""
-    yield RunPausedEvent(
+) -> RunPausedEvent:
+    """Return a RunPausedEvent."""
+    return RunPausedEvent(
         run_id=run_id,
         reason=reason,
         requirements=requirements,
@@ -743,9 +749,9 @@ async def ayield_memory_update_event(
     run_id: str,
     memory_type: Optional[str] = None,
     messages_added: int = 0,
-) -> AsyncIterator[MemoryUpdateEvent]:
-    """Yield a MemoryUpdateEvent."""
-    yield MemoryUpdateEvent(
+) -> MemoryUpdateEvent:
+    """Return a MemoryUpdateEvent."""
+    return MemoryUpdateEvent(
         run_id=run_id,
         memory_type=memory_type,
         messages_added=messages_added,
@@ -773,9 +779,9 @@ async def ayield_storage_connection_event(
     is_connected: bool = False,
     has_memory: bool = False,
     session_id: Optional[str] = None,
-) -> AsyncIterator[StorageConnectionEvent]:
-    """Yield a StorageConnectionEvent."""
-    yield StorageConnectionEvent(
+) -> StorageConnectionEvent:
+    """Return a StorageConnectionEvent."""
+    return StorageConnectionEvent(
         run_id=run_id,
         storage_type=storage_type,
         is_connected=is_connected,
@@ -808,9 +814,9 @@ async def ayield_llm_prepared_event(
     default_model: Optional[str] = None,
     requested_model: Optional[str] = None,
     model_changed: bool = False,
-) -> AsyncIterator[LLMPreparedEvent]:
-    """Yield a LLMPreparedEvent."""
-    yield LLMPreparedEvent(
+) -> LLMPreparedEvent:
+    """Return a LLMPreparedEvent."""
+    return LLMPreparedEvent(
         run_id=run_id,
         default_model=default_model,
         requested_model=requested_model,
@@ -842,9 +848,9 @@ async def ayield_policy_check_event(
     policies_checked: int = 0,
     content_modified: bool = False,
     blocked_reason: Optional[str] = None,
-) -> AsyncIterator[PolicyCheckEvent]:
-    """Yield a PolicyCheckEvent."""
-    yield PolicyCheckEvent(
+) -> PolicyCheckEvent:
+    """Return a PolicyCheckEvent."""
+    return PolicyCheckEvent(
         run_id=run_id,
         policy_type=policy_type,
         action=action,
@@ -880,9 +886,9 @@ async def ayield_policy_feedback_event(
     retry_count: int = 0,
     max_retries: int = 1,
     violated_policy: Optional[str] = None,
-) -> AsyncIterator[PolicyFeedbackEvent]:
-    """Yield a PolicyFeedbackEvent."""
-    yield PolicyFeedbackEvent(
+) -> PolicyFeedbackEvent:
+    """Return a PolicyFeedbackEvent."""
+    return PolicyFeedbackEvent(
         run_id=run_id,
         policy_type=policy_type,
         feedback_message=feedback_message,
@@ -916,9 +922,9 @@ async def ayield_reflection_event(
     improvement_made: bool = False,
     original_preview: Optional[str] = None,
     improved_preview: Optional[str] = None,
-) -> AsyncIterator[ReflectionEvent]:
-    """Yield a ReflectionEvent."""
-    yield ReflectionEvent(
+) -> ReflectionEvent:
+    """Return a ReflectionEvent."""
+    return ReflectionEvent(
         run_id=run_id,
         reflection_applied=reflection_applied,
         improvement_made=improvement_made,
@@ -948,9 +954,9 @@ async def ayield_reliability_event(
     run_id: str,
     reliability_applied: bool = False,
     modifications_made: bool = False,
-) -> AsyncIterator[ReliabilityEvent]:
-    """Yield a ReliabilityEvent."""
-    yield ReliabilityEvent(
+) -> ReliabilityEvent:
+    """Return a ReliabilityEvent."""
+    return ReliabilityEvent(
         run_id=run_id,
         reliability_applied=reliability_applied,
         modifications_made=modifications_made,
@@ -979,9 +985,9 @@ async def ayield_execution_complete_event(
     output_preview: Optional[str],
     total_tool_calls: int,
     total_duration: Optional[float],
-) -> AsyncIterator[ExecutionCompleteEvent]:
-    """Yield an ExecutionCompleteEvent."""
-    yield ExecutionCompleteEvent(
+) -> ExecutionCompleteEvent:
+    """Return an ExecutionCompleteEvent."""
+    return ExecutionCompleteEvent(
         run_id=run_id,
         output_type=output_type,
         has_output=has_output,
@@ -1014,9 +1020,9 @@ async def ayield_final_output_event(
     run_id: str,
     output: Any,
     output_type: Literal['text', 'structured', 'cached', 'blocked'] = 'text',
-) -> AsyncIterator[FinalOutputEvent]:
-    """Yield a FinalOutputEvent."""
-    yield FinalOutputEvent(
+) -> FinalOutputEvent:
+    """Return a FinalOutputEvent."""
+    return FinalOutputEvent(
         run_id=run_id,
         output=output,
         output_type=output_type,
@@ -1118,5 +1124,3 @@ __all__ = [
     "ayield_final_output_event",
     "yield_final_output_event",
 ]
-
-

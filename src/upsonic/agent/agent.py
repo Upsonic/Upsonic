@@ -544,12 +544,12 @@ class Agent(BaseAgent):
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(
-                    asyncio.run, 
+                    self._run_in_new_loop, 
                     self.execute_workspace_greeting_async(return_output)
                 )
                 return future.result()
         except RuntimeError:
-            return asyncio.run(self.execute_workspace_greeting_async(return_output))
+            return self._run_in_new_loop(self.execute_workspace_greeting_async(return_output))
     
     def _setup_policy_models(self) -> None:
         """Setup model references for safety policies."""
@@ -2204,13 +2204,12 @@ class Agent(BaseAgent):
             # Emit ALLOW event if no policies
             if context and context.is_streaming:
                 from upsonic.utils.agent.events import ayield_policy_check_event
-                async for event in ayield_policy_check_event(
+                context.events.append(await ayield_policy_check_event(
                     run_id=context.run_id or "",
                     policy_type='user_policy',
                     action='ALLOW',
                     policies_checked=0
-                ):
-                    context.events.append(event)
+                ))
             return task, True
         
         from upsonic.safety_engine.models import PolicyInput
@@ -2240,28 +2239,26 @@ class Agent(BaseAgent):
             content_modified = result.action_taken in ["REPLACE", "ANONYMIZE"]
             blocked_reason = result.message if result.action_taken == "BLOCK" else None
             
-            async for event in ayield_policy_check_event(
+            context.events.append(await ayield_policy_check_event(
                 run_id=context.run_id or "",
                 policy_type='user_policy',
                 action=event_action,
                 policies_checked=policies_checked,
                 content_modified=content_modified,
                 blocked_reason=blocked_reason
-            ):
-                context.events.append(event)
+            ))
         
         # Emit PolicyFeedbackEvent if feedback was generated
         if context and context.is_streaming and result.feedback_message:
             from upsonic.utils.agent.events import ayield_policy_feedback_event
-            async for event in ayield_policy_feedback_event(
+            context.events.append(await ayield_policy_feedback_event(
                 run_id=context.run_id or "",
                 policy_type='user_policy',
                 feedback_message=result.feedback_message,
                 retry_count=self.user_policy_manager._current_retry_count,
                 max_retries=self.user_policy_manager.feedback_loop_count,
                 violated_policy=result.violated_policy_name
-            ):
-                context.events.append(event)
+            ))
         
         if result.should_block():
             # Re-raise DisallowedOperation if it was caught by PolicyManager
@@ -2587,7 +2584,7 @@ class Agent(BaseAgent):
                 import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(
-                        asyncio.run,
+                        self._run_in_new_loop,
                         self.recommend_model_for_task_async(task, criteria, use_llm)
                     )
                     return future.result()
@@ -2596,7 +2593,7 @@ class Agent(BaseAgent):
                     self.recommend_model_for_task_async(task, criteria, use_llm)
                 )
         except RuntimeError:
-            return asyncio.run(self.recommend_model_for_task_async(task, criteria, use_llm))
+            return self._run_in_new_loop(self.recommend_model_for_task_async(task, criteria, use_llm))
     
     def get_last_model_recommendation(self) -> Optional[Any]:
         """
@@ -2633,13 +2630,12 @@ class Agent(BaseAgent):
             # Emit ALLOW event if no policies
             if context and context.is_streaming:
                 from upsonic.utils.agent.events import ayield_policy_check_event
-                async for event in ayield_policy_check_event(
+                context.events.append(await ayield_policy_check_event(
                     run_id=context.run_id or "",
                     policy_type='agent_policy',
                     action='ALLOW',
                     policies_checked=0
-                ):
-                    context.events.append(event)
+                ))
             return task, None
         
         from upsonic.safety_engine.models import PolicyInput
@@ -2684,30 +2680,28 @@ class Agent(BaseAgent):
             )
             blocked_reason = result.message if result.action_taken == "BLOCK" else None
             
-            async for event in ayield_policy_check_event(
+            context.events.append(await ayield_policy_check_event(
                 run_id=context.run_id or "",
                 policy_type='agent_policy',
                 action=event_action,
                 policies_checked=policies_checked,
                 content_modified=content_modified,
                 blocked_reason=blocked_reason
-            ):
-                context.events.append(event)
+            ))
         
         # Check if retry with feedback should be attempted
         if result.should_retry_with_feedback() and self.agent_policy_manager.can_retry():
             # Emit PolicyFeedbackEvent
             if context and context.is_streaming:
                 from upsonic.utils.agent.events import ayield_policy_feedback_event
-                async for event in ayield_policy_feedback_event(
+                context.events.append(await ayield_policy_feedback_event(
                     run_id=context.run_id or "",
                     policy_type='agent_policy',
                     feedback_message=result.feedback_message,
                     retry_count=self.agent_policy_manager._current_retry_count,
                     max_retries=self.agent_policy_manager.feedback_loop_count,
                     violated_policy=result.violated_policy_name
-                ):
-                    context.events.append(event)
+                ))
             # Return feedback message for retry - don't modify task yet
             return task, result.feedback_message
         
@@ -2961,11 +2955,35 @@ class Agent(BaseAgent):
             loop = asyncio.get_running_loop()
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, self.do_async(task, model, debug, retry, return_output, _print_method_default=False))
+                future = executor.submit(
+                    self._run_in_new_loop,
+                    self.do_async(task, model, debug, retry, return_output, _print_method_default=False)
+                )
                 return future.result()
         except RuntimeError:
-            return asyncio.run(self.do_async(task, model, debug, retry, return_output, _print_method_default=False))
+            return self._run_in_new_loop(
+                self.do_async(task, model, debug, retry, return_output, _print_method_default=False)
+            )
     
+    @staticmethod
+    def _run_in_new_loop(coro):
+        """Run a coroutine in a new event loop with safe async generator shutdown.
+        
+        This avoids RuntimeError('athrow(): asynchronous generator is already running')
+        that can occur when asyncio.run() calls shutdown_asyncgens() while async
+        generators are still being iterated (e.g. in Celery prefork workers).
+        """
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            try:
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            except RuntimeError:
+                pass  # Generator already closed or loop issue
+            finally:
+                loop.close()
+
     def print_do(
         self,
         task: Union[str, "Task", List[Union[str, "Task"]]],
@@ -3012,10 +3030,15 @@ class Agent(BaseAgent):
             loop = asyncio.get_running_loop()
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, self.do_async(task, model, debug, retry, return_output, _print_method_default=True))
+                future = executor.submit(
+                    self._run_in_new_loop,
+                    self.do_async(task, model, debug, retry, return_output, _print_method_default=True)
+                )
                 return future.result()
         except RuntimeError:
-            return asyncio.run(self.do_async(task, model, debug, retry, return_output, _print_method_default=True))
+            return self._run_in_new_loop(
+                self.do_async(task, model, debug, retry, return_output, _print_method_default=True)
+            )
     
     async def print_do_async(
         self,
