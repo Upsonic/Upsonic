@@ -529,11 +529,15 @@ class PipelineManager:
                 
                 # Use run_stream() for streaming execution - yields events including step start/end
                 if step.supports_streaming and context.is_streaming:
-                    async for event in step.run_stream(context, self.task, self.agent, self.model, step_index, pipeline_manager=self):
-                        yield event
-                        # Also collect in context.events if not already there
-                        if event not in context.events:
-                            context.events.append(event)
+                    step_gen = step.run_stream(context, self.task, self.agent, self.model, step_index, pipeline_manager=self)
+                    try:
+                        async for event in step_gen:
+                            yield event
+                            # Also collect in context.events if not already there
+                            if event not in context.events:
+                                context.events.append(event)
+                    finally:
+                        await step_gen.aclose()
                 else:
                     # Non-streaming step - run() returns StepResult directly
                     # Emit StepStartEvent for non-streaming steps

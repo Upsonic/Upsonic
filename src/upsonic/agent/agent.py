@@ -3175,8 +3175,18 @@ class Agent(BaseAgent):
         
         async def stream_to_queue():
             try:
-                async for item in self.astream(task, model, debug, retry, events, state):
-                    result_queue.put(item)
+                # Store a reference to the async generator so we can explicitly
+                # close the entire chain (astream → pipeline.execute_stream →
+                # step.run_stream → _stream_with_tool_calls → StreamedResponse).
+                # async-for does NOT call aclose() on natural exhaustion
+                # (StopAsyncIteration), leaving generators "open but exhausted".
+                # shutdown_asyncgens() then fails trying to finalize them.
+                stream_gen = self.astream(task, model, debug, retry, events, state)
+                try:
+                    async for item in stream_gen:
+                        result_queue.put(item)
+                finally:
+                    await stream_gen.aclose()
             except Exception as e:
                 error_holder.append(e)
             finally:
@@ -3310,8 +3320,11 @@ class Agent(BaseAgent):
             )
             
             # 4. Stream events from pipeline and filter based on events parameter
+            # Explicitly close the pipeline generator chain when done to prevent
+            # lingering async generators that cause shutdown_asyncgens() failures.
+            pipeline_gen = pipeline.execute_stream(context=self._agent_run_output, start_step_index=0)
             try:
-                async for pipeline_event in pipeline.execute_stream(context=self._agent_run_output, start_step_index=0):
+                async for pipeline_event in pipeline_gen:
                     if events:
                         yield pipeline_event
                     else:
@@ -3321,6 +3334,8 @@ class Agent(BaseAgent):
                             yield text_content
             except Exception as stream_error:
                 raise stream_error
+            finally:
+                await pipeline_gen.aclose()
             
             
         finally:
@@ -3681,8 +3696,11 @@ class Agent(BaseAgent):
                     event=event,
                     external_tool_executor=external_tool_executor
                 )
-                async for item in async_gen:
-                    results.append(item)
+                try:
+                    async for item in async_gen:
+                        results.append(item)
+                finally:
+                    await async_gen.aclose()
                 return results
             
             try:

@@ -2422,8 +2422,12 @@ class StreamModelExecutionStep(Step):
         from upsonic.run.events.events import AgentEvent
         
         # Consume the streaming generator and collect events in context
-        async for event in self.execute_stream(context, task, agent, model):
-            context.events.append(event)
+        exec_gen = self.execute_stream(context, task, agent, model)
+        try:
+            async for event in exec_gen:
+                context.events.append(event)
+        finally:
+            await exec_gen.aclose()
         
         # Return the result from context
         return context.current_step_result or StepResult(
@@ -2523,13 +2527,18 @@ class StreamModelExecutionStep(Step):
             tool_calls_in_stream = 0
             
             # Use streaming helper method that yields events
-            async for event in self._stream_with_tool_calls(context, task, agent, model, model_params, accumulated_text, first_token_time):
-                yield event
-                # Track statistics
-                if isinstance(event, TextDeltaEvent):
-                    chunk_count += 1
-                    total_chars += len(event.content) if event.content else 0
-                    accumulated_text += event.content
+            # Explicitly close the generator to prevent lingering async generators
+            stream_gen = self._stream_with_tool_calls(context, task, agent, model, model_params, accumulated_text, first_token_time)
+            try:
+                async for event in stream_gen:
+                    yield event
+                    # Track statistics
+                    if isinstance(event, TextDeltaEvent):
+                        chunk_count += 1
+                        total_chars += len(event.content) if event.content else 0
+                        accumulated_text += event.content
+            finally:
+                await stream_gen.aclose()
             
             # Level 2: Streaming completion details
             if agent.debug and agent.debug_level >= 2:
@@ -2716,8 +2725,12 @@ class StreamModelExecutionStep(Step):
                 accumulated_text = ""
                 
                 # Continue streaming with limit notification
-                async for event in self._stream_with_tool_calls(context, task, agent, model, model_params, accumulated_text, first_token_time):
-                    yield event
+                recurse_gen = self._stream_with_tool_calls(context, task, agent, model, model_params, accumulated_text, first_token_time)
+                try:
+                    async for event in recurse_gen:
+                        yield event
+                finally:
+                    await recurse_gen.aclose()
                 return
             
             # Check for stop execution flag
@@ -2762,8 +2775,12 @@ class StreamModelExecutionStep(Step):
             accumulated_text = ""
             
             # Recursively continue streaming with tool results
-            async for event in self._stream_with_tool_calls(context, task, agent, model, model_params, accumulated_text, first_token_time):
-                yield event
+            recurse_gen = self._stream_with_tool_calls(context, task, agent, model, model_params, accumulated_text, first_token_time)
+            try:
+                async for event in recurse_gen:
+                    yield event
+            finally:
+                await recurse_gen.aclose()
 
 
 class StreamMemoryMessageTrackingStep(Step):

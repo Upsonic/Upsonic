@@ -296,8 +296,14 @@ class Step(ABC):
         context.current_step_result = None
         
         # Execute step - consume generator and yield all events
-        async for event in self.execute_stream(context, task, agent, model, step_number, pipeline_manager=pipeline_manager):
-            yield event
+        # Explicitly close the generator to prevent lingering async generators
+        # that cause shutdown_asyncgens() failures on event loop shutdown.
+        exec_gen = self.execute_stream(context, task, agent, model, step_number, pipeline_manager=pipeline_manager)
+        try:
+            async for event in exec_gen:
+                yield event
+        finally:
+            await exec_gen.aclose()
         
         # Get result from context (set by execute_stream())
         result = context.current_step_result
