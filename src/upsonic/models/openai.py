@@ -445,7 +445,11 @@ class OpenAIChatModel(Model):
             messages, True, cast(OpenAIChatModelSettings, model_settings or {}), model_request_parameters
         )
         async with response:
-            yield await self._process_streamed_response(response, model_request_parameters)
+            streamed_response = await self._process_streamed_response(response, model_request_parameters)
+            try:
+                yield streamed_response
+            finally:
+                await streamed_response.aclose()
 
     @overload
     async def _completions_create(
@@ -1006,7 +1010,11 @@ class OpenAIResponsesModel(Model):
             messages, True, cast(OpenAIResponsesModelSettings, model_settings or {}), model_request_parameters
         )
         async with response:
-            yield await self._process_streamed_response(response, model_request_parameters)
+            streamed_response = await self._process_streamed_response(response, model_request_parameters)
+            try:
+                yield streamed_response
+            finally:
+                await streamed_response.aclose()
 
     def _process_response(  # noqa: C901
         self, response: responses.Response, model_request_parameters: ModelRequestParameters

@@ -257,7 +257,11 @@ class AnthropicModel(Model):
             messages, True, cast(AnthropicModelSettings, model_settings or {}), model_request_parameters
         )
         async with response:
-            yield await self._process_streamed_response(response, model_request_parameters)
+            streamed_response = await self._process_streamed_response(response, model_request_parameters)
+            try:
+                yield streamed_response
+            finally:
+                await streamed_response.aclose()
 
     def prepare_request(
         self, model_settings: ModelSettings | None, model_request_parameters: ModelRequestParameters

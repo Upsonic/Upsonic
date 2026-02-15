@@ -189,7 +189,11 @@ class HuggingFaceModel(Model):
         response = await self._completions_create(
             messages, True, cast(HuggingFaceModelSettings, model_settings or {}), model_request_parameters
         )
-        yield await self._process_streamed_response(response, model_request_parameters)
+        streamed_response = await self._process_streamed_response(response, model_request_parameters)
+        try:
+            yield streamed_response
+        finally:
+            await streamed_response.aclose()
 
     @overload
     async def _completions_create(

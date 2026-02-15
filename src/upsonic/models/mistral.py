@@ -214,7 +214,11 @@ class MistralModel(Model):
             messages, cast(MistralModelSettings, model_settings or {}), model_request_parameters
         )
         async with response:
-            yield await self._process_streamed_response(response, model_request_parameters)
+            streamed_response = await self._process_streamed_response(response, model_request_parameters)
+            try:
+                yield streamed_response
+            finally:
+                await streamed_response.aclose()
 
     async def _completions_create(
         self,

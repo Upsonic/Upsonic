@@ -284,7 +284,11 @@ class OutlinesModel(Model):
         # Async is available for SgLang
         if isinstance(self.model, OutlinesAsyncBaseModel):
             response = self.model.stream(prompt, output_type, None, **inference_kwargs)
-            yield await self._process_streamed_response(response, model_request_parameters)
+            streamed_response = await self._process_streamed_response(response, model_request_parameters)
+            try:
+                yield streamed_response
+            finally:
+                await streamed_response.aclose()
         else:
             response = self.model.stream(prompt, output_type, None, **inference_kwargs)
 
@@ -292,7 +296,11 @@ class OutlinesModel(Model):
                 for chunk in response:
                     yield chunk
 
-            yield await self._process_streamed_response(async_response(), model_request_parameters)
+            streamed_response = await self._process_streamed_response(async_response(), model_request_parameters)
+            try:
+                yield streamed_response
+            finally:
+                await streamed_response.aclose()
 
     async def _build_generation_arguments(
         self,

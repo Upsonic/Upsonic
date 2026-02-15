@@ -3183,7 +3183,16 @@ class Agent(BaseAgent):
                 result_queue.put(None)
         
         def run_async_stream():
-            asyncio.run(stream_to_queue())
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(stream_to_queue())
+            finally:
+                try:
+                    loop.run_until_complete(loop.shutdown_asyncgens())
+                except RuntimeError:
+                    pass  # Generator already closed
+                finally:
+                    loop.close()
         
         try:
             asyncio.get_running_loop()
@@ -3680,10 +3689,10 @@ class Agent(BaseAgent):
                 loop = asyncio.get_running_loop()
                 import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, collect_stream())
+                    future = executor.submit(self._run_in_new_loop, collect_stream())
                     return future.result()
             except RuntimeError:
-                return asyncio.run(collect_stream())
+                return self._run_in_new_loop(collect_stream())
         else:
             # Direct mode
             try:
@@ -3692,7 +3701,7 @@ class Agent(BaseAgent):
                     import concurrent.futures
                     with concurrent.futures.ThreadPoolExecutor() as executor:
                         future = executor.submit(
-                            asyncio.run, 
+                            self._run_in_new_loop, 
                             self.continue_run_async(
                                 task, run_id, requirements, model, debug, retry, return_output,
                                 streaming=False,
@@ -3711,7 +3720,7 @@ class Agent(BaseAgent):
                         )
                     )
             except RuntimeError:
-                return asyncio.run(
+                return self._run_in_new_loop(
                     self.continue_run_async(
                         task, run_id, requirements, model, debug, retry, return_output,
                         streaming=False,

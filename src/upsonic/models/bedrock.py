@@ -447,13 +447,17 @@ class BedrockConverseModel(Model):
         )
         settings = cast(BedrockModelSettings, model_settings or {})
         response = await self._messages_create(messages, True, settings, model_request_parameters)
-        yield BedrockStreamedResponse(
+        streamed_response = BedrockStreamedResponse(
             model_request_parameters=model_request_parameters,
             _model_name=self.model_name,
             _event_stream=response['stream'],
             _provider_name=self._provider.name,
             _provider_response_id=response.get('ResponseMetadata', {}).get('RequestId', None),
         )
+        try:
+            yield streamed_response
+        finally:
+            await streamed_response.aclose()
 
     async def _process_response(self, response: ConverseResponseTypeDef) -> ModelResponse:
         items: list[ModelResponsePart] = []

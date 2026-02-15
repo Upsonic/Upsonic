@@ -2636,6 +2636,10 @@ class StreamModelExecutionStep(Step):
                             context.set_usage_time_to_first_token()
                     
                     yield agent_event
+            
+            # Explicitly close the async generator chain in StreamedResponse
+            # to prevent "generator didn't stop after athrow()" on loop shutdown.
+            await stream.aclose()
         
         # Get the final response from the stream
         final_response = stream.get()

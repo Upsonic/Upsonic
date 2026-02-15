@@ -1672,6 +1672,29 @@ class StreamedResponse(ABC):
         """Get the timestamp of the response."""
         raise NotImplementedError()
 
+    async def aclose(self) -> None:
+        """Close the event iterator's async generator chain to prevent leaks.
+
+        After consuming a streamed response (via ``async for``), the underlying
+        async generators (``iterator_with_part_end``, ``iterator_with_final_event``,
+        ``_get_event_iterator``) remain open even though they are exhausted.
+        When the event loop shuts down (e.g. ``asyncio.run()`` finishing in a
+        sync context like Celery), ``loop.shutdown_asyncgens()`` tries to
+        finalize them and may raise ``RuntimeError: generator didn't stop after
+        athrow()``.
+
+        Calling ``aclose()`` explicitly closes the generator chain before the
+        loop shuts down, avoiding this error.
+        """
+        if self._event_iterator is not None:
+            aclose_method = getattr(self._event_iterator, 'aclose', None)
+            if aclose_method is not None:
+                try:
+                    await aclose_method()
+                except (RuntimeError, GeneratorExit, StopAsyncIteration):
+                    pass  # Generator already closed or in a terminal state
+            self._event_iterator = None
+
 
 ALLOW_MODEL_REQUESTS = True
 """Whether to allow requests to models.

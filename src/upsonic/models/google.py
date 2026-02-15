@@ -325,7 +325,11 @@ class GoogleModel(Model):
         )
         model_settings = cast(GoogleModelSettings, model_settings or {})
         response = await self._generate_content(messages, True, model_settings, model_request_parameters)
-        yield await self._process_streamed_response(response, model_request_parameters)  # type: ignore
+        streamed_response = await self._process_streamed_response(response, model_request_parameters)
+        try:
+            yield streamed_response  # type: ignore
+        finally:
+            await streamed_response.aclose()
 
     def _get_tools(self, model_request_parameters: ModelRequestParameters) -> list[ToolDict] | None:
         tools: list[ToolDict] = [
