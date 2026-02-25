@@ -492,8 +492,9 @@ class PgVectorProvider(BaseVectorDBProvider):
                         # Create schema
                         if self.schema_name and self.schema_name != "public":
                             logger.debug(f"Creating schema: {self.schema_name}")
+                            # Quote schema name to prevent injection
                             session.execute(
-                                text(f"CREATE SCHEMA IF NOT EXISTS {self.schema_name};")
+                                text(f'CREATE SCHEMA IF NOT EXISTS "{self.schema_name}";')
                             )
                 
                 # Create table
@@ -1728,7 +1729,7 @@ class PgVectorProvider(BaseVectorDBProvider):
         
         create_sql = text(
             f'CREATE INDEX "{self._vector_index_name}" '
-            f'ON {self.schema_name}.{self.table_name} '
+            f'ON "{self.schema_name}"."{self.table_name}" '
             f'USING hnsw (embedding {distance_op}) '
             f'WITH (m = {m_val}, ef_construction = {ef_val});'
         )
@@ -1750,7 +1751,7 @@ class PgVectorProvider(BaseVectorDBProvider):
         
         create_sql = text(
             f'CREATE INDEX "{self._vector_index_name}" '
-            f'ON {self.schema_name}.{self.table_name} '
+            f'ON "{self.schema_name}"."{self.table_name}" '
             f'USING ivfflat (embedding {distance_op}) '
             f'WITH (lists = {lists_val});'
         )
@@ -1808,7 +1809,7 @@ class PgVectorProvider(BaseVectorDBProvider):
                         safe_language = ''.join(c for c in language if c.isalnum() or c == '_')
                         create_sql = text(
                             f'CREATE INDEX "{self._gin_index_name}" '
-                            f'ON {self.schema_name}.{self.table_name} '
+                            f'ON "{self.schema_name}"."{self.table_name}" '
                             f"USING GIN (to_tsvector('{safe_language}', content));"
                         )
                         session.execute(create_sql)
@@ -1836,7 +1837,7 @@ class PgVectorProvider(BaseVectorDBProvider):
                         logger.debug("Creating GIN index for metadata")
                         create_sql = text(
                             f'CREATE INDEX "{metadata_index_name}" '
-                            f'ON {self.schema_name}.{self.table_name} '
+                            f'ON "{self.schema_name}"."{self.table_name}" '
                             f'USING GIN (metadata);'
                         )
                         session.execute(create_sql)
