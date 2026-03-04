@@ -12,8 +12,9 @@
 [![GitHub stars](https://img.shields.io/github/stars/Upsonic/Upsonic.svg?style=social&label=Star)](https://github.com/Upsonic/Upsonic)
 [![GitHub issues](https://img.shields.io/github/issues/Upsonic/Upsonic.svg)](https://github.com/Upsonic/Upsonic/issues)
 [![Documentation](https://img.shields.io/badge/docs-upsonic.ai-brightgreen.svg)](https://docs.upsonic.ai)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/pmYDMSQHqY)
 
-[Documentation](https://docs.upsonic.ai) • [Quickstart](https://docs.upsonic.ai/get-started/quickstart) • [Examples](https://docs.upsonic.ai/examples)
+[Documentation](https://docs.upsonic.ai) • [Quickstart](https://docs.upsonic.ai/get-started/quickstart) • [Examples](https://docs.upsonic.ai/examples) • [Discord](https://discord.gg/pmYDMSQHqY)
 
 </div>
 
@@ -195,6 +196,9 @@ AgentOS is an optional deployment platform for running agents in production. It 
 
 ## Community and Support
 
+> **💬 [Join our Discord community!](https://discord.gg/pmYDMSQHqY)** — Ask questions, share what you're building, get help from the team, and connect with other developers using Upsonic.
+
+- **[Discord](https://discord.gg/pmYDMSQHqY)** - Chat with the community and get real-time support
 - **[Issue Tracker](https://github.com/Upsonic/Upsonic/issues)** - Report bugs and request features
 - **[Changelog](https://docs.upsonic.ai/changelog)** - See what's new in each release
 
