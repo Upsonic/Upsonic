@@ -187,6 +187,14 @@ AgentOS is an optional deployment platform for running agents in production. It 
 
 <img width="3024" height="1590" alt="AgentOS Dashboard" src="https://github.com/user-attachments/assets/42fceaca-2dec-4496-ab67-4b9067caca42" />
 
+## IDE Integration
+
+Add Upsonic docs as a source in your coding tools:
+
+**Cursor:** Settings → Indexing & Docs → Add `https://docs.upsonic.ai/llms-full.txt`
+
+Also works with VSCode, Windsurf, and similar tools.
+
 ## Documentation and Resources
 
 - **[Documentation](https://docs.upsonic.ai)** - Complete guides and API reference
