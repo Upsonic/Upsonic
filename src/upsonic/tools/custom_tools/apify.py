@@ -15,15 +15,21 @@ Example Usage:
     from upsonic.tools.custom_tools.apify import ApifyTools
 
     agent = Agent(
-        "My Agent",
+        "openai/gpt-4o",
         tools=[
             ApifyTools(
                 actors=["apify/rag-web-browser"],
                 apify_api_token="your_apify_api_key",
+                actor_defaults={
+                    "apify/rag-web-browser": {
+                        "maxResults": 3,
+                        "outputFormats": ["markdown"],
+                    }
+                },
             )
         ],
     )
-    task = Task("What info can you find on https://example.com?", agent=agent)
+    task = Task("What info can you find on https://example.com?")
     agent.print_do(task)
     ```
 """
@@ -69,6 +75,7 @@ def _make_actor_function(
     client,
     properties: Dict[str, Any],
     required: List[str],
+    fixed_defaults: Optional[Dict[str, Any]] = None,
 ):
     """Create a tool function for an Apify Actor with a proper typed signature.
 
@@ -76,18 +83,19 @@ def _make_actor_function(
     ``Parameter`` per schema property (with correct type annotations and
     defaults).  This lets ``function_schema`` generate the right JSON schema
     so the LLM knows which arguments to pass.
+
+    Parameters that are pre-set via ``fixed_defaults`` are excluded from the
+    signature so the LLM never sees them.  At call time the fixed values are
+    merged underneath whatever the LLM provides (LLM args win).
     """
+    fixed_defaults = fixed_defaults or {}
 
     # -- 1.  Build inspect.Parameter list --------------------------------
-    # Note: `self` is NOT included here. The function uses `self` as a
-    # positional arg in the body, but `types.MethodType` binds it.
-    # `inspect.signature` on a bound method automatically strips `self`.
-    # However the wrapper created by `_make_tool_wrapper` uses
-    # `functools.wraps` which copies `__signature__` — so we must NOT
-    # include `self` or the schema generator will complain about missing
-    # type annotations.
     params: List[inspect.Parameter] = []
     for name, meta in properties.items():
+        # Skip params that are pre-set via actor_defaults
+        if name in fixed_defaults:
+            continue
         annotation = _SCHEMA_TYPE_MAP.get(meta.get("type", ""), Any)
         if name in required:
             default = inspect.Parameter.empty
@@ -108,7 +116,10 @@ def _make_actor_function(
     def actor_function(self, **kwargs: Any) -> str:
         """Run an Apify Actor."""
         try:
-            details = client.actor(actor_id=actor_id).call(run_input=kwargs)
+            # Merge fixed defaults underneath LLM-provided args
+            run_input = {**fixed_defaults, **kwargs}
+
+            details = client.actor(actor_id=actor_id).call(run_input=run_input)
             if details is None:
                 raise ValueError(
                     f"Actor: {actor_id} was not started properly and "
@@ -129,10 +140,9 @@ def _make_actor_function(
 
     # -- 3.  Patch the signature so schema generation works --------------
     actor_function.__signature__ = sig
-    # Also set __annotations__ for _typing_extra.get_function_type_hints
     annotations: Dict[str, type] = {"return": str}
     for p in params:
-        if p.name != "self" and p.annotation is not inspect.Parameter.empty:
+        if p.annotation is not inspect.Parameter.empty:
             annotations[p.name] = p.annotation
     actor_function.__annotations__ = annotations
 
@@ -146,6 +156,7 @@ class ApifyTools(ToolKit):
         self,
         actors: Optional[Union[str, List[str]]] = None,
         apify_api_token: Optional[str] = None,
+        actor_defaults: Optional[Dict[str, Dict[str, Any]]] = None,
         **kwargs: Any,
     ) -> None:
         """Initialize the ApifyTools toolkit.
@@ -153,6 +164,17 @@ class ApifyTools(ToolKit):
         Args:
             actors: Single Actor ID or list of Actor IDs to register as tools.
             apify_api_token: Apify API token. Falls back to APIFY_API_TOKEN env var.
+            actor_defaults: Per-actor default input values.  Keys are actor IDs,
+                values are dicts of parameter name → value.  These parameters
+                are always sent to the actor and hidden from the LLM schema.
+                Example::
+
+                    actor_defaults={
+                        "apify/rag-web-browser": {
+                            "maxResults": 3,
+                            "outputFormats": ["markdown"],
+                        }
+                    }
             **kwargs: ToolKit params (include_tools, exclude_tools, timeout, etc.).
         """
         super().__init__(**kwargs)
@@ -173,6 +195,7 @@ class ApifyTools(ToolKit):
             )
 
         self.client = create_apify_client(self.apify_api_token)
+        self._actor_defaults: Dict[str, Dict[str, Any]] = actor_defaults or {}
 
         if actors:
             actor_list = [actors] if isinstance(actors, str) else actors
@@ -199,17 +222,30 @@ class ApifyTools(ToolKit):
 
             properties, required = prune_actor_input_schema(actor_input)
 
-            # Build docstring with parameter descriptions from Actor's input schema
+            # Resolve fixed defaults for this actor
+            fixed_defaults = self._actor_defaults.get(actor_id, {})
+
+            # Remove fixed-default params from required list
+            visible_required = [r for r in required if r not in fixed_defaults]
+
+            # Build visible properties (exclude pre-set params)
+            visible_properties = {
+                k: v for k, v in properties.items() if k not in fixed_defaults
+            }
+
+            # Build docstring only for visible (LLM-facing) parameters
             docstring = f"{actor_description}\n\nArgs:\n"
-            for param_name, param_info in properties.items():
+            for param_name, param_info in visible_properties.items():
                 param_type = param_info.get("type", "any")
                 param_desc = param_info.get("description", "No description available")
-                required_marker = "(required)" if param_name in required else "(optional)"
+                required_marker = "(required)" if param_name in visible_required else "(optional)"
                 docstring += f"    {param_name} ({param_type}): {required_marker} {param_desc}\n"
             docstring += "\nReturns:\n    str: JSON string containing the Actor's output dataset\n"
 
-            # Create the function and set metadata
-            func = _make_actor_function(actor_id, self.client, properties, required)
+            # Create the function with fixed defaults baked in
+            func = _make_actor_function(
+                actor_id, self.client, properties, required, fixed_defaults
+            )
             func.__name__ = tool_name
             func.__qualname__ = f"ApifyTools.{tool_name}"
             func.__doc__ = docstring
@@ -217,9 +253,10 @@ class ApifyTools(ToolKit):
             # Mark as tool (same attributes the @tool decorator sets)
             func._upsonic_tool_config = ToolConfig()
             func._upsonic_is_tool = True
-            # Provide a rich JSON schema override so the LLM gets accurate
-            # array item types, enums, nested objects, and Apify editor types.
-            func._json_schema_override = props_to_json_schema(properties, required)
+            # Provide a rich JSON schema override using only visible properties
+            func._json_schema_override = props_to_json_schema(
+                visible_properties, visible_required
+            )
 
             # Bind as a method on this instance so inspect.ismethod picks it up
             bound_method = types.MethodType(func, self)
