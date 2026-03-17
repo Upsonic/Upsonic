@@ -774,9 +774,10 @@ async def test_multi_mcp_handler_prefixes_length_validation():
         timeout_seconds=30
     )
     
-    # Attempting to connect should raise ValueError
-    with pytest.raises(ValueError) as exc_info:
-        await invalid_handler.connect()
-    
-    assert "tool_name_prefixes length" in str(exc_info.value), "Should mention prefix length mismatch"
+    # The implementation logs a warning and skips connection (no tools loaded)
+    await invalid_handler.connect()
+
+    # After connect, handler should be initialized but have no tools
+    assert invalid_handler._initialized is True, "Handler should be marked as initialized"
+    assert len(invalid_handler.handlers) == 0, "No sub-handlers should be created when prefixes length mismatches"
 
