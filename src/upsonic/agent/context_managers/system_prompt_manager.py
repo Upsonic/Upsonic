@@ -295,6 +295,24 @@ class SystemPromptManager:
             agent_context_str += "\n</YourCharacter>"
             prompt_parts.append(agent_context_str)
 
+        # Inject skills summary for progressive discovery
+        # Merge agent-level and task-level skills into a unified prompt
+        agent_skills = getattr(self.agent, 'skills', None)
+        task_skills = getattr(self.task, 'skills', None) if self.task else None
+
+        if agent_skills is not None or task_skills is not None:
+            if agent_skills is not None and task_skills is not None:
+                # Merge: task skills override agent skills on name conflict
+                from upsonic.skills import Skills
+                merged = Skills.merge(agent_skills, task_skills)
+                skills_section = merged.get_system_prompt_section()
+            elif agent_skills is not None:
+                skills_section = agent_skills.get_system_prompt_section()
+            else:
+                skills_section = task_skills.get_system_prompt_section()
+            if skills_section:
+                prompt_parts.append(skills_section)
+
         tool_instructions = self._collect_tool_instructions()
         if tool_instructions:
             prompt_parts.append(tool_instructions)

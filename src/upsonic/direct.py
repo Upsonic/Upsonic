@@ -421,13 +421,16 @@ class Direct:
             
             end_time = time.time()
             task.end_time = int(end_time)
-            task._usage.stop_timer()
-            
+
             result = self._extract_output(response, task)
             task._response = result
-            
+
+            # Accumulate token usage BEFORE stopping the timer so that
+            # all metrics are set when stop_timer finalizes duration.
             if hasattr(response, 'usage') and response.usage:
                 task._usage.incr(response.usage)
+
+            task._usage.stop_timer()
             
             usage: dict[str, int] = {
                 'input_tokens': task._usage.input_tokens,

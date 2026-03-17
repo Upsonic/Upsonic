@@ -64,18 +64,20 @@ class GeminiEmbeddingConfig(EmbeddingConfig):
     
     @field_validator('model_name')
     @classmethod
-    def validate_model_name(cls, v):
+    def validate_model_name(cls, v: str) -> str:
         """Validate Gemini model names."""
         valid_models = [
             "gemini-embedding-001",
+            "gemini-embedding-2-preview",
             "text-embedding-005",
             "text-multilingual-embedding-002",
-            "embedding-001"
+            "embedding-001",
         ]
-        
         if v not in valid_models:
-            warning_log(f"'{v}' may not be a valid Gemini embedding model. Known models: {valid_models}", context="GeminiEmbedding")
-        
+            warning_log(
+                f"'{v}' may not be a valid Gemini embedding model. Known models: {valid_models}",
+                context="GeminiEmbedding",
+            )
         return v
     
     @field_validator('task_type')
@@ -294,6 +296,21 @@ class GeminiEmbedding(EmbeddingProvider):
                         "classification",
                         "clustering"
                     ]
+                },
+                "gemini-embedding-2-preview": {
+                    "dimensions": [3072, 1536, 768],
+                    "max_input_tokens": 8192,
+                    "description": "Natively multimodal embedding model (text, images, video, audio, documents)",
+                    "languages": "100+ languages",
+                    "supported_tasks": [
+                        "retrieval",
+                        "semantic_similarity",
+                        "classification",
+                        "clustering",
+                        "multimodal",
+                        "question_answering",
+                        "fact_verification"
+                    ]
                 }
             }
             
@@ -412,7 +429,7 @@ class GeminiEmbedding(EmbeddingProvider):
                 default_dim = 768  # Default dimension
                 if self.config.output_dimensionality:
                     default_dim = self.config.output_dimensionality
-                elif self.config.model_name == "gemini-embedding-001":
+                elif self.config.model_name in ("gemini-embedding-001", "gemini-embedding-2-preview"):
                     default_dim = 3072
                 return [0.0] * default_dim
             

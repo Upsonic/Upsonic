@@ -63,6 +63,7 @@ if TYPE_CHECKING:
     from .slack.slack import SlackInterface
     from .gmail.gmail import GmailInterface
     from .telegram.telegram import TelegramInterface
+    from .discord.discord import DiscordInterface
     from .settings import InterfaceSettings
     from .websocket_manager import WebSocketManager, WebSocketConnection
     from .auth import (
@@ -80,6 +81,7 @@ if TYPE_CHECKING:
     )
     from .whatsapp.schemas import WhatsAppWebhookPayload
     from .telegram.schemas import TelegramWebhookPayload
+    from .discord.schemas import DiscordGatewayPayload
 
 def _get_interface_classes():
     """Lazy import of interface classes."""
@@ -89,15 +91,17 @@ def _get_interface_classes():
     from .slack.slack import SlackInterface
     from .gmail.gmail import GmailInterface
     from .telegram.telegram import TelegramInterface
+    from .discord.discord import DiscordInterface
     from .settings import InterfaceSettings
     from .websocket_manager import WebSocketManager, WebSocketConnection
-    
+
     # Aliases for convenience
     Whatsapp = WhatsAppInterface  # Shortened alias
     Slack = SlackInterface
     Gmail = GmailInterface
     Telegram = TelegramInterface
-    
+    Discord = DiscordInterface
+
     return {
         'Interface': Interface,
         'InterfaceManager': InterfaceManager,
@@ -109,6 +113,8 @@ def _get_interface_classes():
         'Gmail': Gmail,
         'TelegramInterface': TelegramInterface,
         'Telegram': Telegram,
+        'DiscordInterface': DiscordInterface,
+        'Discord': Discord,
         'InterfaceSettings': InterfaceSettings,
         'WebSocketManager': WebSocketManager,
         'WebSocketConnection': WebSocketConnection,
@@ -139,7 +145,8 @@ def _get_schema_classes():
     )
     from .whatsapp.schemas import WhatsAppWebhookPayload
     from .telegram.schemas import TelegramWebhookPayload
-    
+    from .discord.schemas import DiscordGatewayPayload
+
     return {
         'InterfaceMode': InterfaceMode,
         'InterfaceResetCommand': InterfaceResetCommand,
@@ -150,6 +157,7 @@ def _get_schema_classes():
         'WebSocketStatusResponse': WebSocketStatusResponse,
         'WhatsAppWebhookPayload': WhatsAppWebhookPayload,
         'TelegramWebhookPayload': TelegramWebhookPayload,
+        'DiscordGatewayPayload': DiscordGatewayPayload,
     }
 
 def __getattr__(name: str) -> Any:
@@ -193,7 +201,9 @@ __all__ = [
     "Gmail",
     "TelegramInterface",
     "Telegram",  # Alias
-    
+    "DiscordInterface",
+    "Discord",  # Alias
+
     # WebSocket
     "WebSocketManager",
     "WebSocketConnection",
@@ -207,6 +217,7 @@ __all__ = [
     "ErrorResponse",
     "WhatsAppWebhookPayload",
     "TelegramWebhookPayload",
+    "DiscordGatewayPayload",
     "WebSocketMessage",
     "WebSocketConnectionInfo",
     "WebSocketStatusResponse",

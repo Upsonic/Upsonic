@@ -289,9 +289,20 @@ class EmbeddingProvider(BaseModel, ABC):
     
     def _normalize_embeddings(self, embeddings: List[List[float]]) -> List[List[float]]:
         """Normalize embeddings to unit length."""
+        if not embeddings:
+            return embeddings
+        if _NUMPY_AVAILABLE and np is not None:
+            normalized = []
+            for embedding in embeddings:
+                norm = float(np.linalg.norm(embedding))
+                if norm > 0:
+                    normalized.append([x / norm for x in embedding])
+                else:
+                    normalized.append(embedding)
+            return normalized
         normalized = []
         for embedding in embeddings:
-            norm = np.linalg.norm(embedding)
+            norm = sum(x * x for x in embedding) ** 0.5
             if norm > 0:
                 normalized.append([x / norm for x in embedding])
             else:

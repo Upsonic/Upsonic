@@ -265,7 +265,11 @@ class TaskUsage(UsageBase):
     """Internal timer utility for tracking execution time."""
 
     time_to_first_token: Optional[float] = None
-    """Time from run start to first token generation, in seconds."""
+    """Time from run start to first token generation, in seconds.
+
+    Only set for streaming runs. Non-streaming runs receive the full
+    response in a single request, so this metric is not applicable.
+    """
 
     duration: Optional[float] = None
     """Total run time, in seconds."""
@@ -276,13 +280,26 @@ class TaskUsage(UsageBase):
     tool_execution_time: Optional[float] = None
     """Total time spent executing tools (external API calls, etc.), in seconds."""
 
+    pause_time: Optional[float] = None
+    """Total time spent paused (HITL waiting), in seconds.
+
+    Accumulated automatically by the start/stop timer cycle during
+    pause → resume transitions.  Excluded from ``upsonic_execution_time``
+    so that framework overhead reflects only active processing.
+    """
+
+    _pause_stop_ts: Optional[float] = dataclasses.field(default=None, repr=False)
+    """Internal: wall-clock (time.time()) timestamp when the timer was stopped for a pause.
+    Uses time.time() instead of perf_counter() so it can be serialized and used across processes."""
+
     @property
     def upsonic_execution_time(self) -> Optional[float]:
-        """Framework overhead time = duration - model_execution_time - tool_execution_time, in seconds."""
+        """Framework overhead time = duration - model_execution_time - tool_execution_time - pause_time, in seconds."""
         if self.duration is None or self.model_execution_time is None:
             return None
         tool_time = self.tool_execution_time or 0.0
-        return max(0.0, self.duration - self.model_execution_time - tool_time)
+        p_time = self.pause_time or 0.0
+        return max(0.0, self.duration - self.model_execution_time - tool_time - p_time)
 
     cost: Optional[float] = None
     """Estimated cost of the run (provider-specific)."""
@@ -328,6 +345,12 @@ class TaskUsage(UsageBase):
                 else:
                     self.tool_execution_time += incr_usage.tool_execution_time
 
+            if incr_usage.pause_time is not None:
+                if self.pause_time is None:
+                    self.pause_time = incr_usage.pause_time
+                else:
+                    self.pause_time += incr_usage.pause_time
+
             if incr_usage.time_to_first_token is not None:
                 if self.time_to_first_token is None:
                     self.time_to_first_token = incr_usage.time_to_first_token
@@ -371,8 +394,32 @@ class TaskUsage(UsageBase):
         return self + other
 
     def start_timer(self) -> None:
-        """Start the internal timer for tracking execution time."""
+        """Start the internal timer for tracking execution time.
+
+        On the very first call a new :class:`Timer` is created and started.
+        On subsequent calls (i.e. after a pause → resume) the gap between
+        the previous ``stop_timer()`` and this ``start_timer()`` is
+        accumulated into ``pause_time`` so that ``duration`` (wall-clock)
+        naturally includes the pause period while ``upsonic_execution_time``
+        excludes it.
+        """
+        from time import time as wall_time
         from upsonic.utils.timer import Timer
+
+        # If resuming after a pause, accumulate the pause gap into both
+        # pause_time (for breakdown) and duration (for wall-clock total)
+        if self._pause_stop_ts is not None:
+            gap = wall_time() - self._pause_stop_ts
+            if gap < 0:
+                gap = 0  # Guard against clock adjustments
+            if self.pause_time is None:
+                self.pause_time = gap
+            else:
+                self.pause_time += gap
+            if self.duration is not None:
+                self.duration += gap
+            self._pause_stop_ts = None
+
         if self.timer is None:
             self.timer = Timer()
         self.timer.start()
@@ -384,11 +431,19 @@ class TaskUsage(UsageBase):
         (e.g. an initial HITL run), the new elapsed time is **added** so
         the total reflects processing time across all runs.
 
+        Also records a ``_pause_stop_ts`` so that if ``start_timer`` is
+        called again later (resume), the pause gap can be measured.
+
         Args:
             set_duration: If True, accumulate timer.elapsed into self.duration.
         """
+        from time import time as wall_time
+
         if self.timer is not None:
             self.timer.stop()
+            # Record when we stopped so start_timer can measure pause gap
+            # Uses wall-clock time so it works across process boundaries
+            self._pause_stop_ts = wall_time()
             if set_duration:
                 elapsed: float = self.timer.elapsed
                 if self.duration is not None:
@@ -452,6 +507,8 @@ class TaskUsage(UsageBase):
             result["model_execution_time"] = self.model_execution_time
         if self.tool_execution_time is not None:
             result["tool_execution_time"] = self.tool_execution_time
+        if self.pause_time is not None:
+            result["pause_time"] = self.pause_time
         if self.upsonic_execution_time is not None:
             result["upsonic_execution_time"] = self.upsonic_execution_time
         if self.time_to_first_token is not None:
@@ -460,6 +517,8 @@ class TaskUsage(UsageBase):
             result["provider_metrics"] = self.provider_metrics
         if self.additional_metrics:
             result["additional_metrics"] = self.additional_metrics
+        if self._pause_stop_ts is not None:
+            result["_pause_stop_ts"] = self._pause_stop_ts
 
         result = {
             k: v for k, v in result.items()
@@ -494,9 +553,11 @@ class TaskUsage(UsageBase):
             duration=data.get("duration"),
             model_execution_time=data.get("model_execution_time"),
             tool_execution_time=data.get("tool_execution_time"),
+            pause_time=data.get("pause_time"),
             time_to_first_token=data.get("time_to_first_token"),
             provider_metrics=data.get("provider_metrics"),
             additional_metrics=data.get("additional_metrics"),
+            _pause_stop_ts=data.get("_pause_stop_ts"),
         )
 
 
@@ -543,13 +604,17 @@ class AgentUsage(UsageBase):
     tool_execution_time: Optional[float] = None
     """Total time spent executing tools across all tasks, in seconds."""
 
+    pause_time: Optional[float] = None
+    """Total time spent paused (HITL waiting) across all tasks, in seconds."""
+
     @property
     def upsonic_execution_time(self) -> Optional[float]:
-        """Framework overhead time = duration - model_execution_time - tool_execution_time, in seconds."""
+        """Framework overhead time = duration - model_execution_time - tool_execution_time - pause_time, in seconds."""
         if self.duration is None or self.model_execution_time is None:
             return None
         tool_time = self.tool_execution_time or 0.0
-        return max(0.0, self.duration - self.model_execution_time - tool_time)
+        p_time = self.pause_time or 0.0
+        return max(0.0, self.duration - self.model_execution_time - tool_time - p_time)
 
     cost: Optional[float] = None
     """Total estimated cost across all tasks."""
@@ -589,6 +654,12 @@ class AgentUsage(UsageBase):
                 else:
                     self.tool_execution_time += incr_usage.tool_execution_time
 
+            if getattr(incr_usage, "pause_time", None) is not None:
+                if self.pause_time is None:
+                    self.pause_time = incr_usage.pause_time
+                else:
+                    self.pause_time += incr_usage.pause_time
+
             details = getattr(incr_usage, "details", None)
             if isinstance(details, dict) and details:
                 if "reasoning_tokens" in details:
@@ -625,6 +696,8 @@ class AgentUsage(UsageBase):
             result["model_execution_time"] = self.model_execution_time
         if self.tool_execution_time is not None:
             result["tool_execution_time"] = self.tool_execution_time
+        if self.pause_time is not None:
+            result["pause_time"] = self.pause_time
         if self.upsonic_execution_time is not None:
             result["upsonic_execution_time"] = self.upsonic_execution_time
 
@@ -661,6 +734,7 @@ class AgentUsage(UsageBase):
             duration=data.get("duration"),
             model_execution_time=data.get("model_execution_time"),
             tool_execution_time=data.get("tool_execution_time"),
+            pause_time=data.get("pause_time"),
         )
 
 

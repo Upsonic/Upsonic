@@ -84,6 +84,7 @@ if TYPE_CHECKING:
     from upsonic.reflection import ReflectionConfig
     from upsonic.safety_engine.base import Policy
     from upsonic.tools import ToolDefinition, ToolManager
+    from upsonic.skills import Skills
     from upsonic.run.tools.tools import ToolExecution
     from upsonic.run.requirements import RunRequirement
     from upsonic.usage import RequestUsage, TaskUsage, AgentUsage
@@ -247,6 +248,7 @@ class Agent(BaseAgent):
         enable_thinking_tool: bool = False,
         enable_reasoning_tool: bool = False,
         tools: Optional[list] = None,
+        skills: Optional["Skills"] = None,
         user_policy: Optional[Union["Policy", List["Policy"]]] = None,
         agent_policy: Optional[Union["Policy", List["Policy"]]] = None,
         tool_policy_pre: Optional[Union["Policy", List["Policy"]]] = None,
@@ -448,7 +450,12 @@ class Agent(BaseAgent):
         self.enable_reasoning_tool = enable_reasoning_tool
         
         self.tools = tools if tools is not None else []
-            
+        self.skills = skills
+
+        # Register skill tools if skills are provided
+        if self.skills is not None:
+            self.tools.extend(self.skills.get_tools())
+
         if self.memory and feed_tool_call_results is not None:
             self.memory.feed_tool_call_results = feed_tool_call_results
         
@@ -1997,7 +2004,12 @@ class Agent(BaseAgent):
         from upsonic.tools.orchestration import plan_and_execute
         
         tools_to_register: list = list(task_tools) if task_tools else []
-        
+
+        # Register task-level skill tools with prefix to avoid name collision
+        # with agent-level skill tools (both generate get_skill_instructions, etc.)
+        if hasattr(task, 'skills') and task.skills is not None:
+            tools_to_register.extend(task.skills.get_tools(prefix="task_"))
+
         if is_thinking_enabled and plan_and_execute not in tools_to_register:
             tools_to_register.append(plan_and_execute)
         
@@ -2069,6 +2081,12 @@ class Agent(BaseAgent):
             if tool_name in current_task.tool_manager.wrapped_tools:
                 return current_task.tool_manager
         raise ValueError(f"Tool '{tool_name}' not found in any ToolManager")
+
+    def get_skill_metrics(self) -> Dict[str, Any]:
+        """Return skill metrics from agent-level skills."""
+        if self.skills is not None:
+            return {k: v.to_dict() for k, v in self.skills.get_metrics().items()}
+        return {}
 
     async def _build_model_request(
         self, 
@@ -4501,7 +4519,7 @@ class Agent(BaseAgent):
             ReliabilityStep, AgentPolicyStep,
             CacheStorageStep, FinalizationStep
         )
-        
+
         return [
             InitializationStep(),          # 0
             StorageConnectionStep(),       # 1
@@ -4564,7 +4582,7 @@ class Agent(BaseAgent):
             AgentPolicyStep, CacheStorageStep,
             StreamMemoryMessageTrackingStep, StreamFinalizationStep
         )
-        
+
         return [
             InitializationStep(),              # 0
             StorageConnectionStep(),           # 1
@@ -4646,14 +4664,22 @@ class Agent(BaseAgent):
             # --- Confirmation ---
             elif te.requires_confirmation and requirement.confirmation is not None:
                 if requirement.confirmation:
+                    import time as _time
+                    _tool_start = _time.time()
                     result_content = await self._execute_confirmed_tool(te)
+                    _tool_elapsed = _time.time() - _tool_start
+                    output.add_tool_execution_time(_tool_elapsed)
                 else:
                     note = requirement.confirmation_note or "Tool execution rejected by user."
                     result_content = f"Tool execution rejected: {note}"
 
             # --- User input ---
             elif te.requires_user_input and te.answered:
+                import time as _time
+                _tool_start = _time.time()
                 result_content = await self._execute_user_input_tool(te, requirement)
+                _tool_elapsed = _time.time() - _tool_start
+                output.add_tool_execution_time(_tool_elapsed)
 
             if result_content is not None:
                 te.result = result_content
@@ -5010,7 +5036,18 @@ class Agent(BaseAgent):
 
         from upsonic.usage import TaskUsage
         if getattr(task, "_usage", None) is None:
-            task._usage = TaskUsage()
+            # Restore usage from the stored output if available (cross-process resume),
+            # otherwise create a fresh TaskUsage.
+            stored_usage = getattr(output, 'usage', None)
+            if stored_usage is not None:
+                if isinstance(stored_usage, dict):
+                    task._usage = TaskUsage.from_dict(stored_usage)
+                elif isinstance(stored_usage, TaskUsage):
+                    task._usage = stored_usage
+                else:
+                    task._usage = TaskUsage()
+            else:
+                task._usage = TaskUsage()
         output.usage = task._usage
 
         run_status = output.status

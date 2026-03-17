@@ -247,6 +247,19 @@ class Step(ABC):
             StepResult: The result of the execution
         """
 
+        try:
+            check_error_injection(self.name)
+        except Exception as injected_err:
+            import time as _time
+            err_result = StepResult(
+                name=self.name,
+                step_number=step_number,
+                status=StepStatus.ERROR,
+                message=str(injected_err),
+                execution_time=0.0,
+            )
+            self._finalize_step_result(err_result, context)
+            raise
         step_result = await self.execute(context, task, agent, model, step_number, pipeline_manager=pipeline_manager)
         return step_result
 
@@ -314,3 +327,62 @@ class Step(ABC):
                 execution_time=result.execution_time,
                 message=result.message or ""
             )
+
+
+# ============================================================================
+# Error injection utilities for testing durable execution
+# ============================================================================
+
+_ERROR_INJECTIONS: Dict[str, Dict[str, Any]] = {}
+"""Global registry: step_name -> {exception_type, message, trigger_count, triggered}"""
+
+
+def inject_error_into_step(
+    step_name: str,
+    exception_type: type = RuntimeError,
+    message: str = "Injected error",
+    trigger_count: int = 1,
+) -> None:
+    """Inject an error into a pipeline step for testing.
+
+    The step will raise the given exception for the first ``trigger_count``
+    executions, then behave normally.
+
+    Args:
+        step_name: Name of the step to inject into (e.g. ``"model_execution"``).
+        exception_type: Exception class to raise.
+        message: Error message.
+        trigger_count: How many times the error should fire before clearing.
+    """
+    _ERROR_INJECTIONS[step_name] = {
+        "exception_type": exception_type,
+        "message": message,
+        "trigger_count": trigger_count,
+        "triggered": 0,
+    }
+
+
+def clear_error_injection(step_name: Optional[str] = None) -> None:
+    """Clear injected errors.
+
+    Args:
+        step_name: If given, clear only that step. Otherwise clear all.
+    """
+    if step_name is not None:
+        _ERROR_INJECTIONS.pop(step_name, None)
+    else:
+        _ERROR_INJECTIONS.clear()
+
+
+def check_error_injection(step_name: str) -> None:
+    """Check and raise injected error if applicable.
+
+    Called at the beginning of ``Step.run()`` so that the step fails
+    before its real logic executes.
+    """
+    injection = _ERROR_INJECTIONS.get(step_name)
+    if injection is None:
+        return
+    if injection["triggered"] < injection["trigger_count"]:
+        injection["triggered"] += 1
+        raise injection["exception_type"](injection["message"])

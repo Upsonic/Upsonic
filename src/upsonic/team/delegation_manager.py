@@ -5,8 +5,9 @@ from pydantic import BaseModel
 if TYPE_CHECKING:
     from upsonic.agent.agent import Agent
     from upsonic.team.team import Team
-    
+
 from upsonic.tasks.tasks import Task
+from upsonic.tools.config import ToolConfig, tool
 
 class DelegationManager:
     """
@@ -44,12 +45,12 @@ class DelegationManager:
             An asynchronous callable function that serves as the delegation tool.
         """
         async def delegate_task(
-            member_id: str, 
-            description: str, 
-            tools: Optional[List[str]] = None, 
-            context: Any = None, 
+            member_id: str,
+            description: str,
+            tools: Optional[List[str]] = None,
+            context: Any = None,
             attachments: Optional[List[str]] = None,
-            expected_output: Union[Type[BaseModel], type[str], None] = str
+            expected_output: Union[Type[BaseModel], type[str], None] = None,
         ) -> str:
             """
             Delegates a task to a specific team member using detailed parameters.
@@ -60,11 +61,12 @@ class DelegationManager:
                 tools (Optional[List[str]]): A list of task-level tool names to make available for this sub-task. The agent will autonomously decide which tools to use.
                 context (Any): Optional context or data needed for the task, such as a result from a previous delegation step.
                 attachments (Optional[List[str]]): Optional list of file paths for the task.
-                expected_output (Union[Type[BaseModel], type[str], None]): The expected output type for the task.
+                expected_output (Union[Type[BaseModel], type[str], None]): The expected output type for the task. None means plain str.
 
             Returns:
                 str: The result from the team member's execution of the task.
             """
+            response_format: Union[Type[BaseModel], type[str], None] = str if expected_output is None else expected_output
             member_entity: Optional[Union[Agent, Team]] = None
             for entity in self.members:
                 if entity.get_entity_id() == member_id:
@@ -85,7 +87,7 @@ class DelegationManager:
                 tools=sub_task_tools if sub_task_tools else None,
                 context=context,
                 attachments=attachments,
-                response_format=expected_output
+                response_format=response_format,
             )
 
             if self.debug:
@@ -106,6 +108,10 @@ class DelegationManager:
             except Exception as e:
                 return f"An error occurred while delegating task to {member_id}: {e}"
 
+        # Disable timeout — delegate_task runs a full sub-agent pipeline which
+        # can take far longer than the default 30-second tool timeout.
+        delegate_task._upsonic_tool_config = ToolConfig(timeout=None, max_retries=0)
+        delegate_task._upsonic_is_tool = True
         return delegate_task
     
     def get_routing_tool(self) -> Callable:

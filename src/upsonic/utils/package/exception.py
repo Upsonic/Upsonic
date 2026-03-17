@@ -243,3 +243,48 @@ class ModelAPIError(AgentRunError):
     def __init__(self, model_name: str, message: str):
         self.model_name = model_name
         super().__init__(message)
+
+
+class SkillError(Exception):
+    """Base exception for all skill-related errors."""
+    pass
+
+
+class SkillParseError(SkillError):
+    """Raised when SKILL.md parsing fails."""
+    pass
+
+
+class SkillDownloadError(SkillError):
+    """Raised when a remote skill download fails."""
+    pass
+
+
+class SkillIntegrityError(SkillError):
+    """Raised when a downloaded skill fails integrity verification."""
+    pass
+
+
+class SkillRegistryError(SkillError):
+    """Raised when a skill registry operation fails."""
+    pass
+
+
+class SkillValidationError(SkillError):
+    """Raised when skill validation fails.
+
+    Attributes:
+        errors: List of validation error messages.
+    """
+
+    def __init__(self, message: str, errors: list[str] | None = None) -> None:
+        if errors is not None:
+            self.errors = errors
+        else:
+            self.errors = [message]
+        super().__init__(message)
+
+    def __str__(self) -> str:
+        if len(self.errors) == 1:
+            return self.errors[0]
+        return f"{len(self.errors)} validation errors: {'; '.join(self.errors)}"

@@ -263,6 +263,10 @@ slack-interface = [
     "fastapi>=0.128.0",
     "slack-sdk>=3.39.0",
 ]
+discord-interface = [
+    "fastapi>=0.128.0",
+    "websockets>=12.0",
+]
 otel = [
     "opentelemetry-api>=1.39.1",
     "opentelemetry-exporter-otlp-proto-grpc>=1.39.1",
