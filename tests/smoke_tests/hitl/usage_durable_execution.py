@@ -46,7 +46,7 @@ async def durable_direct_call_with_run_id_same_agent():
     inject_error_into_step("model_execution", RuntimeError, "Simulated model failure", trigger_count=1)
     
     db = SqliteDatabase(db_file="durable.db", session_id="session_1", user_id="user_1")
-    agent = Agent("openai/gpt-4o-mini", db=db, retry=1)  # retry=1 to disable internal retries
+    agent = Agent("openai/gpt-4o-mini", db=db, retry=1, print=True)  # retry=1 to disable internal retries
     task = Task("What is 7 + 7? Reply with just the number.")
     
     try:
@@ -78,7 +78,7 @@ async def durable_direct_call_with_task_same_agent():
     inject_error_into_step("model_execution", RuntimeError, "Simulated model failure", trigger_count=1)
     
     db = SqliteDatabase(db_file="durable.db", session_id="session_1", user_id="user_1")
-    agent = Agent("openai/gpt-4o-mini", db=db, retry=1)  # retry=1 to disable internal retries
+    agent = Agent("openai/gpt-4o-mini", db=db, retry=1, print=True)  # retry=1 to disable internal retries
     task = Task("What is 7 + 7? Reply with just the number.")
     
     try:
@@ -109,7 +109,7 @@ async def durable_direct_call_with_run_id_new_agent():
     inject_error_into_step("model_execution", RuntimeError, "Simulated model failure", trigger_count=1)
     
     db = SqliteDatabase(db_file="durable.db", session_id="session_1", user_id="user_1")
-    agent = Agent("openai/gpt-4o-mini", db=db, retry=1)
+    agent = Agent("openai/gpt-4o-mini", db=db, retry=1, print=True)
     task = Task("What is 7 + 7? Reply with just the number.")
     
     run_id = None
@@ -127,7 +127,7 @@ async def durable_direct_call_with_run_id_new_agent():
         if run_id:
             print(f"  Creating new agent to recover with run_id: {run_id}")
             new_db = SqliteDatabase(db_file="durable.db", session_id="session_1", user_id="user_1")
-            new_agent = Agent("openai/gpt-4o-mini", db=new_db, retry=1)
+            new_agent = Agent("openai/gpt-4o-mini", db=new_db, retry=1, print=True)
             result = await new_agent.continue_run_async(run_id=run_id, return_output=True)
             clear_error_injection()
             return result
@@ -151,7 +151,7 @@ async def durable_direct_call_with_task_new_agent():
     inject_error_into_step("model_execution", RuntimeError, "Simulated model failure", trigger_count=1)
     
     db = SqliteDatabase(db_file="durable.db", session_id="session_1", user_id="user_1")
-    agent = Agent("openai/gpt-4o-mini", db=db, retry=1)
+    agent = Agent("openai/gpt-4o-mini", db=db, retry=1, print=True)
     task = Task("What is 7 + 7? Reply with just the number.")
     
     try:
@@ -162,7 +162,7 @@ async def durable_direct_call_with_task_new_agent():
         print(f"  Error caught: {e}")
         print(f"  Creating new agent to recover with task...")
         new_db = SqliteDatabase(db_file="durable.db", session_id="session_1", user_id="user_1")
-        new_agent = Agent("openai/gpt-4o-mini", db=new_db, retry=1)
+        new_agent = Agent("openai/gpt-4o-mini", db=new_db, retry=1, print=True)
         result = await new_agent.continue_run_async(task=task, return_output=True)
         clear_error_injection()
         return result
@@ -184,7 +184,7 @@ async def durable_with_retry_backoff():
     inject_error_into_step("model_execution", RuntimeError, "Simulated model failure", trigger_count=2)
     
     db = SqliteDatabase(db_file="durable.db", session_id="session_1", user_id="user_1")
-    agent = Agent("openai/gpt-4o-mini", db=db, retry=1)
+    agent = Agent("openai/gpt-4o-mini", db=db, retry=1, print=True)
     task = Task("What is 7 + 7? Reply with just the number.")
     
     max_retries = 3
@@ -240,7 +240,7 @@ async def durable_with_retry_backoff_task():
     inject_error_into_step("model_execution", RuntimeError, "Simulated model failure", trigger_count=2)
     
     db = SqliteDatabase(db_file="durable.db", session_id="session_1", user_id="user_1")
-    agent = Agent("openai/gpt-4o-mini", db=db, retry=1)
+    agent = Agent("openai/gpt-4o-mini", db=db, retry=1, print=True)
     task = Task("What is 7 + 7? Reply with just the number.")
     
     max_retries = 3
@@ -297,7 +297,7 @@ async def durable_with_status_check():
     inject_error_into_step("response_processing", RuntimeError, "Simulated processing failure", trigger_count=1)
     
     db = SqliteDatabase(db_file="durable.db", session_id="session_1", user_id="user_1")
-    agent = Agent("openai/gpt-4o-mini", db=db, retry=1)
+    agent = Agent("openai/gpt-4o-mini", db=db, retry=1, print=True)
     task = Task("What is 7 + 7? Reply with just the number.")
     
     try:
@@ -341,7 +341,7 @@ async def durable_with_status_check_task():
     inject_error_into_step("response_processing", RuntimeError, "Simulated processing failure", trigger_count=1)
     
     db = SqliteDatabase(db_file="durable.db", session_id="session_1", user_id="user_1")
-    agent = Agent("openai/gpt-4o-mini", db=db, retry=1)
+    agent = Agent("openai/gpt-4o-mini", db=db, retry=1, print=True)
     task = Task("What is 7 + 7? Reply with just the number.")
     
     try:
@@ -386,7 +386,7 @@ async def durable_cross_process_recovery():
     inject_error_into_step("model_execution", RuntimeError, "Simulated model failure", trigger_count=1)
     
     db = SqliteDatabase(db_file="durable.db", session_id="session_1", user_id="user_1")
-    agent = Agent("openai/gpt-4o-mini", db=db, retry=1)
+    agent = Agent("openai/gpt-4o-mini", db=db, retry=1, print=True)
     task = Task("What is 7 + 7? Reply with just the number.")
     
     try:
@@ -402,7 +402,7 @@ async def durable_cross_process_recovery():
             
             # New agent loads from storage using run_id
             new_db = SqliteDatabase(db_file="durable.db", session_id="session_1", user_id="user_1")
-            new_agent = Agent("openai/gpt-4o-mini", db=new_db, retry=1)
+            new_agent = Agent("openai/gpt-4o-mini", db=new_db, retry=1, print=True)
             result = await new_agent.continue_run_async(run_id=run_id, return_output=True)
             clear_error_injection()
             return result
@@ -421,7 +421,7 @@ async def durable_cross_process_recovery_task():
     inject_error_into_step("model_execution", RuntimeError, "Simulated model failure", trigger_count=1)
     
     db = SqliteDatabase(db_file="durable.db", session_id="session_1", user_id="user_1")
-    agent = Agent("openai/gpt-4o-mini", db=db, retry=1)
+    agent = Agent("openai/gpt-4o-mini", db=db, retry=1, print=True)
     task = Task("What is 7 + 7? Reply with just the number.")
     
     try:
@@ -434,7 +434,7 @@ async def durable_cross_process_recovery_task():
         
         # New agent uses task for continuation
         new_db = SqliteDatabase(db_file="durable.db", session_id="session_1", user_id="user_1")
-        new_agent = Agent("openai/gpt-4o-mini", db=new_db, retry=1)
+        new_agent = Agent("openai/gpt-4o-mini", db=new_db, retry=1, print=True)
         result = await new_agent.continue_run_async(task=task, return_output=True)
         clear_error_injection()
         return result
@@ -453,7 +453,7 @@ async def durable_error_in_tool_setup_step():
     inject_error_into_step("tool_setup", RuntimeError, "Simulated tool setup failure", trigger_count=1)
     
     db = SqliteDatabase(db_file="durable.db", session_id="session_1", user_id="user_1")
-    agent = Agent("openai/gpt-4o-mini", db=db, retry=1)
+    agent = Agent("openai/gpt-4o-mini", db=db, retry=1, print=True)
     task = Task("What is 7 + 7? Reply with just the number.")
     
     try:

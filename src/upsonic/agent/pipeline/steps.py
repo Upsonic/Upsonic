@@ -613,7 +613,8 @@ class ToolSetupStep(Step):
         finally:
             if step_result:
                 self._finalize_step_result(step_result, context)
-            
+
+
 class StorageConnectionStep(Step):
     """Setup storage connection for memory and database operations."""
     
@@ -1591,12 +1592,15 @@ class CallManagementStep(Step):
             
             if context.output is None and task:
                 context.output = task.response
-            
+
+            # task_end() is now called in MemorySaveStep (before save) to ensure
+            # metrics are available when saving to storage. This guard ensures
+            # we don't double-stop the timer if it was already finalized.
             _usage = getattr(task, '_usage', None)
             _timer = getattr(_usage, 'timer', None) if _usage else None
             if _timer is None or getattr(_timer, 'end_time', None) is None:
                 task.task_end()
-            
+
             # Retrieve CallManager from pipeline registry and delegate all printing
             if pipeline_manager:
                 call_manager = pipeline_manager.get_manager('call_manager')
@@ -1766,14 +1770,32 @@ class MemorySaveStep(Step):
         """Save session via MemoryManager.afinalize() for completed runs."""
         from upsonic.run.cancel import raise_if_cancelled
         from upsonic.exceptions import RunCancelledException
-        
+
         start_time = time.time()
         step_result: Optional[StepResult] = None
-        
+
         try:
             if agent and hasattr(agent, 'run_id') and agent.run_id:
                 raise_if_cancelled(agent.run_id)
-            
+
+            # Update skill metrics snapshot before saving
+            all_metrics: dict = {}
+            all_metrics.update(agent.get_skill_metrics())
+            if task:
+                all_metrics.update(task.get_skill_metrics())
+            if all_metrics:
+                context.skill_metrics = all_metrics
+
+            # Ensure all usage metrics (especially duration) are set BEFORE saving
+            # to storage, so that the saved session contains accurate metrics.
+            # This was previously done in CallManagementStep (after MemorySave),
+            # but metrics must be finalized before the save.
+            if not task.is_paused:
+                _usage = getattr(task, '_usage', None)
+                _timer = getattr(_usage, 'timer', None) if _usage else None
+                if _timer is None or getattr(_timer, 'end_time', None) is None:
+                    task.task_end()
+
             # Finalize run messages BEFORE marking completed
             # This extracts new messages from chat_history (using _run_boundaries)
             # and sets them to context.messages
@@ -2674,8 +2696,14 @@ class StreamModelExecutionStep(Step):
                 )
             
             # Execute tool calls - ExternalExecutionPause will bubble up to PipelineManager
+            _tool_exec_start: float = time.time()
             tool_results = await agent._execute_tool_calls(tool_calls)
-            
+            _tool_exec_elapsed: float = time.time() - _tool_exec_start
+
+            # Track tool execution time and tool call count for streaming
+            context.add_tool_execution_time(_tool_exec_elapsed)
+            context.tool_call_count = getattr(context, 'tool_call_count', 0) + len(tool_calls)
+
             # Emit tool result events
             for tc, result in zip(tool_calls, tool_results):
                 result_preview = str(result.content)[:100] if hasattr(result, 'content') else None
@@ -2819,17 +2847,25 @@ class StreamMemoryMessageTrackingStep(Step):
                 )
                 return step_result
             
+            # Update skill metrics snapshot before saving
+            all_metrics: dict = {}
+            all_metrics.update(agent.get_skill_metrics())
+            if task:
+                all_metrics.update(task.get_skill_metrics())
+            if all_metrics:
+                context.skill_metrics = all_metrics
+
             # Finalize run messages BEFORE marking completed and saving
             # This extracts new messages from chat_history (using _run_boundaries)
             # and sets them to context.messages
             context.finalize_run_messages()
-            
+
             # Note: Session-level usage is updated in AgentSessionMemory.asave()
             # when the session is saved to storage
-            
+
             # Mark completed
             context.mark_completed()
-            
+
             # Handle memory save
             session_saved = False
             memory_type = None
@@ -2968,7 +3004,7 @@ class StreamFinalizationStep(Step):
                 ):
                     context.events.append(event)
                 # RunCompletedEvent is emitted by manager after pipeline end
-            
+
             step_result = StepResult(
                 name=self.name,
                 step_number=step_number,
@@ -3079,7 +3115,7 @@ class FinalizationStep(Step):
                 execution_time=time.time() - start_time,
             )
             return step_result
-            
+
         except RunCancelledException as e:
             step_result = StepResult(
                 name=self.name,

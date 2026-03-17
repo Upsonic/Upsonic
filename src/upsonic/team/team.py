@@ -38,6 +38,7 @@ class Team:
                  leader: Optional[Agent] = None,
                  router: Optional[Agent] = None,
                  memory: Optional[Memory] = None,
+                 skills: Optional[Any] = None,
                  debug: bool = False,
                  debug_level: int = 1,
                  agents: Optional[List[Union[Agent, "Team"]]] = None,
@@ -79,6 +80,7 @@ class Team:
         self._leader: Optional[Agent] = leader
         self._router: Optional[Agent] = router
         self.memory: Optional[Memory] = memory
+        self.skills: Optional[Any] = skills
         self.debug: bool = debug
         self.debug_level: int = debug_level if debug else 1
 
@@ -90,6 +92,9 @@ class Team:
 
         if self.memory:
             self._propagate_memory(self.entities, self.memory)
+
+        if self.skills:
+            self._propagate_skills(self.entities, self.skills)
 
         if self.ask_other_team_members:
             self.add_tool()
@@ -115,6 +120,37 @@ class Team:
                 if entity.memory is None:
                     entity.memory = memory
                 self._propagate_memory(entity.entities, memory)
+
+    def _propagate_skills(self, entities: List[Union[Agent, "Team"]], skills: Any) -> None:
+        """Recursively propagate skills to all Agent entities, including those nested in sub-Teams.
+
+        Each agent receives its own copy of the skills so that metrics are
+        tracked independently per agent.  Uses ``agent.add_tools()`` so skill
+        tools are properly registered with the agent's ToolManager.
+        """
+        from upsonic.agent.agent import Agent as AgentClass
+        for entity in entities:
+            if isinstance(entity, AgentClass):
+                if entity.skills is None:
+                    # Each agent gets its own copy so metrics are independent
+                    agent_skills = skills.copy()
+                    entity.skills = agent_skills
+                    entity.add_tools(agent_skills.get_tools())
+                else:
+                    from upsonic.skills import Skills
+                    # Remove old skill tools before merging
+                    old_skill_tool_names = [
+                        t.__name__ for t in entity.tools
+                        if hasattr(t, '__name__') and t.__name__.startswith('get_skill_')
+                    ]
+                    if old_skill_tool_names:
+                        entity.remove_tools(old_skill_tool_names)
+                    entity.skills = Skills.merge(skills, entity.skills)
+                    entity.add_tools(entity.skills.get_tools())
+            elif isinstance(entity, Team):
+                if entity.skills is None:
+                    entity.skills = skills
+                self._propagate_skills(entity.entities, skills)
 
     def get_entity_id(self) -> str:
         """Get display-friendly entity ID for this team."""
@@ -421,7 +457,7 @@ class Team:
             final_task: Task = Task(
                 description=consolidated_description,
                 attachments=all_attachments or None,
-                tools=list(set(all_tools)) if all_tools else None,
+                tools=list(set[Any](all_tools)) if all_tools else None,
                 response_format=self.response_format
             )
 

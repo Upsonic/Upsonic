@@ -1399,6 +1399,8 @@ _EVENT_CLASS_REGISTRY: Dict[str, type] = {
     "ThinkingDeltaEvent": ThinkingDeltaEvent,
     "ToolCallDeltaEvent": ToolCallDeltaEvent,
     "FinalOutputEvent": FinalOutputEvent,
+    "StorageConnectionEvent": StorageConnectionEvent,
+    "LLMPreparedEvent": LLMPreparedEvent,
 }
 
 

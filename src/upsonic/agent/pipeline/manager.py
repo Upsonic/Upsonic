@@ -154,9 +154,16 @@ class PipelineManager:
         """
         if not cancelled_step_result:
             cancelled_step_result = output.get_cancelled_step()
-        
+
+        # Stop the usage timer and mark paused so _finalize_agent_usage
+        # doesn't double-count and duration is preserved for resume.
+        if self.task:
+            self.task.is_paused = True
+            if hasattr(self.task, '_usage') and self.task._usage is not None:
+                self.task._usage.stop_timer()
+
         output.mark_cancelled()
-        
+
         if self.debug:
             from upsonic.utils.printing import warning_log
             step_name = cancelled_step_result.name if cancelled_step_result else 'unknown'
@@ -194,7 +201,14 @@ class PipelineManager:
         """
         if not failed_step_result:
             failed_step_result = output.get_error_step()
-        
+
+        # Stop the usage timer and mark paused so _finalize_agent_usage
+        # doesn't double-count and duration is preserved for resume.
+        if self.task:
+            self.task.is_paused = True
+            if hasattr(self.task, '_usage') and self.task._usage is not None:
+                self.task._usage.stop_timer()
+
         error_msg = failed_step_result.message if failed_step_result else None
         output.mark_error(error_msg)
     

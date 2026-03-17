@@ -1338,15 +1338,19 @@ def print_price_id_summary(
 
     _model_time: Optional[float] = getattr(task_usage, 'model_execution_time', None) if task_usage else None
     _tool_time: Optional[float] = getattr(task_usage, 'tool_execution_time', None) if task_usage else None
+    _pause_time: Optional[float] = getattr(task_usage, 'pause_time', None) if task_usage else None
     _upsonic_time: Optional[float] = None
     if _duration is not None and _model_time is not None:
         _tool_deduct = _tool_time or 0.0
-        _upsonic_time = max(0.0, _duration - _model_time - _tool_deduct)
+        _pause_deduct = _pause_time or 0.0
+        _upsonic_time = max(0.0, _duration - _model_time - _tool_deduct - _pause_deduct)
 
     if _model_time is not None:
         table.add_row("[bold]Model Execution Time:[/bold]", f"[magenta]{_model_time:.2f} seconds[/magenta]")
     if _tool_time is not None:
         table.add_row("[bold]Tool Execution Time:[/bold]", f"[magenta]{_tool_time:.2f} seconds[/magenta]")
+    if _pause_time is not None:
+        table.add_row("[bold]Pause Time (HITL):[/bold]", f"[magenta]{_pause_time:.2f} seconds[/magenta]")
     if _upsonic_time is not None:
         table.add_row("[bold]Framework Overhead:[/bold]", f"[magenta]{_upsonic_time:.2f} seconds[/magenta]")
 
@@ -1392,6 +1396,7 @@ def print_agent_metrics(agent: "Agent", print_output: bool = True) -> Optional[D
         "duration": usage.duration,
         "model_execution_time": usage.model_execution_time,
         "tool_execution_time": usage.tool_execution_time,
+        "pause_time": getattr(usage, 'pause_time', None),
         "upsonic_execution_time": usage.upsonic_execution_time,
     }
     
@@ -1422,9 +1427,11 @@ def print_agent_metrics(agent: "Agent", print_output: bool = True) -> Optional[D
         table.add_row("[bold]Model Execution Time:[/bold]", f"[cyan]{usage.model_execution_time:.2f} seconds[/cyan]")
     if usage.tool_execution_time is not None:
         table.add_row("[bold]Tool Execution Time:[/bold]", f"[cyan]{usage.tool_execution_time:.2f} seconds[/cyan]")
+    if getattr(usage, 'pause_time', None) is not None:
+        table.add_row("[bold]Pause Time (HITL):[/bold]", f"[cyan]{usage.pause_time:.2f} seconds[/cyan]")
     if usage.upsonic_execution_time is not None:
         table.add_row("[bold]Framework Overhead:[/bold]", f"[cyan]{usage.upsonic_execution_time:.2f} seconds[/cyan]")
-    
+
     panel = Panel(
         table,
         title="[bold cyan]Agent Metrics[/bold cyan]",

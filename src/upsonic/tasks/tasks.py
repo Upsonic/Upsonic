@@ -9,6 +9,7 @@ from upsonic.run.base import RunStatus
 
 if TYPE_CHECKING:
     from upsonic.agent.deepagent.tools.planning_toolkit import TodoList
+    from upsonic.skills.skills import Skills
     from upsonic.tools import ToolManager
     from upsonic.tools.base import ToolDefinition
     from upsonic.usage import TaskUsage
@@ -25,6 +26,7 @@ class Task(BaseModel):
     description: str
     attachments: Optional[List[str]] = None
     tools: list[Any] = None
+    skills: Optional[Any] = None
     response_format: Union[Type[BaseModel], type[str], None] = str
     response_lang: Optional[str] = "en"
     _response: Optional[Union[str, bytes]] = None
@@ -278,6 +280,7 @@ class Task(BaseModel):
         description: str, 
         attachments: Optional[List[str]] = None,
         tools: list[Any] = None,
+        skills: Optional["Skills"] = None,
         response_format: Union[Type[BaseModel], type[str], None] = str,
         response: Optional[Union[str, bytes]] = None,
         context: Any = None,
@@ -343,6 +346,7 @@ class Task(BaseModel):
             "description": description,
             "attachments": attachments,
             "tools": tools,
+            "skills": skills,
             "response_format": response_format,
             "_response": response,
             "context": context,
@@ -480,6 +484,12 @@ class Task(BaseModel):
         if self._tool_manager is None:
             return []
         return self._tool_manager.get_tool_definitions()
+
+    def get_skill_metrics(self) -> Dict[str, Any]:
+        """Return skill metrics from task-level skills."""
+        if self.skills is not None:
+            return {k: v.to_dict() for k, v in self.skills.get_metrics().items()}
+        return {}
 
     def add_tools(self, tools: Union[Any, List[Any]]) -> None:
         """
@@ -832,7 +842,8 @@ class Task(BaseModel):
             self.add_canvas(agent.canvas)
 
     def task_end(self) -> None:
-        self.end_time = time.time()
+        if self.end_time is None:
+            self.end_time = time.time()
         if self._usage is not None:
             self._usage.stop_timer()
 
@@ -1041,6 +1052,7 @@ class Task(BaseModel):
         if serialize_flag:
             result["response_format"] = Task._pickle(self.response_format)
             result["tools"] = [Task._pickle(t) for t in self.tools] if self.tools else []
+            result["skills"] = Task._pickle(self.skills) if self.skills is not None else None
             result["registered_task_tools"] = {
                 k: Task._pickle(v) for k, v in self.registered_task_tools.items()
             } if self.registered_task_tools else {}
@@ -1075,6 +1087,7 @@ class Task(BaseModel):
             
             # Other non-serializable fields - exclude from JSON output
             result["tools"] = None
+            result["skills"] = None
             result["registered_task_tools"] = None
             result["task_builtin_tools"] = None
             result["guardrail"] = None
@@ -1145,6 +1158,13 @@ class Task(BaseModel):
         else:
             response_format = response_format_data
         
+        # Handle skills - cloudpickle if deserialize_flag
+        skills_data = data.get("skills")
+        if deserialize_flag and skills_data is not None:
+            skills = Task._unpickle(skills_data)
+        else:
+            skills = skills_data
+
         # Handle tools - cloudpickle if deserialize_flag
         tools_data = data.get("tools")
         if deserialize_flag and tools_data is not None:
@@ -1190,6 +1210,11 @@ class Task(BaseModel):
         
         # Add deserialized fields - skip if still pickled
         filtered_data["tools"] = tools if not tools_are_pickled else []
+
+        # Add skills - pass directly (None if not present or not deserialized)
+        skills_is_pickled = isinstance(skills, dict) and "__pickled__" in skills
+        if not skills_is_pickled:
+            filtered_data["skills"] = skills
         
         # Only pass response_format to constructor if not pickled
         if not response_format_is_pickled:
@@ -1208,6 +1233,8 @@ class Task(BaseModel):
             task.response_format = response_format
         if tools_are_pickled:
             task.tools = tools
+        if skills_is_pickled:
+            task.skills = skills
         
         # Restore status (RunStatus enum)
         status_value = data.get("status")

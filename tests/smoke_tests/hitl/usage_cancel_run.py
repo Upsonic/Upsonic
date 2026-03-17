@@ -46,7 +46,7 @@ async def cancel_direct_call_with_run_id_same_agent():
     """
     cleanup_db()
     db = SqliteDatabase(db_file="cancel.db", session_id="session_1", user_id="user_1")
-    agent = Agent("openai/gpt-4o-mini", db=db)
+    agent = Agent("openai/gpt-4o-mini", db=db, print=True)
     task = Task(
         description="Call long_running_task with 10 seconds.",
         tools=[long_running_task]
@@ -79,7 +79,7 @@ async def cancel_direct_call_with_task_same_agent():
     """
     cleanup_db()
     db = SqliteDatabase(db_file="cancel.db", session_id="session_1", user_id="user_1")
-    agent = Agent("openai/gpt-4o-mini", db=db)
+    agent = Agent("openai/gpt-4o-mini", db=db, print=True)
     task = Task(
         description="Call long_running_task with 10 seconds.",
         tools=[long_running_task]
@@ -116,7 +116,7 @@ async def cancel_direct_call_with_run_id_new_agent():
     """
     cleanup_db()
     db = SqliteDatabase(db_file="cancel.db", session_id="session_1", user_id="user_1")
-    agent = Agent("openai/gpt-4o-mini", db=db)
+    agent = Agent("openai/gpt-4o-mini", db=db, print=True)
     task = Task(
         description="Call long_running_task with 10 seconds.",
         tools=[long_running_task]
@@ -158,7 +158,7 @@ async def cancel_direct_call_with_task_new_agent():
     """
     cleanup_db()
     db = SqliteDatabase(db_file="cancel.db", session_id="session_1", user_id="user_1")
-    agent = Agent("openai/gpt-4o-mini", db=db)
+    agent = Agent("openai/gpt-4o-mini", db=db, print=True)
     task = Task(
         description="Call long_running_task with 10 seconds.",
         tools=[long_running_task]
@@ -233,7 +233,7 @@ async def cancel_with_immediate_check():
     """
     cleanup_db()
     db = SqliteDatabase(db_file="cancel.db", session_id="session_1", user_id="user_1")
-    agent = Agent("openai/gpt-4o-mini", db=db)
+    agent = Agent("openai/gpt-4o-mini", db=db, print=True)
     task = Task(
         description="Call long_running_task with 10 seconds.",
         tools=[long_running_task]
@@ -272,7 +272,7 @@ async def cancel_with_multiple_resume_attempts():
     """
     cleanup_db()
     db = SqliteDatabase(db_file="cancel.db", session_id="session_1", user_id="user_1")
-    agent = Agent("openai/gpt-4o-mini", db=db)
+    agent = Agent("openai/gpt-4o-mini", db=db, print=True)
     task = Task(
         description="Call long_running_task with 8 seconds.",
         tools=[long_running_task]
@@ -326,7 +326,7 @@ async def cancel_verify_resume_from_cutoff():
     """
     cleanup_db()
     db = SqliteDatabase(db_file="cancel.db", session_id="session_1", user_id="user_1")
-    agent = Agent("openai/gpt-4o-mini", db=db, debug=True)
+    agent = Agent("openai/gpt-4o-mini", db=db, debug=True, print=True)
     task = Task(
         description="Call long_running_task with 10 seconds.",
         tools=[long_running_task]

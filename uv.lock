@@ -8824,7 +8824,7 @@ wheels = [
 
 [[package]]
 name = "upsonic"
-version = "0.73.2"
+version = "0.74.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
@@ -8870,6 +8870,10 @@ custom-tools = [
     { name = "crawlee", extra = ["beautifulsoup"] },
     { name = "firecrawl-py" },
     { name = "slack-sdk" },
+]
+discord-interface = [
+    { name = "fastapi" },
+    { name = "websockets" },
 ]
 docling-loader = [
     { name = "docling" },
@@ -9148,6 +9152,7 @@ requires-dist = [
     { name = "easyocr", marker = "extra == 'ocr'", specifier = ">=1.7.2" },
     { name = "faiss-cpu", marker = "extra == 'faiss'", specifier = ">=1.12.0" },
     { name = "faiss-cpu", marker = "extra == 'vectordb'", specifier = ">=1.12.0" },
+    { name = "fastapi", marker = "extra == 'discord-interface'", specifier = ">=0.128.0" },
     { name = "fastapi", marker = "extra == 'gmail-interface'" },
     { name = "fastapi", marker = "extra == 'slack-interface'", specifier = ">=0.128.0" },
     { name = "fastapi", marker = "extra == 'web'" },
@@ -9278,10 +9283,11 @@ requires-dist = [
     { name = "uvicorn", marker = "extra == 'web'", specifier = ">=0.35.0" },
     { name = "weaviate-client", marker = "extra == 'vectordb'", specifier = ">=4.16.9" },
     { name = "weaviate-client", marker = "extra == 'weaviate'", specifier = ">=4.16.9" },
+    { name = "websockets", marker = "extra == 'discord-interface'", specifier = ">=12.0" },
     { name = "xai-sdk", marker = "extra == 'models'", specifier = ">=1.4.0" },
     { name = "yfinance", marker = "extra == 'tools'", specifier = ">=0.2.66" },
 ]
-provides-extras = ["chroma", "qdrant", "milvus", "weaviate", "pinecone", "faiss", "pgvector", "supermemory", "vectordb", "sqlite-storage", "redis-storage", "postgres-storage", "mongo-storage", "mem0-storage", "storage", "models", "embeddings", "csv-loader", "docling-loader", "docx-loader", "html-loader", "json-loader", "markdown-loader", "pdf-loader", "pdfplumber-loader", "pymupdf-loader", "text-loader", "xml-loader", "yaml-loader", "loaders", "tools", "web", "ocr", "custom-tools", "apify-tool", "crawlee-browser", "gmail-interface", "safety-engine", "slack-interface", "otel", "langfuse", "gmail-tool"]
+provides-extras = ["chroma", "qdrant", "milvus", "weaviate", "pinecone", "faiss", "pgvector", "supermemory", "vectordb", "sqlite-storage", "redis-storage", "postgres-storage", "mongo-storage", "mem0-storage", "storage", "models", "embeddings", "csv-loader", "docling-loader", "docx-loader", "html-loader", "json-loader", "markdown-loader", "pdf-loader", "pdfplumber-loader", "pymupdf-loader", "text-loader", "xml-loader", "yaml-loader", "loaders", "tools", "web", "ocr", "custom-tools", "apify-tool", "crawlee-browser", "gmail-interface", "safety-engine", "slack-interface", "discord-interface", "otel", "langfuse", "gmail-tool"]
 
 [package.metadata.requires-dev]
 dev = [

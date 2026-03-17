@@ -1,6 +1,6 @@
 [project]
 name = "upsonic"
-version = "0.73.2"
+version = "0.74.0"
 description = "Agent Framework For Fintech"
 readme = "README.md"
 authors = [
@@ -262,6 +262,10 @@ safety-engine = [
 slack-interface = [
     "fastapi>=0.128.0",
     "slack-sdk>=3.39.0",
+]
+discord-interface = [
+    "fastapi>=0.128.0",
+    "websockets>=12.0",
 ]
 otel = [
     "opentelemetry-api>=1.39.1",
