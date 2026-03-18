@@ -90,8 +90,16 @@ class CallManager:
         if not has_output and not has_tool_calls:
             return
 
-        effective_end: float = self.end_time if self.end_time is not None else time.time()
-        effective_start: float = self.start_time if self.start_time is not None else effective_end
+        # Use task._usage.model_execution_time — the cumulative wall-clock time
+        # of ALL model.request() calls (including tool call rounds).
+        task_usage = getattr(self.task, '_usage', None)
+        model_exec_time = getattr(task_usage, 'model_execution_time', None) if task_usage else None
+        if model_exec_time is not None:
+            effective_end = time.time()
+            effective_start = effective_end - model_exec_time
+        else:
+            effective_end = self.end_time if self.end_time is not None else time.time()
+            effective_start = self.start_time if self.start_time is not None else effective_end
 
         call_end(
             context.output,

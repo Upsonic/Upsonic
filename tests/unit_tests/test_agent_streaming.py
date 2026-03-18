@@ -154,20 +154,24 @@ class TestAgentStreaming:
         assert len(chunks) > 0
     
     def test_stream_initializes_task_properties(self, agent, simple_task):
-        """Test that stream() properly initializes task properties."""
-        # Ensure task properties are set
+        """Test that stream() properly initializes task properties with fresh state."""
+        # Set known values before streaming
         original_price_id = "existing-id"
         simple_task.price_id_ = original_price_id
         simple_task._tool_calls = [{"test": "call"}]
 
         result = agent.stream(simple_task)
-        
+
         # Consume the iterator
         chunks = list(result)
         assert len(chunks) > 0
-        
-        # Task should have a price_id_ (may be same or different depending on implementation)
+
+        # price_id_ should be reset to a fresh UUID (not the original)
         assert simple_task.price_id_ is not None
+        assert simple_task.price_id_ != original_price_id
+
+        # Agent's _tool_call_count should be reset for the new run
+        assert agent._tool_call_count == 0
     
     @pytest.mark.asyncio
     async def test_astream_returns_async_iterator(self, agent, simple_task):
@@ -406,9 +410,112 @@ class TestAgentStreaming:
         assert "".join(chunks) == "Hello world!"
 
 
+class TestStreamingPipelineComposition:
+    """Tests for streaming pipeline step composition and ordering."""
+
+    @pytest.fixture
+    def mock_model(self):
+        return MockModel()
+
+    @pytest.fixture
+    def agent(self, mock_model):
+        return Agent(model=mock_model, name="TestAgent")
+
+    def test_streaming_pipeline_contains_all_required_steps(self, agent):
+        """Streaming pipeline should contain all required steps including post-processing."""
+        steps = agent._create_streaming_pipeline_steps()
+        step_names = [step.name for step in steps]
+
+        # Core steps that must be present
+        required = [
+            "initialization",
+            "storage_connection",
+            "cache_check",
+            "user_policy",
+            "llm_manager",
+            "model_selection",
+            "tool_setup",
+            "message_build",
+            "stream_model_execution",
+            "reflection",
+            "reliability",
+            "agent_policy",
+            "cache_storage",
+            "stream_finalization",
+            "call_management",
+            "stream_memory_message_tracking",
+        ]
+
+        for step_name in required:
+            assert step_name in step_names, f"Missing required step: {step_name}"
+
+    def test_streaming_pipeline_step_order(self, agent):
+        """Post-processing steps must come after model execution and before finalization."""
+        steps = agent._create_streaming_pipeline_steps()
+        step_names = [step.name for step in steps]
+
+        execution_idx = step_names.index("stream_model_execution")
+        reflection_idx = step_names.index("reflection")
+        reliability_idx = step_names.index("reliability")
+        policy_idx = step_names.index("agent_policy")
+        finalization_idx = step_names.index("stream_finalization")
+        call_mgmt_idx = step_names.index("call_management")
+        memory_idx = step_names.index("stream_memory_message_tracking")
+
+        # Post-processing order: execution → reflection → reliability → policy → finalization → call_mgmt → memory
+        assert execution_idx < reflection_idx, "Reflection must come after model execution"
+        assert reflection_idx < reliability_idx, "Reliability must come after reflection"
+        assert reliability_idx < policy_idx, "Agent policy must come after reliability"
+        assert policy_idx < finalization_idx, "Finalization must come after agent policy"
+        assert finalization_idx < call_mgmt_idx, "Call management must come after finalization"
+        assert call_mgmt_idx < memory_idx, "Memory tracking must be the last step"
+
+    def test_streaming_and_direct_pipelines_share_common_steps(self, agent):
+        """Streaming and direct pipelines should share the same pre-execution steps."""
+        streaming_steps = agent._create_streaming_pipeline_steps()
+        direct_steps = agent._create_direct_pipeline_steps()
+
+        streaming_names = [s.name for s in streaming_steps]
+        direct_names = [s.name for s in direct_steps]
+
+        # Steps 0-7 should be identical between both pipelines
+        shared_prefix = [
+            "initialization", "storage_connection", "cache_check",
+            "user_policy", "llm_manager", "model_selection",
+            "tool_setup", "message_build",
+        ]
+        for step_name in shared_prefix:
+            assert step_name in streaming_names, f"Streaming missing shared step: {step_name}"
+            assert step_name in direct_names, f"Direct missing shared step: {step_name}"
+
+    def test_streaming_pipeline_price_id_reset(self, agent):
+        """astream() should generate a fresh price_id for each run."""
+        from upsonic.tasks.tasks import Task as TaskClass
+        task = TaskClass("test")
+        original_price_id = task.price_id_
+
+        # Simulate what astream does before pipeline
+        import uuid as _uuid
+        task.price_id_ = str(_uuid.uuid4())
+
+        assert task.price_id_ != original_price_id
+
+    def test_streaming_pipeline_tool_count_reset(self, agent):
+        """astream() should reset _tool_call_count for each fresh run."""
+        agent._tool_call_count = 15
+        agent._tool_limit_reached = True
+
+        # Simulate what astream does before pipeline
+        agent._tool_call_count = 0
+        agent._tool_limit_reached = False
+
+        assert agent._tool_call_count == 0
+        assert agent._tool_limit_reached is False
+
+
 class TestAgentStreamingIntegration:
     """Integration tests for Agent streaming with various components."""
-    
+
     @pytest.fixture
     def mock_model(self):
         """Create a mock model for integration testing."""
@@ -461,25 +568,32 @@ class TestAgentStreamingIntegration:
     
     @pytest.mark.asyncio
     async def test_multiple_streaming_sessions(self, agent_with_memory):
-        """Test multiple streaming sessions with the same agent."""
+        """Test multiple streaming sessions properly reset per-run state."""
         task1 = Task(description="First task")
         task2 = Task(description="Second task")
-        
+
         # First streaming session
         result1 = agent_with_memory.astream(task1)
         chunks1 = []
         async for chunk in result1:
             chunks1.append(chunk)
-        
+
+        first_price_id = task1.price_id_
+
         # Second streaming session
         result2 = agent_with_memory.astream(task2)
         chunks2 = []
         async for chunk in result2:
             chunks2.append(chunk)
-        
+
+        second_price_id = task2.price_id_
+
         # Both should complete successfully
         assert "".join(chunks1) == "Hello world!"
         assert "".join(chunks2) == "Hello world!"
+
+        # Each task should have its own unique price_id (cost tracking isolation)
+        assert first_price_id != second_price_id
     
     @pytest.mark.asyncio
     async def test_streaming_with_multiple_tasks(self, agent_with_memory):

@@ -3654,10 +3654,17 @@ class Agent(BaseAgent):
         if not is_resuming and effective_retry > 1 and task.is_problematic:
             task.status = None
             task.run_id = None
+            # Clear the stale output from the previous failed attempt so no code
+            # can accidentally read its error status before the new output is created.
+            self._agent_run_output = None
 
-        task.price_id_ = None
-        _ = task.price_id
-        task._tool_calls = []
+        # Only reset per-run agent state for fresh runs — HITL resume should
+        # keep existing state so cost and tool counts aggregate correctly.
+        if not is_resuming:
+            import uuid as _uuid
+            task.price_id_ = str(_uuid.uuid4())
+            self._tool_call_count = 0
+            self._tool_limit_reached = False
         self._last_built_system_prompt = None
 
         if debug or self.debug:
@@ -3736,8 +3743,12 @@ class Agent(BaseAgent):
             if original_model is not None:
                 self.model = original_model
             self._finalize_agent_usage(resolved_print_flag)
-            self.run_id = None
-    
+            # Keep run_id alive when task is paused (HITL) — the run is still active
+            _output = getattr(self, '_agent_run_output', None)
+            _is_paused = getattr(_output.task, 'is_paused', False) if _output and _output.task else False
+            if not _is_paused:
+                self.run_id = None
+
     def _calculate_aggregated_cost(self) -> Optional[float]:
         """Calculate the aggregated monetary cost across the agent run.
 
@@ -3824,8 +3835,6 @@ class Agent(BaseAgent):
                 return self._agent_run_output.output
 
             self._agent_run_output.is_streaming = False
-
-            await self._run_call_management_step(task, debug)
 
             cleanup_run(run_id)
             sentry_sdk.flush()
@@ -4306,7 +4315,14 @@ class Agent(BaseAgent):
                     "Agent"
                 )
             return
-        
+
+        # Reset per-run state (same as do_async for fresh runs)
+        import uuid as _uuid
+        task.price_id_ = str(_uuid.uuid4())
+        self._tool_call_count = 0
+        self._tool_limit_reached = False
+        self._last_built_system_prompt = None
+
         run_id = str(uuid.uuid4())
         self.run_id = run_id
         register_run(run_id)
@@ -4579,8 +4595,10 @@ class Agent(BaseAgent):
             StorageConnectionStep, LLMManagerStep, ModelSelectionStep,
             ToolSetupStep, MessageBuildStep,
             StreamModelExecutionStep,
+            ReflectionStep, ReliabilityStep,
             AgentPolicyStep, CacheStorageStep,
-            StreamMemoryMessageTrackingStep, StreamFinalizationStep
+            StreamFinalizationStep, CallManagementStep,
+            StreamMemoryMessageTrackingStep
         )
 
         return [
@@ -4592,11 +4610,14 @@ class Agent(BaseAgent):
             ModelSelectionStep(),              # 5
             ToolSetupStep(),                   # 6
             MessageBuildStep(),                # 7
-            StreamModelExecutionStep(),        # 8 <-- External tool resumes here (tracks messages internally)
-            AgentPolicyStep(),                 # 9
-            CacheStorageStep(),                # 10
-            StreamFinalizationStep(),          # 11
-            StreamMemoryMessageTrackingStep(), # 12 <-- LAST: Saves AgentSession to storage
+            StreamModelExecutionStep(),        # 8  <-- Streaming model execution
+            ReflectionStep(),                  # 9  <-- Improve output quality
+            ReliabilityStep(),                 # 10 <-- Verify and clean output
+            AgentPolicyStep(),                 # 11
+            CacheStorageStep(),                # 12
+            StreamFinalizationStep(),          # 13 <-- task_end()
+            CallManagementStep(),              # 14 <-- Records usage to price_id_summary
+            StreamMemoryMessageTrackingStep(), # 15 <-- LAST: Saves AgentSession to storage
         ]
     
     def _create_full_pipeline_steps(self, is_streaming: bool = False) -> List[Any]:
@@ -5100,10 +5121,17 @@ class Agent(BaseAgent):
         # Clear paused state and set up for continuation
         task.is_paused = False
         output.task = task
-        
+
+        # Restore agent-level tool call count from the output so that
+        # tool_call_limit checks work correctly across HITL resume
+        # (especially important for cross-process resume where agent.__init__
+        # resets _tool_call_count to 0).
+        self._tool_call_count = getattr(output, 'tool_call_count', 0)
+        self._tool_limit_reached = False
+
         if task.enable_cache:
             task.set_cache_manager(self._cache_manager)
-        
+
         return output, task, resume_step_index
     
     async def continue_run_async(

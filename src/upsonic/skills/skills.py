@@ -228,18 +228,52 @@ class Skills:
         if not self._policies:
             return True, ""
 
+        # Extract skill name from context string (e.g. "skill:my-skill:instructions")
+        context_parts = context.split(":")
+        skill_name = context_parts[1] if len(context_parts) > 1 else "unknown"
+
         try:
             from upsonic.safety_engine.models import PolicyInput
 
             pi = PolicyInput(input_texts=[content])
             for p in self._policies:
                 result = p.check(pi)
+                policy_name = getattr(p, 'name', type(p).__name__)
+
                 if hasattr(result, 'confidence') and result.confidence > 0.7:
                     reason = getattr(result, 'details', str(result))
                     logger.warning(
                         "Policy blocked skill content (%s): %s", context, reason
                     )
+                    try:
+                        from upsonic.utils.printing import skill_safety_check
+                        skill_safety_check(
+                            skill_name=skill_name,
+                            policy_name=policy_name,
+                            check_context=context,
+                            status="BLOCKED",
+                            confidence=result.confidence,
+                            content_type=getattr(result, 'content_type', 'UNKNOWN'),
+                            details=reason,
+                            triggered_keywords=getattr(result, 'triggered_keywords', None),
+                        )
+                    except Exception:
+                        pass
                     return False, reason
+                else:
+                    try:
+                        from upsonic.utils.printing import skill_safety_check
+                        skill_safety_check(
+                            skill_name=skill_name,
+                            policy_name=policy_name,
+                            check_context=context,
+                            status="PASSED",
+                            confidence=getattr(result, 'confidence', 0.0),
+                            content_type=getattr(result, 'content_type', 'SAFE'),
+                            details=getattr(result, 'details', 'Content passed policy check'),
+                        )
+                    except Exception:
+                        pass
         except ImportError:
             logger.debug("Safety engine not available, skipping policy check")
         except Exception as e:

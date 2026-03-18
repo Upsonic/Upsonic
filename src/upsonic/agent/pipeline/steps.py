@@ -343,7 +343,7 @@ class UserPolicyStep(Step):
                 )
                 return step_result
             
-            if hasattr(task, '_cached_result') and task._cached_result:
+            if task._cached_result:
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -824,7 +824,7 @@ class MessageBuildStep(Step):
             if agent and hasattr(agent, 'run_id') and agent.run_id:
                 raise_if_cancelled(agent.run_id)
             
-            if hasattr(task, '_cached_result') and task._cached_result:
+            if task._cached_result:
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -833,7 +833,7 @@ class MessageBuildStep(Step):
                     execution_time=time.time() - start_time,
                 )
                 return step_result
-            if hasattr(task, '_policy_blocked') and task._policy_blocked:
+            if task._policy_blocked:
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -986,7 +986,7 @@ class ModelExecutionStep(Step):
             if agent and hasattr(agent, 'run_id') and agent.run_id:
                 raise_if_cancelled(agent.run_id)
             
-            if hasattr(task, '_cached_result') and task._cached_result:
+            if task._cached_result:
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -995,7 +995,7 @@ class ModelExecutionStep(Step):
                     execution_time=time.time() - start_time,
                 )
                 return step_result
-            if hasattr(task, '_policy_blocked') and task._policy_blocked:
+            if task._policy_blocked:
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -1054,16 +1054,12 @@ class ModelExecutionStep(Step):
                 pipeline_manager.set_manager('call_manager', call_manager)
             
             if task.guardrail:
-                await call_manager.aprepare()
-                try:
-                    final_response = await agent._execute_with_guardrail(
-                        task,
-                        memory_manager,
-                        None
-                    )
-                    call_manager.process_response(final_response)
-                finally:
-                    await call_manager.afinalize()
+                final_response = await agent._execute_with_guardrail(
+                    task,
+                    memory_manager,
+                    None
+                )
+                call_manager.process_response(final_response)
             else:
                 model_params = agent._build_model_request_parameters(task)
                 model_params = model.customize_request_parameters(model_params)
@@ -1095,18 +1091,14 @@ class ModelExecutionStep(Step):
                         tool_call_count=context.tool_call_count
                     )
                 
-                await call_manager.aprepare()
-                try:
-                    model_start_time = time.time()
-                    response = await model.request(
-                        messages=context.chat_history,
-                        model_settings=model.settings,
-                        model_request_parameters=model_params
-                    )
-                    model_execution_time: float = time.time() - model_start_time
-                    context.add_model_execution_time(model_execution_time)
-                finally:
-                    await call_manager.afinalize()
+                model_start_time = time.time()
+                response = await model.request(
+                    messages=context.chat_history,
+                    model_settings=model.settings,
+                    model_request_parameters=model_params
+                )
+                model_execution_time: float = time.time() - model_start_time
+                context.add_model_execution_time(model_execution_time)
                 
                 if agent.debug and agent.debug_level >= 2:
                     from upsonic.utils.printing import debug_log_level2
@@ -1253,7 +1245,7 @@ class ResponseProcessingStep(Step):
             if agent and hasattr(agent, 'run_id') and agent.run_id:
                 raise_if_cancelled(agent.run_id)
             
-            if hasattr(task, '_cached_result') and task._cached_result:
+            if task._cached_result:
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -1262,7 +1254,7 @@ class ResponseProcessingStep(Step):
                     execution_time=time.time() - start_time,
                 )
                 return step_result
-            if hasattr(task, '_policy_blocked') and task._policy_blocked:
+            if task._policy_blocked:
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -1401,7 +1393,7 @@ class ReflectionStep(Step):
                 )
                 return step_result
             
-            if hasattr(task, '_cached_result') and task._cached_result:
+            if task._cached_result:
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -1410,7 +1402,7 @@ class ReflectionStep(Step):
                     execution_time=time.time() - start_time,
                 )
                 return step_result
-            if hasattr(task, '_policy_blocked') and task._policy_blocked:
+            if task._policy_blocked:
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -1562,7 +1554,7 @@ class CallManagementStep(Step):
             if agent and hasattr(agent, 'run_id') and agent.run_id:
                 raise_if_cancelled(agent.run_id)
             
-            if hasattr(task, '_cached_result') and task._cached_result:
+            if task._cached_result:
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -1571,7 +1563,7 @@ class CallManagementStep(Step):
                     execution_time=time.time() - start_time,
                 )
                 return step_result
-            if hasattr(task, '_policy_blocked') and task._policy_blocked:
+            if task._policy_blocked:
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -1640,7 +1632,7 @@ class CallManagementStep(Step):
                         "CallManagementStep",
                         debug=agent.debug,
                         debug_level=agent.debug_level,
-                        execution_time=call_manager.end_time - call_manager.start_time if call_manager.end_time and call_manager.start_time else None,
+                        execution_time=getattr(getattr(task, '_usage', None), 'model_execution_time', None),
                         usage=usage,
                         tool_usage_count=len(tool_usage_result) if tool_usage_result else 0,
                         tool_calls=tool_usage_result[:10] if tool_usage_result else [],
@@ -1962,7 +1954,7 @@ class ReliabilityStep(Step):
                 )
                 return step_result
             
-            if hasattr(task, '_cached_result') and task._cached_result:
+            if task._cached_result:
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -1971,7 +1963,7 @@ class ReliabilityStep(Step):
                     execution_time=time.time() - start_time,
                 )
                 return step_result
-            if hasattr(task, '_policy_blocked') and task._policy_blocked:
+            if task._policy_blocked:
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -2114,7 +2106,7 @@ class AgentPolicyStep(Step):
                 )
                 return step_result
             
-            if hasattr(task, '_cached_result') and task._cached_result:
+            if task._cached_result:
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -2123,7 +2115,7 @@ class AgentPolicyStep(Step):
                     execution_time=time.time() - start_time,
                 )
                 return step_result
-            if hasattr(task, '_policy_blocked') and task._policy_blocked:
+            if task._policy_blocked:
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -2325,7 +2317,7 @@ class CacheStorageStep(Step):
                 )
                 return step_result
             
-            if hasattr(task, '_cached_result') and task._cached_result:
+            if task._cached_result:
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -2334,7 +2326,7 @@ class CacheStorageStep(Step):
                     execution_time=time.time() - start_time,
                 )
                 return step_result
-            if hasattr(task, '_policy_blocked') and task._policy_blocked:
+            if task._policy_blocked:
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -2483,7 +2475,7 @@ class StreamModelExecutionStep(Step):
         )
         
         # Skip if we have cached result or policy blocked
-        if hasattr(task, '_cached_result') and task._cached_result:
+        if task._cached_result:
             cached_content = str(context.output)
             
             # Stream the cached content character by character
@@ -2502,7 +2494,7 @@ class StreamModelExecutionStep(Step):
             )
             return
         
-        if hasattr(task, '_policy_blocked') and task._policy_blocked:
+        if task._policy_blocked:
             yield FinalOutputEvent(run_id=run_id, output=None, output_type='blocked')
             context.current_step_result = StepResult(
                 status=StepStatus.SKIPPED,
@@ -2574,9 +2566,24 @@ class StreamModelExecutionStep(Step):
             
             # Extract output and update context
             output = agent._extract_output(task, context.response)
+
+            # De-anonymize if anonymization was applied by UserPolicyStep
+            if task._anonymization_map:
+                from upsonic.safety_engine.anonymization import deanonymize_content
+                if isinstance(output, str):
+                    output = deanonymize_content(output, task._anonymization_map)
+                elif hasattr(output, 'model_dump_json'):
+                    try:
+                        json_str = output.model_dump_json()
+                        deanonymized_json = deanonymize_content(json_str, task._anonymization_map)
+                        output = type(output).model_validate_json(deanonymized_json)
+                    except Exception:
+                        pass
+                task._anonymization_map = None
+
             task._response = output
             context.output = output
-            
+
             # Emit final output event
             yield FinalOutputEvent(
                 run_id=run_id,
@@ -2827,7 +2834,7 @@ class StreamMemoryMessageTrackingStep(Step):
                 raise_if_cancelled(agent.run_id)
             
             # Skip if cache hit or policy blocked
-            if hasattr(task, '_cached_result') and task._cached_result:
+            if task._cached_result:
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -2837,7 +2844,7 @@ class StreamMemoryMessageTrackingStep(Step):
                 )
                 return step_result
             
-            if hasattr(task, '_policy_blocked') and task._policy_blocked:
+            if task._policy_blocked:
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -2984,9 +2991,9 @@ class StreamFinalizationStep(Step):
             
             # Determine output type
             output_type = 'text'
-            if hasattr(task, '_cached_result') and task._cached_result:
+            if task._cached_result:
                 output_type = 'cached'
-            elif hasattr(task, '_policy_blocked') and task._policy_blocked:
+            elif task._policy_blocked:
                 output_type = 'blocked'
             elif context.output and not isinstance(context.output, str):
                 output_type = 'structured'
@@ -3066,9 +3073,9 @@ class FinalizationStep(Step):
                 context.output = task.response
             
             output_type = 'text'
-            if hasattr(task, '_cached_result') and task._cached_result:
+            if task._cached_result:
                 output_type = 'cached'
-            elif hasattr(task, '_policy_blocked') and task._policy_blocked:
+            elif task._policy_blocked:
                 output_type = 'blocked'
             elif context.output and not isinstance(context.output, str):
                 output_type = 'structured'

@@ -446,20 +446,27 @@ def setup_agent_and_task():
     return agent, task
 
 
-def test_tool_confirmation(monkeypatch, setup_agent_and_task):
+@pytest.mark.asyncio
+async def test_tool_confirmation(setup_agent_and_task):
     agent, task = setup_agent_and_task
+    from upsonic.run.base import RunStatus
 
-    # Simulate confirmation response (even if not printed)
-    monkeypatch.setattr("builtins.input", lambda _: "y")
+    # First call — tool requires_confirmation=True, so the run should pause
+    output = await agent.do_async(task, return_output=True)
 
-    output_buffer = StringIO()
-    with redirect_stdout(output_buffer):
-        agent.print_do(task)
+    assert output.is_paused, "Run should be paused waiting for confirmation"
+    assert output.status == RunStatus.paused, "Status should be paused"
+    assert output.requirements is not None and len(output.requirements) > 0, \
+        "Should have at least one requirement for confirmation"
 
-    result = output_buffer.getvalue()
+    # Confirm the requirement
+    for req in output.requirements:
+        if req.needs_confirmation:
+            req.confirm()
 
-    # Assertions updated based on actual output
-    assert "⚠️ Confirmation Required" in result, "Expected confirmation indicator missing"
-    #assert "About to execute tool:" in result, "Expected execution info missing" # Not true
-    #assert "✓ Tool Result" in result or "✓ Cache Hit" in result, "Expected result or cache hit missing" # Not True
-    assert "Cache hit" in result, "Expected cache hit missing" # Not True
+    # Continue the run after confirmation
+    result = await agent.continue_run_async(task=task, return_output=True)
+
+    assert result.is_complete, "Run should be complete after confirmation"
+    assert result.output is not None, "Should have output after confirmation"
+    assert task.response is not None, "Task response should be set"
