@@ -724,7 +724,7 @@ class KnowledgeBase(ToolKit):
 
                 # Step 1: Load documents
                 all_documents, processing_metadata = await self._load_documents()
-                
+
                 if not all_documents:
                     warning_log(
                         "No documents loaded. Marking as ready but empty.",
@@ -735,7 +735,7 @@ class KnowledgeBase(ToolKit):
 
                 # Step 2: Chunk documents
                 all_chunks = await self._chunk_documents(all_documents, processing_metadata)
-                
+
                 if not all_chunks:
                     warning_log(
                         "No chunks created. Marking as ready but empty.",

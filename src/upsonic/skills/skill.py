@@ -43,7 +43,6 @@ class Skill:
     version: Optional[str] = None
     dependencies: List[str] = field(default_factory=list)
 
-    # -- Serialisation helpers ------------------------------------------------
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert the Skill to a dictionary representation."""

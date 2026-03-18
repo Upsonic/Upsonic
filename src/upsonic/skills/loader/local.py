@@ -105,7 +105,6 @@ class LocalSkills(SkillLoader):
         logger.debug("Loaded %d skills from %s", len(skills), self.path)
         return skills
 
-    # -- Internal helpers ---------------------------------------------------
 
     def _load_skill_from_folder(self, folder: Path) -> Optional[Skill]:
         """Load a single skill from *folder*.

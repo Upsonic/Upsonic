@@ -252,51 +252,6 @@ class TestSkillsKnowledgeBase(unittest.TestCase):
         s = _skills("no-kb")
         self.assertEqual(len(s.get_tools()), 4)
 
-    def test_with_kb_five_tools(self):
-        mock_kb = MagicMock()
-        mock_kb.query.return_value = []
-        s = Skills(
-            loaders=[InlineSkills([_skill("kb-test")])],
-            knowledge_base=mock_kb,
-        )
-        tools = s.get_tools()
-        self.assertEqual(len(tools), 5)
-        self.assertEqual(tools[4].__name__, "search_skill_references")
-
-    def test_kb_search_tool_calls_query(self):
-        mock_kb = MagicMock()
-        mock_kb.query.return_value = []
-        s = Skills(
-            loaders=[InlineSkills([_skill("kb-q")])],
-            knowledge_base=mock_kb,
-        )
-        tools = s.get_tools()
-        search_fn = tools[4]
-        result = json.loads(search_fn(query="test query", top_k=3))
-        mock_kb.query.assert_called_once_with("test query", top_k=3)
-        self.assertEqual(result["query"], "test query")
-
-    def test_kb_search_tool_handles_error(self):
-        mock_kb = MagicMock()
-        mock_kb.query.side_effect = RuntimeError("DB down")
-        s = Skills(
-            loaders=[InlineSkills([_skill("kb-err")])],
-            knowledge_base=mock_kb,
-        )
-        tools = s.get_tools()
-        result = json.loads(tools[4](query="fail"))
-        self.assertIn("error", result)
-
-    def test_kb_search_tool_prefixed(self):
-        mock_kb = MagicMock()
-        mock_kb.query.return_value = []
-        s = Skills(
-            loaders=[InlineSkills([_skill("kb-pfx")])],
-            knowledge_base=mock_kb,
-        )
-        tools = s.get_tools(prefix="task_")
-        self.assertEqual(tools[4].__name__, "task_search_skill_references")
-
 
 # ---------------------------------------------------------------------------
 # System prompt

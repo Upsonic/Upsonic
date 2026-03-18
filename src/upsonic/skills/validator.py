@@ -20,7 +20,6 @@ ALLOWED_FIELDS = {
 }
 
 
-# --- Individual field validators -------------------------------------------
 
 def _validate_name(name: str, skill_dir: Optional[Path] = None) -> List[str]:
     errors: List[str] = []
@@ -136,7 +135,6 @@ def _validate_metadata_fields(metadata: Dict) -> List[str]:
     return []
 
 
-# --- Public API ------------------------------------------------------------
 
 def validate_metadata(
     metadata: Dict,

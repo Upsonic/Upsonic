@@ -81,7 +81,6 @@ class BuiltinSkills(SkillLoader):
         except (TypeError, ModuleNotFoundError):
             pass
 
-        # Fallback: relative to this file (go up to skills/, then into builtins/)
         this_dir = Path(__file__).parent.parent / "builtins"
         if this_dir.is_dir():
             return this_dir

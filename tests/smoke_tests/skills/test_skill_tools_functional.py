@@ -218,18 +218,8 @@ class TestKnowledgeBaseToolRegistration:
         tools = skills.get_tools()
         assert len(tools) == 4
 
-    def test_skills_with_kb_have_five_tools(self):
-        """When knowledge_base is provided, a fourth search tool is added."""
-        try:
-            from upsonic import KnowledgeBase
-        except ImportError:
-            import pytest
-            pytest.skip("KnowledgeBase not available")
-
-        # We can't easily create a real KB without a vectordb, so check
-        # that the Skills constructor accepts knowledge_base parameter
-        skills = _make_skills("kb-test")
-        # Verify the parameter exists in Skills.__init__
-        import inspect
-        sig = inspect.signature(Skills.__init__)
-        assert "knowledge_base" in sig.parameters
+    def test_skills_always_have_four_tools(self):
+        """Skills always produce exactly 4 tools (no KB search tool)."""
+        skills = _make_skills("no-kb-test")
+        tools = skills.get_tools()
+        assert len(tools) == 4
