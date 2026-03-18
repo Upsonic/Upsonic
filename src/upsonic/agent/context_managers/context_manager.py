@@ -98,18 +98,18 @@ class ContextManager:
         return "<Context>\n" + "\n\n".join(final_context_parts) + "\n</Context>"
 
     async def _process_knowledge_base_item(
-        self, 
-        knowledge_base: "KnowledgeBase", 
-        knowledge_base_parts: List[str], 
+        self,
+        knowledge_base: "KnowledgeBase",
+        knowledge_base_parts: List[str],
         query: str
     ) -> None:
         """Process a KnowledgeBase item."""
         try:
             if knowledge_base.rag:
                 await knowledge_base.setup_rag()
-                
+
                 rag_results = await knowledge_base.query_async(query, task=self.task)
-                
+
                 if rag_results:
                     formatted_results = self._format_rag_results(rag_results, knowledge_base)
                     knowledge_base_parts.append(formatted_results)
@@ -117,7 +117,7 @@ class ContextManager:
                     warning_log(f"No results found for KnowledgeBase '{knowledge_base.name}' with query: '{query}'", context="ContextManager")
             else:
                 knowledge_base_parts.append(knowledge_base.markdown())
-                
+
         except Exception as e:
             error_log(f"Error processing KnowledgeBase '{knowledge_base.name}': {str(e)}", context="ContextManager")
             try:

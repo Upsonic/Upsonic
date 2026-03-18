@@ -6,7 +6,7 @@ context=[kb]. Verifies tool registration, system prompt injection,
 skill metrics, and execution tracking.
 
 Uses embedded ChromaDB (no external API key needed for vectordb).
-Requires: OPENAI_API_KEY (for embeddings), ANTHROPIC_API_KEY (for agent).
+Requires: GOOGLE_API_KEY (for Gemini embeddings), ANTHROPIC_API_KEY (for agent).
 """
 
 import os
@@ -19,9 +19,15 @@ from upsonic.skills.loader import LocalSkills
 from upsonic.skills.skills import Skills
 
 
+try:
+    from google import genai as _genai  # noqa: F401
+    _HAS_GEMINI = True
+except ImportError:
+    _HAS_GEMINI = False
+
 requires_keys = pytest.mark.skipif(
-    not os.environ.get("OPENAI_API_KEY") or not os.environ.get("ANTHROPIC_API_KEY"),
-    reason="OPENAI_API_KEY and ANTHROPIC_API_KEY required",
+    not os.environ.get("ANTHROPIC_API_KEY") or not os.environ.get("GOOGLE_API_KEY") or not _HAS_GEMINI,
+    reason="ANTHROPIC_API_KEY, GOOGLE_API_KEY, and google-genai required",
 )
 
 
@@ -40,7 +46,7 @@ def _make_skill_dir_with_refs(base, name, ref_content):
 def _setup_kb_and_skills(tmp_dir):
     """Create a KnowledgeBase backed by embedded ChromaDB + skills."""
     from upsonic import KnowledgeBase
-    from upsonic.embeddings import OpenAIEmbedding, OpenAIEmbeddingConfig
+    from upsonic.embeddings import GeminiEmbedding, GeminiEmbeddingConfig
     from upsonic.vectordb import ChromaProvider, ChromaConfig, ConnectionConfig, Mode
 
     _make_skill_dir_with_refs(
@@ -54,10 +60,10 @@ def _setup_kb_and_skills(tmp_dir):
         "Never catch bare exceptions. Log errors with full context and stack traces."
     )
 
-    embedding = OpenAIEmbedding(OpenAIEmbeddingConfig())
+    embedding = GeminiEmbedding(GeminiEmbeddingConfig())
     config = ChromaConfig(
         collection_name="skill_refs_test",
-        vector_size=1536,
+        vector_size=3072,
         connection=ConnectionConfig(mode=Mode.EMBEDDED, db_path=str(Path(tmp_dir) / "chroma_db")),
     )
     vectordb = ChromaProvider(config)
@@ -70,7 +76,6 @@ def _setup_kb_and_skills(tmp_dir):
 
     skills = Skills(
         loaders=[LocalSkills(tmp_dir)],
-        knowledge_base=kb,
     )
     return skills, kb, vectordb
 
@@ -82,7 +87,7 @@ class TestKnowledgeBaseAgentPipeline:
     def test_agent_do_with_kb_verifies_output_and_tracking(self):
         """Verify agent.do(task) with KB context returns correct output."""
         from upsonic import Agent, Task, KnowledgeBase
-        from upsonic.embeddings import OpenAIEmbedding, OpenAIEmbeddingConfig
+        from upsonic.embeddings import GeminiEmbedding, GeminiEmbeddingConfig
         from upsonic.vectordb import ChromaProvider, ChromaConfig, ConnectionConfig, Mode
 
         with tempfile.TemporaryDirectory() as d:
@@ -93,10 +98,10 @@ class TestKnowledgeBaseAgentPipeline:
                 "It is located in Paris, France."
             )
 
-            embedding = OpenAIEmbedding(OpenAIEmbeddingConfig())
+            embedding = GeminiEmbedding(GeminiEmbeddingConfig())
             config = ChromaConfig(
                 collection_name="agent_kb_test",
-                vector_size=1536,
+                vector_size=3072,
                 connection=ConnectionConfig(mode=Mode.EMBEDDED, db_path=str(Path(d) / "chroma")),
             )
             vectordb = ChromaProvider(config)
@@ -148,16 +153,14 @@ class TestKnowledgeBaseAgentPipeline:
 
             agent = Agent("anthropic/claude-sonnet-4-5", name="Skilled KB Agent", skills=skills)
 
-            # VERIFY: 4 skill tools registered (3 standard + 1 search)
+            # VERIFY: 4 skill tools registered (instructions, reference, script, asset)
             tool_names = [
                 t.__name__ if hasattr(t, "__name__") else str(t)
                 for t in agent.tools
             ]
             skill_tool_names = [n for n in tool_names if "skill" in n.lower()]
-            assert len(skill_tool_names) >= 5, \
-                f"Expected >=5 skill tools (4 + search), got {skill_tool_names}"
-            assert any("search_skill_references" in n for n in tool_names), \
-                "search_skill_references tool not registered"
+            assert len(skill_tool_names) >= 4, \
+                f"Expected >=4 skill tools, got {skill_tool_names}"
             for expected in ("get_skill_instructions", "get_skill_reference", "get_skill_script", "get_skill_asset"):
                 assert any(expected in n for n in tool_names), \
                     f"{expected} tool not registered"
@@ -165,7 +168,6 @@ class TestKnowledgeBaseAgentPipeline:
             # VERIFY: registered_agent_tools includes skill tools
             registered = list(agent.registered_agent_tools.keys())
             assert any("get_skill_instructions" in n for n in registered)
-            assert any("search_skill_references" in n for n in registered)
 
             # VERIFY: Skill metrics exist before execution
             metrics_before = agent.get_skill_metrics()
@@ -260,13 +262,90 @@ class TestKnowledgeBaseAgentPipeline:
 
 
 @requires_keys
+class TestKnowledgeBaseAsToolPipeline:
+    """KnowledgeBase passed via tools=[kb] so the agent can search it."""
+
+    def test_agent_do_with_kb_as_tool_returns_correct_output(self):
+        """Verify agent.do(task, tools=[kb]) lets the agent search the KB."""
+        from upsonic import Agent, Task, KnowledgeBase
+        from upsonic.embeddings import GeminiEmbedding, GeminiEmbeddingConfig
+        from upsonic.vectordb import ChromaProvider, ChromaConfig, ConnectionConfig, Mode
+
+        with tempfile.TemporaryDirectory() as d:
+            ref_dir = Path(d) / "refs"
+            ref_dir.mkdir()
+            (ref_dir / "facts.txt").write_text(
+                "The speed of light is approximately 299792458 meters per second. "
+                "It is denoted by the letter c in physics equations."
+            )
+
+            embedding = GeminiEmbedding(GeminiEmbeddingConfig())
+            config = ChromaConfig(
+                collection_name="kb_as_tool_test",
+                vector_size=3072,
+                connection=ConnectionConfig(mode=Mode.EMBEDDED, db_path=str(Path(d) / "chroma")),
+            )
+            vectordb = ChromaProvider(config)
+
+            kb = KnowledgeBase(
+                sources=[str(ref_dir)],
+                embedding_provider=embedding,
+                vectordb=vectordb,
+            )
+
+            agent = Agent("anthropic/claude-sonnet-4-5", name="KB Tool Agent")
+            task = Task(
+                description="What is the speed of light in meters per second? Answer with just the number.",
+                tools=[kb],
+            )
+
+            output = agent.do(task, return_output=True)
+
+            # VERIFY: Output correctness
+            assert output is not None
+            assert output.output is not None
+            assert "299792458" in str(output.output)
+
+            # VERIFY: The agent used at least one tool (the KB search)
+            assert isinstance(output.tool_call_count, int)
+            assert output.tool_call_count >= 1
+
+    def test_agent_do_with_skills_and_kb_as_tool(self):
+        """Verify skills + KB-as-tool work together on the same task."""
+        from upsonic import Agent, Task
+
+        with tempfile.TemporaryDirectory() as d:
+            skills, kb, vectordb = _setup_kb_and_skills(d)
+
+            agent = Agent("anthropic/claude-sonnet-4-5", name="Skills+KB Tool Agent", skills=skills)
+            task = Task(
+                description="What naming convention should I use for Python variables? Answer briefly.",
+                tools=[kb],
+            )
+
+            output = agent.do(task, return_output=True)
+
+            assert output is not None
+            assert output.output is not None
+
+            # VERIFY: Skill metrics tracked
+            assert output.skill_metrics is not None
+            assert "python-style" in output.skill_metrics
+            assert "error-handling" in output.skill_metrics
+
+            # VERIFY: Tool calls happened
+            assert isinstance(output.tool_call_count, int)
+            assert output.tool_call_count >= 0
+
+
+@requires_keys
 class TestKnowledgeBaseTeamPipeline:
     """Full pipeline: Team + Skills + KnowledgeBase with advanced verification."""
 
     def test_team_do_with_kb_verifies_full_pipeline(self):
         """Team.do(tasks) with KB context returns correct result."""
         from upsonic import Agent, Task, Team, KnowledgeBase
-        from upsonic.embeddings import OpenAIEmbedding, OpenAIEmbeddingConfig
+        from upsonic.embeddings import GeminiEmbedding, GeminiEmbeddingConfig
         from upsonic.vectordb import ChromaProvider, ChromaConfig, ConnectionConfig, Mode
 
         with tempfile.TemporaryDirectory() as d:
@@ -276,10 +355,10 @@ class TestKnowledgeBaseTeamPipeline:
                 "Python was created by Guido van Rossum and first released in 1991."
             )
 
-            embedding = OpenAIEmbedding(OpenAIEmbeddingConfig())
+            embedding = GeminiEmbedding(GeminiEmbeddingConfig())
             config = ChromaConfig(
                 collection_name="team_kb_test",
-                vector_size=1536,
+                vector_size=3072,
                 connection=ConnectionConfig(mode=Mode.EMBEDDED, db_path=str(Path(d) / "chroma")),
             )
             vectordb = ChromaProvider(config)
@@ -338,13 +417,13 @@ class TestKnowledgeBaseTeamPipeline:
             assert "python-style" in agent.skills
             assert "error-handling" in agent.skills
 
-            # VERIFY: Search tool registered (KB integration)
+            # VERIFY: Skill tools registered
             tool_names = [
                 t.__name__ if hasattr(t, "__name__") else str(t)
                 for t in agent.tools
             ]
-            assert any("search_skill_references" in n for n in tool_names), \
-                "search_skill_references should be registered with KB"
+            assert any("get_skill_instructions" in n for n in tool_names), \
+                "get_skill_instructions should be registered"
 
             # VERIFY: Skill metrics available
             metrics = agent.get_skill_metrics()

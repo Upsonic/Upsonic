@@ -43,6 +43,7 @@ class TestSkillToolNamePrefixing:
             "get_skill_instructions",
             "get_skill_reference",
             "get_skill_script",
+            "get_skill_asset",
         ]
 
     def test_prefixed_tools_have_prefix(self):
@@ -52,6 +53,7 @@ class TestSkillToolNamePrefixing:
             "task_get_skill_instructions",
             "task_get_skill_reference",
             "task_get_skill_script",
+            "task_get_skill_asset",
         ]
 
     def test_prefixed_tools_still_work(self):

@@ -59,36 +59,29 @@ class Skills:
         max_skills: int = 5,
         embedding_provider: Optional[Any] = None,
         policy: Optional[Any] = None,
-        knowledge_base: Optional[Any] = None,
     ) -> None:
         self.loaders = loaders
         self.strict_deps = strict_deps
         self._skills: Dict[str, Skill] = {}
 
-        # Caching (Feature 10)
         self._cache: Optional["SkillCache"] = None
         if cache_ttl is not None:
             from .cache import SkillCache
 
             self._cache = SkillCache(ttl_seconds=cache_ttl)
 
-        # Metrics (Feature 13)
         self._metrics: Dict[str, SkillMetrics] = {}
 
-        # Callbacks (Feature 9)
         self._on_load = on_load
         self._on_script_execute = on_script_execute
         self._on_reference_access = on_reference_access
 
-        # Tool binding (Feature 6)
         self._active_skills: Set[str] = set()
 
-        # Auto-selection (Feature 1)
         self.auto_select = auto_select
         self.max_skills = max_skills
         self.embedding_provider = embedding_provider
 
-        # Safety engine (Feature 8)
         self._policies: List[Any] = []
         if policy is not None:
             if isinstance(policy, list):
@@ -96,12 +89,8 @@ class Skills:
             else:
                 self._policies = [policy]
 
-        # Knowledge base / RAG integration (Feature 11)
-        self._knowledge_base = knowledge_base
-
         self._load_skills()
 
-    # -- Loading -------------------------------------------------------------
 
     def _load_skills(self) -> None:
         """Load skills from all loaders, then resolve dependencies."""
@@ -120,6 +109,7 @@ class Skills:
                             skill.version or "unknown",
                         )
                     self._skills[skill.name] = skill
+                    self._invoke_load_callback(skill)
             except SkillValidationError:
                 raise
             except Exception as e:
@@ -131,11 +121,10 @@ class Skills:
 
             missing = get_missing_dependencies(self._skills)
             for name, deps in missing.items():
-                logger.warning(
-                    "Skill '%s' has missing dependencies: %s",
-                    name,
-                    ", ".join(deps),
-                )
+                msg = f"Skill '{name}' has missing dependencies: {', '.join(deps)}"
+                if self.strict_deps:
+                    raise SkillValidationError(msg, errors=list(deps))
+                logger.warning(msg)
 
             cycles = detect_cycles(self._skills)
             if cycles:
@@ -168,7 +157,6 @@ class Skills:
         new.max_skills = self.max_skills
         new.embedding_provider = self.embedding_provider
         new._policies = list(self._policies)
-        new._knowledge_base = self._knowledge_base
         return new
 
     def reload(self) -> None:
@@ -178,7 +166,6 @@ class Skills:
         self._skills.clear()
         self._load_skills()
 
-    # -- Accessors -----------------------------------------------------------
 
     def get_skill(self, name: str) -> Optional[Skill]:
         """Get a skill by name, or ``None`` if not found."""
@@ -192,7 +179,6 @@ class Skills:
         """Return the names of all loaded skills."""
         return list(self._skills.keys())
 
-    # -- Auto-selection (Feature 1) ------------------------------------------
 
     def _select_relevant_skills(
         self, task_description: str
@@ -233,7 +219,6 @@ class Skills:
             return 0.0
         return dot / (norm_a * norm_b)
 
-    # -- Safety engine (Feature 8) -------------------------------------------
 
     def _validate_content(self, content: str, context: str) -> tuple:
         """Validate content against configured policies.
@@ -263,7 +248,6 @@ class Skills:
 
         return True, ""
 
-    # -- System prompt -------------------------------------------------------
 
     def get_system_prompt_section(self, task_description: Optional[str] = None) -> str:
         """Generate an XML-formatted system prompt snippet.
@@ -367,7 +351,6 @@ class Skills:
 
         return result
 
-    # -- Tool generation -----------------------------------------------------
 
     def get_tools(self, prefix: str = "") -> List[Callable[..., str]]:
         """Return three tool functions for agent integration.
@@ -456,39 +439,6 @@ class Skills:
 
         tools = [get_skill_instructions, get_skill_reference, get_skill_script, get_skill_asset]
 
-        # Knowledge base search tool (Feature 11)
-        if self._knowledge_base is not None:
-            kb = self._knowledge_base
-
-            def search_skill_references(query: str, top_k: int = 5) -> str:
-                """Semantically search across all skill reference documents.
-
-                Use this when you need to find specific information across
-                multiple skills' references without knowing which skill has it.
-
-                Args:
-                    query: The search query string.
-                    top_k: Maximum number of results to return (default: 5).
-
-                Returns:
-                    A JSON string with search results.
-                """
-                try:
-                    results = kb.query(query, top_k=top_k)
-                    return json.dumps(
-                        {
-                            "query": query,
-                            "results": [
-                                r.to_dict() if hasattr(r, 'to_dict') else str(r)
-                                for r in results
-                            ],
-                        }
-                    )
-                except Exception as e:
-                    return json.dumps({"error": f"Search failed: {e}"})
-
-            tools.append(search_skill_references)
-
         # Apply prefix to tool function names if provided
         if prefix:
             for tool in tools:
@@ -497,7 +447,6 @@ class Skills:
 
         return tools
 
-    # -- Private tool implementations ----------------------------------------
 
     def _get_skill_instructions(self, skill_name: str) -> str:
         # Check cache first
@@ -771,13 +720,11 @@ class Skills:
                 }
             )
 
-    # -- Metrics (Feature 13) ------------------------------------------------
 
     def get_metrics(self) -> Dict[str, SkillMetrics]:
         """Return usage metrics for all skills."""
         return dict(self._metrics)
 
-    # -- Tool binding (Feature 6) --------------------------------------------
 
     def get_active_skill_tools(self) -> Set[str]:
         """Return the union of ``allowed_tools`` from all actively used skills."""
@@ -788,7 +735,6 @@ class Skills:
                 tools.update(skill.allowed_tools)
         return tools
 
-    # -- Callbacks (Feature 9) ------------------------------------------------
 
     def _invoke_load_callback(self, skill: Skill) -> None:
         if self._on_load is not None:
@@ -815,7 +761,6 @@ class Skills:
             except Exception as e:
                 logger.warning("on_script_execute callback error: %s", e)
 
-    # -- Merge (Feature 5) ---------------------------------------------------
 
     @classmethod
     def merge(cls, *instances: "Skills") -> "Skills":
@@ -833,7 +778,6 @@ class Skills:
 
         return cls(loaders=[InlineSkills(list(combined.values()))])
 
-    # -- Dunder methods ------------------------------------------------------
 
     def __len__(self) -> int:
         return len(self._skills)
