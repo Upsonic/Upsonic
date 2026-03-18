@@ -109,7 +109,6 @@ class Skills:
                             skill.version or "unknown",
                         )
                     self._skills[skill.name] = skill
-                    self._invoke_load_callback(skill)
             except SkillValidationError:
                 raise
             except Exception as e:
