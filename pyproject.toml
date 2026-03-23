@@ -283,6 +283,9 @@ gmail-tool = [
     "google-auth-httplib2>=0.3.0",
     "google-auth-oauthlib>=1.2.4",
 ]
+agentid = [
+    "httpx>=0.28.1",
+]
 
 [project.scripts]
 upsonic = "upsonic.cli.main:main"

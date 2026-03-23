@@ -8853,6 +8853,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+agentid = [
+    { name = "httpx" },
+]
 apify-tool = [
     { name = "apify-client" },
 ]
@@ -9176,6 +9179,7 @@ requires-dist = [
     { name = "griffe", specifier = ">=1.14.0" },
     { name = "groq", marker = "extra == 'models'", specifier = ">=0.32.0" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "httpx", marker = "extra == 'agentid'", specifier = ">=0.28.1" },
     { name = "httpx", marker = "extra == 'models'", specifier = ">=0.28.1" },
     { name = "huggingface-hub", marker = "extra == 'embeddings'", specifier = ">=0.34.4" },
     { name = "jq", marker = "extra == 'json-loader'", specifier = ">=1.10.0" },
@@ -9287,7 +9291,7 @@ requires-dist = [
     { name = "xai-sdk", marker = "extra == 'models'", specifier = ">=1.4.0" },
     { name = "yfinance", marker = "extra == 'tools'", specifier = ">=0.2.66" },
 ]
-provides-extras = ["chroma", "qdrant", "milvus", "weaviate", "pinecone", "faiss", "pgvector", "supermemory", "vectordb", "sqlite-storage", "redis-storage", "postgres-storage", "mongo-storage", "mem0-storage", "storage", "models", "embeddings", "csv-loader", "docling-loader", "docx-loader", "html-loader", "json-loader", "markdown-loader", "pdf-loader", "pdfplumber-loader", "pymupdf-loader", "text-loader", "xml-loader", "yaml-loader", "loaders", "tools", "web", "ocr", "custom-tools", "apify-tool", "crawlee-browser", "gmail-interface", "safety-engine", "slack-interface", "discord-interface", "otel", "langfuse", "gmail-tool"]
+provides-extras = ["chroma", "qdrant", "milvus", "weaviate", "pinecone", "faiss", "pgvector", "supermemory", "vectordb", "sqlite-storage", "redis-storage", "postgres-storage", "mongo-storage", "mem0-storage", "storage", "models", "embeddings", "csv-loader", "docling-loader", "docx-loader", "html-loader", "json-loader", "markdown-loader", "pdf-loader", "pdfplumber-loader", "pymupdf-loader", "text-loader", "xml-loader", "yaml-loader", "loaders", "tools", "web", "ocr", "custom-tools", "apify-tool", "crawlee-browser", "gmail-interface", "safety-engine", "slack-interface", "discord-interface", "otel", "langfuse", "gmail-tool", "agentid"]
 
 [package.metadata.requires-dev]
 dev = [
