@@ -2,7 +2,7 @@
 
 Tests ALL pre-built policies, rules, and actions:
   - 3 keyword rules + 3 LLM fallback rules
-  - 4 action classes (Block, Block_LLM, RaiseException, RaiseException_LLM)
+  - Block / RaiseException actions (LLM messaging actions covered via policies + mocks)
   - 15 pre-built policies (Block, Block_LLM, Block_LLM_Finder,
     RaiseException, RaiseException_LLM × 3 categories)
   - Full execute() path for both Block and RaiseException variants
@@ -11,6 +11,7 @@ Tests ALL pre-built policies, rules, and actions:
 
 import json
 import unittest
+from unittest.mock import patch
 
 from upsonic.safety_engine.exceptions import DisallowedOperation
 from upsonic.safety_engine.models import PolicyInput, RuleOutput
@@ -25,9 +26,7 @@ from upsonic.safety_engine.policies.skill_policies import (
     SkillCodeInjectionRule_LLM,
     # Actions
     SkillBlockAction,
-    SkillBlockAction_LLM,
     SkillRaiseExceptionAction,
-    SkillRaiseExceptionAction_LLM,
     # Pre-built policies — Prompt Injection
     SkillPromptInjectionBlockPolicy,
     SkillPromptInjectionBlockPolicy_LLM,
@@ -409,7 +408,10 @@ class TestSkillBlockAction(unittest.TestCase):
         rule_output = RuleOutput(
             confidence=confidence, content_type=content_type, details=details,
         )
-        return self.action.execute_action(rule_output, ["test content"])
+        # Explicit language avoids ActionBase auto language detection (UpsonicLLMProvider / API key).
+        return self.action.execute_action(
+            rule_output, ["test content"], language="en",
+        )
 
     def test_blocks_prompt_injection(self):
         result = self._execute("PROMPT_INJECTION", 0.9)
@@ -447,7 +449,9 @@ class TestSkillRaiseExceptionAction(unittest.TestCase):
         rule_output = RuleOutput(
             confidence=confidence, content_type=content_type, details=details,
         )
-        return self.action.execute_action(rule_output, ["test content"])
+        return self.action.execute_action(
+            rule_output, ["test content"], language="en",
+        )
 
     def test_raises_on_prompt_injection(self):
         with self.assertRaises(DisallowedOperation) as ctx:
@@ -718,18 +722,33 @@ class TestRaiseExceptionPoliciesExecute(unittest.TestCase):
         self.assertEqual(rule_out.confidence, 0.0)
         self.assertEqual(action_out.action_output["action_taken"], "ALLOW")
 
-    # LLM variants (fallback to keyword)
-    def test_prompt_injection_raise_llm_execute_raises(self):
-        with self.assertRaises(DisallowedOperation):
+    # LLM action path: mock message generation so unit tests need no API key.
+    @patch(
+        "upsonic.safety_engine.base.action_base.UpsonicLLMProvider.generate_block_message",
+        return_value="Unit-test LLM violation message",
+    )
+    def test_prompt_injection_raise_llm_execute_raises(self, _mock_msg: object) -> None:
+        with self.assertRaises(DisallowedOperation) as ctx:
             SkillPromptInjectionRaiseExceptionPolicy_LLM.execute(_pi(INJECTION_CONTENT))
+        self.assertIn("Unit-test LLM violation message", str(ctx.exception))
 
-    def test_secret_leak_raise_llm_execute_raises(self):
-        with self.assertRaises(DisallowedOperation):
+    @patch(
+        "upsonic.safety_engine.base.action_base.UpsonicLLMProvider.generate_block_message",
+        return_value="Unit-test LLM violation message",
+    )
+    def test_secret_leak_raise_llm_execute_raises(self, _mock_msg: object) -> None:
+        with self.assertRaises(DisallowedOperation) as ctx:
             SkillSecretLeakRaiseExceptionPolicy_LLM.execute(_pi(SECRET_CONTENT))
+        self.assertIn("Unit-test LLM violation message", str(ctx.exception))
 
-    def test_code_injection_raise_llm_execute_raises(self):
-        with self.assertRaises(DisallowedOperation):
+    @patch(
+        "upsonic.safety_engine.base.action_base.UpsonicLLMProvider.generate_block_message",
+        return_value="Unit-test LLM violation message",
+    )
+    def test_code_injection_raise_llm_execute_raises(self, _mock_msg: object) -> None:
+        with self.assertRaises(DisallowedOperation) as ctx:
             SkillCodeInjectionRaiseExceptionPolicy_LLM.execute(_pi(CODE_INJECTION_CONTENT))
+        self.assertIn("Unit-test LLM violation message", str(ctx.exception))
 
     def test_prompt_injection_raise_llm_allows_clean(self):
         rule_out, action_out, _ = SkillPromptInjectionRaiseExceptionPolicy_LLM.execute(_pi(CLEAN_CONTENT))
