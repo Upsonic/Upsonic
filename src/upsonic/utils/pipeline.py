@@ -23,11 +23,11 @@ def find_step_index_by_name(steps: List[Any], step_name: str) -> int:
     raise ValueError(f"Step '{step_name}' not found in pipeline")
 
 
-def get_message_build_step_index() -> int:
+def get_chat_history_step_index() -> int:
     """
-    Get the standard index of MessageBuildStep in the pipeline.
+    Get the standard index of ChatHistoryStep in the direct pipeline.
     
-    MessageBuildStep is always at index 7 in the standard agent pipeline:
+    ChatHistoryStep is at index 11 in the standard agent pipeline:
     0: InitializationStep
     1: StorageConnectionStep
     2: CacheCheckStep
@@ -35,26 +35,51 @@ def get_message_build_step_index() -> int:
     4: LLMManagerStep
     5: ModelSelectionStep
     6: ToolSetupStep
-    7: MessageBuildStep
-    8: ModelExecutionStep  <-- External tool resumption point
+    7: MemoryPrepareStep
+    8: SystemPromptBuildStep
+    9: ContextBuildStep
+    10: UserInputBuildStep
+    11: ChatHistoryStep
+    12: MessageAssemblyStep
+    13: CallManagerSetupStep
+    14: ModelExecutionStep  <-- External tool resumption point
     ...
     
     Returns:
-        The index of MessageBuildStep (7)
+        The index of ChatHistoryStep (11)
     """
-    return 8
+    return 11
+
+
+def get_message_assembly_step_index() -> int:
+    """
+    Get the standard index of MessageAssemblyStep in the direct pipeline.
+    
+    Returns:
+        The index of MessageAssemblyStep (12)
+    """
+    return 12
+
+
+def get_call_manager_setup_step_index() -> int:
+    """
+    Get the standard index of CallManagerSetupStep in the direct pipeline.
+    
+    Returns:
+        The index of CallManagerSetupStep (13)
+    """
+    return 13
 
 
 def get_model_execution_step_index() -> int:
     """
-    Get the standard index of ModelExecutionStep in the pipeline.
+    Get the standard index of ModelExecutionStep in the direct pipeline.
     
-    ModelExecutionStep is always at index 8 in the standard agent pipeline.
+    ModelExecutionStep is at index 14 in the standard agent pipeline.
     This is the correct resumption point for external tool continuation since
     messages are already injected by _inject_external_tool_results.
     
     Returns:
-        The index of ModelExecutionStep (8)
+        The index of ModelExecutionStep (14)
     """
-    return 9
-
+    return 14

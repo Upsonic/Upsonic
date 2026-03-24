@@ -800,30 +800,36 @@ class LLMManagerStep(Step):
             if step_result:
                 self._finalize_step_result(step_result, context)
             
-class MessageBuildStep(Step):
-    """Build the model request messages."""
-    
+class MemoryPrepareStep(Step):
+    """Create and prepare the MemoryManager for the pipeline."""
+
     @property
     def name(self) -> str:
-        return "message_build"
-    
+        return "memory_prepare"
+
     @property
     def description(self) -> str:
-        return "Build model request messages"
-    
-    async def execute(self, context: "AgentRunOutput", task: "Task", agent: "Agent", model: "Model", step_number: int, pipeline_manager: Optional[Any] = None) -> StepResult:
-        """Build model request messages with memory manager."""
+        return "Prepare memory manager (load history, profile, metadata)"
+
+    async def execute(
+        self,
+        context: "AgentRunOutput",
+        task: "Task",
+        agent: "Agent",
+        model: "Model",
+        step_number: int,
+        pipeline_manager: Optional[Any] = None,
+    ) -> StepResult:
         from upsonic.run.cancel import raise_if_cancelled
         from upsonic.exceptions import RunCancelledException
-        
-        start_time = time.time()
+
+        start_time: float = time.time()
         step_result: Optional[StepResult] = None
-        messages = []
-        
+
         try:
             if agent and hasattr(agent, 'run_id') and agent.run_id:
                 raise_if_cancelled(agent.run_id)
-            
+
             if task._cached_result:
                 step_result = StepResult(
                     name=self.name,
@@ -842,100 +848,28 @@ class MessageBuildStep(Step):
                     execution_time=time.time() - start_time,
                 )
                 return step_result
-            
+
             from upsonic.agent.context_managers import MemoryManager
-            
-            memory_manager = MemoryManager(
+
+            memory_manager: MemoryManager = MemoryManager(
                 memory=agent.memory,
                 agent_metadata=getattr(agent, 'metadata', None),
             )
-            
-            # Register memory manager in pipeline registry
+
             if pipeline_manager:
                 pipeline_manager.set_manager('memory_manager', memory_manager)
-            
-            # Prepare memory (loads messages, user profile, and cultural knowledge)
+
             await memory_manager.aprepare()
-            
-            historical_message_count = len(memory_manager.get_message_history())
-            
-            # Check if agent has culture enabled (culture is now handled in SystemPromptManager, not MemoryManager)
-            has_culture = bool(
-                getattr(agent, '_culture_manager', None) and 
-                getattr(agent._culture_manager, 'enabled', False) and
-                getattr(agent._culture_manager, 'culture', None) and
-                getattr(agent._culture_manager.culture, 'add_system_prompt', False)
-            )
-            
-            # Set chat_history to historical messages FIRST and mark run start
-            # This ensures new_messages() captures both request and response
-            historical_messages = memory_manager.get_message_history()
-            context.chat_history = list(historical_messages)  # Copy to avoid mutation
-            
-            # Mark the start of this run for message tracking
-            # This records the current chat_history length (historical only) so new_messages()
-            # knows where new messages from this run begin
-            context.start_new_run()
-            
-            # Now build the full messages including the new request
-            messages, context_full_response = await agent._build_model_request(
-                task,
-                memory_manager,
-                None,
-            )
-            context.chat_history = messages
 
-            if context_full_response is not None:
-                context.response = context_full_response
-                context._context_window_full = True
-
-            if agent.debug and agent.debug_level >= 2:
-                from upsonic.utils.printing import debug_log_level2
-                from upsonic.utils.messages import analyze_model_request_messages
-                message_details, total_parts = analyze_model_request_messages(messages)
-                
-                debug_log_level2(
-                    "Messages built",
-                    "MessageBuildStep",
-                    debug=agent.debug,
-                    debug_level=agent.debug_level,
-                    message_count=len(messages),
-                    total_parts=total_parts,
-                    message_details=message_details,
-                    has_memory=historical_message_count > 0,
-                    historical_message_count=historical_message_count,
-                    has_culture=has_culture,
-                    task_description=task.description[:300] if task else None
-                )
-                
-            has_system = False
-            has_memory = historical_message_count > 0
-            from upsonic.messages import ModelRequest, SystemPromptPart
-            if messages:
-                first_msg = messages[0]
-                if isinstance(first_msg, ModelRequest):
-                    has_system = any(isinstance(p, SystemPromptPart) for p in first_msg.parts)
-                    
-            if context.is_streaming:
-                from upsonic.utils.agent.events import ayield_messages_built_event
-                async for event in ayield_messages_built_event(
-                    run_id=context.run_id or "",
-                    message_count=len(messages),
-                    has_system_prompt=has_system,
-                    has_memory_messages=has_memory,
-                    is_continuation=False
-                ):
-                    context.events.append(event)
-            
             step_result = StepResult(
                 name=self.name,
                 step_number=step_number,
                 status=StepStatus.COMPLETED,
-                message=f"Built {len(messages)} messages",
+                message="Memory manager prepared",
                 execution_time=time.time() - start_time,
             )
             return step_result
-            
+
         except RunCancelledException as e:
             step_result = StepResult(
                 name=self.name,
@@ -945,7 +879,7 @@ class MessageBuildStep(Step):
                 execution_time=time.time() - start_time,
             )
             raise
-            
+
         except Exception as e:
             step_result = StepResult(
                 name=self.name,
@@ -958,7 +892,670 @@ class MessageBuildStep(Step):
         finally:
             if step_result:
                 self._finalize_step_result(step_result, context)
-            
+
+
+class SystemPromptBuildStep(Step):
+    """Build the system prompt via SystemPromptManager."""
+
+    @property
+    def name(self) -> str:
+        return "system_prompt_build"
+
+    @property
+    def description(self) -> str:
+        return "Build system prompt (culture, skills, role, tools)"
+
+    async def execute(
+        self,
+        context: "AgentRunOutput",
+        task: "Task",
+        agent: "Agent",
+        model: "Model",
+        step_number: int,
+        pipeline_manager: Optional[Any] = None,
+    ) -> StepResult:
+        from upsonic.run.cancel import raise_if_cancelled
+        from upsonic.exceptions import RunCancelledException
+
+        start_time: float = time.time()
+        step_result: Optional[StepResult] = None
+
+        try:
+            if agent and hasattr(agent, 'run_id') and agent.run_id:
+                raise_if_cancelled(agent.run_id)
+
+            if task._cached_result:
+                step_result = StepResult(
+                    name=self.name,
+                    step_number=step_number,
+                    status=StepStatus.COMPLETED,
+                    message="Skipped due to cache hit",
+                    execution_time=time.time() - start_time,
+                )
+                return step_result
+            if task._policy_blocked:
+                step_result = StepResult(
+                    name=self.name,
+                    step_number=step_number,
+                    status=StepStatus.COMPLETED,
+                    message="Skipped due to policy block",
+                    execution_time=time.time() - start_time,
+                )
+                return step_result
+
+            from upsonic.agent.context_managers import SystemPromptManager, MemoryManager
+
+            memory_manager: Optional[MemoryManager] = None
+            if pipeline_manager:
+                memory_manager = pipeline_manager.get_manager('memory_manager')
+
+            system_prompt_manager: SystemPromptManager = SystemPromptManager(agent, task)
+            await system_prompt_manager.aprepare(memory_handler=memory_manager)
+
+            if pipeline_manager:
+                pipeline_manager.set_manager('system_prompt_manager', system_prompt_manager)
+
+            built_prompt: str = system_prompt_manager.get_system_prompt()
+            if built_prompt:
+                agent._last_built_system_prompt = built_prompt
+
+            step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
+                status=StepStatus.COMPLETED,
+                message=f"System prompt built ({len(built_prompt)} chars)" if built_prompt else "No system prompt",
+                execution_time=time.time() - start_time,
+            )
+            return step_result
+
+        except RunCancelledException as e:
+            step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
+                status=StepStatus.CANCELLED,
+                message=str(e)[:500],
+                execution_time=time.time() - start_time,
+            )
+            raise
+
+        except Exception as e:
+            step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
+                status=StepStatus.ERROR,
+                message=str(e)[:500],
+                execution_time=time.time() - start_time,
+            )
+            raise
+        finally:
+            if step_result:
+                self._finalize_step_result(step_result, context)
+
+
+class ContextBuildStep(Step):
+    """Build the task context (KB/RAG, memory injections, prior outputs)."""
+
+    @property
+    def name(self) -> str:
+        return "context_build"
+
+    @property
+    def description(self) -> str:
+        return "Build task context (KB, RAG, memory, prior outputs)"
+
+    async def execute(
+        self,
+        context: "AgentRunOutput",
+        task: "Task",
+        agent: "Agent",
+        model: "Model",
+        step_number: int,
+        pipeline_manager: Optional[Any] = None,
+    ) -> StepResult:
+        from upsonic.run.cancel import raise_if_cancelled
+        from upsonic.exceptions import RunCancelledException
+
+        start_time: float = time.time()
+        step_result: Optional[StepResult] = None
+
+        try:
+            if agent and hasattr(agent, 'run_id') and agent.run_id:
+                raise_if_cancelled(agent.run_id)
+
+            if task._cached_result:
+                step_result = StepResult(
+                    name=self.name,
+                    step_number=step_number,
+                    status=StepStatus.COMPLETED,
+                    message="Skipped due to cache hit",
+                    execution_time=time.time() - start_time,
+                )
+                return step_result
+            if task._policy_blocked:
+                step_result = StepResult(
+                    name=self.name,
+                    step_number=step_number,
+                    status=StepStatus.COMPLETED,
+                    message="Skipped due to policy block",
+                    execution_time=time.time() - start_time,
+                )
+                return step_result
+
+            from upsonic.agent.context_managers import ContextManager, MemoryManager
+
+            memory_manager: Optional[MemoryManager] = None
+            if pipeline_manager:
+                memory_manager = pipeline_manager.get_manager('memory_manager')
+
+            context_manager: ContextManager = ContextManager(agent, task, state=None)
+            await context_manager.aprepare(memory_handler=memory_manager)
+
+            context_prompt: str = context_manager.get_context_prompt()
+
+            step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
+                status=StepStatus.COMPLETED,
+                message=f"Context built ({len(context_prompt)} chars)" if context_prompt else "No context",
+                execution_time=time.time() - start_time,
+            )
+            return step_result
+
+        except RunCancelledException as e:
+            step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
+                status=StepStatus.CANCELLED,
+                message=str(e)[:500],
+                execution_time=time.time() - start_time,
+            )
+            raise
+
+        except Exception as e:
+            step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
+                status=StepStatus.ERROR,
+                message=str(e)[:500],
+                execution_time=time.time() - start_time,
+            )
+            raise
+        finally:
+            if step_result:
+                self._finalize_step_result(step_result, context)
+
+
+class UserInputBuildStep(Step):
+    """Build the final user input from prompt, context, images, and documents."""
+
+    @property
+    def name(self) -> str:
+        return "user_input_build"
+
+    @property
+    def description(self) -> str:
+        return "Build user input (merge prompt + context + attachments)"
+
+    async def execute(
+        self,
+        context: "AgentRunOutput",
+        task: "Task",
+        agent: "Agent",
+        model: "Model",
+        step_number: int,
+        pipeline_manager: Optional[Any] = None,
+    ) -> StepResult:
+        from upsonic.run.cancel import raise_if_cancelled
+        from upsonic.exceptions import RunCancelledException
+
+        start_time: float = time.time()
+        step_result: Optional[StepResult] = None
+
+        try:
+            if agent and hasattr(agent, 'run_id') and agent.run_id:
+                raise_if_cancelled(agent.run_id)
+
+            if task._cached_result:
+                step_result = StepResult(
+                    name=self.name,
+                    step_number=step_number,
+                    status=StepStatus.COMPLETED,
+                    message="Skipped due to cache hit",
+                    execution_time=time.time() - start_time,
+                )
+                return step_result
+            if task._policy_blocked:
+                step_result = StepResult(
+                    name=self.name,
+                    step_number=step_number,
+                    status=StepStatus.COMPLETED,
+                    message="Skipped due to policy block",
+                    execution_time=time.time() - start_time,
+                )
+                return step_result
+
+            if not (hasattr(agent, '_agent_run_output') and agent._agent_run_output and agent._agent_run_output.input):
+                raise RuntimeError("AgentRunInput not available. This should not happen.")
+
+            from upsonic.run.agent.input import AgentRunInput
+
+            run_input: AgentRunInput = agent._agent_run_output.input
+            if run_input.input is None:
+                run_input.build_input(context_formatted=task.context_formatted)
+
+            if task.context_formatted:
+                task.context_formatted = None
+
+            input_desc: str = "multipart" if isinstance(run_input.input, list) else "text"
+
+            step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
+                status=StepStatus.COMPLETED,
+                message=f"User input built ({input_desc})",
+                execution_time=time.time() - start_time,
+            )
+            return step_result
+
+        except RunCancelledException as e:
+            step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
+                status=StepStatus.CANCELLED,
+                message=str(e)[:500],
+                execution_time=time.time() - start_time,
+            )
+            raise
+
+        except Exception as e:
+            step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
+                status=StepStatus.ERROR,
+                message=str(e)[:500],
+                execution_time=time.time() - start_time,
+            )
+            raise
+        finally:
+            if step_result:
+                self._finalize_step_result(step_result, context)
+
+
+class ChatHistoryStep(Step):
+    """Load historical chat history and mark run boundary."""
+
+    @property
+    def name(self) -> str:
+        return "chat_history"
+
+    @property
+    def description(self) -> str:
+        return "Load chat history and mark run start boundary"
+
+    async def execute(
+        self,
+        context: "AgentRunOutput",
+        task: "Task",
+        agent: "Agent",
+        model: "Model",
+        step_number: int,
+        pipeline_manager: Optional[Any] = None,
+    ) -> StepResult:
+        from upsonic.run.cancel import raise_if_cancelled
+        from upsonic.exceptions import RunCancelledException
+
+        start_time: float = time.time()
+        step_result: Optional[StepResult] = None
+
+        try:
+            if agent and hasattr(agent, 'run_id') and agent.run_id:
+                raise_if_cancelled(agent.run_id)
+
+            if task._cached_result:
+                step_result = StepResult(
+                    name=self.name,
+                    step_number=step_number,
+                    status=StepStatus.COMPLETED,
+                    message="Skipped due to cache hit",
+                    execution_time=time.time() - start_time,
+                )
+                return step_result
+            if task._policy_blocked:
+                step_result = StepResult(
+                    name=self.name,
+                    step_number=step_number,
+                    status=StepStatus.COMPLETED,
+                    message="Skipped due to policy block",
+                    execution_time=time.time() - start_time,
+                )
+                return step_result
+
+            from upsonic.agent.context_managers import MemoryManager
+            from typing import List
+
+            memory_manager: Optional[MemoryManager] = None
+            if pipeline_manager:
+                memory_manager = pipeline_manager.get_manager('memory_manager')
+
+            historical_messages: List[Any] = []
+            if memory_manager:
+                historical_messages = list(memory_manager.get_message_history())
+
+            context.chat_history = historical_messages
+
+            context.start_new_run()
+
+            historical_count: int = len(historical_messages)
+
+            step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
+                status=StepStatus.COMPLETED,
+                message=f"Chat history loaded ({historical_count} historical messages)",
+                execution_time=time.time() - start_time,
+            )
+            return step_result
+
+        except RunCancelledException as e:
+            step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
+                status=StepStatus.CANCELLED,
+                message=str(e)[:500],
+                execution_time=time.time() - start_time,
+            )
+            raise
+
+        except Exception as e:
+            step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
+                status=StepStatus.ERROR,
+                message=str(e)[:500],
+                execution_time=time.time() - start_time,
+            )
+            raise
+        finally:
+            if step_result:
+                self._finalize_step_result(step_result, context)
+
+
+class MessageAssemblyStep(Step):
+    """Assemble the final ModelRequest and apply context management middleware."""
+
+    @property
+    def name(self) -> str:
+        return "message_assembly"
+
+    @property
+    def description(self) -> str:
+        return "Assemble ModelRequest (system + user parts) and apply middleware"
+
+    async def execute(
+        self,
+        context: "AgentRunOutput",
+        task: "Task",
+        agent: "Agent",
+        model: "Model",
+        step_number: int,
+        pipeline_manager: Optional[Any] = None,
+    ) -> StepResult:
+        from upsonic.run.cancel import raise_if_cancelled
+        from upsonic.exceptions import RunCancelledException
+
+        start_time: float = time.time()
+        step_result: Optional[StepResult] = None
+
+        try:
+            if agent and hasattr(agent, 'run_id') and agent.run_id:
+                raise_if_cancelled(agent.run_id)
+
+            if task._cached_result:
+                step_result = StepResult(
+                    name=self.name,
+                    step_number=step_number,
+                    status=StepStatus.COMPLETED,
+                    message="Skipped due to cache hit",
+                    execution_time=time.time() - start_time,
+                )
+                return step_result
+            if task._policy_blocked:
+                step_result = StepResult(
+                    name=self.name,
+                    step_number=step_number,
+                    status=StepStatus.COMPLETED,
+                    message="Skipped due to policy block",
+                    execution_time=time.time() - start_time,
+                )
+                return step_result
+
+            from upsonic.messages import SystemPromptPart, UserPromptPart, ModelRequest
+            from upsonic.agent.context_managers import SystemPromptManager
+            from typing import List
+
+            system_prompt_manager: Optional[SystemPromptManager] = None
+            if pipeline_manager:
+                system_prompt_manager = pipeline_manager.get_manager('system_prompt_manager')
+
+            if not (hasattr(agent, '_agent_run_output') and agent._agent_run_output and agent._agent_run_output.input):
+                raise RuntimeError("AgentRunInput not available for message assembly.")
+
+            task_input: Any = agent._agent_run_output.input.input
+            user_part: UserPromptPart = UserPromptPart(content=task_input)
+
+            parts: List[Any] = []
+
+            if system_prompt_manager is not None:
+                messages: List[Any] = context.chat_history or []
+                if system_prompt_manager.should_include_system_prompt(messages):
+                    system_prompt: str = system_prompt_manager.get_system_prompt()
+                    if system_prompt:
+                        agent._last_built_system_prompt = system_prompt
+                        system_part: SystemPromptPart = SystemPromptPart(content=system_prompt)
+                        parts.append(system_part)
+
+            parts.append(user_part)
+
+            current_request: ModelRequest = ModelRequest(parts=parts)
+            context.chat_history.append(current_request)
+
+            context_full_response: Optional[Any] = None
+            if agent.context_management and getattr(agent, '_context_management_middleware', None):
+                managed_msgs, ctx_full = await agent._context_management_middleware.apply(context.chat_history)
+                context.chat_history = managed_msgs
+                agent._propagate_context_management_usage()
+                if ctx_full:
+                    context_full_response = agent._context_management_middleware._build_context_full_response(
+                        model_name=agent.model.model_name
+                    )
+
+            if context_full_response is not None:
+                context.response = context_full_response
+                context._context_window_full = True
+
+            messages = context.chat_history
+
+            if agent.debug and agent.debug_level >= 2:
+                from upsonic.utils.printing import debug_log_level2
+                from upsonic.utils.messages import analyze_model_request_messages
+                message_details, total_parts = analyze_model_request_messages(messages)
+
+                from upsonic.agent.context_managers import MemoryManager
+                memory_manager: Optional[MemoryManager] = None
+                if pipeline_manager:
+                    memory_manager = pipeline_manager.get_manager('memory_manager')
+                historical_message_count: int = len(memory_manager.get_message_history()) if memory_manager else 0
+
+                has_culture: bool = bool(
+                    getattr(agent, '_culture_manager', None)
+                    and getattr(agent._culture_manager, 'enabled', False)
+                    and getattr(agent._culture_manager, 'culture', None)
+                    and getattr(agent._culture_manager.culture, 'add_system_prompt', False)
+                )
+
+                debug_log_level2(
+                    "Messages assembled",
+                    "MessageAssemblyStep",
+                    debug=agent.debug,
+                    debug_level=agent.debug_level,
+                    message_count=len(messages),
+                    total_parts=total_parts,
+                    message_details=message_details,
+                    has_memory=historical_message_count > 0,
+                    historical_message_count=historical_message_count,
+                    has_culture=has_culture,
+                    task_description=task.description[:300] if task else None,
+                )
+
+            has_system: bool = False
+            from upsonic.agent.context_managers import MemoryManager as _MM
+            _mem: Optional[_MM] = pipeline_manager.get_manager('memory_manager') if pipeline_manager else None
+            has_memory: bool = bool(_mem and len(_mem.get_message_history()) > 0)
+            if messages:
+                first_msg = messages[0]
+                if isinstance(first_msg, ModelRequest):
+                    has_system = any(isinstance(p, SystemPromptPart) for p in first_msg.parts)
+
+            if context.is_streaming:
+                from upsonic.utils.agent.events import ayield_messages_built_event
+                async for event in ayield_messages_built_event(
+                    run_id=context.run_id or "",
+                    message_count=len(messages),
+                    has_system_prompt=has_system,
+                    has_memory_messages=has_memory,
+                    is_continuation=False,
+                ):
+                    context.events.append(event)
+
+            step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
+                status=StepStatus.COMPLETED,
+                message=f"Assembled {len(messages)} messages",
+                execution_time=time.time() - start_time,
+            )
+            return step_result
+
+        except RunCancelledException as e:
+            step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
+                status=StepStatus.CANCELLED,
+                message=str(e)[:500],
+                execution_time=time.time() - start_time,
+            )
+            raise
+
+        except Exception as e:
+            step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
+                status=StepStatus.ERROR,
+                message=str(e)[:500],
+                execution_time=time.time() - start_time,
+            )
+            raise
+        finally:
+            if step_result:
+                self._finalize_step_result(step_result, context)
+
+
+class CallManagerSetupStep(Step):
+    """Create and register the CallManager for the current run."""
+
+    @property
+    def name(self) -> str:
+        return "call_manager_setup"
+
+    @property
+    def description(self) -> str:
+        return "Setup call manager for run lifecycle"
+
+    async def execute(
+        self,
+        context: "AgentRunOutput",
+        task: "Task",
+        agent: "Agent",
+        model: "Model",
+        step_number: int,
+        pipeline_manager: Optional[Any] = None,
+    ) -> StepResult:
+        from upsonic.run.cancel import raise_if_cancelled
+        from upsonic.exceptions import RunCancelledException
+
+        start_time: float = time.time()
+        step_result: Optional[StepResult] = None
+
+        try:
+            if agent and hasattr(agent, 'run_id') and agent.run_id:
+                raise_if_cancelled(agent.run_id)
+
+            if task._cached_result:
+                step_result = StepResult(
+                    name=self.name,
+                    step_number=step_number,
+                    status=StepStatus.COMPLETED,
+                    message="Skipped due to cache hit",
+                    execution_time=time.time() - start_time,
+                )
+                return step_result
+            if task._policy_blocked:
+                step_result = StepResult(
+                    name=self.name,
+                    step_number=step_number,
+                    status=StepStatus.COMPLETED,
+                    message="Skipped due to policy block",
+                    execution_time=time.time() - start_time,
+                )
+                return step_result
+
+            from upsonic.agent.context_managers import CallManager
+
+            call_manager: CallManager = CallManager(
+                model,
+                task,
+                debug=agent.debug,
+                print_output=context.print_flag,
+                show_tool_calls=agent.show_tool_calls and context.print_flag,
+            )
+            await call_manager.aprepare()
+
+            if pipeline_manager:
+                pipeline_manager.set_manager('call_manager', call_manager)
+
+            step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
+                status=StepStatus.COMPLETED,
+                message="CallManager created and registered",
+                execution_time=time.time() - start_time,
+            )
+            return step_result
+
+        except RunCancelledException as e:
+            step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
+                status=StepStatus.CANCELLED,
+                message=str(e)[:500],
+                execution_time=time.time() - start_time,
+            )
+            raise
+
+        except Exception as e:
+            step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
+                status=StepStatus.ERROR,
+                message=str(e)[:500],
+                execution_time=time.time() - start_time,
+            )
+            raise
+        finally:
+            if step_result:
+                self._finalize_step_result(step_result, context)
+
+
 class ModelExecutionStep(Step):
     """Execute the model request."""
     
@@ -1041,17 +1638,22 @@ class ModelExecutionStep(Step):
                     pipeline_manager.set_manager('memory_manager', memory_manager)
                 await memory_manager.aprepare()
             
-            # Create and register CallManager
-            from upsonic.agent.context_managers import CallManager
-            call_manager = CallManager(
-                model,
-                task,
-                debug=agent.debug,
-                print_output=context.print_flag,
-                show_tool_calls=agent.show_tool_calls and context.print_flag,
-            )
+            # Retrieve CallManager from pipeline registry (created by CallManagerSetupStep)
             if pipeline_manager:
-                pipeline_manager.set_manager('call_manager', call_manager)
+                call_manager = pipeline_manager.get_manager('call_manager')
+
+            # Fallback: Create CallManager if not available (HITL resumption case)
+            if call_manager is None:
+                from upsonic.agent.context_managers import CallManager
+                call_manager = CallManager(
+                    model,
+                    task,
+                    debug=agent.debug,
+                    print_output=context.print_flag,
+                    show_tool_calls=agent.show_tool_calls and context.print_flag,
+                )
+                if pipeline_manager:
+                    pipeline_manager.set_manager('call_manager', call_manager)
             
             if task.guardrail:
                 final_response = await agent._execute_with_guardrail(
@@ -1585,13 +2187,10 @@ class CallManagementStep(Step):
             if context.output is None and task:
                 context.output = task.response
 
-            # task_end() is now called in MemorySaveStep (before save) to ensure
-            # metrics are available when saving to storage. This guard ensures
-            # we don't double-stop the timer if it was already finalized.
-            _usage = getattr(task, '_usage', None)
-            _timer = getattr(_usage, 'timer', None) if _usage else None
-            if _timer is None or getattr(_timer, 'end_time', None) is None:
-                task.task_end()
+            # task_end() is NOT called here. Both pipelines place
+            # the memory save step (MemorySaveStep / StreamMemoryMessageTrackingStep)
+            # BEFORE this step so that duration is already set when
+            # we print Task Metrics.
 
             # Retrieve CallManager from pipeline registry and delegate all printing
             if pipeline_manager:
@@ -1778,23 +2377,8 @@ class MemorySaveStep(Step):
             if all_metrics:
                 context.skill_metrics = all_metrics
 
-            # Ensure all usage metrics (especially duration) are set BEFORE saving
-            # to storage, so that the saved session contains accurate metrics.
-            # This was previously done in CallManagementStep (after MemorySave),
-            # but metrics must be finalized before the save.
-            if not task.is_paused:
-                _usage = getattr(task, '_usage', None)
-                _timer = getattr(_usage, 'timer', None) if _usage else None
-                if _timer is None or getattr(_timer, 'end_time', None) is None:
-                    task.task_end()
-
             # Finalize run messages BEFORE marking completed
-            # This extracts new messages from chat_history (using _run_boundaries)
-            # and sets them to context.messages
             context.finalize_run_messages()
-            
-            # Note: Session-level usage is updated in AgentSessionMemory.asave()
-            # when the session is saved to storage
             
             # Mark completed BEFORE save so all state is captured (including resolved requirements)
             context.mark_completed()
@@ -1811,6 +2395,8 @@ class MemorySaveStep(Step):
             
 
             if not agent.memory:
+                if not task.is_paused:
+                    task.task_end()
                 step_result = StepResult(
                     name=self.name,
                     step_number=step_number,
@@ -1819,15 +2405,6 @@ class MemorySaveStep(Step):
                     execution_time=time.time() - start_time,
                 )
                 return step_result
-            
-            # Get memory manager from pipeline registry and finalize it
-            memory_manager = None
-            if pipeline_manager:
-                memory_manager = pipeline_manager.get_manager('memory_manager')
-            
-            # Set run output in memory manager before finalizing
-            if memory_manager:
-                memory_manager.set_run_output(context)
             
             # Add streaming events BEFORE save so they're included
             if context.is_streaming:
@@ -1846,25 +2423,34 @@ class MemorySaveStep(Step):
                 ):
                     context.events.append(event)
             
-            
-            # Finalize memory manager (this saves the session)
-            if memory_manager:
-                await memory_manager.afinalize()
+            # --- 3-phase memory save ---
+            # Phase 1: Run memory sub-agents (summary, user analysis).
+            #   These add model_execution_time via incr() while timer runs.
+            await agent.memory.run_memory_agents_async(
+                output=context,
+                agent_id=agent.agent_id,
+            )
+
+            # Phase 2: Stop the timer so duration covers sub-agent time.
+            if not task.is_paused:
+                _usage = getattr(task, '_usage', None)
+                _timer = getattr(_usage, 'timer', None) if _usage else None
+                if _timer is None or getattr(_timer, 'end_time', None) is None:
+                    task.task_end()
+
+            # Phase 3: Persist to storage with finalized duration.
+            try:
+                await agent.memory.persist_session_async(
+                    output=context,
+                    agent_id=agent.agent_id,
+                )
                 session_saved = True
-            else:
-                # Fallback to direct save if manager not found
-                try:
-                    await agent.memory.save_session_async(
-                        output=context,
-                        agent_id=agent.agent_id,
-                    )
-                    session_saved = True
-                except Exception as save_error:
-                    session_saved = False
-                    if agent.debug:
-                        from upsonic.utils.printing import warning_log
-                        warning_log(f"Failed to save session: {save_error}", "MemorySaveStep")
-            
+            except Exception as save_error:
+                session_saved = False
+                if agent.debug:
+                    from upsonic.utils.printing import warning_log
+                    warning_log(f"Failed to persist session: {save_error}", "MemorySaveStep")
+
             if agent.debug and agent.debug_level >= 2:
                 from upsonic.utils.printing import debug_log_level2
                 memory_type = None
@@ -2703,12 +3289,10 @@ class StreamModelExecutionStep(Step):
                 )
             
             # Execute tool calls - ExternalExecutionPause will bubble up to PipelineManager
-            _tool_exec_start: float = time.time()
+            # _execute_tool_calls already records per-tool time via
+            # self._agent_run_output.add_tool_execution_time() internally,
+            # so we must NOT add the elapsed time again here.
             tool_results = await agent._execute_tool_calls(tool_calls)
-            _tool_exec_elapsed: float = time.time() - _tool_exec_start
-
-            # Track tool execution time and tool call count for streaming
-            context.add_tool_execution_time(_tool_exec_elapsed)
             context.tool_call_count = getattr(context, 'tool_call_count', 0) + len(tool_calls)
 
             # Emit tool result events
@@ -2803,7 +3387,9 @@ class StreamModelExecutionStep(Step):
 
 class StreamMemoryMessageTrackingStep(Step):
     """
-    Save AgentSession to storage for streaming execution. This is the LAST step.
+    Save AgentSession to storage for streaming execution.
+    Runs BEFORE CallManagementStep so that task_end() sets duration
+    before Task Metrics are printed.
     
     For HITL (errors, cancel, external tools), session saving is handled
     by PipelineManager's exception handlers.
@@ -2879,6 +3465,8 @@ class StreamMemoryMessageTrackingStep(Step):
             messages_count = len(context.messages) if context.messages else 0
             
             if not agent.memory:
+                if not task.is_paused:
+                    task.task_end()
                 # No memory configured - still emit event for visibility
                 if context.is_streaming:
                     from upsonic.utils.agent.events import ayield_memory_update_event
@@ -2898,9 +3486,24 @@ class StreamMemoryMessageTrackingStep(Step):
                 )
                 return step_result
             
-            # Save session to storage
+            # --- 3-phase memory save ---
+            # Phase 1: Run memory sub-agents (summary, user analysis).
+            #   These add model_execution_time via incr() while timer runs.
+            await agent.memory.run_memory_agents_async(
+                output=context,
+                agent_id=agent.agent_id,
+            )
+
+            # Phase 2: Stop the timer so duration covers sub-agent time.
+            if not task.is_paused:
+                _usage = getattr(task, '_usage', None)
+                _timer = getattr(_usage, 'timer', None) if _usage else None
+                if _timer is None or getattr(_timer, 'end_time', None) is None:
+                    task.task_end()
+
+            # Phase 3: Persist to storage with finalized duration.
             try:
-                await agent.memory.save_session_async(
+                await agent.memory.persist_session_async(
                     output=context,
                     agent_id=agent.agent_id,
                 )
@@ -2909,8 +3512,8 @@ class StreamMemoryMessageTrackingStep(Step):
                 session_saved = False
                 if agent.debug:
                     from upsonic.utils.printing import warning_log
-                    warning_log(f"Failed to save session: {save_error}", "StreamMemoryMessageTrackingStep")
-            
+                    warning_log(f"Failed to persist session: {save_error}", "StreamMemoryMessageTrackingStep")
+
             # Get memory type and emit event
             if getattr(agent.memory, 'full_session_memory_enabled', False):
                 memory_type = 'full_session'
@@ -2984,7 +3587,10 @@ class StreamFinalizationStep(Step):
             if agent and hasattr(agent, 'run_id') and agent.run_id:
                 raise_if_cancelled(agent.run_id)
             
-            task.task_end()
+            # NOTE: task_end() is NOT called here. The timer keeps running
+            # until StreamMemoryMessageTrackingStep calls task_end() AFTER
+            # memory sub-agents complete, so that duration includes their
+            # wall-clock time.
             
             if context.output is None and task:
                 context.output = task.response
@@ -3010,7 +3616,6 @@ class StreamFinalizationStep(Step):
                     total_duration=task.duration if task.duration else None
                 ):
                     context.events.append(event)
-                # RunCompletedEvent is emitted by manager after pipeline end
 
             step_result = StepResult(
                 name=self.name,

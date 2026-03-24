@@ -96,9 +96,6 @@ class MockAgent:
     def _setup_tools(self, task):
         pass
     
-    async def _build_model_request(self, task, memory_handler, state):
-        return []
-    
     def _build_model_request_parameters(self, task):
         return None
     

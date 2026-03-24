@@ -365,7 +365,7 @@ class AgentRunOutput:
         This records the current length of chat_history in _run_boundaries,
         allowing us to later extract only the new messages from this run.
         
-        Should be called at the START of a run (in MessageBuildStep) AFTER
+        Should be called at the START of a run (in ChatHistoryStep) AFTER
         loading historical messages into chat_history.
         """
         # Record current chat_history length as the run boundary

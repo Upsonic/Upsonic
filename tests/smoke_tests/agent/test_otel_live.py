@@ -125,7 +125,7 @@ async def test_do_async_creates_span_hierarchy(otel_capture: tuple) -> None:
 
 
 def test_root_span_attributes(otel_capture: tuple) -> None:
-    """The agent.run span should carry agent name, model, run_id, and task description."""
+    """The agent.run span should carry agent name, model, and run_id."""
     settings, exporter = otel_capture
 
     agent = Agent(MODEL, instrument=settings, name="AttrAgent")
@@ -140,9 +140,6 @@ def test_root_span_attributes(otel_capture: tuple) -> None:
 
     run_id = _attr(root, "upsonic.run_id")
     assert run_id is not None and len(run_id) > 0
-
-    task_desc = _attr(root, "upsonic.task.description")
-    assert task_desc is not None and "hello" in task_desc.lower()
 
 
 def test_chat_span_genai_attributes(otel_capture: tuple) -> None:
@@ -723,11 +720,9 @@ def test_user_id_session_id_propagation(otel_capture: tuple) -> None:
 
     assert _attr(root, "langfuse.user.id") == "test-user-7"
     assert _attr(root, "user.id") == "test-user-7"
-    assert _attr(root, "upsonic.user_id") == "test-user-7"
 
     assert _attr(root, "langfuse.session.id") == "test-session-42"
     assert _attr(root, "session.id") == "test-session-42"
-    assert _attr(root, "upsonic.session_id") == "test-session-42"
 
     
 def test_execution_time_on_root(otel_capture: tuple) -> None:

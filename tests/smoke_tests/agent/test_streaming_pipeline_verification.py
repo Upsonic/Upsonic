@@ -10,6 +10,7 @@ Run with:
 
 import asyncio
 import time
+import pytest
 from upsonic import Agent, Task
 from upsonic.tools import tool
 from upsonic.reflection import ReflectionConfig
@@ -33,6 +34,7 @@ def multiply(a: int, b: int) -> int:
     return a * b
 
 
+@pytest.mark.asyncio
 async def test_text_streaming_with_reflection():
     print("=" * 80)
     print("  TEST 1: TEXT STREAMING — REFLECTION ENABLED")
@@ -67,17 +69,19 @@ async def test_text_streaming_with_reflection():
     print("=" * 80)
 
 
+@pytest.mark.asyncio
+@pytest.mark.timeout(180)
 async def test_event_streaming_with_tools():
     print("\n" + "=" * 80)
-    print("  TEST 2: EVENT STREAMING — ALL 16 STEPS")
+    print("  TEST 2: EVENT STREAMING — ALL STEPS")
     print("=" * 80)
 
     agent = Agent(
-        model="anthropic/claude-sonnet-4-6",
+        model="openai/gpt-4o-mini",
         name="EventStreamAgent",
         tools=[multiply],
         reflection=True,
-        reflection_config=ReflectionConfig(max_iterations=1, acceptance_threshold=0.95),
+        reflection_config=ReflectionConfig(max_iterations=1, acceptance_threshold=0.5),
         print=True,
     )
 

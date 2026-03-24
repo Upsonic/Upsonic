@@ -435,15 +435,21 @@ class TestStreamingPipelineComposition:
             "llm_manager",
             "model_selection",
             "tool_setup",
-            "message_build",
+            "memory_prepare",
+            "system_prompt_build",
+            "context_build",
+            "user_input_build",
+            "chat_history",
+            "message_assembly",
+            "call_manager_setup",
             "stream_model_execution",
             "reflection",
             "reliability",
             "agent_policy",
             "cache_storage",
             "stream_finalization",
-            "call_management",
             "stream_memory_message_tracking",
+            "call_management",
         ]
 
         for step_name in required:
@@ -462,13 +468,14 @@ class TestStreamingPipelineComposition:
         call_mgmt_idx = step_names.index("call_management")
         memory_idx = step_names.index("stream_memory_message_tracking")
 
-        # Post-processing order: execution → reflection → reliability → policy → finalization → call_mgmt → memory
+        # Post-processing order: execution → reflection → reliability → policy → finalization
+        # → memory tracking (session / task_end) → call management (usage / price_id_summary last)
         assert execution_idx < reflection_idx, "Reflection must come after model execution"
         assert reflection_idx < reliability_idx, "Reliability must come after reflection"
         assert reliability_idx < policy_idx, "Agent policy must come after reliability"
         assert policy_idx < finalization_idx, "Finalization must come after agent policy"
-        assert finalization_idx < call_mgmt_idx, "Call management must come after finalization"
-        assert call_mgmt_idx < memory_idx, "Memory tracking must be the last step"
+        assert finalization_idx < memory_idx, "Memory tracking must come after finalization"
+        assert memory_idx < call_mgmt_idx, "Call management must run after memory tracking (last step)"
 
     def test_streaming_and_direct_pipelines_share_common_steps(self, agent):
         """Streaming and direct pipelines should share the same pre-execution steps."""
@@ -478,11 +485,13 @@ class TestStreamingPipelineComposition:
         streaming_names = [s.name for s in streaming_steps]
         direct_names = [s.name for s in direct_steps]
 
-        # Steps 0-7 should be identical between both pipelines
+        # Steps 0-13 should be identical between both pipelines
         shared_prefix = [
             "initialization", "storage_connection", "cache_check",
             "user_policy", "llm_manager", "model_selection",
-            "tool_setup", "message_build",
+            "tool_setup", "memory_prepare", "system_prompt_build",
+            "context_build", "user_input_build", "chat_history",
+            "message_assembly", "call_manager_setup",
         ]
         for step_name in shared_prefix:
             assert step_name in streaming_names, f"Streaming missing shared step: {step_name}"

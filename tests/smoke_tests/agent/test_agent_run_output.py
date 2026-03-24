@@ -1072,7 +1072,7 @@ def test_chat_history_messages_response_single_run():
     historical_response = ModelResponse(parts=[TextPart(content="Hi from memory")])
     output.chat_history = [historical_request, historical_response]
     
-    # Step 2: Mark start of new run (MessageBuildStep does this)
+    # Step 2: Mark start of new run (ChatHistoryStep does this)
     output.start_new_run()
     
     # Step 3: Add new messages during this run

@@ -322,6 +322,93 @@ class Memory:
         
         return prepared_data
     
+    async def run_memory_agents_async(
+        self,
+        output: "AgentRunOutput",
+        session_type: Optional["SessionType"] = None,
+        agent_id: Optional[str] = None,
+    ) -> None:
+        """Run memory sub-agents (user analysis, summary) WITHOUT persisting.
+
+        Sub-agents make LLM calls that contribute ``model_execution_time``
+        to the parent task's usage via ``incr()``.  Call this BEFORE
+        ``task.task_end()`` so the timer keeps running while sub-agents work,
+        then call ``persist_session_async`` AFTER ``task.task_end()`` so
+        storage receives finalized metrics.
+
+        Args:
+            output: The run output.
+            session_type: The session type (defaults to AGENT).
+            agent_id: Optional agent identifier.
+        """
+        from upsonic.session.base import SessionType
+        from upsonic.run.base import RunStatus
+        from upsonic.utils.printing import warning_log
+
+        if output is None:
+            return
+
+        if session_type is None:
+            session_type = SessionType.AGENT
+
+        is_completed: bool = output.status == RunStatus.completed
+
+        if self._user_memory and is_completed:
+            try:
+                agent_id = output.agent_id
+                await self._user_memory.asave(output, agent_id=agent_id)
+            except Exception as e:
+                if self.debug:
+                    warning_log(f"Failed to analyze/update user memory: {e}", "Memory")
+
+        session_memory = self.get_session_memory(session_type)
+        if session_memory and hasattr(session_memory, "arun_agents"):
+            try:
+                await session_memory.arun_agents(output, is_completed)
+            except Exception as e:
+                if self.debug:
+                    warning_log(f"Failed to run memory agents: {e}", "Memory")
+
+    async def persist_session_async(
+        self,
+        output: "AgentRunOutput",
+        session_type: Optional["SessionType"] = None,
+        agent_id: Optional[str] = None,
+    ) -> None:
+        """Persist the prepared session to storage.
+
+        Call AFTER ``task.task_end()`` so that ``output.usage.duration`` is
+        finalized before writing.
+
+        Args:
+            output: The run output (carries final usage metrics).
+            session_type: The session type (defaults to AGENT).
+            agent_id: Optional agent identifier.
+        """
+        from upsonic.session.base import SessionType
+        from upsonic.run.base import RunStatus
+        from upsonic.utils.printing import warning_log, info_log
+
+        if output is None:
+            return
+
+        if session_type is None:
+            session_type = SessionType.AGENT
+
+        is_completed: bool = output.status == RunStatus.completed
+
+        session_memory = self.get_session_memory(session_type)
+        if session_memory and hasattr(session_memory, "apersist"):
+            try:
+                await session_memory.apersist(output, is_completed)
+            except Exception as e:
+                if self.debug:
+                    warning_log(f"Failed to persist session: {e}", "Memory")
+
+        if self.debug:
+            status_str = "completed" if is_completed else output.status.value
+            info_log(f"Session saved for run {output.run_id} (status: {status_str})", "Memory")
+
     async def save_session_async(
         self,
         output: "AgentRunOutput",
@@ -329,7 +416,7 @@ class Memory:
         agent_id: Optional[str] = None,
     ) -> None:
         """
-        Save session to storage.
+        Save session to storage (backward-compatible single-call entry point).
         
         This is the centralized method for ALL session saving operations:
         
@@ -342,46 +429,18 @@ class Memory:
         - Processes memory features if enabled:
           - Generates session summary (if summary_memory enabled)
           - Analyzes user profile (if user_analysis_memory enabled)
-        
+
+        Pipeline steps that need to insert ``task.task_end()`` between
+        sub-agent execution and storage persistence should use
+        ``run_memory_agents_async`` + ``persist_session_async`` instead.
+
         Args:
             output: The run output (AgentRunOutput, TeamRunOutput, etc.)
             session_type: The session type (defaults to AGENT)
             agent_id: Optional agent identifier
         """
-        from upsonic.session.base import SessionType
-        from upsonic.run.base import RunStatus
-        from upsonic.utils.printing import warning_log, info_log
-        
-        if output is None:
-            return
-        
-        if session_type is None:
-            session_type = SessionType.AGENT
-        
-        is_completed = output.status == RunStatus.completed
-        
-        # Analyze and update user memory BEFORE session save so that any LLM usage
-        # from user analysis is included in output.usage when the session is persisted
-        if self._user_memory and is_completed:
-            try:
-                agent_id = output.agent_id
-                await self._user_memory.asave(output, agent_id=agent_id)
-            except Exception as e:
-                if self.debug:
-                    warning_log(f"Failed to analyze/update user memory: {e}", "Memory")
-        
-        # Save session memory (includes summary generation and persists output.usage)
-        session_memory = self.get_session_memory(session_type)
-        if session_memory:
-            try:
-                await session_memory.asave(output, is_completed)
-            except Exception as e:
-                if self.debug:
-                    warning_log(f"Failed to save session: {e}", "Memory")
-        
-        if self.debug:
-            status_str = "completed" if is_completed else output.status.value
-            info_log(f"Session saved for run {output.run_id} (status: {status_str})", "Memory")
+        await self.run_memory_agents_async(output, session_type, agent_id)
+        await self.persist_session_async(output, session_type, agent_id)
     
     
     async def get_session_async(self) -> Optional["Session"]:
