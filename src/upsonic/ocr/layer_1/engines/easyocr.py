@@ -76,11 +76,16 @@ class EasyOCREngine(OCRProvider):
             )
     
     def _get_reader(self):
-        """Get or create EasyOCR reader instance."""
-        if self._reader is None:
+        """Get or create EasyOCR reader instance (thread-safe)."""
+        if self._reader is not None:
+            return self._reader
+        with self._reader_lock:
+            # Double-check after acquiring lock
+            if self._reader is not None:
+                return self._reader
             try:
                 from upsonic.utils.printing import ocr_language_not_supported, ocr_loading, ocr_initialized
-                
+
                 # Check language support
                 unsupported_langs = [lang for lang in self.config.languages if lang not in self.supported_languages]
                 if unsupported_langs:
@@ -94,47 +99,46 @@ class EasyOCREngine(OCRProvider):
                         f"Language(s) not supported by EasyOCR: {', '.join(unsupported_langs)}",
                         error_code="UNSUPPORTED_LANGUAGE"
                     )
-                
+
                 # Show loading message
                 extra_info = {
                     "GPU": "Enabled" if self.gpu else "Disabled",
                     "Note": "First run will download models"
                 }
                 ocr_loading("EasyOCR", self.config.languages, extra_info)
-                
+
                 # Handle SSL certificate issues during model download
                 # EasyOCR downloads models on first use
                 import ssl
-                import urllib.request
-                
+
                 # Save original SSL context
                 original_context = ssl._create_default_https_context
-                
+
                 try:
                     # Temporarily disable SSL verification for model download
                     ssl._create_default_https_context = ssl._create_unverified_context
-                    
+
                     # Build Reader arguments
                     reader_kwargs = {
                         'gpu': self.gpu,
                         'verbose': False,
                         'download_enabled': self.download_enabled
                     }
-                    
+
                     # Add custom model storage directory if provided
                     if self.model_storage_directory:
                         reader_kwargs['model_storage_directory'] = self.model_storage_directory
-                    
+
                     self._reader = easyocr.Reader(
                         self.config.languages,
                         **reader_kwargs
                     )
-                    
+
                     ocr_initialized("EasyOCR")
                 finally:
                     # Restore original SSL context
                     ssl._create_default_https_context = original_context
-                    
+
             except Exception as e:
                 raise OCRProviderError(
                     f"Failed to initialize EasyOCR reader: {str(e)}",

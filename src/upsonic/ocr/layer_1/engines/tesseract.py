@@ -125,6 +125,20 @@ class TesseractOCREngine(OCRProvider):
         except Exception:
             warning_log("Could not verify language pack availability", "Tesseract OCR")
     
+    def _get_reader(self):
+        """Return the pytesseract module (thread-safe, stateless).
+
+        Tesseract is invoked via the ``pytesseract`` wrapper which is
+        effectively stateless — there is no heavyweight reader object to
+        create.  This implementation satisfies the base-class contract.
+        """
+        if not _PYTESSERACT_AVAILABLE:
+            raise OCRProviderError(
+                "pytesseract is not available. Please install it: pip install pytesseract",
+                error_code="PYTESSERACT_NOT_AVAILABLE"
+            )
+        return pytesseract
+
     def _get_tesseract_config(self, **kwargs) -> str:
         """Build Tesseract configuration string.
         
