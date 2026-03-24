@@ -11,7 +11,7 @@ Tests ALL pre-built policies, rules, and actions:
 
 import json
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from upsonic.safety_engine.exceptions import DisallowedOperation
 from upsonic.safety_engine.models import PolicyInput, RuleOutput
@@ -722,30 +722,30 @@ class TestRaiseExceptionPoliciesExecute(unittest.TestCase):
         self.assertEqual(rule_out.confidence, 0.0)
         self.assertEqual(action_out.action_output["action_taken"], "ALLOW")
 
-    # LLM action path: mock message generation so unit tests need no API key.
-    @patch(
-        "upsonic.safety_engine.base.action_base.UpsonicLLMProvider.generate_block_message",
-        return_value="Unit-test LLM violation message",
-    )
-    def test_prompt_injection_raise_llm_execute_raises(self, _mock_msg: object) -> None:
+    # LLM action path: UpsonicLLMProvider.__init__ builds a real Agent (OpenAI). Stub Agent.do().
+    @patch("upsonic.agent.agent.Agent")
+    def test_prompt_injection_raise_llm_execute_raises(self, mock_agent_cls: MagicMock) -> None:
+        _stub_do_result = MagicMock()
+        _stub_do_result.block_message = "Unit-test LLM violation message"
+        mock_agent_cls.return_value.do.return_value = _stub_do_result
         with self.assertRaises(DisallowedOperation) as ctx:
             SkillPromptInjectionRaiseExceptionPolicy_LLM.execute(_pi(INJECTION_CONTENT))
         self.assertIn("Unit-test LLM violation message", str(ctx.exception))
 
-    @patch(
-        "upsonic.safety_engine.base.action_base.UpsonicLLMProvider.generate_block_message",
-        return_value="Unit-test LLM violation message",
-    )
-    def test_secret_leak_raise_llm_execute_raises(self, _mock_msg: object) -> None:
+    @patch("upsonic.agent.agent.Agent")
+    def test_secret_leak_raise_llm_execute_raises(self, mock_agent_cls: MagicMock) -> None:
+        _stub_do_result = MagicMock()
+        _stub_do_result.block_message = "Unit-test LLM violation message"
+        mock_agent_cls.return_value.do.return_value = _stub_do_result
         with self.assertRaises(DisallowedOperation) as ctx:
             SkillSecretLeakRaiseExceptionPolicy_LLM.execute(_pi(SECRET_CONTENT))
         self.assertIn("Unit-test LLM violation message", str(ctx.exception))
 
-    @patch(
-        "upsonic.safety_engine.base.action_base.UpsonicLLMProvider.generate_block_message",
-        return_value="Unit-test LLM violation message",
-    )
-    def test_code_injection_raise_llm_execute_raises(self, _mock_msg: object) -> None:
+    @patch("upsonic.agent.agent.Agent")
+    def test_code_injection_raise_llm_execute_raises(self, mock_agent_cls: MagicMock) -> None:
+        _stub_do_result = MagicMock()
+        _stub_do_result.block_message = "Unit-test LLM violation message"
+        mock_agent_cls.return_value.do.return_value = _stub_do_result
         with self.assertRaises(DisallowedOperation) as ctx:
             SkillCodeInjectionRaiseExceptionPolicy_LLM.execute(_pi(CODE_INJECTION_CONTENT))
         self.assertIn("Unit-test LLM violation message", str(ctx.exception))
