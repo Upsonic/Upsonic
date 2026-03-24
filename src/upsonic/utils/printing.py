@@ -4002,3 +4002,89 @@ def planning_todo_update(
     spacing()
     
     _bg_logger.debug(f"Planning todo update: {updated_count} updated, {added_count} added")
+
+
+def skill_safety_check(
+    skill_name: str,
+    policy_name: str,
+    check_context: str,
+    status: str,
+    confidence: float,
+    content_type: str,
+    details: str,
+    triggered_keywords: Optional[List[str]] = None,
+) -> None:
+    """
+    Prints a formatted panel for skill safety policy validation results.
+
+    Args:
+        skill_name: Name of the skill being validated
+        policy_name: Name of the policy that ran
+        check_context: Where the check happened (e.g. "instructions", "reference", "script")
+        status: Validation status ("BLOCKED" or "PASSED")
+        confidence: Confidence score (0.0-1.0)
+        content_type: The content type from the rule output
+        details: Details string from the rule output
+        triggered_keywords: Optional list of triggered keywords/patterns
+    """
+    skill_name_esc = escape_rich_markup(skill_name)
+    policy_name_esc = escape_rich_markup(policy_name)
+    check_context_esc = escape_rich_markup(check_context)
+    details_esc = escape_rich_markup(details)
+    content_type_esc = escape_rich_markup(content_type)
+
+    if status.upper() == "BLOCKED":
+        border_style = "bold red"
+        title = "[bold red]🛡️ Skill Safety: BLOCKED[/bold red]"
+        status_display = "[red]BLOCKED[/red]"
+    else:
+        border_style = "bold green"
+        title = "[bold green]🛡️ Skill Safety: PASSED[/bold green]"
+        status_display = "[green]PASSED[/green]"
+
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+
+    table.add_row("[bold]Skill Name:[/bold]", f"[cyan]{skill_name_esc}[/cyan]")
+    table.add_row("[bold]Policy Name:[/bold]", f"[cyan]{policy_name_esc}[/cyan]")
+    table.add_row("[bold]Check Context:[/bold]", f"[cyan]{check_context_esc}[/cyan]")
+    table.add_row("")
+    table.add_row("[bold]Status:[/bold]", status_display)
+    table.add_row("[bold]Confidence:[/bold]", f"{confidence:.2f}")
+    table.add_row("[bold]Content Type:[/bold]", f"{content_type_esc}")
+
+    if details_esc:
+        if len(details_esc) > 150:
+            details_esc = details_esc[:147] + "..."
+        table.add_row("[bold]Details:[/bold]", f"{details_esc}")
+
+    if triggered_keywords:
+        keywords_str = ", ".join(map(str, triggered_keywords))
+        if len(keywords_str) > 100:
+            keywords_str = keywords_str[:97] + "..."
+        keywords_esc = escape_rich_markup(keywords_str)
+        table.add_row("[bold]Triggers:[/bold]", f"[yellow]{keywords_esc}[/yellow]")
+
+    panel = Panel(
+        table,
+        title=title,
+        border_style=border_style,
+        expand=True,
+        width=70
+    )
+
+    console.print(panel)
+    spacing()
+
+    _sentry_logger.info(
+        "Skill safety check: %s (policy=%s, context=%s) - %s",
+        skill_name, policy_name, check_context, status,
+        extra={
+            "skill_name": skill_name,
+            "policy_name": policy_name,
+            "check_context": check_context,
+            "status": status,
+            "confidence": confidence,
+            "content_type": content_type,
+        },
+    )

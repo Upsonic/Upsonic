@@ -170,6 +170,146 @@ class AgentSessionMemory(BaseSessionMemory):
         
         return result
     
+    async def _load_or_create_session(
+        self,
+        output: "AgentRunOutput",
+    ) -> "AgentSession":
+        """Load existing session from storage or create a new one.
+
+        Args:
+            output: The run output used to populate a new session.
+
+        Returns:
+            The loaded or newly created AgentSession.
+        """
+        from upsonic.session.agent import AgentSession
+        from upsonic.session.base import SessionType
+        from upsonic.utils.printing import info_log
+
+        if _is_async_storage(self.storage):
+            session = await self.storage.aget_session(
+                session_id=self.session_id,
+                session_type=SessionType.AGENT,
+                deserialize=True,
+            )
+        else:
+            session = self.storage.get_session(
+                session_id=self.session_id,
+                session_type=SessionType.AGENT,
+                deserialize=True,
+            )
+
+        if not session:
+            session = AgentSession(
+                session_id=self.session_id,
+                agent_id=output.agent_id,
+                user_id=output.user_id,
+                created_at=int(time.time()),
+                metadata={},
+                runs={},
+            )
+            if self.debug:
+                info_log(f"Created new session: {self.session_id}", "AgentSessionMemory")
+
+        return session
+
+    async def arun_agents(self, output: "AgentRunOutput", is_completed: bool) -> None:
+        """Run memory sub-agents (summary, etc.) WITHOUT persisting to storage.
+
+        This method loads/creates the session, runs sub-agents that contribute
+        ``model_execution_time`` via ``usage.incr()``, and caches the prepared
+        session on ``self._pending_session`` so that a subsequent ``apersist``
+        call can write it with finalized metrics.
+
+        For incomplete runs the session is prepared but no sub-agents run
+        (summary generation only happens on completed runs).
+
+        Args:
+            output: The run output.
+            is_completed: Whether the run completed successfully.
+        """
+        from upsonic.utils.printing import warning_log
+
+        if output is None:
+            return
+
+        try:
+            session = await self._load_or_create_session(output)
+
+            run_previously_saved: bool = bool(
+                session and session.runs and output.run_id in session.runs
+            )
+
+            if is_completed and not self.enabled and not self.summary_enabled and not run_previously_saved:
+                self._pending_session = None
+                return
+
+            if is_completed:
+                if run_previously_saved and not self.enabled and not self.summary_enabled:
+                    session.upsert_run(output)
+                else:
+                    await self._save_completed_run(session, output)
+            else:
+                await self._save_incomplete_run(session, output)
+
+            self._pending_session = session
+        except Exception as e:
+            self._pending_session = None
+            if self.debug:
+                import traceback
+                error_trace = "".join(traceback.format_exception(type(e), e, e.__traceback__))
+                warning_log(
+                    f"Failed to run memory agents: {e}\n{error_trace[-500:]}",
+                    "AgentSessionMemory",
+                )
+
+    async def apersist(self, output: "AgentRunOutput", is_completed: bool) -> None:
+        """Persist the prepared session to storage.
+
+        Must be called AFTER ``arun_agents`` (and after ``task.task_end()``)
+        so that ``output.usage`` carries the finalized ``duration``.
+
+        Args:
+            output: The run output (carries final usage metrics).
+            is_completed: Whether the run completed successfully.
+        """
+        from upsonic.utils.printing import info_log, warning_log
+
+        if output is None:
+            return
+
+        session: Optional["AgentSession"] = getattr(self, "_pending_session", None)
+        if session is None:
+            return
+
+        try:
+            if output.usage:
+                session.update_usage_from_run(output)
+
+            session.updated_at = int(time.time())
+
+            if _is_async_storage(self.storage):
+                await self.storage.aupsert_session(session, deserialize=True)
+            else:
+                self.storage.upsert_session(session, deserialize=True)
+
+            if self.debug:
+                status_str = "completed" if is_completed else "incomplete"
+                info_log(
+                    f"Session saved for run {output.run_id} ({status_str})",
+                    "AgentSessionMemory",
+                )
+        except Exception as e:
+            if self.debug:
+                import traceback
+                error_trace = "".join(traceback.format_exception(type(e), e, e.__traceback__))
+                warning_log(
+                    f"Failed to persist session: {e}\n{error_trace[-500:]}",
+                    "AgentSessionMemory",
+                )
+        finally:
+            self._pending_session = None
+
     async def asave(self, output: "AgentRunOutput", is_completed: bool) -> None:
         """Save AgentSession to storage (async).
         
@@ -181,84 +321,13 @@ class AgentSessionMemory(BaseSessionMemory):
         - If the run was previously saved (e.g., transitioning from paused to completed),
           we ALWAYS update the run status to reflect completion.
         - Full history is only saved when 'enabled' is True.
+
+        This is the backward-compatible single-call entry point. Pipeline steps
+        that need to insert ``task.task_end()`` between sub-agent execution and
+        storage persistence should use ``arun_agents`` + ``apersist`` instead.
         """
-        from upsonic.session.agent import AgentSession
-        from upsonic.session.base import SessionType
-        from upsonic.utils.printing import info_log, warning_log
-        
-        if output is None:
-            return
-        
-        try:
-            # Load or create session using appropriate method
-            if _is_async_storage(self.storage):
-                session = await self.storage.aget_session(
-                    session_id=self.session_id,
-                    session_type=SessionType.AGENT,
-                    deserialize=True
-                )
-            else:
-                session = self.storage.get_session(
-                    session_id=self.session_id,
-                    session_type=SessionType.AGENT,
-                    deserialize=True
-                )
-            
-            # CRITICAL: For HITL to work, incomplete runs (paused, error, cancelled) 
-            # MUST ALWAYS be saved, regardless of 'enabled' setting.
-            # For completed runs: 
-            # - If run was previously saved (exists in session.runs), update it
-            # - If not previously saved and enabled=False, skip full save
-            run_previously_saved = session and session.runs and output.run_id in session.runs
-            
-            if is_completed and not self.enabled and not self.summary_enabled and not run_previously_saved:
-                # Skip saving completed runs that were never saved before when disabled
-                return
-            
-            if not session:
-                session = AgentSession(
-                    session_id=self.session_id,
-                    agent_id=output.agent_id,
-                    user_id=output.user_id,
-                    created_at=int(time.time()),
-                    metadata={},
-                    runs={},
-                )
-                if self.debug:
-                    info_log(f"Created new session: {self.session_id}", "AgentSessionMemory")
-            
-            # Handle based on completion status
-            if is_completed:
-                if run_previously_saved and not self.enabled and not self.summary_enabled:
-                    # Just update the run status, don't do full save with messages
-                    session.upsert_run(output)
-                else:
-                    await self._save_completed_run(session, output)
-            else:
-                await self._save_incomplete_run(session, output)
-            
-            # Update session-level usage by aggregating this run's usage
-            # This is done AFTER upserting the run so we have the latest usage data
-            if output.usage:
-                session.update_usage_from_run(output)
-            
-            # Always upsert to storage
-            session.updated_at = int(time.time())
-            
-            if _is_async_storage(self.storage):
-                await self.storage.aupsert_session(session, deserialize=True)
-            else:
-                self.storage.upsert_session(session, deserialize=True)
-            
-            if self.debug:
-                status_str = "completed" if is_completed else "incomplete"
-                info_log(f"Session saved for run {output.run_id} ({status_str})", "AgentSessionMemory")
-                
-        except Exception as e:
-            if self.debug:
-                import traceback
-                error_trace = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
-                warning_log(f"Failed to save session: {e}\n{error_trace[-500:]}", "AgentSessionMemory")
+        await self.arun_agents(output, is_completed)
+        await self.apersist(output, is_completed)
     
     def save(self, output: "AgentRunOutput", is_completed: bool) -> None:
         """Save AgentSession to storage (sync).

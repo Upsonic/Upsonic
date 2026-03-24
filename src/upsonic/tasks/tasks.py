@@ -68,12 +68,24 @@ class Task(BaseModel):
     registered_task_tools: Dict[str, Any] = {}
     task_builtin_tools: List[Any] = []
     _tool_manager: Optional[Any] = None
-        
+
+    # Dynamic attributes - previously set without declaration
+    _cached_result: bool = False
+    _policy_blocked: bool = False
+    _reliability_sub_agent_usage: Optional[Any] = None
+    _upsonic_tool_config: Optional[Any] = None
+    _upsonic_is_tool: bool = False
+
     vector_search_top_k: Optional[int] = None
     vector_search_alpha: Optional[float] = None
     vector_search_fusion_method: Optional[Literal['rrf', 'weighted']] = None
     vector_search_similarity_threshold: Optional[float] = None
     vector_search_filter: Optional[Dict[str, Any]] = None
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name == '_task_todos' and value is not None and not isinstance(value, list):
+            raise TypeError("_task_todos must be a list or None")
+        super().__setattr__(name, value)
 
     @staticmethod
     def _is_file_path(item: Any) -> bool:
@@ -327,7 +339,7 @@ class Task(BaseModel):
             
         if tools is None:
             tools = []
-            
+
         if context is None:
             context = []
 
@@ -335,13 +347,20 @@ class Task(BaseModel):
             context, extracted_files = self._extract_files_from_context(context)
         except FileNotFoundError as e:
             raise FileNotFoundError(e.file_path, f"File specified in context cannot be accessed: {e.reason}")
-        
+
         if attachments is None:
             attachments = []
-        
+
         if extracted_files:
             attachments.extend(extracted_files)
-            
+
+        # Eagerly generate IDs if not provided
+        import uuid
+        if price_id_ is None:
+            price_id_ = str(uuid.uuid4())
+        if task_id_ is None:
+            task_id_ = str(uuid.uuid4())
+
         super().__init__(**{
             "description": description,
             "attachments": attachments,
@@ -693,16 +712,10 @@ class Task(BaseModel):
 
     @property
     def price_id(self):
-        if self.price_id_ is None:
-            import uuid
-            self.price_id_ = str(uuid.uuid4())
         return self.price_id_
 
     @property
     def task_id(self):
-        if self.task_id_ is None:
-            import uuid
-            self.task_id_ = str(uuid.uuid4())
         return self.task_id_
     
     def get_task_id(self):
@@ -834,10 +847,24 @@ class Task(BaseModel):
 
 
     def task_start(self, agent: Any) -> None:
+        """Initialize task for a fresh pipeline run.
+
+        This is called by InitStep (step 0) and always means the start of a
+        brand-new pipeline execution. It creates fresh TaskUsage and resets
+        per-run state. Must NOT be called during HITL resume — the pipeline
+        skips InitStep when resuming from a later step, which is the correct
+        behavior. If this is ever called while _usage already has accumulated
+        data, it means a full restart was intended.
+        """
         self.start_time = time.time()
+        self.end_time = None
         from upsonic.usage import TaskUsage
         self._usage = TaskUsage()
         self._usage.start_timer()
+        # Reset per-run state
+        self._context_formatted = None
+        self._cached_result = False
+        self._policy_blocked = False
         if agent.canvas:
             self.add_canvas(agent.canvas)
 
@@ -1028,6 +1055,8 @@ class Task(BaseModel):
             "_last_cache_entry": self._last_cache_entry,
             "_anonymization_map": self._anonymization_map,
             "_usage": self._usage.to_dict() if self._usage is not None else None,
+            "_cached_result": self._cached_result,
+            "_policy_blocked": self._policy_blocked,
         }
         
         # Handle status (RunStatus enum)
@@ -1138,9 +1167,14 @@ class Task(BaseModel):
                         module = importlib.import_module(module_name)
                         response_format = getattr(module, class_name)
                     except (ImportError, AttributeError):
-                        response_format = None
+                        from upsonic.utils.printing import warning_log
+                        warning_log(
+                            f"Could not deserialize response_format type '{module_name}.{class_name}', falling back to str",
+                            "TaskDeserializer"
+                        )
+                        response_format = str
                 else:
-                    response_format = None
+                    response_format = str
             elif response_format_data.get("__type__"):
                 import importlib
                 module_name = response_format_data.get("module")
@@ -1150,9 +1184,14 @@ class Task(BaseModel):
                         module = importlib.import_module(module_name)
                         response_format = getattr(module, class_name)
                     except (ImportError, AttributeError):
-                        response_format = None
+                        from upsonic.utils.printing import warning_log
+                        warning_log(
+                            f"Could not deserialize response_format type '{module_name}.{class_name}', falling back to str",
+                            "TaskDeserializer"
+                        )
+                        response_format = str
                 else:
-                    response_format = None
+                    response_format = str
             else:
                 response_format = response_format_data
         else:
@@ -1297,7 +1336,11 @@ class Task(BaseModel):
             task._last_cache_entry = data["_last_cache_entry"]
         if data.get("_anonymization_map") is not None:
             task._anonymization_map = data["_anonymization_map"]
-        
+        if data.get("_cached_result") is not None:
+            task._cached_result = data["_cached_result"]
+        if data.get("_policy_blocked") is not None:
+            task._policy_blocked = data["_policy_blocked"]
+
         usage_data: Optional[Dict[str, Any]] = data.get("_usage")
         if usage_data is not None and isinstance(usage_data, dict):
             from upsonic.usage import TaskUsage

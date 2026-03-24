@@ -18,6 +18,10 @@ if TYPE_CHECKING:
     from upsonic.models import Model
     from upsonic.culture.culture import Culture
     from upsonic.db.database import DatabaseBase
+    from upsonic.skills import Skills
+    from upsonic.models.instrumented import InstrumentationSettings
+    from upsonic.integrations.tracing import TracingProvider
+    from upsonic.integrations.promptlayer import PromptLayer
 
 
 RetryMode = Literal["raise", "return_false"]
@@ -108,6 +112,7 @@ class AutonomousAgent(Agent):
         reflection: bool = False,
         context_management: bool = False,
         context_management_keep_recent: int = 5,
+        context_management_model: Optional[str] = None,
         reliability_layer: Optional[Any] = None,
         agent_id_: Optional[str] = None,
         canvas: Optional["Canvas"] = None,
@@ -123,6 +128,7 @@ class AutonomousAgent(Agent):
         enable_thinking_tool: bool = False,
         enable_reasoning_tool: bool = False,
         tools: Optional[List[Any]] = None,
+        skills: Optional["Skills"] = None,
         user_policy: Optional[Union["Policy", List["Policy"]]] = None,
         agent_policy: Optional[Union["Policy", List["Policy"]]] = None,
         tool_policy_pre: Optional[Union["Policy", List["Policy"]]] = None,
@@ -144,6 +150,8 @@ class AutonomousAgent(Agent):
         reasoning_format: Optional[Literal["hidden", "raw", "parsed"]] = None,
         culture: Optional["Culture"] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        instrument: Union[bool, "TracingProvider", "InstrumentationSettings", None] = None,
+        promptlayer: Optional["PromptLayer"] = None,
         heartbeat: bool = False,
         heartbeat_period: int = 30,
         heartbeat_message: str = "",
@@ -287,6 +295,7 @@ class AutonomousAgent(Agent):
             reflection=reflection,
             context_management=context_management,
             context_management_keep_recent=context_management_keep_recent,
+            context_management_model=context_management_model,
             reliability_layer=reliability_layer,
             agent_id_=agent_id_,
             canvas=canvas,
@@ -303,6 +312,7 @@ class AutonomousAgent(Agent):
             enable_thinking_tool=enable_thinking_tool,
             enable_reasoning_tool=enable_reasoning_tool,
             tools=all_tools,
+            skills=skills,
             user_policy=user_policy,
             agent_policy=agent_policy,
             tool_policy_pre=tool_policy_pre,
@@ -325,6 +335,8 @@ class AutonomousAgent(Agent):
             culture=culture,
             metadata=metadata,
             workspace=str(self.autonomous_workspace),
+            instrument=instrument,
+            promptlayer=promptlayer,
         )
     
     def _build_autonomous_system_prompt(

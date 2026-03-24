@@ -2088,73 +2088,6 @@ class Agent(BaseAgent):
             return {k: v.to_dict() for k, v in self.skills.get_metrics().items()}
         return {}
 
-    async def _build_model_request(
-        self, 
-        task: "Task", 
-        memory_handler: Optional["MemoryManager"], 
-        state: Optional["State"] = None,
-    ) -> tuple[List["ModelRequest"], Optional["ModelResponse"]]:
-        """Build the complete message history for the model request.
-
-        Returns:
-            A tuple of (messages, context_full_response).
-            context_full_response is None when the context fits within the
-            model's window, or a ModelResponse with a fixed message when
-            the context is full after all reduction strategies.
-        """
-        from upsonic.agent.context_managers import SystemPromptManager, ContextManager
-        from upsonic.messages import SystemPromptPart, UserPromptPart, ModelRequest
-        
-        messages: List["ModelRequest"] = []
-        message_history = memory_handler.get_message_history()
-        messages.extend(message_history)
-        
-        system_prompt_manager = SystemPromptManager(self, task)
-        context_manager = ContextManager(self, task, state)
-        
-        async with system_prompt_manager.manage_system_prompt(memory_handler) as sp_handler, \
-                   context_manager.manage_context(memory_handler) as _ctx_handler:
-            
-            if hasattr(self, '_agent_run_output') and self._agent_run_output and self._agent_run_output.input:
-                run_input = self._agent_run_output.input
-                if run_input.input is None:
-                    run_input.build_input(context_formatted=task.context_formatted)
-                task_input = run_input.input
-                if task.context_formatted:
-                    task.context_formatted = None
-            else:
-                raise RuntimeError("AgentRunInput not available. This should not happen.")
-            
-            user_part = UserPromptPart(content=task_input)
-            
-            parts = []
-            
-            if sp_handler.should_include_system_prompt(messages):
-                system_prompt = sp_handler.get_system_prompt()
-                if system_prompt:
-                    self._last_built_system_prompt = system_prompt
-                    system_part = SystemPromptPart(content=system_prompt)
-                    parts.append(system_part)
-            
-            parts.append(user_part)
-            
-            current_request = ModelRequest(parts=parts)
-            messages.append(current_request)
-
-        # Apply context management middleware
-        context_full_response: Optional["ModelResponse"] = None
-        if self.context_management and self._context_management_middleware:
-            managed_msgs, ctx_full = await self._context_management_middleware.apply(messages)
-            messages = managed_msgs
-            # Propagate summarization usage to the parent run context
-            self._propagate_context_management_usage()
-            if ctx_full:
-                context_full_response = self._context_management_middleware._build_context_full_response(
-                    model_name=self.model.model_name
-                )
-
-        return messages, context_full_response
-    
     async def _build_model_request_with_input(
         self, 
         task: "Task", 
@@ -2576,9 +2509,6 @@ class Agent(BaseAgent):
                         _tool_elapsed = _time.time() - _tool_start
 
                         if hasattr(self, '_agent_run_output') and self._agent_run_output:
-                            self._agent_run_output.add_tool_execution_time(_tool_elapsed)
-
-                        if hasattr(self, '_agent_run_output') and self._agent_run_output:
                             from upsonic.run.tools.tools import ToolExecution
                             tool_exec = ToolExecution(
                                 tool_call_id=tool_call.tool_call_id,
@@ -2607,8 +2537,6 @@ class Agent(BaseAgent):
                     except Exception as e:
                         _tool_elapsed = _time.time() - _tool_start
                         self._otel.set_tool_result(otel_tool_span, _tool_elapsed, success=False, error=e)
-                        if hasattr(self, '_agent_run_output') and self._agent_run_output:
-                            self._agent_run_output.add_tool_execution_time(_tool_elapsed)
                         return ToolReturnPart(
                             tool_name=tool_call.tool_name,
                             content=f"Error executing tool: {str(e)}",
@@ -2616,11 +2544,15 @@ class Agent(BaseAgent):
                             timestamp=now_utc()
                         )
             
-            # Execute all tools in parallel, capturing exceptions
+            import time as _time_mod
+            _parallel_batch_start: float = _time_mod.time()
             parallel_results = await asyncio.gather(
                 *[execute_single_tool(tc) for tc in parallel_calls],
                 return_exceptions=True
             )
+            _parallel_batch_elapsed: float = _time_mod.time() - _parallel_batch_start
+            if hasattr(self, '_agent_run_output') and self._agent_run_output:
+                self._agent_run_output.add_tool_execution_time(_parallel_batch_elapsed)
             
             # Separate successful results from HITL pauses
             external_pauses: List[ExternalExecutionPause] = []
@@ -3654,10 +3586,17 @@ class Agent(BaseAgent):
         if not is_resuming and effective_retry > 1 and task.is_problematic:
             task.status = None
             task.run_id = None
+            # Clear the stale output from the previous failed attempt so no code
+            # can accidentally read its error status before the new output is created.
+            self._agent_run_output = None
 
-        task.price_id_ = None
-        _ = task.price_id
-        task._tool_calls = []
+        # Only reset per-run agent state for fresh runs — HITL resume should
+        # keep existing state so cost and tool counts aggregate correctly.
+        if not is_resuming:
+            import uuid as _uuid
+            task.price_id_ = str(_uuid.uuid4())
+            self._tool_call_count = 0
+            self._tool_limit_reached = False
         self._last_built_system_prompt = None
 
         if debug or self.debug:
@@ -3736,8 +3675,12 @@ class Agent(BaseAgent):
             if original_model is not None:
                 self.model = original_model
             self._finalize_agent_usage(resolved_print_flag)
-            self.run_id = None
-    
+            # Keep run_id alive when task is paused (HITL) — the run is still active
+            _output = getattr(self, '_agent_run_output', None)
+            _is_paused = getattr(_output.task, 'is_paused', False) if _output and _output.task else False
+            if not _is_paused:
+                self.run_id = None
+
     def _calculate_aggregated_cost(self) -> Optional[float]:
         """Calculate the aggregated monetary cost across the agent run.
 
@@ -3824,8 +3767,6 @@ class Agent(BaseAgent):
                 return self._agent_run_output.output
 
             self._agent_run_output.is_streaming = False
-
-            await self._run_call_management_step(task, debug)
 
             cleanup_run(run_id)
             sentry_sdk.flush()
@@ -4306,7 +4247,14 @@ class Agent(BaseAgent):
                     "Agent"
                 )
             return
-        
+
+        # Reset per-run state (same as do_async for fresh runs)
+        import uuid as _uuid
+        task.price_id_ = str(_uuid.uuid4())
+        self._tool_call_count = 0
+        self._tool_limit_reached = False
+        self._last_built_system_prompt = None
+
         run_id = str(uuid.uuid4())
         self.run_id = run_id
         register_run(run_id)
@@ -4512,7 +4460,10 @@ class Agent(BaseAgent):
         from upsonic.agent.pipeline import (
             InitializationStep, CacheCheckStep, UserPolicyStep,
             StorageConnectionStep, LLMManagerStep, ModelSelectionStep,
-            ToolSetupStep, MessageBuildStep,
+            ToolSetupStep,
+            MemoryPrepareStep, SystemPromptBuildStep, ContextBuildStep,
+            UserInputBuildStep, ChatHistoryStep, MessageAssemblyStep,
+            CallManagerSetupStep,
             ModelExecutionStep, ResponseProcessingStep,
             ReflectionStep, CallManagementStep, TaskManagementStep,
             MemorySaveStep,
@@ -4528,17 +4479,23 @@ class Agent(BaseAgent):
             LLMManagerStep(),              # 4
             ModelSelectionStep(),          # 5
             ToolSetupStep(),               # 6
-            MessageBuildStep(),            # 7
-            ModelExecutionStep(),          # 8 <-- External tool resumes here
-            ResponseProcessingStep(),      # 9 <-- Tracks messages to AgentRunOutput
-            ReflectionStep(),              # 10
-            TaskManagementStep(),          # 11
-            ReliabilityStep(),             # 12
-            AgentPolicyStep(),             # 13
-            CacheStorageStep(),            # 14
-            FinalizationStep(),            # 15
-            MemorySaveStep(),              # 16
-            CallManagementStep(),          # 17 <-- LAST: calls task_end() & prints metrics
+            MemoryPrepareStep(),           # 7  <-- Load memory (history, profile, metadata)
+            SystemPromptBuildStep(),       # 8  <-- Build system prompt
+            ContextBuildStep(),            # 9  <-- Build task context (KB/RAG)
+            UserInputBuildStep(),          # 10 <-- Build user input (prompt + context + attachments)
+            ChatHistoryStep(),             # 11 <-- Load chat history + mark run boundary
+            MessageAssemblyStep(),         # 12 <-- Assemble ModelRequest + apply middleware
+            CallManagerSetupStep(),        # 13 <-- Create and register CallManager
+            ModelExecutionStep(),          # 14 <-- External tool resumes here
+            ResponseProcessingStep(),      # 15 <-- Tracks messages to AgentRunOutput
+            ReflectionStep(),              # 16
+            TaskManagementStep(),          # 17
+            ReliabilityStep(),             # 18
+            AgentPolicyStep(),             # 19
+            CacheStorageStep(),            # 20
+            FinalizationStep(),            # 21
+            MemorySaveStep(),              # 22
+            CallManagementStep(),          # 23 <-- LAST: calls task_end() & prints metrics
         ]
     
     def _get_step_index_by_name(self, step_name: str, is_streaming: bool = False) -> int:
@@ -4550,7 +4507,7 @@ class Agent(BaseAgent):
         which steps set _run_boundaries.
         
         Args:
-            step_name: The name of the step (e.g., "message_build")
+            step_name: The name of the step (e.g., "chat_history", "model_execution")
             is_streaming: Whether to use streaming pipeline (default: direct)
             
         Returns:
@@ -4577,10 +4534,15 @@ class Agent(BaseAgent):
         from upsonic.agent.pipeline import (
             InitializationStep, CacheCheckStep, UserPolicyStep,
             StorageConnectionStep, LLMManagerStep, ModelSelectionStep,
-            ToolSetupStep, MessageBuildStep,
+            ToolSetupStep,
+            MemoryPrepareStep, SystemPromptBuildStep, ContextBuildStep,
+            UserInputBuildStep, ChatHistoryStep, MessageAssemblyStep,
+            CallManagerSetupStep,
             StreamModelExecutionStep,
+            ReflectionStep, ReliabilityStep,
             AgentPolicyStep, CacheStorageStep,
-            StreamMemoryMessageTrackingStep, StreamFinalizationStep
+            StreamFinalizationStep, CallManagementStep,
+            StreamMemoryMessageTrackingStep
         )
 
         return [
@@ -4591,12 +4553,21 @@ class Agent(BaseAgent):
             LLMManagerStep(),                  # 4
             ModelSelectionStep(),              # 5
             ToolSetupStep(),                   # 6
-            MessageBuildStep(),                # 7
-            StreamModelExecutionStep(),        # 8 <-- External tool resumes here (tracks messages internally)
-            AgentPolicyStep(),                 # 9
-            CacheStorageStep(),                # 10
-            StreamFinalizationStep(),          # 11
-            StreamMemoryMessageTrackingStep(), # 12 <-- LAST: Saves AgentSession to storage
+            MemoryPrepareStep(),               # 7  <-- Load memory
+            SystemPromptBuildStep(),           # 8  <-- Build system prompt
+            ContextBuildStep(),                # 9  <-- Build task context (KB/RAG)
+            UserInputBuildStep(),              # 10 <-- Build user input
+            ChatHistoryStep(),                 # 11 <-- Load chat history + mark run boundary
+            MessageAssemblyStep(),             # 12 <-- Assemble ModelRequest + apply middleware
+            CallManagerSetupStep(),            # 13 <-- Create and register CallManager
+            StreamModelExecutionStep(),        # 14 <-- Streaming model execution
+            ReflectionStep(),                  # 15 <-- Improve output quality
+            ReliabilityStep(),                 # 16 <-- Verify and clean output
+            AgentPolicyStep(),                 # 17
+            CacheStorageStep(),                # 18
+            StreamFinalizationStep(),          # 19
+            StreamMemoryMessageTrackingStep(), # 20 <-- Saves AgentSession + task_end()
+            CallManagementStep(),              # 21 <-- LAST: Records usage to price_id_summary
         ]
     
     def _create_full_pipeline_steps(self, is_streaming: bool = False) -> List[Any]:
@@ -5066,14 +5037,14 @@ class Agent(BaseAgent):
         
         resume_step_index = problematic_step.step_number
         
-        # MessageBuildStep sets _run_boundaries when building messages.
-        # Only call start_new_run() if we're resuming AFTER MessageBuildStep.
-        # If we resume AT or BEFORE MessageBuildStep, it will rebuild chat_history and
+        # ChatHistoryStep sets _run_boundaries when loading history.
+        # Only call start_new_run() if we're resuming AFTER ChatHistoryStep.
+        # If we resume AT or BEFORE ChatHistoryStep, it will rebuild chat_history and
         # set the correct boundary itself.
-        message_build_step_index = self._get_step_index_by_name("message_build")
-        if resume_step_index > message_build_step_index:
+        chat_history_step_index: int = self._get_step_index_by_name("chat_history")
+        if resume_step_index > chat_history_step_index:
             # CRITICAL: Mark the start of this resumed run for message tracking BEFORE any modifications.
-            # When resuming AFTER MessageBuildStep, it's skipped (we resume from a later step),
+            # When resuming AFTER ChatHistoryStep, it's skipped (we resume from a later step),
             # so we need to record the current chat_history length here.
             # This ensures finalize_run_messages() includes ALL messages from THIS resumed run,
             # including injected tool results.
@@ -5100,10 +5071,17 @@ class Agent(BaseAgent):
         # Clear paused state and set up for continuation
         task.is_paused = False
         output.task = task
-        
+
+        # Restore agent-level tool call count from the output so that
+        # tool_call_limit checks work correctly across HITL resume
+        # (especially important for cross-process resume where agent.__init__
+        # resets _tool_call_count to 0).
+        self._tool_call_count = getattr(output, 'tool_call_count', 0)
+        self._tool_limit_reached = False
+
         if task.enable_cache:
             task.set_cache_manager(self._cache_manager)
-        
+
         return output, task, resume_step_index
     
     async def continue_run_async(

@@ -992,10 +992,9 @@ class Model(Runnable[Any, Any]):
         
         task = self._build_task_for_invoke(messages)
 
-        task.price_id_ = None
-        _ = task.price_id
-        task._tool_calls = []
-        
+        import uuid as _uuid
+        task.price_id_ = str(_uuid.uuid4())
+
         model_params = self._build_parameters_for_invoke()
         model_params = self.customize_request_parameters(model_params)
         
@@ -1009,43 +1008,7 @@ class Model(Runnable[Any, Any]):
             response = await self._handle_response_with_tools(response, messages, model_params)
         
         output = self._extract_output_for_invoke(response)
-        
-        try:
-            from upsonic.agent.context_managers import CallManager
-            from upsonic.run.agent.output import AgentRunOutput
-            
-            run_output = AgentRunOutput(
-                run_id=str(__import__('uuid').uuid4()),
-                output=output,
-                messages=[]
-            )
-            call_manager = CallManager(
-                self,  # model
-                task,
-                debug=False,
-                show_tool_calls=True
-            )
-            
-            async with call_manager.manage_call() as call_handler:
-                call_handler.process_response(run_output)
-        except Exception:
-            pass
-        
-        try:
-            from upsonic.agent.context_managers import TaskManager
-            from upsonic.run.agent.output import AgentRunOutput
-            
-            run_output_tm = AgentRunOutput(
-                run_id=str(__import__('uuid').uuid4()),
-                output=output,
-                messages=[]
-            )
-            task_manager = TaskManager(task, None)
-            async with task_manager.manage_task() as task_handler:
-                task_handler.process_response(run_output_tm)
-        except Exception:
-            pass
-        
+
         if self._memory:
             await self._save_to_memory(messages, response)
         
