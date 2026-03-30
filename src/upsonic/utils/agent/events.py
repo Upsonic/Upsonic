@@ -13,11 +13,14 @@ from upsonic.run.events.events import (
     CacheHitEvent,
     CacheMissEvent,
     CacheStoredEvent,
+    ChatHistoryLoadedEvent,
+    ContextBuiltEvent,
     CultureUpdateEvent,
     ExecutionCompleteEvent,
     ExternalToolPauseEvent,
     FinalOutputEvent,
     LLMPreparedEvent,
+    MemoryPreparedEvent,
     MemoryUpdateEvent,
     MessagesBuiltEvent,
     ModelRequestStartEvent,
@@ -36,11 +39,13 @@ from upsonic.run.events.events import (
     StepEndEvent,
     StepStartEvent,
     StorageConnectionEvent,
+    SystemPromptBuiltEvent,
     TextCompleteEvent,
     TextDeltaEvent,
     ToolCallEvent,
     ToolResultEvent,
     ToolsConfiguredEvent,
+    UserInputBuiltEvent,
 )
 
 
@@ -765,6 +770,158 @@ def yield_memory_update_event(
     )
 
 
+# Memory Prepared Events
+
+async def ayield_memory_prepared_event(
+    run_id: str,
+    memory_enabled: bool = False,
+    history_count: int = 0,
+) -> AsyncIterator[MemoryPreparedEvent]:
+    """Yield a MemoryPreparedEvent."""
+    yield MemoryPreparedEvent(
+        run_id=run_id,
+        memory_enabled=memory_enabled,
+        history_count=history_count,
+    )
+
+
+def yield_memory_prepared_event(
+    run_id: str,
+    memory_enabled: bool = False,
+    history_count: int = 0,
+) -> Iterator[MemoryPreparedEvent]:
+    """Yield a MemoryPreparedEvent (sync)."""
+    yield MemoryPreparedEvent(
+        run_id=run_id,
+        memory_enabled=memory_enabled,
+        history_count=history_count,
+    )
+
+
+# System Prompt Built Events
+
+async def ayield_system_prompt_built_event(
+    run_id: str,
+    prompt_length: int = 0,
+    has_culture: bool = False,
+    has_skills: bool = False,
+) -> AsyncIterator[SystemPromptBuiltEvent]:
+    """Yield a SystemPromptBuiltEvent."""
+    yield SystemPromptBuiltEvent(
+        run_id=run_id,
+        prompt_length=prompt_length,
+        has_culture=has_culture,
+        has_skills=has_skills,
+    )
+
+
+def yield_system_prompt_built_event(
+    run_id: str,
+    prompt_length: int = 0,
+    has_culture: bool = False,
+    has_skills: bool = False,
+) -> Iterator[SystemPromptBuiltEvent]:
+    """Yield a SystemPromptBuiltEvent (sync)."""
+    yield SystemPromptBuiltEvent(
+        run_id=run_id,
+        prompt_length=prompt_length,
+        has_culture=has_culture,
+        has_skills=has_skills,
+    )
+
+
+# Context Built Events
+
+async def ayield_context_built_event(
+    run_id: str,
+    context_length: int = 0,
+    has_knowledge_base: bool = False,
+    has_prior_outputs: bool = False,
+) -> AsyncIterator[ContextBuiltEvent]:
+    """Yield a ContextBuiltEvent."""
+    yield ContextBuiltEvent(
+        run_id=run_id,
+        context_length=context_length,
+        has_knowledge_base=has_knowledge_base,
+        has_prior_outputs=has_prior_outputs,
+    )
+
+
+def yield_context_built_event(
+    run_id: str,
+    context_length: int = 0,
+    has_knowledge_base: bool = False,
+    has_prior_outputs: bool = False,
+) -> Iterator[ContextBuiltEvent]:
+    """Yield a ContextBuiltEvent (sync)."""
+    yield ContextBuiltEvent(
+        run_id=run_id,
+        context_length=context_length,
+        has_knowledge_base=has_knowledge_base,
+        has_prior_outputs=has_prior_outputs,
+    )
+
+
+# User Input Built Events
+
+async def ayield_user_input_built_event(
+    run_id: str,
+    input_type: str = "text",
+    has_images: bool = False,
+    has_documents: bool = False,
+    input_length: int = 0,
+) -> AsyncIterator[UserInputBuiltEvent]:
+    """Yield a UserInputBuiltEvent."""
+    yield UserInputBuiltEvent(
+        run_id=run_id,
+        input_type=input_type,
+        has_images=has_images,
+        has_documents=has_documents,
+        input_length=input_length,
+    )
+
+
+def yield_user_input_built_event(
+    run_id: str,
+    input_type: str = "text",
+    has_images: bool = False,
+    has_documents: bool = False,
+    input_length: int = 0,
+) -> Iterator[UserInputBuiltEvent]:
+    """Yield a UserInputBuiltEvent (sync)."""
+    yield UserInputBuiltEvent(
+        run_id=run_id,
+        input_type=input_type,
+        has_images=has_images,
+        has_documents=has_documents,
+        input_length=input_length,
+    )
+
+
+# Chat History Loaded Events
+
+async def ayield_chat_history_loaded_event(
+    run_id: str,
+    history_count: int = 0,
+) -> AsyncIterator[ChatHistoryLoadedEvent]:
+    """Yield a ChatHistoryLoadedEvent."""
+    yield ChatHistoryLoadedEvent(
+        run_id=run_id,
+        history_count=history_count,
+    )
+
+
+def yield_chat_history_loaded_event(
+    run_id: str,
+    history_count: int = 0,
+) -> Iterator[ChatHistoryLoadedEvent]:
+    """Yield a ChatHistoryLoadedEvent (sync)."""
+    yield ChatHistoryLoadedEvent(
+        run_id=run_id,
+        history_count=history_count,
+    )
+
+
 # Storage Connection Events
 
 async def ayield_storage_connection_event(
@@ -1096,6 +1253,21 @@ __all__ = [
     # Memory events
     "ayield_memory_update_event",
     "yield_memory_update_event",
+    # Memory Prepared events
+    "ayield_memory_prepared_event",
+    "yield_memory_prepared_event",
+    # System Prompt Built events
+    "ayield_system_prompt_built_event",
+    "yield_system_prompt_built_event",
+    # Context Built events
+    "ayield_context_built_event",
+    "yield_context_built_event",
+    # User Input Built events
+    "ayield_user_input_built_event",
+    "yield_user_input_built_event",
+    # Chat History Loaded events
+    "ayield_chat_history_loaded_event",
+    "yield_chat_history_loaded_event",
     # Storage Connection events
     "ayield_storage_connection_event",
     "yield_storage_connection_event",

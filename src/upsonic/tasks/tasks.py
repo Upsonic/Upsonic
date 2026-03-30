@@ -64,6 +64,17 @@ class Task(BaseModel):
     # Stores mappings: {idx: {"original": "...", "anonymous": "...", "pii_type": "..."}}
     # Used to de-anonymize LLM responses before returning to user
     _anonymization_map: Optional[Dict[int, Dict[str, str]]] = None
+
+    policy_apply_to_description: Optional[bool] = None
+    policy_apply_to_context: Optional[bool] = None
+    policy_apply_to_system_prompt: Optional[bool] = None
+    policy_apply_to_chat_history: Optional[bool] = None
+    policy_apply_to_tool_outputs: Optional[bool] = None
+
+    _saved_context_for_policy: Optional[str] = None
+    _policy_originals: Optional[Dict[str, Any]] = None
+    _policy_scope_tool_outputs: bool = False
+
     _usage: Optional[TaskUsage] = None
     registered_task_tools: Dict[str, Any] = {}
     task_builtin_tools: List[Any] = []
@@ -320,6 +331,11 @@ class Task(BaseModel):
         vector_search_fusion_method: Optional[Literal['rrf', 'weighted']] = None,
         vector_search_similarity_threshold: Optional[float] = None,
         vector_search_filter: Optional[Dict[str, Any]] = None,
+        policy_apply_to_description: Optional[bool] = None,
+        policy_apply_to_context: Optional[bool] = None,
+        policy_apply_to_system_prompt: Optional[bool] = None,
+        policy_apply_to_chat_history: Optional[bool] = None,
+        policy_apply_to_tool_outputs: Optional[bool] = None,
     ):
         if guardrail is not None and not callable(guardrail):
             raise TypeError("The 'guardrail' parameter must be a callable function.")
@@ -399,6 +415,11 @@ class Task(BaseModel):
             "vector_search_fusion_method": vector_search_fusion_method,
             "vector_search_similarity_threshold": vector_search_similarity_threshold,
             "vector_search_filter": vector_search_filter,
+            "policy_apply_to_description": policy_apply_to_description,
+            "policy_apply_to_context": policy_apply_to_context,
+            "policy_apply_to_system_prompt": policy_apply_to_system_prompt,
+            "policy_apply_to_chat_history": policy_apply_to_chat_history,
+            "policy_apply_to_tool_outputs": policy_apply_to_tool_outputs,
         })
         
         self.validate_tools()
@@ -644,7 +665,10 @@ class Task(BaseModel):
         from upsonic.knowledge_base.knowledge_base import KnowledgeBase
             
         rag_results = []
-        for context in self.context:
+        context_items: list[Any] = (
+            self.context if isinstance(self.context, list) else [self.context]
+        )
+        for context in context_items:
             
             # Lazy import KnowledgeBase to avoid heavy imports
             if hasattr(context, 'rag') and context.rag == True:
@@ -1057,6 +1081,17 @@ class Task(BaseModel):
             "_usage": self._usage.to_dict() if self._usage is not None else None,
             "_cached_result": self._cached_result,
             "_policy_blocked": self._policy_blocked,
+            "policy_apply_to_description": self.policy_apply_to_description,
+            "policy_apply_to_context": self.policy_apply_to_context,
+            "policy_apply_to_system_prompt": self.policy_apply_to_system_prompt,
+            "policy_apply_to_chat_history": self.policy_apply_to_chat_history,
+            "policy_apply_to_tool_outputs": self.policy_apply_to_tool_outputs,
+            "_saved_context_for_policy": self._saved_context_for_policy,
+            "_policy_originals": self._policy_originals,
+            "_policy_scope_tool_outputs": self._policy_scope_tool_outputs,
+            "_reliability_sub_agent_usage": self._reliability_sub_agent_usage,
+            "_upsonic_tool_config": self._upsonic_tool_config,
+            "_upsonic_is_tool": self._upsonic_is_tool,
         }
         
         # Handle status (RunStatus enum)
@@ -1237,7 +1272,10 @@ class Task(BaseModel):
             "guardrail_retries", "is_paused", "enable_cache", "cache_method",
             "cache_threshold", "cache_duration_minutes", "vector_search_top_k",
             "vector_search_alpha", "vector_search_fusion_method",
-            "vector_search_similarity_threshold", "vector_search_filter"
+            "vector_search_similarity_threshold", "vector_search_filter",
+            "policy_apply_to_description", "policy_apply_to_context",
+            "policy_apply_to_system_prompt", "policy_apply_to_chat_history",
+            "policy_apply_to_tool_outputs",
         }
         filtered_data = {k: v for k, v in data.items() if k in valid_fields}
         
@@ -1340,6 +1378,18 @@ class Task(BaseModel):
             task._cached_result = data["_cached_result"]
         if data.get("_policy_blocked") is not None:
             task._policy_blocked = data["_policy_blocked"]
+        if data.get("_saved_context_for_policy") is not None:
+            task._saved_context_for_policy = data["_saved_context_for_policy"]
+        if data.get("_policy_originals") is not None:
+            task._policy_originals = data["_policy_originals"]
+        if "_policy_scope_tool_outputs" in data:
+            task._policy_scope_tool_outputs = data["_policy_scope_tool_outputs"]
+        if data.get("_reliability_sub_agent_usage") is not None:
+            task._reliability_sub_agent_usage = data["_reliability_sub_agent_usage"]
+        if data.get("_upsonic_tool_config") is not None:
+            task._upsonic_tool_config = data["_upsonic_tool_config"]
+        if "_upsonic_is_tool" in data:
+            task._upsonic_is_tool = data["_upsonic_is_tool"]
 
         usage_data: Optional[Dict[str, Any]] = data.get("_usage")
         if usage_data is not None and isinstance(usage_data, dict):

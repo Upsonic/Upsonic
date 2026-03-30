@@ -133,6 +133,28 @@ PromptCompressor = None
 RetryMode = Literal["raise", "return_false"]
 
 
+def _merge_transformation_maps(
+    target: Dict[int, Dict[str, str]],
+    source: Dict[int, Dict[str, str]],
+) -> None:
+    """Merge *source* transformation map into *target* without overwriting existing keys.
+
+    New entries from *source* are appended with keys starting after the current
+    maximum key in *target*, preserving all original mappings.
+    """
+    if not source:
+        return
+    next_key: int = (max(target.keys()) + 1) if target else 1
+    for _old_key, entry in source.items():
+        anon_val: str = entry.get("anonymous", "")
+        already_exists: bool = any(
+            e.get("anonymous") == anon_val for e in target.values()
+        ) if anon_val else False
+        if not already_exists:
+            target[next_key] = entry
+            next_key += 1
+
+
 class Agent(BaseAgent):
     """
     A comprehensive, high-level AI Agent that integrates all framework components.
@@ -279,6 +301,12 @@ class Agent(BaseAgent):
         instrument: Union[bool, "TracingProvider", "InstrumentationSettings", None] = None,
         # PromptLayer integration
         promptlayer: Optional["PromptLayer"] = None,
+        # Policy scope flags (global defaults for which inputs user policies apply to)
+        user_policy_apply_to_description: bool = True,
+        user_policy_apply_to_context: bool = True,
+        user_policy_apply_to_system_prompt: bool = True,
+        user_policy_apply_to_chat_history: bool = True,
+        user_policy_apply_to_tool_outputs: bool = True,
     ):
         """
         Initialize the Agent with comprehensive configuration options.
@@ -391,6 +419,12 @@ class Agent(BaseAgent):
         self.work_experience = work_experience
         self._user_system_prompt: Optional[str] = system_prompt
         self._last_built_system_prompt: Optional[str] = None
+        
+        self.user_policy_apply_to_description: bool = user_policy_apply_to_description
+        self.user_policy_apply_to_context: bool = user_policy_apply_to_context
+        self.user_policy_apply_to_system_prompt: bool = user_policy_apply_to_system_prompt
+        self.user_policy_apply_to_chat_history: bool = user_policy_apply_to_chat_history
+        self.user_policy_apply_to_tool_outputs: bool = user_policy_apply_to_tool_outputs
         
         self.company_url = company_url
         self.company_objective = company_objective
@@ -2735,6 +2769,44 @@ class Agent(BaseAgent):
         if regular_tool_calls:
             tool_results = await self._execute_tool_calls(regular_tool_calls)
             
+            current_task = getattr(self, 'current_task', None)
+            if current_task and getattr(current_task, '_policy_scope_tool_outputs', False) and getattr(current_task, '_anonymization_map', None):
+                from upsonic.safety_engine.models import PolicyInput as _ToolPolicyInput
+                for tr in tool_results:
+                    if not hasattr(tr, 'content'):
+                        continue
+
+                    raw_text: Optional[str] = None
+                    dict_key: Optional[str] = None
+
+                    if isinstance(tr.content, str):
+                        raw_text = tr.content
+                    elif isinstance(tr.content, dict):
+                        for k, v in tr.content.items():
+                            if isinstance(v, str):
+                                raw_text = v
+                                dict_key = k
+                                break
+
+                    if raw_text is None:
+                        continue
+
+                    tool_policy_input = _ToolPolicyInput(
+                        input_texts=[raw_text],
+                        existing_transformation_map=current_task._anonymization_map,
+                    )
+                    tool_result = await self.user_policy_manager.execute_policies_async(
+                        tool_policy_input, check_type="Tool Output Check"
+                    )
+                    if tool_result.action_taken in ["REPLACE", "ANONYMIZE"]:
+                        sanitized: str = tool_result.final_output or raw_text
+                        if dict_key is not None:
+                            tr.content[dict_key] = sanitized
+                        else:
+                            tr.content = sanitized
+                        if tool_result.transformation_map:
+                            _merge_transformation_maps(current_task._anonymization_map, tool_result.transformation_map)
+
             if hasattr(self, '_tool_limit_reached') and self._tool_limit_reached:
                 tool_request = ModelRequest(parts=tool_results)
                 messages.append(response)
@@ -2956,78 +3028,116 @@ class Agent(BaseAgent):
             return None
     
     async def _apply_user_policy(
-        self, 
-        task: "Task", 
-        context: Optional[AgentRunOutput] = None
-    ) -> tuple[Optional["Task"], bool]:
+        self,
+        task: "Task",
+        context: AgentRunOutput,
+        system_prompt_manager: Optional[Any] = None,
+    ) -> tuple["Task", bool]:
         """
-        Apply user policy to task input.
-        
-        This method now uses PolicyManager to handle multiple policies.
-        When feedback is enabled, returns a helpful message to the user instead
-        of hard blocking, explaining what was wrong and how to correct it.
-        
+        Apply user policies to ALL built inputs: description, context, system
+        prompt, and chat history.  Each policy's own anonymize/replace logic is
+        respected via scoped execution in ``PolicyManager``.
+
         Args:
-            task: The task to apply policy to
-            context: Optional AgentRunOutput for event emission
-        
+            task: The current task (may be mutated with anonymized values).
+            context: The AgentRunOutput carrying chat_history and events.
+            system_prompt_manager: The pipeline's SystemPromptManager (if available).
+
         Returns:
-            tuple: (task, should_continue)
-                - task: The task (possibly modified with feedback response)
-                - should_continue: False if task should stop (blocked or feedback given)
+            (task, should_continue) – *should_continue* is False when the
+            pipeline must stop (blocked / feedback given).
         """
+        from upsonic.safety_engine.models import PolicyInput
+        from upsonic.agent.policy_manager import resolve_policy_scope, PolicyResult
+
+        policy_count: int = len(self.user_policy_manager.policies)
+
         if not self.user_policy_manager.has_policies() or not task.description:
-            # Emit ALLOW event if no policies
             if context and context.is_streaming:
                 from upsonic.utils.agent.events import ayield_policy_check_event
                 async for event in ayield_policy_check_event(
                     run_id=context.run_id or "",
                     policy_type='user_policy',
                     action='ALLOW',
-                    policies_checked=0
+                    policies_checked=policy_count,
+                    content_modified=False,
+                    blocked_reason=None,
                 ):
                     context.events.append(event)
             return task, True
-        
-        from upsonic.safety_engine.models import PolicyInput
-        
-        policy_input = PolicyInput(input_texts=[task.description])
-        result = await self.user_policy_manager.execute_policies_async(
-            policy_input,
-            check_type="User Input Check"
+
+        # ----- 1. Collect all available text inputs with source tracking -----
+        input_texts: List[str] = []
+        source_keys: List[tuple[str, Optional[int]]] = []
+
+        input_texts.append(task.description)
+        source_keys.append(("description", None))
+
+        if task.context_formatted:
+            input_texts.append(task.context_formatted)
+            source_keys.append(("context", None))
+
+        system_prompt_text: Optional[str] = None
+        if system_prompt_manager:
+            system_prompt_text = system_prompt_manager.get_system_prompt()
+            if system_prompt_text:
+                input_texts.append(system_prompt_text)
+                source_keys.append(("system_prompt", None))
+
+        chat_part_map: List[tuple[int, int]] = []
+        if context.chat_history:
+            for msg_idx, msg in enumerate(context.chat_history):
+                if hasattr(msg, 'parts'):
+                    for part_idx, part in enumerate(msg.parts):
+                        if hasattr(part, 'content') and isinstance(part.content, str):
+                            input_texts.append(part.content)
+                            source_keys.append(("chat_history", len(chat_part_map)))
+                            chat_part_map.append((msg_idx, part_idx))
+
+        if self.debug:
+            from upsonic.utils.printing import debug_log
+            debug_log(
+                f"[PolicySanitize] Collected {len(input_texts)} input(s) for user-policy scan "
+                f"(sources: {[sk[0] for sk in source_keys]})",
+                "Agent._apply_user_policy",
+            )
+
+        # ----- 2. Run policies (scoped) -----
+        result: PolicyResult = await self.user_policy_manager.execute_policies_async(
+            PolicyInput(input_texts=input_texts),
+            check_type="User Input Check",
+            source_keys=source_keys,
+            task=task,
+            agent=self,
         )
-        
-        # Get policies checked count
-        policies_checked = len(self.user_policy_manager.policies)
-        
-        # Map action_taken to event action
+
+        user_policy_usage = self.user_policy_manager.drain_accumulated_usage()
+        if user_policy_usage is not None:
+            usage = context._ensure_usage()
+            usage.incr(user_policy_usage)
+
+        # ----- 3. Emit streaming events -----
         action_mapping = {
-            "ALLOW": "ALLOW",
-            "BLOCK": "BLOCK",
-            "REPLACE": "REPLACE",
-            "ANONYMIZE": "ANONYMIZE",
-            "DISALLOWED_EXCEPTION": "RAISE ERROR"
+            "ALLOW": "ALLOW", "BLOCK": "BLOCK", "REPLACE": "REPLACE",
+            "ANONYMIZE": "ANONYMIZE", "DISALLOWED_EXCEPTION": "RAISE ERROR",
         }
-        event_action = action_mapping.get(result.action_taken, "ALLOW")
-        
-        # Emit PolicyCheckEvent
-        if context and context.is_streaming:
+        event_action: str = action_mapping.get(result.action_taken, "ALLOW")
+
+        if context.is_streaming:
             from upsonic.utils.agent.events import ayield_policy_check_event
-            content_modified = result.action_taken in ["REPLACE", "ANONYMIZE"]
-            blocked_reason = result.message if result.action_taken == "BLOCK" else None
-            
+            content_modified: bool = result.action_taken in ["REPLACE", "ANONYMIZE"]
+            blocked_reason: Optional[str] = result.message if result.action_taken == "BLOCK" else None
             async for event in ayield_policy_check_event(
                 run_id=context.run_id or "",
                 policy_type='user_policy',
                 action=event_action,
-                policies_checked=policies_checked,
+                policies_checked=policy_count,
                 content_modified=content_modified,
-                blocked_reason=blocked_reason
+                blocked_reason=blocked_reason,
             ):
                 context.events.append(event)
-        
-        # Emit PolicyFeedbackEvent if feedback was generated
-        if context and context.is_streaming and result.feedback_message:
+
+        if context.is_streaming and result.feedback_message:
             from upsonic.utils.agent.events import ayield_policy_feedback_event
             async for event in ayield_policy_feedback_event(
                 run_id=context.run_id or "",
@@ -3035,67 +3145,117 @@ class Agent(BaseAgent):
                 feedback_message=result.feedback_message,
                 retry_count=self.user_policy_manager._current_retry_count,
                 max_retries=self.user_policy_manager.feedback_loop_count,
-                violated_policy=result.violated_policy_name
+                violated_policy=result.violated_policy_name,
             ):
                 context.events.append(event)
-        
+
+        # ----- 4. Handle BLOCK / RAISE -----
         if result.should_block():
-            # Re-raise DisallowedOperation if it was caught by PolicyManager
-            # (unless feedback was generated - then we want to return the feedback)
             if result.disallowed_exception and not result.feedback_message:
                 raise result.disallowed_exception
-            
             task.task_end()
-            # Use feedback message if available (gives helpful guidance to user)
             task._response = result.get_final_message()
-            
-            # Print feedback info if debug mode and feedback was generated
+            context.output = task._response
+            task._policy_blocked = True
+
             if self.debug and result.feedback_message:
                 from upsonic.utils.printing import user_policy_feedback_returned, debug_log_level2
                 user_policy_feedback_returned(
                     policy_name=result.violated_policy_name or "Unknown Policy",
-                    feedback_message=result.feedback_message
+                    feedback_message=result.feedback_message,
                 )
-                # Level 2: Detailed policy feedback information
                 if self.debug_level >= 2:
                     debug_log_level2(
-                        "User policy feedback details",
-                        "Agent",
-                        debug=self.debug,
-                        debug_level=self.debug_level,
+                        "User policy feedback details", "Agent",
+                        debug=self.debug, debug_level=self.debug_level,
                         policy_name=result.violated_policy_name or "Unknown Policy",
                         feedback_message=result.feedback_message,
                         action_taken=result.action_taken,
-                        confidence=result.confidence if hasattr(result, 'confidence') else None,
-                        original_input=task.description[:200] if task.description else None
+                        original_input=task.description[:200] if task.description else None,
                     )
             return task, False
-        elif result.action_taken in ["REPLACE", "ANONYMIZE"]:
-            task.description = result.final_output or task.description
-            # Store transformation map for de-anonymization of LLM response
-            if result.transformation_map:
-                task._anonymization_map = result.transformation_map
-                # Add anonymization notice to the prompt - prepend for visibility
-                anonymization_notice = (
-                    "[PRIVACY MODE ACTIVE: Personal data has been anonymized with random placeholders. "
-                    "Answer the question directly using the placeholder values shown. "
-                    "Do NOT comment on, question, or mention the format of any data.]\n\n"
+
+        # ----- 5. Handle REPLACE / ANONYMIZE -----
+        if result.action_taken in ["REPLACE", "ANONYMIZE"]:
+            transformed_by_source: dict[str, Any] = {}
+            output_texts: List[str] = result.output_texts or []
+            for i, (source_type, _sub_idx) in enumerate(source_keys):
+                if i < len(output_texts):
+                    if source_type == "chat_history":
+                        transformed_by_source.setdefault("chat_history", [])
+                        transformed_by_source["chat_history"].append(output_texts[i])
+                    else:
+                        transformed_by_source[source_type] = output_texts[i]
+
+            actually_changed: list[str] = []
+            for stype in transformed_by_source:
+                idx_in_source = next((i for i, (st, _) in enumerate(source_keys) if st == stype), None)
+                if idx_in_source is not None and idx_in_source < len(input_texts):
+                    if transformed_by_source[stype] != input_texts[idx_in_source]:
+                        actually_changed.append(stype)
+                else:
+                    actually_changed.append(stype)
+
+            originals: dict[str, Any] = {}
+            if "description" in actually_changed:
+                originals["description"] = task.description
+            if "context" in actually_changed:
+                originals["context"] = task.context_formatted
+            if "system_prompt" in actually_changed:
+                originals["system_prompt"] = system_prompt_text
+            if "chat_history" in actually_changed and chat_part_map:
+                originals["chat_history_parts"] = [
+                    (m, p, context.chat_history[m].parts[p].content)
+                    for m, p in chat_part_map
+                ]
+            task._policy_originals = originals
+
+            anonymization_notice: str = (
+                "[PRIVACY MODE ACTIVE: Personal data has been anonymized with random placeholders. "
+                "Answer the question directly using the placeholder values shown. "
+                "Do NOT comment on, question, or mention the format of any data.]\n\n"
+            )
+
+            if "description" in actually_changed:
+                new_desc: str = transformed_by_source["description"]
+                task.description = anonymization_notice + new_desc
+                if hasattr(self, '_agent_run_output') and self._agent_run_output and self._agent_run_output.input:
+                    self._agent_run_output.input.user_prompt = task.description
+
+            if "context" in actually_changed:
+                task.context_formatted = transformed_by_source["context"]
+
+            if "system_prompt" in actually_changed and system_prompt_manager:
+                system_prompt_manager.system_prompt = transformed_by_source["system_prompt"]
+                self._last_built_system_prompt = transformed_by_source["system_prompt"]
+
+            if "chat_history" in transformed_by_source and chat_part_map:
+                for i, (msg_idx, part_idx) in enumerate(chat_part_map):
+                    if i < len(transformed_by_source["chat_history"]):
+                        context.chat_history[msg_idx].parts[part_idx].content = transformed_by_source["chat_history"][i]
+
+            task._anonymization_map = result.transformation_map
+            task._policy_scope_tool_outputs = any(
+                resolve_policy_scope(p, task, self).tool_outputs
+                for p in self.user_policy_manager.policies
+            )
+
+            if self.debug:
+                from upsonic.utils.printing import debug_log
+                map_size: int = len(result.transformation_map) if result.transformation_map else 0
+                debug_log(
+                    f"[PolicySanitize] Stored anonymization map with {map_size} entries for de-anonymization",
+                    "Agent._apply_user_policy",
                 )
-                task.description = anonymization_notice + task.description
-                if self.debug:
-                    from upsonic.utils.printing import debug_log, anonymization_debug_panel
-                    debug_log(
-                        f"Stored anonymization map with {len(result.transformation_map)} entries for de-anonymization",
-                        "Agent"
-                    )
-                    # Show detailed anonymization info - what LLM will see vs original
-                    anonymization_debug_panel(
-                        original_values=[entry.get("original", "") for entry in result.transformation_map.values()],
-                        anonymized_values=[entry.get("anonymous", "") for entry in result.transformation_map.values()],
-                        llm_input=task.description
-                    )
+                if result.transformation_map:
+                    for idx, entry in result.transformation_map.items():
+                        debug_log(
+                            f"  [{idx}] '{entry.get('original','')}' → '{entry.get('anonymous','')}'",
+                            "Agent._apply_user_policy",
+                        )
+
             return task, True
-        
+
         return task, True
     
     async def _execute_with_guardrail(self, task: "Task", memory_handler: Optional["MemoryManager"], state: Optional["State"] = None) -> "ModelResponse":
@@ -4475,15 +4635,15 @@ class Agent(BaseAgent):
             InitializationStep(),          # 0
             StorageConnectionStep(),       # 1
             CacheCheckStep(),              # 2
-            UserPolicyStep(),              # 3
-            LLMManagerStep(),              # 4
-            ModelSelectionStep(),          # 5
-            ToolSetupStep(),               # 6
-            MemoryPrepareStep(),           # 7  <-- Load memory (history, profile, metadata)
-            SystemPromptBuildStep(),       # 8  <-- Build system prompt
-            ContextBuildStep(),            # 9  <-- Build task context (KB/RAG)
-            UserInputBuildStep(),          # 10 <-- Build user input (prompt + context + attachments)
-            ChatHistoryStep(),             # 11 <-- Load chat history + mark run boundary
+            LLMManagerStep(),              # 3
+            ModelSelectionStep(),          # 4
+            ToolSetupStep(),               # 5
+            MemoryPrepareStep(),           # 6  <-- Load memory (history, profile, metadata)
+            SystemPromptBuildStep(),       # 7  <-- Build system prompt
+            ContextBuildStep(),            # 8  <-- Build task context (KB/RAG)
+            ChatHistoryStep(),             # 9  <-- Load chat history + mark run boundary
+            UserPolicyStep(),              # 10 <-- Apply user policy BEFORE build_input
+            UserInputBuildStep(),          # 11 <-- Build user input (prompt + context + attachments)
             MessageAssemblyStep(),         # 12 <-- Assemble ModelRequest + apply middleware
             CallManagerSetupStep(),        # 13 <-- Create and register CallManager
             ModelExecutionStep(),          # 14 <-- External tool resumes here
@@ -4549,15 +4709,15 @@ class Agent(BaseAgent):
             InitializationStep(),              # 0
             StorageConnectionStep(),           # 1
             CacheCheckStep(),                  # 2
-            UserPolicyStep(),                  # 3
-            LLMManagerStep(),                  # 4
-            ModelSelectionStep(),              # 5
-            ToolSetupStep(),                   # 6
-            MemoryPrepareStep(),               # 7  <-- Load memory
-            SystemPromptBuildStep(),           # 8  <-- Build system prompt
-            ContextBuildStep(),                # 9  <-- Build task context (KB/RAG)
-            UserInputBuildStep(),              # 10 <-- Build user input
-            ChatHistoryStep(),                 # 11 <-- Load chat history + mark run boundary
+            LLMManagerStep(),                  # 3
+            ModelSelectionStep(),              # 4
+            ToolSetupStep(),                   # 5
+            MemoryPrepareStep(),               # 6  <-- Load memory
+            SystemPromptBuildStep(),           # 7  <-- Build system prompt
+            ContextBuildStep(),                # 8  <-- Build task context (KB/RAG)
+            ChatHistoryStep(),                 # 9  <-- Load chat history + mark run boundary
+            UserPolicyStep(),                  # 10 <-- Apply user policy BEFORE build_input
+            UserInputBuildStep(),              # 11 <-- Build user input
             MessageAssemblyStep(),             # 12 <-- Assemble ModelRequest + apply middleware
             CallManagerSetupStep(),            # 13 <-- Create and register CallManager
             StreamModelExecutionStep(),        # 14 <-- Streaming model execution
