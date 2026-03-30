@@ -263,6 +263,9 @@ slack-interface = [
     "fastapi>=0.128.0",
     "slack-sdk>=3.39.0",
 ]
+mail-interface = [
+    "fastapi>=0.128.0",
+]
 discord-interface = [
     "fastapi>=0.128.0",
     "websockets>=12.0",

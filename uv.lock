@@ -8947,6 +8947,9 @@ loaders = [
     { name = "rapidocr-onnxruntime", marker = "python_full_version < '3.13'" },
     { name = "requests" },
 ]
+mail-interface = [
+    { name = "fastapi" },
+]
 markdown-loader = [
     { name = "markdown-it-py" },
     { name = "python-frontmatter" },
@@ -9154,6 +9157,7 @@ requires-dist = [
     { name = "faiss-cpu", marker = "extra == 'vectordb'", specifier = ">=1.12.0" },
     { name = "fastapi", marker = "extra == 'discord-interface'", specifier = ">=0.128.0" },
     { name = "fastapi", marker = "extra == 'gmail-interface'" },
+    { name = "fastapi", marker = "extra == 'mail-interface'", specifier = ">=0.128.0" },
     { name = "fastapi", marker = "extra == 'slack-interface'", specifier = ">=0.128.0" },
     { name = "fastapi", marker = "extra == 'web'" },
     { name = "fastembed", marker = "python_full_version < '3.14' and extra == 'embeddings'", specifier = ">=0.7.3" },
@@ -9287,7 +9291,7 @@ requires-dist = [
     { name = "xai-sdk", marker = "extra == 'models'", specifier = ">=1.4.0" },
     { name = "yfinance", marker = "extra == 'tools'", specifier = ">=0.2.66" },
 ]
-provides-extras = ["chroma", "qdrant", "milvus", "weaviate", "pinecone", "faiss", "pgvector", "supermemory", "vectordb", "sqlite-storage", "redis-storage", "postgres-storage", "mongo-storage", "mem0-storage", "storage", "models", "embeddings", "csv-loader", "docling-loader", "docx-loader", "html-loader", "json-loader", "markdown-loader", "pdf-loader", "pdfplumber-loader", "pymupdf-loader", "text-loader", "xml-loader", "yaml-loader", "loaders", "tools", "web", "ocr", "custom-tools", "apify-tool", "crawlee-browser", "gmail-interface", "safety-engine", "slack-interface", "discord-interface", "otel", "langfuse", "gmail-tool"]
+provides-extras = ["chroma", "qdrant", "milvus", "weaviate", "pinecone", "faiss", "pgvector", "supermemory", "vectordb", "sqlite-storage", "redis-storage", "postgres-storage", "mongo-storage", "mem0-storage", "storage", "models", "embeddings", "csv-loader", "docling-loader", "docx-loader", "html-loader", "json-loader", "markdown-loader", "pdf-loader", "pdfplumber-loader", "pymupdf-loader", "text-loader", "xml-loader", "yaml-loader", "loaders", "tools", "web", "ocr", "custom-tools", "apify-tool", "crawlee-browser", "gmail-interface", "safety-engine", "slack-interface", "mail-interface", "discord-interface", "otel", "langfuse", "gmail-tool"]
 
 [package.metadata.requires-dev]
 dev = [
