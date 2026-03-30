@@ -38,7 +38,7 @@ Usage:
 import random
 import string
 import re
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 
 
@@ -254,7 +254,6 @@ def deanonymize_content(
     
     result = content
     
-    # Sort by anonymous value length (longest first) to avoid partial replacements
     sorted_entries = sorted(
         transformation_map.values(),
         key=lambda x: len(x.get("anonymous", "")),
@@ -262,11 +261,10 @@ def deanonymize_content(
     )
     
     for entry in sorted_entries:
-        anonymous = entry.get("anonymous", "")
-        original = entry.get("original", "")
+        anonymous: str = entry.get("anonymous", "")
+        original: str = entry.get("original", "")
         
         if anonymous and original:
-            # Case-insensitive replacement
             pattern = re.compile(re.escape(anonymous), re.IGNORECASE)
             result = pattern.sub(original, result)
     
@@ -288,6 +286,63 @@ def deanonymize_contents(
         List of contents with original values restored
     """
     return [deanonymize_content(content, transformation_map) for content in contents]
+
+
+def deanonymize_mapping_content(
+    content: Any,
+    transformation_map: Dict[int, Dict[str, str]],
+) -> Any:
+    """Recursively de-anonymize values inside dicts, lists, and strings.
+
+    Handles ToolReturnPart.content which can be dict, list, or str.
+    """
+    if isinstance(content, str):
+        return deanonymize_content(content, transformation_map)
+    if isinstance(content, dict):
+        return {
+            k: deanonymize_mapping_content(v, transformation_map)
+            for k, v in content.items()
+        }
+    if isinstance(content, list):
+        return [deanonymize_mapping_content(item, transformation_map) for item in content]
+    return content
+
+
+
+class StreamDeanonymizer:
+    """Buffer-based streaming de-anonymizer that yields safe (fully de-anonymized) text."""
+
+    def __init__(self, transformation_map: Dict[int, Dict[str, str]]):
+        self._map: Dict[int, Dict[str, str]] = transformation_map
+        self._anon_values: List[str] = [
+            e["anonymous"] for e in transformation_map.values() if e.get("anonymous")
+        ]
+        self._buffer: str = ""
+
+    def process_token(self, token: str) -> str:
+        self._buffer += token
+
+        self._buffer = deanonymize_content(self._buffer, self._map)
+
+        safe_pos: int = len(self._buffer)
+        for anon in self._anon_values:
+            max_suffix: int = min(len(anon) - 1, len(self._buffer))
+            for suffix_len in range(max_suffix, 0, -1):
+                suffix: str = self._buffer[-suffix_len:]
+                if anon.lower().startswith(suffix.lower()):
+                    safe_pos = min(safe_pos, len(self._buffer) - suffix_len)
+                    break
+
+        safe_text: str = self._buffer[:safe_pos]
+        self._buffer = self._buffer[safe_pos:]
+        return safe_text
+
+    def flush(self) -> str:
+        remaining: str = self._buffer
+        self._buffer = ""
+        if remaining:
+            return deanonymize_content(remaining, self._map)
+        return ""
 
 
 # Convenience function for ActionBase integration

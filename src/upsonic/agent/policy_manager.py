@@ -8,7 +8,8 @@ Supports feedback loop mechanism where policies can provide constructive
 feedback before applying blocking actions.
 """
 
-from typing import List, Optional, Union, TYPE_CHECKING
+from dataclasses import dataclass
+from typing import List, Optional, Tuple, Union, TYPE_CHECKING
 from upsonic.safety_engine.base import Policy
 from upsonic.safety_engine.models import PolicyInput, RuleOutput
 from upsonic.safety_engine.exceptions import DisallowedOperation
@@ -16,6 +17,42 @@ from upsonic.safety_engine.exceptions import DisallowedOperation
 if TYPE_CHECKING:
     from upsonic.safety_engine.llm.upsonic_llm import UpsonicLLMProvider
     from upsonic.usage import RunUsage
+    from upsonic.tasks.tasks import Task
+    from upsonic.agent.agent import Agent
+
+
+@dataclass
+class PolicyScope:
+    """Resolved scope flags for a single policy execution."""
+    description: bool
+    context: bool
+    system_prompt: bool
+    chat_history: bool
+    tool_outputs: bool
+
+
+def resolve_policy_scope(
+    policy: Policy,
+    task: "Task",
+    agent: "Agent",
+) -> PolicyScope:
+    """Resolve scope flags with Policy > Task > Agent priority."""
+    def _resolve(policy_attr: str, task_attr: str, agent_attr: str) -> bool:
+        val = getattr(policy, policy_attr, None)
+        if val is not None:
+            return val
+        val = getattr(task, task_attr, None)
+        if val is not None:
+            return val
+        return getattr(agent, agent_attr, True)
+
+    return PolicyScope(
+        description=_resolve("apply_to_description", "policy_apply_to_description", "user_policy_apply_to_description"),
+        context=_resolve("apply_to_context", "policy_apply_to_context", "user_policy_apply_to_context"),
+        system_prompt=_resolve("apply_to_system_prompt", "policy_apply_to_system_prompt", "user_policy_apply_to_system_prompt"),
+        chat_history=_resolve("apply_to_chat_history", "policy_apply_to_chat_history", "user_policy_apply_to_chat_history"),
+        tool_outputs=_resolve("apply_to_tool_outputs", "policy_apply_to_tool_outputs", "user_policy_apply_to_tool_outputs"),
+    )
 
 
 class PolicyResult:
@@ -44,6 +81,9 @@ class PolicyResult:
         # Transformation map for reversible anonymization
         # Maps anonymous values back to originals: {idx: {"original": "...", "anonymous": "...", "pii_type": "..."}}
         self.transformation_map: Optional[dict] = None
+        
+        self.output_texts: Optional[List[str]] = None
+        self.source_keys: Optional[List[Tuple[str, Optional[int]]]] = None
     
     def should_block(self) -> bool:
         """Check if content should be blocked.
@@ -158,7 +198,10 @@ class PolicyManager:
     async def execute_policies_async(
         self,
         policy_input: PolicyInput,
-        check_type: str = "Policy Check"
+        check_type: str = "Policy Check",
+        source_keys: Optional[List[Tuple[str, Optional[int]]]] = None,
+        task: Optional["Task"] = None,
+        agent: Optional["Agent"] = None,
     ) -> PolicyResult:
         """
         Execute all policies asynchronously and aggregate results.
@@ -182,24 +225,52 @@ class PolicyManager:
         if not self.has_policies():
             return result
         
-        # Current content being processed (may be transformed by policies)
-        current_texts = policy_input.input_texts or []
-        original_content = " ".join(current_texts) if current_texts else ""
+        scoped_mode: bool = task is not None and agent is not None and source_keys is not None
         
+        current_texts: List[str] = list(policy_input.input_texts or [])
+        original_content: str = " ".join(current_texts) if current_texts else ""
+        accumulated_map: Optional[dict] = (
+            dict(policy_input.existing_transformation_map)
+            if getattr(policy_input, 'existing_transformation_map', None)
+            else None
+        )
         for policy in self.policies:
             try:
-                # Create policy input with current (possibly transformed) texts
-                current_input = PolicyInput(
-                    input_texts=current_texts,
-                    input_images=policy_input.input_images,
-                    input_videos=policy_input.input_videos,
-                    input_audio=policy_input.input_audio,
-                    input_files=policy_input.input_files,
-                    extra_data=policy_input.extra_data
-                )
+                if scoped_mode:
+                    scope: PolicyScope = resolve_policy_scope(policy, task, agent)
+                    
+                    filtered_indices: List[int] = []
+                    filtered_texts: List[str] = []
+                    for idx, (source_type, _sub_idx) in enumerate(source_keys):
+                        if getattr(scope, source_type, True):
+                            filtered_indices.append(idx)
+                            filtered_texts.append(current_texts[idx])
+                    
+                    if not filtered_texts:
+                        continue
+                    
+                    per_policy_input = PolicyInput(
+                        input_texts=filtered_texts,
+                        existing_transformation_map=accumulated_map,
+                        input_images=policy_input.input_images,
+                        input_videos=policy_input.input_videos,
+                        input_audio=policy_input.input_audio,
+                        input_files=policy_input.input_files,
+                        extra_data=policy_input.extra_data,
+                    )
+                else:
+                    filtered_indices = None
+                    per_policy_input = PolicyInput(
+                        input_texts=current_texts,
+                        existing_transformation_map=accumulated_map,
+                        input_images=policy_input.input_images,
+                        input_videos=policy_input.input_videos,
+                        input_audio=policy_input.input_audio,
+                        input_files=policy_input.input_files,
+                        extra_data=policy_input.extra_data,
+                    )
                 
-                # Execute policy
-                rule_output, action_output, policy_output = await policy.execute_async(current_input)
+                rule_output, action_output, policy_output = await policy.execute_async(per_policy_input)
                 action_taken = policy_output.action_output.get("action_taken", "UNKNOWN") if policy_output.action_output else "UNKNOWN"
                 
                 # Store rule output for logging
@@ -233,11 +304,14 @@ class PolicyManager:
                     break
                 
                 elif action_taken in ["REPLACE", "ANONYMIZE"]:
-                    # Apply transformation - content continues to next policy
                     if policy_output.output_texts:
-                        current_texts = policy_output.output_texts
+                        if filtered_indices is not None:
+                            for i, full_idx in enumerate(filtered_indices):
+                                if i < len(policy_output.output_texts):
+                                    current_texts[full_idx] = policy_output.output_texts[i]
+                        else:
+                            current_texts = policy_output.output_texts
                     else:
-                        # If output_texts is missing, log warning but continue with current_texts
                         if self.debug:
                             from upsonic.utils.printing import warning_log
                             warning_log(
@@ -246,35 +320,22 @@ class PolicyManager:
                                 "PolicyManager"
                             )
                     
-                    # Keep track of most restrictive non-blocking action
                     if result.action_taken == "ALLOW":
                         result.action_taken = action_taken
                         result.original_content = original_content
                         result.violated_policy_name = policy.name
                         result.violation_reason = rule_output.details
                     
-                    # Store the transformed text - must use output_texts from policy if available
-                    if policy_output.output_texts and len(policy_output.output_texts) > 0:
-                        result.final_output = policy_output.output_texts[0]
-                        # Update current_texts for next policy in chain
-                        current_texts = policy_output.output_texts
-                    elif current_texts:
-                        # Fallback to current_texts if output_texts is missing
-                        result.final_output = current_texts[0]
-                    else:
-                        result.final_output = ""
+                    result.final_output = current_texts[0] if current_texts else ""
                     
-                    # Collect transformation_map for reversible anonymization
                     if policy_output.transformation_map:
                         if result.transformation_map is None:
                             result.transformation_map = {}
-                        # Merge transformation maps (renumber keys to avoid conflicts)
                         base_idx = len(result.transformation_map)
                         for key, value in policy_output.transformation_map.items():
                             result.transformation_map[base_idx + key] = value
+                        accumulated_map = dict(result.transformation_map)
                     
-                    # For REPLACE/ANONYMIZE, we consider this a "violation" that could benefit from feedback
-                    # However, we still apply the transformation - feedback is for agent to understand why
                     await self._generate_feedback_if_enabled(result, action_taken)
                 
             except DisallowedOperation as e:
@@ -315,7 +376,9 @@ class PolicyManager:
                     warning_log(f"Policy '{policy.name}' execution failed: {str(e)}", "PolicyManager")
                 continue
         
-        # Set final output if not blocked and transformations were applied
+        result.output_texts = current_texts
+        result.source_keys = source_keys
+        
         if not result.should_block() and result.action_taken in ["REPLACE", "ANONYMIZE"]:
             if not result.final_output and current_texts:
                 result.final_output = current_texts[0]

@@ -126,9 +126,21 @@ class DeepSeekOCREngine(OCRProvider):
                 feature_name="DeepSeek OCR provider (additional dependencies)"
             )
     
+    def _get_reader(self):
+        """Get or create the vLLM instance (thread-safe).
+
+        Returns the same object as ``_get_llm()`` — provided for
+        base-class contract compliance.
+        """
+        return self._get_llm()
+
     def _get_llm(self) -> LLM:
-        """Get or create vLLM instance."""
-        if self._llm is None:
+        """Get or create vLLM instance (thread-safe)."""
+        if self._llm is not None:
+            return self._llm
+        with self._reader_lock:
+            if self._llm is not None:
+                return self._llm
             if not _VLLM_AVAILABLE:
                 raise OCRProviderError(
                     "vLLM is not available. Please install vLLM: pip install vllm",

@@ -12,7 +12,8 @@ if TYPE_CHECKING:
     from .anonymization import (
         anonymize_content, anonymize_contents,
         deanonymize_content, deanonymize_contents,
-        Anonymizer, AnonymizationResult
+        Anonymizer, AnonymizationResult,
+        StreamDeanonymizer
     )
     from .policies import *
 
@@ -51,7 +52,8 @@ def _get_anonymization_classes():
     from .anonymization import (
         anonymize_content, anonymize_contents,
         deanonymize_content, deanonymize_contents,
-        Anonymizer, AnonymizationResult
+        Anonymizer, AnonymizationResult,
+        StreamDeanonymizer
     )
     
     return {
@@ -61,6 +63,7 @@ def _get_anonymization_classes():
         'deanonymize_contents': deanonymize_contents,
         'Anonymizer': Anonymizer,
         'AnonymizationResult': AnonymizationResult,
+        'StreamDeanonymizer': StreamDeanonymizer,
     }
 
 def _get_policy_classes():
@@ -443,6 +446,7 @@ __all__ = [
     "deanonymize_contents",
     "Anonymizer",
     "AnonymizationResult",
+    "StreamDeanonymizer",
     
     # Original policies
     "AdultContentBlockPolicy",

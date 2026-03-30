@@ -63,7 +63,11 @@ class ContextManager:
             previous_task_output_parts = []
             additional_parts = []
 
-            for item in self.task.context:
+            context_items: list[Any] = (
+                self.task.context if isinstance(self.task.context, list) else [self.task.context]
+            )
+
+            for item in context_items:
                 if isinstance(item, Task):  
                     task_parts.append(f"Task ID ({item.get_task_id()}): " + turn_task_to_string(item))
                 
@@ -258,7 +262,10 @@ class ContextManager:
         health_status = {}
         
         if self.task.context:
-            for item in self.task.context:
+            ctx_items: list[Any] = (
+                self.task.context if isinstance(self.task.context, list) else [self.task.context]
+            )
+            for item in ctx_items:
                 if isinstance(item, KnowledgeBase):
                     try:
                         health_status[item.name] = await item.health_check_async()
@@ -321,8 +328,11 @@ class ContextManager:
             from upsonic.knowledge_base.knowledge_base import KnowledgeBase
             from upsonic.tasks.tasks import Task
             from upsonic.context.sources import TaskOutputSource
-            
-            for item in self.task.context:
+
+            ctx_items_info: list[Any] = (
+                self.task.context if isinstance(self.task.context, list) else [self.task.context]
+            )
+            for item in ctx_items_info:
                 if isinstance(item, KnowledgeBase):
                     kb_info = {
                         "name": item.name,

@@ -83,17 +83,28 @@ class DeepSeekOllamaOCREngine(OCRProvider):
                 feature_name="DeepSeek Ollama OCR provider"
             )
     
+    def _get_reader(self):
+        """Get or create Ollama client instance (thread-safe).
+
+        Returns the same object as ``_get_client()``.
+        """
+        return self._get_client()
+
     def _get_client(self) -> Client:
-        """Get or create Ollama client instance."""
-        if self._client is None:
+        """Get or create Ollama client instance (thread-safe)."""
+        if self._client is not None:
+            return self._client
+        with self._reader_lock:
+            if self._client is not None:
+                return self._client
             if not _OLLAMA_AVAILABLE:
                 raise OCRProviderError(
                     "Ollama is not available. Please install ollama: pip install ollama",
                     error_code="OLLAMA_NOT_AVAILABLE"
                 )
-            
+
             from upsonic.utils.printing import ocr_language_warning, ocr_loading, ocr_initialized
-            
+
             unsupported_langs = [lang for lang in self.config.languages if lang not in self.supported_languages]
             if unsupported_langs:
                 ocr_language_warning(
@@ -101,7 +112,7 @@ class DeepSeekOllamaOCREngine(OCRProvider):
                     warning_langs=unsupported_langs,
                     best_supported=self.supported_languages
                 )
-            
+
             extra_info = {
                 "Model": self.model,
                 "Host": self.host,
@@ -109,7 +120,7 @@ class DeepSeekOllamaOCREngine(OCRProvider):
                 "Note": "Make sure Ollama is running and the model is pulled"
             }
             ocr_loading("DeepSeek-OCR (Ollama)", self.config.languages, extra_info)
-            
+
             try:
                 self._client = Client(host=self.host)
                 ocr_initialized("DeepSeek-OCR (Ollama)")

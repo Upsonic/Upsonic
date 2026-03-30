@@ -298,7 +298,7 @@ class CacheCheckStep(Step):
                 self._finalize_step_result(step_result, context)
             
 class UserPolicyStep(Step):
-    """Apply user policy to the task input."""
+    """Apply user policy to ALL built inputs (description, context, system prompt, chat history)."""
     
     @property
     def name(self) -> str:
@@ -309,111 +309,65 @@ class UserPolicyStep(Step):
         return "Apply user input safety policy"
     
     async def execute(self, context: "AgentRunOutput", task: "Task", agent: "Agent", model: "Model", step_number: int, pipeline_manager: Optional[Any] = None) -> StepResult:
-        """Apply user policy to task input."""
         from upsonic.run.cancel import raise_if_cancelled
         from upsonic.exceptions import RunCancelledException
-        
-        start_time = time.time()
+
+        start_time: float = time.time()
         step_result: Optional[StepResult] = None
-        
+
         try:
             if agent and hasattr(agent, 'run_id') and agent.run_id:
                 raise_if_cancelled(agent.run_id)
-            
-            policy_count = len(agent.user_policy_manager._policies) if hasattr(agent.user_policy_manager, '_policies') else 0
-            
-            if not agent.user_policy_manager.has_policies() or not task.description or task.is_paused:
-                if context.is_streaming:
-                    from upsonic.utils.agent.events import ayield_policy_check_event
-                    async for event in ayield_policy_check_event(
-                        run_id=context.run_id or "",
-                        policy_type='user_policy',
-                        action='ALLOW',
-                        policies_checked=policy_count,
-                        content_modified=False,
-                        blocked_reason=None
-                    ):
-                        context.events.append(event)
+
+            if task.is_paused or task._cached_result:
+                msg: str = "Skipped due to cache hit" if task._cached_result else "Task paused"
                 step_result = StepResult(
-                    name=self.name,
-                    step_number=step_number,
-                    status=StepStatus.COMPLETED,
-                    message="No user policy or task paused",
+                    name=self.name, step_number=step_number,
+                    status=StepStatus.COMPLETED, message=msg,
                     execution_time=time.time() - start_time,
                 )
                 return step_result
-            
-            if task._cached_result:
-                step_result = StepResult(
-                    name=self.name,
-                    step_number=step_number,
-                    status=StepStatus.COMPLETED,
-                    message="Skipped due to cache hit",
-                    execution_time=time.time() - start_time,
-                )
-                return step_result
-            
-            original_content = task.description
-            processed_task, should_continue = await agent._apply_user_policy(task, context)
-            
-            # Drain and aggregate sub-agent usage from user policy LLM calls
-            user_policy_usage = agent.user_policy_manager.drain_accumulated_usage()
-            if user_policy_usage is not None:
-                usage = context._ensure_usage()
-                usage.incr(user_policy_usage)
-            
-            # Update AgentRunInput.user_prompt if task.description was modified by policy
-            if hasattr(agent, '_agent_run_output') and agent._agent_run_output and agent._agent_run_output.input:
-                if processed_task.description != original_content:
-                    agent._agent_run_output.input.user_prompt = processed_task.description
-            
+
+            system_prompt_mgr: Optional[Any] = None
+            if pipeline_manager:
+                system_prompt_mgr = pipeline_manager.get_manager('system_prompt_manager')
+
+            _task, should_continue = await agent._apply_user_policy(
+                task=task,
+                context=context,
+                system_prompt_manager=system_prompt_mgr,
+            )
+
             if not should_continue:
-                context.output = processed_task._response
-                processed_task._policy_blocked = True
-                
                 step_result = StepResult(
-                    name=self.name,
-                    step_number=step_number,
+                    name=self.name, step_number=step_number,
                     status=StepStatus.COMPLETED,
                     message="User input blocked by policy",
                     execution_time=time.time() - start_time,
                 )
                 return step_result
-            elif processed_task.description != original_content:
-                step_result = StepResult(
-                    name=self.name,
-                    step_number=step_number,
-                    status=StepStatus.COMPLETED,
-                    message="User input modified by policy",
-                    execution_time=time.time() - start_time,
-                )
-                return step_result
-            
+
+            has_anon: bool = getattr(task, '_anonymization_map', None) is not None
             step_result = StepResult(
-                name=self.name,
-                step_number=step_number,
+                name=self.name, step_number=step_number,
                 status=StepStatus.COMPLETED,
-                message="User policies passed",
+                message="User input modified by policy" if has_anon else "User policies passed",
                 execution_time=time.time() - start_time,
             )
             return step_result
-            
+
         except RunCancelledException as e:
             step_result = StepResult(
-                name=self.name,
-                step_number=step_number,
-                status=StepStatus.CANCELLED,
-                message=str(e)[:500],
+                name=self.name, step_number=step_number,
+                status=StepStatus.CANCELLED, message=str(e)[:500],
                 execution_time=time.time() - start_time,
             )
             raise
-            
+
         except Exception as e:
             step_result = StepResult(
-                name=self.name,
-                step_number=step_number,
-                status=StepStatus.ERROR,
-                message=str(e)[:500],
+                name=self.name, step_number=step_number,
+                status=StepStatus.ERROR, message=str(e)[:500],
                 execution_time=time.time() - start_time,
             )
             raise
@@ -861,6 +815,17 @@ class MemoryPrepareStep(Step):
 
             await memory_manager.aprepare()
 
+            memory_enabled: bool = agent.memory is not None
+
+            if context.is_streaming:
+                from upsonic.utils.agent.events import ayield_memory_prepared_event
+                async for event in ayield_memory_prepared_event(
+                    run_id=context.run_id or "",
+                    memory_enabled=memory_enabled,
+                    history_count=0,
+                ):
+                    context.events.append(event)
+
             step_result = StepResult(
                 name=self.name,
                 step_number=step_number,
@@ -956,8 +921,22 @@ class SystemPromptBuildStep(Step):
                 pipeline_manager.set_manager('system_prompt_manager', system_prompt_manager)
 
             built_prompt: str = system_prompt_manager.get_system_prompt()
+
             if built_prompt:
                 agent._last_built_system_prompt = built_prompt
+
+            has_culture: bool = bool(getattr(system_prompt_manager, '_culture_prompt', None))
+            has_skills: bool = bool(getattr(system_prompt_manager, '_skills_prompt', None))
+
+            if context.is_streaming:
+                from upsonic.utils.agent.events import ayield_system_prompt_built_event
+                async for event in ayield_system_prompt_built_event(
+                    run_id=context.run_id or "",
+                    prompt_length=len(built_prompt) if built_prompt else 0,
+                    has_culture=has_culture,
+                    has_skills=has_skills,
+                ):
+                    context.events.append(event)
 
             step_result = StepResult(
                 name=self.name,
@@ -1051,6 +1030,19 @@ class ContextBuildStep(Step):
             await context_manager.aprepare(memory_handler=memory_manager)
 
             context_prompt: str = context_manager.get_context_prompt()
+
+            has_kb: bool = bool(getattr(context_manager, '_kb_context', None))
+            has_prior: bool = bool(getattr(context_manager, '_prior_output', None))
+
+            if context.is_streaming:
+                from upsonic.utils.agent.events import ayield_context_built_event
+                async for event in ayield_context_built_event(
+                    run_id=context.run_id or "",
+                    context_length=len(context_prompt) if context_prompt else 0,
+                    has_knowledge_base=has_kb,
+                    has_prior_outputs=has_prior,
+                ):
+                    context.events.append(event)
 
             step_result = StepResult(
                 name=self.name,
@@ -1147,6 +1139,25 @@ class UserInputBuildStep(Step):
                 task.context_formatted = None
 
             input_desc: str = "multipart" if isinstance(run_input.input, list) else "text"
+
+            has_images: bool = bool(getattr(run_input, 'images', None))
+            has_documents: bool = bool(getattr(run_input, 'documents', None))
+            input_length: int = 0
+            if isinstance(run_input.input, str):
+                input_length = len(run_input.input)
+            elif isinstance(run_input.input, list):
+                input_length = sum(len(str(p)) for p in run_input.input)
+
+            if context.is_streaming:
+                from upsonic.utils.agent.events import ayield_user_input_built_event
+                async for event in ayield_user_input_built_event(
+                    run_id=context.run_id or "",
+                    input_type=input_desc,
+                    has_images=has_images,
+                    has_documents=has_documents,
+                    input_length=input_length,
+                ):
+                    context.events.append(event)
 
             step_result = StepResult(
                 name=self.name,
@@ -1246,6 +1257,14 @@ class ChatHistoryStep(Step):
             context.start_new_run()
 
             historical_count: int = len(historical_messages)
+
+            if context.is_streaming:
+                from upsonic.utils.agent.events import ayield_chat_history_loaded_event
+                async for event in ayield_chat_history_loaded_event(
+                    run_id=context.run_id or "",
+                    history_count=historical_count,
+                ):
+                    context.events.append(event)
 
             step_result = StepResult(
                 name=self.name,
@@ -1895,33 +1914,6 @@ class ResponseProcessingStep(Step):
                             images.append(part.content)
                 if images:
                     context.images = images
-            
-            if task and hasattr(task, '_anonymization_map') and task._anonymization_map:
-                from upsonic.safety_engine.anonymization import deanonymize_content
-                
-                if context.output is not None:
-                    if isinstance(context.output, str):
-                        context.output = deanonymize_content(context.output, task._anonymization_map)
-                    elif hasattr(context.output, 'model_dump_json'):
-                        try:
-                            json_str = context.output.model_dump_json()
-                            deanonymized_json = deanonymize_content(json_str, task._anonymization_map)
-                            context.output = type(context.output).model_validate_json(deanonymized_json)
-                        except Exception:
-                            pass
-                
-                if hasattr(task, '_response') and task._response:
-                    if isinstance(task._response, str):
-                        task._response = deanonymize_content(task._response, task._anonymization_map)
-                
-                if agent.debug:
-                    from upsonic.utils.printing import debug_log
-                    debug_log(
-                        f"De-anonymized response using {len(task._anonymization_map)} mappings",
-                        "ResponseProcessingStep"
-                    )
-                
-                task._anonymization_map = None
             
             step_result = StepResult(
                 name=self.name,
@@ -3153,20 +3145,6 @@ class StreamModelExecutionStep(Step):
             # Extract output and update context
             output = agent._extract_output(task, context.response)
 
-            # De-anonymize if anonymization was applied by UserPolicyStep
-            if task._anonymization_map:
-                from upsonic.safety_engine.anonymization import deanonymize_content
-                if isinstance(output, str):
-                    output = deanonymize_content(output, task._anonymization_map)
-                elif hasattr(output, 'model_dump_json'):
-                    try:
-                        json_str = output.model_dump_json()
-                        deanonymized_json = deanonymize_content(json_str, task._anonymization_map)
-                        output = type(output).model_validate_json(deanonymized_json)
-                    except Exception:
-                        pass
-                task._anonymization_map = None
-
             task._response = output
             context.output = output
 
@@ -3223,13 +3201,16 @@ class StreamModelExecutionStep(Step):
             convert_llm_event_to_agent_event,
         )
         
-        # Check if we've reached tool call limit
         if context.tool_limit_reached:
             return
         
         run_id = context.run_id or ""
         
-        # Stream the model response
+        from upsonic.safety_engine.anonymization import StreamDeanonymizer as _StreamDeanonymizer
+        stream_deanonymizer: Optional[_StreamDeanonymizer] = None
+        if getattr(task, '_anonymization_map', None):
+            stream_deanonymizer = _StreamDeanonymizer(task._anonymization_map)
+        
         _stream_model_start: float = time.time()
         async with model.request_stream(
             messages=context.chat_history,
@@ -3245,8 +3226,21 @@ class StreamModelExecutionStep(Step):
                         if first_token_time is None:
                             first_token_time = time.time()
                             context.set_usage_time_to_first_token()
-                    
-                    yield agent_event
+                        
+                        if stream_deanonymizer:
+                            deanon_delta: str = stream_deanonymizer.process_token(agent_event.content)
+                            if deanon_delta:
+                                yield TextDeltaEvent(run_id=run_id, content=deanon_delta)
+                        else:
+                            yield agent_event
+                    else:
+                        yield agent_event
+        
+        if stream_deanonymizer:
+            remaining: str = stream_deanonymizer.flush()
+            if remaining:
+                yield TextDeltaEvent(run_id=run_id, content=remaining)
+        
         _stream_model_elapsed: float = time.time() - _stream_model_start
         context.add_model_execution_time(_stream_model_elapsed)
         
@@ -3294,6 +3288,44 @@ class StreamModelExecutionStep(Step):
             # so we must NOT add the elapsed time again here.
             tool_results = await agent._execute_tool_calls(tool_calls)
             context.tool_call_count = getattr(context, 'tool_call_count', 0) + len(tool_calls)
+
+            if getattr(task, '_policy_scope_tool_outputs', False) and getattr(task, '_anonymization_map', None):
+                from upsonic.safety_engine.models import PolicyInput as _ToolPolicyInput
+                for tr in tool_results:
+                    if not hasattr(tr, 'content'):
+                        continue
+
+                    raw_text: Optional[str] = None
+                    dict_key: Optional[str] = None
+
+                    if isinstance(tr.content, str):
+                        raw_text = tr.content
+                    elif isinstance(tr.content, dict):
+                        for k, v in tr.content.items():
+                            if isinstance(v, str):
+                                raw_text = v
+                                dict_key = k
+                                break
+
+                    if raw_text is None:
+                        continue
+
+                    tool_policy_input = _ToolPolicyInput(
+                        input_texts=[raw_text],
+                        existing_transformation_map=task._anonymization_map,
+                    )
+                    tool_result = await agent.user_policy_manager.execute_policies_async(
+                        tool_policy_input, check_type="Tool Output Check"
+                    )
+                    if tool_result.action_taken in ["REPLACE", "ANONYMIZE"]:
+                        sanitized: str = tool_result.final_output or raw_text
+                        if dict_key is not None:
+                            tr.content[dict_key] = sanitized
+                        else:
+                            tr.content = sanitized
+                        if tool_result.transformation_map:
+                            from upsonic.agent.agent import _merge_transformation_maps
+                            _merge_transformation_maps(task._anonymization_map, tool_result.transformation_map)
 
             # Emit tool result events
             for tc, result in zip(tool_calls, tool_results):
@@ -3595,7 +3627,6 @@ class StreamFinalizationStep(Step):
             if context.output is None and task:
                 context.output = task.response
             
-            # Determine output type
             output_type = 'text'
             if task._cached_result:
                 output_type = 'cached'
@@ -3603,6 +3634,77 @@ class StreamFinalizationStep(Step):
                 output_type = 'blocked'
             elif context.output and not isinstance(context.output, str):
                 output_type = 'structured'
+
+            if getattr(task, '_anonymization_map', None):
+                from upsonic.safety_engine.anonymization import deanonymize_content as _deanon
+
+                if context.output is not None:
+                    if isinstance(context.output, str):
+                        context.output = _deanon(context.output, task._anonymization_map)
+                    elif hasattr(context.output, 'model_dump_json'):
+                        try:
+                            json_str: str = context.output.model_dump_json()
+                            deanon_json: str = _deanon(json_str, task._anonymization_map)
+                            context.output = type(context.output).model_validate_json(deanon_json)
+                        except Exception:
+                            pass
+
+                if hasattr(task, '_response') and task._response:
+                    if isinstance(task._response, str):
+                        task._response = _deanon(task._response, task._anonymization_map)
+                    elif hasattr(task._response, 'model_dump_json'):
+                        try:
+                            json_str = task._response.model_dump_json()
+                            deanon_json = _deanon(json_str, task._anonymization_map)
+                            task._response = type(task._response).model_validate_json(deanon_json)
+                        except Exception:
+                            pass
+
+                originals = getattr(task, '_policy_originals', None)
+                if originals:
+                    if "description" in originals:
+                        task.description = originals["description"]
+                        if hasattr(agent, '_agent_run_output') and agent._agent_run_output and agent._agent_run_output.input:
+                            agent._agent_run_output.input.user_prompt = originals["description"]
+                    if "context" in originals:
+                        task.context_formatted = originals["context"]
+                    if "system_prompt" in originals:
+                        agent._last_built_system_prompt = originals["system_prompt"]
+                    if originals.get("chat_history_parts") and context.chat_history:
+                        for msg_idx, part_idx, original_content in originals["chat_history_parts"]:
+                            if msg_idx < len(context.chat_history):
+                                msg = context.chat_history[msg_idx]
+                                if hasattr(msg, 'parts') and part_idx < len(msg.parts):
+                                    msg.parts[part_idx].content = original_content
+
+                _PRIVACY_NOTICE_PREFIX: str = (
+                    "[PRIVACY MODE ACTIVE: Personal data has been anonymized with random placeholders. "
+                    "Answer the question directly using the placeholder values shown. "
+                    "Do NOT comment on, question, or mention the format of any data.]\n\n"
+                )
+                if context.chat_history and task._anonymization_map:
+                    from upsonic.safety_engine.anonymization import deanonymize_mapping_content as _deanon_any
+                    for _chi, msg in enumerate(context.chat_history):
+                        if not hasattr(msg, 'parts'):
+                            continue
+                        for _chpi, part in enumerate(msg.parts):
+                            raw_content = getattr(part, 'content', None)
+                            if isinstance(raw_content, str):
+                                if raw_content.startswith(_PRIVACY_NOTICE_PREFIX):
+                                    raw_content = raw_content[len(_PRIVACY_NOTICE_PREFIX):]
+                                part.content = _deanon(raw_content, task._anonymization_map)
+                            elif isinstance(raw_content, (dict, list)):
+                                part.content = _deanon_any(raw_content, task._anonymization_map)
+
+                            raw_args = getattr(part, 'args', None)
+                            if isinstance(raw_args, str):
+                                part.args = _deanon(raw_args, task._anonymization_map)
+                            elif isinstance(raw_args, dict):
+                                part.args = _deanon_any(raw_args, task._anonymization_map)
+
+                task._anonymization_map = None
+                task._policy_originals = None
+                task._policy_scope_tool_outputs = False
 
             if context.is_streaming:
                 output_preview = str(context.output)[:100] if context.output else None
@@ -3684,7 +3786,78 @@ class FinalizationStep(Step):
                 output_type = 'blocked'
             elif context.output and not isinstance(context.output, str):
                 output_type = 'structured'
-            
+
+            if getattr(task, '_anonymization_map', None):
+                from upsonic.safety_engine.anonymization import deanonymize_content as _deanon
+
+                if context.output is not None:
+                    if isinstance(context.output, str):
+                        context.output = _deanon(context.output, task._anonymization_map)
+                    elif hasattr(context.output, 'model_dump_json'):
+                        try:
+                            json_str: str = context.output.model_dump_json()
+                            deanon_json: str = _deanon(json_str, task._anonymization_map)
+                            context.output = type(context.output).model_validate_json(deanon_json)
+                        except Exception:
+                            pass
+
+                if hasattr(task, '_response') and task._response:
+                    if isinstance(task._response, str):
+                        task._response = _deanon(task._response, task._anonymization_map)
+                    elif hasattr(task._response, 'model_dump_json'):
+                        try:
+                            json_str = task._response.model_dump_json()
+                            deanon_json = _deanon(json_str, task._anonymization_map)
+                            task._response = type(task._response).model_validate_json(deanon_json)
+                        except Exception:
+                            pass
+
+                originals = getattr(task, '_policy_originals', None)
+                if originals:
+                    if "description" in originals:
+                        task.description = originals["description"]
+                        if hasattr(agent, '_agent_run_output') and agent._agent_run_output and agent._agent_run_output.input:
+                            agent._agent_run_output.input.user_prompt = originals["description"]
+                    if "context" in originals:
+                        task.context_formatted = originals["context"]
+                    if "system_prompt" in originals:
+                        agent._last_built_system_prompt = originals["system_prompt"]
+                    if originals.get("chat_history_parts") and context.chat_history:
+                        for msg_idx, part_idx, original_content in originals["chat_history_parts"]:
+                            if msg_idx < len(context.chat_history):
+                                msg = context.chat_history[msg_idx]
+                                if hasattr(msg, 'parts') and part_idx < len(msg.parts):
+                                    msg.parts[part_idx].content = original_content
+
+                _PRIVACY_NOTICE_PREFIX: str = (
+                    "[PRIVACY MODE ACTIVE: Personal data has been anonymized with random placeholders. "
+                    "Answer the question directly using the placeholder values shown. "
+                    "Do NOT comment on, question, or mention the format of any data.]\n\n"
+                )
+                if context.chat_history and task._anonymization_map:
+                    from upsonic.safety_engine.anonymization import deanonymize_mapping_content as _deanon_any
+                    for _chi, msg in enumerate(context.chat_history):
+                        if not hasattr(msg, 'parts'):
+                            continue
+                        for _chpi, part in enumerate(msg.parts):
+                            raw_content = getattr(part, 'content', None)
+                            if isinstance(raw_content, str):
+                                if raw_content.startswith(_PRIVACY_NOTICE_PREFIX):
+                                    raw_content = raw_content[len(_PRIVACY_NOTICE_PREFIX):]
+                                part.content = _deanon(raw_content, task._anonymization_map)
+                            elif isinstance(raw_content, (dict, list)):
+                                part.content = _deanon_any(raw_content, task._anonymization_map)
+
+                            raw_args = getattr(part, 'args', None)
+                            if isinstance(raw_args, str):
+                                part.args = _deanon(raw_args, task._anonymization_map)
+                            elif isinstance(raw_args, dict):
+                                part.args = _deanon_any(raw_args, task._anonymization_map)
+
+                task._anonymization_map = None
+                task._policy_originals = None
+                task._policy_scope_tool_outputs = False
+
             if context.is_streaming:
                 output_preview = str(context.output)[:100] if context.output else None
                 total_duration = task.duration if task.duration else None

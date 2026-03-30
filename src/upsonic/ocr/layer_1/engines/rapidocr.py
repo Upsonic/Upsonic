@@ -76,11 +76,15 @@ class RapidOCREngine(OCRProvider):
                 feature_name="RapidOCR provider"
             )
     
-    def _get_engine(self):
-        """Get or create RapidOCR engine instance."""
-        if self._engine is None:
+    def _get_reader(self):
+        """Get or create RapidOCR engine instance (thread-safe)."""
+        if self._engine is not None:
+            return self._engine
+        with self._reader_lock:
+            if self._engine is not None:
+                return self._engine
             from upsonic.utils.printing import ocr_language_not_supported, ocr_loading, ocr_initialized
-            
+
             unsupported_langs = [lang for lang in self.config.languages if lang not in self.supported_languages]
             if unsupported_langs:
                 ocr_language_not_supported(
@@ -93,11 +97,11 @@ class RapidOCREngine(OCRProvider):
                     f"Language(s) not supported by RapidOCR: {', '.join(unsupported_langs)}",
                     error_code="UNSUPPORTED_LANGUAGE"
                 )
-            
+
             extra_info = {
                 "Note": "Primarily supports Chinese and English"
             }
-            
+
             # Add model path info if custom models are provided
             if self.det_model_path or self.rec_model_path or self.cls_model_path:
                 model_info = []
@@ -108,13 +112,13 @@ class RapidOCREngine(OCRProvider):
                 if self.cls_model_path:
                     model_info.append(f"cls={self.cls_model_path}")
                 extra_info["Custom Models"] = ", ".join(model_info)
-            
+
             ocr_loading("RapidOCR", self.config.languages, extra_info)
-            
+
             try:
                 # Build engine initialization arguments
                 engine_kwargs = {}
-                
+
                 # Add custom model paths if provided
                 if self.det_model_path:
                     engine_kwargs['Det.model_path'] = self.det_model_path
@@ -122,7 +126,7 @@ class RapidOCREngine(OCRProvider):
                     engine_kwargs['CLs.model_path'] = self.rec_model_path
                 if self.cls_model_path:
                     engine_kwargs['Rec.model_path'] = self.cls_model_path
-                
+
                 self._engine = _RapidOCR(**engine_kwargs) if engine_kwargs else _RapidOCR()
                 ocr_initialized("RapidOCR")
             except Exception as e:
@@ -144,7 +148,7 @@ class RapidOCREngine(OCRProvider):
             OCRResult object
         """
         try:
-            engine = self._get_engine()
+            engine = self._get_reader()
             
             # Convert PIL Image to numpy array
             img_array = np.array(image)
