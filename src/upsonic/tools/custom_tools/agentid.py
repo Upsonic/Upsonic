@@ -30,6 +30,21 @@ _DEFAULT_BASE_URL = "https://getagentid.dev/api/v1"
 _TIMEOUT = 15  # seconds
 
 
+class AgentIDAuthError(RuntimeError):
+    """Raised when the API key is invalid, expired, or missing."""
+    pass
+
+
+class AgentIDRateLimitError(RuntimeError):
+    """Raised when the API rate limit is exceeded."""
+    pass
+
+
+class AgentIDNetworkError(RuntimeError):
+    """Raised when the API is unreachable."""
+    pass
+
+
 class AgentIDTools(ToolKit):
     """Identity verification toolkit backed by AgentID.
 
@@ -112,14 +127,26 @@ class AgentIDTools(ToolKit):
             Parsed JSON response dict.
         """
         headers = self._auth_headers() if auth else {}
-        resp = httpx.post(
-            f"{self.base_url}{path}",
-            json=body,
-            headers=headers,
-            timeout=_TIMEOUT,
-            follow_redirects=True,
-        )
+        try:
+            resp = httpx.post(
+                f"{self.base_url}{path}",
+                json=body,
+                headers=headers,
+                timeout=_TIMEOUT,
+                follow_redirects=True,
+            )
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            raise AgentIDNetworkError(f"AgentID unreachable: {exc}") from exc
         data = resp.json()
+        if resp.status_code == 401:
+            raise AgentIDAuthError(
+                "AgentID API key is invalid or expired. "
+                "Check AGENTID_API_KEY and ensure it is active."
+            )
+        if resp.status_code == 429:
+            raise AgentIDRateLimitError(
+                f"AgentID rate limit exceeded: {data.get('message', 'Too many requests')}"
+            )
         if resp.status_code >= 400:
             raise RuntimeError(
                 f"AgentID API error ({resp.status_code}): "
@@ -145,15 +172,27 @@ class AgentIDTools(ToolKit):
             Parsed JSON response dict.
         """
         headers = self._auth_headers() if auth else {}
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{self.base_url}{path}",
-                json=body,
-                headers=headers,
-                timeout=_TIMEOUT,
-                follow_redirects=True,
-            )
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f"{self.base_url}{path}",
+                    json=body,
+                    headers=headers,
+                    timeout=_TIMEOUT,
+                    follow_redirects=True,
+                )
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            raise AgentIDNetworkError(f"AgentID unreachable: {exc}") from exc
         data = resp.json()
+        if resp.status_code == 401:
+            raise AgentIDAuthError(
+                "AgentID API key is invalid or expired. "
+                "Check AGENTID_API_KEY and ensure it is active."
+            )
+        if resp.status_code == 429:
+            raise AgentIDRateLimitError(
+                f"AgentID rate limit exceeded: {data.get('message', 'Too many requests')}"
+            )
         if resp.status_code >= 400:
             raise RuntimeError(
                 f"AgentID API error ({resp.status_code}): "
@@ -175,13 +214,20 @@ class AgentIDTools(ToolKit):
         Returns:
             Parsed JSON response dict.
         """
-        resp = httpx.get(
-            f"{self.base_url}{path}",
-            params=params,
-            timeout=_TIMEOUT,
-            follow_redirects=True,
-        )
+        try:
+            resp = httpx.get(
+                f"{self.base_url}{path}",
+                params=params,
+                timeout=_TIMEOUT,
+                follow_redirects=True,
+            )
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            raise AgentIDNetworkError(f"AgentID unreachable: {exc}") from exc
         data = resp.json()
+        if resp.status_code == 429:
+            raise AgentIDRateLimitError(
+                f"AgentID rate limit exceeded: {data.get('message', 'Too many requests')}"
+            )
         if resp.status_code >= 400:
             raise RuntimeError(
                 f"AgentID API error ({resp.status_code}): "
@@ -203,14 +249,21 @@ class AgentIDTools(ToolKit):
         Returns:
             Parsed JSON response dict.
         """
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                f"{self.base_url}{path}",
-                params=params,
-                timeout=_TIMEOUT,
-                follow_redirects=True,
-            )
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    f"{self.base_url}{path}",
+                    params=params,
+                    timeout=_TIMEOUT,
+                    follow_redirects=True,
+                )
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            raise AgentIDNetworkError(f"AgentID unreachable: {exc}") from exc
         data = resp.json()
+        if resp.status_code == 429:
+            raise AgentIDRateLimitError(
+                f"AgentID rate limit exceeded: {data.get('message', 'Too many requests')}"
+            )
         if resp.status_code >= 400:
             raise RuntimeError(
                 f"AgentID API error ({resp.status_code}): "
