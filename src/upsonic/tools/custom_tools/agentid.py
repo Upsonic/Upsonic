@@ -95,6 +95,10 @@ class AgentIDTools(ToolKit):
             base_url or getenv("AGENTID_BASE_URL") or _DEFAULT_BASE_URL
         ).rstrip("/")
 
+        # Cached agent_id from registration -- avoids duplicate registrations
+        # for task-centric agents that spawn frequently.
+        self._registered_agent_id: Optional[str] = None
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -388,6 +392,97 @@ class AgentIDTools(ToolKit):
         except Exception as exc:
             error_log(f"AgentID register error: {exc}")
             return json.dumps({"error": str(exc)})
+
+    @tool
+    def register_or_verify(
+        self,
+        agent_id: str,
+        name: str = "",
+        description: str = "",
+        capabilities: Optional[str] = None,
+    ) -> str:
+        """Idempotent registration: verify first, register only if not found.
+
+        Safe for task-centric agents that spawn frequently. If the
+        ``agent_id`` already exists and is verified, returns the existing
+        identity. Otherwise registers a new agent.
+
+        Caches the result on the ToolKit instance so repeated calls
+        within the same agent lifecycle are a no-op.
+
+        Args:
+            agent_id: The AgentID identifier to check.
+            name: Human-readable name (used only if registering).
+            description: Short description (used only if registering).
+            capabilities: Comma-separated tags (used only if registering).
+
+        Returns:
+            A JSON string with agent identity (existing or newly created).
+        """
+        # Return cached result if we already registered in this lifecycle
+        if self._registered_agent_id == agent_id:
+            return self.verify_agent(agent_id)
+        try:
+            # Try to verify the existing identity first
+            result = self._post(
+                "/agents/verify",
+                {"agent_id": agent_id},
+                auth=False,
+            )
+            if result.get("verified"):
+                self._registered_agent_id = agent_id
+                return json.dumps(result, indent=2, default=str)
+        except Exception:
+            pass  # Not found or network error -- fall through to register
+
+        # Agent not found or not verified -- register a new one
+        reg_result = self.register_agent(
+            name=name or agent_id,
+            description=description,
+            capabilities=capabilities,
+        )
+        try:
+            data = json.loads(reg_result)
+            if "agent_id" in data:
+                self._registered_agent_id = data["agent_id"]
+        except (json.JSONDecodeError, TypeError):
+            pass
+        return reg_result
+
+    async def aregister_or_verify(
+        self,
+        agent_id: str,
+        name: str = "",
+        description: str = "",
+        capabilities: Optional[str] = None,
+    ) -> str:
+        """Async version of :meth:`register_or_verify`."""
+        if self._registered_agent_id == agent_id:
+            return await self.averify_agent(agent_id)
+        try:
+            result = await self._apost(
+                "/agents/verify",
+                {"agent_id": agent_id},
+                auth=False,
+            )
+            if result.get("verified"):
+                self._registered_agent_id = agent_id
+                return json.dumps(result, indent=2, default=str)
+        except Exception:
+            pass
+
+        reg_result = await self.aregister_agent(
+            name=name or agent_id,
+            description=description,
+            capabilities=capabilities,
+        )
+        try:
+            data = json.loads(reg_result)
+            if "agent_id" in data:
+                self._registered_agent_id = data["agent_id"]
+        except (json.JSONDecodeError, TypeError):
+            pass
+        return reg_result
 
     @tool
     def discover_agents(
