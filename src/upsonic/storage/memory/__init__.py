@@ -5,6 +5,7 @@ This module provides memory orchestration for session and user memory operations
 Key Components:
     - Memory: Main orchestrator with runtime session type selection
     - SessionMemoryFactory: Factory for creating session memory instances
+    - BaseMemoryStrategy: Shared base for all memory strategy types
     - BaseSessionMemory: Abstract base for session memory implementations
     - AgentSessionMemory: Session memory for AgentSession
     - BaseUserMemory: Abstract base for user memory implementations
@@ -19,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .memory import Memory
     from .factory import SessionMemoryFactory
+    from .strategy.base import BaseMemoryStrategy
     from .session.base import BaseSessionMemory, PreparedSessionInputs
     from .session.agent import AgentSessionMemory
     from .user.base import BaseUserMemory
@@ -36,6 +38,10 @@ def __getattr__(name: str) -> Any:
     if name == "SessionMemoryFactory":
         from .factory import SessionMemoryFactory
         return SessionMemoryFactory
+    
+    if name == "BaseMemoryStrategy":
+        from .strategy.base import BaseMemoryStrategy
+        return BaseMemoryStrategy
     
     if name == "BaseSessionMemory":
         from .session.base import BaseSessionMemory
@@ -74,6 +80,7 @@ def __getattr__(name: str) -> Any:
 __all__ = [
     "Memory",
     "SessionMemoryFactory",
+    "BaseMemoryStrategy",
     "BaseSessionMemory",
     "PreparedSessionInputs",
     "AgentSessionMemory",

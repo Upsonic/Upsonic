@@ -99,10 +99,14 @@ class Chat:
         agent: "Agent",
         *,
         storage: Optional[Storage] = None,
-        # Memory configuration
+        # Memory configuration (save flags)
         full_session_memory: bool = True,
         summary_memory: bool = False,
         user_analysis_memory: bool = False,
+        # Memory configuration (load flags)
+        load_full_session_memory: bool = True,
+        load_summary_memory: Optional[bool] = None,
+        load_user_analysis_memory: Optional[bool] = None,
         user_profile_schema: Optional[type] = None,
         dynamic_user_profile: bool = False,
         num_last_messages: Optional[int] = None,
@@ -170,6 +174,9 @@ class Chat:
             full_session_memory=full_session_memory,
             summary_memory=summary_memory,
             user_analysis_memory=user_analysis_memory,
+            load_full_session_memory=load_full_session_memory,
+            load_summary_memory=load_summary_memory,
+            load_user_analysis_memory=load_user_analysis_memory,
             user_profile_schema=user_profile_schema,
             dynamic_user_profile=dynamic_user_profile,
             num_last_messages=num_last_messages,

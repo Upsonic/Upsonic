@@ -8,7 +8,6 @@ import json
 import os
 import shutil
 import weakref
-from contextlib import AsyncExitStack
 from dataclasses import asdict, dataclass
 from datetime import timedelta
 from shlex import split as shlex_split
@@ -17,6 +16,7 @@ from typing import Any, Dict, List, Literal, Optional, Type, Union
 from urllib.parse import urlparse
 from uuid import uuid4
 
+import httpx
 from mcp import types as mcp_types
 from mcp.client.session import ClientSession
 from mcp.client.sse import sse_client
@@ -26,7 +26,7 @@ from upsonic.tools.base import Tool, ToolMetadata
 
 # Try to import streamable HTTP client (may not be available in all MCP versions)
 try:
-    from mcp.client.streamable_http import streamablehttp_client
+    from mcp.client.streamable_http import streamable_http_client
     HAS_STREAMABLE_HTTP = True
 except ImportError:
     HAS_STREAMABLE_HTTP = False
@@ -156,13 +156,36 @@ class StreamableHTTPClientParams:
     timeout: Optional[timedelta] = None
     sse_read_timeout: Optional[timedelta] = None
     terminate_on_close: Optional[bool] = None
+    auth: Optional[Any] = None
     
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Set default timeouts."""
         if self.timeout is None:
             self.timeout = timedelta(seconds=30)
         if self.sse_read_timeout is None:
             self.sse_read_timeout = timedelta(seconds=60 * 5)
+
+    def build_http_client(self) -> "httpx.AsyncClient":
+        """Build an httpx.AsyncClient configured with headers, timeout, and auth."""
+
+        kwargs: Dict[str, Any] = {}
+        if self.headers:
+            kwargs["headers"] = self.headers
+        if self.timeout:
+            kwargs["timeout"] = httpx.Timeout(self.timeout.total_seconds())
+        if self.auth:
+            kwargs["auth"] = self.auth
+        return httpx.AsyncClient(**kwargs)
+
+    def to_connect_kwargs(self) -> Dict[str, Any]:
+        """Build kwargs for ``streamable_http_client()``."""
+        result: Dict[str, Any] = {
+            "url": self.url,
+            "http_client": self.build_http_client(),
+        }
+        if self.terminate_on_close is not None:
+            result["terminate_on_close"] = self.terminate_on_close
+        return result
 
 
 
@@ -427,7 +450,7 @@ class MCPHandler:
                     feature_name="MCP streamable HTTP"
                 )
             if isinstance(self.server_params, StreamableHTTPClientParams):
-                return streamablehttp_client(**asdict(self.server_params))
+                return streamable_http_client(**self.server_params.to_connect_kwargs())
             else:
                 raise ValueError("Streamable HTTP requires StreamableHTTPClientParams")
             
@@ -463,12 +486,15 @@ class MCPHandler:
                 client_timeout = min(self.timeout_seconds, sse_params.get("timeout", self.timeout_seconds))
                 
             elif self.connection_type == 'streamable-http':
-                http_params = asdict(self.server_params) if isinstance(self.server_params, StreamableHTTPClientParams) else {}
-                self._context = streamablehttp_client(**http_params)
-                params_timeout = http_params.get("timeout", self.timeout_seconds)
-                if isinstance(params_timeout, timedelta):
-                    params_timeout = int(params_timeout.total_seconds())
-                client_timeout = min(self.timeout_seconds, params_timeout)
+                if isinstance(self.server_params, StreamableHTTPClientParams):
+                    self._context = streamable_http_client(**self.server_params.to_connect_kwargs())
+                    params_timeout = self.server_params.timeout
+                    if isinstance(params_timeout, timedelta):
+                        params_timeout = int(params_timeout.total_seconds())
+                    client_timeout = min(self.timeout_seconds, params_timeout or self.timeout_seconds)
+                else:
+                    self._context = streamable_http_client(url=str(self.server_params))
+                    client_timeout = self.timeout_seconds
                 
             else:  # stdio
                 if not isinstance(self.server_params, StdioServerParameters):
@@ -731,36 +757,28 @@ class MCPHandler:
         try:
             console.print(f"[blue]Calling MCP tool '{tool_name}' with args: {arguments}[/blue]")
             
-            # Create fresh client connection for this call
             client = self._create_session()
-            
+
             async with client as client_context:
-                if self.connection_type == 'stdio':
-                    read_stream, write_stream = client_context
-                    from mcp.client.session import ClientSession
-                    from datetime import timedelta
-                    session = ClientSession(
-                        read_stream, 
-                        write_stream,
-                        read_timeout_seconds=timedelta(seconds=max(self.timeout_seconds, 30))
-                    )
-                else:
-                    # For SSE or Streamable HTTP
-                    session = client_context
-                
+                read_stream, write_stream = client_context[0], client_context[1]
+                from mcp.client.session import ClientSession as _ClientSession
+                from datetime import timedelta as _td
+                session = _ClientSession(
+                    read_stream,
+                    write_stream,
+                    read_timeout_seconds=_td(seconds=max(self.timeout_seconds, 30)),
+                )
+
                 async with session:
                     await session.initialize()
-                    
-                    # Call the tool
+
                     result: mcp_types.CallToolResult = await session.call_tool(tool_name, arguments)
-                    
-                    # Check for errors in result
+
                     if result.isError:
                         error_msg = f"Error from MCP tool '{tool_name}': {result.content}"
                         console.print(f"[red]{error_msg}[/red]")
                         return {"error": error_msg, "success": False}
-                    
-                    # Process the result content with enhanced image/media handling
+
                     return self._process_tool_result(result, tool_name)
             
         except Exception as e:

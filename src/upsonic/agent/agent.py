@@ -1424,15 +1424,21 @@ class Agent(BaseAgent):
         start_time: float,
         end_time: float,
     ) -> None:
-        """Fire-and-forget: launches PromptLayer logging in a background thread."""
-        def _run():
+        """Fire-and-forget: launches PromptLayer logging in a background thread.
+
+        The thread is registered with the PromptLayer instance so that
+        ``shutdown()`` can wait for it to finish before closing clients.
+        """
+        def _run() -> None:
             try:
                 asyncio.run(self._log_to_promptlayer_unified(task, output, start_time, end_time))
             except Exception as e:
                 _pl_logger.warning("Background PromptLayer logging failed: %s", e)
 
-        thread = threading.Thread(target=_run, daemon=True)
+        thread = threading.Thread(target=_run, daemon=False)
         thread.start()
+        if self.promptlayer is not None:
+            self.promptlayer._register_thread(thread)
 
     def _build_pl_tools(self) -> Optional[List[Dict[str, Any]]]:
         """Build PromptLayer-compatible tool definitions from the agent's registered tools."""

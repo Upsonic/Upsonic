@@ -12,12 +12,10 @@ if TYPE_CHECKING:
     from upsonic.session.base import SessionType
 
 from upsonic.storage.memory.session.base import BaseSessionMemory, PreparedSessionInputs
-
-
-def _is_async_storage(storage) -> bool:
-    """Check if storage is an async storage implementation."""
-    from upsonic.storage.base import AsyncStorage
-    return isinstance(storage, AsyncStorage)
+from upsonic.storage.memory.storage_dispatch import (
+    is_async_storage_backend,
+    run_awaitable_sync,
+)
 
 
 class AgentSessionMemory(BaseSessionMemory):
@@ -38,137 +36,108 @@ class AgentSessionMemory(BaseSessionMemory):
         from upsonic.session.base import SessionType
         return SessionType.AGENT
     
-    async def aget(self) -> PreparedSessionInputs:
-        """Get AgentSession and prepare inputs for Agent class (async)."""
-        from upsonic.session.base import SessionType
+    def _build_prepared_inputs_from_session(
+        self,
+        session: Optional[Any],
+    ) -> PreparedSessionInputs:
+        """Build :class:`PreparedSessionInputs` from a loaded session.
+
+        Uses **load** flags (``load_enabled``, ``load_summary_enabled``) to
+        decide which data to include in the prepared inputs.  Save flags are
+        irrelevant here – they only govern persistence.
+        """
         from upsonic.utils.printing import info_log, warning_log
-        
+
         result = PreparedSessionInputs()
-        
-        if not self.enabled and not self.summary_enabled:
+        if not session:
+            if self.debug:
+                info_log("No session found in storage", "AgentSessionMemory")
             return result
-        
-        # Load AgentSession from storage - use appropriate method based on storage type
-        if _is_async_storage(self.storage):
+
+        result.session = session
+
+        if self.load_summary_enabled and session.summary:
+            result.context_injection = f"<SessionSummary>\n{session.summary}\n</SessionSummary>"
+            if self.debug:
+                info_log(f"Loaded session summary ({len(session.summary)} chars)", "AgentSessionMemory")
+
+        if self.load_enabled:
+            try:
+                if session.messages:
+                    messages = self._limit_message_history(session.messages)
+                    if not self.feed_tool_call_results:
+                        messages = self._filter_tool_messages(messages)
+                    result.message_history = messages
+                    if self.debug:
+                        info_log(f"Loaded {len(messages)} messages from session", "AgentSessionMemory")
+            except Exception as e:
+                warning_log(f"Could not load messages from session: {e}", "AgentSessionMemory")
+
+        if session.metadata:
+            metadata_parts = []
+            for key, value in session.metadata.items():
+                metadata_parts.append(f"  {key}: {value}")
+            if metadata_parts:
+                result.metadata_injection = (
+                    "<SessionMetadata>\n" + "\n".join(metadata_parts) + "\n</SessionMetadata>"
+                )
+                if self.debug:
+                    info_log(f"Loaded session metadata with {len(session.metadata)} keys", "AgentSessionMemory")
+
+        return result
+
+    async def _aget_prepared_async_storage(self) -> PreparedSessionInputs:
+        """Load session via async storage and build prepared inputs (for sync ``get`` bridge)."""
+        from upsonic.session.base import SessionType
+
+        if not self.load_enabled and not self.load_summary_enabled:
+            return PreparedSessionInputs()
+        session = await self.storage.aget_session(
+            session_id=self.session_id,
+            session_type=SessionType.AGENT,
+            deserialize=True,
+        )
+        return self._build_prepared_inputs_from_session(session)
+
+    async def aget(self) -> PreparedSessionInputs:
+        """Get AgentSession and prepare inputs for Agent class (async).
+
+        Respects **load** flags to decide what to include.
+        """
+        from upsonic.session.base import SessionType
+
+        if not self.load_enabled and not self.load_summary_enabled:
+            return PreparedSessionInputs()
+
+        if is_async_storage_backend(self.storage):
             session = await self.storage.aget_session(
                 session_id=self.session_id,
                 session_type=SessionType.AGENT,
-                deserialize=True
+                deserialize=True,
             )
-        else:
-            # Sync storage - call sync method
-            session = self.storage.get_session(
-                session_id=self.session_id,
-                session_type=SessionType.AGENT,
-                deserialize=True
-            )
-        
-        if not session:
-            if self.debug:
-                info_log("No session found in storage", "AgentSessionMemory")
-            return result
-        
-        result.session = session
-        
-        # Prepare session summary (context injection)
-        if self.summary_enabled and session.summary:
-            result.context_injection = f"<SessionSummary>\n{session.summary}\n</SessionSummary>"
-            if self.debug:
-                info_log(f"Loaded session summary ({len(session.summary)} chars)", "AgentSessionMemory")
-        
-        # Prepare message history
-        if self.enabled:
-            try:
-                if session.messages:
-                    # Apply limiting
-                    messages = self._limit_message_history(session.messages)
-                    
-                    # Apply tool message filtering
-                    if not self.feed_tool_call_results:
-                        messages = self._filter_tool_messages(messages)
-                    
-                    result.message_history = messages
-                    
-                    if self.debug:
-                        info_log(f"Loaded {len(messages)} messages from session", "AgentSessionMemory")
-            except Exception as e:
-                warning_log(f"Could not load messages from session: {e}", "AgentSessionMemory")
-        
-        # Prepare metadata injection
-        if session.metadata:
-            metadata_parts = []
-            for key, value in session.metadata.items():
-                metadata_parts.append(f"  {key}: {value}")
-            if metadata_parts:
-                result.metadata_injection = (
-                    "<SessionMetadata>\n" + "\n".join(metadata_parts) + "\n</SessionMetadata>"
-                )
-                if self.debug:
-                    info_log(f"Loaded session metadata with {len(session.metadata)} keys", "AgentSessionMemory")
-        
-        return result
-    
+            return self._build_prepared_inputs_from_session(session)
+
+        return self.get()
+
     def get(self) -> PreparedSessionInputs:
-        """Get AgentSession and prepare inputs for Agent class (sync)."""
+        """Get AgentSession and prepare inputs for Agent class (sync).
+
+        Respects **load** flags to decide what to include.
+        """
         from upsonic.session.base import SessionType
-        from upsonic.utils.printing import info_log, warning_log
-        
-        result = PreparedSessionInputs()
-        
-        if not self.enabled and not self.summary_enabled:
-            return result
-        
-        # Load AgentSession from storage using sync method
+
+        if is_async_storage_backend(self.storage):
+            return run_awaitable_sync(self._aget_prepared_async_storage())
+
+        if not self.load_enabled and not self.load_summary_enabled:
+            return PreparedSessionInputs()
+
         session = self.storage.get_session(
             session_id=self.session_id,
             session_type=SessionType.AGENT,
-            deserialize=True
+            deserialize=True,
         )
-        
-        if not session:
-            if self.debug:
-                info_log("No session found in storage", "AgentSessionMemory")
-            return result
-        
-        result.session = session
-        
-        # Prepare session summary (context injection)
-        if self.summary_enabled and session.summary:
-            result.context_injection = f"<SessionSummary>\n{session.summary}\n</SessionSummary>"
-            if self.debug:
-                info_log(f"Loaded session summary ({len(session.summary)} chars)", "AgentSessionMemory")
-        
-        # Prepare message history
-        if self.enabled:
-            try:
-                if session.messages:
-                    # Apply limiting
-                    messages = self._limit_message_history(session.messages)
-                    
-                    # Apply tool message filtering
-                    if not self.feed_tool_call_results:
-                        messages = self._filter_tool_messages(messages)
-                    
-                    result.message_history = messages
-                    
-                    if self.debug:
-                        info_log(f"Loaded {len(messages)} messages from session", "AgentSessionMemory")
-            except Exception as e:
-                warning_log(f"Could not load messages from session: {e}", "AgentSessionMemory")
-        
-        # Prepare metadata injection
-        if session.metadata:
-            metadata_parts = []
-            for key, value in session.metadata.items():
-                metadata_parts.append(f"  {key}: {value}")
-            if metadata_parts:
-                result.metadata_injection = (
-                    "<SessionMetadata>\n" + "\n".join(metadata_parts) + "\n</SessionMetadata>"
-                )
-                if self.debug:
-                    info_log(f"Loaded session metadata with {len(session.metadata)} keys", "AgentSessionMemory")
-        
-        return result
+        return self._build_prepared_inputs_from_session(session)
     
     async def _load_or_create_session(
         self,
@@ -186,7 +155,7 @@ class AgentSessionMemory(BaseSessionMemory):
         from upsonic.session.base import SessionType
         from upsonic.utils.printing import info_log
 
-        if _is_async_storage(self.storage):
+        if is_async_storage_backend(self.storage):
             session = await self.storage.aget_session(
                 session_id=self.session_id,
                 session_type=SessionType.AGENT,
@@ -288,7 +257,7 @@ class AgentSessionMemory(BaseSessionMemory):
 
             session.updated_at = int(time.time())
 
-            if _is_async_storage(self.storage):
+            if is_async_storage_backend(self.storage):
                 await self.storage.aupsert_session(session, deserialize=True)
             else:
                 self.storage.upsert_session(session, deserialize=True)
@@ -347,7 +316,11 @@ class AgentSessionMemory(BaseSessionMemory):
         
         if output is None:
             return
-        
+
+        if is_async_storage_backend(self.storage):
+            run_awaitable_sync(self.asave(output, is_completed))
+            return
+
         try:
             # Load or create session using sync method
             session = self.storage.get_session(
@@ -413,22 +386,25 @@ class AgentSessionMemory(BaseSessionMemory):
         session: "AgentSession",
         output: "AgentRunOutput",
     ) -> None:
-        """Save completed run with memory features."""
+        """Save completed run with memory features.
+
+        ``self.enabled`` (save flag) controls whether messages are persisted.
+        ``self.summary_enabled`` (save flag) controls whether a summary is
+        generated.  Summary generation works even when ``enabled=False``
+        because it uses the previous summary + current turn from the run
+        output, not stored messages.
+        """
         from upsonic.utils.printing import info_log, warning_log
         
         if self.debug:
             info_log("Saving completed run...", "AgentSessionMemory")
         
-        # Populate session data from output
         session.populate_from_run_output(output)
-        
-        # Upsert run
         session.upsert_run(output)
         
         if self.debug:
             info_log(f"Added run output to session (total runs: {len(session.runs or {})})", "AgentSessionMemory")
         
-        # Generate summary if enabled
         if self.summary_enabled:
             if not self.model:
                 warning_log(
@@ -445,20 +421,21 @@ class AgentSessionMemory(BaseSessionMemory):
                 except Exception as e:
                     warning_log(f"Failed to generate summary: {e}", "AgentSessionMemory")
         
-        # Aggregate summary sub-agent LLM usage into output.usage before session save
         summary_llm_usage = getattr(self, '_last_llm_usage', None)
         if summary_llm_usage is not None and output is not None:
             usage = output._ensure_usage()
             usage.incr(summary_llm_usage)
             self._last_llm_usage = None
         
-        # Append new messages
-        new_message_count = session.append_new_messages_from_run_output(output)
-        if self.debug:
-            info_log(
-                f"Appended {new_message_count} new messages (total: {len(session.messages or [])})",
-                "AgentSessionMemory"
-            )
+        if self.enabled:
+            new_message_count = session.append_new_messages_from_run_output(output)
+            if self.debug:
+                info_log(
+                    f"Appended {new_message_count} new messages (total: {len(session.messages or [])})",
+                    "AgentSessionMemory"
+                )
+        elif self.debug:
+            info_log("Skipping message persistence (full_session_memory disabled)", "AgentSessionMemory")
     
     def _save_completed_run_sync(
         self,
@@ -471,29 +448,27 @@ class AgentSessionMemory(BaseSessionMemory):
         if self.debug:
             info_log("Saving completed run (sync)...", "AgentSessionMemory")
         
-        # Populate session data from output
         session.populate_from_run_output(output)
-        
-        # Upsert run
         session.upsert_run(output)
         
         if self.debug:
             info_log(f"Added run output to session (total runs: {len(session.runs or {})})", "AgentSessionMemory")
         
-        # Note: Summary generation requires async LLM call, skip in sync mode
         if self.summary_enabled:
             warning_log(
                 "Summary memory requires async execution. Use asave() instead.",
                 "AgentSessionMemory"
             )
         
-        # Append new messages
-        new_message_count = session.append_new_messages_from_run_output(output)
-        if self.debug:
-            info_log(
-                f"Appended {new_message_count} new messages (total: {len(session.messages or [])})",
-                "AgentSessionMemory"
-            )
+        if self.enabled:
+            new_message_count = session.append_new_messages_from_run_output(output)
+            if self.debug:
+                info_log(
+                    f"Appended {new_message_count} new messages (total: {len(session.messages or [])})",
+                    "AgentSessionMemory"
+                )
+        elif self.debug:
+            info_log("Skipping message persistence (full_session_memory disabled)", "AgentSessionMemory")
     
     async def _save_incomplete_run(
         self,
@@ -573,7 +548,7 @@ class AgentSessionMemory(BaseSessionMemory):
         
         # Try current session first
         if self.session_id:
-            if _is_async_storage(self.storage):
+            if is_async_storage_backend(self.storage):
                 session = await self.storage.aget_session(
                     session_id=self.session_id,
                     session_type=SessionType.AGENT,
@@ -602,7 +577,7 @@ class AgentSessionMemory(BaseSessionMemory):
         
         # Search all sessions for agent
         if agent_id:
-            if _is_async_storage(self.storage):
+            if is_async_storage_backend(self.storage):
                 sessions = await self.storage.aget_sessions(
                     agent_id=agent_id,
                     session_type=SessionType.AGENT,
@@ -633,7 +608,10 @@ class AgentSessionMemory(BaseSessionMemory):
         from upsonic.run.base import RunStatus
         from upsonic.session.base import SessionType
         from upsonic.utils.printing import debug_log_level2
-        
+
+        if is_async_storage_backend(self.storage):
+            return run_awaitable_sync(self.aload_resumable_run(run_id, agent_id))
+
         resumable_statuses = {RunStatus.paused, RunStatus.error, RunStatus.cancelled}
         
         if self.debug:
@@ -696,7 +674,7 @@ class AgentSessionMemory(BaseSessionMemory):
         
         # Try current session first
         if self.session_id:
-            if _is_async_storage(self.storage):
+            if is_async_storage_backend(self.storage):
                 session = await self.storage.aget_session(
                     session_id=self.session_id,
                     session_type=SessionType.AGENT,
@@ -714,7 +692,7 @@ class AgentSessionMemory(BaseSessionMemory):
         
         # Search all sessions for agent
         if agent_id:
-            if _is_async_storage(self.storage):
+            if is_async_storage_backend(self.storage):
                 sessions = await self.storage.aget_sessions(
                     agent_id=agent_id,
                     session_type=SessionType.AGENT,
@@ -742,7 +720,10 @@ class AgentSessionMemory(BaseSessionMemory):
         """Load a run by run_id (regardless of status) - sync."""
         from upsonic.session.base import SessionType
         from upsonic.utils.printing import debug_log_level2
-        
+
+        if is_async_storage_backend(self.storage):
+            return run_awaitable_sync(self.aload_run(run_id, agent_id))
+
         if self.debug:
             debug_log_level2(
                 f"Loading run {run_id}",

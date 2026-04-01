@@ -87,6 +87,8 @@ class Task(BaseModel):
     _upsonic_tool_config: Optional[Any] = None
     _upsonic_is_tool: bool = False
 
+    query_knowledge_base: bool = False
+
     vector_search_top_k: Optional[int] = None
     vector_search_alpha: Optional[float] = None
     vector_search_fusion_method: Optional[Literal['rrf', 'weighted']] = None
@@ -670,36 +672,34 @@ class Task(BaseModel):
         )
         for context in context_items:
             
-            # Lazy import KnowledgeBase to avoid heavy imports
-            if hasattr(context, 'rag') and context.rag == True:
-                # Import KnowledgeBase only when needed
-                if isinstance(context, KnowledgeBase):
-                    await context.setup_rag()
-                    rag_result_objects = await context.query_async(self.description, task=self)
-                    # Convert RAGSearchResult objects to formatted strings
-                    if rag_result_objects:
-                        formatted_results = []
-                        for i, result in enumerate(rag_result_objects, 1):
-                            cleaned_text = result.text.strip()
-                            metadata_str = ""
-                            if result.metadata:
-                                source = result.metadata.get('source', 'Unknown')
-                                page_number = result.metadata.get('page_number')
-                                chunk_id = result.chunk_id or result.metadata.get('chunk_id')
-                                
-                                metadata_parts = [f"source: {source}"]
-                                if page_number is not None:
-                                    metadata_parts.append(f"page: {page_number}")
-                                if chunk_id:
-                                    metadata_parts.append(f"chunk_id: {chunk_id}")
-                                if result.score is not None:
-                                    metadata_parts.append(f"score: {result.score:.3f}")
-                                
-                                metadata_str = f" [metadata: {', '.join(metadata_parts)}]"
+            if isinstance(context, KnowledgeBase):
+                await context.setup_async()
+                if not self.query_knowledge_base:
+                    continue
+                rag_result_objects = await context.query_async(self.description, task=self)
+                if rag_result_objects:
+                    formatted_results: list[str] = []
+                    for i, result in enumerate(rag_result_objects, 1):
+                        cleaned_text: str = result.text.strip()
+                        metadata_str: str = ""
+                        if result.metadata:
+                            source = result.metadata.get('source', 'Unknown')
+                            page_number = result.metadata.get('page_number')
+                            chunk_id = result.chunk_id or result.metadata.get('chunk_id')
                             
-                            formatted_results.append(f"[{i}]{metadata_str} {cleaned_text}")
+                            metadata_parts: list[str] = [f"source: {source}"]
+                            if page_number is not None:
+                                metadata_parts.append(f"page: {page_number}")
+                            if chunk_id:
+                                metadata_parts.append(f"chunk_id: {chunk_id}")
+                            if result.score is not None:
+                                metadata_parts.append(f"score: {result.score:.3f}")
+                            
+                            metadata_str = f" [metadata: {', '.join(metadata_parts)}]"
                         
-                        rag_results.extend(formatted_results)
+                        formatted_results.append(f"[{i}]{metadata_str} {cleaned_text}")
+                    
+                    rag_results.extend(formatted_results)
                 
         if rag_results:
             return f"The following is the RAG data: <rag>{' '.join(rag_results)}</rag>"

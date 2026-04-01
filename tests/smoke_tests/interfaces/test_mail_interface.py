@@ -23,13 +23,13 @@ import pytest
 
 # ── Config ───────────────────────────────────────────────────────────
 
-MAIL_USERNAME = "dogankeskin33@gmail.com"
+MAIL_USERNAME = os.getenv("MAIL_USERNAME")
 MAIL_PASSWORD = os.getenv("MAIL_PASSWORD_33")
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 587
 IMAP_HOST = "imap.gmail.com"
 IMAP_PORT = 993
-TEST_RECIPIENT = "dogankeskin803@gmail.com"
+TEST_RECIPIENT = os.getenv("TEST_RECIPIENT")
 
 # Unique subject to identify test emails and avoid collisions
 TEST_SUBJECT_TAG = f"[SMOKE-TEST-{int(time.time())}]"

@@ -90,6 +90,8 @@ class SessionMemoryFactory:
         session_id: str,
         enabled: bool = True,
         summary_enabled: bool = False,
+        load_enabled: Optional[bool] = None,
+        load_summary_enabled: Optional[bool] = None,
         num_last_messages: Optional[int] = None,
         feed_tool_call_results: bool = False,
         model: Optional[Union["Model", str]] = None,
@@ -106,8 +108,10 @@ class SessionMemoryFactory:
             session_type: The type of session (AGENT, TEAM, WORKFLOW)
             storage: Storage backend for persistence
             session_id: Unique identifier for the session
-            enabled: Whether full session memory is enabled
-            summary_enabled: Whether to generate/use summaries
+            enabled: Save flag – persist chat history
+            summary_enabled: Save flag – generate/persist summaries
+            load_enabled: Load flag – inject chat history into runs (defaults to ``enabled``)
+            load_summary_enabled: Load flag – inject summary into runs (defaults to ``summary_enabled``)
             num_last_messages: Limit on message turns
             feed_tool_call_results: Include tool results in history
             model: Model for summary generation
@@ -135,6 +139,8 @@ class SessionMemoryFactory:
             session_id=session_id,
             enabled=enabled,
             summary_enabled=summary_enabled,
+            load_enabled=load_enabled,
+            load_summary_enabled=load_summary_enabled,
             num_last_messages=num_last_messages,
             feed_tool_call_results=feed_tool_call_results,
             model=model,

@@ -48,7 +48,6 @@ def sqlite_storage() -> SqliteStorage:
     db_file = tempfile.mktemp(suffix=".db")
     storage = SqliteStorage(db_file=db_file)
     yield storage
-    # Cleanup
     if os.path.exists(db_file):
         os.remove(db_file)
 
