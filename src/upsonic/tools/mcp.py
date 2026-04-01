@@ -760,25 +760,29 @@ class MCPHandler:
             client = self._create_session()
 
             async with client as client_context:
-                read_stream, write_stream = client_context[0], client_context[1]
-                from mcp.client.session import ClientSession as _ClientSession
-                from datetime import timedelta as _td
-                session = _ClientSession(
+                from mcp.client.session import ClientSession
+                from datetime import timedelta
+                # All transports (stdio, SSE, streamable-http) return a tuple
+                read_stream, write_stream = client_context[0:2]
+                session = ClientSession(
                     read_stream,
                     write_stream,
-                    read_timeout_seconds=_td(seconds=max(self.timeout_seconds, 30)),
+                    read_timeout_seconds=timedelta(seconds=max(self.timeout_seconds, 30))
                 )
 
                 async with session:
                     await session.initialize()
 
+                    # Call the tool
                     result: mcp_types.CallToolResult = await session.call_tool(tool_name, arguments)
 
+                    # Check for errors in result
                     if result.isError:
                         error_msg = f"Error from MCP tool '{tool_name}': {result.content}"
                         console.print(f"[red]{error_msg}[/red]")
                         return {"error": error_msg, "success": False}
 
+                    # Process the result content with enhanced image/media handling
                     return self._process_tool_result(result, tool_name)
             
         except Exception as e:
@@ -876,7 +880,7 @@ class MCPHandler:
                 # Handle embedded resources
                 resource_info = {
                     'type': 'resource',
-                    'uri': content_item.resource.uri,
+                    'uri': str(content_item.resource.uri),
                     'mime_type': getattr(content_item.resource, 'mimeType', None),
                     'text': getattr(content_item.resource, 'text', None)
                 }

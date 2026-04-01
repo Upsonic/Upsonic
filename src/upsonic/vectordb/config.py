@@ -473,7 +473,20 @@ class PgVectorConfig(BaseVectorDBConfig):
     pool_timeout: float = 30.0
     pool_recycle: int = 3600
     
-    @pydantic.field_validator('table_name')
+    @pydantic.field_validator('schema_name', 'table_name')
+    @classmethod
+    def validate_identifiers(cls, v: Optional[str]) -> Optional[str]:
+        """Ensure schema and table names are safe SQL identifiers."""
+        if v is not None:
+            import re
+            if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', v):
+                raise ValueError(
+                    f"Invalid SQL identifier: '{v}'. "
+                    "Only alphanumeric characters and underscores are allowed."
+                )
+        return v
+
+    @pydantic.field_validator('table_name', mode='before')
     @classmethod
     def set_table_name(cls, v, info):
         """Use collection_name as table_name if not specified."""

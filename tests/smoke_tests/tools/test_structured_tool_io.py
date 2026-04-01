@@ -13,6 +13,13 @@ from upsonic.tools import tool
 pytestmark = pytest.mark.timeout(120)
 
 
+def _unwrap_tool_result(tool_result):
+    """Unwrap tool result from {'func': ...} wrapper if present."""
+    if isinstance(tool_result, dict) and list(tool_result.keys()) == ['func']:
+        return tool_result['func']
+    return tool_result
+
+
 # Define structured input/output models
 class DiscountInput(BaseModel):
     """Input for discount calculation."""
@@ -91,7 +98,7 @@ async def test_structured_tool_input_output():
                 f"Params should contain price and discount_percent, got {params}"
         
         # Verify tool_result is the calculated value
-        tool_result = tool_call['tool_result']
+        tool_result = _unwrap_tool_result(tool_call['tool_result'])
         assert tool_result is not None, "Tool result should not be None"
         # Should be 80.0 (100 * (1 - 20/100))
         if isinstance(tool_result, (int, float)):
@@ -164,8 +171,9 @@ async def test_structured_tool_with_pydantic_input():
         
         # Verify params and result exist (even if tool execution failed, they should be recorded)
         assert tool_call['params'] is not None, "Params should not be None"
-        assert tool_call['tool_result'] is not None, "Tool result should not be None"
-        
+        tool_result = _unwrap_tool_result(tool_call['tool_result'])
+        assert tool_result is not None, "Tool result should not be None"
+
     finally:
         pass  # Agent cleanup handled automatically
 
@@ -243,7 +251,8 @@ async def test_multiple_structured_tools():
             
             # Verify params and result exist
             assert tool_call['params'] is not None, "Params should not be None"
-            assert tool_call['tool_result'] is not None, "Tool result should not be None"
+            unwrapped_result = _unwrap_tool_result(tool_call['tool_result'])
+            assert unwrapped_result is not None, "Tool result should not be None"
         
     finally:
         pass  # Agent cleanup handled automatically
@@ -316,7 +325,7 @@ async def test_structured_tool_with_complex_types():
                 f"Params should contain items and tax_rate, got {params}"
         
         # Verify tool_result contains calculation results
-        tool_result = tool_call['tool_result']
+        tool_result = _unwrap_tool_result(tool_call['tool_result'])
         assert tool_result is not None, "Tool result should not be None"
         # Result should be a dict with subtotal, tax, total
         if isinstance(tool_result, dict):
