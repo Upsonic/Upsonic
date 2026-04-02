@@ -52,6 +52,7 @@ class MockTask:
         self.enable_thinking_tool = None
         self.enable_reasoning_tool = None
         self.tools = []
+        self.query_knowledge_base = False
 
     def get_task_id(self):
         return "test-task-id"
