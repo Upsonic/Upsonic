@@ -64,6 +64,7 @@ if TYPE_CHECKING:
     from .gmail.gmail import GmailInterface
     from .telegram.telegram import TelegramInterface
     from .discord.discord import DiscordInterface
+    from .mail.mail import MailInterface
     from .settings import InterfaceSettings
     from .websocket_manager import WebSocketManager, WebSocketConnection
     from .auth import (
@@ -92,6 +93,7 @@ def _get_interface_classes():
     from .gmail.gmail import GmailInterface
     from .telegram.telegram import TelegramInterface
     from .discord.discord import DiscordInterface
+    from .mail.mail import MailInterface
     from .settings import InterfaceSettings
     from .websocket_manager import WebSocketManager, WebSocketConnection
 
@@ -101,6 +103,7 @@ def _get_interface_classes():
     Gmail = GmailInterface
     Telegram = TelegramInterface
     Discord = DiscordInterface
+    Mail = MailInterface
 
     return {
         'Interface': Interface,
@@ -115,6 +118,8 @@ def _get_interface_classes():
         'Telegram': Telegram,
         'DiscordInterface': DiscordInterface,
         'Discord': Discord,
+        'MailInterface': MailInterface,
+        'Mail': Mail,
         'InterfaceSettings': InterfaceSettings,
         'WebSocketManager': WebSocketManager,
         'WebSocketConnection': WebSocketConnection,
@@ -203,6 +208,8 @@ __all__ = [
     "Telegram",  # Alias
     "DiscordInterface",
     "Discord",  # Alias
+    "MailInterface",
+    "Mail",  # Alias
 
     # WebSocket
     "WebSocketManager",

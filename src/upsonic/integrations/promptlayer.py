@@ -32,6 +32,7 @@ from upsonic.utils.logging_config import get_logger
 
 if TYPE_CHECKING:
     import httpx as _httpx
+    import threading as _threading
 
 logger = get_logger(__name__)
 
@@ -77,6 +78,10 @@ class PromptLayer:
         self._last_prompt_id: Optional[int] = None
         self._last_prompt_version: Optional[int] = None
         self._created_workflows: Dict[str, int] = {}  # name -> workflow_id
+
+        from threading import Lock, Thread  # noqa: F811
+        self._pending_threads: list[Thread] = []
+        self._threads_lock: Lock = Lock()
 
     # ------------------------------------------------------------------
     # Static helpers
@@ -1428,17 +1433,42 @@ class PromptLayer:
     # Lifecycle
     # ------------------------------------------------------------------
 
+    def _register_thread(self, thread: "_threading.Thread") -> None:
+        with self._threads_lock:
+            self._pending_threads = [t for t in self._pending_threads if t.is_alive()]
+            self._pending_threads.append(thread)
+
+    def _drain_threads(self, timeout: float = 10.0) -> None:
+        with self._threads_lock:
+            threads = list(self._pending_threads)
+            self._pending_threads.clear()
+        for t in threads:
+            t.join(timeout=timeout)
+
     def shutdown(self) -> None:
-        """Close HTTP clients. Safe to call multiple times."""
+        """Wait for pending background logs, then close HTTP clients.
+
+        Safe to call multiple times.  The async client is created inside
+        background threads (each with their own event loop via
+        ``asyncio.run``), so by the time ``_drain_threads`` returns the
+        underlying transport is already finished.  We drop the reference
+        instead of attempting ``aclose`` on a dead loop.
+        """
+        self._drain_threads()
         if self._client is not None:
             self._client.close()
             self._client = None
+        self._async_client = None
 
     async def ashutdown(self) -> None:
         """Async variant of :meth:`shutdown`."""
+        self._drain_threads()
         if self._async_client is not None:
             await self._async_client.aclose()
             self._async_client = None
+        if self._client is not None:
+            self._client.close()
+            self._client = None
 
     def __repr__(self) -> str:
         return f"PromptLayer(base_url={self._base_url!r})"

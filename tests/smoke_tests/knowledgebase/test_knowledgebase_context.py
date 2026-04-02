@@ -392,7 +392,7 @@ async def test_knowledgebase_context_attributes():
         assert kb.description == "A test knowledge base", "KB description should be set"
         assert kb.embedding_provider == embedding, "Embedding provider should be set"
         assert kb.vectordb == vectordb, "VectorDB should be set"
-        assert kb.rag is True, "KB should have rag flag set"
+        assert kb._is_ready is False, "KB should not be ready before setup"
         
         await kb.setup_async()
         

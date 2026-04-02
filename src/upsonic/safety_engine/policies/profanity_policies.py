@@ -59,9 +59,7 @@ class ProfanityRule(RuleBase):
                 f"Must be one of: {', '.join(valid_models)}"
             )
         
-        # Initialize Detoxify model (lazy loading)
         self._model: Optional[Detoxify] = None
-        self._model_lock = asyncio.Lock()
     
     def _get_model(self) -> Detoxify:
         """Lazy load the Detoxify model"""
@@ -72,25 +70,22 @@ class ProfanityRule(RuleBase):
                 self._model = Detoxify(self.model_name)
         return self._model
     
-    def _get_toxicity_labels(self) -> List[str]:
-        """Get the labels returned by the current model"""
-        model = self._get_model()
-        
-        # Different models return different labels
-        # Test with empty string to get label structure
-        test_result = model.predict("")
-        
-        # Return all keys except any metadata keys
-        labels = [key for key in test_result.keys() if not key.startswith("_")]
-        return labels
-    
-    def _get_all_category_scores(self, results: Dict[str, float]) -> List[str]:
+    def _get_all_category_scores(self, results: Dict[str, Any]) -> List[str]:
         """Get all category scores from Detoxify results in format 'category:score'"""
-        scores = []
+        scores: List[str] = []
         for label, score in results.items():
-            if not label.startswith("_"):  # Skip metadata keys
-                scores.append(f"{label}:{score:.6f}")
+            if not label.startswith("_"):
+                scores.append(f"{label}:{float(score):.6f}")
         return scores
+    
+    def _is_batch_result(self, results: Dict[str, Any]) -> bool:
+        """Determine if predict results are batch format (dict with sequences as values)"""
+        if not isinstance(results, dict) or len(results) == 0:
+            return False
+        first_value = next(iter(results.values()))
+        return isinstance(first_value, (list, tuple)) or (
+            hasattr(first_value, '__len__') and not isinstance(first_value, str)
+        )
     
     def process(self, policy_input: PolicyInput) -> RuleOutput:
         """Process input texts for profanity and toxic content detection"""
@@ -102,74 +97,48 @@ class ProfanityRule(RuleBase):
                 details="No input text provided"
             )
         
-        try:
-            model = self._get_model()
+        model = self._get_model()
+        
+        input_texts: List[str] = policy_input.input_texts
+        
+        if len(input_texts) == 1:
+            results = model.predict(input_texts[0])
+        else:
+            results = model.predict(input_texts)
+        
+        if self._is_batch_result(results):
+            num_texts: int = len(next(iter(results.values())))
+            all_scores: List[str] = []
             
-            # Detoxify can handle both single strings and lists
-            input_texts = policy_input.input_texts
+            for i in range(num_texts):
+                text_results: Dict[str, float] = {
+                    label: float(scores[i]) for label, scores in results.items()
+                }
+                text_scores = self._get_all_category_scores(text_results)
+                all_scores.extend(text_scores)
             
-            # Get predictions from Detoxify
-            # For single string: returns dict[str, float]
-            # For list: returns dict[str, List[float]] where each key is a label
-            if len(input_texts) == 1:
-                results = model.predict(input_texts[0])
-            else:
-                results = model.predict(input_texts)
-            
-            # Check if results are batch format (dict with lists as values)
-            is_batch = (
-                isinstance(results, dict) and 
-                len(results) > 0 and 
-                isinstance(next(iter(results.values())), list)
+            max_score: float = max(
+                [float(score.split(":")[1]) for score in all_scores] if all_scores else [0.0]
             )
             
-            if is_batch:
-                # Batch results: results is dict[str, List[float]]
-                # Process each text's scores and collect all scores
-                num_texts = len(next(iter(results.values())))
-                all_scores = []
-                
-                for i in range(num_texts):
-                    # Extract scores for this text
-                    text_results = {label: scores[i] for label, scores in results.items()}
-                    # Get all category scores for this text
-                    text_scores = self._get_all_category_scores(text_results)
-                    all_scores.extend(text_scores)
-                
-                # Return all scores - Action will filter and compare
-                max_score = max(
-                    [float(score.split(":")[1]) for score in all_scores] if all_scores else [0.0]
-                )
-                
-                return RuleOutput(
-                    confidence=max_score,  # Max score for reference, but Action will decide
-                    content_type="PROFANITY_DETECTION_RESULT",  # Neutral type, Action will decide
-                    details=f"Detected {len(all_scores)} category scores across {num_texts} texts",
-                    triggered_keywords=all_scores
-                )
-            else:
-                # Single prediction result: results is dict[str, float]
-                # Return all raw category scores - Action will filter and compare
-                all_scores = self._get_all_category_scores(results)
-                
-                max_score = max(
-                    [float(score.split(":")[1]) for score in all_scores] if all_scores else [0.0]
-                )
-                
-                return RuleOutput(
-                    confidence=max_score,  # Max score for reference, but Action will decide
-                    content_type="PROFANITY_DETECTION_RESULT",  # Neutral type, Action will decide
-                    details=f"Detected {len(all_scores)} category scores",
-                    triggered_keywords=all_scores
-                )
-                
-        except Exception as e:
-            # Fallback: return low confidence but don't block
             return RuleOutput(
-                confidence=0.1,
-                content_type="SAFE_CONTENT",
-                details=f"Error during profanity detection: {str(e)}. Content allowed with low confidence.",
-                triggered_keywords=[]
+                confidence=max_score,
+                content_type="PROFANITY_DETECTION_RESULT",
+                details=f"Detected {len(all_scores)} category scores across {num_texts} texts",
+                triggered_keywords=all_scores
+            )
+        else:
+            all_scores = self._get_all_category_scores(results)
+            
+            max_score = max(
+                [float(score.split(":")[1]) for score in all_scores] if all_scores else [0.0]
+            )
+            
+            return RuleOutput(
+                confidence=max_score,
+                content_type="PROFANITY_DETECTION_RESULT",
+                details=f"Detected {len(all_scores)} category scores",
+                triggered_keywords=all_scores
             )
     
     async def process_async(self, policy_input: PolicyInput) -> RuleOutput:

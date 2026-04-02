@@ -86,10 +86,14 @@ class AutonomousAgent(Agent):
         db: Optional["DatabaseBase"] = None,
         session_id: Optional[str] = None,
         user_id: Optional[str] = None,
-        # Memory features
+        # Memory features (save flags)
         full_session_memory: bool = True,
         summary_memory: bool = False,
         user_analysis_memory: bool = False,
+        # Memory features (load flags)
+        load_full_session_memory: bool = True,
+        load_summary_memory: Optional[bool] = None,
+        load_user_analysis_memory: Optional[bool] = None,
         user_profile_schema: Optional[Type["BaseModel"]] = None,
         dynamic_user_profile: bool = False,
         num_last_messages: Optional[int] = None,
@@ -234,6 +238,9 @@ class AutonomousAgent(Agent):
                 full_session_memory=full_session_memory,
                 summary_memory=summary_memory,
                 user_analysis_memory=user_analysis_memory,
+                load_full_session_memory=load_full_session_memory,
+                load_summary_memory=load_summary_memory,
+                load_user_analysis_memory=load_user_analysis_memory,
                 user_profile_schema=user_profile_schema,
                 dynamic_user_profile=dynamic_user_profile,
                 num_last_messages=num_last_messages,

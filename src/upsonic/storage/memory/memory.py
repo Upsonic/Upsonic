@@ -18,6 +18,11 @@ if TYPE_CHECKING:
     from upsonic.session.agent import RunData
     from upsonic.run.agent.output import AgentRunOutput
 
+from upsonic.storage.memory.storage_dispatch import (
+    is_async_storage_backend,
+    run_awaitable_sync,
+)
+
 
 class Memory:
     """Orchestrator for session and user memory with runtime session type selection.
@@ -26,14 +31,24 @@ class Memory:
     - Session memory: Chat history, summaries, session metadata
     - User memory: User profiles and traits extracted from conversations
     
-    Key Design Principle:
-        Session memory type is selected at RUNTIME, not at init time.
-        The same Memory instance can be shared across Agent, Team, and Workflow.
-        When methods are called (save, get), the caller passes session_type
-        and Memory routes to the correct session memory implementation.
+    **Save vs Load flag separation:**
+    
+    Save flags control what is persisted to storage:
+    - ``full_session_memory``: persist chat history
+    - ``summary_memory``: generate and persist session summaries
+    - ``user_analysis_memory``: analyze and persist user profiles
+    
+    Load flags control what is injected into subsequent runs:
+    - ``load_full_session_memory``: inject chat history as message context
+    - ``load_summary_memory``: inject session summary as context
+    - ``load_user_analysis_memory``: inject user profile into system prompt
+    
+    Load flags default to their corresponding save flags for backward
+    compatibility.  Users can override them independently, e.g. save
+    everything but only inject summaries to conserve tokens.
     
     Usage:
-        # Create memory with configuration
+        # Save everything, but only inject summary and user profile
         memory = Memory(
             storage=storage,
             session_id="session_001",
@@ -41,14 +56,11 @@ class Memory:
             full_session_memory=True,
             summary_memory=True,
             user_analysis_memory=True,
+            load_full_session_memory=False,
+            load_summary_memory=True,
+            load_user_analysis_memory=True,
             model="openai/gpt-4o"
         )
-        
-        # Attach to agent
-        agent = Agent("openai/gpt-4o", memory=memory)
-        
-        # Memory is used automatically during agent execution
-        result = agent.do(task)
     
     The Memory class caches session memory instances per SessionType for efficiency.
     """
@@ -61,6 +73,9 @@ class Memory:
         full_session_memory: bool = False,
         summary_memory: bool = False,
         user_analysis_memory: bool = False,
+        load_full_session_memory: Optional[bool] = None,
+        load_summary_memory: Optional[bool] = None,
+        load_user_analysis_memory: Optional[bool] = None,
         user_profile_schema: Optional[Type["BaseModel"]] = None,
         dynamic_user_profile: bool = False,
         num_last_messages: Optional[int] = None,
@@ -77,9 +92,15 @@ class Memory:
             storage: Storage backend for persistence
             session_id: Unique session identifier (auto-generated if None)
             user_id: Unique user identifier (auto-generated if None)
-            full_session_memory: Enable chat history persistence
-            summary_memory: Enable session summary generation
-            user_analysis_memory: Enable user profile extraction
+            full_session_memory: Save flag – persist chat history to storage
+            summary_memory: Save flag – generate and persist session summaries
+            user_analysis_memory: Save flag – analyze and persist user profiles
+            load_full_session_memory: Load flag – inject chat history into runs
+                (defaults to ``full_session_memory``)
+            load_summary_memory: Load flag – inject session summary into runs
+                (defaults to ``summary_memory``)
+            load_user_analysis_memory: Load flag – inject user profile into runs
+                (defaults to ``user_analysis_memory``)
             user_profile_schema: Pydantic model for user profile structure
             dynamic_user_profile: Generate profile schema dynamically
             num_last_messages: Limit on message turns to keep in history
@@ -91,25 +112,37 @@ class Memory:
         """
         from upsonic.utils.printing import info_log
         
-        self.storage = storage
+        self.storage: "Storage" = storage
         
-        # Store configuration for lazy session memory creation
-        self.full_session_memory_enabled = full_session_memory
-        self.summary_memory_enabled = summary_memory
-        self.user_analysis_memory_enabled = user_analysis_memory
-        self.num_last_messages = num_last_messages
-        self.model = model
-        self.debug = debug
-        self.debug_level = debug_level if debug else 1
-        self.feed_tool_call_results = feed_tool_call_results
+        # Save flags – control what is persisted to storage
+        self.full_session_memory_enabled: bool = full_session_memory
+        self.summary_memory_enabled: bool = summary_memory
+        self.user_analysis_memory_enabled: bool = user_analysis_memory
+        
+        # Load flags – control what is injected into runs (default to save flags)
+        self.load_full_session_memory_enabled: bool = (
+            load_full_session_memory if load_full_session_memory is not None else full_session_memory
+        )
+        self.load_summary_memory_enabled: bool = (
+            load_summary_memory if load_summary_memory is not None else summary_memory
+        )
+        self.load_user_analysis_memory_enabled: bool = (
+            load_user_analysis_memory if load_user_analysis_memory is not None else user_analysis_memory
+        )
+        
+        self.num_last_messages: Optional[int] = num_last_messages
+        self.model: Optional[Union["Model", str]] = model
+        self.debug: bool = debug
+        self.debug_level: int = debug_level if debug else 1
+        self.feed_tool_call_results: bool = feed_tool_call_results
         
         # User memory configuration
-        self.user_profile_schema = user_profile_schema
-        self.dynamic_user_profile = dynamic_user_profile
-        self.user_memory_mode = user_memory_mode
+        self.user_profile_schema: Optional[Type["BaseModel"]] = user_profile_schema
+        self.dynamic_user_profile: bool = dynamic_user_profile
+        self.user_memory_mode: Literal['update', 'replace'] = user_memory_mode
         
         # For backward compatibility - expose these attributes
-        self.is_profile_dynamic = dynamic_user_profile
+        self.is_profile_dynamic: bool = dynamic_user_profile
         
         # Auto-generate session_id if not provided
         if session_id:
@@ -130,16 +163,19 @@ class Memory:
         # Cache of session memory instances (created on demand per SessionType)
         self._session_memory_cache: Dict["SessionType", "BaseSessionMemory"] = {}
         
-        # User memory (same for all session types, created once if enabled)
+        # User memory – created when EITHER save or load is enabled
         self._user_memory: Optional["BaseUserMemory"] = None
-        if user_analysis_memory:
-            self._user_memory: Optional["BaseUserMemory"] = self._create_user_memory()
+        if user_analysis_memory or self.load_user_analysis_memory_enabled:
+            self._user_memory = self._create_user_memory()
         
         if self.debug:
             info_log("Memory initialized with configuration:", "Memory")
-            info_log(f"  - Full Session Memory: {self.full_session_memory_enabled}", "Memory")
-            info_log(f"  - Summary Memory: {self.summary_memory_enabled}", "Memory")
-            info_log(f"  - User Analysis Memory: {self.user_analysis_memory_enabled}", "Memory")
+            info_log(f"  - Full Session Memory (save): {self.full_session_memory_enabled}", "Memory")
+            info_log(f"  - Summary Memory (save): {self.summary_memory_enabled}", "Memory")
+            info_log(f"  - User Analysis Memory (save): {self.user_analysis_memory_enabled}", "Memory")
+            info_log(f"  - Load Session History: {self.load_full_session_memory_enabled}", "Memory")
+            info_log(f"  - Load Summary: {self.load_summary_memory_enabled}", "Memory")
+            info_log(f"  - Load User Profile: {self.load_user_analysis_memory_enabled}", "Memory")
             info_log(f"  - Session ID: {self.session_id}", "Memory")
             info_log(f"  - User ID: {self.user_id}", "Memory")
             info_log(f"  - Max Messages: {self.num_last_messages}", "Memory")
@@ -149,13 +185,14 @@ class Memory:
             info_log(f"  - Model: {self.model}", "Memory")
     
     def _create_user_memory(self) -> "BaseUserMemory":
-        """Create user memory instance."""
+        """Create user memory instance with separate save/load flags."""
         from upsonic.storage.memory.user.user import UserMemory
         
         return UserMemory(
             storage=self.storage,
             user_id=self.user_id,
-            enabled=True,
+            enabled=self.user_analysis_memory_enabled,
+            load_enabled=self.load_user_analysis_memory_enabled,
             profile_schema=self.user_profile_schema,
             dynamic_profile=self.dynamic_user_profile,
             update_mode=self.user_memory_mode,
@@ -207,6 +244,8 @@ class Memory:
             session_id=self.session_id,
             enabled=self.full_session_memory_enabled,
             summary_enabled=self.summary_memory_enabled,
+            load_enabled=self.load_full_session_memory_enabled,
+            load_summary_enabled=self.load_summary_memory_enabled,
             num_last_messages=self.num_last_messages,
             feed_tool_call_results=self.feed_tool_call_results,
             model=self.model,
@@ -446,29 +485,22 @@ class Memory:
     async def get_session_async(self) -> Optional["Session"]:
         """Get the current session from storage."""
         from upsonic.session.base import SessionType
-        from upsonic.storage.base import AsyncStorage
-        
-        if isinstance(self.storage, AsyncStorage):
+
+        if is_async_storage_backend(self.storage):
             return await self.storage.aget_session(
                 session_id=self.session_id,
                 session_type=SessionType.AGENT,
                 deserialize=True
             )
-        else:
-            return self.storage.get_session(
-                session_id=self.session_id,
-                session_type=SessionType.AGENT,
-                deserialize=True
-            )
-    
-    def get_session(self) -> Optional["Session"]:
-        """Get the current session from storage (sync version)."""
-        from upsonic.session.base import SessionType
         return self.storage.get_session(
             session_id=self.session_id,
             session_type=SessionType.AGENT,
             deserialize=True
         )
+    
+    def get_session(self) -> Optional["Session"]:
+        """Get the current session from storage (sync version)."""
+        return run_awaitable_sync(self.get_session_async())
     
     async def get_messages_async(self) -> list:
         """Get messages from the current session."""
@@ -486,26 +518,19 @@ class Memory:
     
     async def set_metadata_async(self, metadata: Dict[str, Any]) -> None:
         """Set metadata on the current session."""
-        from upsonic.storage.base import AsyncStorage
-        
         session = await self.get_session_async()
         if session:
             if not session.metadata:
                 session.metadata = {}
             session.metadata.update(metadata)
-            if isinstance(self.storage, AsyncStorage):
+            if is_async_storage_backend(self.storage):
                 await self.storage.aupsert_session(session, deserialize=True)
             else:
                 self.storage.upsert_session(session, deserialize=True)
     
     def set_metadata(self, metadata: Dict[str, Any]) -> None:
         """Set metadata on the current session (sync version)."""
-        session = self.get_session()
-        if session:
-            if not session.metadata:
-                session.metadata = {}
-            session.metadata.update(metadata)
-            self.storage.upsert_session(session, deserialize=True)
+        run_awaitable_sync(self.set_metadata_async(metadata))
     
     async def get_metadata_async(self) -> Optional[Dict[str, Any]]:
         """Get metadata from the current session."""
@@ -524,9 +549,8 @@ class Memory:
     async def list_sessions_async(self, user_id: Optional[str] = None) -> list:
         """List sessions, optionally filtered by user_id."""
         from upsonic.session.base import SessionType
-        from upsonic.storage.base import AsyncStorage
-        
-        if isinstance(self.storage, AsyncStorage):
+
+        if is_async_storage_backend(self.storage):
             sessions = await self.storage.aget_sessions(
                 user_id=user_id or self.user_id,
                 session_type=SessionType.AGENT,
@@ -544,57 +568,37 @@ class Memory:
     
     def list_sessions(self, user_id: Optional[str] = None) -> list:
         """List sessions, optionally filtered by user_id (sync version)."""
-        from upsonic.session.base import SessionType
-        
-        sessions = self.storage.get_sessions(
-            user_id=user_id or self.user_id,
-            session_type=SessionType.AGENT,
-            deserialize=True
-        )
-        if isinstance(sessions, list):
-            return sessions
-        return []
+        return run_awaitable_sync(self.list_sessions_async(user_id))
     
     async def find_session_async(self, session_id: Optional[str] = None) -> Optional["Session"]:
         """Find a specific session by session_id."""
         from upsonic.session.base import SessionType
-        from upsonic.storage.base import AsyncStorage
-        
-        if isinstance(self.storage, AsyncStorage):
+
+        if is_async_storage_backend(self.storage):
             return await self.storage.aget_session(
                 session_id=session_id or self.session_id,
                 session_type=SessionType.AGENT,
                 deserialize=True
             )
-        else:
-            return self.storage.get_session(
-                session_id=session_id or self.session_id,
-                session_type=SessionType.AGENT,
-                deserialize=True
-            )
-    
-    def find_session(self, session_id: Optional[str] = None) -> Optional["Session"]:
-        """Find a specific session by session_id (sync version)."""
-        from upsonic.session.base import SessionType
-        
         return self.storage.get_session(
             session_id=session_id or self.session_id,
             session_type=SessionType.AGENT,
             deserialize=True
         )
     
+    def find_session(self, session_id: Optional[str] = None) -> Optional["Session"]:
+        """Find a specific session by session_id (sync version)."""
+        return run_awaitable_sync(self.find_session_async(session_id))
+    
     async def delete_session_async(self, session_id: Optional[str] = None) -> bool:
         """Delete the current or specified session."""
-        from upsonic.storage.base import AsyncStorage
-        
-        if isinstance(self.storage, AsyncStorage):
+        if is_async_storage_backend(self.storage):
             return await self.storage.adelete_session(session_id or self.session_id)
-        else:
-            return self.storage.delete_session(session_id or self.session_id)
+        return self.storage.delete_session(session_id or self.session_id)
     
     def delete_session(self, session_id: Optional[str] = None) -> bool:
         """Delete the current or specified session (sync version)."""
-        return self.storage.delete_session(session_id or self.session_id)
+        return run_awaitable_sync(self.delete_session_async(session_id))
     
     async def load_resumable_run_async(
         self,
