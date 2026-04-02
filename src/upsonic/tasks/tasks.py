@@ -87,7 +87,7 @@ class Task(BaseModel):
     _upsonic_tool_config: Optional[Any] = None
     _upsonic_is_tool: bool = False
 
-    query_knowledge_base: bool = False
+    query_knowledge_base: bool = True
 
     vector_search_top_k: Optional[int] = None
     vector_search_alpha: Optional[float] = None
@@ -333,6 +333,7 @@ class Task(BaseModel):
         vector_search_fusion_method: Optional[Literal['rrf', 'weighted']] = None,
         vector_search_similarity_threshold: Optional[float] = None,
         vector_search_filter: Optional[Dict[str, Any]] = None,
+        query_knowledge_base: bool = True,
         policy_apply_to_description: Optional[bool] = None,
         policy_apply_to_context: Optional[bool] = None,
         policy_apply_to_system_prompt: Optional[bool] = None,
@@ -421,6 +422,7 @@ class Task(BaseModel):
             "policy_apply_to_context": policy_apply_to_context,
             "policy_apply_to_system_prompt": policy_apply_to_system_prompt,
             "policy_apply_to_chat_history": policy_apply_to_chat_history,
+            "query_knowledge_base": query_knowledge_base,
             "policy_apply_to_tool_outputs": policy_apply_to_tool_outputs,
         })
         
@@ -1063,6 +1065,7 @@ class Task(BaseModel):
             "cache_method": self.cache_method,
             "cache_threshold": self.cache_threshold,
             "cache_duration_minutes": self.cache_duration_minutes,
+            "query_knowledge_base": self.query_knowledge_base,
             "vector_search_top_k": self.vector_search_top_k,
             "vector_search_alpha": self.vector_search_alpha,
             "vector_search_fusion_method": self.vector_search_fusion_method,
@@ -1270,7 +1273,7 @@ class Task(BaseModel):
             "price_id_", "task_id_", "not_main_task", "start_time", "end_time",
             "enable_thinking_tool", "enable_reasoning_tool",
             "guardrail_retries", "is_paused", "enable_cache", "cache_method",
-            "cache_threshold", "cache_duration_minutes", "vector_search_top_k",
+            "cache_threshold", "cache_duration_minutes", "query_knowledge_base", "vector_search_top_k",
             "vector_search_alpha", "vector_search_fusion_method",
             "vector_search_similarity_threshold", "vector_search_filter",
             "policy_apply_to_description", "policy_apply_to_context",
