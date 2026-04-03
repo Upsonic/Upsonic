@@ -74,6 +74,7 @@ class AgentIDTools(ToolKit):
         self,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
+        reverify_interval: Optional[int] = None,
         **kwargs: Any,
     ) -> None:
         """Initialize the AgentIDTools class.
@@ -86,6 +87,11 @@ class AgentIDTools(ToolKit):
             base_url: Override the default AgentID API base URL. Falls
                 back to ``AGENTID_BASE_URL`` env-var, then to
                 ``https://getagentid.dev/api/v1``.
+            reverify_interval: Seconds between re-verification calls.
+                ``0`` = verify every call (per-transaction).
+                ``None`` = session-scoped (verify once, cache for lifetime).
+                Any positive int = re-verify after N seconds.
+                Configurable per regulatory requirement.
             **kwargs: ToolKit params (include_tools, exclude_tools, timeout, etc.).
         """
         super().__init__(**kwargs)
@@ -94,10 +100,12 @@ class AgentIDTools(ToolKit):
         self.base_url: str = (
             base_url or getenv("AGENTID_BASE_URL") or _DEFAULT_BASE_URL
         ).rstrip("/")
+        self.reverify_interval: Optional[int] = reverify_interval
 
         # Cached agent_id from registration -- avoids duplicate registrations
         # for task-centric agents that spawn frequently.
         self._registered_agent_id: Optional[str] = None
+        self._last_verified_at: float = 0.0
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -145,16 +153,19 @@ class AgentIDTools(ToolKit):
         if resp.status_code == 401:
             raise AgentIDAuthError(
                 "AgentID API key is invalid or expired. "
-                "Check AGENTID_API_KEY and ensure it is active."
+                "Check AGENTID_API_KEY and ensure it is active. "
+                f"Response: {json.dumps(data, default=str)}"
             )
         if resp.status_code == 429:
             raise AgentIDRateLimitError(
-                f"AgentID rate limit exceeded: {data.get('message', 'Too many requests')}"
+                f"AgentID rate limit exceeded: {data.get('message', 'Too many requests')}. "
+                f"Response: {json.dumps(data, default=str)}"
             )
         if resp.status_code >= 400:
             raise RuntimeError(
                 f"AgentID API error ({resp.status_code}): "
-                f"{data.get('error', 'Unknown error')}"
+                f"{data.get('error', 'Unknown error')}. "
+                f"Response: {json.dumps(data, default=str)}"
             )
         return data
 
@@ -191,16 +202,19 @@ class AgentIDTools(ToolKit):
         if resp.status_code == 401:
             raise AgentIDAuthError(
                 "AgentID API key is invalid or expired. "
-                "Check AGENTID_API_KEY and ensure it is active."
+                "Check AGENTID_API_KEY and ensure it is active. "
+                f"Response: {json.dumps(data, default=str)}"
             )
         if resp.status_code == 429:
             raise AgentIDRateLimitError(
-                f"AgentID rate limit exceeded: {data.get('message', 'Too many requests')}"
+                f"AgentID rate limit exceeded: {data.get('message', 'Too many requests')}. "
+                f"Response: {json.dumps(data, default=str)}"
             )
         if resp.status_code >= 400:
             raise RuntimeError(
                 f"AgentID API error ({resp.status_code}): "
-                f"{data.get('error', 'Unknown error')}"
+                f"{data.get('error', 'Unknown error')}. "
+                f"Response: {json.dumps(data, default=str)}"
             )
         return data
 
