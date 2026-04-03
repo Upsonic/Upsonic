@@ -17,6 +17,7 @@ Environment variables:
 from __future__ import annotations
 
 import json
+import time
 from os import getenv
 from typing import Any, Dict, List, Optional
 
@@ -110,6 +111,24 @@ class AgentIDTools(ToolKit):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _should_reverify(self) -> bool:
+        """Check if re-verification is needed based on reverify_interval.
+
+        Returns True if the cache is stale and a fresh verify call is needed.
+        """
+        if self.reverify_interval is None:
+            # Session-scoped: verify once, cache forever
+            return self._last_verified_at == 0.0
+        if self.reverify_interval == 0:
+            # Per-transaction: always re-verify
+            return True
+        # Interval-based: re-verify if enough time has passed
+        return (time.monotonic() - self._last_verified_at) >= self.reverify_interval
+
+    def _mark_verified(self) -> None:
+        """Record that a verification just completed."""
+        self._last_verified_at = time.monotonic()
 
     def _auth_headers(self) -> Dict[str, str]:
         """Return Authorization header if an API key is available."""
@@ -301,6 +320,10 @@ class AgentIDTools(ToolKit):
         operations. Returns verification status, trust score,
         certificate validity, capabilities, and owner information.
 
+        Respects ``reverify_interval``: if a cached result exists and
+        the interval has not elapsed, returns the cached result without
+        a network call.
+
         This is a public endpoint -- no API key is required.
 
         Args:
@@ -311,26 +334,37 @@ class AgentIDTools(ToolKit):
             ``verified``, ``trust_score``, ``certificate``, and
             ``capabilities``.
         """
+        # Return cached result if re-verification is not yet due
+        if not self._should_reverify() and hasattr(self, '_cached_verify_result'):
+            return self._cached_verify_result
+
         try:
             result = self._post(
                 "/agents/verify",
                 {"agent_id": agent_id},
                 auth=False,
             )
-            return json.dumps(result, indent=2, default=str)
+            self._mark_verified()
+            self._cached_verify_result = json.dumps(result, indent=2, default=str)
+            return self._cached_verify_result
         except Exception as exc:
             error_log(f"AgentID verify error: {exc}")
             return json.dumps({"error": str(exc)})
 
     async def averify_agent(self, agent_id: str) -> str:
         """Async version of :meth:`verify_agent`."""
+        if not self._should_reverify() and hasattr(self, '_cached_verify_result'):
+            return self._cached_verify_result
+
         try:
             result = await self._apost(
                 "/agents/verify",
                 {"agent_id": agent_id},
                 auth=False,
             )
-            return json.dumps(result, indent=2, default=str)
+            self._mark_verified()
+            self._cached_verify_result = json.dumps(result, indent=2, default=str)
+            return self._cached_verify_result
         except Exception as exc:
             error_log(f"AgentID verify error: {exc}")
             return json.dumps({"error": str(exc)})
