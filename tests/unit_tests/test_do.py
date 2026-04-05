@@ -295,11 +295,12 @@ class TestTaskMetricsAfterExecution(unittest.TestCase):
         self.assertEqual(task.tool_calls[0]["tool_name"], "search")
 
     def test_price_id_reset_generates_new_id(self) -> None:
-        """Resetting price_id_ and accessing price_id generates a new UUID."""
+        """Setting a new price_id_ generates a different UUID."""
+        import uuid
         task = Task("Test task")
         first_id = task.price_id
 
-        task.price_id_ = None
+        task.price_id_ = str(uuid.uuid4())
         second_id = task.price_id
 
         self.assertNotEqual(first_id, second_id)

@@ -3,7 +3,6 @@ from typing import Any, Optional, Union, List, TYPE_CHECKING
 from pydantic import BaseModel, Field
 from enum import Enum
 import re
-from urllib.parse import urlparse
 import asyncio
 
 from upsonic.models import Model
@@ -401,7 +400,7 @@ class ReliabilityProcessor:
                     
                     # Aggregate sub-agent usage from validation runs
                     from upsonic.usage import RunUsage
-                    if not hasattr(task, '_reliability_sub_agent_usage'):
+                    if task._reliability_sub_agent_usage is None:
                         task._reliability_sub_agent_usage = RunUsage()
                     for v_output in validation_outputs:
                         if hasattr(v_output, 'usage') and v_output.usage:

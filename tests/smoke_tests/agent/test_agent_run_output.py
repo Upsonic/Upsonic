@@ -219,12 +219,12 @@ def test_tools_properties():
     assert output.tools_requiring_user_input == []
     assert output.tools_awaiting_external_execution == []
     
-    # Test with tools requiring confirmation
+    # Test with tools requiring confirmation (confirmed=None means pending)
     tool1 = ToolExecution(
         tool_name="tool1",
         tool_call_id="call_001",
         requires_confirmation=True,
-        confirmed=False
+        confirmed=None
     )
     
     # Test with tools requiring user input
@@ -573,27 +573,28 @@ def test_usage_tracking():
     output.start_usage_timer()
     assert output.usage is not None
     assert isinstance(output.usage, RunUsage)
-    
-    # Test update_usage_from_response with RequestUsage
+
+    # Test usage accumulation with RequestUsage via incr()
     request_usage = RequestUsage(
         input_tokens=100,
         output_tokens=50,
         cache_write_tokens=10,
         cache_read_tokens=5
     )
-    output.update_usage_from_response(request_usage)
-    
+    output.usage.incr(request_usage)
+
     assert output.usage.input_tokens == 100
     assert output.usage.output_tokens == 50
     assert output.usage.cache_write_tokens == 10
     assert output.usage.cache_read_tokens == 5
-    
-    # Test update_usage_from_response with dict
-    output.update_usage_from_response({
-        "input_tokens": 200,
-        "output_tokens": 100
-    })
-    
+
+    # Test usage accumulation with a second RequestUsage
+    request_usage2 = RequestUsage(
+        input_tokens=200,
+        output_tokens=100
+    )
+    output.usage.incr(request_usage2)
+
     assert output.usage.input_tokens == 300  # Accumulated
     assert output.usage.output_tokens == 150
     
@@ -800,10 +801,10 @@ def test_to_dict():
     )
     
     output.start_usage_timer()
-    output.update_usage_from_response(RequestUsage(input_tokens=100, output_tokens=50))
-    
+    output.usage.incr(RequestUsage(input_tokens=100, output_tokens=50))
+
     data = output.to_dict()
-    
+
     assert isinstance(data, dict)
     assert data["run_id"] == "test_001"
     assert data["agent_id"] == "agent_001"
@@ -930,7 +931,7 @@ def test_serialization_roundtrip():
     
     # Add usage
     original.start_usage_timer()
-    original.update_usage_from_response(RequestUsage(input_tokens=100, output_tokens=50))
+    original.usage.incr(RequestUsage(input_tokens=100, output_tokens=50))
     original.increment_tool_calls(3)
     original.set_usage_cost(0.05)
     
@@ -1071,7 +1072,7 @@ def test_chat_history_messages_response_single_run():
     historical_response = ModelResponse(parts=[TextPart(content="Hi from memory")])
     output.chat_history = [historical_request, historical_response]
     
-    # Step 2: Mark start of new run (MessageBuildStep does this)
+    # Step 2: Mark start of new run (ChatHistoryStep does this)
     output.start_new_run()
     
     # Step 3: Add new messages during this run

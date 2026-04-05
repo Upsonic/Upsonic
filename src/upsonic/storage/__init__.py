@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from .memory import (
         Memory,
         SessionMemoryFactory,
+        BaseMemoryStrategy,
         BaseSessionMemory,
         PreparedSessionInputs,
         AgentSessionMemory,
@@ -83,6 +84,7 @@ def _get_memory_classes() -> dict[str, Any]:
     from .memory import (
         Memory,
         SessionMemoryFactory,
+        BaseMemoryStrategy,
         BaseSessionMemory,
         PreparedSessionInputs,
         AgentSessionMemory,
@@ -93,6 +95,7 @@ def _get_memory_classes() -> dict[str, Any]:
     return {
         "Memory": Memory,
         "SessionMemoryFactory": SessionMemoryFactory,
+        "BaseMemoryStrategy": BaseMemoryStrategy,
         "BaseSessionMemory": BaseSessionMemory,
         "PreparedSessionInputs": PreparedSessionInputs,
         "AgentSessionMemory": AgentSessionMemory,
@@ -220,6 +223,7 @@ __all__ = [
     # Memory classes
     "Memory",
     "SessionMemoryFactory",
+    "BaseMemoryStrategy",
     "BaseSessionMemory",
     "PreparedSessionInputs",
     "AgentSessionMemory",

@@ -11,12 +11,10 @@ if TYPE_CHECKING:
     from upsonic.run.agent.output import AgentRunOutput
 
 from upsonic.storage.memory.user.base import BaseUserMemory
-
-
-def _is_async_storage(storage: Any) -> bool:
-    """Check if storage is an async storage implementation."""
-    from upsonic.storage.base import AsyncStorage
-    return isinstance(storage, AsyncStorage)
+from upsonic.storage.memory.storage_dispatch import (
+    is_async_storage_backend,
+    run_awaitable_sync,
+)
 
 
 class UserMemory(BaseUserMemory):
@@ -34,6 +32,7 @@ class UserMemory(BaseUserMemory):
         storage: "Storage",
         user_id: str,
         enabled: bool = True,
+        load_enabled: Optional[bool] = None,
         profile_schema: Optional[Type["BaseModel"]] = None,
         dynamic_profile: bool = False,
         update_mode: Literal['update', 'replace'] = 'update',
@@ -45,6 +44,7 @@ class UserMemory(BaseUserMemory):
             storage=storage,
             user_id=user_id,
             enabled=enabled,
+            load_enabled=load_enabled,
             profile_schema=profile_schema,
             dynamic_profile=dynamic_profile,
             update_mode=update_mode,
@@ -105,50 +105,51 @@ class UserMemory(BaseUserMemory):
         agent_id: Optional[str] = None,
         team_id: Optional[str] = None,
     ) -> Optional[str]:
-        """Get user profile formatted for prompt injection (async)."""
+        """Get user profile formatted for prompt injection (async).
+
+        Respects ``load_enabled`` – returns ``None`` when loading is disabled.
+        """
         from upsonic.utils.printing import info_log
         
-        if not self.enabled:
+        if not self.load_enabled:
             return None
-        
-        # Get user memory from storage using correct method based on storage type
-        try:
-            if _is_async_storage(self.storage):
+
+        if is_async_storage_backend(self.storage):
+            try:
                 user_memory = await self.storage.aget_user_memory(
                     user_id=self.user_id,
                     agent_id=agent_id,
                     team_id=team_id,
-                    deserialize=True
+                    deserialize=True,
                 )
-            else:
-                user_memory = self.storage.get_user_memory(
-                    user_id=self.user_id,
-                    agent_id=agent_id,
-                    team_id=team_id,
-                    deserialize=True
-                )
-            
-            if user_memory and hasattr(user_memory, 'user_memory') and user_memory.user_memory:
-                profile_str = self._format_profile_data(user_memory.user_memory)
-                if profile_str:
-                    if self.debug:
-                        info_log("Loaded user profile from storage", "UserMemory")
-                    return f"<UserProfile>\n{profile_str}\n</UserProfile>"
-        except Exception as e:
-            if self.debug:
-                info_log(f"Could not load user memory from storage: {e}", "UserMemory")
-        
-        return None
+                if user_memory and hasattr(user_memory, "user_memory") and user_memory.user_memory:
+                    profile_str = self._format_profile_data(user_memory.user_memory)
+                    if profile_str:
+                        if self.debug:
+                            info_log("Loaded user profile from storage", "UserMemory")
+                        return f"<UserProfile>\n{profile_str}\n</UserProfile>"
+            except Exception as e:
+                if self.debug:
+                    info_log(f"Could not load user memory from storage: {e}", "UserMemory")
+            return None
+
+        return self.get(agent_id=agent_id, team_id=team_id)
     
     def get(
         self,
         agent_id: Optional[str] = None,
         team_id: Optional[str] = None,
     ) -> Optional[str]:
-        """Get user profile formatted for prompt injection (sync version)."""
+        """Get user profile formatted for prompt injection (sync version).
+
+        Respects ``load_enabled`` – returns ``None`` when loading is disabled.
+        """
         from upsonic.utils.printing import info_log
+
+        if is_async_storage_backend(self.storage):
+            return run_awaitable_sync(self.aget(agent_id=agent_id, team_id=team_id))
         
-        if not self.enabled:
+        if not self.load_enabled:
             return None
         
         # Get user memory from storage using correct method
@@ -193,7 +194,7 @@ class UserMemory(BaseUserMemory):
         try:
             # Get current user memory from storage
             current_profile: Dict[str, Any] = {}
-            if _is_async_storage(self.storage):
+            if is_async_storage_backend(self.storage):
                 user_memory = await self.storage.aget_user_memory(
                     user_id=self.user_id,
                     agent_id=agent_id,
@@ -251,7 +252,7 @@ class UserMemory(BaseUserMemory):
                 team_id=team_id,
             )
             
-            if _is_async_storage(self.storage):
+            if is_async_storage_backend(self.storage):
                 await self.storage.aupsert_user_memory(user_memory_instance, deserialize=True)
             else:
                 self.storage.upsert_user_memory(user_memory_instance, deserialize=True)
@@ -268,7 +269,7 @@ class UserMemory(BaseUserMemory):
         agent_id: Optional[str] = None,
         team_id: Optional[str] = None,
     ) -> None:
-        """Analyze interaction and save user profile to storage (sync version - limited functionality)."""
+        """Analyze interaction and save user profile (runs async pipeline in a dedicated event loop when needed)."""
         from upsonic.utils.printing import warning_log
         
         if not self.enabled:
@@ -280,12 +281,8 @@ class UserMemory(BaseUserMemory):
                 "UserMemory"
             )
             return
-        
-        # Note: User analysis requires async LLM calls
-        warning_log(
-            "User analysis memory requires async execution. Use asave() instead.",
-            "UserMemory"
-        )
+
+        run_awaitable_sync(self.asave(output, agent_id=agent_id, team_id=team_id))
     
     async def _analyze_interaction_for_traits(
         self,

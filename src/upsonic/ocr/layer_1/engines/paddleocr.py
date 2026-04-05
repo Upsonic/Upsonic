@@ -103,7 +103,7 @@ class BasePaddleOCREngine(OCRProvider):
         super().__init__(config=config, **kwargs)
         self._paddle_instance = None
         self._paddle_kwargs = kwargs
-        self._initialize_paddle()
+        self._get_reader()
     
     def _validate_dependencies(self) -> None:
         """Validate that PaddleOCR is installed."""
@@ -119,6 +119,19 @@ class BasePaddleOCREngine(OCRProvider):
                 feature_name="PaddleOCR"
             )
     
+    def _get_reader(self):
+        """Get or lazily create the PaddleOCR instance (thread-safe).
+
+        Delegates to ``_initialize_paddle()`` on first call.
+        """
+        if self._paddle_instance is not None:
+            return self._paddle_instance
+        with self._reader_lock:
+            if self._paddle_instance is not None:
+                return self._paddle_instance
+            self._initialize_paddle()
+        return self._paddle_instance
+
     def _initialize_paddle(self) -> None:
         """Initialize the PaddleOCR instance. To be implemented by subclasses."""
         raise NotImplementedError("Subclasses must implement _initialize_paddle")

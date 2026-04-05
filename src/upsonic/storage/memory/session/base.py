@@ -1,15 +1,16 @@
 """Base abstract class for session memory implementations."""
 from __future__ import annotations
 
-import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, List, Optional, Union
 
 if TYPE_CHECKING:
-    from upsonic.session.base import SessionType, Session
+    from upsonic.session.base import SessionType
     from upsonic.storage.base import Storage
     from upsonic.models import Model
+
+from upsonic.storage.memory.strategy.base import BaseMemoryStrategy
 
 
 @dataclass
@@ -28,20 +29,29 @@ class PreparedSessionInputs:
     session: Optional[Any] = None
 
 
-class BaseSessionMemory(ABC):
+class BaseSessionMemory(BaseMemoryStrategy, ABC):
     """Abstract base class for session memory implementations.
     
     Each session type (Agent, Team, Workflow) has its own implementation
     that handles the specific session class and its data format.
     
+    **Save vs Load flag separation:**
+    
+    - ``enabled`` / ``summary_enabled`` are **save** flags – they control
+      whether data is persisted to storage (chat history, summary generation).
+    - ``load_enabled`` / ``load_summary_enabled`` are **load** flags – they
+      control whether persisted data is injected into subsequent runs.
+    
+    By default the load flags mirror the save flags so existing behaviour is
+    preserved.  Users can override them independently, e.g. save everything
+    but only inject summaries into runs to save tokens.
+    
     Subclasses must define:
     - session_type: Class attribute identifying which SessionType this handles
-    - aget(): Async method to load session and prepare inputs
-    - asave(): Async method to save session to storage
-    - aload_resumable_run(): Async method to load resumable runs for HITL
-    
-    The sync versions (get, save, load_resumable_run) are provided with
-    default implementations that wrap the async versions.
+    - ``aget`` / ``asave`` / ``get`` / ``save``: See
+      :class:`~upsonic.storage.memory.strategy.base.BaseMemoryStrategy`
+    - ``aload_resumable_run`` / ``aload_run``: async loaders for HITL / inspection
+    - ``load_resumable_run`` / ``load_run``: sync-callable loaders (async storage bridged when needed)
     """
     
     # Subclasses MUST define their session type as a class attribute
@@ -53,6 +63,8 @@ class BaseSessionMemory(ABC):
         session_id: str,
         enabled: bool = True,
         summary_enabled: bool = False,
+        load_enabled: Optional[bool] = None,
+        load_summary_enabled: Optional[bool] = None,
         num_last_messages: Optional[int] = None,
         feed_tool_call_results: bool = False,
         model: Optional[Union["Model", str]] = None,
@@ -65,52 +77,29 @@ class BaseSessionMemory(ABC):
         Args:
             storage: Storage backend for persistence
             session_id: Unique identifier for the session
-            enabled: Whether full session memory (chat history) is enabled
-            summary_enabled: Whether to generate/use session summaries
+            enabled: Save flag – persist chat history to storage
+            summary_enabled: Save flag – generate and persist session summaries
+            load_enabled: Load flag – inject chat history into runs (defaults to ``enabled``)
+            load_summary_enabled: Load flag – inject summary into runs (defaults to ``summary_enabled``)
             num_last_messages: Limit on number of message turns to keep
             feed_tool_call_results: Whether to include tool call results in history
             model: Model for summary generation (required if summary_enabled)
             debug: Enable debug logging
             debug_level: Debug verbosity level (1-3)
         """
-        self.storage = storage
-        self.session_id = session_id
-        self.enabled = enabled
-        self.summary_enabled = summary_enabled
-        self.num_last_messages = num_last_messages
-        self.feed_tool_call_results = feed_tool_call_results
-        self.model = model
-        self.debug = debug
-        self.debug_level = debug_level
-    
-    @abstractmethod
-    async def aget(self) -> PreparedSessionInputs:
-        """
-        Get session from storage and prepare inputs for task execution.
-        
-        This method:
-        1. Loads the session from storage
-        2. Prepares message history (with limiting/filtering if configured)
-        3. Prepares context injection (summary if enabled)
-        4. Prepares metadata injection
-        
-        Returns:
-            PreparedSessionInputs with all prepared data
-        """
-        raise NotImplementedError
-    
-    @abstractmethod
-    async def asave(self, output: Any, is_completed: bool) -> None:
-        """
-        Save session to storage.
-        
-        Args:
-            output: The run output (AgentRunOutput, TeamRunOutput, etc.)
-            is_completed: Whether the run completed successfully
-                - If True: Process memory features (summary, flatten messages)
-                - If False: Save checkpoint only (for HITL resumption)
-        """
-        raise NotImplementedError
+        super().__init__(
+            storage=storage,
+            enabled=enabled,
+            model=model,
+            debug=debug,
+            debug_level=debug_level,
+        )
+        self.session_id: str = session_id
+        self.summary_enabled: bool = summary_enabled
+        self.load_enabled: bool = load_enabled if load_enabled is not None else enabled
+        self.load_summary_enabled: bool = load_summary_enabled if load_summary_enabled is not None else summary_enabled
+        self.num_last_messages: Optional[int] = num_last_messages
+        self.feed_tool_call_results: bool = feed_tool_call_results
     
     @abstractmethod
     async def aload_resumable_run(
@@ -153,57 +142,21 @@ class BaseSessionMemory(ABC):
         """
         raise NotImplementedError
     
-    def get(self) -> PreparedSessionInputs:
-        """Synchronous version of aget()."""
-        try:
-            loop = asyncio.get_running_loop()
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                return pool.submit(asyncio.run, self.aget()).result()
-        except RuntimeError:
-            return asyncio.run(self.aget())
-    
-    def save(self, output: Any, is_completed: bool) -> None:
-        """Synchronous version of asave()."""
-        try:
-            loop = asyncio.get_running_loop()
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                pool.submit(asyncio.run, self.asave(output, is_completed)).result()
-        except RuntimeError:
-            asyncio.run(self.asave(output, is_completed))
-    
+    @abstractmethod
     def load_resumable_run(
         self,
         run_id: str,
         agent_id: Optional[str] = None,
     ) -> Optional[Any]:
-        """Synchronous version of aload_resumable_run()."""
-        try:
-            loop = asyncio.get_running_loop()
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                return pool.submit(
-                    asyncio.run, 
-                    self.aload_resumable_run(run_id, agent_id)
-                ).result()
-        except RuntimeError:
-            return asyncio.run(self.aload_resumable_run(run_id, agent_id))
-    
+        """Load a resumable run (sync API; supports sync and async storage)."""
+        ...
+
+    @abstractmethod
     def load_run(
         self,
         run_id: str,
         agent_id: Optional[str] = None,
     ) -> Optional[Any]:
-        """Synchronous version of aload_run()."""
-        try:
-            loop = asyncio.get_running_loop()
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                return pool.submit(
-                    asyncio.run, 
-                    self.aload_run(run_id, agent_id)
-                ).result()
-        except RuntimeError:
-            return asyncio.run(self.aload_run(run_id, agent_id))
+        """Load a run by id (sync API; supports sync and async storage)."""
+        ...
 

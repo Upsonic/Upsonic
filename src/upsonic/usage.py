@@ -313,6 +313,18 @@ class TaskUsage(UsageBase):
     def incr(self, incr_usage: "TaskUsage | RequestUsage") -> None:
         """Increment the usage in place.
 
+        When this TaskUsage has an active timer (i.e. it belongs to a live
+        parent task), ``duration`` and ``pause_time`` from the incoming
+        sub-agent usage are **skipped** because they overlap with the
+        parent's wall-clock measurement.  The parent's own timer
+        (start_timer / stop_timer) is the single source of truth for
+        ``duration``, and ``pause_time`` is tracked by the parent's own
+        HITL pause/resume cycle.
+
+        ``model_execution_time`` and ``tool_execution_time`` are always
+        added because they represent real compute that happened inside
+        sub-agents and are genuinely additive.
+
         Args:
             incr_usage: The usage to increment by.
         """
@@ -327,12 +339,27 @@ class TaskUsage(UsageBase):
                 else:
                     self.cost += incr_usage.cost
 
-            if incr_usage.duration is not None:
+            # duration and pause_time from sub-agents overlap with the
+            # parent's wall-clock timer — only add them when this
+            # TaskUsage does NOT have its own active timer (i.e. it is
+            # a pure aggregation container like RunUsage / AgentUsage).
+            has_own_timer = self.timer is not None
+
+            if not has_own_timer and incr_usage.duration is not None:
                 if self.duration is None:
                     self.duration = incr_usage.duration
                 else:
                     self.duration += incr_usage.duration
 
+            if not has_own_timer and incr_usage.pause_time is not None:
+                if self.pause_time is None:
+                    self.pause_time = incr_usage.pause_time
+                else:
+                    self.pause_time += incr_usage.pause_time
+
+            # model_execution_time and tool_execution_time are genuinely
+            # additive — sub-agent LLM/tool time is real compute that
+            # the parent should know about.
             if incr_usage.model_execution_time is not None:
                 if self.model_execution_time is None:
                     self.model_execution_time = incr_usage.model_execution_time
@@ -344,12 +371,6 @@ class TaskUsage(UsageBase):
                     self.tool_execution_time = incr_usage.tool_execution_time
                 else:
                     self.tool_execution_time += incr_usage.tool_execution_time
-
-            if incr_usage.pause_time is not None:
-                if self.pause_time is None:
-                    self.pause_time = incr_usage.pause_time
-                else:
-                    self.pause_time += incr_usage.pause_time
 
             if incr_usage.time_to_first_token is not None:
                 if self.time_to_first_token is None:

@@ -276,3 +276,202 @@ class TestTaskTimingSanity:
             assert u.upsonic_execution_time >= 0, (
                 f"Task {i}: upsonic_time negative ({u.upsonic_execution_time:.3f})"
             )
+
+
+# ---------------------------------------------------------------------------
+# 9. Duration formula — duration == model + tool + pause + overhead
+# ---------------------------------------------------------------------------
+
+TOLERANCE = 0.01  # seconds
+
+
+def _assert_duration_formula(usage: TaskUsage, label: str) -> None:
+    """Assert duration == model_execution_time + tool_execution_time + pause_time + upsonic_execution_time."""
+    model = usage.model_execution_time or 0.0
+    tool = usage.tool_execution_time or 0.0
+    pause = usage.pause_time or 0.0
+    overhead = usage.upsonic_execution_time or 0.0
+    expected = model + tool + pause + overhead
+    diff = abs(usage.duration - expected)
+    assert diff < TOLERANCE, (
+        f"[{label}] duration formula mismatch: "
+        f"duration={usage.duration:.4f} != model({model:.4f}) + tool({tool:.4f}) "
+        f"+ pause({pause:.4f}) + overhead({overhead:.4f}) = {expected:.4f}  (diff={diff:.4f})"
+    )
+
+
+class TestTaskDurationFormula:
+
+    def test_simple_task_duration_formula(self) -> None:
+        """duration == model + tool + pause + overhead for a simple text task."""
+        agent = _make_agent()
+        task = Task("What is 2+2? Answer with just the number.")
+        agent.do(task)
+        _assert_duration_formula(task.usage, "simple_formula")
+
+    def test_sync_task_duration_formula(self) -> None:
+        """duration formula holds for sync do runs."""
+        agent = _make_agent()
+        task = Task("What is 5+5? Answer with just the number.")
+        agent.do(task)
+        _assert_duration_formula(task.usage, "sync_formula")
+
+    def test_tool_task_duration_formula(self) -> None:
+        """duration formula holds when tools are used (tool_execution_time > 0)."""
+        def multiply(a: int, b: int) -> int:
+            """Multiply two numbers together.
+
+            Args:
+                a: First number.
+                b: Second number.
+            """
+            return a * b
+
+        agent = _make_agent(tools=[multiply])
+        task = Task("Multiply 6 by 7 using the multiply tool.")
+        agent.do(task)
+
+        usage = task.usage
+        _assert_duration_formula(usage, "tool_formula")
+        assert usage.tool_execution_time is not None and usage.tool_execution_time >= 0, (
+            f"tool_execution_time should be set, got {usage.tool_execution_time}"
+        )
+
+    def test_multiple_tasks_each_satisfies_formula(self) -> None:
+        """Each task's duration formula holds independently when running multiple tasks."""
+        agent = _make_agent()
+        tasks = [
+            Task("Say hello in French."),
+            Task("Say hello in German."),
+            Task("Say hello in Japanese."),
+        ]
+        for t in tasks:
+            agent.do(t)
+        for i, t in enumerate(tasks):
+            _assert_duration_formula(t.usage, f"multi_task_{i}")
+
+
+# ---------------------------------------------------------------------------
+# 10. Agent accumulation — agent.usage == sum(task.usage) for all fields
+# ---------------------------------------------------------------------------
+
+class TestAgentAccumulatesTaskMetrics:
+
+    def test_agent_duration_equals_sum_of_task_durations(self) -> None:
+        """Agent duration == sum of individual task durations."""
+        agent = _make_agent()
+        t1 = Task("Say yes.")
+        t2 = Task("Say no.")
+        t3 = Task("Say maybe.")
+
+        agent.do(t1)
+        agent.do(t2)
+        agent.do(t3)
+
+        sum_dur = t1.usage.duration + t2.usage.duration + t3.usage.duration
+        diff = abs(agent.usage.duration - sum_dur)
+        assert diff < TOLERANCE, (
+            f"Agent duration ({agent.usage.duration:.4f}) != "
+            f"sum of task durations ({sum_dur:.4f}), diff={diff:.4f}"
+        )
+
+    def test_agent_model_time_equals_sum_of_task_model_times(self) -> None:
+        """Agent model_execution_time == sum of individual task model_execution_times."""
+        agent = _make_agent()
+        t1 = Task("Say red.")
+        t2 = Task("Say blue.")
+
+        agent.do(t1)
+        agent.do(t2)
+
+        sum_model = t1.usage.model_execution_time + t2.usage.model_execution_time
+        diff = abs(agent.usage.model_execution_time - sum_model)
+        assert diff < TOLERANCE, (
+            f"Agent model_execution_time ({agent.usage.model_execution_time:.4f}) != "
+            f"sum ({sum_model:.4f}), diff={diff:.4f}"
+        )
+
+    def test_agent_tokens_equal_sum_of_task_tokens(self) -> None:
+        """Agent tokens == exact sum of individual task tokens."""
+        agent = _make_agent()
+        t1 = Task("Say one.")
+        t2 = Task("Say two.")
+        t3 = Task("Say three.")
+
+        agent.do(t1)
+        agent.do(t2)
+        agent.do(t3)
+
+        sum_in = t1.usage.input_tokens + t2.usage.input_tokens + t3.usage.input_tokens
+        sum_out = t1.usage.output_tokens + t2.usage.output_tokens + t3.usage.output_tokens
+
+        assert agent.usage.input_tokens == sum_in, (
+            f"Agent input_tokens ({agent.usage.input_tokens}) != sum ({sum_in})"
+        )
+        assert agent.usage.output_tokens == sum_out, (
+            f"Agent output_tokens ({agent.usage.output_tokens}) != sum ({sum_out})"
+        )
+
+    def test_agent_requests_equal_sum_of_task_requests(self) -> None:
+        """Agent requests == exact sum of individual task requests."""
+        agent = _make_agent()
+        t1 = Task("Say A.")
+        t2 = Task("Say B.")
+
+        o1 = agent.do(t1, return_output=True)
+        o2 = agent.do(t2, return_output=True)
+
+        sum_reqs = o1.usage.requests + o2.usage.requests
+        assert agent.usage.requests == sum_reqs, (
+            f"Agent requests ({agent.usage.requests}) != sum ({sum_reqs})"
+        )
+
+    def test_agent_tool_calls_equal_sum_of_task_tool_calls(self) -> None:
+        """Agent tool_calls == sum of individual task tool_calls."""
+        def add(a: int, b: int) -> int:
+            """Add two numbers.
+
+            Args:
+                a: First number.
+                b: Second number.
+            """
+            return a + b
+
+        agent = _make_agent(tools=[add])
+        t1 = Task("Use the add tool to add 1 and 2.")
+        t2 = Task("Use the add tool to add 3 and 4.")
+
+        o1 = agent.do(t1, return_output=True)
+        o2 = agent.do(t2, return_output=True)
+
+        sum_calls = o1.usage.tool_calls + o2.usage.tool_calls
+        assert agent.usage.tool_calls == sum_calls, (
+            f"Agent tool_calls ({agent.usage.tool_calls}) != sum ({sum_calls})"
+        )
+
+    def test_agent_tool_time_equals_sum_of_task_tool_times(self) -> None:
+        """Agent tool_execution_time == sum of individual task tool_execution_times."""
+        def slow_op(x: int) -> int:
+            """Do a slow operation.
+
+            Args:
+                x: Input number.
+            """
+            import time
+            time.sleep(0.3)
+            return x * 2
+
+        agent = _make_agent(tools=[slow_op])
+        t1 = Task("Use the slow_op tool with input 5.")
+        t2 = Task("Use the slow_op tool with input 10.")
+
+        agent.do(t1)
+        agent.do(t2)
+
+        sum_tool = (t1.usage.tool_execution_time or 0.0) + (t2.usage.tool_execution_time or 0.0)
+        agent_tool = agent.usage.tool_execution_time or 0.0
+        diff = abs(agent_tool - sum_tool)
+        assert diff < TOLERANCE, (
+            f"Agent tool_execution_time ({agent_tool:.4f}) != "
+            f"sum ({sum_tool:.4f}), diff={diff:.4f}"
+        )

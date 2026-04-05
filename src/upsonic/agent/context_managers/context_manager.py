@@ -63,7 +63,11 @@ class ContextManager:
             previous_task_output_parts = []
             additional_parts = []
 
-            for item in self.task.context:
+            context_items: list[Any] = (
+                self.task.context if isinstance(self.task.context, list) else [self.task.context]
+            )
+
+            for item in context_items:
                 if isinstance(item, Task):  
                     task_parts.append(f"Task ID ({item.get_task_id()}): " + turn_task_to_string(item))
                 
@@ -103,11 +107,15 @@ class ContextManager:
         knowledge_base_parts: List[str],
         query: str
     ) -> None:
-        """Process a KnowledgeBase item."""
+        """Process a KnowledgeBase item.
+        
+        Always indexes/stores data when rag is enabled.
+        Only queries and appends results when knowledge_base.query is True.
+        """
         try:
-            if knowledge_base.rag:
-                await knowledge_base.setup_rag()
+            await knowledge_base.setup_async()
 
+            if self.task.query_knowledge_base:
                 rag_results = await knowledge_base.query_async(query, task=self.task)
 
                 if rag_results:
@@ -115,15 +123,9 @@ class ContextManager:
                     knowledge_base_parts.append(formatted_results)
                 else:
                     warning_log(f"No results found for KnowledgeBase '{knowledge_base.name}' with query: '{query}'", context="ContextManager")
-            else:
-                knowledge_base_parts.append(knowledge_base.markdown())
 
         except Exception as e:
             error_log(f"Error processing KnowledgeBase '{knowledge_base.name}': {str(e)}", context="ContextManager")
-            try:
-                knowledge_base_parts.append(knowledge_base.markdown())
-            except Exception as fallback_error:
-                error_log(f"Fallback also failed for KnowledgeBase '{knowledge_base.name}': {str(fallback_error)}", context="ContextManager")
 
     def _format_rag_results(self, rag_results: List["RAGSearchResult"], knowledge_base: "KnowledgeBase") -> str:
         """Format RAG results with enhanced context and metadata."""
@@ -258,7 +260,10 @@ class ContextManager:
         health_status = {}
         
         if self.task.context:
-            for item in self.task.context:
+            ctx_items: list[Any] = (
+                self.task.context if isinstance(self.task.context, list) else [self.task.context]
+            )
+            for item in ctx_items:
                 if isinstance(item, KnowledgeBase):
                     try:
                         health_status[item.name] = await item.health_check_async()
@@ -287,7 +292,8 @@ class ContextManager:
                 "total_cost": self.task.total_cost,
                 "total_input_tokens": self.task.total_input_token,
                 "total_output_tokens": self.task.total_output_token,
-                "tool_calls_count": len(self.task.tool_calls) if self.task.tool_calls else 0
+                "tool_calls_count": len(self.task.tool_calls) if self.task.tool_calls else 0,
+                "query_knowledge_base": self.task.query_knowledge_base
             },
             "context": {
                 "items_count": len(self.task.context) if self.task.context else 0,
@@ -321,12 +327,14 @@ class ContextManager:
             from upsonic.knowledge_base.knowledge_base import KnowledgeBase
             from upsonic.tasks.tasks import Task
             from upsonic.context.sources import TaskOutputSource
-            
-            for item in self.task.context:
+
+            ctx_items_info: list[Any] = (
+                self.task.context if isinstance(self.task.context, list) else [self.task.context]
+            )
+            for item in ctx_items_info:
                 if isinstance(item, KnowledgeBase):
-                    kb_info = {
+                    kb_info: Dict[str, Any] = {
                         "name": item.name,
-                        "type": "rag" if item.rag else "static",
                         "is_ready": getattr(item, '_is_ready', False),
                         "knowledge_id": getattr(item, 'knowledge_id', 'unknown'),
                         "sources_count": len(item.sources) if hasattr(item, 'sources') else 0

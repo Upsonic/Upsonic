@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -318,15 +319,9 @@ class AutonomousShellToolKit(ToolKit):
         Returns:
             Information about the command availability
         """
-        result = subprocess.run(
-            f"which {command}",
-            shell=True,
-            capture_output=True,
-            text=True,
-        )
-        
-        if result.returncode == 0:
-            return f"✅ Command '{command}' is available at: {result.stdout.strip()}"
+        path = shutil.which(command)
+        if path is not None:
+            return f"✅ Command '{command}' is available at: {path}"
         else:
             return f"❌ Command '{command}' is not available"
     

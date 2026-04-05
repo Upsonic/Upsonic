@@ -2,7 +2,7 @@
 Policy class that combines rules and actions
 """
 
-from typing import Optional, List
+from typing import Optional
 import asyncio
 from .rule_base import RuleBase
 from .action_base import ActionBase
@@ -19,12 +19,23 @@ class Policy:
                  text_finder_llm=None,
                  language_identify_model: str = None,
                  base_model: str = None,
-                 text_finder_model: str = None):
-        self.name = name
-        self.description = description
-        self.rule = rule
-        self.action = action
-        self.language = language
+                 text_finder_model: str = None,
+                 apply_to_description: Optional[bool] = None,
+                 apply_to_context: Optional[bool] = None,
+                 apply_to_system_prompt: Optional[bool] = None,
+                 apply_to_chat_history: Optional[bool] = None,
+                 apply_to_tool_outputs: Optional[bool] = None):
+        self.name: str = name
+        self.description: str = description
+        self.rule: RuleBase = rule
+        self.action: ActionBase = action
+        self.language: str = language
+        
+        self.apply_to_description: Optional[bool] = apply_to_description
+        self.apply_to_context: Optional[bool] = apply_to_context
+        self.apply_to_system_prompt: Optional[bool] = apply_to_system_prompt
+        self.apply_to_chat_history: Optional[bool] = apply_to_chat_history
+        self.apply_to_tool_outputs: Optional[bool] = apply_to_tool_outputs
         
         # Create LLM instances with models if specified
         from ..llm.upsonic_llm import UpsonicLLMProvider
@@ -69,23 +80,29 @@ class Policy:
         """Execute the full policy: check rule and take action"""
         rule_result = self.check(policy_input)
 
-        action_result = self.action.execute_action(rule_result, policy_input.input_texts or [], self.language, 
-                                        self.language_identify_llm, self.base_llm, self.text_finder_llm)
+        action_result = self.action.execute_action(
+            rule_result, policy_input.input_texts or [], self.language, 
+            self.language_identify_llm, self.base_llm, self.text_finder_llm,
+            existing_transformation_map=getattr(policy_input, 'existing_transformation_map', None)
+        )
         return rule_result, action_result, action_result
 
     async def execute_async(self, policy_input: PolicyInput) -> tuple[RuleOutput, ActionOutput, PolicyOutput]:
         """Async execution path without breaking the sync API."""
         rule_result = await self.check_async(policy_input)
+        existing_map = getattr(policy_input, 'existing_transformation_map', None)
         if hasattr(self.action, "execute_action_async"):
             action_result = await self.action.execute_action_async(
                 rule_result, policy_input.input_texts or [], self.language,
-                self.language_identify_llm, self.base_llm, self.text_finder_llm
+                self.language_identify_llm, self.base_llm, self.text_finder_llm,
+                existing_transformation_map=existing_map
             )
         else:
             action_result = await asyncio.to_thread(
                 self.action.execute_action,
                 rule_result, policy_input.input_texts or [], self.language,
-                self.language_identify_llm, self.base_llm, self.text_finder_llm
+                self.language_identify_llm, self.base_llm, self.text_finder_llm,
+                existing_transformation_map=existing_map
             )
         return rule_result, action_result, action_result
     

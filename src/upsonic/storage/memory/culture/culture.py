@@ -10,12 +10,10 @@ if TYPE_CHECKING:
     from upsonic.models import Model
 
 from upsonic.storage.memory.culture.base import BaseCultureMemory
-
-
-def _is_async_storage(storage: Any) -> bool:
-    """Check if storage is an async storage implementation."""
-    from upsonic.storage.base import AsyncStorage
-    return isinstance(storage, AsyncStorage)
+from upsonic.storage.memory.storage_dispatch import (
+    is_async_storage_backend,
+    run_awaitable_sync,
+)
 
 
 class CultureMemory(BaseCultureMemory):
@@ -54,53 +52,8 @@ class CultureMemory(BaseCultureMemory):
             debug=debug,
             debug_level=debug_level,
         )
-    
-    async def aget(
-        self,
-        culture_id: Optional[str] = None,
-        agent_id: Optional[str] = None,
-        team_id: Optional[str] = None,
-    ) -> Optional["CulturalKnowledge"]:
-        """Get cultural knowledge from storage."""
-        from upsonic.utils.printing import info_log
-        
-        if not self.enabled:
-            return None
-        
-        try:
-            if culture_id:
-                # Use get_cultural_knowledge(id) for specific ID lookup
-                if _is_async_storage(self.storage):
-                    result = await self.storage.aget_cultural_knowledge(culture_id)
-                else:
-                    result = self.storage.get_cultural_knowledge(culture_id)
-            else:
-                # Use get_all_cultural_knowledge with filters
-                if _is_async_storage(self.storage):
-                    results = await self.storage.aget_all_cultural_knowledge(
-                        agent_id=agent_id,
-                        team_id=team_id,
-                        limit=1,
-                    )
-                else:
-                    results = self.storage.get_all_cultural_knowledge(
-                        agent_id=agent_id,
-                        team_id=team_id,
-                        limit=1,
-                    )
-                result = results[0] if results else None
-            
-            if result and self.debug:
-                info_log(f"Loaded cultural knowledge: {result.name}", "CultureMemory")
-            
-            return result
-            
-        except Exception as e:
-            if self.debug:
-                info_log(f"Could not load cultural knowledge: {e}", "CultureMemory")
-            return None
-    
-    async def aget_all(
+
+    async def _aquery_all_cultural(
         self,
         name: Optional[str] = None,
         limit: Optional[int] = None,
@@ -109,6 +62,230 @@ class CultureMemory(BaseCultureMemory):
         sort_order: Optional[str] = None,
         agent_id: Optional[str] = None,
         team_id: Optional[str] = None,
+        deserialize: bool = True,
+    ) -> Union[List["CulturalKnowledge"], Tuple[List[Dict[str, Any]], int]]:
+        return await self.storage.aget_all_cultural_knowledge(
+            name=name,
+            limit=limit,
+            page=page,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            agent_id=agent_id,
+            team_id=team_id,
+            deserialize=deserialize,
+        )
+
+    def _query_all_cultural(
+        self,
+        name: Optional[str] = None,
+        limit: Optional[int] = None,
+        page: Optional[int] = None,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        team_id: Optional[str] = None,
+        deserialize: bool = True,
+    ) -> Union[List["CulturalKnowledge"], Tuple[List[Dict[str, Any]], int]]:
+        if is_async_storage_backend(self.storage):
+            return run_awaitable_sync(
+                self._aquery_all_cultural(
+                    name=name,
+                    limit=limit,
+                    page=page,
+                    sort_by=sort_by,
+                    sort_order=sort_order,
+                    agent_id=agent_id,
+                    team_id=team_id,
+                    deserialize=deserialize,
+                )
+            )
+        return self.storage.get_all_cultural_knowledge(
+            name=name,
+            limit=limit,
+            page=page,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            agent_id=agent_id,
+            team_id=team_id,
+            deserialize=deserialize,
+        )
+
+    def get(
+        self,
+        culture_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        team_id: Optional[str] = None,
+    ) -> Optional["CulturalKnowledge"]:
+        """Load cultural knowledge (async or sync storage)."""
+        from upsonic.utils.printing import info_log
+
+        if is_async_storage_backend(self.storage):
+            return run_awaitable_sync(self.aget(culture_id, agent_id, team_id))
+
+        if not self.enabled:
+            return None
+
+        try:
+            if culture_id:
+                result = self.storage.get_cultural_knowledge(culture_id)
+            else:
+                results = self.storage.get_all_cultural_knowledge(
+                    agent_id=agent_id,
+                    team_id=team_id,
+                    limit=1,
+                    deserialize=True,
+                )
+                result = results[0] if isinstance(results, list) and results else None
+
+            if result and self.debug:
+                info_log(f"Loaded cultural knowledge: {result.name}", "CultureMemory")
+
+            return result
+        except Exception as e:
+            if self.debug:
+                info_log(f"Could not load cultural knowledge: {e}", "CultureMemory")
+            return None
+
+    def save(
+        self,
+        cultural_knowledge: "CulturalKnowledge",
+        agent_id: Optional[str] = None,
+        team_id: Optional[str] = None,
+    ) -> Optional["CulturalKnowledge"]:
+        """Persist cultural knowledge (async or sync storage)."""
+        from upsonic.utils.printing import info_log, warning_log
+
+        if is_async_storage_backend(self.storage):
+            return run_awaitable_sync(self.asave(cultural_knowledge, agent_id, team_id))
+
+        if not self.enabled:
+            return None
+
+        try:
+            if cultural_knowledge.id is None:
+                cultural_knowledge.id = str(uuid.uuid4())
+            if agent_id and cultural_knowledge.agent_id is None:
+                cultural_knowledge.agent_id = agent_id
+            if team_id and cultural_knowledge.team_id is None:
+                cultural_knowledge.team_id = team_id
+            cultural_knowledge.bump_updated_at()
+
+            result = self.storage.upsert_cultural_knowledge(cultural_knowledge)
+
+            if self.debug:
+                info_log(
+                    f"Saved cultural knowledge: {cultural_knowledge.name} (id={cultural_knowledge.id})",
+                    "CultureMemory",
+                )
+
+            return result
+        except Exception as e:
+            warning_log(f"Failed to save cultural knowledge: {e}", "CultureMemory")
+            return None
+
+    def get_all(
+        self,
+        agent_id: Optional[str] = None,
+        team_id: Optional[str] = None,
+        categories: Optional[List[str]] = None,
+        limit: Optional[int] = None,
+    ) -> List["CulturalKnowledge"]:
+        """List cultural knowledge (async or sync storage)."""
+        from upsonic.utils.printing import info_log
+
+        if not self.enabled:
+            return []
+
+        try:
+            raw = self._query_all_cultural(
+                agent_id=agent_id,
+                team_id=team_id,
+                limit=limit,
+                deserialize=True,
+            )
+            if not isinstance(raw, list):
+                return []
+
+            if categories:
+                want = set(categories)
+                raw = [
+                    k
+                    for k in raw
+                    if getattr(k, "categories", None)
+                    and want.intersection(set(k.categories or []))
+                ]
+
+            if raw and self.debug:
+                info_log(f"Loaded {len(raw)} cultural knowledge entries", "CultureMemory")
+
+            return raw
+        except Exception as e:
+            if self.debug:
+                info_log(f"Could not load cultural knowledge list: {e}", "CultureMemory")
+            return []
+
+    def delete(self, culture_id: str) -> bool:
+        """Delete cultural knowledge (async or sync storage)."""
+        from upsonic.utils.printing import info_log, warning_log
+
+        if is_async_storage_backend(self.storage):
+            return run_awaitable_sync(self.adelete(culture_id))
+
+        if not self.enabled:
+            return False
+
+        try:
+            self.storage.delete_cultural_knowledge(culture_id)
+            if self.debug:
+                info_log(f"Deleted cultural knowledge: {culture_id}", "CultureMemory")
+            return True
+        except Exception as e:
+            warning_log(f"Failed to delete cultural knowledge: {e}", "CultureMemory")
+            return False
+
+    async def aget(
+        self,
+        culture_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        team_id: Optional[str] = None,
+    ) -> Optional["CulturalKnowledge"]:
+        """Get cultural knowledge from storage."""
+        from upsonic.utils.printing import info_log
+
+        if not self.enabled:
+            return None
+
+        try:
+            if is_async_storage_backend(self.storage):
+                if culture_id:
+                    result = await self.storage.aget_cultural_knowledge(culture_id)
+                else:
+                    results = await self.storage.aget_all_cultural_knowledge(
+                        agent_id=agent_id,
+                        team_id=team_id,
+                        limit=1,
+                    )
+                    result = results[0] if results else None
+                if result and self.debug:
+                    info_log(f"Loaded cultural knowledge: {result.name}", "CultureMemory")
+                return result
+
+            return self.get(culture_id, agent_id, team_id)
+        except Exception as e:
+            if self.debug:
+                info_log(f"Could not load cultural knowledge: {e}", "CultureMemory")
+            return None
+    
+    async def aget_all(
+        self,
+        agent_id: Optional[str] = None,
+        team_id: Optional[str] = None,
+        categories: Optional[List[str]] = None,
+        limit: Optional[int] = None,
+        name: Optional[str] = None,
+        page: Optional[int] = None,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None,
         deserialize: bool = True,
     ) -> Union[List["CulturalKnowledge"], Tuple[List[Dict[str, Any]], int]]:
         """Get all cultural knowledge entries from storage.
@@ -121,6 +298,7 @@ class CultureMemory(BaseCultureMemory):
             sort_order: Sort order ('asc' or 'desc').
             agent_id: Filter by agent ID.
             team_id: Filter by team ID.
+            categories: When results are deserialized objects, filter by overlapping tags.
             deserialize: If True, return list of CulturalKnowledge objects.
                         If False, return tuple of (list of dicts, total count).
         
@@ -133,7 +311,7 @@ class CultureMemory(BaseCultureMemory):
             return [] if deserialize else ([], 0)
         
         try:
-            if _is_async_storage(self.storage):
+            if is_async_storage_backend(self.storage):
                 results = await self.storage.aget_all_cultural_knowledge(
                     name=name,
                     limit=limit,
@@ -145,7 +323,7 @@ class CultureMemory(BaseCultureMemory):
                     deserialize=deserialize,
                 )
             else:
-                results = self.storage.get_all_cultural_knowledge(
+                results = self._query_all_cultural(
                     name=name,
                     limit=limit,
                     page=page,
@@ -176,8 +354,17 @@ class CultureMemory(BaseCultureMemory):
                 return (results if isinstance(results, list) else [], 0)
             
             # Return list of CulturalKnowledge objects
-            return results if isinstance(results, list) and results else []
-            
+            out = results if isinstance(results, list) and results else []
+            if categories and out:
+                want = set(categories)
+                out = [
+                    k
+                    for k in out
+                    if getattr(k, "categories", None)
+                    and want.intersection(set(k.categories or []))
+                ]
+            return out
+
         except Exception as e:
             if self.debug:
                 info_log(f"Could not load cultural knowledge list: {e}", "CultureMemory")
@@ -194,34 +381,29 @@ class CultureMemory(BaseCultureMemory):
         
         if not self.enabled:
             return None
-        
+
+        if not is_async_storage_backend(self.storage):
+            return self.save(cultural_knowledge, agent_id=agent_id, team_id=team_id)
+
         try:
-            # Ensure cultural knowledge has an ID
             if cultural_knowledge.id is None:
                 cultural_knowledge.id = str(uuid.uuid4())
-            
-            # Set agent_id and team_id if provided and not already set
             if agent_id and cultural_knowledge.agent_id is None:
                 cultural_knowledge.agent_id = agent_id
             if team_id and cultural_knowledge.team_id is None:
                 cultural_knowledge.team_id = team_id
-            
-            # Bump updated_at timestamp
             cultural_knowledge.bump_updated_at()
-            
-            if _is_async_storage(self.storage):
-                result = await self.storage.aupsert_cultural_knowledge(cultural_knowledge)
-            else:
-                result = self.storage.upsert_cultural_knowledge(cultural_knowledge)
-            
+
+            result = await self.storage.aupsert_cultural_knowledge(cultural_knowledge)
+
             if self.debug:
                 info_log(
                     f"Saved cultural knowledge: {cultural_knowledge.name} (id={cultural_knowledge.id})",
-                    "CultureMemory"
+                    "CultureMemory",
                 )
-            
+
             return result
-            
+
         except Exception as e:
             warning_log(f"Failed to save cultural knowledge: {e}", "CultureMemory")
             return None
@@ -235,18 +417,18 @@ class CultureMemory(BaseCultureMemory):
         
         if not self.enabled:
             return False
-        
+
+        if not is_async_storage_backend(self.storage):
+            return self.delete(culture_id)
+
         try:
-            if _is_async_storage(self.storage):
-                await self.storage.adelete_cultural_knowledge(culture_id)
-            else:
-                self.storage.delete_cultural_knowledge(culture_id)
-            
+            await self.storage.adelete_cultural_knowledge(culture_id)
+
             if self.debug:
                 info_log(f"Deleted cultural knowledge: {culture_id}", "CultureMemory")
-            
+
             return True
-            
+
         except Exception as e:
             warning_log(f"Failed to delete cultural knowledge: {e}", "CultureMemory")
             return False

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional, Union
 from pathlib import Path
@@ -88,13 +89,14 @@ class OCRProvider(ABC):
     
     def __init__(self, config: Optional[OCRConfig] = None, **kwargs):
         """Initialize the OCR provider.
-        
+
         Args:
             config: OCRConfig object with provider settings
             **kwargs: Additional provider-specific arguments
         """
         self.config = config or OCRConfig(**kwargs)
         self._metrics = OCRMetrics(provider=self.__class__.__name__)
+        self._reader_lock = threading.Lock()
         self._validate_dependencies()
     
     @property
@@ -113,7 +115,21 @@ class OCRProvider(ABC):
     def _validate_dependencies(self) -> None:
         """Validate that required dependencies are installed."""
         raise NotImplementedError()
-    
+
+    @abstractmethod
+    def _get_reader(self):
+        """Get or lazily create the underlying OCR reader/engine instance.
+
+        Implementations MUST be thread-safe. Use ``self._reader_lock``
+        (provided by the base class) with a double-checked locking pattern
+        to ensure the reader is initialised exactly once, even when
+        multiple threads call this method concurrently.
+
+        Returns:
+            The provider-specific reader/engine object.
+        """
+        raise NotImplementedError()
+
     @abstractmethod
     def _process_image(self, image, **kwargs) -> OCRResult:
         """Process a single image and extract text (sync).

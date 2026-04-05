@@ -133,6 +133,28 @@ PromptCompressor = None
 RetryMode = Literal["raise", "return_false"]
 
 
+def _merge_transformation_maps(
+    target: Dict[int, Dict[str, str]],
+    source: Dict[int, Dict[str, str]],
+) -> None:
+    """Merge *source* transformation map into *target* without overwriting existing keys.
+
+    New entries from *source* are appended with keys starting after the current
+    maximum key in *target*, preserving all original mappings.
+    """
+    if not source:
+        return
+    next_key: int = (max(target.keys()) + 1) if target else 1
+    for _old_key, entry in source.items():
+        anon_val: str = entry.get("anonymous", "")
+        already_exists: bool = any(
+            e.get("anonymous") == anon_val for e in target.values()
+        ) if anon_val else False
+        if not already_exists:
+            target[next_key] = entry
+            next_key += 1
+
+
 class Agent(BaseAgent):
     """
     A comprehensive, high-level AI Agent that integrates all framework components.
@@ -279,6 +301,12 @@ class Agent(BaseAgent):
         instrument: Union[bool, "TracingProvider", "InstrumentationSettings", None] = None,
         # PromptLayer integration
         promptlayer: Optional["PromptLayer"] = None,
+        # Policy scope flags (global defaults for which inputs user policies apply to)
+        user_policy_apply_to_description: bool = True,
+        user_policy_apply_to_context: bool = True,
+        user_policy_apply_to_system_prompt: bool = True,
+        user_policy_apply_to_chat_history: bool = True,
+        user_policy_apply_to_tool_outputs: bool = True,
     ):
         """
         Initialize the Agent with comprehensive configuration options.
@@ -391,6 +419,12 @@ class Agent(BaseAgent):
         self.work_experience = work_experience
         self._user_system_prompt: Optional[str] = system_prompt
         self._last_built_system_prompt: Optional[str] = None
+        
+        self.user_policy_apply_to_description: bool = user_policy_apply_to_description
+        self.user_policy_apply_to_context: bool = user_policy_apply_to_context
+        self.user_policy_apply_to_system_prompt: bool = user_policy_apply_to_system_prompt
+        self.user_policy_apply_to_chat_history: bool = user_policy_apply_to_chat_history
+        self.user_policy_apply_to_tool_outputs: bool = user_policy_apply_to_tool_outputs
         
         self.company_url = company_url
         self.company_objective = company_objective
@@ -1390,15 +1424,21 @@ class Agent(BaseAgent):
         start_time: float,
         end_time: float,
     ) -> None:
-        """Fire-and-forget: launches PromptLayer logging in a background thread."""
-        def _run():
+        """Fire-and-forget: launches PromptLayer logging in a background thread.
+
+        The thread is registered with the PromptLayer instance so that
+        ``shutdown()`` can wait for it to finish before closing clients.
+        """
+        def _run() -> None:
             try:
                 asyncio.run(self._log_to_promptlayer_unified(task, output, start_time, end_time))
             except Exception as e:
                 _pl_logger.warning("Background PromptLayer logging failed: %s", e)
 
-        thread = threading.Thread(target=_run, daemon=True)
+        thread = threading.Thread(target=_run, daemon=False)
         thread.start()
+        if self.promptlayer is not None:
+            self.promptlayer._register_thread(thread)
 
     def _build_pl_tools(self) -> Optional[List[Dict[str, Any]]]:
         """Build PromptLayer-compatible tool definitions from the agent's registered tools."""
@@ -2088,73 +2128,6 @@ class Agent(BaseAgent):
             return {k: v.to_dict() for k, v in self.skills.get_metrics().items()}
         return {}
 
-    async def _build_model_request(
-        self, 
-        task: "Task", 
-        memory_handler: Optional["MemoryManager"], 
-        state: Optional["State"] = None,
-    ) -> tuple[List["ModelRequest"], Optional["ModelResponse"]]:
-        """Build the complete message history for the model request.
-
-        Returns:
-            A tuple of (messages, context_full_response).
-            context_full_response is None when the context fits within the
-            model's window, or a ModelResponse with a fixed message when
-            the context is full after all reduction strategies.
-        """
-        from upsonic.agent.context_managers import SystemPromptManager, ContextManager
-        from upsonic.messages import SystemPromptPart, UserPromptPart, ModelRequest
-        
-        messages: List["ModelRequest"] = []
-        message_history = memory_handler.get_message_history()
-        messages.extend(message_history)
-        
-        system_prompt_manager = SystemPromptManager(self, task)
-        context_manager = ContextManager(self, task, state)
-        
-        async with system_prompt_manager.manage_system_prompt(memory_handler) as sp_handler, \
-                   context_manager.manage_context(memory_handler) as _ctx_handler:
-            
-            if hasattr(self, '_agent_run_output') and self._agent_run_output and self._agent_run_output.input:
-                run_input = self._agent_run_output.input
-                if run_input.input is None:
-                    run_input.build_input(context_formatted=task.context_formatted)
-                task_input = run_input.input
-                if task.context_formatted:
-                    task.context_formatted = None
-            else:
-                raise RuntimeError("AgentRunInput not available. This should not happen.")
-            
-            user_part = UserPromptPart(content=task_input)
-            
-            parts = []
-            
-            if sp_handler.should_include_system_prompt(messages):
-                system_prompt = sp_handler.get_system_prompt()
-                if system_prompt:
-                    self._last_built_system_prompt = system_prompt
-                    system_part = SystemPromptPart(content=system_prompt)
-                    parts.append(system_part)
-            
-            parts.append(user_part)
-            
-            current_request = ModelRequest(parts=parts)
-            messages.append(current_request)
-
-        # Apply context management middleware
-        context_full_response: Optional["ModelResponse"] = None
-        if self.context_management and self._context_management_middleware:
-            managed_msgs, ctx_full = await self._context_management_middleware.apply(messages)
-            messages = managed_msgs
-            # Propagate summarization usage to the parent run context
-            self._propagate_context_management_usage()
-            if ctx_full:
-                context_full_response = self._context_management_middleware._build_context_full_response(
-                    model_name=self.model.model_name
-                )
-
-        return messages, context_full_response
-    
     async def _build_model_request_with_input(
         self, 
         task: "Task", 
@@ -2576,9 +2549,6 @@ class Agent(BaseAgent):
                         _tool_elapsed = _time.time() - _tool_start
 
                         if hasattr(self, '_agent_run_output') and self._agent_run_output:
-                            self._agent_run_output.add_tool_execution_time(_tool_elapsed)
-
-                        if hasattr(self, '_agent_run_output') and self._agent_run_output:
                             from upsonic.run.tools.tools import ToolExecution
                             tool_exec = ToolExecution(
                                 tool_call_id=tool_call.tool_call_id,
@@ -2607,8 +2577,6 @@ class Agent(BaseAgent):
                     except Exception as e:
                         _tool_elapsed = _time.time() - _tool_start
                         self._otel.set_tool_result(otel_tool_span, _tool_elapsed, success=False, error=e)
-                        if hasattr(self, '_agent_run_output') and self._agent_run_output:
-                            self._agent_run_output.add_tool_execution_time(_tool_elapsed)
                         return ToolReturnPart(
                             tool_name=tool_call.tool_name,
                             content=f"Error executing tool: {str(e)}",
@@ -2616,11 +2584,15 @@ class Agent(BaseAgent):
                             timestamp=now_utc()
                         )
             
-            # Execute all tools in parallel, capturing exceptions
+            import time as _time_mod
+            _parallel_batch_start: float = _time_mod.time()
             parallel_results = await asyncio.gather(
                 *[execute_single_tool(tc) for tc in parallel_calls],
                 return_exceptions=True
             )
+            _parallel_batch_elapsed: float = _time_mod.time() - _parallel_batch_start
+            if hasattr(self, '_agent_run_output') and self._agent_run_output:
+                self._agent_run_output.add_tool_execution_time(_parallel_batch_elapsed)
             
             # Separate successful results from HITL pauses
             external_pauses: List[ExternalExecutionPause] = []
@@ -2803,6 +2775,44 @@ class Agent(BaseAgent):
         if regular_tool_calls:
             tool_results = await self._execute_tool_calls(regular_tool_calls)
             
+            current_task = getattr(self, 'current_task', None)
+            if current_task and getattr(current_task, '_policy_scope_tool_outputs', False) and getattr(current_task, '_anonymization_map', None):
+                from upsonic.safety_engine.models import PolicyInput as _ToolPolicyInput
+                for tr in tool_results:
+                    if not hasattr(tr, 'content'):
+                        continue
+
+                    raw_text: Optional[str] = None
+                    dict_key: Optional[str] = None
+
+                    if isinstance(tr.content, str):
+                        raw_text = tr.content
+                    elif isinstance(tr.content, dict):
+                        for k, v in tr.content.items():
+                            if isinstance(v, str):
+                                raw_text = v
+                                dict_key = k
+                                break
+
+                    if raw_text is None:
+                        continue
+
+                    tool_policy_input = _ToolPolicyInput(
+                        input_texts=[raw_text],
+                        existing_transformation_map=current_task._anonymization_map,
+                    )
+                    tool_result = await self.user_policy_manager.execute_policies_async(
+                        tool_policy_input, check_type="Tool Output Check"
+                    )
+                    if tool_result.action_taken in ["REPLACE", "ANONYMIZE"]:
+                        sanitized: str = tool_result.final_output or raw_text
+                        if dict_key is not None:
+                            tr.content[dict_key] = sanitized
+                        else:
+                            tr.content = sanitized
+                        if tool_result.transformation_map:
+                            _merge_transformation_maps(current_task._anonymization_map, tool_result.transformation_map)
+
             if hasattr(self, '_tool_limit_reached') and self._tool_limit_reached:
                 tool_request = ModelRequest(parts=tool_results)
                 messages.append(response)
@@ -3024,78 +3034,116 @@ class Agent(BaseAgent):
             return None
     
     async def _apply_user_policy(
-        self, 
-        task: "Task", 
-        context: Optional[AgentRunOutput] = None
-    ) -> tuple[Optional["Task"], bool]:
+        self,
+        task: "Task",
+        context: AgentRunOutput,
+        system_prompt_manager: Optional[Any] = None,
+    ) -> tuple["Task", bool]:
         """
-        Apply user policy to task input.
-        
-        This method now uses PolicyManager to handle multiple policies.
-        When feedback is enabled, returns a helpful message to the user instead
-        of hard blocking, explaining what was wrong and how to correct it.
-        
+        Apply user policies to ALL built inputs: description, context, system
+        prompt, and chat history.  Each policy's own anonymize/replace logic is
+        respected via scoped execution in ``PolicyManager``.
+
         Args:
-            task: The task to apply policy to
-            context: Optional AgentRunOutput for event emission
-        
+            task: The current task (may be mutated with anonymized values).
+            context: The AgentRunOutput carrying chat_history and events.
+            system_prompt_manager: The pipeline's SystemPromptManager (if available).
+
         Returns:
-            tuple: (task, should_continue)
-                - task: The task (possibly modified with feedback response)
-                - should_continue: False if task should stop (blocked or feedback given)
+            (task, should_continue) – *should_continue* is False when the
+            pipeline must stop (blocked / feedback given).
         """
+        from upsonic.safety_engine.models import PolicyInput
+        from upsonic.agent.policy_manager import resolve_policy_scope, PolicyResult
+
+        policy_count: int = len(self.user_policy_manager.policies)
+
         if not self.user_policy_manager.has_policies() or not task.description:
-            # Emit ALLOW event if no policies
             if context and context.is_streaming:
                 from upsonic.utils.agent.events import ayield_policy_check_event
                 async for event in ayield_policy_check_event(
                     run_id=context.run_id or "",
                     policy_type='user_policy',
                     action='ALLOW',
-                    policies_checked=0
+                    policies_checked=policy_count,
+                    content_modified=False,
+                    blocked_reason=None,
                 ):
                     context.events.append(event)
             return task, True
-        
-        from upsonic.safety_engine.models import PolicyInput
-        
-        policy_input = PolicyInput(input_texts=[task.description])
-        result = await self.user_policy_manager.execute_policies_async(
-            policy_input,
-            check_type="User Input Check"
+
+        # ----- 1. Collect all available text inputs with source tracking -----
+        input_texts: List[str] = []
+        source_keys: List[tuple[str, Optional[int]]] = []
+
+        input_texts.append(task.description)
+        source_keys.append(("description", None))
+
+        if task.context_formatted:
+            input_texts.append(task.context_formatted)
+            source_keys.append(("context", None))
+
+        system_prompt_text: Optional[str] = None
+        if system_prompt_manager:
+            system_prompt_text = system_prompt_manager.get_system_prompt()
+            if system_prompt_text:
+                input_texts.append(system_prompt_text)
+                source_keys.append(("system_prompt", None))
+
+        chat_part_map: List[tuple[int, int]] = []
+        if context.chat_history:
+            for msg_idx, msg in enumerate(context.chat_history):
+                if hasattr(msg, 'parts'):
+                    for part_idx, part in enumerate(msg.parts):
+                        if hasattr(part, 'content') and isinstance(part.content, str):
+                            input_texts.append(part.content)
+                            source_keys.append(("chat_history", len(chat_part_map)))
+                            chat_part_map.append((msg_idx, part_idx))
+
+        if self.debug:
+            from upsonic.utils.printing import debug_log
+            debug_log(
+                f"[PolicySanitize] Collected {len(input_texts)} input(s) for user-policy scan "
+                f"(sources: {[sk[0] for sk in source_keys]})",
+                "Agent._apply_user_policy",
+            )
+
+        # ----- 2. Run policies (scoped) -----
+        result: PolicyResult = await self.user_policy_manager.execute_policies_async(
+            PolicyInput(input_texts=input_texts),
+            check_type="User Input Check",
+            source_keys=source_keys,
+            task=task,
+            agent=self,
         )
-        
-        # Get policies checked count
-        policies_checked = len(self.user_policy_manager.policies)
-        
-        # Map action_taken to event action
+
+        user_policy_usage = self.user_policy_manager.drain_accumulated_usage()
+        if user_policy_usage is not None:
+            usage = context._ensure_usage()
+            usage.incr(user_policy_usage)
+
+        # ----- 3. Emit streaming events -----
         action_mapping = {
-            "ALLOW": "ALLOW",
-            "BLOCK": "BLOCK",
-            "REPLACE": "REPLACE",
-            "ANONYMIZE": "ANONYMIZE",
-            "DISALLOWED_EXCEPTION": "RAISE ERROR"
+            "ALLOW": "ALLOW", "BLOCK": "BLOCK", "REPLACE": "REPLACE",
+            "ANONYMIZE": "ANONYMIZE", "DISALLOWED_EXCEPTION": "RAISE ERROR",
         }
-        event_action = action_mapping.get(result.action_taken, "ALLOW")
-        
-        # Emit PolicyCheckEvent
-        if context and context.is_streaming:
+        event_action: str = action_mapping.get(result.action_taken, "ALLOW")
+
+        if context.is_streaming:
             from upsonic.utils.agent.events import ayield_policy_check_event
-            content_modified = result.action_taken in ["REPLACE", "ANONYMIZE"]
-            blocked_reason = result.message if result.action_taken == "BLOCK" else None
-            
+            content_modified: bool = result.action_taken in ["REPLACE", "ANONYMIZE"]
+            blocked_reason: Optional[str] = result.message if result.action_taken == "BLOCK" else None
             async for event in ayield_policy_check_event(
                 run_id=context.run_id or "",
                 policy_type='user_policy',
                 action=event_action,
-                policies_checked=policies_checked,
+                policies_checked=policy_count,
                 content_modified=content_modified,
-                blocked_reason=blocked_reason
+                blocked_reason=blocked_reason,
             ):
                 context.events.append(event)
-        
-        # Emit PolicyFeedbackEvent if feedback was generated
-        if context and context.is_streaming and result.feedback_message:
+
+        if context.is_streaming and result.feedback_message:
             from upsonic.utils.agent.events import ayield_policy_feedback_event
             async for event in ayield_policy_feedback_event(
                 run_id=context.run_id or "",
@@ -3103,67 +3151,117 @@ class Agent(BaseAgent):
                 feedback_message=result.feedback_message,
                 retry_count=self.user_policy_manager._current_retry_count,
                 max_retries=self.user_policy_manager.feedback_loop_count,
-                violated_policy=result.violated_policy_name
+                violated_policy=result.violated_policy_name,
             ):
                 context.events.append(event)
-        
+
+        # ----- 4. Handle BLOCK / RAISE -----
         if result.should_block():
-            # Re-raise DisallowedOperation if it was caught by PolicyManager
-            # (unless feedback was generated - then we want to return the feedback)
             if result.disallowed_exception and not result.feedback_message:
                 raise result.disallowed_exception
-            
             task.task_end()
-            # Use feedback message if available (gives helpful guidance to user)
             task._response = result.get_final_message()
-            
-            # Print feedback info if debug mode and feedback was generated
+            context.output = task._response
+            task._policy_blocked = True
+
             if self.debug and result.feedback_message:
                 from upsonic.utils.printing import user_policy_feedback_returned, debug_log_level2
                 user_policy_feedback_returned(
                     policy_name=result.violated_policy_name or "Unknown Policy",
-                    feedback_message=result.feedback_message
+                    feedback_message=result.feedback_message,
                 )
-                # Level 2: Detailed policy feedback information
                 if self.debug_level >= 2:
                     debug_log_level2(
-                        "User policy feedback details",
-                        "Agent",
-                        debug=self.debug,
-                        debug_level=self.debug_level,
+                        "User policy feedback details", "Agent",
+                        debug=self.debug, debug_level=self.debug_level,
                         policy_name=result.violated_policy_name or "Unknown Policy",
                         feedback_message=result.feedback_message,
                         action_taken=result.action_taken,
-                        confidence=result.confidence if hasattr(result, 'confidence') else None,
-                        original_input=task.description[:200] if task.description else None
+                        original_input=task.description[:200] if task.description else None,
                     )
             return task, False
-        elif result.action_taken in ["REPLACE", "ANONYMIZE"]:
-            task.description = result.final_output or task.description
-            # Store transformation map for de-anonymization of LLM response
-            if result.transformation_map:
-                task._anonymization_map = result.transformation_map
-                # Add anonymization notice to the prompt - prepend for visibility
-                anonymization_notice = (
-                    "[PRIVACY MODE ACTIVE: Personal data has been anonymized with random placeholders. "
-                    "Answer the question directly using the placeholder values shown. "
-                    "Do NOT comment on, question, or mention the format of any data.]\n\n"
+
+        # ----- 5. Handle REPLACE / ANONYMIZE -----
+        if result.action_taken in ["REPLACE", "ANONYMIZE"]:
+            transformed_by_source: dict[str, Any] = {}
+            output_texts: List[str] = result.output_texts or []
+            for i, (source_type, _sub_idx) in enumerate(source_keys):
+                if i < len(output_texts):
+                    if source_type == "chat_history":
+                        transformed_by_source.setdefault("chat_history", [])
+                        transformed_by_source["chat_history"].append(output_texts[i])
+                    else:
+                        transformed_by_source[source_type] = output_texts[i]
+
+            actually_changed: list[str] = []
+            for stype in transformed_by_source:
+                idx_in_source = next((i for i, (st, _) in enumerate(source_keys) if st == stype), None)
+                if idx_in_source is not None and idx_in_source < len(input_texts):
+                    if transformed_by_source[stype] != input_texts[idx_in_source]:
+                        actually_changed.append(stype)
+                else:
+                    actually_changed.append(stype)
+
+            originals: dict[str, Any] = {}
+            if "description" in actually_changed:
+                originals["description"] = task.description
+            if "context" in actually_changed:
+                originals["context"] = task.context_formatted
+            if "system_prompt" in actually_changed:
+                originals["system_prompt"] = system_prompt_text
+            if "chat_history" in actually_changed and chat_part_map:
+                originals["chat_history_parts"] = [
+                    (m, p, context.chat_history[m].parts[p].content)
+                    for m, p in chat_part_map
+                ]
+            task._policy_originals = originals
+
+            anonymization_notice: str = (
+                "[PRIVACY MODE ACTIVE: Personal data has been anonymized with random placeholders. "
+                "Answer the question directly using the placeholder values shown. "
+                "Do NOT comment on, question, or mention the format of any data.]\n\n"
+            )
+
+            if "description" in actually_changed:
+                new_desc: str = transformed_by_source["description"]
+                task.description = anonymization_notice + new_desc
+                if hasattr(self, '_agent_run_output') and self._agent_run_output and self._agent_run_output.input:
+                    self._agent_run_output.input.user_prompt = task.description
+
+            if "context" in actually_changed:
+                task.context_formatted = transformed_by_source["context"]
+
+            if "system_prompt" in actually_changed and system_prompt_manager:
+                system_prompt_manager.system_prompt = transformed_by_source["system_prompt"]
+                self._last_built_system_prompt = transformed_by_source["system_prompt"]
+
+            if "chat_history" in transformed_by_source and chat_part_map:
+                for i, (msg_idx, part_idx) in enumerate(chat_part_map):
+                    if i < len(transformed_by_source["chat_history"]):
+                        context.chat_history[msg_idx].parts[part_idx].content = transformed_by_source["chat_history"][i]
+
+            task._anonymization_map = result.transformation_map
+            task._policy_scope_tool_outputs = any(
+                resolve_policy_scope(p, task, self).tool_outputs
+                for p in self.user_policy_manager.policies
+            )
+
+            if self.debug:
+                from upsonic.utils.printing import debug_log
+                map_size: int = len(result.transformation_map) if result.transformation_map else 0
+                debug_log(
+                    f"[PolicySanitize] Stored anonymization map with {map_size} entries for de-anonymization",
+                    "Agent._apply_user_policy",
                 )
-                task.description = anonymization_notice + task.description
-                if self.debug:
-                    from upsonic.utils.printing import debug_log, anonymization_debug_panel
-                    debug_log(
-                        f"Stored anonymization map with {len(result.transformation_map)} entries for de-anonymization",
-                        "Agent"
-                    )
-                    # Show detailed anonymization info - what LLM will see vs original
-                    anonymization_debug_panel(
-                        original_values=[entry.get("original", "") for entry in result.transformation_map.values()],
-                        anonymized_values=[entry.get("anonymous", "") for entry in result.transformation_map.values()],
-                        llm_input=task.description
-                    )
+                if result.transformation_map:
+                    for idx, entry in result.transformation_map.items():
+                        debug_log(
+                            f"  [{idx}] '{entry.get('original','')}' → '{entry.get('anonymous','')}'",
+                            "Agent._apply_user_policy",
+                        )
+
             return task, True
-        
+
         return task, True
     
     async def _execute_with_guardrail(self, task: "Task", memory_handler: Optional["MemoryManager"], state: Optional["State"] = None) -> "ModelResponse":
@@ -3654,10 +3752,17 @@ class Agent(BaseAgent):
         if not is_resuming and effective_retry > 1 and task.is_problematic:
             task.status = None
             task.run_id = None
+            # Clear the stale output from the previous failed attempt so no code
+            # can accidentally read its error status before the new output is created.
+            self._agent_run_output = None
 
-        task.price_id_ = None
-        _ = task.price_id
-        task._tool_calls = []
+        # Only reset per-run agent state for fresh runs — HITL resume should
+        # keep existing state so cost and tool counts aggregate correctly.
+        if not is_resuming:
+            import uuid as _uuid
+            task.price_id_ = str(_uuid.uuid4())
+            self._tool_call_count = 0
+            self._tool_limit_reached = False
         self._last_built_system_prompt = None
 
         if debug or self.debug:
@@ -3736,8 +3841,12 @@ class Agent(BaseAgent):
             if original_model is not None:
                 self.model = original_model
             self._finalize_agent_usage(resolved_print_flag)
-            self.run_id = None
-    
+            # Keep run_id alive when task is paused (HITL) — the run is still active
+            _output = getattr(self, '_agent_run_output', None)
+            _is_paused = getattr(_output.task, 'is_paused', False) if _output and _output.task else False
+            if not _is_paused:
+                self.run_id = None
+
     def _calculate_aggregated_cost(self) -> Optional[float]:
         """Calculate the aggregated monetary cost across the agent run.
 
@@ -3824,8 +3933,6 @@ class Agent(BaseAgent):
                 return self._agent_run_output.output
 
             self._agent_run_output.is_streaming = False
-
-            await self._run_call_management_step(task, debug)
 
             cleanup_run(run_id)
             sentry_sdk.flush()
@@ -4306,7 +4413,14 @@ class Agent(BaseAgent):
                     "Agent"
                 )
             return
-        
+
+        # Reset per-run state (same as do_async for fresh runs)
+        import uuid as _uuid
+        task.price_id_ = str(_uuid.uuid4())
+        self._tool_call_count = 0
+        self._tool_limit_reached = False
+        self._last_built_system_prompt = None
+
         run_id = str(uuid.uuid4())
         self.run_id = run_id
         register_run(run_id)
@@ -4512,7 +4626,10 @@ class Agent(BaseAgent):
         from upsonic.agent.pipeline import (
             InitializationStep, CacheCheckStep, UserPolicyStep,
             StorageConnectionStep, LLMManagerStep, ModelSelectionStep,
-            ToolSetupStep, MessageBuildStep,
+            ToolSetupStep,
+            MemoryPrepareStep, SystemPromptBuildStep, ContextBuildStep,
+            UserInputBuildStep, ChatHistoryStep, MessageAssemblyStep,
+            CallManagerSetupStep,
             ModelExecutionStep, ResponseProcessingStep,
             ReflectionStep, CallManagementStep, TaskManagementStep,
             MemorySaveStep,
@@ -4524,21 +4641,27 @@ class Agent(BaseAgent):
             InitializationStep(),          # 0
             StorageConnectionStep(),       # 1
             CacheCheckStep(),              # 2
-            UserPolicyStep(),              # 3
-            LLMManagerStep(),              # 4
-            ModelSelectionStep(),          # 5
-            ToolSetupStep(),               # 6
-            MessageBuildStep(),            # 7
-            ModelExecutionStep(),          # 8 <-- External tool resumes here
-            ResponseProcessingStep(),      # 9 <-- Tracks messages to AgentRunOutput
-            ReflectionStep(),              # 10
-            TaskManagementStep(),          # 11
-            ReliabilityStep(),             # 12
-            AgentPolicyStep(),             # 13
-            CacheStorageStep(),            # 14
-            FinalizationStep(),            # 15
-            MemorySaveStep(),              # 16
-            CallManagementStep(),          # 17 <-- LAST: calls task_end() & prints metrics
+            LLMManagerStep(),              # 3
+            ModelSelectionStep(),          # 4
+            ToolSetupStep(),               # 5
+            MemoryPrepareStep(),           # 6  <-- Load memory (history, profile, metadata)
+            SystemPromptBuildStep(),       # 7  <-- Build system prompt
+            ContextBuildStep(),            # 8  <-- Build task context (KB/RAG)
+            ChatHistoryStep(),             # 9  <-- Load chat history + mark run boundary
+            UserPolicyStep(),              # 10 <-- Apply user policy BEFORE build_input
+            UserInputBuildStep(),          # 11 <-- Build user input (prompt + context + attachments)
+            MessageAssemblyStep(),         # 12 <-- Assemble ModelRequest + apply middleware
+            CallManagerSetupStep(),        # 13 <-- Create and register CallManager
+            ModelExecutionStep(),          # 14 <-- External tool resumes here
+            ResponseProcessingStep(),      # 15 <-- Tracks messages to AgentRunOutput
+            ReflectionStep(),              # 16
+            TaskManagementStep(),          # 17
+            ReliabilityStep(),             # 18
+            AgentPolicyStep(),             # 19
+            CacheStorageStep(),            # 20
+            FinalizationStep(),            # 21
+            MemorySaveStep(),              # 22
+            CallManagementStep(),          # 23 <-- LAST: calls task_end() & prints metrics
         ]
     
     def _get_step_index_by_name(self, step_name: str, is_streaming: bool = False) -> int:
@@ -4550,7 +4673,7 @@ class Agent(BaseAgent):
         which steps set _run_boundaries.
         
         Args:
-            step_name: The name of the step (e.g., "message_build")
+            step_name: The name of the step (e.g., "chat_history", "model_execution")
             is_streaming: Whether to use streaming pipeline (default: direct)
             
         Returns:
@@ -4577,26 +4700,40 @@ class Agent(BaseAgent):
         from upsonic.agent.pipeline import (
             InitializationStep, CacheCheckStep, UserPolicyStep,
             StorageConnectionStep, LLMManagerStep, ModelSelectionStep,
-            ToolSetupStep, MessageBuildStep,
+            ToolSetupStep,
+            MemoryPrepareStep, SystemPromptBuildStep, ContextBuildStep,
+            UserInputBuildStep, ChatHistoryStep, MessageAssemblyStep,
+            CallManagerSetupStep,
             StreamModelExecutionStep,
+            ReflectionStep, ReliabilityStep,
             AgentPolicyStep, CacheStorageStep,
-            StreamMemoryMessageTrackingStep, StreamFinalizationStep
+            StreamFinalizationStep, CallManagementStep,
+            StreamMemoryMessageTrackingStep
         )
 
         return [
             InitializationStep(),              # 0
             StorageConnectionStep(),           # 1
             CacheCheckStep(),                  # 2
-            UserPolicyStep(),                  # 3
-            LLMManagerStep(),                  # 4
-            ModelSelectionStep(),              # 5
-            ToolSetupStep(),                   # 6
-            MessageBuildStep(),                # 7
-            StreamModelExecutionStep(),        # 8 <-- External tool resumes here (tracks messages internally)
-            AgentPolicyStep(),                 # 9
-            CacheStorageStep(),                # 10
-            StreamFinalizationStep(),          # 11
-            StreamMemoryMessageTrackingStep(), # 12 <-- LAST: Saves AgentSession to storage
+            LLMManagerStep(),                  # 3
+            ModelSelectionStep(),              # 4
+            ToolSetupStep(),                   # 5
+            MemoryPrepareStep(),               # 6  <-- Load memory
+            SystemPromptBuildStep(),           # 7  <-- Build system prompt
+            ContextBuildStep(),                # 8  <-- Build task context (KB/RAG)
+            ChatHistoryStep(),                 # 9  <-- Load chat history + mark run boundary
+            UserPolicyStep(),                  # 10 <-- Apply user policy BEFORE build_input
+            UserInputBuildStep(),              # 11 <-- Build user input
+            MessageAssemblyStep(),             # 12 <-- Assemble ModelRequest + apply middleware
+            CallManagerSetupStep(),            # 13 <-- Create and register CallManager
+            StreamModelExecutionStep(),        # 14 <-- Streaming model execution
+            ReflectionStep(),                  # 15 <-- Improve output quality
+            ReliabilityStep(),                 # 16 <-- Verify and clean output
+            AgentPolicyStep(),                 # 17
+            CacheStorageStep(),                # 18
+            StreamFinalizationStep(),          # 19
+            StreamMemoryMessageTrackingStep(), # 20 <-- Saves AgentSession + task_end()
+            CallManagementStep(),              # 21 <-- LAST: Records usage to price_id_summary
         ]
     
     def _create_full_pipeline_steps(self, is_streaming: bool = False) -> List[Any]:
@@ -5066,14 +5203,14 @@ class Agent(BaseAgent):
         
         resume_step_index = problematic_step.step_number
         
-        # MessageBuildStep sets _run_boundaries when building messages.
-        # Only call start_new_run() if we're resuming AFTER MessageBuildStep.
-        # If we resume AT or BEFORE MessageBuildStep, it will rebuild chat_history and
+        # ChatHistoryStep sets _run_boundaries when loading history.
+        # Only call start_new_run() if we're resuming AFTER ChatHistoryStep.
+        # If we resume AT or BEFORE ChatHistoryStep, it will rebuild chat_history and
         # set the correct boundary itself.
-        message_build_step_index = self._get_step_index_by_name("message_build")
-        if resume_step_index > message_build_step_index:
+        chat_history_step_index: int = self._get_step_index_by_name("chat_history")
+        if resume_step_index > chat_history_step_index:
             # CRITICAL: Mark the start of this resumed run for message tracking BEFORE any modifications.
-            # When resuming AFTER MessageBuildStep, it's skipped (we resume from a later step),
+            # When resuming AFTER ChatHistoryStep, it's skipped (we resume from a later step),
             # so we need to record the current chat_history length here.
             # This ensures finalize_run_messages() includes ALL messages from THIS resumed run,
             # including injected tool results.
@@ -5100,10 +5237,17 @@ class Agent(BaseAgent):
         # Clear paused state and set up for continuation
         task.is_paused = False
         output.task = task
-        
+
+        # Restore agent-level tool call count from the output so that
+        # tool_call_limit checks work correctly across HITL resume
+        # (especially important for cross-process resume where agent.__init__
+        # resets _tool_call_count to 0).
+        self._tool_call_count = getattr(output, 'tool_call_count', 0)
+        self._tool_limit_reached = False
+
         if task.enable_cache:
             task.set_cache_manager(self._cache_manager)
-        
+
         return output, task, resume_step_index
     
     async def continue_run_async(

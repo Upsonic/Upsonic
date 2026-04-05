@@ -31,26 +31,28 @@ class ActionBase(ABC):
                       language: Optional[str] = None,
                       language_identify_llm=None,
                       base_llm=None,
-                      text_finder_llm=None) -> PolicyOutput:
+                      text_finder_llm=None,
+                      existing_transformation_map: Optional[Dict[int, Dict[str, str]]] = None) -> PolicyOutput:
         """Wrapper method that saves rule_result and original_content, then calls the actual action"""
         self.rule_result = rule_result
-        self.original_content = original_content.copy()  # Copy here once!
-        self.transformation_map = {}  # Reset transformation map
-        self.transformation_index = 0  # Reset index
+        self.original_content = original_content.copy()
+        self.transformation_map = {}
+        self.transformation_index = 0
         
-        # Store LLM specifications
+        if existing_transformation_map:
+            self.transformation_map = dict(existing_transformation_map)
+            self.transformation_index = max(existing_transformation_map.keys()) if existing_transformation_map else 0
+        
         self.language_identify_llm = language_identify_llm
         self.base_llm = base_llm
         self.text_finder_llm = text_finder_llm
         
-        # Language detection/setting
         if language and language != "auto":
             self.detected_language = language
         elif language == "auto" or not language:
-            # Auto-detect language from content
             self.detected_language = self._detect_content_language(original_content)
         else:
-            self.detected_language = "en"  # Default fallback
+            self.detected_language = "en"
             
         return self.action(rule_result)
 
@@ -58,12 +60,18 @@ class ActionBase(ABC):
                       language: Optional[str] = None,
                       language_identify_llm=None,
                       base_llm=None,
-                      text_finder_llm=None) -> PolicyOutput:
+                      text_finder_llm=None,
+                      existing_transformation_map: Optional[Dict[int, Dict[str, str]]] = None) -> PolicyOutput:
         """Async wrapper to execute action without blocking the event loop by default."""
         self.rule_result = rule_result
         self.original_content = original_content.copy()
         self.transformation_map = {}
         self.transformation_index = 0
+        
+        if existing_transformation_map:
+            self.transformation_map = dict(existing_transformation_map)
+            self.transformation_index = max(existing_transformation_map.keys()) if existing_transformation_map else 0
+
         self.language_identify_llm = language_identify_llm
         self.base_llm = base_llm
         self.text_finder_llm = text_finder_llm
@@ -147,14 +155,37 @@ class ActionBase(ABC):
         return await asyncio.to_thread(self.action, rule_result)
 
     def _generate_unique_replacement(self, original: str) -> str:
-        """Generate unique replacement maintaining character types"""
-        # Check if already transformed
+        """Generate unique replacement maintaining character types.
+
+        When a leading-space variant already exists (e.g. ' 555-123-4567' → ' 430-779-1195'),
+        the bare variant ('555-123-4567') is derived by stripping the space ('430-779-1195')
+        so the LLM can't produce an un-matchable anonymous value.
+        """
         for entry in self.transformation_map.values():
             if entry["original"] == original:
                 return entry["anonymous"]
-        
-        # Generate new replacement
-        replacement = ""
+
+        for entry in self.transformation_map.values():
+            existing_orig: str = entry["original"]
+            existing_anon: str = entry["anonymous"]
+            if existing_orig == " " + original and existing_anon.startswith(" "):
+                derived: str = existing_anon[1:]
+                self.transformation_index += 1
+                self.transformation_map[self.transformation_index] = {
+                    "original": original,
+                    "anonymous": derived,
+                }
+                return derived
+            if original.startswith(" ") and existing_orig == original[1:]:
+                derived = " " + existing_anon
+                self.transformation_index += 1
+                self.transformation_map[self.transformation_index] = {
+                    "original": original,
+                    "anonymous": derived,
+                }
+                return derived
+
+        replacement: str = ""
         for char in original:
             if char.isdigit():
                 replacement += str(random.randint(0, 9))
@@ -164,9 +195,8 @@ class ActionBase(ABC):
                 else:
                     replacement += random.choice(string.ascii_lowercase)
             else:
-                replacement += char  # Keep special characters as is
-        
-        # Store with index
+                replacement += char
+
         self.transformation_index += 1
         self.transformation_map[self.transformation_index] = {
             "original": original,
@@ -235,6 +265,8 @@ class ActionBase(ABC):
             for keyword in triggered_keywords:
                 # Support typed keywords like "CREDIT_CARD:xxxx" by stripping the type prefix
                 target = keyword.split(":", 1)[1] if ":" in keyword else keyword
+                if not target or not target.strip():
+                    continue
                 # Case-insensitive replacement using regex
                 pattern = re.compile(re.escape(target), re.IGNORECASE)
                 # Store mapping for fixed replacement
@@ -267,10 +299,13 @@ class ActionBase(ABC):
         for text in original_content:
             transformed_text = text
             for keyword in triggered_keywords:
-                pattern = re.compile(re.escape(keyword), re.IGNORECASE)
+                target: str = keyword.split(":", 1)[1] if ":" in keyword else keyword
+                if not target or not target.strip():
+                    continue
+                pattern = re.compile(re.escape(target), re.IGNORECASE)
                 self.transformation_index += 1
                 self.transformation_map[self.transformation_index] = {
-                    "original": keyword,
+                    "original": target,
                     "anonymous": replacement
                 }
                 transformed_text = pattern.sub(replacement, transformed_text)
@@ -312,6 +347,8 @@ class ActionBase(ABC):
                     continue
                 # Support typed keywords like "CREDIT_CARD:xxxx" by stripping the type prefix
                 target = keyword.split(":", 1)[1] if ":" in keyword else keyword
+                if not target or not target.strip():
+                    continue
                 # Generate unique replacement maintaining character types
                 replacement = self._generate_unique_replacement(target)
                 # Case-insensitive replacement using regex for robustness
@@ -343,6 +380,8 @@ class ActionBase(ABC):
                 if keyword.startswith("PII_KEYWORD:"):
                     continue
                 target = keyword.split(":", 1)[1] if ":" in keyword else keyword
+                if not target or not target.strip():
+                    continue
                 replacement = self._generate_unique_replacement(target)
                 pattern = re.compile(re.escape(target), re.IGNORECASE)
                 transformed_text = pattern.sub(replacement, transformed_text)

@@ -48,9 +48,9 @@ class FinancialInfoRule(RuleBase):
             r'\b(?:account|acct|acc)\s*(?:number|num|#)?\s*:?\s*\d{8,17}\b',
             r'\b\d{8,17}\s*(?:account|acct|acc)\s*(?:number|num|#)?\b',
             # IBAN (International Bank Account Number)
-            r'\b[A-Z]{2}[0-9]{2}[A-Z0-9]{4}[0-9]{7}([A-Z0-9]?){0,16}\b',
+            r'\b[A-Z]{2}[0-9]{2}[A-Z0-9]{4}[0-9]{7}(?:[A-Z0-9]?){0,16}\b',
             # SWIFT/BIC codes
-            r'\b[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?\b',
+            r'\b[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b',
         ]
         
         # Routing Number patterns (US)

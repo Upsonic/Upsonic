@@ -13,6 +13,7 @@ from .phishing_policies import *
 from .insider_threat_policies import *
 from .tool_safety_policies import *
 from .profanity_policies import *
+from .skill_policies import *
 
 __all__ = [
     # Original policies
@@ -185,4 +186,25 @@ __all__ = [
     "ProfanityRaiseExceptionPolicy_LLM_Multilingual_GPU",
     "ProfanityRaiseExceptionPolicy_LLM_OriginalSmall_GPU",
     "ProfanityRaiseExceptionPolicy_LLM_UnbiasedSmall_GPU",
+
+    # Skill Safety Policies - Prompt Injection
+    "SkillPromptInjectionBlockPolicy",
+    "SkillPromptInjectionBlockPolicy_LLM",
+    "SkillPromptInjectionBlockPolicy_LLM_Finder",
+    "SkillPromptInjectionRaiseExceptionPolicy",
+    "SkillPromptInjectionRaiseExceptionPolicy_LLM",
+
+    # Skill Safety Policies - Secret Leak
+    "SkillSecretLeakBlockPolicy",
+    "SkillSecretLeakBlockPolicy_LLM",
+    "SkillSecretLeakBlockPolicy_LLM_Finder",
+    "SkillSecretLeakRaiseExceptionPolicy",
+    "SkillSecretLeakRaiseExceptionPolicy_LLM",
+
+    # Skill Safety Policies - Code Injection
+    "SkillCodeInjectionBlockPolicy",
+    "SkillCodeInjectionBlockPolicy_LLM",
+    "SkillCodeInjectionBlockPolicy_LLM_Finder",
+    "SkillCodeInjectionRaiseExceptionPolicy",
+    "SkillCodeInjectionRaiseExceptionPolicy_LLM",
 ]

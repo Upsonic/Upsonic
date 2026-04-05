@@ -1705,30 +1705,31 @@ async def test_durable_cross_process_comprehensive():
 
 
 # =============================================================================
-# TEST: DURABLE EXECUTION - EARLY STEPS (Before and At MessageBuildStep)
+# TEST: DURABLE EXECUTION - EARLY STEPS (Before and At ChatHistoryStep)
 # =============================================================================
 
 @pytest.mark.asyncio
 async def test_durable_execution_early_steps():
     """
     Test durable execution with error injection at early steps:
-    - Steps 0-6 (before MessageBuildStep)
-    - Step 7 (MessageBuildStep itself)
+    - Steps 0-6 (before message-building steps)
+    - Steps 7-12 (the decomposed message-building steps)
     
     This verifies that _run_boundaries is correctly handled when:
-    - Resuming FROM MessageBuildStep (step 7) - MessageBuildStep sets its own boundary
-    - Resuming FROM earlier steps (0-6) - MessageBuildStep will rebuild and set boundary
+    - Resuming FROM ChatHistoryStep (step 11) - ChatHistoryStep sets its own boundary
+    - Resuming FROM earlier steps (0-10) - ChatHistoryStep will rebuild and set boundary
     """
     print("\n" + "="*80)
-    print("TEST: Durable Execution - Early Steps (Before/At MessageBuildStep)")
+    print("TEST: Durable Execution - Early Steps (Before/At ChatHistoryStep)")
     print("="*80)
     
     # Define early steps to test with their names and step indices
-    # MessageBuildStep is at index 7
+    # ChatHistoryStep is at index 11
     early_steps_to_test = [
-        ("tool_setup", 6),        # Step right before MessageBuildStep
-        ("message_build", 7),     # MessageBuildStep itself
-        ("model_selection", 5),   # Even earlier step
+        ("tool_setup", 6),          # Step right before message-building steps
+        ("memory_prepare", 7),      # First message-building step
+        ("chat_history", 11),       # ChatHistoryStep (sets run boundary)
+        ("model_selection", 5),     # Even earlier step
     ]
     
     for step_name, expected_step_index in early_steps_to_test:
@@ -1880,21 +1881,21 @@ async def test_durable_execution_early_steps():
 
 
 # =============================================================================
-# TEST: CANCEL RUN - EARLY STEPS (Before and At MessageBuildStep)
+# TEST: CANCEL RUN - EARLY STEPS (Before and At ChatHistoryStep)
 # =============================================================================
 
 @pytest.mark.asyncio
 async def test_cancel_run_early_steps():
     """
     Test cancel run at early steps:
-    - Steps 0-6 (before MessageBuildStep)
-    - Step 7 (MessageBuildStep itself)
+    - Steps 0-6 (before message-building steps)
+    - Steps 7-11 (message-building steps including ChatHistoryStep)
     
     This verifies that resumption from early cancellation points correctly
     handles _run_boundaries and message tracking.
     """
     print("\n" + "="*80)
-    print("TEST: Cancel Run - Early Steps (Before/At MessageBuildStep)")
+    print("TEST: Cancel Run - Early Steps (Before/At ChatHistoryStep)")
     print("="*80)
     
     # We'll test cancellation at different timing points
@@ -1906,8 +1907,8 @@ async def test_cancel_run_early_steps():
     # and cancel during that slow operation
     
     early_steps_to_test = [
-        ("tool_setup", 6, 0.3),        # Step right before MessageBuildStep
-        ("message_build", 7, 0.5),     # MessageBuildStep itself
+        ("tool_setup", 6, 0.3),          # Step right before message-building steps
+        ("memory_prepare", 7, 0.5),      # First message-building step
     ]
     
     for step_name, expected_step_index, delay_before_cancel in early_steps_to_test:
@@ -2056,15 +2057,15 @@ async def test_cancel_run_early_steps():
 # =============================================================================
 
 @pytest.mark.asyncio
-async def test_message_build_step_boundary():
+async def test_chat_history_step_boundary():
     """
     Specifically test that _run_boundaries is correctly set when:
-    1. Error occurs AT MessageBuildStep
-    2. Resume happens - MessageBuildStep runs again and sets correct boundary
+    1. Error occurs AT ChatHistoryStep
+    2. Resume happens - ChatHistoryStep runs again and sets correct boundary
     3. Final messages are correctly extracted
     """
     print("\n" + "="*80)
-    print("TEST: MessageBuildStep Boundary Verification")
+    print("TEST: ChatHistoryStep Boundary Verification")
     print("="*80)
     
     cleanup()
@@ -2076,13 +2077,13 @@ async def test_message_build_step_boundary():
         tools=[simple_math]
     )
     
-    # Inject error at message_build step
-    inject_error_into_step("message_build", RuntimeError, "Simulated error at message_build", trigger_count=1)
+    # Inject error at chat_history step
+    inject_error_into_step("chat_history", RuntimeError, "Simulated error at chat_history", trigger_count=1)
     
     # =========================================================================
-    # STEP 1: Run and catch error at message_build
+    # STEP 1: Run and catch error at chat_history
     # =========================================================================
-    print("\n[STEP 1] Running with error at message_build step...")
+    print("\n[STEP 1] Running with error at chat_history step...")
     
     try:
         output = await agent.do_async(task, return_output=True)
@@ -2092,18 +2093,16 @@ async def test_message_build_step_boundary():
         print(f"  Caught expected error: {e}")
         output = agent._agent_run_output
     
-    # Note: agent.run_id is cleared in finally block, so get from output
     assert output is not None, "Output should exist after error"
     run_id = output.run_id
     assert run_id is not None, "run_id should exist"
     
-    # At this point, chat_history might be empty or partial since MessageBuildStep failed
     print(f"  Run ID: {run_id}")
     print(f"  Status: {output.status}")
     print(f"  chat_history length: {len(output.chat_history) if output.chat_history else 0}")
     print(f"  _run_boundaries: {output._run_boundaries}")
     
-    # Verify the failed step is message_build
+    # Verify the failed step is chat_history
     failed_step = None
     for sr in output.step_results:
         if sr.status == StepStatus.ERROR:
@@ -2111,15 +2110,15 @@ async def test_message_build_step_boundary():
             break
     
     assert failed_step is not None, "Should have a failed step"
-    assert failed_step.name == "message_build", f"Failed step should be message_build, got {failed_step.name}"
+    assert failed_step.name == "chat_history", f"Failed step should be chat_history, got {failed_step.name}"
     print(f"  Failed step: {failed_step.name} (step {failed_step.step_number})")
     
     print("\n[STEP 1] PASSED")
     
     # =========================================================================
-    # STEP 2: Resume - MessageBuildStep should run again
+    # STEP 2: Resume - ChatHistoryStep should run again
     # =========================================================================
-    print("\n[STEP 2] Resuming from message_build error...")
+    print("\n[STEP 2] Resuming from chat_history error...")
     
     clear_error_injection()
     
@@ -2136,7 +2135,7 @@ async def test_message_build_step_boundary():
     print(f"  Result output: {result.output}")
     
     # =========================================================================
-    # STEP 3: Verify _run_boundaries was correctly set by MessageBuildStep
+    # STEP 3: Verify _run_boundaries was correctly set by ChatHistoryStep
     # =========================================================================
     print("\n[STEP 3] Verifying _run_boundaries handling...")
     
@@ -2180,13 +2179,13 @@ async def test_message_build_step_boundary():
     assert final_output.status == RunStatus.completed, f"Final status should be completed, got {final_output.status}"
     
     # Verify session.messages is consistent
-    verify_session_messages_consistency(final_session, final_output, "MessageBuildStep Boundary - Final")
+    verify_session_messages_consistency(final_session, final_output, "ChatHistoryStep Boundary - Final")
     
     print("\n[STEP 4] PASSED")
     
     cleanup()
     print("\n" + "="*80)
-    print("ALL TESTS PASSED: MessageBuildStep Boundary Verification")
+    print("ALL TESTS PASSED: ChatHistoryStep Boundary Verification")
     print("="*80)
 
 
@@ -3200,7 +3199,7 @@ async def main():
     await test_durable_cross_process_comprehensive()
     await test_durable_execution_early_steps()
     await test_cancel_run_early_steps()
-    await test_message_build_step_boundary()
+    await test_chat_history_step_boundary()
     await test_confirmation_approve_comprehensive()
     await test_confirmation_reject_comprehensive()
     await test_confirmation_cross_process_comprehensive()
@@ -3219,7 +3218,7 @@ async def main():
     print("  - Durable Cross-Process: PASSED")
     print("  - Durable Execution Early Steps: PASSED")
     print("  - Cancel Run Early Steps: PASSED")
-    print("  - MessageBuildStep Boundary: PASSED")
+    print("  - ChatHistoryStep Boundary: PASSED")
     print("  - Confirmation Approve: PASSED")
     print("  - Confirmation Reject: PASSED")
     print("  - Confirmation Cross-Process: PASSED")

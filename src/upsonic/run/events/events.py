@@ -803,10 +803,96 @@ class LLMPreparedEvent(AgentEvent):
 
 
 @dataclass(repr=False, kw_only=True)
+class MemoryPreparedEvent(AgentEvent):
+    """
+    Event emitted when memory manager preparation completes.
+
+    Attributes:
+        memory_enabled: Whether memory is configured on the agent
+        history_count: Number of historical messages loaded
+    """
+
+    memory_enabled: bool = False
+    history_count: int = 0
+
+    event_kind: Literal['memory_prepared'] = 'memory_prepared'
+
+
+@dataclass(repr=False, kw_only=True)
+class SystemPromptBuiltEvent(AgentEvent):
+    """
+    Event emitted when the system prompt is built.
+
+    Attributes:
+        prompt_length: Character length of the built system prompt
+        has_culture: Whether culture content was included
+        has_skills: Whether skill content was included
+    """
+
+    prompt_length: int = 0
+    has_culture: bool = False
+    has_skills: bool = False
+
+    event_kind: Literal['system_prompt_built'] = 'system_prompt_built'
+
+
+@dataclass(repr=False, kw_only=True)
+class ContextBuiltEvent(AgentEvent):
+    """
+    Event emitted when the task context is built.
+
+    Attributes:
+        context_length: Character length of the built context
+        has_knowledge_base: Whether knowledge-base / RAG context was included
+        has_prior_outputs: Whether prior-task outputs were included
+    """
+
+    context_length: int = 0
+    has_knowledge_base: bool = False
+    has_prior_outputs: bool = False
+
+    event_kind: Literal['context_built'] = 'context_built'
+
+
+@dataclass(repr=False, kw_only=True)
+class UserInputBuiltEvent(AgentEvent):
+    """
+    Event emitted when the user input is assembled.
+
+    Attributes:
+        input_type: 'text' or 'multipart'
+        has_images: Whether images were attached
+        has_documents: Whether documents were attached
+        input_length: Approximate character length of the input
+    """
+
+    input_type: str = "text"
+    has_images: bool = False
+    has_documents: bool = False
+    input_length: int = 0
+
+    event_kind: Literal['user_input_built'] = 'user_input_built'
+
+
+@dataclass(repr=False, kw_only=True)
+class ChatHistoryLoadedEvent(AgentEvent):
+    """
+    Event emitted when chat history is loaded and run boundary is marked.
+
+    Attributes:
+        history_count: Number of historical messages in chat history
+    """
+
+    history_count: int = 0
+
+    event_kind: Literal['chat_history_loaded'] = 'chat_history_loaded'
+
+
+@dataclass(repr=False, kw_only=True)
 class CultureUpdateEvent(AgentEvent):
     """
     Event emitted when cultural knowledge is updated.
-    
+
     Attributes:
         culture_enabled: Whether culture update is enabled
         extraction_triggered: Whether extraction was triggered
@@ -1131,6 +1217,11 @@ class AgentRunEvent(str, Enum):
     STEP_END = "step_end"
     AGENT_INITIALIZED = "agent_initialized"
     STORAGE_CONNECTION = "storage_connection"
+    MEMORY_PREPARED = "memory_prepared"
+    SYSTEM_PROMPT_BUILT = "system_prompt_built"
+    CONTEXT_BUILT = "context_built"
+    USER_INPUT_BUILT = "user_input_built"
+    CHAT_HISTORY_LOADED = "chat_history_loaded"
     CACHE_CHECK = "cache_check"
     CACHE_HIT = "cache_hit"
     CACHE_MISS = "cache_miss"
@@ -1179,6 +1270,11 @@ StepEvent = Annotated[
 # Step-specific events
 StepSpecificEvent = Annotated[
     AgentInitializedEvent |
+    MemoryPreparedEvent |
+    SystemPromptBuiltEvent |
+    ContextBuiltEvent |
+    UserInputBuiltEvent |
+    ChatHistoryLoadedEvent |
     CacheCheckEvent |
     CacheHitEvent |
     CacheMissEvent |
@@ -1218,6 +1314,11 @@ AgentStreamEvent = Annotated[
     StepStartEvent |
     StepEndEvent |
     AgentInitializedEvent |
+    MemoryPreparedEvent |
+    SystemPromptBuiltEvent |
+    ContextBuiltEvent |
+    UserInputBuiltEvent |
+    ChatHistoryLoadedEvent |
     CacheCheckEvent |
     CacheHitEvent |
     CacheMissEvent |
@@ -1371,6 +1472,11 @@ _EVENT_CLASS_REGISTRY: Dict[str, type] = {
     "StepStartEvent": StepStartEvent,
     "StepEndEvent": StepEndEvent,
     "AgentInitializedEvent": AgentInitializedEvent,
+    "MemoryPreparedEvent": MemoryPreparedEvent,
+    "SystemPromptBuiltEvent": SystemPromptBuiltEvent,
+    "ContextBuiltEvent": ContextBuiltEvent,
+    "UserInputBuiltEvent": UserInputBuiltEvent,
+    "ChatHistoryLoadedEvent": ChatHistoryLoadedEvent,
     "CacheCheckEvent": CacheCheckEvent,
     "CacheHitEvent": CacheHitEvent,
     "CacheMissEvent": CacheMissEvent,

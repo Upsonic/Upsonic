@@ -376,9 +376,9 @@ class Direct:
         
         model = self._prepare_model()
         
-        # Ensure price_id is set for cost tracking
-        task.price_id_ = None
-        _ = task.price_id  # This will auto-generate if None
+        # Ensure fresh price_id is set for cost tracking
+        import uuid as _uuid
+        task.price_id_ = str(_uuid.uuid4())
         
         # Get response format name
         response_format_name = "str"
@@ -437,13 +437,23 @@ class Direct:
                 'output_tokens': task._usage.output_tokens,
             }
             
+            # Derive start/end from model_execution_time so call_end
+            # displays the accurate LLM execution time, not wall-clock.
+            _met = task._usage.model_execution_time
+            if _met is not None:
+                _effective_end = time.time()
+                _effective_start = _effective_end - _met
+            else:
+                _effective_end = end_time
+                _effective_start = start_time
+
             from upsonic.utils.printing import call_end
             call_end(
                 result=result,
                 model=model,
                 response_format=task.response_format if task.response_format is not None else str,
-                start_time=start_time,
-                end_time=end_time,
+                start_time=_effective_start,
+                end_time=_effective_end,
                 usage=usage,
                 tool_usage=[],
                 debug=False,

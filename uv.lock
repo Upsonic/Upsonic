@@ -8824,7 +8824,7 @@ wheels = [
 
 [[package]]
 name = "upsonic"
-version = "0.74.1"
+version = "0.74.4"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
@@ -8853,9 +8853,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-agentid = [
-    { name = "httpx" },
-]
 apify-tool = [
     { name = "apify-client" },
 ]
@@ -8949,6 +8946,9 @@ loaders = [
     { name = "pyyaml" },
     { name = "rapidocr-onnxruntime", marker = "python_full_version < '3.13'" },
     { name = "requests" },
+]
+mail-interface = [
+    { name = "fastapi" },
 ]
 markdown-loader = [
     { name = "markdown-it-py" },
@@ -9157,6 +9157,7 @@ requires-dist = [
     { name = "faiss-cpu", marker = "extra == 'vectordb'", specifier = ">=1.12.0" },
     { name = "fastapi", marker = "extra == 'discord-interface'", specifier = ">=0.128.0" },
     { name = "fastapi", marker = "extra == 'gmail-interface'" },
+    { name = "fastapi", marker = "extra == 'mail-interface'", specifier = ">=0.128.0" },
     { name = "fastapi", marker = "extra == 'slack-interface'", specifier = ">=0.128.0" },
     { name = "fastapi", marker = "extra == 'web'" },
     { name = "fastembed", marker = "python_full_version < '3.14' and extra == 'embeddings'", specifier = ">=0.7.3" },
@@ -9179,7 +9180,6 @@ requires-dist = [
     { name = "griffe", specifier = ">=1.14.0" },
     { name = "groq", marker = "extra == 'models'", specifier = ">=0.32.0" },
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "httpx", marker = "extra == 'agentid'", specifier = ">=0.28.1" },
     { name = "httpx", marker = "extra == 'models'", specifier = ">=0.28.1" },
     { name = "huggingface-hub", marker = "extra == 'embeddings'", specifier = ">=0.34.4" },
     { name = "jq", marker = "extra == 'json-loader'", specifier = ">=1.10.0" },
@@ -9291,7 +9291,7 @@ requires-dist = [
     { name = "xai-sdk", marker = "extra == 'models'", specifier = ">=1.4.0" },
     { name = "yfinance", marker = "extra == 'tools'", specifier = ">=0.2.66" },
 ]
-provides-extras = ["chroma", "qdrant", "milvus", "weaviate", "pinecone", "faiss", "pgvector", "supermemory", "vectordb", "sqlite-storage", "redis-storage", "postgres-storage", "mongo-storage", "mem0-storage", "storage", "models", "embeddings", "csv-loader", "docling-loader", "docx-loader", "html-loader", "json-loader", "markdown-loader", "pdf-loader", "pdfplumber-loader", "pymupdf-loader", "text-loader", "xml-loader", "yaml-loader", "loaders", "tools", "web", "ocr", "custom-tools", "apify-tool", "crawlee-browser", "gmail-interface", "safety-engine", "slack-interface", "discord-interface", "otel", "langfuse", "gmail-tool", "agentid"]
+provides-extras = ["chroma", "qdrant", "milvus", "weaviate", "pinecone", "faiss", "pgvector", "supermemory", "vectordb", "sqlite-storage", "redis-storage", "postgres-storage", "mongo-storage", "mem0-storage", "storage", "models", "embeddings", "csv-loader", "docling-loader", "docx-loader", "html-loader", "json-loader", "markdown-loader", "pdf-loader", "pdfplumber-loader", "pymupdf-loader", "text-loader", "xml-loader", "yaml-loader", "loaders", "tools", "web", "ocr", "custom-tools", "apify-tool", "crawlee-browser", "gmail-interface", "safety-engine", "slack-interface", "mail-interface", "discord-interface", "otel", "langfuse", "gmail-tool"]
 
 [package.metadata.requires-dev]
 dev = [

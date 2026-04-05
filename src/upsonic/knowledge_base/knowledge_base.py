@@ -137,7 +137,6 @@ class KnowledgeBase(ToolKit):
         self.name: str = name or self.knowledge_id[:16]  # Use first 16 chars of ID if no name
         
         # State management
-        self.rag: bool = True  # Flag for RAG-enabled mode
         self._is_ready: bool = False
         self._is_closed: bool = False
         self._setup_lock: asyncio.Lock = asyncio.Lock()
@@ -1495,20 +1494,9 @@ class KnowledgeBase(ToolKit):
     # Utility and Compatibility Methods
     # ============================================================================
 
-    async def setup_rag(self) -> None:
-        """
-        Setup RAG functionality for the knowledge base.
-        This method is called by the context manager when RAG is enabled.
-        """
-        await self.setup_async()
-
     def markdown(self) -> str:
-        """
-        Return a markdown representation of the knowledge base.
-        Used when RAG is disabled.
-        """
-        # Convert sources to strings to handle Path objects
-        source_strs = [str(source) for source in self.sources]
+        """Return a markdown representation of the knowledge base."""
+        source_strs: List[str] = [str(source) for source in self.sources]
         return f"# Knowledge Base: {self.name}\n\nSources: {', '.join(source_strs)}"
     
     # ============================================================================

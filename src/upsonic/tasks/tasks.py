@@ -64,16 +64,41 @@ class Task(BaseModel):
     # Stores mappings: {idx: {"original": "...", "anonymous": "...", "pii_type": "..."}}
     # Used to de-anonymize LLM responses before returning to user
     _anonymization_map: Optional[Dict[int, Dict[str, str]]] = None
+
+    policy_apply_to_description: Optional[bool] = None
+    policy_apply_to_context: Optional[bool] = None
+    policy_apply_to_system_prompt: Optional[bool] = None
+    policy_apply_to_chat_history: Optional[bool] = None
+    policy_apply_to_tool_outputs: Optional[bool] = None
+
+    _saved_context_for_policy: Optional[str] = None
+    _policy_originals: Optional[Dict[str, Any]] = None
+    _policy_scope_tool_outputs: bool = False
+
     _usage: Optional[TaskUsage] = None
     registered_task_tools: Dict[str, Any] = {}
     task_builtin_tools: List[Any] = []
     _tool_manager: Optional[Any] = None
-        
+
+    # Dynamic attributes - previously set without declaration
+    _cached_result: bool = False
+    _policy_blocked: bool = False
+    _reliability_sub_agent_usage: Optional[Any] = None
+    _upsonic_tool_config: Optional[Any] = None
+    _upsonic_is_tool: bool = False
+
+    query_knowledge_base: bool = True
+
     vector_search_top_k: Optional[int] = None
     vector_search_alpha: Optional[float] = None
     vector_search_fusion_method: Optional[Literal['rrf', 'weighted']] = None
     vector_search_similarity_threshold: Optional[float] = None
     vector_search_filter: Optional[Dict[str, Any]] = None
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name == '_task_todos' and value is not None and not isinstance(value, list):
+            raise TypeError("_task_todos must be a list or None")
+        super().__setattr__(name, value)
 
     @staticmethod
     def _is_file_path(item: Any) -> bool:
@@ -308,6 +333,12 @@ class Task(BaseModel):
         vector_search_fusion_method: Optional[Literal['rrf', 'weighted']] = None,
         vector_search_similarity_threshold: Optional[float] = None,
         vector_search_filter: Optional[Dict[str, Any]] = None,
+        query_knowledge_base: bool = True,
+        policy_apply_to_description: Optional[bool] = None,
+        policy_apply_to_context: Optional[bool] = None,
+        policy_apply_to_system_prompt: Optional[bool] = None,
+        policy_apply_to_chat_history: Optional[bool] = None,
+        policy_apply_to_tool_outputs: Optional[bool] = None,
     ):
         if guardrail is not None and not callable(guardrail):
             raise TypeError("The 'guardrail' parameter must be a callable function.")
@@ -327,7 +358,7 @@ class Task(BaseModel):
             
         if tools is None:
             tools = []
-            
+
         if context is None:
             context = []
 
@@ -335,13 +366,20 @@ class Task(BaseModel):
             context, extracted_files = self._extract_files_from_context(context)
         except FileNotFoundError as e:
             raise FileNotFoundError(e.file_path, f"File specified in context cannot be accessed: {e.reason}")
-        
+
         if attachments is None:
             attachments = []
-        
+
         if extracted_files:
             attachments.extend(extracted_files)
-            
+
+        # Eagerly generate IDs if not provided
+        import uuid
+        if price_id_ is None:
+            price_id_ = str(uuid.uuid4())
+        if task_id_ is None:
+            task_id_ = str(uuid.uuid4())
+
         super().__init__(**{
             "description": description,
             "attachments": attachments,
@@ -380,6 +418,12 @@ class Task(BaseModel):
             "vector_search_fusion_method": vector_search_fusion_method,
             "vector_search_similarity_threshold": vector_search_similarity_threshold,
             "vector_search_filter": vector_search_filter,
+            "policy_apply_to_description": policy_apply_to_description,
+            "policy_apply_to_context": policy_apply_to_context,
+            "policy_apply_to_system_prompt": policy_apply_to_system_prompt,
+            "policy_apply_to_chat_history": policy_apply_to_chat_history,
+            "query_knowledge_base": query_knowledge_base,
+            "policy_apply_to_tool_outputs": policy_apply_to_tool_outputs,
         })
         
         self.validate_tools()
@@ -625,38 +669,39 @@ class Task(BaseModel):
         from upsonic.knowledge_base.knowledge_base import KnowledgeBase
             
         rag_results = []
-        for context in self.context:
+        context_items: list[Any] = (
+            self.context if isinstance(self.context, list) else [self.context]
+        )
+        for context in context_items:
             
-            # Lazy import KnowledgeBase to avoid heavy imports
-            if hasattr(context, 'rag') and context.rag == True:
-                # Import KnowledgeBase only when needed
-                if isinstance(context, KnowledgeBase):
-                    await context.setup_rag()
-                    rag_result_objects = await context.query_async(self.description, task=self)
-                    # Convert RAGSearchResult objects to formatted strings
-                    if rag_result_objects:
-                        formatted_results = []
-                        for i, result in enumerate(rag_result_objects, 1):
-                            cleaned_text = result.text.strip()
-                            metadata_str = ""
-                            if result.metadata:
-                                source = result.metadata.get('source', 'Unknown')
-                                page_number = result.metadata.get('page_number')
-                                chunk_id = result.chunk_id or result.metadata.get('chunk_id')
-                                
-                                metadata_parts = [f"source: {source}"]
-                                if page_number is not None:
-                                    metadata_parts.append(f"page: {page_number}")
-                                if chunk_id:
-                                    metadata_parts.append(f"chunk_id: {chunk_id}")
-                                if result.score is not None:
-                                    metadata_parts.append(f"score: {result.score:.3f}")
-                                
-                                metadata_str = f" [metadata: {', '.join(metadata_parts)}]"
+            if isinstance(context, KnowledgeBase):
+                await context.setup_async()
+                if not self.query_knowledge_base:
+                    continue
+                rag_result_objects = await context.query_async(self.description, task=self)
+                if rag_result_objects:
+                    formatted_results: list[str] = []
+                    for i, result in enumerate(rag_result_objects, 1):
+                        cleaned_text: str = result.text.strip()
+                        metadata_str: str = ""
+                        if result.metadata:
+                            source = result.metadata.get('source', 'Unknown')
+                            page_number = result.metadata.get('page_number')
+                            chunk_id = result.chunk_id or result.metadata.get('chunk_id')
                             
-                            formatted_results.append(f"[{i}]{metadata_str} {cleaned_text}")
+                            metadata_parts: list[str] = [f"source: {source}"]
+                            if page_number is not None:
+                                metadata_parts.append(f"page: {page_number}")
+                            if chunk_id:
+                                metadata_parts.append(f"chunk_id: {chunk_id}")
+                            if result.score is not None:
+                                metadata_parts.append(f"score: {result.score:.3f}")
+                            
+                            metadata_str = f" [metadata: {', '.join(metadata_parts)}]"
                         
-                        rag_results.extend(formatted_results)
+                        formatted_results.append(f"[{i}]{metadata_str} {cleaned_text}")
+                    
+                    rag_results.extend(formatted_results)
                 
         if rag_results:
             return f"The following is the RAG data: <rag>{' '.join(rag_results)}</rag>"
@@ -693,16 +738,10 @@ class Task(BaseModel):
 
     @property
     def price_id(self):
-        if self.price_id_ is None:
-            import uuid
-            self.price_id_ = str(uuid.uuid4())
         return self.price_id_
 
     @property
     def task_id(self):
-        if self.task_id_ is None:
-            import uuid
-            self.task_id_ = str(uuid.uuid4())
         return self.task_id_
     
     def get_task_id(self):
@@ -834,10 +873,24 @@ class Task(BaseModel):
 
 
     def task_start(self, agent: Any) -> None:
+        """Initialize task for a fresh pipeline run.
+
+        This is called by InitStep (step 0) and always means the start of a
+        brand-new pipeline execution. It creates fresh TaskUsage and resets
+        per-run state. Must NOT be called during HITL resume — the pipeline
+        skips InitStep when resuming from a later step, which is the correct
+        behavior. If this is ever called while _usage already has accumulated
+        data, it means a full restart was intended.
+        """
         self.start_time = time.time()
+        self.end_time = None
         from upsonic.usage import TaskUsage
         self._usage = TaskUsage()
         self._usage.start_timer()
+        # Reset per-run state
+        self._context_formatted = None
+        self._cached_result = False
+        self._policy_blocked = False
         if agent.canvas:
             self.add_canvas(agent.canvas)
 
@@ -1012,6 +1065,7 @@ class Task(BaseModel):
             "cache_method": self.cache_method,
             "cache_threshold": self.cache_threshold,
             "cache_duration_minutes": self.cache_duration_minutes,
+            "query_knowledge_base": self.query_knowledge_base,
             "vector_search_top_k": self.vector_search_top_k,
             "vector_search_alpha": self.vector_search_alpha,
             "vector_search_fusion_method": self.vector_search_fusion_method,
@@ -1028,6 +1082,19 @@ class Task(BaseModel):
             "_last_cache_entry": self._last_cache_entry,
             "_anonymization_map": self._anonymization_map,
             "_usage": self._usage.to_dict() if self._usage is not None else None,
+            "_cached_result": self._cached_result,
+            "_policy_blocked": self._policy_blocked,
+            "policy_apply_to_description": self.policy_apply_to_description,
+            "policy_apply_to_context": self.policy_apply_to_context,
+            "policy_apply_to_system_prompt": self.policy_apply_to_system_prompt,
+            "policy_apply_to_chat_history": self.policy_apply_to_chat_history,
+            "policy_apply_to_tool_outputs": self.policy_apply_to_tool_outputs,
+            "_saved_context_for_policy": self._saved_context_for_policy,
+            "_policy_originals": self._policy_originals,
+            "_policy_scope_tool_outputs": self._policy_scope_tool_outputs,
+            "_reliability_sub_agent_usage": self._reliability_sub_agent_usage,
+            "_upsonic_tool_config": self._upsonic_tool_config,
+            "_upsonic_is_tool": self._upsonic_is_tool,
         }
         
         # Handle status (RunStatus enum)
@@ -1138,9 +1205,14 @@ class Task(BaseModel):
                         module = importlib.import_module(module_name)
                         response_format = getattr(module, class_name)
                     except (ImportError, AttributeError):
-                        response_format = None
+                        from upsonic.utils.printing import warning_log
+                        warning_log(
+                            f"Could not deserialize response_format type '{module_name}.{class_name}', falling back to str",
+                            "TaskDeserializer"
+                        )
+                        response_format = str
                 else:
-                    response_format = None
+                    response_format = str
             elif response_format_data.get("__type__"):
                 import importlib
                 module_name = response_format_data.get("module")
@@ -1150,9 +1222,14 @@ class Task(BaseModel):
                         module = importlib.import_module(module_name)
                         response_format = getattr(module, class_name)
                     except (ImportError, AttributeError):
-                        response_format = None
+                        from upsonic.utils.printing import warning_log
+                        warning_log(
+                            f"Could not deserialize response_format type '{module_name}.{class_name}', falling back to str",
+                            "TaskDeserializer"
+                        )
+                        response_format = str
                 else:
-                    response_format = None
+                    response_format = str
             else:
                 response_format = response_format_data
         else:
@@ -1196,9 +1273,12 @@ class Task(BaseModel):
             "price_id_", "task_id_", "not_main_task", "start_time", "end_time",
             "enable_thinking_tool", "enable_reasoning_tool",
             "guardrail_retries", "is_paused", "enable_cache", "cache_method",
-            "cache_threshold", "cache_duration_minutes", "vector_search_top_k",
+            "cache_threshold", "cache_duration_minutes", "query_knowledge_base", "vector_search_top_k",
             "vector_search_alpha", "vector_search_fusion_method",
-            "vector_search_similarity_threshold", "vector_search_filter"
+            "vector_search_similarity_threshold", "vector_search_filter",
+            "policy_apply_to_description", "policy_apply_to_context",
+            "policy_apply_to_system_prompt", "policy_apply_to_chat_history",
+            "policy_apply_to_tool_outputs",
         }
         filtered_data = {k: v for k, v in data.items() if k in valid_fields}
         
@@ -1297,7 +1377,23 @@ class Task(BaseModel):
             task._last_cache_entry = data["_last_cache_entry"]
         if data.get("_anonymization_map") is not None:
             task._anonymization_map = data["_anonymization_map"]
-        
+        if data.get("_cached_result") is not None:
+            task._cached_result = data["_cached_result"]
+        if data.get("_policy_blocked") is not None:
+            task._policy_blocked = data["_policy_blocked"]
+        if data.get("_saved_context_for_policy") is not None:
+            task._saved_context_for_policy = data["_saved_context_for_policy"]
+        if data.get("_policy_originals") is not None:
+            task._policy_originals = data["_policy_originals"]
+        if "_policy_scope_tool_outputs" in data:
+            task._policy_scope_tool_outputs = data["_policy_scope_tool_outputs"]
+        if data.get("_reliability_sub_agent_usage") is not None:
+            task._reliability_sub_agent_usage = data["_reliability_sub_agent_usage"]
+        if data.get("_upsonic_tool_config") is not None:
+            task._upsonic_tool_config = data["_upsonic_tool_config"]
+        if "_upsonic_is_tool" in data:
+            task._upsonic_is_tool = data["_upsonic_is_tool"]
+
         usage_data: Optional[Dict[str, Any]] = data.get("_usage")
         if usage_data is not None and isinstance(usage_data, dict):
             from upsonic.usage import TaskUsage
