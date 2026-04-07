@@ -37,6 +37,10 @@ class AutonomousAgent(Agent):
     - **Filesystem Tools**: Read, write, edit, search, list, move, copy, delete files
     - **Shell Tools**: Execute terminal commands with timeout and output capture
     - **Workspace Sandboxing**: All file/shell operations are restricted to workspace
+    - **Printing**: ``print`` defaults to ``True``, so :meth:`do` / :meth:`do_async` emit the
+      same Task/Agent metrics and stream panels as :meth:`print_do` unless you pass
+      ``print=False``, ``print=None`` (match base :class:`Agent` behavior), or set
+      ``UPSONIC_AGENT_PRINT=false``. Heartbeat runs stay non-printing.
     
     This is the ideal choice for:
     - Coding assistants that need to read/write files
@@ -107,7 +111,7 @@ class AutonomousAgent(Agent):
         # Standard Agent parameters
         debug: bool = False,
         debug_level: int = 1,
-        print: Optional[bool] = None,
+        print: Optional[bool] = True,
         company_url: Optional[str] = None,
         company_objective: Optional[str] = None,
         company_description: Optional[str] = None,
@@ -198,6 +202,10 @@ class AutonomousAgent(Agent):
                 this agent and forward the response through the interface channel.
             heartbeat_period: Heartbeat interval in minutes (default: 30).
             heartbeat_message: Message to send to the agent on each heartbeat tick.
+            
+            print: Defaults to ``True`` so :meth:`do` / :meth:`do_async` print like
+                :meth:`print_do`. Pass ``False`` for quiet runs, or ``None`` for the same
+                resolution as :class:`Agent` (quiet ``do`` unless ``UPSONIC_AGENT_PRINT``).
             
             # Standard Agent parameters - see Agent class for full documentation
         """
@@ -511,7 +519,15 @@ You can execute commands in the workspace directory:
         from upsonic.tasks.tasks import Task
 
         task: Task = Task(self.heartbeat_message)
-        await self.do_async(task, _print_method_default=False)
+        saved_print_param: Optional[bool] = self._print_param
+        saved_print_attr: bool = self.print
+        try:
+            self._print_param = False
+            self.print = False
+            await self.do_async(task, _print_method_default=False)
+        finally:
+            self._print_param = saved_print_param
+            self.print = saved_print_attr
 
         run_result = self.get_run_output()
         if not run_result:
