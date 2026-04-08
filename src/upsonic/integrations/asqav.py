@@ -13,7 +13,7 @@ Usage::
     agent.print_do("Analyze quarterly revenue data")
 
     # Export audit trail
-    gov.export_audit("json")
+    gov.export_audit_json()
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ class AsqavGovernance(TracingProvider):
     Extends the standard tracing pipeline with cryptographic signing.
     Every span (tool call, agent step, LLM invocation) gets an ML-DSA-65
     signature chained to the previous action, creating a tamper-evident
-    audit trail suitable for EU AI Act Article 12 compliance.
+    audit trail.
 
     Args:
         api_key: Asqav API key (``sk_...``).
@@ -86,13 +86,10 @@ class AsqavGovernance(TracingProvider):
         try:
             import asqav
 
-            asqav.init(api_key=self._api_key, api_url=self._endpoint)
+            asqav.init(api_key=self._api_key, base_url=self._endpoint)
             self._asqav = asqav
             self._agent = asqav.Agent.create(self._agent_name)
-            self._session = self._agent.start_session(
-                name="upsonic-session",
-                metadata={"framework": "upsonic"},
-            )
+            self._session = self._agent.start_session()
         except ImportError:
             raise ImportError(
                 "asqav is required for AsqavGovernance. "
@@ -105,40 +102,49 @@ class AsqavGovernance(TracingProvider):
 
     def _create_exporter(self) -> _SpanExporter:
         """Create an OTLP exporter that also signs spans via asqav."""
-        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
         from opentelemetry.sdk.trace.export.in_memory import InMemorySpanExporter
 
         # Use in-memory exporter as base - we process spans for signing
         exporter = InMemorySpanExporter()
         return _AsqavSigningExporter(
             inner=exporter,
-            session=self._session,
+            agent=self._agent,
             sign_tool_calls=self._sign_tool_calls,
             sign_llm_calls=self._sign_llm_calls,
             sign_agent_steps=self._sign_agent_steps,
         )
 
-    def export_audit(self, format: str = "json") -> Optional[bytes]:
-        """Export the audit trail as JSON or CSV.
-
-        Args:
-            format: Export format (``"json"`` or ``"csv"``).
+    def export_audit_json(self) -> Optional[dict]:
+        """Export the audit trail as JSON.
 
         Returns:
-            Audit trail data as bytes, or None if export fails.
+            Audit trail data as a dict, or None if export fails.
         """
         if self._asqav is None:
             return None
         try:
-            return self._asqav.export_audit(format)
+            return self._asqav.export_audit_json()
+        except Exception:
+            return None
+
+    def export_audit_csv(self) -> Optional[str]:
+        """Export the audit trail as CSV.
+
+        Returns:
+            Audit trail data as a CSV string, or None if export fails.
+        """
+        if self._asqav is None:
+            return None
+        try:
+            return self._asqav.export_audit_csv()
         except Exception:
             return None
 
     def shutdown(self) -> None:
         """End the asqav session and shut down tracing."""
-        if self._session is not None:
+        if self._agent is not None and self._agent._session_id is not None:
             try:
-                self._session.end()
+                self._agent.end_session()
             except Exception:
                 pass
         super().shutdown()
@@ -150,20 +156,20 @@ class _AsqavSigningExporter:
     def __init__(
         self,
         inner: Any,
-        session: Any,
+        agent: Any,
         sign_tool_calls: bool = True,
         sign_llm_calls: bool = True,
         sign_agent_steps: bool = True,
     ) -> None:
         self._inner = inner
-        self._session = session
+        self._agent = agent
         self._sign_tool_calls = sign_tool_calls
         self._sign_llm_calls = sign_llm_calls
         self._sign_agent_steps = sign_agent_steps
 
     def export(self, spans: Any) -> Any:
         """Sign relevant spans and forward to inner exporter."""
-        if self._session is not None:
+        if self._agent is not None:
             for span in spans:
                 self._maybe_sign(span)
         return self._inner.export(spans)
@@ -173,21 +179,22 @@ class _AsqavSigningExporter:
         try:
             name = span.name or ""
             attrs = dict(span.attributes or {})
+            context = {k: str(v) for k, v in attrs.items()}
 
             if "tool" in name.lower() and self._sign_tool_calls:
-                self._session.log(
-                    f"tool:{name}",
-                    metadata={k: str(v) for k, v in attrs.items()},
+                self._agent.sign(
+                    action_type=f"tool:{name}",
+                    context=context,
                 )
             elif "llm" in name.lower() and self._sign_llm_calls:
-                self._session.log(
-                    f"llm:{name}",
-                    metadata={k: str(v) for k, v in attrs.items()},
+                self._agent.sign(
+                    action_type=f"llm:{name}",
+                    context=context,
                 )
             elif self._sign_agent_steps:
-                self._session.log(
-                    f"agent:{name}",
-                    metadata={k: str(v) for k, v in attrs.items()},
+                self._agent.sign(
+                    action_type=f"agent:{name}",
+                    context=context,
                 )
         except Exception:
             pass  # Never break the tracing pipeline
