@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .base import Storage, AsyncStorage
     from .json import JSONStorage
+    from .schemas import KnowledgeRow
     from .in_memory import (
         InMemoryStorage,
         apply_pagination,
@@ -47,6 +48,15 @@ def _get_base_classes() -> dict[str, Any]:
     return {
         "Storage": Storage,
         "AsyncStorage": AsyncStorage,
+    }
+
+
+def _get_schema_classes() -> dict[str, Any]:
+    """Lazy import of schema dataclasses."""
+    from .schemas import KnowledgeRow
+
+    return {
+        "KnowledgeRow": KnowledgeRow,
     }
 
 
@@ -180,6 +190,7 @@ def _safe_get(loader: Any) -> dict[str, Any]:
 # dependency doesn't prevent importing unrelated classes from the same package.
 _LOADERS: list[tuple[bool, Any]] = [
     (False, _get_base_classes),
+    (False, _get_schema_classes),
     (False, _get_json_classes),
     (False, _get_in_memory_classes),
     (False, _get_memory_classes),
@@ -208,6 +219,8 @@ __all__ = [
     # Base classes
     "Storage",
     "AsyncStorage",
+    # Schema dataclasses
+    "KnowledgeRow",
     # Storage classes
     "InMemoryStorage",
     "JSONStorage",

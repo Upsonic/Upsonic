@@ -12,6 +12,7 @@ from upsonic.utils.logging_config import get_logger
 if TYPE_CHECKING:
     from upsonic.culture.cultural_knowledge import CulturalKnowledge
     from upsonic.session.base import Session, SessionType
+    from upsonic.storage.schemas import KnowledgeRow
 
 _logger = get_logger("upsonic.storage.mem0.utils")
 
@@ -793,6 +794,88 @@ def build_cultural_knowledge_filters(
     if team_id is not None:
         filters["team_id"] = team_id
     
+    return filters
+
+
+# ======================== Knowledge Helpers ========================
+
+
+def generate_knowledge_memory_id(document_id: str, table_name: str) -> str:
+    """Generate a unique memory ID for a knowledge document record."""
+    return f"knowledge__{table_name}__{document_id}"
+
+
+def serialize_knowledge_to_mem0(
+    knowledge_row: "KnowledgeRow",
+    table_name: str,
+) -> Dict[str, Any]:
+    """Serialize a KnowledgeRow for Mem0 storage.
+
+    Stores the full KnowledgeRow data as a JSON string in metadata._data,
+    with key fields duplicated in metadata for filtering.
+    """
+    current_time = int(time.time())
+
+    data_payload = knowledge_row.to_dict()
+    data_payload.setdefault("created_at", current_time)
+    data_payload["updated_at"] = current_time
+
+    memory_id = generate_knowledge_memory_id(data_payload["id"], table_name)
+
+    metadata: Dict[str, Any] = {
+        "_type": "knowledge",
+        "_table": table_name,
+        "_upsonic_memory_id": memory_id,
+        "_data": json.dumps(data_payload, default=str),
+        "knowledge_base_id": data_payload.get("knowledge_base_id") or "",
+        "document_id": data_payload["id"],
+        "status": data_payload.get("status") or "",
+        "created_at": _epoch_to_iso(data_payload["created_at"])
+        if isinstance(data_payload.get("created_at"), int)
+        else data_payload.get("created_at", ""),
+        "updated_at": _epoch_to_iso(data_payload["updated_at"])
+        if isinstance(data_payload.get("updated_at"), int)
+        else data_payload.get("updated_at", ""),
+    }
+
+    content = f"Knowledge document: {data_payload.get('name', data_payload['id'])}"
+
+    return {
+        "content": content,
+        "metadata": metadata,
+        "memory_id": memory_id,
+    }
+
+
+def deserialize_knowledge_from_mem0(
+    mem0_record: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Deserialize a Mem0 record back to a knowledge dictionary."""
+    metadata = mem0_record.get("metadata", {})
+    data_str = metadata.get("_data")
+
+    if data_str:
+        try:
+            return json.loads(data_str)
+        except json.JSONDecodeError:
+            _logger.warning(f"Failed to parse knowledge _data from metadata: {data_str[:100]}")
+
+    return {}
+
+
+def build_knowledge_filters(
+    table_name: str,
+    knowledge_base_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Build metadata filters for Mem0 knowledge queries."""
+    filters: Dict[str, Any] = {
+        "_type": "knowledge",
+        "_table": table_name,
+    }
+
+    if knowledge_base_id is not None:
+        filters["knowledge_base_id"] = knowledge_base_id
+
     return filters
 
 

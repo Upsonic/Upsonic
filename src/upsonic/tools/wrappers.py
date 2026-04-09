@@ -23,16 +23,16 @@ class FunctionTool(Tool):
         schema: FunctionSchema,
         config: Optional[ToolConfig] = None
     ):
-        self.function = function
-        self.config = config or ToolConfig()
+        self.function: Callable = function
+        self.config: ToolConfig = config or ToolConfig()
         
         # Create metadata with universal fields
-        metadata = ToolMetadata(
+        metadata: ToolMetadata = ToolMetadata(
             name=function.__name__,
             description=schema.description,
             kind='function',
             is_async=schema.is_async,
-            strict=config.strict if config and config.strict is not None else False
+            strict=self.config.strict if self.config.strict is not None else False
         )
         
         super().__init__(
@@ -42,7 +42,50 @@ class FunctionTool(Tool):
             metadata=metadata
         )
         
-        self.is_async = schema.is_async
+        self.is_async: bool = schema.is_async
+
+    @classmethod
+    def from_callable(
+        cls,
+        c: Callable,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        config: Optional[ToolConfig] = None,
+    ) -> "FunctionTool":
+        """Create a ``FunctionTool`` from a plain callable in one step.
+
+        This is the preferred way for tool providers (e.g. ``KnowledgeBase``)
+        to produce tool objects.  It mirrors Agno's
+        ``Function.from_callable(func, name=...)`` pattern: pass in a
+        properly typed and documented function, optionally override the
+        name/description, and get back a complete tool object ready for
+        registration.
+
+        The callable's ``__name__``, ``__doc__``, type annotations, and
+        async nature are all inspected automatically via ``function_schema``.
+
+        Args:
+            c: The callable (sync or async function) to wrap.
+            name: Override the tool name.  If ``None``, uses ``c.__name__``.
+            description: Override the tool description.  If ``None``, the
+                description is extracted from the callable's docstring.
+            config: Optional ``ToolConfig`` for behavioral settings.
+
+        Returns:
+            A fully initialised ``FunctionTool``.
+        """
+        if name is not None:
+            c.__name__ = name
+
+        schema: FunctionSchema = function_schema(
+            c,
+            schema_generator=GenerateToolJsonSchema,
+        )
+
+        if description is not None:
+            schema.description = description
+
+        return cls(function=c, schema=schema, config=config)
     
     async def execute(self, *args: Any, **kwargs: Any) -> Any:
         """Execute the tool function."""

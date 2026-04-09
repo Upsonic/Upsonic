@@ -425,7 +425,7 @@ class TestPdfPlumberLoaderSafe(unittest.TestCase):
         
         # Check basic metadata
         self.assertIn("source", metadata)
-        self.assertIn("file_name", metadata)
+        self.assertIn("document_name", metadata)
         self.assertIn("file_size", metadata)
         self.assertIn("file_extension", metadata)
         self.assertIn("loader_type", metadata)

@@ -19,21 +19,26 @@ if TYPE_CHECKING:
     from mem0.configs.base import MemoryConfig
     from upsonic.culture.cultural_knowledge import CulturalKnowledge
     from upsonic.session.base import Session, SessionType
+    from upsonic.storage.schemas import KnowledgeRow
 
 from upsonic.storage.base import Storage
 from upsonic.storage.mem0.utils import (
     apply_pagination,
     build_cultural_knowledge_filters,
+    build_knowledge_filters,
     build_session_filters,
     build_user_memory_filters,
     deserialize_cultural_knowledge_from_mem0,
+    deserialize_knowledge_from_mem0,
     deserialize_session_from_mem0,
     deserialize_session_to_object,
     deserialize_user_memory_from_mem0,
     generate_cultural_knowledge_memory_id,
+    generate_knowledge_memory_id,
     generate_session_memory_id,
     generate_user_memory_id,
     serialize_cultural_knowledge_to_mem0,
+    serialize_knowledge_to_mem0,
     serialize_session_to_mem0,
     serialize_user_memory_to_mem0,
     sort_records_by_field,
@@ -109,6 +114,7 @@ class Mem0Storage(Storage):
         session_table: Optional[str] = None,
         user_memory_table: Optional[str] = None,
         cultural_knowledge_table: Optional[str] = None,
+        knowledge_table: Optional[str] = None,
         default_user_id: str = "upsonic_default",
         id: Optional[str] = None,
     ) -> None:
@@ -142,6 +148,7 @@ class Mem0Storage(Storage):
             session_table=session_table,
             user_memory_table=user_memory_table,
             cultural_knowledge_table=cultural_knowledge_table,
+            knowledge_table=knowledge_table,
             id=id,
         )
         
@@ -1175,6 +1182,160 @@ class Mem0Storage(Storage):
             _logger.error(f"Error upserting cultural knowledge: {e}")
             raise e
 
+    # ======================== Knowledge Content Methods ========================
+
+    def upsert_knowledge_content(
+        self,
+        knowledge_row: "KnowledgeRow",
+    ) -> Optional["KnowledgeRow"]:
+        """Insert or update a knowledge document registry entry."""
+        from upsonic.storage.schemas import KnowledgeRow
+
+        try:
+            serialized = serialize_knowledge_to_mem0(
+                knowledge_row, self.knowledge_table_name
+            )
+            memory_id = serialized["memory_id"]
+
+            existing = self._get_memory_by_id(memory_id)
+
+            if existing:
+                existing_data = deserialize_knowledge_from_mem0(existing)
+                created_at = existing_data.get("created_at", int(time.time()))
+
+                from upsonic.storage.mem0.utils import _epoch_to_iso
+                data_str = serialized["metadata"].get("_data")
+                if data_str:
+                    data_dict = json.loads(data_str)
+                    data_dict["created_at"] = created_at
+                    serialized["metadata"]["_data"] = json.dumps(data_dict, default=str)
+                    serialized["metadata"]["created_at"] = (
+                        _epoch_to_iso(created_at)
+                        if isinstance(created_at, int)
+                        else created_at
+                    )
+
+                self._update_memory(
+                    memory_id=memory_id,
+                    content=serialized["content"],
+                    metadata=serialized["metadata"],
+                )
+                _logger.debug(f"Updated knowledge content: {knowledge_row.id}")
+            else:
+                self._add_memory(
+                    memory_id=memory_id,
+                    content=serialized["content"],
+                    metadata=serialized["metadata"],
+                )
+                _logger.debug(f"Added knowledge content: {knowledge_row.id}")
+
+            stored = self._get_memory_by_id(memory_id)
+            if stored is None:
+                return None
+
+            db_row = deserialize_knowledge_from_mem0(stored)
+            return KnowledgeRow.from_dict(db_row)
+
+        except Exception as e:
+            _logger.error(f"Error upserting knowledge content: {e}")
+            raise e
+
+    def get_knowledge_content(
+        self,
+        id: str,
+    ) -> Optional["KnowledgeRow"]:
+        """Get a knowledge document registry entry by ID."""
+        from upsonic.storage.schemas import KnowledgeRow
+
+        try:
+            memory_id = generate_knowledge_memory_id(id, self.knowledge_table_name)
+            stored = self._get_memory_by_id(memory_id)
+
+            if stored is None:
+                return None
+
+            db_row = deserialize_knowledge_from_mem0(stored)
+            if not db_row:
+                return None
+
+            return KnowledgeRow.from_dict(db_row)
+
+        except Exception as e:
+            _logger.error(f"Error getting knowledge content: {e}")
+            raise e
+
+    def get_knowledge_contents(
+        self,
+        knowledge_base_id: Optional[str] = None,
+        limit: Optional[int] = None,
+        page: Optional[int] = None,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None,
+    ) -> Tuple[List["KnowledgeRow"], int]:
+        """Get knowledge document registry entries with filtering and pagination."""
+        from upsonic.storage.schemas import KnowledgeRow
+
+        try:
+            filters = build_knowledge_filters(
+                table_name=self.knowledge_table_name,
+                knowledge_base_id=knowledge_base_id,
+            )
+
+            records = self._search_memories(filters=filters)
+
+            if not records:
+                return [], 0
+
+            total_count: int = len(records)
+
+            sorted_records = sort_records_by_field(
+                records,
+                sort_by=sort_by or "created_at",
+                sort_order=sort_order or "desc",
+            )
+
+            offset: Optional[int] = None
+            if page is not None and limit is not None:
+                offset = (page - 1) * limit
+
+            paginated_records = apply_pagination(sorted_records, limit, offset)
+
+            rows = [
+                KnowledgeRow.from_dict(deserialize_knowledge_from_mem0(r))
+                for r in paginated_records
+            ]
+            return rows, total_count
+
+        except Exception as e:
+            _logger.error(f"Error getting knowledge contents: {e}")
+            raise e
+
+    def delete_knowledge_content(self, id: str) -> bool:
+        """Delete a knowledge document registry entry by ID."""
+        try:
+            memory_id = generate_knowledge_memory_id(id, self.knowledge_table_name)
+            return self._delete_memory(memory_id)
+
+        except Exception as e:
+            _logger.error(f"Error deleting knowledge content: {e}")
+            raise e
+
+    def delete_knowledge_contents(self, ids: List[str]) -> int:
+        """Delete multiple knowledge document registry entries."""
+        if not ids:
+            return 0
+
+        deleted_count: int = 0
+        for doc_id in ids:
+            try:
+                if self.delete_knowledge_content(doc_id):
+                    deleted_count += 1
+            except Exception as e:
+                _logger.warning(f"Error deleting knowledge content {doc_id}: {e}")
+
+        _logger.debug(f"Deleted {deleted_count} knowledge entries")
+        return deleted_count
+
     # ======================== Utility Methods ========================
 
     def clear_all(self) -> None:
@@ -1219,6 +1380,19 @@ class Mem0Storage(Storage):
                     self._delete_memory(memory_id)
             
             _logger.debug(f"Cleared {len(cultural_knowledge_records)} cultural knowledge entries")
+
+            # Get all knowledge entries and delete them
+            knowledge_filters = build_knowledge_filters(
+                table_name=self.knowledge_table_name
+            )
+            knowledge_records = self._search_memories(filters=knowledge_filters)
+
+            for record in knowledge_records:
+                memory_id = record.get("id") or record.get("memory_id")
+                if memory_id:
+                    self._delete_memory(memory_id)
+
+            _logger.debug(f"Cleared {len(knowledge_records)} knowledge entries")
             _logger.info("Cleared all data from Mem0 storage")
         
         except Exception as e:

@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .base import BaseVectorDBProvider
+    from .store import VectorStore
     from .config import (
         BaseVectorDBConfig,
         DistanceMetric,
@@ -107,11 +108,16 @@ def _get_config_classes():
     return _config_cache
 
 def __getattr__(name: str) -> Any:
-    """Lazy import of provider and config classes."""
+    """Lazy import of provider, config, and store classes."""
     # Check base classes first
     base_classes = _get_base_classes()
     if name in base_classes:
         return base_classes[name]
+
+    # VectorStore convenience wrapper
+    if name == "VectorStore":
+        from .store import VectorStore
+        return VectorStore
     
     # Check config classes
     config_classes = _get_config_classes()
@@ -126,11 +132,9 @@ def __getattr__(name: str) -> Any:
     if name in _PROVIDER_MAP:
         module_path = _PROVIDER_MAP[name]
         try:
-            # Import the module dynamically
             from importlib import import_module
             module = import_module(module_path, package=__package__)
             provider_class = getattr(module, name)
-            # Cache it for future access
             _provider_cache[name] = provider_class
             return provider_class
         except (ImportError, AttributeError) as e:
@@ -148,6 +152,9 @@ def __getattr__(name: str) -> Any:
 __all__ = [
     # Base classes
     'BaseVectorDBProvider',
+
+    # High-level wrapper
+    'VectorStore',
     
     # Provider classes
     'ChromaProvider',

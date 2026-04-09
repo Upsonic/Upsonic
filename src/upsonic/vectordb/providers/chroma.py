@@ -3,25 +3,20 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import uuid as _uuid
 from hashlib import md5
-from typing import Any, Dict, List, Optional, Union, Literal, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Tuple, Union, Literal, TYPE_CHECKING
 
 if TYPE_CHECKING:
     import chromadb
-    from chromadb.api.client import Client as ChromaClientAPI
-    from chromadb.api.models.Collection import Collection as ChromaCollection
     from chromadb.errors import NotFoundError
 
 try:
     import chromadb
-    from chromadb.api.client import Client as ChromaClientAPI
-    from chromadb.api.models.Collection import Collection as ChromaCollection
     from chromadb.errors import NotFoundError
     _CHROMADB_AVAILABLE = True
 except ImportError:
     chromadb = None  # type: ignore
-    ChromaClientAPI = None  # type: ignore
-    ChromaCollection = None  # type: ignore
     NotFoundError = None  # type: ignore
     _CHROMADB_AVAILABLE = False
 
@@ -31,10 +26,9 @@ from upsonic.utils.printing import info_log, debug_log
 
 from upsonic.vectordb.config import (
     ChromaConfig,
-    Mode, 
+    Mode,
     DistanceMetric,
     HNSWIndexConfig,
-    FlatIndexConfig
 )
 
 from upsonic.utils.package.exception import(
@@ -51,29 +45,30 @@ from upsonic.schemas.vector_schemas import VectorSearchResult
 
 class ChromaProvider(BaseVectorDBProvider):
     """
-    A high-level, comprehensive, async-first implementation of ChromaDB provider.
-    
-    This provider integrates best practices from multiple frameworks and provides:
-    - Full async support for all operations
-    - Flexible metadata handling with nested structure flattening
-    - Advanced filtering capabilities
-    - Content hash tracking for deduplication
-    - Comprehensive data management methods
-    - Optional reranker support for search result re-ranking
-    
-    Key Features:
-    - document_name, document_id, content_id metadata tracking
-    - Dense vector search (ChromaDB automatically indexes all metadata fields)
+    A comprehensive, async-first implementation of BaseVectorDBProvider for ChromaDB.
+
+    Standard metadata fields stored per record:
+    - chunk_id (str) — unique per-chunk identifier
+    - chunk_content_hash (str) — MD5 of chunk text content for deduplication
+    - document_id (str) — parent document identifier
+    - doc_content_hash (str) — MD5 of parent document content for change detection
+    - document_name (str) — human-readable source name
+    - metadata (str) — JSON-serialised dict of all non-standard data
+
+    This provider offers:
+    - Full async/sync support with context manager lifecycle
+    - Content-based deduplication via chunk_content_hash
+    - Dense vector search (ChromaDB auto-indexes all metadata)
     - Full-text search using document content filtering
-    - Hybrid search combining vector and text
+    - Hybrid search combining dense vectors and full-text
+    - Generic field_exists / delete_by_field helpers
     - Rich filtering with ChromaDB operators ($eq, $ne, $in, $gt, etc.)
-    - Multiple deletion strategies (by ID, filter, document_name, content_id, etc.)
-    - Metadata updates and existence checks
-    
-    Note: ChromaDB only supports dense vectors. Sparse vectors are not supported.
-    
+
+    Note: ChromaDB does NOT support sparse vectors. Hybrid search combines
+    dense vector similarity with document-content keyword matching.
+
     Attributes:
-        reranker: Optional reranker instance for re-ranking search results
+        reranker: Optional reranker instance for re-ranking search results.
     """
     
     def __init__(
@@ -103,16 +98,11 @@ class ChromaProvider(BaseVectorDBProvider):
         super().__init__(config)
         self._config: ChromaConfig = config  # Type hint for better IDE support
         self._validate_config()
-        self._collection_instance: Optional[ChromaCollection] = None
-        
-        # Provider metadata
-        self.provider_name = config.provider_name or f"ChromaProvider_{config.collection_name}"
-        self.provider_description = config.provider_description
-        self.provider_id = config.provider_id or self._generate_provider_id()
+        self._collection_instance: Optional[Any] = None
         
         # Provider utilities
         self.reranker = reranker
-        
+
     def _validate_config(self) -> None:
         """Validate Chroma-specific configuration."""
         debug_log("Performing Chroma-specific configuration validation...", context="ChromaVectorDB")
@@ -135,33 +125,131 @@ class ChromaProvider(BaseVectorDBProvider):
         return md5(identifier.encode()).hexdigest()[:16]
 
     # ============================================================================
-    # Connection Management (Async)
+    # Client Lifecycle Management
     # ============================================================================
 
-    async def connect(self) -> None:
-        """Establish connection to ChromaDB asynchronously."""
-        if self._is_connected:
-            return
-        
-        debug_log(f"Connecting to ChromaDB in '{self._config.connection.mode.value}' mode...", context="ChromaVectorDB")
-        
-        try:
-            # Run synchronous client creation in thread pool
-            client_instance = await asyncio.to_thread(self._create_client)
-            
-            # Verify connection with heartbeat
-            await asyncio.to_thread(client_instance.heartbeat)
-            
-            self._client = client_instance
-            self._is_connected = True
-            info_log("ChromaDB connection successful and verified.", context="ChromaVectorDB")
-            
-        except Exception as e:
-            raise VectorDBConnectionError(f"Failed to connect to ChromaDB: {e}") from e
+    async def aget_client(self) -> Any:
+        """
+        Gets or creates the ChromaDB client, ensuring it is connected and ready.
 
-    def _create_client(self) -> ChromaClientAPI:
+        Follows a singleton pattern: reuses the existing client if available,
+        creates a new one if needed, verifies readiness via heartbeat, and
+        auto-recovers if the existing client is unresponsive.
+
+        Returns:
+            A connected and ready ChromaDB client instance.
+
+        Raises:
+            VectorDBConnectionError: If the client cannot be created or is not ready.
+        """
+        if self.client is None:
+            debug_log(
+                f"Creating client for '{self._config.connection.mode.value}' mode...",
+                context="ChromaVectorDB",
+            )
+            self.client = await asyncio.to_thread(self._create_client)
+
+        try:
+            await asyncio.to_thread(self.client.heartbeat)
+        except Exception:
+            debug_log("Existing ChromaDB client unresponsive, recreating...", context="ChromaVectorDB")
+            try:
+                self.client = await asyncio.to_thread(self._create_client)
+                await asyncio.to_thread(self.client.heartbeat)
+            except Exception as e:
+                self.client = None
+                self._is_connected = False
+                self._collection_instance = None
+                raise VectorDBConnectionError(
+                    f"ChromaDB client not ready after recreation: {e}"
+                ) from e
+
+        self._is_connected = True
+        return self.client
+
+    def get_client(self) -> Any:
+        """
+        Gets or creates the ChromaDB client (sync wrapper).
+
+        Returns:
+            A connected and ready ChromaDB client instance.
+
+        Raises:
+            VectorDBConnectionError: If the client cannot be created or is not ready.
+        """
+        return self._run_async_from_sync(self.aget_client())
+
+    async def ais_client_connected(self) -> bool:
+        """
+        Checks whether the ChromaDB client exists and is responsive.
+        Does not create or reconnect — purely a read-only status check.
+
+        Returns:
+            True if the client is connected and responsive, False otherwise.
+        """
+        if self.client is None:
+            return False
+
+        try:
+            await asyncio.to_thread(self.client.heartbeat)
+            return True
+        except Exception:
+            return False
+
+    def is_client_connected(self) -> bool:
+        """
+        Checks whether the ChromaDB client exists and is responsive (sync).
+
+        Returns:
+            True if the client is connected and responsive, False otherwise.
+        """
+        return self._run_async_from_sync(self.ais_client_connected())
+
+    # ============================================================================
+    # Connection Lifecycle
+    # ============================================================================
+
+    async def aconnect(self) -> None:
+        """
+        Establishes an async connection to ChromaDB.
+
+        Delegates to aget_client() which handles client creation, heartbeat
+        verification, and auto-recovery. This method is idempotent.
+
+        Raises:
+            VectorDBConnectionError: If the connection fails for any reason.
+        """
+        if await self.ais_client_connected():
+            info_log("Already connected to ChromaDB.", context="ChromaVectorDB")
+            return
+
+        debug_log(
+            f"Attempting to connect to ChromaDB in '{self._config.connection.mode.value}' mode...",
+            context="ChromaVectorDB",
+        )
+
+        try:
+            await self.aget_client()
+            info_log(
+                "Successfully connected to ChromaDB and health check passed.",
+                context="ChromaVectorDB",
+            )
+        except (VectorDBConnectionError, ConfigurationError):
+            self.client = None
+            self._is_connected = False
+            self._collection_instance = None
+            raise
+        except Exception as e:
+            self.client = None
+            self._is_connected = False
+            self._collection_instance = None
+            raise VectorDBConnectionError(
+                f"An unexpected error occurred during connection: {e}"
+            ) from e
+
+    def _create_client(self) -> Any:
         """Create ChromaDB client based on configuration."""
-        client_instance: ChromaClientAPI
+        client_instance: Any
         
         if self._config.connection.mode == Mode.IN_MEMORY:
             client_instance = chromadb.Client()
@@ -195,7 +283,7 @@ class ChromaProvider(BaseVectorDBProvider):
             # Use CloudClient for Chroma Cloud connections
             try:
                 client_instance = chromadb.CloudClient(**cloud_kwargs)
-            except (AttributeError, ImportError, TypeError) as e:
+            except (AttributeError, ImportError, TypeError):
                 # Fallback to HttpClient if CloudClient is not available
                 if not self._config.connection.host:
                     raise ConfigurationError("CloudClient not available and no host specified for fallback HttpClient.")
@@ -212,87 +300,71 @@ class ChromaProvider(BaseVectorDBProvider):
         
         return client_instance
 
-    def connect_sync(self) -> None:
-        """Establish connection to ChromaDB synchronously."""
-        return self._run_async_from_sync(self.connect())
-
-    async def disconnect(self) -> None:
+    async def adisconnect(self) -> None:
         """Gracefully disconnect from ChromaDB."""
-        if not self._is_connected or not self._client:
+        if not self._is_connected or not self.client:
             return
         
         debug_log("Disconnecting from ChromaDB...", context="ChromaVectorDB")
         
         try:
             # Add timeout to prevent hanging on reset
-            await asyncio.wait_for(asyncio.to_thread(self._client.reset), timeout=5.0)
+            await asyncio.wait_for(asyncio.to_thread(self.client.reset), timeout=5.0)
         except asyncio.TimeoutError:
             debug_log("ChromaDB reset timed out, forcing cleanup...", context="ChromaVectorDB")
         except Exception:
             pass
         finally:
-            self._client = None
+            self.client = None
             self._is_connected = False
             self._collection_instance = None
             info_log("ChromaDB client session has been reset.", context="ChromaVectorDB")
 
-    def disconnect_sync(self) -> None:
-        """Gracefully disconnect from ChromaDB synchronously."""
-        return self._run_async_from_sync(self.disconnect())
-
-    async def is_ready(self) -> bool:
+    async def ais_ready(self) -> bool:
         """Check if the database is ready and responsive."""
-        if not self._is_connected or not self._client:
+        if not self._is_connected or not self.client:
             return False
         
         try:
-            await asyncio.to_thread(self._client.heartbeat)
+            await asyncio.to_thread(self.client.heartbeat)
             return True
         except Exception:
             return False
-
-    def is_ready_sync(self) -> bool:
-        """Check if the database is ready and responsive (sync)."""
-        return self._run_async_from_sync(self.is_ready())
 
     # ============================================================================
     # Collection Management (Async)
     # ============================================================================
 
-    async def create_collection(self) -> None:
+    async def acreate_collection(self) -> None:
         """Create or retrieve the collection with proper configuration."""
-        if not await self.is_ready():
-            raise VectorDBConnectionError("Cannot create collection: Provider is not connected or ready.")
-        
+        client = await self.aget_client()
+
         collection_name = self._config.collection_name
-        
+
         try:
-            # Handle recreate_if_exists
-            if self._config.recreate_if_exists and await self.collection_exists():
-                info_log(f"Configuration specifies 'recreate_if_exists'. Deleting existing collection '{collection_name}'...", context="ChromaVectorDB")
-                await self.delete_collection()
-            
-            # Prepare collection metadata
+            if self._config.recreate_if_exists and await self.acollection_exists():
+                info_log(
+                    f"Configuration specifies 'recreate_if_exists'. "
+                    f"Deleting existing collection '{collection_name}'...",
+                    context="ChromaVectorDB",
+                )
+                await self.adelete_collection()
+
             chroma_metadata = self._translate_config_to_chroma_metadata()
-            
+
             debug_log(f"Creating or retrieving collection '{collection_name}'...", context="ChromaVectorDB")
-            
-            # Create or get collection
+
             self._collection_instance = await asyncio.to_thread(
-                self._client.get_or_create_collection,
+                client.get_or_create_collection,
                 name=collection_name,
-                metadata=chroma_metadata
+                metadata=chroma_metadata,
             )
-            
+
             info_log(f"Successfully prepared collection '{collection_name}'.", context="ChromaVectorDB")
-            
+
         except Exception as e:
             raise VectorDBError(f"Failed to create or get collection '{collection_name}': {e}") from e
 
-    def create_collection_sync(self) -> None:
-        """Create or retrieve the collection with proper configuration (sync)."""
-        return self._run_async_from_sync(self.create_collection())
-            
     def _translate_config_to_chroma_metadata(self) -> dict:
         """Translate framework config to ChromaDB metadata."""
         distance_map = {
@@ -310,165 +382,178 @@ class ChromaProvider(BaseVectorDBProvider):
         
         return metadata
 
-    async def delete_collection(self) -> None:
+    async def adelete_collection(self) -> None:
         """Delete the collection permanently."""
-        if not await self.is_ready():
-            raise VectorDBConnectionError("Cannot delete collection: Provider is not connected or ready.")
-        
+        client = await self.aget_client()
+
         collection_name = self._config.collection_name
         debug_log(f"Attempting to delete collection '{collection_name}'...", context="ChromaVectorDB")
-        
+
         try:
-            await asyncio.to_thread(self._client.delete_collection, name=collection_name)
+            await asyncio.to_thread(client.delete_collection, name=collection_name)
             self._collection_instance = None
             info_log(f"Collection '{collection_name}' deleted successfully.", context="ChromaVectorDB")
-            
+
         except (ValueError, chromadb.errors.NotFoundError) as e:
-            raise CollectionDoesNotExistError(f"Cannot delete collection '{collection_name}' because it does not exist.") from e
+            raise CollectionDoesNotExistError(
+                f"Cannot delete collection '{collection_name}' because it does not exist."
+            ) from e
         except Exception as e:
-            raise VectorDBError(f"An unexpected error occurred while deleting collection '{collection_name}': {e}") from e
+            raise VectorDBError(
+                f"An unexpected error occurred while deleting collection '{collection_name}': {e}"
+            ) from e
 
-    def delete_collection_sync(self) -> None:
-        """Delete the collection permanently (sync)."""
-        return self._run_async_from_sync(self.delete_collection())
-
-    async def collection_exists(self) -> bool:
+    async def acollection_exists(self) -> bool:
         """Check if the collection exists."""
-        if not await self.is_ready():
-            raise VectorDBConnectionError("Cannot check for collection: Provider is not connected or ready.")
-        
+        client = await self.aget_client()
+
         try:
             collection = await asyncio.to_thread(
-                self._client.get_collection,
-                name=self._config.collection_name
+                client.get_collection,
+                name=self._config.collection_name,
             )
-            
+
             if self._collection_instance is None:
                 self._collection_instance = collection
-            
+
             return True
-            
+
         except NotFoundError:
             return False
         except Exception as e:
-            raise VectorDBConnectionError(f"Failed to check collection existence due to a server error: {e}") from e
+            raise VectorDBConnectionError(
+                f"Failed to check collection existence due to a server error: {e}"
+            ) from e
 
-    def collection_exists_sync(self) -> bool:
-        """Check if the collection exists (sync)."""
-        return self._run_async_from_sync(self.collection_exists())
+    async def _get_active_collection(self) -> Any:
+        """
+        Ensure the collection instance is available.
 
-    async def _get_active_collection(self) -> ChromaCollection:
-        """Ensure the collection instance is available."""
+        Uses aget_client() to guarantee the client is connected and ready
+        before retrieving the collection reference.
+
+        Returns:
+            A ChromaDB Collection object.
+
+        Raises:
+            VectorDBConnectionError: If the client is not connected or not ready.
+            VectorDBError: If the collection is not initialized.
+        """
+        client = await self.aget_client()
+
         if self._collection_instance is None:
-            # Try to get the collection
             try:
                 self._collection_instance = await asyncio.to_thread(
-                    self._client.get_collection,
-                    name=self._config.collection_name
+                    client.get_collection,
+                    name=self._config.collection_name,
                 )
             except Exception:
-                raise VectorDBError("Collection is not initialized. Please call 'create_collection' before performing data operations.")
-        
+                raise VectorDBError(
+                    "Collection is not initialized. Please call 'create_collection' before performing data operations."
+                )
+
         return self._collection_instance
 
-    # ============================================================================
-    # Metadata Handling
-    # ============================================================================
 
-    def _flatten_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Union[str, int, float, bool]]:
-        """
-        Flatten nested metadata to ChromaDB-compatible format.
-        
-        ChromaDB only supports primitive types in metadata. This method
-        recursively flattens nested structures using dot notation and
-        converts complex types to JSON strings.
-        
-        Args:
-            metadata: Dictionary that may contain nested structures
-            
-        Returns:
-            Flattened dictionary with only primitive values
-        """
-        flattened: Dict[str, Any] = {}
-        
-        def _flatten_recursive(obj: Any, prefix: str = "") -> None:
-            if isinstance(obj, dict):
-                if len(obj) == 0:
-                    # Handle empty dictionaries by converting to JSON string
-                    flattened[prefix] = json.dumps(obj)
-                else:
-                    for key, value in obj.items():
-                        new_key = f"{prefix}.{key}" if prefix else key
-                        _flatten_recursive(value, new_key)
-            elif isinstance(obj, (list, tuple)):
-                # Convert lists/tuples to JSON strings
-                flattened[prefix] = json.dumps(obj)
-            elif isinstance(obj, (str, int, float, bool)) or obj is None:
-                if obj is not None:  # ChromaDB doesn't accept None values
-                    flattened[prefix] = obj
-            else:
-                # Convert other complex types to JSON strings
-                try:
-                    flattened[prefix] = json.dumps(obj)
-                except (TypeError, ValueError):
-                    # If it can't be serialized, convert to string
-                    flattened[prefix] = str(obj)
-        
-        _flatten_recursive(metadata)
-        return flattened
+    _STANDARD_FIELDS: frozenset = frozenset({
+        'document_name', 'document_id', 'chunk_id',
+        'metadata', 'content', 'doc_content_hash', 'chunk_content_hash',
+        'knowledge_base_id',
+    })
 
     def _prepare_metadata(
-        self, 
+        self,
         payload: Dict[str, Any],
-        document_name: Optional[str] = None,
-        document_id: Optional[str] = None,
-        content_id: Optional[str] = None,
-        content_hash: Optional[str] = None,
-        additional_metadata: Optional[Dict[str, Any]] = None
+        chunk_id: str,
+        chunk_content_hash: str,
+        document_id: str = "",
+        doc_content_hash: str = "",
+        document_name: str = "",
+        knowledge_base_id: Optional[str] = None,
+        extra_metadata: Optional[Dict[str, Any]] = None,
+        _warned_standard_keys: Optional[set] = None,
+    ) -> Dict[str, Union[str, int, float, bool]]:
+        """
+        Build the ChromaDB metadata dict (flat primitives only) with strict
+        payload-contract compliance.
+
+        Standard fields are taken ONLY from dedicated parameters. Non-standard
+        keys from ``payload`` and the nested ``payload["metadata"]`` dict are
+        merged into a single ``metadata`` JSON-serialized Chroma key.
+        """
+        combined_user_metadata: Dict[str, Any] = {}
+
+        if self._config.default_metadata:
+            combined_user_metadata.update(self._config.default_metadata)
+
+        if payload:
+            nested = payload.get("metadata")
+            if isinstance(nested, dict):
+                combined_user_metadata.update(nested)
+
+            for key, value in payload.items():
+                if key in self._STANDARD_FIELDS:
+                    if key == "metadata":
+                        continue
+                    if _warned_standard_keys is not None and key not in _warned_standard_keys:
+                        debug_log(
+                            f"Standard field '{key}' found in payload dict and will be ignored. "
+                            f"Standard fields must be passed via dedicated parameters "
+                            f"(ids, document_ids, document_names, doc_content_hashes, "
+                            f"chunk_content_hashes, knowledge_base_ids).",
+                            context="ChromaVectorDB",
+                        )
+                        _warned_standard_keys.add(key)
+                    continue
+                combined_user_metadata[key] = value
+
+        if extra_metadata:
+            combined_user_metadata.update(extra_metadata)
+
+        chroma_metadata: Dict[str, Union[str, int, float, bool]] = {
+            "chunk_id": chunk_id or "",
+            "chunk_content_hash": chunk_content_hash or "",
+            "document_id": document_id or "",
+            "doc_content_hash": doc_content_hash or "",
+            "document_name": document_name or "",
+            "knowledge_base_id": knowledge_base_id or "",
+            "metadata": json.dumps(combined_user_metadata),
+        }
+
+        return chroma_metadata
+
+    def _hydrate_payload(
+        self,
+        chroma_metadata: Optional[Dict[str, Any]],
+        chroma_document: Optional[str],
     ) -> Dict[str, Any]:
         """
-        Prepare metadata for upserting by merging all sources.
-        
-        Args:
-            payload: Base payload/metadata
-            document_name: Optional document name
-            document_id: Optional document ID
-            content_id: Content ID (main identifier)
-            content_hash: Hash of content for deduplication
-            additional_metadata: Additional metadata from method call
-            
-        Returns:
-            Merged and flattened metadata
+        Build a contract-compliant VectorSearchResult.payload from Chroma's
+        flat metadata dict + documents field.
         """
-        # Start with payload
-        merged_metadata = dict(payload) if payload else {}
-        
-        # Add default metadata from config
-        if self._config.default_metadata:
-            for key, value in self._config.default_metadata.items():
-                if key not in merged_metadata:
-                    merged_metadata[key] = value
-        
-        # Add additional metadata from method call
-        if additional_metadata:
-            merged_metadata.update(additional_metadata)
-        
-        # Add tracking fields
-        if document_name is not None:
-            merged_metadata["document_name"] = document_name
-        if document_id is not None:
-            merged_metadata["document_id"] = document_id
-        if content_id is not None:
-            merged_metadata["content_id"] = content_id
-        if content_hash is not None:
-            merged_metadata["content_hash"] = content_hash
-        
-        # Flatten for ChromaDB compatibility
-        return self._flatten_metadata(merged_metadata)
+        chroma_metadata = chroma_metadata or {}
+        raw_metadata = chroma_metadata.get("metadata", "{}")
+        if isinstance(raw_metadata, dict):
+            parsed_metadata = raw_metadata
+        elif isinstance(raw_metadata, str) and raw_metadata:
+            try:
+                parsed = json.loads(raw_metadata)
+                parsed_metadata = parsed if isinstance(parsed, dict) else {}
+            except (json.JSONDecodeError, TypeError, ValueError):
+                parsed_metadata = {}
+        else:
+            parsed_metadata = {}
 
-    def _generate_content_id(self, content: str) -> str:
-        """Generate a unique content ID based on content hash."""
-        return md5(content.encode()).hexdigest()
+        return {
+            "chunk_id": chroma_metadata.get("chunk_id", "") or "",
+            "document_id": chroma_metadata.get("document_id", "") or "",
+            "document_name": chroma_metadata.get("document_name", "") or "",
+            "content": chroma_document or "",
+            "doc_content_hash": chroma_metadata.get("doc_content_hash", "") or "",
+            "chunk_content_hash": chroma_metadata.get("chunk_content_hash", "") or "",
+            "knowledge_base_id": chroma_metadata.get("knowledge_base_id", "") or "",
+            "metadata": parsed_metadata,
+        }
 
     # ============================================================================
     # Filter Building
@@ -515,255 +600,514 @@ class ChromaProvider(BaseVectorDBProvider):
         # If multiple conditions, wrap in $and
         return {"$and": conditions}
 
+    def _split_filter(
+        self,
+        filters: Optional[Dict[str, Any]],
+    ) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
+        """
+        Split a filter dict into (native_chroma_filter, python_post_filter).
+
+        Native filter: standard fields (excluding 'metadata' and 'content') that
+        Chroma can match natively at the flat top level of its metadata.
+
+        Post filter: non-standard user fields that live inside the JSON-serialized
+        ``metadata`` Chroma key and must be matched in Python after fetching.
+        """
+        if not filters:
+            return None, {}
+
+        native_standard_keys = self._STANDARD_FIELDS - {'metadata', 'content'}
+
+        # Logical operators at top level: collect all leaf keys; if any are
+        # non-standard, fall back to a pure-Python post-filter for the whole tree.
+        if any(k.startswith("$") for k in filters.keys()):
+            def _leaf_keys(f: Any) -> set:
+                keys: set = set()
+                if isinstance(f, dict):
+                    for k, v in f.items():
+                        if k.startswith("$"):
+                            if isinstance(v, list):
+                                for item in v:
+                                    keys |= _leaf_keys(item)
+                            elif isinstance(v, dict):
+                                keys |= _leaf_keys(v)
+                        else:
+                            keys.add(k)
+                return keys
+
+            all_keys = _leaf_keys(filters)
+            if all_keys and all_keys <= native_standard_keys:
+                return filters, {}
+            return None, filters
+
+        native_part: Dict[str, Any] = {}
+        post_part: Dict[str, Any] = {}
+        for key, value in filters.items():
+            if key in native_standard_keys:
+                native_part[key] = value
+            else:
+                post_part[key] = value
+
+        native_chroma = self._convert_filters(native_part) if native_part else None
+        return native_chroma, post_part
+
+    def _matches_post_filter(
+        self,
+        payload: Dict[str, Any],
+        post_filter: Dict[str, Any],
+    ) -> bool:
+        """
+        Check if a hydrated payload matches a Python-side post-filter
+        (non-standard fields stored inside the user metadata blob).
+        """
+        if not post_filter:
+            return True
+
+        user_meta = payload.get("metadata") if isinstance(payload, dict) else None
+        if not isinstance(user_meta, dict):
+            return False
+
+        for key, expected in post_filter.items():
+            if key.startswith("$"):
+                if key == "$and":
+                    if not all(self._matches_post_filter(payload, sub) for sub in expected):
+                        return False
+                elif key == "$or":
+                    if not any(self._matches_post_filter(payload, sub) for sub in expected):
+                        return False
+                else:
+                    return False
+                continue
+
+            actual = user_meta.get(key)
+            if isinstance(expected, dict):
+                for op, val in expected.items():
+                    if op == "$eq":
+                        if actual != val:
+                            return False
+                    elif op == "$ne":
+                        if actual == val:
+                            return False
+                    elif op == "$in":
+                        if actual not in val:
+                            return False
+                    elif op == "$nin":
+                        if actual in val:
+                            return False
+                    elif op == "$gt":
+                        if not (actual is not None and actual > val):
+                            return False
+                    elif op == "$gte":
+                        if not (actual is not None and actual >= val):
+                            return False
+                    elif op == "$lt":
+                        if not (actual is not None and actual < val):
+                            return False
+                    elif op == "$lte":
+                        if not (actual is not None and actual <= val):
+                            return False
+                    else:
+                        return False
+            else:
+                if actual != expected:
+                    return False
+
+        return True
+
 
     # ============================================================================
     # Data Operations (Async)
     # ============================================================================
 
-    async def upsert(
+    async def _batch_find_existing_by_hashes(
         self,
-        vectors: List[List[float]],
-        payloads: List[Dict[str, Any]],
-        ids: List[Union[str, int]],
-        chunks: Optional[List[str]] = None,
-        sparse_vectors: Optional[List[Dict[str, Any]]] = None,
-        document_names: Optional[List[str]] = None,
-        document_ids: Optional[List[str]] = None,
-        content_ids: Optional[List[str]] = None,
-        additional_metadata: Optional[Dict[str, Any]] = None,
-        **kwargs
-    ) -> None:
+        chunk_content_hashes: List[str],
+    ) -> Dict[str, List[str]]:
         """
-        Add or update records in the ChromaDB collection.
-        
+        Batch lookup of existing records by chunk_content_hash.
+
+        Uses ChromaDB ``$in`` filter for a single network roundtrip.
+
         Args:
-            vectors: List of dense vector embeddings
-            payloads: List of corresponding metadata objects
-            ids: List of unique identifiers
-            chunks: List of text content (required for full-text search)
-            sparse_vectors: Not supported by ChromaDB (ignored if provided)
-            document_names: Optional list of document names
-            document_ids: Optional list of document IDs
-            content_ids: Optional list of content IDs (auto-generated if not provided)
-            additional_metadata: Additional metadata to merge into all records
-            **kwargs: Provider-specific options
-            
-        Raises:
-            UpsertError: If the data ingestion operation fails
-            VectorDBError: If the collection is not initialized
-        """
-        collection = await self._get_active_collection()
-        debug_log(f"Upserting {len(ids)} records into collection '{collection.name}'...", context="ChromaVectorDB")
-        
-        # Validate inputs
-        if len(vectors) != len(ids):
-            raise UpsertError(f"Number of vectors ({len(vectors)}) must match number of IDs ({len(ids)})")
-        if len(payloads) != len(ids):
-            raise UpsertError(f"Number of payloads ({len(payloads)}) must match number of IDs ({len(ids)})")
-        
-        # Log warning if sparse vectors provided (not supported)
-        if sparse_vectors is not None:
-            debug_log("Sparse vectors are not supported by ChromaDB and will be ignored.", context="ChromaVectorDB")
-        
-        try:
-            # Prepare data
-            upsert_embeddings = []
-            upsert_metadatas = []
-            upsert_ids = []
-            upsert_documents = []
-            
-            for i in range(len(ids)):
-                # Get components
-                vector = vectors[i]
-                payload = payloads[i]
-                doc_id = str(ids[i])
-                content = chunks[i] if chunks and i < len(chunks) else None
-                
-                # Get tracking fields
-                doc_name = document_names[i] if document_names and i < len(document_names) else None
-                document_id = document_ids[i] if document_ids and i < len(document_ids) else None
-                
-                # Generate or get content_id
-                if content_ids and i < len(content_ids):
-                    content_id = content_ids[i]
-                elif self._config.auto_generate_content_id and content:
-                    content_id = self._generate_content_id(content)
-                else:
-                    content_id = doc_id  # Fallback to record ID
-                
-                # Generate content hash if content exists
-                content_hash = None
-                if content:
-                    content_hash = md5(content.encode()).hexdigest()
-                
-                # Prepare metadata
-                prepared_metadata = self._prepare_metadata(
-                    payload=payload,
-                    document_name=doc_name,
-                    document_id=document_id,
-                    content_id=content_id,
-                    content_hash=content_hash,
-                    additional_metadata=additional_metadata
-                )
-                
-                upsert_embeddings.append(vector)
-                upsert_metadatas.append(prepared_metadata)
-                upsert_ids.append(doc_id)
-                
-                if content is not None:
-                    # Clean content (remove null bytes)
-                    cleaned_content = content.replace("\x00", "\ufffd")
-                    upsert_documents.append(cleaned_content)
-                else:
-                    upsert_documents.append("")
-            
-            # Perform upsert
-            upsert_params = {
-                "embeddings": upsert_embeddings,
-                "metadatas": upsert_metadatas,
-                "ids": upsert_ids
-            }
-            
-            if chunks is not None:
-                upsert_params["documents"] = upsert_documents
-            
-            await asyncio.to_thread(collection.upsert, **upsert_params)
-            
-            info_log(f"Successfully upserted {len(ids)} records.", context="ChromaVectorDB")
-            
-        except Exception as e:
-            raise UpsertError(f"Failed to upsert data into collection '{collection.name}': {e}") from e
+            chunk_content_hashes: List of chunk content hashes to search for.
 
-    def upsert_sync(
-        self,
-        vectors: List[List[float]],
-        payloads: List[Dict[str, Any]],
-        ids: List[Union[str, int]],
-        chunks: Optional[List[str]] = None,
-        sparse_vectors: Optional[List[Dict[str, Any]]] = None,
-        **kwargs
-    ) -> None:
-        """Add or update records in the ChromaDB collection (sync)."""
-        return self._run_async_from_sync(
-            self.upsert(vectors, payloads, ids, chunks, sparse_vectors, **kwargs)
-        )
-
-    async def delete(self, ids: List[Union[str, int]], **kwargs) -> None:
-        """
-        Remove records from the collection by their unique identifiers.
-        
-        Args:
-            ids: List of specific IDs to remove
-            **kwargs: Provider-specific options
-            
-        Raises:
-            VectorDBError: If the deletion fails or the collection is not initialized
-        """
-        collection = await self._get_active_collection()
-        debug_log(f"Deleting {len(ids)} records from collection '{collection.name}'...", context="ChromaVectorDB")
-        
-        try:
-            await asyncio.to_thread(
-                collection.delete,
-                ids=[str(i) for i in ids]
-            )
-            info_log(f"Successfully deleted {len(ids)} records.", context="ChromaVectorDB")
-            
-        except Exception as e:
-            raise VectorDBError(f"Failed to delete records from collection '{collection.name}': {e}") from e
-
-    def delete_sync(self, ids: List[Union[str, int]], **kwargs) -> None:
-        """Remove records from the collection by their unique identifiers (sync)."""
-        return self._run_async_from_sync(self.delete(ids, **kwargs))
-
-    def delete_by_id_sync(self, ids: List[Union[str, int]], **kwargs) -> None:
-        """Alias for delete_sync() - provided for backward compatibility."""
-        return self.delete_sync(ids, **kwargs)
-
-    async def delete_by_filter(self, filter: Dict[str, Any], **kwargs) -> bool:
-        """
-        Delete documents matching the given filter.
-        
-        Args:
-            filter: Metadata filter to match documents
-            **kwargs: Provider-specific options
-            
         Returns:
-            True if deletion was successful, False otherwise
-            
-        Raises:
-            VectorDBError: If deletion fails
+            Mapping of chunk_content_hash -> list of matching ChromaDB IDs.
         """
+        if not chunk_content_hashes:
+            return {}
+
         collection = await self._get_active_collection()
-        
+        unique_hashes: List[str] = list(set(chunk_content_hashes))
+
         try:
-            # Convert filter to ChromaDB format
-            where_filter = self._convert_filters(filter)
-            
-            # Get matching documents
+            where_filter: Dict[str, Any] = {"chunk_content_hash": {"$in": unique_hashes}}
             result = await asyncio.to_thread(
                 collection.get,
-                where=where_filter
+                where=where_filter,
+                include=["metadatas"],
             )
-            
-            ids_to_delete = result.get("ids", [])
-            
-            if not ids_to_delete:
-                debug_log(f"No documents found matching filter: {filter}", context="ChromaVectorDB")
-                return False
-            
-            # Delete matching documents
-            await asyncio.to_thread(collection.delete, ids=ids_to_delete)
-            
-            info_log(f"Deleted {len(ids_to_delete)} documents matching filter.", context="ChromaVectorDB")
-            return True
-            
+
+            hash_map: Dict[str, List[str]] = {}
+            result_ids: List[str] = result.get("ids", [])
+            result_metadatas: List[Dict[str, Any]] = result.get("metadatas", [])
+
+            for idx, record_id in enumerate(result_ids):
+                meta: Dict[str, Any] = result_metadatas[idx] if idx < len(result_metadatas) else {}
+                h: str = meta.get("chunk_content_hash", "")
+                if h:
+                    hash_map.setdefault(h, []).append(record_id)
+
+            return hash_map
+
         except Exception as e:
-            raise VectorDBError(f"Failed to delete documents by filter: {e}") from e
+            debug_log(f"Batch hash lookup failed: {e}", context="ChromaVectorDB")
+            return {}
 
-    def delete_by_document_name(self, document_name: str) -> bool:
-        """Delete all documents with the given document_name (sync)."""
-        return self._run_async_from_sync(self.async_delete_by_document_name(document_name))
-    
-    async def async_delete_by_document_name(self, document_name: str) -> bool:
-        """Delete all documents with the given document_name (async)."""
-        return await self.delete_by_filter({"document_name": document_name})
+    async def aupsert(
+        self,
+        vectors: Optional[List[List[float]]] = None,
+        payloads: Optional[List[Dict[str, Any]]] = None,
+        ids: Optional[List[Union[str, int]]] = None,
+        chunks: Optional[List[str]] = None,
+        document_ids: Optional[List[str]] = None,
+        document_names: Optional[List[str]] = None,
+        doc_content_hashes: Optional[List[str]] = None,
+        chunk_content_hashes: Optional[List[str]] = None,
+        sparse_vectors: Optional[List[Dict[str, Any]]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        knowledge_base_ids: Optional[List[str]] = None,
+    ) -> None:
+        """
+        Adds new data or updates existing data in the collection.
 
-    def delete_by_document_id(self, document_id: str) -> bool:
-        """Delete all documents with the given document_id (sync)."""
-        return self._run_async_from_sync(self.async_delete_by_document_id(document_id))
-    
-    async def async_delete_by_document_id(self, document_id: str) -> bool:
-        """Delete all documents with the given document_id (async)."""
-        return await self.delete_by_filter({"document_id": document_id})
+        Uses chunk_content_hash for content-based deduplication: stale records
+        (same content hash, different ID) are deleted before upserting.
+        """
+        if (vectors is None or len(vectors) == 0) and (sparse_vectors is None or len(sparse_vectors) == 0):
+            info_log("Nothing to upsert: no dense or sparse vectors provided.", context="ChromaVectorDB")
+            return
 
-    def delete_by_content_id(self, content_id: str) -> bool:
-        """Delete all documents with the given content_id (sync)."""
-        return self._run_async_from_sync(self.async_delete_by_content_id(content_id))
-    
-    async def async_delete_by_content_id(self, content_id: str) -> bool:
-        """Delete all documents with the given content_id (async)."""
-        return await self.delete_by_filter({"content_id": content_id})
+        n: int = len(vectors) if vectors else len(sparse_vectors)  # type: ignore[arg-type]
 
-    async def delete_by_content_hash(self, content_hash: str, **kwargs) -> bool:
-        """Delete all documents with the given content_hash."""
-        return await self.delete_by_filter({"content_hash": content_hash}, **kwargs)
-    
-    def delete_by_metadata(self, metadata: Dict[str, Any]) -> bool:
-        """Delete all documents matching the given metadata (sync)."""
-        return self._run_async_from_sync(self.async_delete_by_metadata(metadata))
-    
-    async def async_delete_by_metadata(self, metadata: Dict[str, Any]) -> bool:
-        """Delete all documents matching the given metadata (async)."""
-        return await self.delete_by_filter(metadata)
+        # Strict per-item array length validation (Invariant #1)
+        _length_checks = {
+            "vectors": vectors,
+            "payloads": payloads,
+            "ids": ids,
+            "chunks": chunks,
+            "document_ids": document_ids,
+            "document_names": document_names,
+            "doc_content_hashes": doc_content_hashes,
+            "chunk_content_hashes": chunk_content_hashes,
+            "sparse_vectors": sparse_vectors,
+            "knowledge_base_ids": knowledge_base_ids,
+        }
+        for _name, _arr in _length_checks.items():
+            if _arr is not None and len(_arr) != n:
+                raise UpsertError(
+                    f"Length mismatch in aupsert: '{_name}' has {len(_arr)} items, expected {n}."
+                )
 
-    async def fetch(self, ids: List[Union[str, int]], **kwargs) -> List[VectorSearchResult]:
+        if sparse_vectors is not None:
+            debug_log(
+                "Sparse vectors are not supported by ChromaDB and will be ignored.",
+                context="ChromaVectorDB",
+            )
+
+        collection = await self._get_active_collection()
+        extra_metadata: Dict[str, Any] = metadata or {}
+        _warned_standard_keys: set = set()
+
+        computed_hashes: List[str] = []
+        for i in range(n):
+            chunk_text: str = chunks[i] if chunks and i < len(chunks) else ""
+            if chunk_content_hashes and i < len(chunk_content_hashes):
+                computed_hashes.append(chunk_content_hashes[i])
+            else:
+                computed_hashes.append(md5(chunk_text.encode("utf-8")).hexdigest())
+
+        existing_hash_map: Dict[str, List[str]] = await self._batch_find_existing_by_hashes(
+            computed_hashes
+        )
+
+        stale_ids: List[str] = []
+        upsert_embeddings: List[List[float]] = []
+        upsert_metadatas: List[Dict[str, Union[str, int, float, bool]]] = []
+        upsert_ids: List[str] = []
+        upsert_documents: List[str] = []
+
+        for i in range(n):
+            chunk_id_str: str = str(ids[i]) if ids and i < len(ids) else str(_uuid.uuid4())
+            payload: Dict[str, Any] = payloads[i] if payloads and i < len(payloads) else {}
+            doc_id: str = document_ids[i] if document_ids and i < len(document_ids) else ""
+            doc_name: str = document_names[i] if document_names and i < len(document_names) else ""
+            doc_hash: str = doc_content_hashes[i] if doc_content_hashes and i < len(doc_content_hashes) else ""
+            chunk_hash: str = computed_hashes[i]
+            content: str = chunks[i] if chunks and i < len(chunks) else ""
+
+            old_ids: List[str] = existing_hash_map.get(chunk_hash, [])
+            for old_id in old_ids:
+                if old_id != chunk_id_str:
+                    stale_ids.append(old_id)
+
+            kbi: Optional[str] = knowledge_base_ids[i] if knowledge_base_ids else None
+            prepared_metadata = self._prepare_metadata(
+                payload=payload,
+                chunk_id=chunk_id_str,
+                chunk_content_hash=chunk_hash,
+                document_id=doc_id,
+                doc_content_hash=doc_hash,
+                document_name=doc_name,
+                knowledge_base_id=kbi,
+                extra_metadata=extra_metadata,
+                _warned_standard_keys=_warned_standard_keys,
+            )
+
+            if vectors and i < len(vectors):
+                upsert_embeddings.append(vectors[i])
+            upsert_metadatas.append(prepared_metadata)
+            upsert_ids.append(chunk_id_str)
+
+            cleaned_content: str = content.replace("\x00", "\ufffd")
+            upsert_documents.append(cleaned_content)
+
+        if stale_ids:
+            try:
+                unique_stale: List[str] = list(set(stale_ids))
+                await asyncio.to_thread(collection.delete, ids=unique_stale)
+                debug_log(
+                    f"Deleted {len(unique_stale)} stale records with duplicate chunk_content_hash.",
+                    context="ChromaVectorDB",
+                )
+            except Exception as e:
+                debug_log(
+                    f"Failed to delete stale duplicate records: {e}",
+                    context="ChromaVectorDB",
+                )
+
+        try:
+            await asyncio.to_thread(
+                collection.upsert,
+                embeddings=upsert_embeddings,
+                metadatas=upsert_metadatas,
+                ids=upsert_ids,
+                documents=upsert_documents,
+            )
+
+            replaced_count: int = sum(1 for h in computed_hashes if h in existing_hash_map)
+            new_count: int = len(upsert_ids) - replaced_count
+            info_log(
+                f"Successfully upserted {len(upsert_ids)} records "
+                f"({new_count} new, {replaced_count} replaced by content hash).",
+                context="ChromaVectorDB",
+            )
+
+        except Exception as e:
+            raise UpsertError(
+                f"Failed to upsert data into collection '{collection.name}': {e}"
+            ) from e
+
+    async def adelete(self, ids: List[Union[str, int]]) -> None:
+        """
+        Remove records from the collection by their unique identifiers.
+
+        Pre-checks existence for each ID before attempting deletion.
+        Non-existent IDs are skipped with a debug log, making this
+        method idempotent and retry-safe.
+
+        Args:
+            ids: List of specific IDs to remove.
+
+        Raises:
+            VectorDBError: If the deletion fails or the collection is not initialized.
+        """
+        if not ids:
+            debug_log(
+                "Delete called with an empty list of IDs. No action taken.",
+                context="ChromaVectorDB",
+            )
+            return
+
+        collection = await self._get_active_collection()
+        str_ids: List[str] = [str(i) for i in ids]
+
+        try:
+            existing_result = await asyncio.to_thread(
+                collection.get,
+                ids=str_ids,
+            )
+            existing_ids: List[str] = existing_result.get("ids", [])
+            existing_set: set = set(existing_ids)
+
+            for sid in str_ids:
+                if sid not in existing_set:
+                    debug_log(
+                        f"Record with ID '{sid}' does not exist, skipping deletion.",
+                        context="ChromaVectorDB",
+                    )
+
+            if not existing_ids:
+                info_log(
+                    "No matching records found to delete. No action taken.",
+                    context="ChromaVectorDB",
+                )
+                return
+
+            await asyncio.to_thread(collection.delete, ids=existing_ids)
+
+            info_log(
+                f"Successfully processed deletion request for {len(str_ids)} IDs. "
+                f"Existed: {len(existing_ids)}, Deleted: {len(existing_ids)}.",
+                context="ChromaVectorDB",
+            )
+
+        except Exception as e:
+            raise VectorDBError(
+                f"Failed to delete records from collection '{collection.name}': {e}"
+            ) from e
+
+    async def afield_exists(self, field_name: str, field_value: Any) -> bool:
+        """
+        Generic check if any record with the given metadata field value exists.
+
+        Args:
+            field_name: The metadata field name to filter on.
+            field_value: The value to match.
+
+        Returns:
+            True if at least one matching record exists, False otherwise.
+        """
+        try:
+            collection = await self._get_active_collection()
+            where_filter = self._convert_filters({field_name: field_value})
+            result = await asyncio.to_thread(
+                collection.get,
+                where=where_filter,
+                limit=1,
+            )
+            return len(result.get("ids", [])) > 0
+        except Exception as e:
+            debug_log(f"Error checking if {field_name}='{field_value}' exists: {e}", context="ChromaVectorDB")
+            return False
+
+    async def adelete_by_field(self, field_name: str, field_value: Any) -> bool:
+        """
+        Generic deletion of all records matching a metadata field value.
+
+        Includes a pre-existence check. Returns True if no matches found (idempotent).
+
+        Args:
+            field_name: The metadata field name to filter on.
+            field_value: The value to match for deletion.
+
+        Returns:
+            True if deletion was successful or no matches found, False on failure.
+        """
+        try:
+            collection = await self._get_active_collection()
+            where_filter = self._convert_filters({field_name: field_value})
+
+            result = await asyncio.to_thread(
+                collection.get,
+                where=where_filter,
+            )
+
+            ids_to_delete: List[str] = result.get("ids", [])
+
+            if not ids_to_delete:
+                debug_log(
+                    f"No records with {field_name}='{field_value}' found. No action taken.",
+                    context="ChromaVectorDB",
+                )
+                return True
+
+            await asyncio.to_thread(collection.delete, ids=ids_to_delete)
+
+            info_log(
+                f"Deleted {len(ids_to_delete)} records with {field_name}='{field_value}'.",
+                context="ChromaVectorDB",
+            )
+            return True
+
+        except Exception as e:
+            debug_log(
+                f"Error deleting records by {field_name}='{field_value}': {e}",
+                context="ChromaVectorDB",
+            )
+            return False
+
+    # --- Document-name deletion ---
+
+    async def adelete_by_document_name(self, document_name: str) -> bool:
+        """Delete all records with the given document_name."""
+        return await self.adelete_by_field("document_name", document_name)
+
+    # --- Document-ID deletion ---
+
+    async def adelete_by_document_id(self, document_id: str) -> bool:
+        """Delete all records with the given document_id."""
+        return await self.adelete_by_field("document_id", document_id)
+
+    # --- Chunk-ID deletion ---
+
+    async def adelete_by_chunk_id(self, chunk_id: str) -> bool:
+        """Delete all records with the given chunk_id."""
+        return await self.adelete_by_field("chunk_id", chunk_id)
+
+    # --- Doc-content-hash deletion ---
+
+    async def adelete_by_doc_content_hash(self, doc_content_hash: str) -> bool:
+        """Delete all records with the given doc_content_hash."""
+        return await self.adelete_by_field("doc_content_hash", doc_content_hash)
+
+    # --- Chunk-content-hash deletion ---
+
+    async def adelete_by_chunk_content_hash(self, chunk_content_hash: str) -> bool:
+        """Delete all records with the given chunk_content_hash."""
+        return await self.adelete_by_field("chunk_content_hash", chunk_content_hash)
+
+    # --- Metadata deletion ---
+
+    async def adelete_by_metadata(self, metadata: Dict[str, Any]) -> bool:
+        """Delete all records matching the given metadata."""
+        collection = await self._get_active_collection()
+        try:
+            native_filter, post_filter = self._split_filter(metadata)
+            result = await asyncio.to_thread(
+                collection.get,
+                where=native_filter,
+                include=["metadatas", "documents"],
+            )
+            ids_candidates: List[str] = result.get("ids", [])
+            if not ids_candidates:
+                return False
+            if post_filter:
+                metadatas = result.get("metadatas") or []
+                documents = result.get("documents") or []
+                ids_to_delete: List[str] = []
+                for i, rid in enumerate(ids_candidates):
+                    md = metadatas[i] if i < len(metadatas) else None
+                    doc = documents[i] if i < len(documents) else None
+                    payload = self._hydrate_payload(md, doc)
+                    if self._matches_post_filter(payload, post_filter):
+                        ids_to_delete.append(rid)
+            else:
+                ids_to_delete = ids_candidates
+            if not ids_to_delete:
+                return False
+            await asyncio.to_thread(collection.delete, ids=ids_to_delete)
+            return True
+        except Exception as e:
+            debug_log(f"Error deleting by metadata: {e}", context="ChromaVectorDB")
+            return False
+
+    async def afetch(self, ids: List[Union[str, int]]) -> List[VectorSearchResult]:
         """
         Retrieve full records from the collection by their IDs.
         
         Args:
             ids: List of IDs for which to retrieve the full records
-            **kwargs: Provider-specific options
             
         Returns:
             List of VectorSearchResult objects containing the fetched data.
@@ -785,7 +1129,10 @@ class ChromaProvider(BaseVectorDBProvider):
             # Build results map for efficient lookup
             results_map = {
                 results['ids'][i]: {
-                    "payload": results['metadatas'][i],
+                    "payload": self._hydrate_payload(
+                        results['metadatas'][i] if results.get('metadatas') is not None else None,
+                        results['documents'][i] if results.get('documents') is not None else None,
+                    ),
                     "vector": results['embeddings'][i] if results['embeddings'] is not None else None,
                     "text": results['documents'][i] if results['documents'] is not None else None
                 }
@@ -813,179 +1160,116 @@ class ChromaProvider(BaseVectorDBProvider):
         except Exception as e:
             raise VectorDBError(f"Failed to fetch records from collection '{collection.name}': {e}") from e
 
-    def fetch_sync(self, ids: List[Union[str, int]], **kwargs) -> List[VectorSearchResult]:
-        """Retrieve full records from the collection by their IDs (sync)."""
-        return self._run_async_from_sync(self.fetch(ids, **kwargs))
-
-    def fetch_by_id_sync(self, ids: List[Union[str, int]], **kwargs) -> List[VectorSearchResult]:
-        """Alias for fetch_sync() - provided for backward compatibility."""
-        return self.fetch_sync(ids, **kwargs)
-
     # ============================================================================
     # Existence Checks
     # ============================================================================
 
-    async def id_exists(self, id: Union[str, int], **kwargs) -> bool:
-        """Check if a document with the given ID exists."""
+    async def aid_exists(self, id: Union[str, int]) -> bool:
+        """Check if a record with the given ChromaDB ID exists."""
         collection = await self._get_active_collection()
-        
         try:
             result = await asyncio.to_thread(collection.get, ids=[str(id)])
-            found_ids = result.get("ids", [])
-            return len(found_ids) > 0
+            return len(result.get("ids", [])) > 0
         except Exception as e:
             debug_log(f"Error checking if ID '{id}' exists: {e}", context="ChromaVectorDB")
             return False
 
-    def document_name_exists(self, document_name: str) -> bool:
-        """Check if any document with the given document_name exists (sync)."""
-        return self._run_async_from_sync(self.async_document_name_exists(document_name))
-    
-    async def async_document_name_exists(self, document_name: str) -> bool:
-        """Check if any document with the given document_name exists (async)."""
-        collection = await self._get_active_collection()
-        
-        try:
-            where_filter = self._convert_filters({"document_name": document_name})
-            result = await asyncio.to_thread(
-                collection.get,
-                where=where_filter,
-                limit=1
-            )
-            return len(result.get("ids", [])) > 0
-        except Exception as e:
-            debug_log(f"Error checking if document_name '{document_name}' exists: {e}", context="ChromaVectorDB")
-            return False
-    
-    def document_id_exists(self, document_id: str) -> bool:
-        """Check if any document with the given document_id exists (sync)."""
-        return self._run_async_from_sync(self.async_document_id_exists(document_id))
-    
-    async def async_document_id_exists(self, document_id: str) -> bool:
-        """Check if any document with the given document_id exists (async)."""
-        collection = await self._get_active_collection()
-        
-        try:
-            where_filter = self._convert_filters({"document_id": document_id})
-            result = await asyncio.to_thread(
-                collection.get,
-                where=where_filter,
-                limit=1
-            )
-            return len(result.get("ids", [])) > 0
-        except Exception as e:
-            debug_log(f"Error checking if document_id '{document_id}' exists: {e}", context="ChromaVectorDB")
-            return False
+    async def adocument_name_exists(self, document_name: str) -> bool:
+        """Check if any record with the given document_name exists."""
+        return await self.afield_exists("document_name", document_name)
 
-    def content_id_exists(self, content_id: str) -> bool:
-        """Check if any document with the given content_id exists (sync)."""
-        return self._run_async_from_sync(self.async_content_id_exists(content_id))
-    
-    async def async_content_id_exists(self, content_id: str) -> bool:
-        """Check if any document with the given content_id exists (async)."""
-        collection = await self._get_active_collection()
-        
-        try:
-            where_filter = self._convert_filters({"content_id": content_id})
-            result = await asyncio.to_thread(
-                collection.get,
-                where=where_filter,
-                limit=1
-            )
-            return len(result.get("ids", [])) > 0
-        except Exception as e:
-            debug_log(f"Error checking if content_id '{content_id}' exists: {e}", context="ChromaVectorDB")
-            return False
+    async def adocument_id_exists(self, document_id: str) -> bool:
+        """Check if any record with the given document_id exists."""
+        return await self.afield_exists("document_id", document_id)
 
-    async def content_hash_exists(self, content_hash: str, **kwargs) -> bool:
-        """Check if any document with the given content_hash exists."""
-        collection = await self._get_active_collection()
-        
-        try:
-            where_filter = self._convert_filters({"content_hash": content_hash})
-            result = await asyncio.to_thread(
-                collection.get,
-                where=where_filter,
-                limit=1
-            )
-            return len(result.get("ids", [])) > 0
-        except Exception as e:
-            debug_log(f"Error checking if content_hash '{content_hash}' exists: {e}", context="ChromaVectorDB")
-            return False
+    async def achunk_id_exists(self, chunk_id: str) -> bool:
+        """Check if any record with the given chunk_id exists."""
+        return await self.afield_exists("chunk_id", chunk_id)
+
+    async def adoc_content_hash_exists(self, doc_content_hash: str) -> bool:
+        """Check if any record with the given doc_content_hash exists."""
+        return await self.afield_exists("doc_content_hash", doc_content_hash)
+
+    async def achunk_content_hash_exists(self, chunk_content_hash: str) -> bool:
+        """Check if any record with the given chunk_content_hash exists."""
+        return await self.afield_exists("chunk_content_hash", chunk_content_hash)
 
     # ============================================================================
     # Metadata Management
     # ============================================================================
 
-    def update_metadata(self, content_id: str, metadata: Dict[str, Any]) -> bool:
-        """Update metadata for a specific content ID (sync)."""
-        return self._run_async_from_sync(self.async_update_metadata(content_id, metadata))
-    
-    async def async_update_metadata(self, content_id: str, metadata: Dict[str, Any]) -> bool:
+    async def aupdate_metadata(self, chunk_id: str, metadata: Dict[str, Any]) -> bool:
         """
-        Update metadata for a specific content ID (async).
-        
+        Update the metadata JSON field for the record with the given chunk_id.
+
+        Merges the provided metadata into the existing ``metadata`` JSON field
+        of the matching record.  Since chunk_id is unique, at most one record
+        is updated.
+
         Args:
-            content_id: The content ID to update
-            metadata: Metadata updates to apply
-            
+            chunk_id: The chunk ID to update.
+            metadata: Metadata fields to merge into the existing metadata.
+
         Returns:
-            True if update was successful, False otherwise
-            
+            True if update was successful, False otherwise.
+
         Raises:
-            VectorDBError: If update fails
+            VectorDBError: If the update operation fails critically.
         """
         if not metadata:
             raise ValueError("'metadata' must be provided")
-        
+
         collection = await self._get_active_collection()
-        
+
         try:
-            # Find documents with matching content_id
-            where_filter = self._convert_filters({"content_id": content_id})
+            where_filter = self._convert_filters({"chunk_id": chunk_id})
             result = await asyncio.to_thread(
                 collection.get,
                 where=where_filter,
-                include=["metadatas"]
+                include=["metadatas"],
+                limit=1,
             )
-            
-            target_ids = result.get("ids", [])
-            current_metadatas = result.get("metadatas", [])
-            
+
+            target_ids: List[str] = result.get("ids", [])
+            current_metadatas: List[Dict[str, Any]] = result.get("metadatas", [])
+
             if not target_ids:
-                debug_log(f"No documents found with content_id '{content_id}' to update metadata.", context="ChromaVectorDB")
+                debug_log(f"No record found with chunk_id '{chunk_id}'.", context="ChromaVectorDB")
                 return False
-            
-            # Flatten new metadata
-            flattened_new_metadata = self._flatten_metadata(metadata)
-            
-            # Merge metadata for each document
-            updated_metadatas = []
-            for current_meta in current_metadatas:
-                meta_dict = dict(current_meta) if current_meta else {}
-                meta_dict.update(flattened_new_metadata)
-                updated_metadatas.append(meta_dict)
-            
-            # Update in ChromaDB
+
+            current_meta: Dict[str, Any] = dict(current_metadatas[0]) if current_metadatas else {}
+
+            existing_metadata: Dict[str, Any] = {}
+            metadata_raw: Any = current_meta.get("metadata", "{}")
+            if isinstance(metadata_raw, str):
+                try:
+                    existing_metadata = json.loads(metadata_raw)
+                except json.JSONDecodeError:
+                    existing_metadata = {}
+            elif isinstance(metadata_raw, dict):
+                existing_metadata = metadata_raw
+
+            existing_metadata.update(metadata)
+            current_meta["metadata"] = json.dumps(existing_metadata) if existing_metadata else "{}"
+
             await asyncio.to_thread(
                 collection.update,
-                ids=target_ids,
-                metadatas=updated_metadatas
+                ids=[target_ids[0]],
+                metadatas=[current_meta],
             )
-            
-            info_log(f"Updated metadata for {len(target_ids)} documents with content_id '{content_id}'.", context="ChromaVectorDB")
-            return True
-            
-        except Exception as e:
-            raise VectorDBError(f"Failed to update metadata: {e}") from e
 
-    async def get_count(self, filter: Optional[Dict[str, Any]] = None, **kwargs) -> int:
+            info_log(f"Updated metadata for chunk_id '{chunk_id}'.", context="ChromaVectorDB")
+            return True
+
+        except Exception as e:
+            raise VectorDBError(f"Failed to update metadata for chunk_id '{chunk_id}': {e}") from e
+
+    async def aget_count(self, filter: Optional[Dict[str, Any]] = None) -> int:
         """
         Get the count of documents in the collection.
         
         Args:
             filter: Optional filter to count specific documents
-            **kwargs: Provider-specific options
             
         Returns:
             Number of documents
@@ -994,38 +1278,49 @@ class ChromaProvider(BaseVectorDBProvider):
         
         try:
             if filter:
-                where_filter = self._convert_filters(filter)
-                result = await asyncio.to_thread(collection.get, where=where_filter)
-                return len(result.get("ids", []))
+                native_filter, post_filter = self._split_filter(filter)
+                result = await asyncio.to_thread(
+                    collection.get,
+                    where=native_filter,
+                    include=["metadatas", "documents"],
+                )
+                ids = result.get("ids", [])
+                if not post_filter:
+                    return len(ids)
+                metadatas = result.get("metadatas") or []
+                documents = result.get("documents") or []
+                count = 0
+                for i in range(len(ids)):
+                    md = metadatas[i] if i < len(metadatas) else None
+                    doc = documents[i] if i < len(documents) else None
+                    payload = self._hydrate_payload(md, doc)
+                    if self._matches_post_filter(payload, post_filter):
+                        count += 1
+                return count
             else:
                 return await asyncio.to_thread(collection.count)
         except Exception as e:
             debug_log(f"Error getting count: {e}", context="ChromaVectorDB")
             return 0
 
-    def get_count_sync(self, filter: Optional[Dict[str, Any]] = None, **kwargs) -> int:
-        """Get the count of documents in the collection (sync)."""
-        return self._run_async_from_sync(self.get_count(filter, **kwargs))
+    def get_count(self, filter: Optional[Dict[str, Any]] = None) -> int:
+        return self._run_async_from_sync(self.aget_count(filter))
     
     # ============================================================================
     # Optimization
     # ============================================================================
     
-    def optimize(self) -> bool:
-        """Optimize the vector database (sync). ChromaDB doesn't require explicit optimization."""
-        return True
-    
-    async def async_optimize(self) -> bool:
-        """Optimize the vector database (async). ChromaDB doesn't require explicit optimization."""
+    async def aoptimize(self) -> bool:
+        """Optimize the vector database. ChromaDB doesn't require explicit optimization."""
         return True
     
     # ============================================================================
     # Search Type Support
     # ============================================================================
     
-    def get_supported_search_types(self) -> List[str]:
-        """Get the supported search types for ChromaDB (sync)."""
-        supported = []
+    async def aget_supported_search_types(self) -> List[str]:
+        """Get the supported search types for ChromaDB."""
+        supported: List[str] = []
         if self._config.dense_search_enabled:
             supported.append("dense")
         if self._config.full_text_search_enabled:
@@ -1033,16 +1328,12 @@ class ChromaProvider(BaseVectorDBProvider):
         if self._config.hybrid_search_enabled:
             supported.append("hybrid")
         return supported
-    
-    async def async_get_supported_search_types(self) -> List[str]:
-        """Get the supported search types for ChromaDB (async)."""
-        return self.get_supported_search_types()
 
     # ============================================================================
     # Search Operations
     # ============================================================================
 
-    async def search(
+    async def asearch(
         self,
         top_k: Optional[int] = None,
         query_vector: Optional[List[float]] = None,
@@ -1051,7 +1342,8 @@ class ChromaProvider(BaseVectorDBProvider):
         alpha: Optional[float] = None,
         fusion_method: Optional[Literal['rrf', 'weighted']] = None,
         similarity_threshold: Optional[float] = None,
-        **kwargs
+        apply_reranking: bool = True,
+        sparse_query_vector: Optional[Dict[str, Any]] = None,
     ) -> List[VectorSearchResult]:
         """
         Master search method that dispatches to appropriate search type.
@@ -1064,7 +1356,8 @@ class ChromaProvider(BaseVectorDBProvider):
             alpha: Hybrid search weighting (0=text only, 1=vector only)
             fusion_method: Fusion algorithm ('rrf' or 'weighted')
             similarity_threshold: Minimum similarity score
-            **kwargs: Provider-specific options
+            apply_reranking: Whether to apply reranking to results
+            sparse_query_vector: Optional sparse vector for hybrid search
             
         Returns:
             List of VectorSearchResult objects
@@ -1073,10 +1366,8 @@ class ChromaProvider(BaseVectorDBProvider):
             ConfigurationError: If requested search type is disabled
             SearchError: If search fails
         """
-        filter = self._convert_filters(filter)
         final_top_k = top_k if top_k is not None else self._config.default_top_k
         
-        # Determine search type
         is_hybrid = query_vector is not None and query_text is not None
         is_dense = query_vector is not None and query_text is None
         is_full_text = query_vector is None and query_text is not None
@@ -1084,7 +1375,7 @@ class ChromaProvider(BaseVectorDBProvider):
         if is_hybrid:
             if not self._config.hybrid_search_enabled:
                 raise ConfigurationError("Hybrid search is disabled.")
-            return await self.hybrid_search(
+            return await self.ahybrid_search(
                 query_vector=query_vector,
                 query_text=query_text,
                 top_k=final_top_k,
@@ -1092,54 +1383,40 @@ class ChromaProvider(BaseVectorDBProvider):
                 alpha=alpha,
                 fusion_method=fusion_method,
                 similarity_threshold=similarity_threshold,
-                **kwargs
+                apply_reranking=apply_reranking,
+                sparse_query_vector=sparse_query_vector,
             )
         elif is_dense:
             if not self._config.dense_search_enabled:
                 raise ConfigurationError("Dense search is disabled.")
-            return await self.dense_search(
+            return await self.adense_search(
                 query_vector=query_vector,
                 top_k=final_top_k,
                 filter=filter,
                 similarity_threshold=similarity_threshold,
-                **kwargs
+                apply_reranking=apply_reranking,
             )
         elif is_full_text:
             if not self._config.full_text_search_enabled:
                 raise ConfigurationError("Full-text search is disabled.")
-            return await self.full_text_search(
+            return await self.afull_text_search(
                 query_text=query_text,
                 top_k=final_top_k,
                 filter=filter,
                 similarity_threshold=similarity_threshold,
-                **kwargs
+                apply_reranking=apply_reranking,
+                sparse_query_vector=sparse_query_vector,
             )
         else:
             raise ConfigurationError("Search requires at least one of 'query_vector' or 'query_text'.")
 
-    def search_sync(
-        self,
-        top_k: Optional[int] = None,
-        query_vector: Optional[List[float]] = None,
-        query_text: Optional[str] = None,
-        filter: Optional[Dict[str, Any]] = None,
-        alpha: Optional[float] = None,
-        fusion_method: Optional[Literal['rrf', 'weighted']] = None,
-        similarity_threshold: Optional[float] = None,
-        **kwargs
-    ) -> List[VectorSearchResult]:
-        """Master search method that dispatches to appropriate search type (sync)."""
-        return self._run_async_from_sync(
-            self.search(top_k, query_vector, query_text, filter, alpha, fusion_method, similarity_threshold, **kwargs)
-        )
-
-    async def dense_search(
+    async def adense_search(
         self,
         query_vector: List[float],
         top_k: int,
         filter: Optional[Dict[str, Any]] = None,
         similarity_threshold: Optional[float] = None,
-        **kwargs
+        apply_reranking: bool = True,
     ) -> List[VectorSearchResult]:
         """
         Perform pure vector similarity search.
@@ -1149,7 +1426,7 @@ class ChromaProvider(BaseVectorDBProvider):
             top_k: Number of results
             filter: Metadata filter
             similarity_threshold: Minimum similarity score
-            **kwargs: Provider-specific options
+            apply_reranking: Whether to apply reranking to results
             
         Returns:
             List of VectorSearchResult objects sorted by similarity
@@ -1157,18 +1434,20 @@ class ChromaProvider(BaseVectorDBProvider):
         Raises:
             SearchError: If search fails
         """
+        _ = apply_reranking  # accepted for API parity; not applied in dense path
         collection = await self._get_active_collection()
-        
+
         final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.default_similarity_threshold or 0.5
-        
+
         try:
-            where_filter = self._convert_filters(filter)
-            
+            native_filter, post_filter = self._split_filter(filter)
+            fetch_n = top_k * 5 if post_filter else top_k
+
             results = await asyncio.to_thread(
                 collection.query,
                 query_embeddings=[query_vector],
-                n_results=top_k,
-                where=where_filter,
+                n_results=fetch_n,
+                where=native_filter,
                 include=["metadatas", "distances", "embeddings", "documents"]
             )
             
@@ -1194,41 +1473,34 @@ class ChromaProvider(BaseVectorDBProvider):
                     score = 1 - distances[i]
                 
                 if score >= final_similarity_threshold:
+                    payload = self._hydrate_payload(metadatas[i], chunks[i])
+                    if post_filter and not self._matches_post_filter(payload, post_filter):
+                        continue
                     filtered_results.append(
                         VectorSearchResult(
                             id=ids[i],
                             score=score,
-                            payload=metadatas[i],
+                            payload=payload,
                             vector=vectors[i],
                             text=chunks[i]
                         )
                     )
-            
+                    if len(filtered_results) >= top_k:
+                        break
+
             return filtered_results
             
         except Exception as e:
             raise SearchError(f"An error occurred during dense search: {e}") from e
 
-    def dense_search_sync(
-        self,
-        query_vector: List[float],
-        top_k: int,
-        filter: Optional[Dict[str, Any]] = None,
-        similarity_threshold: Optional[float] = None,
-        **kwargs
-    ) -> List[VectorSearchResult]:
-        """Perform pure vector similarity search (sync)."""
-        return self._run_async_from_sync(
-            self.dense_search(query_vector, top_k, filter, similarity_threshold, **kwargs)
-        )
-
-    async def full_text_search(
+    async def afull_text_search(
         self,
         query_text: str,
         top_k: int,
         filter: Optional[Dict[str, Any]] = None,
         similarity_threshold: Optional[float] = None,
-        **kwargs
+        apply_reranking: bool = True,
+        sparse_query_vector: Optional[Dict[str, Any]] = None,
     ) -> List[VectorSearchResult]:
         """
         Perform full-text search using ChromaDB's document filtering.
@@ -1238,7 +1510,8 @@ class ChromaProvider(BaseVectorDBProvider):
             top_k: Number of results
             filter: Metadata filter
             similarity_threshold: Minimum relevance score
-            **kwargs: Provider-specific options
+            apply_reranking: Whether to apply reranking to results
+            sparse_query_vector: Optional sparse vector (unused in ChromaDB)
             
         Returns:
             List of VectorSearchResult objects sorted by relevance
@@ -1246,20 +1519,22 @@ class ChromaProvider(BaseVectorDBProvider):
         Raises:
             SearchError: If search fails
         """
+        _ = (apply_reranking, sparse_query_vector)  # accepted for API parity; ChromaDB uses BM25-like scoring with no sparse vectors
         collection = await self._get_active_collection()
-        
+
         final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.default_similarity_threshold or 0.5
-        
+
         where_document_filter = {"$contains": query_text}
-        where_filter = self._convert_filters(filter)
-        
+        native_filter, post_filter = self._split_filter(filter)
+
         try:
+            fetch_limit = top_k * 5 if post_filter else top_k * 2
             # Use where_document parameter for document filtering in Chroma
             results = await asyncio.to_thread(
                 collection.get,
-                where=where_filter,
+                where=native_filter,
                 where_document=where_document_filter,
-                limit=top_k * 2,  # Get more to account for filtering
+                limit=fetch_limit,  # Get more to account for filtering
                 include=["metadatas", "embeddings", "documents"]
             )
             
@@ -1271,6 +1546,11 @@ class ChromaProvider(BaseVectorDBProvider):
                 document_text = results['documents'][i] if results['documents'] else ""
                 if not document_text:
                     continue
+                if post_filter:
+                    md_i = results['metadatas'][i] if results.get('metadatas') else None
+                    payload_i = self._hydrate_payload(md_i, document_text)
+                    if not self._matches_post_filter(payload_i, post_filter):
+                        continue
                 
                 doc_lower = document_text.lower()
                 doc_words = doc_lower.split()
@@ -1314,7 +1594,7 @@ class ChromaProvider(BaseVectorDBProvider):
                     VectorSearchResult(
                         id=results['ids'][i],
                         score=score,
-                        payload=results['metadatas'][i],
+                        payload=self._hydrate_payload(results['metadatas'][i], text),
                         vector=vector,
                         text=text
                     )
@@ -1324,19 +1604,6 @@ class ChromaProvider(BaseVectorDBProvider):
             
         except Exception as e:
             raise SearchError(f"An error occurred during full-text search: {e}") from e
-
-    def full_text_search_sync(
-        self,
-        query_text: str,
-        top_k: int,
-        filter: Optional[Dict[str, Any]] = None,
-        similarity_threshold: Optional[float] = None,
-        **kwargs
-    ) -> List[VectorSearchResult]:
-        """Perform full-text search using ChromaDB's document filtering (sync)."""
-        return self._run_async_from_sync(
-            self.full_text_search(query_text, top_k, filter, similarity_threshold, **kwargs)
-        )
 
     def _reciprocal_rank_fusion(self, results_lists: List[List[VectorSearchResult]], k: int = 60) -> dict:
         """
@@ -1385,7 +1652,7 @@ class ChromaProvider(BaseVectorDBProvider):
         
         return fused_scores
 
-    async def hybrid_search(
+    async def ahybrid_search(
         self,
         query_vector: List[float],
         query_text: str,
@@ -1394,7 +1661,8 @@ class ChromaProvider(BaseVectorDBProvider):
         alpha: Optional[float] = None,
         fusion_method: Optional[Literal['rrf', 'weighted']] = None,
         similarity_threshold: Optional[float] = None,
-        **kwargs
+        apply_reranking: bool = True,
+        sparse_query_vector: Optional[Dict[str, Any]] = None,
     ) -> List[VectorSearchResult]:
         """
         Perform hybrid search combining dense vector and full-text search.
@@ -1407,7 +1675,8 @@ class ChromaProvider(BaseVectorDBProvider):
             alpha: Weighting factor (0=text only, 1=vector only)
             fusion_method: Algorithm for fusing results ('rrf' or 'weighted')
             similarity_threshold: Minimum similarity threshold
-            **kwargs: Provider-specific options
+            apply_reranking: Whether to apply reranking to results
+            sparse_query_vector: Optional sparse vector (unused in ChromaDB)
             
         Returns:
             List of VectorSearchResult objects with hybrid scores
@@ -1419,13 +1688,11 @@ class ChromaProvider(BaseVectorDBProvider):
         final_fusion_method = fusion_method if fusion_method is not None else self._config.default_fusion_method or 'weighted'
         
         try:
-            # Get more candidates for better fusion results
             candidate_k = max(top_k * 2, 20)
             
-            # Perform both searches in parallel
             dense_results, ft_results = await asyncio.gather(
-                self.dense_search(query_vector, candidate_k, filter, similarity_threshold, **kwargs),
-                self.full_text_search(query_text, candidate_k, filter, similarity_threshold, **kwargs)
+                self.adense_search(query_vector, candidate_k, filter, similarity_threshold, apply_reranking=apply_reranking),
+                self.afull_text_search(query_text, candidate_k, filter, similarity_threshold, apply_reranking=apply_reranking, sparse_query_vector=sparse_query_vector)
             )
             
             # Fuse results
@@ -1444,7 +1711,7 @@ class ChromaProvider(BaseVectorDBProvider):
                 return []
             
             # Fetch full documents
-            final_results = await self.fetch(ids=reranked_ids)
+            final_results = await self.afetch(ids=reranked_ids)
             
             # Update scores with fused scores
             updated_results = []
@@ -1466,18 +1733,4 @@ class ChromaProvider(BaseVectorDBProvider):
         except Exception as e:
             raise SearchError(f"An error occurred during hybrid search: {e}") from e
 
-    def hybrid_search_sync(
-        self,
-        query_vector: List[float],
-        query_text: str,
-        top_k: int,
-        filter: Optional[Dict[str, Any]] = None,
-        alpha: Optional[float] = None,
-        fusion_method: Optional[Literal['rrf', 'weighted']] = None,
-        similarity_threshold: Optional[float] = None,
-        **kwargs
-    ) -> List[VectorSearchResult]:
-        """Perform hybrid search combining dense vector and full-text search (sync)."""
-        return self._run_async_from_sync(
-            self.hybrid_search(query_vector, query_text, top_k, filter, alpha, fusion_method, similarity_threshold, **kwargs)
-        )
+

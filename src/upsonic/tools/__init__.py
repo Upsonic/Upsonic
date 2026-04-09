@@ -662,6 +662,11 @@ class ToolManager:
                 class_instances.append(tool_identifier)
                 original_objects_to_remove.add(tool_identifier)
             
+            # Tool provider (e.g. KnowledgeBase implementing get_tools() protocol)
+            elif hasattr(tool_identifier, 'get_tools') and callable(tool_identifier.get_tools):
+                class_instances.append(tool_identifier)
+                original_objects_to_remove.add(tool_identifier)
+            
             # Class (not instance) - find all instances of this class
             elif inspect.isclass(tool_identifier):
                 # Find instances of this class by looking at registered tools

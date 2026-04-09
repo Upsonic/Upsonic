@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import hashlib
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Coroutine, Dict, Generic, List, Optional, TypeVar
 
@@ -277,10 +278,14 @@ class BaseChunker(ABC, Generic[ConfigType]):
         if extra_metadata:
             chunk_metadata.update(extra_metadata)
             
+        chunk_content_hash: str = hashlib.md5(final_text.encode("utf-8")).hexdigest()
+
         return Chunk(
             text_content=final_text,
             metadata=chunk_metadata,
             document_id=parent_document.document_id,
+            doc_content_hash=parent_document.doc_content_hash,
+            chunk_content_hash=chunk_content_hash,
             start_index=start_index,
             end_index=end_index,
         )

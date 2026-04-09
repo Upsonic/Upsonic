@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 if TYPE_CHECKING:
     from upsonic.session.base import Session, SessionType
     from upsonic.culture.cultural_knowledge import CulturalKnowledge
+    from upsonic.storage.schemas import KnowledgeRow
 
 from upsonic.storage.base import Storage
 from upsonic.storage.in_memory.utils import (
@@ -54,6 +55,7 @@ class InMemoryStorage(Storage):
         self,
         session_table: Optional[str] = None,
         user_memory_table: Optional[str] = None,
+        knowledge_table: Optional[str] = None,
         id: Optional[str] = None,
     ) -> None:
         """
@@ -62,19 +64,20 @@ class InMemoryStorage(Storage):
         Args:
             session_table: Name of the session table (for compatibility).
             user_memory_table: Name of the user memory table (for compatibility).
+            knowledge_table: Name of the knowledge table (for compatibility).
             id: Unique identifier for this storage instance.
         """
         super().__init__(
             session_table=session_table,
             user_memory_table=user_memory_table,
+            knowledge_table=knowledge_table,
             id=id,
         )
 
-        # In-memory storage using lists of dictionaries
         self._sessions: List[Dict[str, Any]] = []
         self._user_memories: List[Dict[str, Any]] = []
         self._cultural_knowledge: List[Dict[str, Any]] = []
-        # Generic model storage: {collection_name: {key: model_data}}
+        self._knowledge: List[Dict[str, Any]] = []
         self._generic_models: Dict[str, Dict[str, Any]] = {}
 
         _logger.info(f"Initialized InMemoryStorage with id: {self.id}")
@@ -96,6 +99,7 @@ class InMemoryStorage(Storage):
         self._sessions.clear()
         self._user_memories.clear()
         self._cultural_knowledge.clear()
+        self._knowledge.clear()
         _logger.info(f"InMemoryStorage with id: {self.id} closed and cleared")
 
     def _get_session_type_value(self, session: "Session") -> str:
@@ -888,11 +892,12 @@ class InMemoryStorage(Storage):
         """
         Clear all data from all tables.
         
-        This removes all sessions and user memories from the storage.
+        This removes all sessions, user memories, and knowledge from storage.
         """
         try:
             self._sessions.clear()
             self._user_memories.clear()
+            self._knowledge.clear()
             _logger.info("Cleared all data from InMemoryStorage")
 
         except Exception as e:
@@ -1168,4 +1173,120 @@ class InMemoryStorage(Storage):
 
         except Exception as e:
             _logger.error(f"Error upserting cultural knowledge: {e}")
+            raise e
+
+    # ======================== Knowledge Content Methods ========================
+
+    def upsert_knowledge_content(
+        self,
+        knowledge_row: "KnowledgeRow",
+    ) -> Optional["KnowledgeRow"]:
+        """Insert or update a knowledge document registry entry."""
+        from upsonic.storage.schemas import KnowledgeRow
+
+        try:
+            current_time = int(time.time())
+            data = knowledge_row.to_dict()
+            data.setdefault("created_at", current_time)
+            data["updated_at"] = current_time
+
+            self._knowledge = [
+                item for item in self._knowledge if item.get("id") != data["id"]
+            ]
+            self._knowledge.append(deepcopy(data))
+
+            _logger.debug(f"Upserted knowledge content: {data['id']}")
+            return KnowledgeRow.from_dict(data)
+
+        except Exception as e:
+            _logger.error(f"Error upserting knowledge content: {e}")
+            raise e
+
+    def get_knowledge_content(
+        self,
+        id: str,
+    ) -> Optional["KnowledgeRow"]:
+        """Get a knowledge document registry entry by ID."""
+        from upsonic.storage.schemas import KnowledgeRow
+
+        try:
+            for item in self._knowledge:
+                if item.get("id") == id:
+                    return KnowledgeRow.from_dict(deep_copy_record(item))
+            return None
+
+        except Exception as e:
+            _logger.error(f"Error getting knowledge content: {e}")
+            raise e
+
+    def get_knowledge_contents(
+        self,
+        knowledge_base_id: Optional[str] = None,
+        limit: Optional[int] = None,
+        page: Optional[int] = None,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None,
+    ) -> Tuple[List["KnowledgeRow"], int]:
+        """Get knowledge document registry entries with filtering and pagination."""
+        from upsonic.storage.schemas import KnowledgeRow
+
+        try:
+            filtered: List[Dict[str, Any]] = []
+            for item in self._knowledge:
+                if knowledge_base_id is not None and item.get("knowledge_base_id") != knowledge_base_id:
+                    continue
+                filtered.append(item)
+
+            total_count: int = len(filtered)
+
+            sorted_items = apply_sorting(
+                filtered,
+                sort_by=sort_by or "created_at",
+                sort_order=sort_order or "desc",
+            )
+
+            paginated = apply_pagination(sorted_items, limit, page)
+
+            rows = [KnowledgeRow.from_dict(deep_copy_record(item)) for item in paginated]
+            return rows, total_count
+
+        except Exception as e:
+            _logger.error(f"Error getting knowledge contents: {e}")
+            raise e
+
+    def delete_knowledge_content(self, id: str) -> bool:
+        """Delete a knowledge document registry entry by ID."""
+        try:
+            original_count = len(self._knowledge)
+            self._knowledge = [
+                item for item in self._knowledge if item.get("id") != id
+            ]
+
+            if len(self._knowledge) < original_count:
+                _logger.debug(f"Deleted knowledge content: {id}")
+                return True
+            return False
+
+        except Exception as e:
+            _logger.error(f"Error deleting knowledge content: {e}")
+            raise e
+
+    def delete_knowledge_contents(self, ids: List[str]) -> int:
+        """Delete multiple knowledge document registry entries."""
+        if not ids:
+            return 0
+
+        try:
+            ids_set = set(ids)
+            original_count = len(self._knowledge)
+            self._knowledge = [
+                item for item in self._knowledge if item.get("id") not in ids_set
+            ]
+
+            deleted_count: int = original_count - len(self._knowledge)
+            _logger.debug(f"Deleted {deleted_count} knowledge entries")
+            return deleted_count
+
+        except Exception as e:
+            _logger.error(f"Error deleting knowledge contents: {e}")
             raise e

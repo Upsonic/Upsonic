@@ -39,6 +39,18 @@ CULTURAL_KNOWLEDGE_COLLECTION_INDEXES: List[Dict[str, Any]] = [
 ]
 
 
+# Knowledge collection indexes
+KNOWLEDGE_COLLECTION_INDEXES: List[Dict[str, Any]] = [
+    {"keys": [("id", 1)], "unique": True},
+    {"keys": [("knowledge_base_id", 1)]},
+    {"keys": [("type", 1)]},
+    {"keys": [("content_hash", 1)]},
+    {"keys": [("status", 1)]},
+    {"keys": [("created_at", -1)]},
+    {"keys": [("updated_at", -1)]},
+]
+
+
 # Session document structure (for reference/validation)
 SESSION_DOCUMENT_STRUCTURE: Dict[str, Dict[str, Any]] = {
     "session_id": {"type": "string", "required": True, "unique": True},
@@ -89,6 +101,26 @@ CULTURAL_KNOWLEDGE_DOCUMENT_STRUCTURE: Dict[str, Dict[str, Any]] = {
 }
 
 
+# Knowledge document structure (for reference/validation)
+KNOWLEDGE_DOCUMENT_STRUCTURE: Dict[str, Dict[str, Any]] = {
+    "id": {"type": "string", "required": True, "unique": True},
+    "name": {"type": "string", "required": True},
+    "description": {"type": "string", "required": False},
+    "metadata": {"type": "object", "required": False},
+    "type": {"type": "string", "required": False},
+    "size": {"type": "int", "required": False},
+    "knowledge_base_id": {"type": "string", "required": False},
+    "content_hash": {"type": "string", "required": False},
+    "chunk_count": {"type": "int", "required": False},
+    "source": {"type": "string", "required": False},
+    "status": {"type": "string", "required": False},
+    "status_message": {"type": "string", "required": False},
+    "access_count": {"type": "int", "required": False},
+    "created_at": {"type": "int", "required": False},
+    "updated_at": {"type": "int", "required": False},
+}
+
+
 def get_collection_indexes(collection_type: str) -> List[Dict[str, Any]]:
     """
     Get the index specifications for a given collection type.
@@ -106,6 +138,7 @@ def get_collection_indexes(collection_type: str) -> List[Dict[str, Any]]:
         "sessions": SESSION_COLLECTION_INDEXES,
         "user_memories": USER_MEMORY_COLLECTION_INDEXES,
         "cultural_knowledge": CULTURAL_KNOWLEDGE_COLLECTION_INDEXES,
+        "knowledge": KNOWLEDGE_COLLECTION_INDEXES,
     }
     
     if collection_type not in indexes:
@@ -134,6 +167,7 @@ def get_document_structure(collection_type: str) -> Dict[str, Dict[str, Any]]:
         "sessions": SESSION_DOCUMENT_STRUCTURE,
         "user_memories": USER_MEMORY_DOCUMENT_STRUCTURE,
         "cultural_knowledge": CULTURAL_KNOWLEDGE_DOCUMENT_STRUCTURE,
+        "knowledge": KNOWLEDGE_DOCUMENT_STRUCTURE,
     }
     
     if collection_type not in structures:

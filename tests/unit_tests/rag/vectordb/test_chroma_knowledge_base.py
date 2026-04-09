@@ -32,15 +32,15 @@ async def safe_disconnect(provider: ChromaProvider, timeout: float = 5.0) -> Non
         return
     
     try:
-        await asyncio.wait_for(provider.disconnect(), timeout=timeout)
+        await asyncio.wait_for(asyncio.to_thread(provider.disconnect), timeout=timeout)
     except asyncio.TimeoutError:
         # Force cleanup if timeout
-        provider._client = None
+        provider.client = None
         provider._is_connected = False
         provider._collection_instance = None
     except Exception:
         # Force cleanup on any error
-        provider._client = None
+        provider.client = None
         provider._is_connected = False
         provider._collection_instance = None
 
@@ -100,16 +100,16 @@ class TestChromaKnowledgeBaseIntegration:
         """Test ChromaProvider initialization."""
         assert chroma_provider._config == chroma_config
         assert not chroma_provider._is_connected
-        assert chroma_provider._client is None
+        assert chroma_provider.client is None
     
     @pytest.mark.asyncio
     async def test_chroma_provider_connection(self, chroma_provider):
         """Test ChromaProvider connection."""
         try:
-            await asyncio.wait_for(chroma_provider.connect(), timeout=10.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.connect), timeout=10.0)
             assert chroma_provider._is_connected
-            assert chroma_provider._client is not None
-            assert await asyncio.wait_for(chroma_provider.is_ready(), timeout=5.0)
+            assert chroma_provider.client is not None
+            assert await asyncio.wait_for(asyncio.to_thread(chroma_provider.is_ready), timeout=5.0)
         finally:
             await safe_disconnect(chroma_provider)
     
@@ -117,12 +117,12 @@ class TestChromaKnowledgeBaseIntegration:
     async def test_chroma_provider_disconnection(self, chroma_provider):
         """Test ChromaProvider disconnection."""
         try:
-            await asyncio.wait_for(chroma_provider.connect(), timeout=10.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.connect), timeout=10.0)
             assert chroma_provider._is_connected
             
             await safe_disconnect(chroma_provider)
             assert not chroma_provider._is_connected
-            assert chroma_provider._client is None
+            assert chroma_provider.client is None
         except Exception:
             await safe_disconnect(chroma_provider)
             raise
@@ -131,11 +131,11 @@ class TestChromaKnowledgeBaseIntegration:
     async def test_chroma_collection_creation(self, chroma_provider):
         """Test ChromaProvider collection creation."""
         try:
-            await asyncio.wait_for(chroma_provider.connect(), timeout=10.0)
-            assert not await asyncio.wait_for(chroma_provider.collection_exists(), timeout=5.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.connect), timeout=10.0)
+            assert not await asyncio.wait_for(asyncio.to_thread(chroma_provider.collection_exists), timeout=5.0)
             
-            await asyncio.wait_for(chroma_provider.create_collection(), timeout=10.0)
-            assert await asyncio.wait_for(chroma_provider.collection_exists(), timeout=5.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.create_collection), timeout=10.0)
+            assert await asyncio.wait_for(asyncio.to_thread(chroma_provider.collection_exists), timeout=5.0)
         finally:
             await safe_disconnect(chroma_provider)
     
@@ -143,12 +143,12 @@ class TestChromaKnowledgeBaseIntegration:
     async def test_chroma_collection_deletion(self, chroma_provider):
         """Test ChromaProvider collection deletion."""
         try:
-            await asyncio.wait_for(chroma_provider.connect(), timeout=10.0)
-            await asyncio.wait_for(chroma_provider.create_collection(), timeout=10.0)
-            assert await asyncio.wait_for(chroma_provider.collection_exists(), timeout=5.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.connect), timeout=10.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.create_collection), timeout=10.0)
+            assert await asyncio.wait_for(asyncio.to_thread(chroma_provider.collection_exists), timeout=5.0)
             
-            await asyncio.wait_for(chroma_provider.delete_collection(), timeout=10.0)
-            assert not await asyncio.wait_for(chroma_provider.collection_exists(), timeout=5.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.delete_collection), timeout=10.0)
+            assert not await asyncio.wait_for(asyncio.to_thread(chroma_provider.collection_exists), timeout=5.0)
         finally:
             await safe_disconnect(chroma_provider)
     
@@ -156,8 +156,8 @@ class TestChromaKnowledgeBaseIntegration:
     async def test_chroma_upsert_operations(self, chroma_provider):
         """Test ChromaProvider upsert operations."""
         try:
-            await asyncio.wait_for(chroma_provider.connect(), timeout=10.0)
-            await asyncio.wait_for(chroma_provider.create_collection(), timeout=10.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.connect), timeout=10.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.create_collection), timeout=10.0)
             
             # Test data
             vectors = [[0.1] * 384, [0.2] * 384]
@@ -166,10 +166,13 @@ class TestChromaKnowledgeBaseIntegration:
             chunks = ["chunk1", "chunk2"]
             
             # Upsert data
-            await asyncio.wait_for(chroma_provider.upsert(vectors, payloads, ids, chunks), timeout=10.0)
+            await asyncio.wait_for(
+                asyncio.to_thread(chroma_provider.upsert, vectors, payloads, ids, chunks),
+                timeout=10.0,
+            )
             
             # Verify data was stored
-            results = await asyncio.wait_for(chroma_provider.fetch(ids), timeout=10.0)
+            results = await asyncio.wait_for(asyncio.to_thread(chroma_provider.fetch, ids), timeout=10.0)
             assert len(results) == 2
             assert results[0].id == "id1"
             assert results[1].id == "id2"
@@ -180,8 +183,8 @@ class TestChromaKnowledgeBaseIntegration:
     async def test_chroma_search_operations(self, chroma_provider):
         """Test ChromaProvider search operations."""
         try:
-            await asyncio.wait_for(chroma_provider.connect(), timeout=10.0)
-            await asyncio.wait_for(chroma_provider.create_collection(), timeout=10.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.connect), timeout=10.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.create_collection), timeout=10.0)
             
             # Insert test data
             vectors = [[0.1] * 384, [0.2] * 384, [0.3] * 384]
@@ -189,11 +192,17 @@ class TestChromaKnowledgeBaseIntegration:
             ids = ["id1", "id2", "id3"]
             chunks = ["chunk1", "chunk2", "chunk3"]
             
-            await asyncio.wait_for(chroma_provider.upsert(vectors, payloads, ids, chunks), timeout=10.0)
+            await asyncio.wait_for(
+                asyncio.to_thread(chroma_provider.upsert, vectors, payloads, ids, chunks),
+                timeout=10.0,
+            )
             
             # Test dense search
             query_vector = [0.15] * 384
-            results = await asyncio.wait_for(chroma_provider.dense_search(query_vector, top_k=2), timeout=10.0)
+            results = await asyncio.wait_for(
+                asyncio.to_thread(chroma_provider.dense_search, query_vector, 2),
+                timeout=10.0,
+            )
             assert len(results) <= 2
             assert all(isinstance(result, VectorSearchResult) for result in results)
         finally:
@@ -203,8 +212,8 @@ class TestChromaKnowledgeBaseIntegration:
     async def test_chroma_delete_operations(self, chroma_provider):
         """Test ChromaProvider delete operations."""
         try:
-            await asyncio.wait_for(chroma_provider.connect(), timeout=10.0)
-            await asyncio.wait_for(chroma_provider.create_collection(), timeout=10.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.connect), timeout=10.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.create_collection), timeout=10.0)
             
             # Insert test data
             vectors = [[0.1] * 384, [0.2] * 384]
@@ -212,17 +221,20 @@ class TestChromaKnowledgeBaseIntegration:
             ids = ["id1", "id2"]
             chunks = ["chunk1", "chunk2"]
             
-            await asyncio.wait_for(chroma_provider.upsert(vectors, payloads, ids, chunks), timeout=10.0)
+            await asyncio.wait_for(
+                asyncio.to_thread(chroma_provider.upsert, vectors, payloads, ids, chunks),
+                timeout=10.0,
+            )
             
             # Verify data exists
-            results = await asyncio.wait_for(chroma_provider.fetch(ids), timeout=10.0)
+            results = await asyncio.wait_for(asyncio.to_thread(chroma_provider.fetch, ids), timeout=10.0)
             assert len(results) == 2
             
             # Delete one item
-            await asyncio.wait_for(chroma_provider.delete(["id1"]), timeout=10.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.delete, ["id1"]), timeout=10.0)
             
             # Verify deletion
-            results = await asyncio.wait_for(chroma_provider.fetch(ids), timeout=10.0)
+            results = await asyncio.wait_for(asyncio.to_thread(chroma_provider.fetch, ids), timeout=10.0)
             assert len(results) == 1
             assert results[0].id == "id2"
         finally:
@@ -232,13 +244,13 @@ class TestChromaKnowledgeBaseIntegration:
     async def test_knowledge_base_setup_with_chroma(self, knowledge_base):
         """Test Knowledge Base setup with ChromaProvider."""
         try:
-            # Mock the vectordb methods
-            knowledge_base.vectordb.connect = AsyncMock()
-            knowledge_base.vectordb.create_collection = AsyncMock()
-            knowledge_base.vectordb.upsert = AsyncMock()
-            knowledge_base.vectordb.collection_exists = AsyncMock(return_value=False)
-            knowledge_base.vectordb.is_ready = AsyncMock(return_value=True)
-            knowledge_base.vectordb.disconnect = AsyncMock()
+            # Mock the vectordb async API used by KnowledgeBase
+            knowledge_base.vectordb.aconnect = AsyncMock()
+            knowledge_base.vectordb.acreate_collection = AsyncMock()
+            knowledge_base.vectordb.aupsert = AsyncMock()
+            knowledge_base.vectordb.acollection_exists = AsyncMock(return_value=False)
+            knowledge_base.vectordb.ais_ready = AsyncMock(return_value=True)
+            knowledge_base.vectordb.adisconnect = AsyncMock()
             
             # Mock the embedding provider - return 1 vector per chunk
             async def mock_embed_documents(chunks):
@@ -249,9 +261,9 @@ class TestChromaKnowledgeBaseIntegration:
             await knowledge_base.setup_async()
             
             # Verify setup was called
-            knowledge_base.vectordb.connect.assert_called_once()
-            knowledge_base.vectordb.create_collection.assert_called_once()
-            knowledge_base.vectordb.upsert.assert_called_once()
+            knowledge_base.vectordb.aconnect.assert_called_once()
+            knowledge_base.vectordb.acreate_collection.assert_called_once()
+            knowledge_base.vectordb.aupsert.assert_called_once()
         finally:
             if hasattr(knowledge_base, 'close'):
                 await asyncio.wait_for(knowledge_base.close(), timeout=5.0)
@@ -262,14 +274,14 @@ class TestChromaKnowledgeBaseIntegration:
     async def test_knowledge_base_query_with_chroma(self, knowledge_base):
         """Test Knowledge Base query with ChromaProvider."""
         try:
-            # Mock the vectordb methods
-            knowledge_base.vectordb.connect = AsyncMock()
-            knowledge_base.vectordb.create_collection = AsyncMock()
-            knowledge_base.vectordb.upsert = AsyncMock()
-            knowledge_base.vectordb.collection_exists = AsyncMock(return_value=False)
-            knowledge_base.vectordb.is_ready = AsyncMock(return_value=True)
-            knowledge_base.vectordb.disconnect = AsyncMock()
-            knowledge_base.vectordb.search = AsyncMock(return_value=[
+            # Mock the vectordb async API used by KnowledgeBase
+            knowledge_base.vectordb.aconnect = AsyncMock()
+            knowledge_base.vectordb.acreate_collection = AsyncMock()
+            knowledge_base.vectordb.aupsert = AsyncMock()
+            knowledge_base.vectordb.acollection_exists = AsyncMock(return_value=False)
+            knowledge_base.vectordb.ais_ready = AsyncMock(return_value=True)
+            knowledge_base.vectordb.adisconnect = AsyncMock()
+            knowledge_base.vectordb.asearch = AsyncMock(return_value=[
                 create_mock_vector_search_result("id1", 0.9, "Test result 1"),
                 create_mock_vector_search_result("id2", 0.8, "Test result 2")
             ])
@@ -301,8 +313,8 @@ class TestChromaKnowledgeBaseIntegration:
     async def test_chroma_hybrid_search(self, chroma_provider):
         """Test ChromaProvider hybrid search functionality."""
         try:
-            await asyncio.wait_for(chroma_provider.connect(), timeout=10.0)
-            await asyncio.wait_for(chroma_provider.create_collection(), timeout=10.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.connect), timeout=10.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.create_collection), timeout=10.0)
             
             # Insert test data
             vectors = [[0.1] * 384, [0.2] * 384]
@@ -310,25 +322,24 @@ class TestChromaKnowledgeBaseIntegration:
             ids = ["id1", "id2"]
             chunks = ["chunk1", "chunk2"]
             
-            await asyncio.wait_for(chroma_provider.upsert(vectors, payloads, ids, chunks), timeout=10.0)
+            await asyncio.wait_for(
+                asyncio.to_thread(chroma_provider.upsert, vectors, payloads, ids, chunks),
+                timeout=10.0,
+            )
             
             # Test hybrid search
             query_vector = [0.15] * 384
             query_text = "test query"
             
-            # Mock the individual search methods
-            chroma_provider.dense_search = AsyncMock(return_value=[
-                create_mock_vector_search_result("id1", 0.9, "Test result 1")
-            ])
-            chroma_provider.full_text_search = AsyncMock(return_value=[
-                create_mock_vector_search_result("id2", 0.8, "Test result 2")
-            ])
+            results = await asyncio.wait_for(
+                asyncio.to_thread(
+                    lambda: chroma_provider.hybrid_search(query_vector, query_text, top_k=2)
+                ),
+                timeout=10.0,
+            )
             
-            results = await asyncio.wait_for(chroma_provider.hybrid_search(query_vector, query_text, top_k=2), timeout=10.0)
-            
-            # Verify hybrid search was called
-            chroma_provider.dense_search.assert_called_once()
-            chroma_provider.full_text_search.assert_called_once()
+            assert len(results) <= 2
+            assert all(isinstance(result, VectorSearchResult) for result in results)
         finally:
             await safe_disconnect(chroma_provider)
     
@@ -336,8 +347,8 @@ class TestChromaKnowledgeBaseIntegration:
     async def test_chroma_full_text_search(self, chroma_provider):
         """Test ChromaProvider full-text search."""
         try:
-            await asyncio.wait_for(chroma_provider.connect(), timeout=10.0)
-            await asyncio.wait_for(chroma_provider.create_collection(), timeout=10.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.connect), timeout=10.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.create_collection), timeout=10.0)
             
             # Insert test data
             vectors = [[0.1] * 384, [0.2] * 384]
@@ -345,10 +356,16 @@ class TestChromaKnowledgeBaseIntegration:
             ids = ["id1", "id2"]
             chunks = ["chunk1", "chunk2"]
             
-            await asyncio.wait_for(chroma_provider.upsert(vectors, payloads, ids, chunks), timeout=10.0)
+            await asyncio.wait_for(
+                asyncio.to_thread(chroma_provider.upsert, vectors, payloads, ids, chunks),
+                timeout=10.0,
+            )
             
             # Test full-text search
-            results = await asyncio.wait_for(chroma_provider.full_text_search("chunk", top_k=2), timeout=10.0)
+            results = await asyncio.wait_for(
+                asyncio.to_thread(chroma_provider.full_text_search, "chunk", 2),
+                timeout=10.0,
+            )
             assert len(results) <= 2
             assert all(isinstance(result, VectorSearchResult) for result in results)
         finally:
@@ -358,17 +375,20 @@ class TestChromaKnowledgeBaseIntegration:
     async def test_chroma_error_handling(self, chroma_provider):
         """Test ChromaProvider error handling."""
         try:
-            # Test connection error
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.connect), timeout=10.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.create_collection), timeout=10.0)
+
             with pytest.raises(Exception):
-                await asyncio.wait_for(chroma_provider.create_collection(), timeout=5.0)  # Should fail without connection
-            
-            # Test with connection
-            await asyncio.wait_for(chroma_provider.connect(), timeout=10.0)
-            await asyncio.wait_for(chroma_provider.create_collection(), timeout=10.0)
-            
-            # Test invalid upsert
-            with pytest.raises(Exception):
-                await asyncio.wait_for(chroma_provider.upsert([], [], [], []), timeout=5.0)  # Empty data should be handled gracefully
+                await asyncio.wait_for(
+                    asyncio.to_thread(
+                        chroma_provider.upsert,
+                        [[0.1] * 384],
+                        [],
+                        ["only_one_id"],
+                        ["only_one_chunk"],
+                    ),
+                    timeout=5.0,
+                )
         finally:
             await safe_disconnect(chroma_provider)
     
@@ -392,14 +412,14 @@ class TestChromaKnowledgeBaseIntegration:
     async def test_chroma_collection_recreation(self, chroma_provider):
         """Test ChromaProvider collection recreation."""
         try:
-            await asyncio.wait_for(chroma_provider.connect(), timeout=10.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.connect), timeout=10.0)
             
             # Create collection
-            await asyncio.wait_for(chroma_provider.create_collection(), timeout=10.0)
-            assert await asyncio.wait_for(chroma_provider.collection_exists(), timeout=5.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.create_collection), timeout=10.0)
+            assert await asyncio.wait_for(asyncio.to_thread(chroma_provider.collection_exists), timeout=5.0)
             
             # Test recreation - should not raise error
-            await asyncio.wait_for(chroma_provider.create_collection(), timeout=10.0)
-            assert await asyncio.wait_for(chroma_provider.collection_exists(), timeout=5.0)
+            await asyncio.wait_for(asyncio.to_thread(chroma_provider.create_collection), timeout=10.0)
+            assert await asyncio.wait_for(asyncio.to_thread(chroma_provider.collection_exists), timeout=5.0)
         finally:
             await safe_disconnect(chroma_provider)

@@ -275,21 +275,21 @@ def detect_content_type(content: str, metadata: Optional[Dict[str, Any]] = None)
     
     if metadata:
         source = metadata.get('source', '').lower()
-        file_name = metadata.get('file_name', '').lower()
+        document_name = metadata.get('document_name', '').lower()
         
-        if any(ext in source or ext in file_name for ext in ['.md', '.markdown']):
+        if any(ext in source or ext in document_name for ext in ['.md', '.markdown']):
             return ContentType.MARKDOWN
-        elif any(ext in source or ext in file_name for ext in ['.html', '.htm']):
+        elif any(ext in source or ext in document_name for ext in ['.html', '.htm']):
             return ContentType.HTML
-        elif any(ext in source or ext in file_name for ext in ['.json']):
+        elif any(ext in source or ext in document_name for ext in ['.json']):
             return ContentType.JSON
-        elif any(ext in source or ext in file_name for ext in ['.csv']):
+        elif any(ext in source or ext in document_name for ext in ['.csv']):
             return ContentType.CSV
-        elif any(ext in source or ext in file_name for ext in ['.xml']):
+        elif any(ext in source or ext in document_name for ext in ['.xml']):
             return ContentType.XML
-        elif any(ext in source or ext in file_name for ext in ['.py']):
+        elif any(ext in source or ext in document_name for ext in ['.py']):
             return ContentType.PYTHON
-        elif any(ext in source or ext in file_name for ext in ['.js', '.jsx', '.ts', '.tsx']):
+        elif any(ext in source or ext in document_name for ext in ['.js', '.jsx', '.ts', '.tsx']):
             return ContentType.JAVASCRIPT
     
     content_sample = content[:2000]

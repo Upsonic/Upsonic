@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
     from upsonic.session.base import SessionType, Session
     from upsonic.culture.cultural_knowledge import CulturalKnowledge
+    from upsonic.storage.schemas import KnowledgeRow
 
 try:
     from sqlalchemy import Column, MetaData, Table, func, select, text
@@ -92,6 +93,7 @@ class PostgresStorage(Storage):
         db_schema: Optional[str] = None,
         session_table: Optional[str] = None,
         user_memory_table: Optional[str] = None,
+        knowledge_table: Optional[str] = None,
         create_schema: bool = True,
         id: Optional[str] = None,
     ) -> None:
@@ -104,6 +106,7 @@ class PostgresStorage(Storage):
             db_schema: PostgreSQL schema to use (default: "public").
             session_table: Name of the session table.
             user_memory_table: Name of the user memory table.
+            knowledge_table: Name of the knowledge document registry table.
             create_schema: Whether to create the schema if it doesn't exist.
             id: Unique identifier for this storage instance.
         
@@ -122,6 +125,7 @@ class PostgresStorage(Storage):
         super().__init__(
             session_table=session_table,
             user_memory_table=user_memory_table,
+            knowledge_table=knowledge_table,
             id=id,
         )
 
@@ -163,6 +167,7 @@ class PostgresStorage(Storage):
         self._session_table: Optional[Table] = None
         self._user_memory_table: Optional[Table] = None
         self._cultural_knowledge_table: Optional[Table] = None
+        self._knowledge_table: Optional[Table] = None
         self._tables: Dict[str, Table] = {}  # Cache for generic model tables
 
     def close(self) -> None:
@@ -188,6 +193,7 @@ class PostgresStorage(Storage):
             (self.session_table_name, "sessions"),
             (self.user_memory_table_name, "user_memories"),
             (self.cultural_knowledge_table_name, "cultural_knowledge"),
+            (self.knowledge_table_name, "knowledge"),
         ]
 
         for table_name, table_type in tables_to_create:
@@ -347,6 +353,16 @@ class PostgresStorage(Storage):
                 create_if_not_found=create_if_not_found,
             )
         return self._cultural_knowledge_table
+
+    def _get_knowledge_table(self, create_if_not_found: bool = False) -> Table:
+        """Get the knowledge document registry table, creating if needed."""
+        if self._knowledge_table is None:
+            self._knowledge_table = self._get_or_create_table(
+                table_name=self.knowledge_table_name,
+                table_type="knowledge",
+                create_if_not_found=create_if_not_found,
+            )
+        return self._knowledge_table
 
     def _sanitize_session_dict(self, session_dict: Dict[str, Any]) -> Dict[str, Any]:
         """Sanitize session dictionary for PostgreSQL storage."""
@@ -1264,6 +1280,15 @@ class PostgresStorage(Storage):
             except ValueError:
                 pass
 
+            # Clear knowledge
+            try:
+                table = self._get_knowledge_table(create_if_not_found=False)
+                with self.Session() as sess, sess.begin():
+                    sess.execute(table.delete())
+                _logger.debug("Cleared all knowledge entries")
+            except ValueError:
+                pass
+
             _logger.info("Cleared all data from PostgreSQL storage")
 
         except Exception as e:
@@ -1656,4 +1681,167 @@ class PostgresStorage(Storage):
 
         except Exception as e:
             _logger.error(f"Error upserting cultural knowledge: {e}")
+            raise e
+
+    # ======================== Knowledge Content Methods ========================
+
+    def upsert_knowledge_content(
+        self,
+        knowledge_row: "KnowledgeRow",
+    ) -> Optional["KnowledgeRow"]:
+        """Insert or update a knowledge document registry entry."""
+        from upsonic.storage.schemas import KnowledgeRow
+
+        try:
+            table = self._get_knowledge_table(create_if_not_found=True)
+            current_time = int(time.time())
+
+            data = knowledge_row.to_dict()
+            data.setdefault("created_at", current_time)
+            data["updated_at"] = current_time
+
+            if "name" in data:
+                data["name"] = sanitize_postgres_string(data.get("name"))
+            if "description" in data:
+                data["description"] = sanitize_postgres_string(data.get("description"))
+            if "source" in data:
+                data["source"] = sanitize_postgres_string(data.get("source"))
+            if "status_message" in data:
+                data["status_message"] = sanitize_postgres_string(data.get("status_message"))
+            if "metadata" in data and data["metadata"] is not None:
+                data["metadata"] = sanitize_postgres_dict(data["metadata"])
+
+            with self.Session() as sess, sess.begin():
+                update_fields = {k: v for k, v in data.items() if k != "id"}
+                stmt = (
+                    postgresql.insert(table)
+                    .values(**data)
+                    .on_conflict_do_update(
+                        index_elements=["id"],
+                        set_=update_fields,
+                    )
+                    .returning(table)
+                )
+                result = sess.execute(stmt)
+                row = result.fetchone()
+
+                if row is None:
+                    return None
+
+            return KnowledgeRow.from_dict(dict(row._mapping))
+
+        except Exception as e:
+            _logger.error(f"Error upserting knowledge content: {e}")
+            raise e
+
+    def get_knowledge_content(
+        self,
+        id: str,
+    ) -> Optional["KnowledgeRow"]:
+        """Get a knowledge document registry entry by ID."""
+        from upsonic.storage.schemas import KnowledgeRow
+
+        try:
+            table = self._get_knowledge_table(create_if_not_found=False)
+        except ValueError:
+            return None
+
+        try:
+            with self.Session() as sess, sess.begin():
+                stmt = select(table).where(table.c.id == id)
+                result = sess.execute(stmt).fetchone()
+                if result is None:
+                    return None
+                return KnowledgeRow.from_dict(dict(result._mapping))
+
+        except Exception as e:
+            _logger.error(f"Error getting knowledge content: {e}")
+            raise e
+
+    def get_knowledge_contents(
+        self,
+        knowledge_base_id: Optional[str] = None,
+        limit: Optional[int] = None,
+        page: Optional[int] = None,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None,
+    ) -> Tuple[List["KnowledgeRow"], int]:
+        """Get knowledge document registry entries with filtering and pagination."""
+        from upsonic.storage.schemas import KnowledgeRow
+
+        try:
+            table = self._get_knowledge_table(create_if_not_found=False)
+        except ValueError:
+            return [], 0
+
+        try:
+            with self.Session() as sess, sess.begin():
+                stmt = select(table)
+
+                if knowledge_base_id is not None:
+                    stmt = stmt.where(table.c.knowledge_base_id == knowledge_base_id)
+
+                count_stmt = select(func.count()).select_from(stmt.alias())
+                total_count: int = sess.execute(count_stmt).scalar() or 0
+
+                stmt = apply_sorting(stmt, table, sort_by, sort_order)
+
+                if limit is not None:
+                    stmt = stmt.limit(limit)
+                    if page is not None:
+                        stmt = stmt.offset((page - 1) * limit)
+
+                result = sess.execute(stmt).fetchall()
+                if not result:
+                    return [], 0
+
+                rows = [KnowledgeRow.from_dict(dict(record._mapping)) for record in result]
+                return rows, total_count
+
+        except Exception as e:
+            _logger.error(f"Error getting knowledge contents: {e}")
+            raise e
+
+    def delete_knowledge_content(self, id: str) -> bool:
+        """Delete a knowledge document registry entry by ID."""
+        try:
+            table = self._get_knowledge_table(create_if_not_found=False)
+        except ValueError:
+            return False
+
+        try:
+            with self.Session() as sess, sess.begin():
+                stmt = table.delete().where(table.c.id == id)
+                result = sess.execute(stmt)
+
+                deleted: bool = result.rowcount > 0
+                if deleted:
+                    _logger.debug(f"Deleted knowledge content: {id}")
+                return deleted
+
+        except Exception as e:
+            _logger.error(f"Error deleting knowledge content: {e}")
+            raise e
+
+    def delete_knowledge_contents(self, ids: List[str]) -> int:
+        """Delete multiple knowledge document registry entries."""
+        if not ids:
+            return 0
+
+        try:
+            table = self._get_knowledge_table(create_if_not_found=False)
+        except ValueError:
+            return 0
+
+        try:
+            with self.Session() as sess, sess.begin():
+                stmt = table.delete().where(table.c.id.in_(ids))
+                result = sess.execute(stmt)
+
+                deleted_count: int = result.rowcount
+                _logger.debug(f"Deleted {deleted_count} knowledge entries")
+                return deleted_count
+
+        except Exception as e:
+            _logger.error(f"Error deleting knowledge contents: {e}")
             raise e

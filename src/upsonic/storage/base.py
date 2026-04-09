@@ -5,7 +5,7 @@ from uuid import uuid4
 
 if TYPE_CHECKING:
     from upsonic.session.base import SessionType
-    from upsonic.storage.schemas import UserMemory
+    from upsonic.storage.schemas import UserMemory, KnowledgeRow
     from upsonic.session.base import Session
     from upsonic.culture.cultural_knowledge import CulturalKnowledge
 
@@ -24,6 +24,7 @@ class Storage(ABC):
         session_table: Optional[str] = None,
         user_memory_table: Optional[str] = None,
         cultural_knowledge_table: Optional[str] = None,
+        knowledge_table: Optional[str] = None,
         id: Optional[str] = None,
     ) -> None:
         """
@@ -32,12 +33,16 @@ class Storage(ABC):
         Args:
             session_table: Name of the table to store sessions.
             user_memory_table: Name of the table to store user memories.
+            cultural_knowledge_table: Name of the table to store cultural knowledge.
+            knowledge_table: Name of the table to store knowledge base document registry.
             id: Unique identifier for this storage instance.
         """
         self.id: str = id or str(uuid4())
         self.session_table_name: str = session_table or "upsonic_sessions"
         self.user_memory_table_name: str = user_memory_table or "upsonic_user_memories"
         self.cultural_knowledge_table_name: str = cultural_knowledge_table or "upsonic_cultural_knowledge"
+        self.knowledge_table_name: str = knowledge_table or "upsonic_knowledge"
+
     @abstractmethod
     def table_exists(self, table_name: str) -> bool:
         """
@@ -439,6 +444,105 @@ class Storage(ABC):
         """
         raise NotImplementedError
 
+    # --- Knowledge Content Methods ---
+
+    @abstractmethod
+    def upsert_knowledge_content(
+        self,
+        knowledge_row: "KnowledgeRow",
+    ) -> Optional["KnowledgeRow"]:
+        """
+        Insert or update a knowledge document registry entry.
+        
+        Args:
+            knowledge_row: The KnowledgeRow instance to upsert.
+        
+        Returns:
+            The upserted KnowledgeRow, or None if the operation fails.
+        
+        Raises:
+            Exception: If an error occurs during upsert.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_knowledge_content(
+        self,
+        id: str,
+    ) -> Optional["KnowledgeRow"]:
+        """
+        Get a knowledge document registry entry by ID.
+        
+        Args:
+            id: The document ID to retrieve.
+        
+        Returns:
+            KnowledgeRow if found, None otherwise.
+        
+        Raises:
+            Exception: If an error occurs during retrieval.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_knowledge_contents(
+        self,
+        knowledge_base_id: Optional[str] = None,
+        limit: Optional[int] = None,
+        page: Optional[int] = None,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None,
+    ) -> Tuple[List["KnowledgeRow"], int]:
+        """
+        Get knowledge document registry entries with filtering and pagination.
+        
+        Args:
+            knowledge_base_id: Filter by knowledge base ID.
+            limit: Maximum number of records to return.
+            page: Page number (1-indexed).
+            sort_by: Column to sort by.
+            sort_order: Sort order ('asc' or 'desc').
+        
+        Returns:
+            Tuple of (list of KnowledgeRow, total count).
+        
+        Raises:
+            Exception: If an error occurs during retrieval.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def delete_knowledge_content(self, id: str) -> bool:
+        """
+        Delete a knowledge document registry entry by ID.
+        
+        Args:
+            id: The document ID to delete.
+        
+        Returns:
+            True if deleted successfully, False otherwise.
+        
+        Raises:
+            Exception: If an error occurs during deletion.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def delete_knowledge_contents(self, ids: List[str]) -> int:
+        """
+        Delete multiple knowledge document registry entries.
+        
+        Args:
+            ids: List of document IDs to delete.
+        
+        Returns:
+            Number of records deleted.
+        
+        Raises:
+            Exception: If an error occurs during deletion.
+        """
+        raise NotImplementedError
+
     # --- Utility Methods ---
 
     @abstractmethod
@@ -568,6 +672,7 @@ class AsyncStorage(ABC):
         session_table: Optional[str] = None,
         user_memory_table: Optional[str] = None,
         cultural_knowledge_table: Optional[str] = None,
+        knowledge_table: Optional[str] = None,
         id: Optional[str] = None,
     ) -> None:
         """
@@ -577,12 +682,14 @@ class AsyncStorage(ABC):
             session_table: Name of the table to store sessions.
             user_memory_table: Name of the table to store user memories.
             cultural_knowledge_table: Name of the table to store cultural knowledge.
+            knowledge_table: Name of the table to store knowledge base document registry.
             id: Unique identifier for this storage instance.
         """
         self.id: str = id or str(uuid4())
         self.session_table_name: str = session_table or "upsonic_sessions"
         self.user_memory_table_name: str = user_memory_table or "upsonic_user_memories"
         self.cultural_knowledge_table_name: str = cultural_knowledge_table or "upsonic_cultural_knowledge"
+        self.knowledge_table_name: str = knowledge_table or "upsonic_knowledge"
 
     @abstractmethod
     async def table_exists(self, table_name: str) -> bool:
@@ -982,6 +1089,105 @@ class AsyncStorage(ABC):
         
         Raises:
             Exception: If an error occurs during upsert.
+        """
+        raise NotImplementedError
+
+    # --- Knowledge Content Methods (Async) ---
+
+    @abstractmethod
+    async def aupsert_knowledge_content(
+        self,
+        knowledge_row: "KnowledgeRow",
+    ) -> Optional["KnowledgeRow"]:
+        """
+        Insert or update a knowledge document registry entry (async).
+        
+        Args:
+            knowledge_row: The KnowledgeRow instance to upsert.
+        
+        Returns:
+            The upserted KnowledgeRow, or None if the operation fails.
+        
+        Raises:
+            Exception: If an error occurs during upsert.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def aget_knowledge_content(
+        self,
+        id: str,
+    ) -> Optional["KnowledgeRow"]:
+        """
+        Get a knowledge document registry entry by ID (async).
+        
+        Args:
+            id: The document ID to retrieve.
+        
+        Returns:
+            KnowledgeRow if found, None otherwise.
+        
+        Raises:
+            Exception: If an error occurs during retrieval.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def aget_knowledge_contents(
+        self,
+        knowledge_base_id: Optional[str] = None,
+        limit: Optional[int] = None,
+        page: Optional[int] = None,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None,
+    ) -> Tuple[List["KnowledgeRow"], int]:
+        """
+        Get knowledge document registry entries with filtering and pagination (async).
+        
+        Args:
+            knowledge_base_id: Filter by knowledge base ID.
+            limit: Maximum number of records to return.
+            page: Page number (1-indexed).
+            sort_by: Column to sort by.
+            sort_order: Sort order ('asc' or 'desc').
+        
+        Returns:
+            Tuple of (list of KnowledgeRow, total count).
+        
+        Raises:
+            Exception: If an error occurs during retrieval.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def adelete_knowledge_content(self, id: str) -> bool:
+        """
+        Delete a knowledge document registry entry by ID (async).
+        
+        Args:
+            id: The document ID to delete.
+        
+        Returns:
+            True if deleted successfully, False otherwise.
+        
+        Raises:
+            Exception: If an error occurs during deletion.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def adelete_knowledge_contents(self, ids: List[str]) -> int:
+        """
+        Delete multiple knowledge document registry entries (async).
+        
+        Args:
+            ids: List of document IDs to delete.
+        
+        Returns:
+            Number of records deleted.
+        
+        Raises:
+            Exception: If an error occurs during deletion.
         """
         raise NotImplementedError
 

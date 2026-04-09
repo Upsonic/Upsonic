@@ -1,4 +1,5 @@
 from __future__ import annotations
+import hashlib
 import uuid
 from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
@@ -24,6 +25,10 @@ class Document(BaseModel):
         ...,
         description="A unique, deterministic identifier for the source, typically an MD5 hash of its absolute path or URL."
     )
+    doc_content_hash: str = Field(
+        default="",
+        description="MD5 hash of the document's full content, used for change detection and deduplication."
+    )
 
 class Chunk(BaseModel):
     """
@@ -45,11 +50,19 @@ class Chunk(BaseModel):
     )
     document_id: str = Field(
         ...,
-        description="Document ID"
+        description="The parent document's unique identifier, linking this chunk back to its source."
+    )
+    doc_content_hash: str = Field(
+        default="",
+        description="MD5 hash of the parent document's full content, inherited for change detection."
     )
     chunk_id: str = Field(
         default_factory=lambda: str(uuid.uuid4()),
         description="A unique identifier for this specific chunk."
+    )
+    chunk_content_hash: str = Field(
+        default="",
+        description="MD5 hash of this chunk's text_content, used for chunk-level deduplication and integrity."
     )
 
     start_index: Optional[int] = Field(

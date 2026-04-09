@@ -74,11 +74,13 @@ class ToolProcessor:
         self.mcp_handlers: List[Any] = []
         # Track which tools belong to which MCP handler
         self.mcp_handler_to_tools: Dict[int, List[str]] = {}  # handler id -> tool names
-        # Track which tools belong to which class instance (ToolKit or regular class)
+        # Track which tools belong to which class instance (ToolKit, tool provider, or regular class)
         self.class_instance_to_tools: Dict[int, List[str]] = {}  # class instance id -> tool names
         # Track KnowledgeBase instances that need setup_async() called
         self.knowledge_base_instances: Dict[int, Any] = {}  # instance id -> KnowledgeBase instance
         self.toolkit_instances: Dict[int, Any] = {}  # instance id -> ToolKit instance
+        # Track tool provider instances (objects implementing the get_tools() protocol)
+        self.tool_provider_instances: Dict[int, Any] = {}  # instance id -> provider instance
         # Track raw tool object IDs for deduplication (prevents re-processing same objects)
         self._raw_tool_ids: set = set()
     
@@ -134,6 +136,9 @@ class ToolProcessor:
                 if isinstance(tool_item, ToolKit):
                     toolkit_tools = self._process_toolkit(tool_item)
                     processed_tools.update(toolkit_tools)
+                elif self._is_tool_provider(tool_item):
+                    provider_tools = self._process_tool_provider(tool_item)
+                    processed_tools.update(provider_tools)
                 elif self._is_agent_instance(tool_item):
                     agent_tool = self._process_agent_tool(tool_item)
                     processed_tools[agent_tool.name] = agent_tool
@@ -384,6 +389,72 @@ class ToolProcessor:
 
         return tools
 
+    def _is_tool_provider(self, obj: Any) -> bool:
+        """Check if an object implements the tool provider protocol.
+
+        A tool provider is any object that exposes a ``get_tools()`` method
+        returning a list of callables, *without* being a ``ToolKit`` subclass.
+        This is the preferred integration path for components like
+        ``KnowledgeBase`` that produce tools on demand.
+
+        Args:
+            obj: The object to check.
+
+        Returns:
+            True if the object implements the tool provider protocol.
+        """
+        return (
+            hasattr(obj, 'get_tools')
+            and callable(obj.get_tools)
+            and not isinstance(obj, ToolKit)
+        )
+
+    def _process_tool_provider(self, provider: Any) -> Dict[str, Tool]:
+        """Process an object implementing the tool provider protocol.
+
+        Calls ``provider.get_tools()`` to obtain ready-to-use ``Tool``
+        objects (or raw callables as fallback) and registers them.  The
+        provider is tracked for lifecycle management (unregistration,
+        context instructions, KB setup, etc.).
+
+        Args:
+            provider: An object with a ``get_tools()`` method returning a
+                list of ``Tool`` instances or callables.
+
+        Returns:
+            Dict mapping tool names to ``Tool`` instances.
+        """
+        tools: Dict[str, Tool] = {}
+
+        provider_id: int = id(provider)
+        self.tool_provider_instances[provider_id] = provider
+
+        try:
+            from upsonic.knowledge_base.knowledge_base import KnowledgeBase
+            if isinstance(provider, KnowledgeBase):
+                self.knowledge_base_instances[provider_id] = provider
+        except ImportError:
+            pass
+
+        provided_tools: list = provider.get_tools()
+
+        for item in provided_tools:
+            if isinstance(item, Tool):
+                tools[item.name] = item
+            else:
+                processed: Tool = self._process_function_tool(item)
+                tools[processed.name] = processed
+
+        if tools:
+            if provider_id not in self.class_instance_to_tools:
+                self.class_instance_to_tools[provider_id] = []
+            existing: set = set(self.class_instance_to_tools[provider_id])
+            for tool_name in tools:
+                if tool_name not in existing:
+                    self.class_instance_to_tools[provider_id].append(tool_name)
+
+        return tools
+
     @staticmethod
     def _make_tool_wrapper(
         method: Any,
@@ -513,26 +584,18 @@ class ToolProcessor:
             config = getattr(tool, 'config', ToolConfig())
 
             # Ensure KnowledgeBase setup_async() is called if this tool belongs to a KnowledgeBase
-            if isinstance(tool, FunctionTool) and hasattr(tool, 'function'):
-                try:
-                    from upsonic.knowledge_base.knowledge_base import KnowledgeBase
-                    # Check if the function is a bound method of a KnowledgeBase instance
-                    func = tool.function
-                    if inspect.ismethod(func) and hasattr(func, '__self__'):
-                        instance = func.__self__
-                        if isinstance(instance, KnowledgeBase):
-                            # Ensure setup_async() is called
-                            await instance.setup_async()
-                except ImportError:
-                    # KnowledgeBase might not be available, skip
-                    pass
-                except Exception as e:
-                    # Log but don't fail - setup_async() might already be called or fail for other reasons
-                    from upsonic.utils.printing import warning_log
-                    warning_log(
-                        f"Could not ensure KnowledgeBase setup for tool '{tool.name}': {e}",
-                        "ToolProcessor"
-                    )
+            if self.knowledge_base_instances:
+                for kb_id, kb in self.knowledge_base_instances.items():
+                    if tool.name in (self.class_instance_to_tools.get(kb_id) or []):
+                        try:
+                            await kb.setup_async()
+                        except Exception as e:
+                            from upsonic.utils.printing import warning_log
+                            warning_log(
+                                f"Could not ensure KnowledgeBase setup for tool '{tool.name}': {e}",
+                                "ToolProcessor"
+                            )
+                        break
 
             func_dict: Dict[str, Any] = {}
             # Before hook
@@ -907,6 +970,9 @@ class ToolProcessor:
             if instance_id in self.toolkit_instances:
                 del self.toolkit_instances[instance_id]
             
+            if instance_id in self.tool_provider_instances:
+                del self.tool_provider_instances[instance_id]
+            
             # Remove from raw tool IDs tracking
             if instance_id in self._raw_tool_ids:
                 self._raw_tool_ids.discard(instance_id)
@@ -944,6 +1010,23 @@ class ToolProcessor:
                 continue
             seen.add(key)
             instructions.append(f"Instructions for toolkit «{toolkit_name}»:\n{text.strip()}")
+
+        # Tool provider context (e.g. KnowledgeBase.build_context())
+        for provider in self.tool_provider_instances.values():
+            if not (hasattr(provider, 'build_context') and callable(provider.build_context)):
+                continue
+            try:
+                context: str = provider.build_context()
+            except Exception:
+                continue
+            if not context:
+                continue
+            provider_name: str = getattr(provider, 'name', None) or type(provider).__name__
+            key = ("provider", provider_name, context)
+            if key in seen:
+                continue
+            seen.add(key)
+            instructions.append(context)
 
         for tool_name, tool in self.registered_tools.items():
             config: Optional[Any] = getattr(tool, "config", None)

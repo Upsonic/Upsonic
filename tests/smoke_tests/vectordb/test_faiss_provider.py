@@ -42,11 +42,11 @@ SAMPLE_VECTORS: List[List[float]] = [
 ]
 
 SAMPLE_PAYLOADS: List[Dict[str, Any]] = [
-    {"content": "The theory of relativity revolutionized physics", "category": "science", "author": "Einstein", "year": 1905},
-    {"content": "Laws of motion and universal gravitation", "category": "science", "author": "Newton", "year": 1687},
-    {"content": "To be or not to be, that is the question", "category": "literature", "author": "Shakespeare", "year": 1600},
-    {"content": "It was the best of times, it was the worst of times", "category": "literature", "author": "Dickens", "year": 1850},
-    {"content": "The unexamined life is not worth living", "category": "philosophy", "author": "Plato", "year": -400}
+    {"category": "science", "author": "Einstein", "year": 1905},
+    {"category": "science", "author": "Newton", "year": 1687},
+    {"category": "literature", "author": "Shakespeare", "year": 1600},
+    {"category": "literature", "author": "Dickens", "year": 1850},
+    {"category": "philosophy", "author": "Plato", "year": -400}
 ]
 
 SAMPLE_CHUNKS: List[str] = [
@@ -57,7 +57,13 @@ SAMPLE_CHUNKS: List[str] = [
     "The unexamined life is not worth living"
 ]
 
-SAMPLE_IDS: List[str] = ["doc1", "doc2", "doc3", "doc4", "doc5"]
+SAMPLE_IDS: List[str] = [
+    "11111111-1111-4111-8111-111111111111",
+    "22222222-2222-4222-8222-222222222222",
+    "33333333-3333-4333-8333-333333333333",
+    "44444444-4444-4444-8444-444444444444",
+    "55555555-5555-4555-8555-555555555555",
+]
 
 QUERY_VECTOR: List[float] = [0.15, 0.25, 0.35, 0.45, 0.55]
 QUERY_TEXT: str = "physics theory"
@@ -175,157 +181,157 @@ class TestFaissProvider:
         
         # Test internal state
         assert provider._metadata_store == {}
-        assert provider._content_id_to_faiss_id == {}
-        assert provider._faiss_id_to_content_id == {}
+        assert provider._chunk_id_to_faiss_id == {}
+        assert provider._faiss_id_to_chunk_id == {}
         assert provider._field_indexes == {}
     
     @pytest.mark.asyncio
     async def test_connect(self, provider: FaissProvider):
         """Test connection to FAISS."""
-        await provider.connect()
+        await provider.aconnect()
         assert provider._is_connected is True
     
     @pytest.mark.asyncio
     async def test_connect_sync(self, provider: FaissProvider):
         """Test synchronous connection."""
-        provider.connect_sync()
+        provider.connect()
         assert provider._is_connected is True
     
     @pytest.mark.asyncio
     async def test_disconnect(self, provider: FaissProvider):
         """Test disconnection."""
-        await provider.connect()
+        await provider.aconnect()
         assert provider._is_connected is True
-        await provider.disconnect()
+        await provider.adisconnect()
         assert provider._is_connected is False
         assert provider._index is None
     
     @pytest.mark.asyncio
     async def test_disconnect_sync(self, provider: FaissProvider):
         """Test synchronous disconnection."""
-        provider.connect_sync()
+        provider.connect()
         assert provider._is_connected is True
-        provider.disconnect_sync()
+        provider.disconnect()
         assert provider._is_connected is False
     
     @pytest.mark.asyncio
     async def test_is_ready(self, provider: FaissProvider):
         """Test is_ready check."""
-        assert await provider.is_ready() is False
-        await provider.connect()
-        assert await provider.is_ready() is False  # Not ready until collection is created
-        await provider.create_collection()
-        assert await provider.is_ready() is True
-        await provider.disconnect()
-        assert await provider.is_ready() is False
+        assert await provider.ais_ready() is False
+        await provider.aconnect()
+        assert await provider.ais_ready() is False  # Not ready until collection is created
+        await provider.acreate_collection()
+        assert await provider.ais_ready() is True
+        await provider.adisconnect()
+        assert await provider.ais_ready() is False
     
     @pytest.mark.asyncio
     async def test_is_ready_sync(self, provider: FaissProvider):
         """Test synchronous is_ready check."""
-        assert provider.is_ready_sync() is False
-        provider.connect_sync()
-        assert provider.is_ready_sync() is False
-        provider.create_collection_sync()
-        assert provider.is_ready_sync() is True
-        provider.disconnect_sync()
-        assert provider.is_ready_sync() is False
+        assert provider.is_ready() is False
+        provider.connect()
+        assert provider.is_ready() is False
+        provider.create_collection()
+        assert provider.is_ready() is True
+        provider.disconnect()
+        assert provider.is_ready() is False
     
     @pytest.mark.asyncio
     async def test_create_collection(self, provider: FaissProvider):
         """Test collection creation."""
-        await provider.connect()
-        assert not await provider.collection_exists()
-        await provider.create_collection()
+        await provider.aconnect()
+        assert not await provider.acollection_exists()
+        await provider.acreate_collection()
         # After creation, index exists in memory but not on disk until disconnect
         assert provider._index is not None
-        await provider.disconnect()
+        await provider.adisconnect()
         # After disconnect, collection should exist on disk
-        assert await provider.collection_exists()
+        assert await provider.acollection_exists()
     
     @pytest.mark.asyncio
     async def test_create_collection_sync(self, provider: FaissProvider):
         """Test synchronous collection creation."""
-        provider.connect_sync()
+        provider.connect()
         try:
-            if provider.collection_exists_sync():
-                provider.delete_collection_sync()
+            if provider.collection_exists():
+                provider.delete_collection()
         except Exception:
             pass
-        assert not provider.collection_exists_sync()
-        provider.create_collection_sync()
+        assert not provider.collection_exists()
+        provider.create_collection()
         assert provider._index is not None
-        provider.disconnect_sync()
+        provider.disconnect()
         # After disconnect, collection should exist on disk
-        assert provider.collection_exists_sync()
+        assert provider.collection_exists()
     
     @pytest.mark.asyncio
     async def test_collection_exists(self, provider: FaissProvider):
         """Test collection existence check."""
-        await provider.connect()
+        await provider.aconnect()
         try:
-            if await provider.collection_exists():
-                await provider.delete_collection()
+            if await provider.acollection_exists():
+                await provider.adelete_collection()
         except Exception:
             pass
-        assert not await provider.collection_exists()
-        await provider.create_collection()
+        assert not await provider.acollection_exists()
+        await provider.acreate_collection()
         assert provider._index is not None
-        await provider.disconnect()
+        await provider.adisconnect()
         # After disconnect, collection should exist on disk
-        assert await provider.collection_exists()
+        assert await provider.acollection_exists()
     
     @pytest.mark.asyncio
     async def test_collection_exists_sync(self, provider: FaissProvider):
         """Test synchronous collection existence check."""
-        provider.connect_sync()
+        provider.connect()
         try:
-            if provider.collection_exists_sync():
-                provider.delete_collection_sync()
+            if provider.collection_exists():
+                provider.delete_collection()
         except Exception:
             pass
-        assert not provider.collection_exists_sync()
-        provider.create_collection_sync()
+        assert not provider.collection_exists()
+        provider.create_collection()
         assert provider._index is not None
-        provider.disconnect_sync()
+        provider.disconnect()
         # After disconnect, collection should exist on disk
-        assert provider.collection_exists_sync()
+        assert provider.collection_exists()
     
     @pytest.mark.asyncio
     async def test_delete_collection(self, provider: FaissProvider):
         """Test collection deletion."""
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         assert provider._index is not None
-        await provider.disconnect()
+        await provider.adisconnect()
         # After disconnect, collection exists on disk
-        assert await provider.collection_exists()
-        await provider.connect()
-        await provider.delete_collection()
-        assert not await provider.collection_exists()
+        assert await provider.acollection_exists()
+        await provider.aconnect()
+        await provider.adelete_collection()
+        assert not await provider.acollection_exists()
         assert provider._index is None
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_collection_sync(self, provider: FaissProvider):
         """Test synchronous collection deletion."""
-        provider.connect_sync()
-        provider.create_collection_sync()
+        provider.connect()
+        provider.create_collection()
         assert provider._index is not None
-        provider.disconnect_sync()
+        provider.disconnect()
         # After disconnect, collection exists on disk
-        assert provider.collection_exists_sync()
-        provider.connect_sync()
-        provider.delete_collection_sync()
-        assert not provider.collection_exists_sync()
+        assert provider.collection_exists()
+        provider.connect()
+        provider.delete_collection()
+        assert not provider.collection_exists()
         assert provider._index is None
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_upsert(self, provider: FaissProvider):
         """Test upsert operation with content validation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
@@ -333,9 +339,9 @@ class TestFaissProvider:
         )
         # Verify data was actually stored with correct content
         # Since content_id is auto-generated, fetch all and verify content
-        content_ids = list(provider._content_id_to_faiss_id.keys())
+        content_ids = list(provider._chunk_id_to_faiss_id.keys())
         assert len(content_ids) == 5
-        all_results = await provider.fetch(ids=content_ids)
+        all_results = await provider.afetch(ids=content_ids)
         assert len(all_results) == 5
         for result in all_results:
             assert result.id is not None
@@ -343,104 +349,99 @@ class TestFaissProvider:
             content = result.text
             assert content in SAMPLE_CHUNKS
             idx = SAMPLE_CHUNKS.index(content)
-            assert result.payload.get("category") == SAMPLE_PAYLOADS[idx]["category"]
-            assert result.payload.get("author") == SAMPLE_PAYLOADS[idx]["author"]
-            assert result.payload.get("year") == SAMPLE_PAYLOADS[idx]["year"]
+            assert result.payload["metadata"]["category"] == SAMPLE_PAYLOADS[idx]["category"]
+            assert result.payload["metadata"]["author"] == SAMPLE_PAYLOADS[idx]["author"]
+            assert result.payload["metadata"]["year"] == SAMPLE_PAYLOADS[idx]["year"]
             assert result.text == SAMPLE_CHUNKS[idx]
             # Validate vector is retrieved and has correct length
             assert result.vector is not None
             assert len(result.vector) == len(SAMPLE_VECTORS[idx])
             # Validate vector matches (accounting for normalization)
             assert_result_vector_matches(result, SAMPLE_VECTORS[idx])
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_upsert_sync(self, provider: FaissProvider):
+    async def test_upsert(self, provider: FaissProvider):
         """Test synchronous upsert with content validation."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
         # Verify data was stored
-        content_ids = list(provider._content_id_to_faiss_id.keys())
-        results = provider.fetch_sync(ids=content_ids[:3])
+        content_ids = list(provider._chunk_id_to_faiss_id.keys())
+        results = provider.fetch(ids=content_ids[:3])
         assert len(results) >= 3
         for result in results:
             assert result.id is not None
             assert result.payload is not None
             assert result.text is not None
             assert result.vector is not None
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_with_document_tracking(self, provider: FaissProvider):
         """Test upsert with document_name, document_id, content_id and validate metadata."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_tracking = []
-        for i, payload in enumerate(SAMPLE_PAYLOADS[:2]):
-            payload_copy = payload.copy()
-            payload_copy["document_name"] = f"faiss_doc{i+1}"
-            payload_copy["document_id"] = f"faiss_doc_id_{i+1}"
-            payload_copy["content_id"] = f"faiss_content_{i+1}"
-            payloads_with_tracking.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        chunk_ids_tracked = ["faiss_content_1", "faiss_content_2"]
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
-            payloads=payloads_with_tracking,
-            ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+            payloads=SAMPLE_PAYLOADS[:2],
+            ids=chunk_ids_tracked,
+            chunks=SAMPLE_CHUNKS[:2],
+            document_names=[f"faiss_doc{i+1}" for i in range(2)],
+            document_ids=[f"faiss_doc_id_{i+1}" for i in range(2)],
         )
         # Verify tracking metadata was stored correctly
-        results = await provider.fetch(ids=["faiss_content_1", "faiss_content_2"])
+        results = await provider.afetch(ids=chunk_ids_tracked)
         assert len(results) == 2
         for result in results:
-            content_id = result.payload.get("content_id")
-            assert content_id in ["faiss_content_1", "faiss_content_2"]
-            idx = int(content_id.split("_")[-1]) - 1
-            assert result.payload.get("document_name") == f"faiss_doc{idx+1}"
-            assert result.payload.get("document_id") == f"faiss_doc_id_{idx+1}"
-            assert result.payload.get("content_id") == f"faiss_content_{idx+1}"
-            assert result.payload.get("category") == SAMPLE_PAYLOADS[idx]["category"]
+            chunk_id = result.payload["chunk_id"]
+            assert chunk_id in chunk_ids_tracked
+            idx = int(chunk_id.split("_")[-1]) - 1
+            assert result.payload["document_name"] == f"faiss_doc{idx+1}"
+            assert result.payload["document_id"] == f"faiss_doc_id_{idx+1}"
+            assert result.payload["chunk_id"] == f"faiss_content_{idx+1}"
+            assert result.payload["metadata"]["category"] == SAMPLE_PAYLOADS[idx]["category"]
             assert result.text == SAMPLE_CHUNKS[idx]
             # Validate vector is retrieved and matches
             assert result.vector is not None
             assert len(result.vector) == len(SAMPLE_VECTORS[idx])
             assert_result_vector_matches(result, SAMPLE_VECTORS[idx])
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_validation_error(self, provider: FaissProvider):
         """Test upsert with mismatched lengths raises error."""
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         with pytest.raises(UpsertError):
-            await provider.upsert(
+            await provider.aupsert(
                 vectors=SAMPLE_VECTORS[:2],
                 payloads=SAMPLE_PAYLOADS[:3],
                 ids=SAMPLE_IDS[:2],
                 chunks=SAMPLE_CHUNKS[:2]
             )
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_fetch(self, provider: FaissProvider):
         """Test fetch operation with detailed validation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
         # Get content_ids from metadata store
-        content_ids = list(provider._content_id_to_faiss_id.keys())
-        results = await provider.fetch(ids=content_ids[:3])
+        content_ids = list(provider._chunk_id_to_faiss_id.keys())
+        results = await provider.afetch(ids=content_ids[:3])
         assert len(results) == 3
         for result in results:
             assert isinstance(result, VectorSearchResult)
@@ -453,21 +454,21 @@ class TestFaissProvider:
             assert len(result.vector) == 5
             # Validate that content matches
             assert result.text in SAMPLE_CHUNKS
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_fetch_sync(self, provider: FaissProvider):
+    async def test_fetch(self, provider: FaissProvider):
         """Test synchronous fetch with content validation."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        content_ids = list(provider._content_id_to_faiss_id.keys())
-        results = provider.fetch_sync(ids=content_ids[:3])
+        content_ids = list(provider._chunk_id_to_faiss_id.keys())
+        results = provider.fetch(ids=content_ids[:3])
         assert len(results) == 3
         for result in results:
             assert isinstance(result, VectorSearchResult)
@@ -476,58 +477,58 @@ class TestFaissProvider:
             assert result.payload is not None
             assert result.text is not None
             assert result.vector is not None
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete(self, provider: FaissProvider):
         """Test delete operation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        content_ids = list(provider._content_id_to_faiss_id.keys())
-        await provider.delete(ids=content_ids[:2])
-        results = await provider.fetch(ids=content_ids[:2])
+        content_ids = list(provider._chunk_id_to_faiss_id.keys())
+        await provider.adelete(ids=content_ids[:2])
+        results = await provider.afetch(ids=content_ids[:2])
         assert len(results) == 0
-        results = await provider.fetch(ids=content_ids[2:])
+        results = await provider.afetch(ids=content_ids[2:])
         assert len(results) == 3
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_delete_sync(self, provider: FaissProvider):
+    async def test_delete(self, provider: FaissProvider):
         """Test synchronous delete with validation."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        content_ids = list(provider._content_id_to_faiss_id.keys())
-        provider.delete_sync(ids=content_ids[:2])
-        results = provider.fetch_sync(ids=content_ids[:2])
+        content_ids = list(provider._chunk_id_to_faiss_id.keys())
+        provider.delete(ids=content_ids[:2])
+        results = provider.fetch(ids=content_ids[:2])
         assert len(results) == 0
-        results = provider.fetch_sync(ids=content_ids[2:])
+        results = provider.fetch(ids=content_ids[2:])
         assert len(results) == 3
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_dense_search(self, provider: FaissProvider):
         """Test dense search with detailed result validation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=3,
             similarity_threshold=0.0
@@ -545,20 +546,20 @@ class TestFaissProvider:
             assert len(result.vector) == 5
         scores = [r.score for r in results]
         assert scores == sorted(scores, reverse=True)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_dense_search_sync(self, provider: FaissProvider):
+    async def test_dense_search(self, provider: FaissProvider):
         """Test synchronous dense search with content validation."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.dense_search_sync(
+        results = provider.dense_search(
             query_vector=QUERY_VECTOR,
             top_k=3,
             similarity_threshold=0.0
@@ -573,34 +574,34 @@ class TestFaissProvider:
             assert result.payload is not None
             assert result.text is not None
             assert result.vector is not None
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_full_text_search(self, provider: FaissProvider):
         """Test full-text search raises NotImplementedError."""
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         with pytest.raises(NotImplementedError):
-            await provider.full_text_search(
+            await provider.afull_text_search(
                 query_text="physics",
                 top_k=3,
                 similarity_threshold=0.0
             )
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_hybrid_search(self, provider: FaissProvider):
         """Test hybrid search falls back to dense search."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
         # Hybrid search should fall back to dense search
-        results = await provider.hybrid_search(
+        results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -618,13 +619,13 @@ class TestFaissProvider:
             assert result.payload is not None
             assert result.text is not None
             assert result.vector is not None
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_search_with_filter(self, provider: FaissProvider):
         """Test search with metadata filter."""
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         # Create payloads with metadata structure
         payloads_with_metadata = []
         for payload in SAMPLE_PAYLOADS:
@@ -632,13 +633,13 @@ class TestFaissProvider:
             payload_copy["metadata"] = {"category": payload["category"]}
             payloads_with_metadata.append(payload_copy)
         
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=payloads_with_metadata,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=5,
             filter={"metadata.category": "science"}
@@ -646,57 +647,51 @@ class TestFaissProvider:
         assert len(results) > 0
         for result in results:
             assert result.payload.get("metadata", {}).get("category") == "science"
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_get_count(self, provider: FaissProvider):
         """Test get_count."""
-        await provider.connect()
-        await provider.create_collection()
-        initial_count = len(provider._content_id_to_faiss_id)
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        initial_count = len(provider._chunk_id_to_faiss_id)
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
         # FAISS doesn't have a get_count method, so we check internal state
-        assert len(provider._content_id_to_faiss_id) == initial_count + 5
-        content_ids = list(provider._content_id_to_faiss_id.keys())
-        await provider.delete(ids=content_ids[:2])
-        assert len(provider._content_id_to_faiss_id) == initial_count + 3
-        await provider.disconnect()
+        assert len(provider._chunk_id_to_faiss_id) == initial_count + 5
+        content_ids = list(provider._chunk_id_to_faiss_id.keys())
+        await provider.adelete(ids=content_ids[:2])
+        assert len(provider._chunk_id_to_faiss_id) == initial_count + 3
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_update_metadata(self, provider: FaissProvider):
         """Test update_metadata with validation."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "faiss_content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:1],
+            payloads=SAMPLE_PAYLOADS[:1],
+            ids=["faiss_content_1"],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        updated = await provider.async_update_metadata("faiss_content_1", {"new_field": "new_value", "updated": True})
+        updated = await provider.aupdate_metadata("faiss_content_1", {"new_field": "new_value", "updated": True})
         assert updated is True
-        results = await provider.fetch(ids=["faiss_content_1"])
+        results = await provider.afetch(ids=["faiss_content_1"])
         assert len(results) == 1
         assert results[0].payload.get("metadata", {}).get("new_field") == "new_value"
         assert results[0].payload.get("metadata", {}).get("updated") is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_filter(self, provider: FaissProvider):
         """Test delete_by_metadata."""
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         # Create payloads with metadata structure
         payloads_with_metadata = []
         for payload in SAMPLE_PAYLOADS:
@@ -704,162 +699,130 @@ class TestFaissProvider:
             payload_copy["metadata"] = {"category": payload["category"]}
             payloads_with_metadata.append(payload_copy)
         
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=payloads_with_metadata,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
         # Use metadata.category in the filter since that's where it's stored
-        deleted = await provider.async_delete_by_metadata({"metadata.category": "science"})
+        deleted = await provider.adelete_by_metadata({"metadata.category": "science"})
         assert deleted is True
-        content_ids = list(provider._content_id_to_faiss_id.keys())
-        results = await provider.fetch(ids=content_ids)
+        content_ids = list(provider._chunk_id_to_faiss_id.keys())
+        results = await provider.afetch(ids=content_ids)
         assert len(results) == 3
         for result in results:
             assert result.payload.get("metadata", {}).get("category") != "science"
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_document_name(self, provider: FaissProvider):
         """Test delete_by_document_name with validation."""
-        await provider.connect()
-        await provider.create_collection()
-        initial_count = len(provider._content_id_to_faiss_id)
-        payloads_with_doc_name = []
-        for payload in SAMPLE_PAYLOADS[:2]:
-            payload_copy = payload.copy()
-            payload_copy["document_name"] = "faiss_doc"
-            payloads_with_doc_name.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        initial_count = len(provider._chunk_id_to_faiss_id)
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
-            payloads=payloads_with_doc_name,
+            payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+            chunks=SAMPLE_CHUNKS[:2],
+            document_names=["faiss_doc", "faiss_doc"],
         )
-        deleted = await provider.async_delete_by_document_name("faiss_doc")
+        deleted = await provider.adelete_by_document_name("faiss_doc")
         assert deleted is True
-        count = len(provider._content_id_to_faiss_id)
+        count = len(provider._chunk_id_to_faiss_id)
         assert count == initial_count
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_async_delete_by_document_name(self, provider: FaissProvider):
-        """Test async_delete_by_document_name."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_doc_name = []
-        for payload in SAMPLE_PAYLOADS[:2]:
-            payload_copy = payload.copy()
-            payload_copy["document_name"] = "faiss_doc"
-            payloads_with_doc_name.append(payload_copy)
-        
-        await provider.upsert(
+    async def test_adelete_by_document_name(self, provider: FaissProvider):
+        """Test adelete_by_document_name."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
-            payloads=payloads_with_doc_name,
+            payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+            chunks=SAMPLE_CHUNKS[:2],
+            document_names=["faiss_doc", "faiss_doc"],
         )
-        deleted = await provider.async_delete_by_document_name("faiss_doc")
+        deleted = await provider.adelete_by_document_name("faiss_doc")
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_document_id(self, provider: FaissProvider):
         """Test delete_by_document_id with validation."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_doc_id = []
-        for payload in SAMPLE_PAYLOADS[:2]:
-            payload_copy = payload.copy()
-            payload_copy["document_id"] = "faiss_doc_id_1"
-            payloads_with_doc_id.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
-            payloads=payloads_with_doc_id,
+            payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+            chunks=SAMPLE_CHUNKS[:2],
+            document_ids=["faiss_doc_id_1", "faiss_doc_id_1"],
         )
-        deleted = await provider.async_delete_by_document_id("faiss_doc_id_1")
+        deleted = await provider.adelete_by_document_id("faiss_doc_id_1")
         assert deleted is True
-        content_ids = list(provider._content_id_to_faiss_id.keys())
-        results = await provider.fetch(ids=content_ids)
+        content_ids = list(provider._chunk_id_to_faiss_id.keys())
+        results = await provider.afetch(ids=content_ids)
         assert len(results) == 0
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_async_delete_by_document_id(self, provider: FaissProvider):
-        """Test async_delete_by_document_id."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_doc_id = []
-        for payload in SAMPLE_PAYLOADS[:2]:
-            payload_copy = payload.copy()
-            payload_copy["document_id"] = "faiss_doc_id_1"
-            payloads_with_doc_id.append(payload_copy)
-        
-        await provider.upsert(
+    async def test_adelete_by_document_id(self, provider: FaissProvider):
+        """Test adelete_by_document_id."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
-            payloads=payloads_with_doc_id,
+            payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+            chunks=SAMPLE_CHUNKS[:2],
+            document_ids=["faiss_doc_id_1", "faiss_doc_id_1"],
         )
-        deleted = await provider.async_delete_by_document_id("faiss_doc_id_1")
+        deleted = await provider.adelete_by_document_id("faiss_doc_id_1")
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_delete_by_content_id(self, provider: FaissProvider):
+    async def test_delete_by_chunk_id(self, provider: FaissProvider):
         """Test delete_by_content_id with validation."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:2]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "faiss_content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS[:2],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:1],
+            payloads=SAMPLE_PAYLOADS[:1],
+            ids=["faiss_content_1"],
+            chunks=SAMPLE_CHUNKS[:1],
         )
-        deleted = await provider.async_delete_by_content_id("faiss_content_1")
+        deleted = await provider.adelete_by_chunk_id("faiss_content_1")
         assert deleted is True
-        content_ids = list(provider._content_id_to_faiss_id.keys())
-        results = await provider.fetch(ids=content_ids)
+        content_ids = list(provider._chunk_id_to_faiss_id.keys())
+        results = await provider.afetch(ids=content_ids)
         assert len(results) == 0
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_async_delete_by_content_id(self, provider: FaissProvider):
-        """Test async_delete_by_content_id."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:2]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "faiss_content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS[:2],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+    async def test_adelete_by_chunk_id(self, provider: FaissProvider):
+        """Test adelete_by_chunk_id."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:1],
+            payloads=SAMPLE_PAYLOADS[:1],
+            ids=["faiss_content_1"],
+            chunks=SAMPLE_CHUNKS[:1],
         )
-        deleted = await provider.async_delete_by_content_id("faiss_content_1")
+        deleted = await provider.adelete_by_chunk_id("faiss_content_1")
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_async_delete_by_metadata(self, provider: FaissProvider):
-        """Test async_delete_by_metadata."""
-        await provider.connect()
-        await provider.create_collection()
+    async def test_adelete_by_metadata(self, provider: FaissProvider):
+        """Test adelete_by_metadata."""
+        await provider.aconnect()
+        await provider.acreate_collection()
         # Create payloads with metadata structure
         payloads_with_metadata = []
         for payload in SAMPLE_PAYLOADS:
@@ -867,181 +830,143 @@ class TestFaissProvider:
             payload_copy["metadata"] = {"category": payload["category"]}
             payloads_with_metadata.append(payload_copy)
         
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=payloads_with_metadata,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
         # Use metadata.category in the filter since that's where it's stored
-        deleted = await provider.async_delete_by_metadata({"metadata.category": "science"})
+        deleted = await provider.adelete_by_metadata({"metadata.category": "science"})
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_content_id_exists(self, provider: FaissProvider):
+    async def test_chunk_id_exists(self, provider: FaissProvider):
         """Test content_id_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "faiss_content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+            payloads=SAMPLE_PAYLOADS[:1],
+            ids=["faiss_content_1"],
+            chunks=SAMPLE_CHUNKS[:1],
         )
-        assert provider.content_id_exists("faiss_content_1")
-        assert not provider.content_id_exists("nonexistent")
-        await provider.disconnect()
+        assert provider.chunk_id_exists("faiss_content_1")
+        assert not provider.chunk_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_async_content_id_exists(self, provider: FaissProvider):
-        """Test async_content_id_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "faiss_content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
+    async def test_achunk_id_exists(self, provider: FaissProvider):
+        """Test achunk_id_exists."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+            payloads=SAMPLE_PAYLOADS[:1],
+            ids=["faiss_content_1"],
+            chunks=SAMPLE_CHUNKS[:1],
         )
-        assert await provider.async_content_id_exists("faiss_content_1")
-        assert not await provider.async_content_id_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.achunk_id_exists("faiss_content_1")
+        assert not await provider.achunk_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_document_name_exists(self, provider: FaissProvider):
         """Test document_name_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_doc_name = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["document_name"] = "faiss_doc"
-            payloads_with_doc_name.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_doc_name,
+            payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+            chunks=SAMPLE_CHUNKS[:1],
+            document_names=["faiss_doc"],
         )
         assert provider.document_name_exists("faiss_doc")
         assert not provider.document_name_exists("nonexistent")
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_async_document_name_exists(self, provider: FaissProvider):
-        """Test async_document_name_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_doc_name = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["document_name"] = "faiss_doc"
-            payloads_with_doc_name.append(payload_copy)
-        
-        await provider.upsert(
+    async def test_adocument_name_exists(self, provider: FaissProvider):
+        """Test adocument_name_exists."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_doc_name,
+            payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+            chunks=SAMPLE_CHUNKS[:1],
+            document_names=["faiss_doc"],
         )
-        assert await provider.async_document_name_exists("faiss_doc")
-        assert not await provider.async_document_name_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.adocument_name_exists("faiss_doc")
+        assert not await provider.adocument_name_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_document_id_exists(self, provider: FaissProvider):
         """Test document_id_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_doc_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["document_id"] = "faiss_doc_id_1"
-            payloads_with_doc_id.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_doc_id,
+            payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+            chunks=SAMPLE_CHUNKS[:1],
+            document_ids=["faiss_doc_id_1"],
         )
         assert provider.document_id_exists("faiss_doc_id_1")
         assert not provider.document_id_exists("nonexistent")
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_async_document_id_exists(self, provider: FaissProvider):
-        """Test async_document_id_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_doc_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["document_id"] = "faiss_doc_id_1"
-            payloads_with_doc_id.append(payload_copy)
-        
-        await provider.upsert(
+    async def test_adocument_id_exists(self, provider: FaissProvider):
+        """Test adocument_id_exists."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_doc_id,
+            payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+            chunks=SAMPLE_CHUNKS[:1],
+            document_ids=["faiss_doc_id_1"],
         )
-        assert await provider.async_document_id_exists("faiss_doc_id_1")
-        assert not await provider.async_document_id_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.adocument_id_exists("faiss_doc_id_1")
+        assert not await provider.adocument_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_async_update_metadata(self, provider: FaissProvider):
-        """Test async_update_metadata with validation."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "faiss_content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
+    async def test_aupdate_metadata(self, provider: FaissProvider):
+        """Test aupdate_metadata with validation."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+            payloads=SAMPLE_PAYLOADS[:1],
+            ids=["faiss_content_1"],
+            chunks=SAMPLE_CHUNKS[:1],
         )
-        updated = await provider.async_update_metadata("faiss_content_1", {"new_field": "new_value", "updated": True})
+        updated = await provider.aupdate_metadata("faiss_content_1", {"new_field": "new_value", "updated": True})
         assert updated is True
-        results = await provider.fetch(ids=["faiss_content_1"])
+        results = await provider.afetch(ids=["faiss_content_1"])
         assert results[0].payload.get("metadata", {}).get("new_field") == "new_value"
         assert results[0].payload.get("metadata", {}).get("updated") is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_optimize(self, provider: FaissProvider):
         """Test optimize operation."""
-        await provider.connect()
-        await provider.create_collection()
-        result = await provider.async_optimize()
+        await provider.aconnect()
+        await provider.acreate_collection()
+        result = await provider.aoptimize()
         assert result is True
     
     @pytest.mark.asyncio
-    async def test_async_optimize(self, provider: FaissProvider):
+    async def test_aoptimize(self, provider: FaissProvider):
         """Test async optimize."""
-        await provider.connect()
-        await provider.create_collection()
-        result = await provider.async_optimize()
+        await provider.aconnect()
+        await provider.acreate_collection()
+        result = await provider.aoptimize()
         assert result is True
     
     @pytest.mark.asyncio
@@ -1054,9 +979,9 @@ class TestFaissProvider:
         assert "hybrid" not in supported
     
     @pytest.mark.asyncio
-    async def test_async_get_supported_search_types(self, provider: FaissProvider):
-        """Test async_get_supported_search_types."""
-        supported = await provider.async_get_supported_search_types()
+    async def test_aget_supported_search_types(self, provider: FaissProvider):
+        """Test aget_supported_search_types."""
+        supported = await provider.aget_supported_search_types()
         assert isinstance(supported, list)
         assert "dense" in supported
         assert "full_text" not in supported
@@ -1065,16 +990,16 @@ class TestFaissProvider:
     @pytest.mark.asyncio
     async def test_search_master_method(self, provider: FaissProvider):
         """Test master search method with content validation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
         # Dense search
-        results = await provider.search(
+        results = await provider.asearch(
             query_vector=QUERY_VECTOR,
             top_k=3
         )
@@ -1084,20 +1009,20 @@ class TestFaissProvider:
         assert all(r.payload is not None for r in results)
         assert all(r.text is not None for r in results)
         assert all(r.vector is not None for r in results)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_search_sync(self, provider: FaissProvider):
+    async def test_search(self, provider: FaissProvider):
         """Test synchronous master search with validation."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.search_sync(
+        results = provider.search(
             query_vector=QUERY_VECTOR,
             top_k=3
         )
@@ -1106,7 +1031,7 @@ class TestFaissProvider:
         assert all(r.payload is not None for r in results)
         assert all(r.text is not None for r in results)
         assert all(r.vector is not None for r in results)
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_recreate_if_exists(self, provider: FaissProvider):
@@ -1123,18 +1048,18 @@ class TestFaissProvider:
                 recreate_if_exists=True
             )
             provider2 = FaissProvider(config)
-            await provider2.connect()
-            await provider2.create_collection()
-            await provider2.upsert(
+            await provider2.aconnect()
+            await provider2.acreate_collection()
+            await provider2.aupsert(
                 vectors=SAMPLE_VECTORS[:1],
                 payloads=SAMPLE_PAYLOADS[:1],
                 ids=SAMPLE_IDS[:1],
                 chunks=SAMPLE_CHUNKS[:1]
             )
-            await provider2.create_collection()
-            count = len(provider2._content_id_to_faiss_id)
+            await provider2.acreate_collection()
+            count = len(provider2._chunk_id_to_faiss_id)
             assert count == 0
-            await provider2.disconnect()
+            await provider2.adisconnect()
         finally:
             shutil.rmtree(temp_path, ignore_errors=True)
     
@@ -1153,15 +1078,15 @@ class TestFaissProvider:
                 index=FlatIndexConfig()
             )
             provider2 = FaissProvider(config)
-            await provider2.connect()
-            await provider2.create_collection()
-            await provider2.upsert(
+            await provider2.aconnect()
+            await provider2.acreate_collection()
+            await provider2.aupsert(
                 vectors=SAMPLE_VECTORS[:2],
                 payloads=SAMPLE_PAYLOADS[:2],
                 ids=SAMPLE_IDS[:2],
                 chunks=SAMPLE_CHUNKS[:2]
             )
-            results = await provider2.dense_search(
+            results = await provider2.adense_search(
                 query_vector=QUERY_VECTOR,
                 top_k=2,
                 similarity_threshold=0.0
@@ -1169,7 +1094,7 @@ class TestFaissProvider:
             assert len(results) > 0
             assert all(isinstance(r, VectorSearchResult) for r in results)
             assert all(r.score >= 0.0 for r in results)
-            await provider2.disconnect()
+            await provider2.adisconnect()
         finally:
             shutil.rmtree(temp_path, ignore_errors=True)
     
@@ -1190,15 +1115,15 @@ class TestFaissProvider:
                     normalize_vectors=(metric == DistanceMetric.COSINE)
                 )
                 provider2 = FaissProvider(config)
-                await provider2.connect()
-                await provider2.create_collection()
-                await provider2.upsert(
+                await provider2.aconnect()
+                await provider2.acreate_collection()
+                await provider2.aupsert(
                     vectors=SAMPLE_VECTORS[:2],
                     payloads=SAMPLE_PAYLOADS[:2],
                     ids=SAMPLE_IDS[:2],
                     chunks=SAMPLE_CHUNKS[:2]
                 )
-                results = await provider2.dense_search(
+                results = await provider2.adense_search(
                     query_vector=QUERY_VECTOR,
                     top_k=2,
                     similarity_threshold=0.0
@@ -1206,62 +1131,57 @@ class TestFaissProvider:
                 assert len(results) > 0
                 assert all(isinstance(r, VectorSearchResult) for r in results)
                 assert all(r.score >= 0.0 for r in results)
-                await provider2.disconnect()
+                await provider2.adisconnect()
         finally:
             shutil.rmtree(temp_path, ignore_errors=True)
     
     @pytest.mark.asyncio
     async def test_persistence(self, provider: FaissProvider):
         """Test that data persists across disconnect/connect cycles."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2]
         )
-        content_ids = list(provider._content_id_to_faiss_id.keys())
-        await provider.disconnect()
+        content_ids = list(provider._chunk_id_to_faiss_id.keys())
+        await provider.adisconnect()
         
         # Reconnect and verify data is still there
-        await provider.connect()
+        await provider.aconnect()
         # After connect, data is loaded from disk, so index exists
-        await provider.create_collection()  # This should load existing data
+        await provider.acreate_collection()  # This should load existing data
         # Verify data persisted
-        results = await provider.fetch(ids=content_ids)
+        results = await provider.afetch(ids=content_ids)
         assert len(results) == 2
         for result in results:
             assert result.text in SAMPLE_CHUNKS[:2]
             assert result.vector is not None
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_fetch_and_search_consistency(self, provider: FaissProvider):
         """Test that fetch and search return consistent data - MOST IMPORTANT TEST."""
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         
-        # Upsert with explicit content_ids for easier tracking
-        payloads_with_ids = []
-        for i, payload in enumerate(SAMPLE_PAYLOADS):
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = f"test_content_{i+1}"
-            payloads_with_ids.append(payload_copy)
-        
-        await provider.upsert(
+        # Upsert with explicit chunk_ids for easier tracking
+        tracked_ids = [f"test_content_{i+1}" for i in range(5)]
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
-            payloads=payloads_with_ids,
-            ids=SAMPLE_IDS,
+            payloads=SAMPLE_PAYLOADS,
+            ids=tracked_ids,
             chunks=SAMPLE_CHUNKS
         )
-        
+
         # Fetch all records
-        fetch_results = await provider.fetch(ids=[f"test_content_{i+1}" for i in range(5)])
+        fetch_results = await provider.afetch(ids=tracked_ids)
         assert len(fetch_results) == 5
         
         # Perform search
-        search_results = await provider.dense_search(
+        search_results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=5,
             similarity_threshold=0.0
@@ -1298,5 +1218,219 @@ class TestFaissProvider:
             fetch_norm = fetch_vec / np.linalg.norm(fetch_vec) if np.linalg.norm(fetch_vec) > 0 else fetch_vec
             assert np.allclose(search_norm, fetch_norm, atol=1e-5), \
                 f"Vector mismatch for {search_id}: normalized vectors don't match"
-        
-        await provider.disconnect()
+
+        await provider.adisconnect()
+
+    # ========================================================================
+    # Payload contract tests
+    # ========================================================================
+
+    @pytest.mark.asyncio
+    async def test_chunk_id_preserved_as_uuid(self, provider: FaissProvider):
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS,
+            payloads=SAMPLE_PAYLOADS,
+            ids=SAMPLE_IDS,
+            chunks=SAMPLE_CHUNKS,
+        )
+        results = await provider.afetch(ids=SAMPLE_IDS)
+        assert len(results) == 5
+        ids_back = {r.id for r in results}
+        assert ids_back == set(SAMPLE_IDS)
+        for r in results:
+            assert r.payload["chunk_id"] in SAMPLE_IDS
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_aupsert_with_knowledge_base_ids(self, provider: FaissProvider):
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS,
+            payloads=SAMPLE_PAYLOADS,
+            ids=SAMPLE_IDS,
+            chunks=SAMPLE_CHUNKS,
+            knowledge_base_ids=["kb-A"] * 5,
+        )
+        results = await provider.afetch(ids=SAMPLE_IDS)
+        assert len(results) == 5
+        for r in results:
+            assert r.payload["knowledge_base_id"] == "kb-A"
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_aupsert_standard_field_leak_warning(self, provider: FaissProvider):
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:1],
+            payloads=[{"document_name": "leaked.pdf", "category": "x"}],
+            ids=SAMPLE_IDS[:1],
+            chunks=SAMPLE_CHUNKS[:1],
+            document_names=["correct.pdf"],
+        )
+        results = await provider.afetch(ids=SAMPLE_IDS[:1])
+        assert len(results) == 1
+        assert results[0].payload["document_name"] == "correct.pdf"
+        assert results[0].payload["metadata"]["category"] == "x"
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_aupsert_with_chunk_content_hashes(self, provider: FaissProvider):
+        await provider.aconnect()
+        await provider.acreate_collection()
+        hashes = [f"hash{i}" for i in range(5)]
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS,
+            payloads=SAMPLE_PAYLOADS,
+            ids=SAMPLE_IDS,
+            chunks=SAMPLE_CHUNKS,
+            chunk_content_hashes=hashes,
+        )
+        results = await provider.afetch(ids=SAMPLE_IDS)
+        got = {r.payload["chunk_content_hash"] for r in results}
+        assert got == set(hashes)
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_achunk_content_hash_exists(self, provider: FaissProvider):
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:1],
+            payloads=SAMPLE_PAYLOADS[:1],
+            ids=SAMPLE_IDS[:1],
+            chunks=SAMPLE_CHUNKS[:1],
+            chunk_content_hashes=["cchash"],
+        )
+        assert await provider.achunk_content_hash_exists("cchash") is True
+        assert await provider.achunk_content_hash_exists("nope") is False
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_adoc_content_hash_exists(self, provider: FaissProvider):
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:1],
+            payloads=SAMPLE_PAYLOADS[:1],
+            ids=SAMPLE_IDS[:1],
+            chunks=SAMPLE_CHUNKS[:1],
+            doc_content_hashes=["dhash"],
+        )
+        assert await provider.adoc_content_hash_exists("dhash") is True
+        assert await provider.adoc_content_hash_exists("nope") is False
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_adelete_by_chunk_content_hash(self, provider: FaissProvider):
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:2],
+            payloads=SAMPLE_PAYLOADS[:2],
+            ids=SAMPLE_IDS[:2],
+            chunks=SAMPLE_CHUNKS[:2],
+            chunk_content_hashes=["h1", "h2"],
+        )
+        assert await provider.adelete_by_chunk_content_hash("h1") is True
+        assert await provider.achunk_content_hash_exists("h1") is False
+        assert await provider.achunk_content_hash_exists("h2") is True
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_adelete_by_doc_content_hash(self, provider: FaissProvider):
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:2],
+            payloads=SAMPLE_PAYLOADS[:2],
+            ids=SAMPLE_IDS[:2],
+            chunks=SAMPLE_CHUNKS[:2],
+            doc_content_hashes=["d1", "d2"],
+        )
+        assert await provider.adelete_by_doc_content_hash("d1") is True
+        assert await provider.adoc_content_hash_exists("d1") is False
+        assert await provider.adoc_content_hash_exists("d2") is True
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_afield_exists_and_adelete_by_field(self, provider: FaissProvider):
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS,
+            payloads=SAMPLE_PAYLOADS,
+            ids=SAMPLE_IDS,
+            chunks=SAMPLE_CHUNKS,
+        )
+        # afield_exists and adelete_by_field use payload.get(field_name), so
+        # user metadata fields must be addressed via top-level "metadata" dict lookup.
+        # Use a top-level standard field that we can directly access.
+        assert await provider.afield_exists("document_name", "") is True
+        # Delete by chunk_id field
+        assert await provider.adelete_by_field("chunk_id", SAMPLE_IDS[0]) is True
+        assert await provider.achunk_id_exists(SAMPLE_IDS[0]) is False
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("bad_arg", [
+        "chunks", "document_ids", "document_names",
+        "doc_content_hashes", "chunk_content_hashes", "knowledge_base_ids",
+    ])
+    async def test_aupsert_length_mismatch_variants(self, provider: FaissProvider, bad_arg: str):
+        await provider.aconnect()
+        await provider.acreate_collection()
+        kwargs: Dict[str, Any] = {
+            "vectors": SAMPLE_VECTORS[:2],
+            "payloads": SAMPLE_PAYLOADS[:2],
+            "ids": SAMPLE_IDS[:2],
+            "chunks": SAMPLE_CHUNKS[:2],
+        }
+        bad_value = ["x", "y", "z"]  # 3 items, expected 2
+        if bad_arg == "chunks":
+            kwargs["chunks"] = bad_value
+        else:
+            kwargs[bad_arg] = bad_value
+        with pytest.raises(UpsertError):
+            await provider.aupsert(**kwargs)
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_filter_on_nonstandard_field_auto_routes_to_metadata(self, provider: FaissProvider):
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS,
+            payloads=SAMPLE_PAYLOADS,
+            ids=SAMPLE_IDS,
+            chunks=SAMPLE_CHUNKS,
+        )
+        results = await provider.adense_search(
+            query_vector=QUERY_VECTOR,
+            top_k=5,
+            filter={"category": "science"},
+            similarity_threshold=0.0,
+        )
+        assert len(results) >= 1
+        for r in results:
+            assert r.payload["metadata"]["category"] == "science"
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_metadata_is_always_dict(self, provider: FaissProvider):
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:1],
+            payloads=[{}],
+            ids=SAMPLE_IDS[:1],
+            chunks=SAMPLE_CHUNKS[:1],
+        )
+        results = await provider.afetch(ids=SAMPLE_IDS[:1])
+        assert len(results) == 1
+        assert results[0].payload["metadata"] == {}
+        assert isinstance(results[0].payload["metadata"], dict)
+        await provider.adisconnect()

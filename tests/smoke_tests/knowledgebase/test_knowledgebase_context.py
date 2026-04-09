@@ -10,6 +10,7 @@ import tempfile
 import shutil
 
 from upsonic import Agent, Task, KnowledgeBase
+from upsonic.knowledge_base.knowledge_base import KBState
 from upsonic.embeddings import OpenAIEmbedding, OpenAIEmbeddingConfig
 from upsonic.vectordb import ChromaProvider, ChromaConfig, ConnectionConfig, Mode
 
@@ -392,7 +393,7 @@ async def test_knowledgebase_context_attributes():
         assert kb.description == "A test knowledge base", "KB description should be set"
         assert kb.embedding_provider == embedding, "Embedding provider should be set"
         assert kb.vectordb == vectordb, "VectorDB should be set"
-        assert kb._is_ready is False, "KB should not be ready before setup"
+        assert kb._state == KBState.UNINITIALIZED, "KB should not be ready before setup"
         
         await kb.setup_async()
         

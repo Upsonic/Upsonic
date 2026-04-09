@@ -75,3 +75,29 @@ CULTURAL_KNOWLEDGE_INDEX_FIELDS: Final[list[str]] = [
     "agent_id",
     "team_id",
 ]
+
+# Knowledge table schema - stores KnowledgeRow data
+KNOWLEDGE_SCHEMA: Final[Dict[str, Dict[str, Any]]] = {
+    "id": {"type": "string", "primary_key": True},
+    "name": {"type": "string"},
+    "description": {"type": "string"},
+    "metadata": {"type": "json"},
+    "type": {"type": "string"},
+    "size": {"type": "integer"},
+    "knowledge_base_id": {"type": "string"},
+    "content_hash": {"type": "string"},
+    "chunk_count": {"type": "integer"},
+    "source": {"type": "string"},
+    "status": {"type": "string"},
+    "status_message": {"type": "string"},
+    "access_count": {"type": "integer"},
+    "created_at": {"type": "integer"},
+    "updated_at": {"type": "integer"},
+}
+
+KNOWLEDGE_INDEX_FIELDS: Final[list[str]] = [
+    "knowledge_base_id",
+    "type",
+    "content_hash",
+    "status",
+]

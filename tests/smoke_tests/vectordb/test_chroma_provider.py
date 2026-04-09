@@ -32,7 +32,6 @@ from upsonic.utils.package.exception import (
     ConfigurationError,
     CollectionDoesNotExistError,
     VectorDBError,
-    SearchError,
     UpsertError
 )
 from upsonic.schemas.vector_schemas import VectorSearchResult
@@ -152,258 +151,257 @@ class TestChromaProviderIN_MEMORY:
         assert provider._config.vector_size == 5
         assert provider._config.distance_metric == DistanceMetric.COSINE
         assert not provider._is_connected
-        assert provider._client is None
+        assert provider.client is None
         assert provider._collection_instance is None
         
         # Test provider metadata attributes
-        assert provider.provider_name is not None
-        assert isinstance(provider.provider_id, str)
-        assert len(provider.provider_id) > 0
+        assert provider.name is not None
+        assert isinstance(provider.id, str)
+        assert len(provider.id) > 0
         assert provider.reranker is None
     
     @pytest.mark.asyncio
     async def test_connect(self, provider: ChromaProvider):
         """Test connection to ChromaDB."""
-        await provider.connect()
+        await provider.aconnect()
         assert provider._is_connected
-        assert provider._client is not None
-        assert await provider.is_ready()
+        assert provider.client is not None
+        assert await provider.ais_ready()
     
     @pytest.mark.asyncio
     async def test_connect_sync(self, provider: ChromaProvider):
         """Test synchronous connection."""
-        provider.connect_sync()
+        provider.connect()
         assert provider._is_connected
-        assert provider._client is not None
-        assert provider.is_ready_sync()
+        assert provider.client is not None
+        assert provider.is_ready()
     
     @pytest.mark.asyncio
     async def test_disconnect(self, provider: ChromaProvider):
         """Test disconnection."""
-        await provider.connect()
+        await provider.aconnect()
         assert provider._is_connected
-        await provider.disconnect()
+        await provider.adisconnect()
         assert not provider._is_connected
-        assert provider._client is None
+        assert provider.client is None
         assert provider._collection_instance is None
     
     @pytest.mark.asyncio
     async def test_disconnect_sync(self, provider: ChromaProvider):
         """Test synchronous disconnection."""
-        provider.connect_sync()
+        provider.connect()
         assert provider._is_connected
-        provider.disconnect_sync()
+        provider.disconnect()
         assert not provider._is_connected
     
     @pytest.mark.asyncio
     async def test_is_ready(self, provider: ChromaProvider):
         """Test is_ready check."""
-        assert not await provider.is_ready()
-        await provider.connect()
-        assert await provider.is_ready()
-        await provider.disconnect()
-        assert not await provider.is_ready()
+        assert not await provider.ais_ready()
+        await provider.aconnect()
+        assert await provider.ais_ready()
+        await provider.adisconnect()
+        assert not await provider.ais_ready()
     
     @pytest.mark.asyncio
     async def test_is_ready_sync(self, provider: ChromaProvider):
         """Test synchronous is_ready check."""
-        assert not provider.is_ready_sync()
-        provider.connect_sync()
-        assert provider.is_ready_sync()
-        provider.disconnect_sync()
-        assert not provider.is_ready_sync()
+        assert not provider.is_ready()
+        provider.connect()
+        assert provider.is_ready()
+        provider.disconnect()
+        assert not provider.is_ready()
     
     @pytest.mark.asyncio
     async def test_create_collection(self, provider: ChromaProvider):
         """Test collection creation."""
-        await provider.connect()
-        assert not await provider.collection_exists()
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.disconnect()
+        await provider.aconnect()
+        assert not await provider.acollection_exists()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_create_collection_sync(self, provider: ChromaProvider):
         """Test synchronous collection creation."""
-        provider.connect_sync()
+        provider.connect()
         # Delete collection if it exists first
         try:
-            if provider.collection_exists_sync():
-                provider.delete_collection_sync()
+            if provider.collection_exists():
+                provider.delete_collection()
         except Exception:
             pass
-        assert not provider.collection_exists_sync()
-        provider.create_collection_sync()
-        assert provider.collection_exists_sync()
-        provider.disconnect_sync()
+        assert not provider.collection_exists()
+        provider.create_collection()
+        assert provider.collection_exists()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_collection_exists(self, provider: ChromaProvider):
         """Test collection existence check."""
-        await provider.connect()
+        await provider.aconnect()
         # Delete collection if it exists first
         try:
-            if await provider.collection_exists():
-                await provider.delete_collection()
+            if await provider.acollection_exists():
+                await provider.adelete_collection()
         except Exception:
             pass
-        assert not await provider.collection_exists()
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.disconnect()
+        assert not await provider.acollection_exists()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_collection_exists_sync(self, provider: ChromaProvider):
         """Test synchronous collection existence check."""
-        provider.connect_sync()
+        provider.connect()
         # Delete collection if it exists first
         try:
-            if provider.collection_exists_sync():
-                provider.delete_collection_sync()
+            if provider.collection_exists():
+                provider.delete_collection()
         except Exception:
             pass
-        assert not provider.collection_exists_sync()
-        provider.create_collection_sync()
-        assert provider.collection_exists_sync()
-        provider.disconnect_sync()
+        assert not provider.collection_exists()
+        provider.create_collection()
+        assert provider.collection_exists()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_collection(self, provider: ChromaProvider):
         """Test collection deletion."""
-        await provider.connect()
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.delete_collection()
-        assert not await provider.collection_exists()
-        await provider.disconnect()
+        await provider.aconnect()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adelete_collection()
+        assert not await provider.acollection_exists()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_collection_sync(self, provider: ChromaProvider):
         """Test synchronous collection deletion."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        assert provider.collection_exists_sync()
-        provider.delete_collection_sync()
-        assert not provider.collection_exists_sync()
-        provider.disconnect_sync()
+        provider.connect()
+        provider.create_collection()
+        assert provider.collection_exists()
+        provider.delete_collection()
+        assert not provider.collection_exists()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_nonexistent_collection(self, provider: ChromaProvider):
         """Test deleting non-existent collection raises error."""
-        await provider.connect()
+        await provider.aconnect()
         with pytest.raises(CollectionDoesNotExistError):
-            await provider.delete_collection()
-        await provider.disconnect()
+            await provider.adelete_collection()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert(self, provider: ChromaProvider):
         """Test upsert operation with content validation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
         # Verify data was actually stored with correct content
-        results = await provider.fetch(ids=SAMPLE_IDS)
+        results = await provider.afetch(ids=SAMPLE_IDS)
         assert len(results) == 5
         for i, result in enumerate(results):
             assert result.id == SAMPLE_IDS[i]
             assert result.payload is not None
-            assert result.payload.get("category") == SAMPLE_PAYLOADS[i]["category"]
-            assert result.payload.get("author") == SAMPLE_PAYLOADS[i]["author"]
-            assert result.payload.get("year") == SAMPLE_PAYLOADS[i]["year"]
+            assert result.payload["metadata"].get("category") == SAMPLE_PAYLOADS[i]["category"]
+            assert result.payload["metadata"].get("author") == SAMPLE_PAYLOADS[i]["author"]
+            assert result.payload["metadata"].get("year") == SAMPLE_PAYLOADS[i]["year"]
             assert result.text == SAMPLE_CHUNKS[i]
             # Validate vector matches exactly
             assert_result_vector_matches(result, SAMPLE_VECTORS[i], result_index=i)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_sync(self, provider: ChromaProvider):
         """Test synchronous upsert."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_with_document_tracking(self, provider: ChromaProvider):
         """Test upsert with document_name, document_id, content_id and validate metadata."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
             document_names=["doc1", "doc2"],
             document_ids=["doc_id_1", "doc_id_2"],
-            content_ids=["content_1", "content_2"]
         )
         # Verify tracking metadata was stored correctly
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 2
         for i, result in enumerate(results):
             assert result.payload.get("document_name") == f"doc{i+1}"
             assert result.payload.get("document_id") == f"doc_id_{i+1}"
-            assert result.payload.get("content_id") == f"content_{i+1}"
-            assert result.payload.get("category") == SAMPLE_PAYLOADS[i]["category"]
+            assert result.payload.get("chunk_id") == SAMPLE_IDS[i]
+            assert result.payload["metadata"].get("category") == SAMPLE_PAYLOADS[i]["category"]
             assert result.text == SAMPLE_CHUNKS[i]
             # Validate vector matches exactly
             assert_result_vector_matches(result, SAMPLE_VECTORS[i], result_index=i)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_with_sparse_vectors_ignored(self, provider: ChromaProvider):
         """Test that sparse vectors are ignored (ChromaDB doesn't support them)."""
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         sparse_vectors = [
             {"indices": [0, 2, 4], "values": [0.5, 0.3, 0.2]},
             {"indices": [1, 3], "values": [0.4, 0.6]}
         ]
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
             sparse_vectors=sparse_vectors
         )
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_validation_error(self, provider: ChromaProvider):
         """Test upsert with mismatched lengths raises error."""
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         with pytest.raises(UpsertError):
-            await provider.upsert(
+            await provider.aupsert(
                 vectors=SAMPLE_VECTORS[:2],
                 payloads=SAMPLE_PAYLOADS[:3],
                 ids=SAMPLE_IDS[:2],
                 chunks=SAMPLE_CHUNKS[:2]
             )
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_fetch(self, provider: ChromaProvider):
         """Test fetch operation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 2
         assert all(isinstance(r, VectorSearchResult) for r in results)
         assert results[0].id == "doc1"
@@ -412,154 +410,154 @@ class TestChromaProviderIN_MEMORY:
         # Validate vectors match exactly
         for i, result in enumerate(results):
             assert_result_vector_matches(result, SAMPLE_VECTORS[i], result_index=i)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_fetch_sync(self, provider: ChromaProvider):
         """Test synchronous fetch."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.fetch_sync(ids=SAMPLE_IDS[:2])
+        results = provider.fetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 2
         assert all(isinstance(r, VectorSearchResult) for r in results)
         # Validate vectors match exactly
         for i, result in enumerate(results):
             assert_result_vector_matches(result, SAMPLE_VECTORS[i], result_index=i)
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_fetch_by_id_sync(self, provider: ChromaProvider):
         """Test fetch_by_id_sync alias."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.fetch_by_id_sync(ids=SAMPLE_IDS[:2])
+        results = provider.fetch_by_id(ids=SAMPLE_IDS[:2])
         assert len(results) == 2
         # Validate vectors match exactly
         for i, result in enumerate(results):
             assert_result_vector_matches(result, SAMPLE_VECTORS[i], result_index=i)
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete(self, provider: ChromaProvider):
         """Test delete operation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        await provider.delete(ids=SAMPLE_IDS[:2])
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        await provider.adelete(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_sync(self, provider: ChromaProvider):
         """Test synchronous delete."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        provider.delete_sync(ids=SAMPLE_IDS[:2])
-        results = provider.fetch_sync(ids=SAMPLE_IDS[:2])
+        provider.delete(ids=SAMPLE_IDS[:2])
+        results = provider.fetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_id_sync(self, provider: ChromaProvider):
         """Test delete_by_id_sync alias."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        provider.delete_by_id_sync(ids=SAMPLE_IDS[:2])
-        results = provider.fetch_sync(ids=SAMPLE_IDS[:2])
+        provider.delete_by_id(ids=SAMPLE_IDS[:2])
+        results = provider.fetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_filter(self, provider: ChromaProvider):
         """Test delete_by_filter."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        deleted = await provider.delete_by_filter({"category": "science"})
+        deleted = await provider.adelete_by_metadata({"category": "science"})
         assert deleted is True
-        count = await provider.get_count()
+        count = await provider.aget_count()
         assert count == 3
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_document_name(self, provider: ChromaProvider):
         """Test delete_by_document_name."""
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         # First ensure collection is empty
-        initial_count = await provider.get_count()
-        await provider.upsert(
+        initial_count = await provider.aget_count()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
             document_names=["test_doc", "test_doc"]
         )
-        count_before = await provider.get_count()
+        count_before = await provider.aget_count()
         assert count_before == initial_count + 2
         deleted = provider.delete_by_document_name("test_doc")
         assert deleted is True
-        count_after = await provider.get_count()
+        count_after = await provider.aget_count()
         assert count_after == initial_count
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_delete_by_document_name(self, provider: ChromaProvider):
         """Test async_delete_by_document_name."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
             document_names=["test_doc", "test_doc"]
         )
-        deleted = await provider.async_delete_by_document_name("test_doc")
+        deleted = await provider.adelete_by_document_name("test_doc")
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_document_id(self, provider: ChromaProvider):
         """Test delete_by_document_id."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
@@ -568,78 +566,76 @@ class TestChromaProviderIN_MEMORY:
         )
         deleted = provider.delete_by_document_id("doc_id_1")
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_delete_by_document_id(self, provider: ChromaProvider):
         """Test async_delete_by_document_id."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
             document_ids=["doc_id_1", "doc_id_1"]
         )
-        deleted = await provider.async_delete_by_document_id("doc_id_1")
+        deleted = await provider.adelete_by_document_id("doc_id_1")
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_content_id(self, provider: ChromaProvider):
-        """Test delete_by_content_id."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        """Test delete_by_chunk_id."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
-            content_ids=["content_1", "content_1"]
         )
-        deleted = provider.delete_by_content_id("content_1")
+        deleted = provider.delete_by_chunk_id(SAMPLE_IDS[0])
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_delete_by_content_id(self, provider: ChromaProvider):
         """Test async_delete_by_content_id."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
-            content_ids=["content_1", "content_1"]
         )
-        deleted = await provider.async_delete_by_content_id("content_1")
+        deleted = await provider.adelete_by_chunk_id(SAMPLE_IDS[0])
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_content_hash(self, provider: ChromaProvider):
-        """Test delete_by_content_hash."""
-        await provider.connect()
-        await provider.create_collection()
+        """Test delete_by_chunk_content_hash."""
+        await provider.aconnect()
+        await provider.acreate_collection()
         content_hash = md5(SAMPLE_CHUNKS[0].encode()).hexdigest()
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        deleted = await provider.delete_by_content_hash(content_hash)
+        deleted = await provider.adelete_by_chunk_content_hash(content_hash)
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_metadata(self, provider: ChromaProvider):
         """Test delete_by_metadata."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
@@ -647,44 +643,44 @@ class TestChromaProviderIN_MEMORY:
         )
         deleted = provider.delete_by_metadata({"category": "science"})
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_delete_by_metadata(self, provider: ChromaProvider):
         """Test async_delete_by_metadata."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        deleted = await provider.async_delete_by_metadata({"category": "science"})
+        deleted = await provider.adelete_by_metadata({"category": "science"})
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_id_exists(self, provider: ChromaProvider):
         """Test id_exists check."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        assert await provider.id_exists("doc1")
-        assert not await provider.id_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.aid_exists("doc1")
+        assert not await provider.aid_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_document_name_exists(self, provider: ChromaProvider):
         """Test document_name_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
@@ -693,30 +689,30 @@ class TestChromaProviderIN_MEMORY:
         )
         assert provider.document_name_exists("test_doc")
         assert not provider.document_name_exists("nonexistent")
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_document_name_exists(self, provider: ChromaProvider):
         """Test async_document_name_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
             document_names=["test_doc"]
         )
-        assert await provider.async_document_name_exists("test_doc")
-        assert not await provider.async_document_name_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.adocument_name_exists("test_doc")
+        assert not await provider.adocument_name_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_document_id_exists(self, provider: ChromaProvider):
         """Test document_id_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
@@ -725,152 +721,148 @@ class TestChromaProviderIN_MEMORY:
         )
         assert provider.document_id_exists("doc_id_1")
         assert not provider.document_id_exists("nonexistent")
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_document_id_exists(self, provider: ChromaProvider):
         """Test async_document_id_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
             document_ids=["doc_id_1"]
         )
-        assert await provider.async_document_id_exists("doc_id_1")
-        assert not await provider.async_document_id_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.adocument_id_exists("doc_id_1")
+        assert not await provider.adocument_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_content_id_exists(self, provider: ChromaProvider):
-        """Test content_id_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        """Test chunk_id_exists."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
-            content_ids=["content_1"]
         )
-        assert provider.content_id_exists("content_1")
-        assert not provider.content_id_exists("nonexistent")
-        await provider.disconnect()
+        assert provider.chunk_id_exists(SAMPLE_IDS[0])
+        assert not provider.chunk_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_content_id_exists(self, provider: ChromaProvider):
         """Test async_content_id_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
-            content_ids=["content_1"]
         )
-        assert await provider.async_content_id_exists("content_1")
-        assert not await provider.async_content_id_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.achunk_id_exists(SAMPLE_IDS[0])
+        assert not await provider.achunk_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_content_hash_exists(self, provider: ChromaProvider):
-        """Test content_hash_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        """Test chunk_content_hash_exists."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
         content_hash = md5(SAMPLE_CHUNKS[0].encode()).hexdigest()
-        assert await provider.content_hash_exists(content_hash)
-        assert not await provider.content_hash_exists("nonexistent_hash")
-        await provider.disconnect()
+        assert await provider.achunk_content_hash_exists(content_hash)
+        assert not await provider.achunk_content_hash_exists("nonexistent_hash")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_update_metadata(self, provider: ChromaProvider):
         """Test update_metadata."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
-            content_ids=["content_1"]
         )
-        updated = provider.update_metadata("content_1", {"new_field": "new_value"})
+        updated = provider.update_metadata(SAMPLE_IDS[0], {"new_field": "new_value"})
         assert updated is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:1])
-        assert results[0].payload.get("new_field") == "new_value"
-        await provider.disconnect()
+        results = await provider.afetch(ids=SAMPLE_IDS[:1])
+        assert results[0].payload["metadata"].get("new_field") == "new_value"
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_update_metadata(self, provider: ChromaProvider):
         """Test async_update_metadata."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
-            content_ids=["content_1"]
         )
-        updated = await provider.async_update_metadata("content_1", {"new_field": "new_value"})
+        updated = await provider.aupdate_metadata(SAMPLE_IDS[0], {"new_field": "new_value"})
         assert updated is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_get_count(self, provider: ChromaProvider):
         """Test get_count."""
-        await provider.connect()
-        await provider.create_collection()
-        initial_count = await provider.get_count()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        initial_count = await provider.aget_count()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        assert await provider.get_count() == initial_count + 5
-        await provider.delete(ids=SAMPLE_IDS[:2])
-        assert await provider.get_count() == initial_count + 3
-        await provider.disconnect()
+        assert await provider.aget_count() == initial_count + 5
+        await provider.adelete(ids=SAMPLE_IDS[:2])
+        assert await provider.aget_count() == initial_count + 3
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_get_count_with_filter(self, provider: ChromaProvider):
         """Test get_count with filter."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        count = await provider.get_count(filter={"category": "science"})
+        count = await provider.aget_count(filter={"category": "science"})
         assert count == 2
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_get_count_sync(self, provider: ChromaProvider):
         """Test synchronous get_count."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        initial_count = provider.get_count_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        initial_count = provider.get_count()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        assert provider.get_count_sync() == initial_count + 5
-        provider.disconnect_sync()
+        assert provider.get_count() == initial_count + 5
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_optimize(self, provider: ChromaProvider):
@@ -881,7 +873,7 @@ class TestChromaProviderIN_MEMORY:
     @pytest.mark.asyncio
     async def test_async_optimize(self, provider: ChromaProvider):
         """Test async optimize."""
-        result = await provider.async_optimize()
+        result = await provider.aoptimize()
         assert result is True
     
     @pytest.mark.asyncio
@@ -896,22 +888,22 @@ class TestChromaProviderIN_MEMORY:
     @pytest.mark.asyncio
     async def test_async_get_supported_search_types(self, provider: ChromaProvider):
         """Test async_get_supported_search_types."""
-        supported = await provider.async_get_supported_search_types()
+        supported = await provider.aget_supported_search_types()
         assert isinstance(supported, list)
         assert "dense" in supported
     
     @pytest.mark.asyncio
     async def test_dense_search(self, provider: ChromaProvider):
         """Test dense search."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=3,
             similarity_threshold=0.0
@@ -923,20 +915,20 @@ class TestChromaProviderIN_MEMORY:
         for i, result in enumerate(results):
             expected_vector = get_expected_vector_by_id(result.id)
             assert_result_vector_matches(result, expected_vector, result_index=i)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_dense_search_sync(self, provider: ChromaProvider):
         """Test synchronous dense search."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.dense_search_sync(
+        results = provider.dense_search(
             query_vector=QUERY_VECTOR,
             top_k=3,
             similarity_threshold=0.0
@@ -946,20 +938,20 @@ class TestChromaProviderIN_MEMORY:
         for i, result in enumerate(results):
             expected_vector = get_expected_vector_by_id(result.id)
             assert_result_vector_matches(result, expected_vector, result_index=i)
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_full_text_search(self, provider: ChromaProvider):
         """Test full-text search."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.full_text_search(
+        results = await provider.afull_text_search(
             query_text="physics",
             top_k=3,
             similarity_threshold=0.0
@@ -970,20 +962,20 @@ class TestChromaProviderIN_MEMORY:
         for i, result in enumerate(results):
             expected_vector = get_expected_vector_by_id(result.id)
             assert_result_vector_matches(result, expected_vector, result_index=i)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_full_text_search_sync(self, provider: ChromaProvider):
         """Test synchronous full-text search."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.full_text_search_sync(
+        results = provider.full_text_search(
             query_text="physics",
             top_k=3,
             similarity_threshold=0.0
@@ -993,20 +985,20 @@ class TestChromaProviderIN_MEMORY:
         for i, result in enumerate(results):
             expected_vector = get_expected_vector_by_id(result.id)
             assert_result_vector_matches(result, expected_vector, result_index=i)
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_hybrid_search(self, provider: ChromaProvider):
         """Test hybrid search."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.hybrid_search(
+        results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -1020,20 +1012,20 @@ class TestChromaProviderIN_MEMORY:
         for i, result in enumerate(results):
             expected_vector = get_expected_vector_by_id(result.id)
             assert_result_vector_matches(result, expected_vector, result_index=i)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_hybrid_search_rrf(self, provider: ChromaProvider):
         """Test hybrid search with RRF fusion."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.hybrid_search(
+        results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -1045,20 +1037,20 @@ class TestChromaProviderIN_MEMORY:
         for i, result in enumerate(results):
             expected_vector = get_expected_vector_by_id(result.id)
             assert_result_vector_matches(result, expected_vector, result_index=i)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_hybrid_search_sync(self, provider: ChromaProvider):
         """Test synchronous hybrid search."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.hybrid_search_sync(
+        results = provider.hybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -1070,21 +1062,21 @@ class TestChromaProviderIN_MEMORY:
         for i, result in enumerate(results):
             expected_vector = get_expected_vector_by_id(result.id)
             assert_result_vector_matches(result, expected_vector, result_index=i)
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_search_master_method(self, provider: ChromaProvider):
         """Test master search method."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
         # Dense search
-        results = await provider.search(
+        results = await provider.asearch(
             query_vector=QUERY_VECTOR,
             top_k=3
         )
@@ -1094,7 +1086,7 @@ class TestChromaProviderIN_MEMORY:
             expected_vector = get_expected_vector_by_id(result.id)
             assert_result_vector_matches(result, expected_vector, result_index=i)
         # Full-text search
-        results = await provider.search(
+        results = await provider.asearch(
             query_text="physics",
             top_k=3
         )
@@ -1104,7 +1096,7 @@ class TestChromaProviderIN_MEMORY:
             expected_vector = get_expected_vector_by_id(result.id)
             assert_result_vector_matches(result, expected_vector, result_index=i)
         # Hybrid search
-        results = await provider.search(
+        results = await provider.asearch(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3
@@ -1114,20 +1106,20 @@ class TestChromaProviderIN_MEMORY:
         for i, result in enumerate(results):
             expected_vector = get_expected_vector_by_id(result.id)
             assert_result_vector_matches(result, expected_vector, result_index=i)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_search_sync(self, provider: ChromaProvider):
         """Test synchronous master search."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.search_sync(
+        results = provider.search(
             query_vector=QUERY_VECTOR,
             top_k=3
         )
@@ -1136,31 +1128,31 @@ class TestChromaProviderIN_MEMORY:
         for i, result in enumerate(results):
             expected_vector = get_expected_vector_by_id(result.id)
             assert_result_vector_matches(result, expected_vector, result_index=i)
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_search_with_filter(self, provider: ChromaProvider):
         """Test search with metadata filter."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=5,
             filter={"category": "science"}
         )
         assert len(results) > 0
-        assert all(r.payload.get("category") == "science" for r in results)
+        assert all(r.payload["metadata"].get("category") == "science" for r in results)
         # Validate vectors match exactly
         for i, result in enumerate(results):
             expected_vector = get_expected_vector_by_id(result.id)
             assert_result_vector_matches(result, expected_vector, result_index=i)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_recreate_if_exists(self, provider: ChromaProvider):
@@ -1172,19 +1164,19 @@ class TestChromaProviderIN_MEMORY:
             recreate_if_exists=True
         )
         provider2 = ChromaProvider(config)
-        await provider2.connect()
-        await provider2.create_collection()
-        await provider2.upsert(
+        await provider2.aconnect()
+        await provider2.acreate_collection()
+        await provider2.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
         # Create again with recreate_if_exists=True
-        await provider2.create_collection()
-        count = await provider2.get_count()
+        await provider2.acreate_collection()
+        count = await provider2.aget_count()
         assert count == 0
-        await provider2.disconnect()
+        await provider2.adisconnect()
     
     @pytest.mark.asyncio
     async def test_flat_index_config(self, provider: ChromaProvider):
@@ -1196,9 +1188,9 @@ class TestChromaProviderIN_MEMORY:
             index=FlatIndexConfig()
         )
         provider2 = ChromaProvider(config)
-        await provider2.connect()
-        await provider2.create_collection()
-        await provider2.disconnect()
+        await provider2.aconnect()
+        await provider2.acreate_collection()
+        await provider2.adisconnect()
     
     @pytest.mark.asyncio
     async def test_distance_metrics(self, provider: ChromaProvider):
@@ -1213,21 +1205,21 @@ class TestChromaProviderIN_MEMORY:
                 distance_metric=metric
             )
             provider2 = ChromaProvider(config)
-            await provider2.connect()
-            await provider2.create_collection()
-            await provider2.upsert(
+            await provider2.aconnect()
+            await provider2.acreate_collection()
+            await provider2.aupsert(
                 vectors=SAMPLE_VECTORS[:2],
                 payloads=SAMPLE_PAYLOADS[:2],
                 ids=SAMPLE_IDS[:2],
                 chunks=SAMPLE_CHUNKS[:2]
             )
-            results = await provider2.dense_search(
+            results = await provider2.adense_search(
                 query_vector=QUERY_VECTOR,
                 top_k=2,
                 similarity_threshold=0.0
             )
             assert len(results) > 0
-            await provider2.disconnect()
+            await provider2.adisconnect()
 
 
 class TestChromaProviderEMBEDDED:
@@ -1266,149 +1258,148 @@ class TestChromaProviderEMBEDDED:
         assert provider._config.vector_size == 5
         assert provider._config.distance_metric == DistanceMetric.COSINE
         assert not provider._is_connected
-        assert provider._client is None
+        assert provider.client is None
         assert provider._collection_instance is None
-        assert provider.provider_name is not None
-        assert isinstance(provider.provider_id, str)
-        assert len(provider.provider_id) > 0
+        assert provider.name is not None
+        assert isinstance(provider.id, str)
+        assert len(provider.id) > 0
         assert provider.reranker is None
     
     @pytest.mark.asyncio
     async def test_connect(self, provider: ChromaProvider):
         """Test connection to ChromaDB with validation."""
-        await provider.connect()
+        await provider.aconnect()
         assert provider._is_connected is True
-        assert provider._client is not None
-        assert await provider.is_ready() is True
+        assert provider.client is not None
+        assert await provider.ais_ready() is True
     
     @pytest.mark.asyncio
     async def test_connect_sync(self, provider: ChromaProvider):
         """Test synchronous connection."""
-        provider.connect_sync()
+        provider.connect()
         assert provider._is_connected is True
-        assert provider._client is not None
-        assert provider.is_ready_sync() is True
+        assert provider.client is not None
+        assert provider.is_ready() is True
     
     @pytest.mark.asyncio
     async def test_disconnect(self, provider: ChromaProvider):
         """Test disconnection."""
-        await provider.connect()
+        await provider.aconnect()
         assert provider._is_connected is True
-        await provider.disconnect()
+        await provider.adisconnect()
         assert provider._is_connected is False
-        assert provider._client is None
+        assert provider.client is None
         assert provider._collection_instance is None
     
     @pytest.mark.asyncio
     async def test_is_ready(self, provider: ChromaProvider):
         """Test is_ready check."""
-        assert await provider.is_ready() is False
-        await provider.connect()
-        assert await provider.is_ready() is True
-        await provider.disconnect()
-        assert await provider.is_ready() is False
+        assert await provider.ais_ready() is False
+        await provider.aconnect()
+        assert await provider.ais_ready() is True
+        await provider.adisconnect()
+        assert await provider.ais_ready() is False
     
     @pytest.mark.asyncio
     async def test_create_collection(self, provider: ChromaProvider):
         """Test collection creation."""
-        await provider.connect()
+        await provider.aconnect()
         try:
-            if await provider.collection_exists():
-                await provider.delete_collection()
+            if await provider.acollection_exists():
+                await provider.adelete_collection()
         except Exception:
             pass
-        assert not await provider.collection_exists()
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.disconnect()
+        assert not await provider.acollection_exists()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_collection_exists(self, provider: ChromaProvider):
         """Test collection existence check."""
-        await provider.connect()
+        await provider.aconnect()
         try:
-            if await provider.collection_exists():
-                await provider.delete_collection()
+            if await provider.acollection_exists():
+                await provider.adelete_collection()
         except Exception:
             pass
-        assert not await provider.collection_exists()
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.disconnect()
+        assert not await provider.acollection_exists()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_collection(self, provider: ChromaProvider):
         """Test collection deletion."""
-        await provider.connect()
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.delete_collection()
-        assert not await provider.collection_exists()
-        await provider.disconnect()
+        await provider.aconnect()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adelete_collection()
+        assert not await provider.acollection_exists()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert(self, provider: ChromaProvider):
         """Test upsert operation with content validation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
         # Verify data was actually stored
-        results = await provider.fetch(ids=SAMPLE_IDS)
+        results = await provider.afetch(ids=SAMPLE_IDS)
         assert len(results) == 5
         for i, result in enumerate(results):
             assert result.id == SAMPLE_IDS[i]
             assert result.payload is not None
-            assert result.payload.get("category") == SAMPLE_PAYLOADS[i]["category"]
-            assert result.payload.get("author") == SAMPLE_PAYLOADS[i]["author"]
-            assert result.payload.get("year") == SAMPLE_PAYLOADS[i]["year"]
+            assert result.payload["metadata"].get("category") == SAMPLE_PAYLOADS[i]["category"]
+            assert result.payload["metadata"].get("author") == SAMPLE_PAYLOADS[i]["author"]
+            assert result.payload["metadata"].get("year") == SAMPLE_PAYLOADS[i]["year"]
             assert result.text == SAMPLE_CHUNKS[i]
             assert result.vector is not None
             assert len(result.vector) == 5
             # Test that vectors match (with tolerance for floating-point precision in persistent storage)
             assert_result_vector_matches(result, SAMPLE_VECTORS[i], result_index=i)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_with_document_tracking(self, provider: ChromaProvider):
         """Test upsert with document tracking and validate metadata."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
             document_names=["doc1", "doc2"],
             document_ids=["doc_id_1", "doc_id_2"],
-            content_ids=["content_1", "content_2"]
         )
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 2
         for i, result in enumerate(results):
             assert result.payload.get("document_name") == f"doc{i+1}"
             assert result.payload.get("document_id") == f"doc_id_{i+1}"
-            assert result.payload.get("content_id") == f"content_{i+1}"
+            assert result.payload.get("chunk_id") == SAMPLE_IDS[i]
             # Validate vector matches exactly
             assert_result_vector_matches(result, SAMPLE_VECTORS[i], result_index=i)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_fetch(self, provider: ChromaProvider):
         """Test fetch operation with detailed content validation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.fetch(ids=SAMPLE_IDS[:3])
+        results = await provider.afetch(ids=SAMPLE_IDS[:3])
         assert len(results) == 3
         for i, result in enumerate(results):
             assert isinstance(result, VectorSearchResult)
@@ -1416,73 +1407,73 @@ class TestChromaProviderEMBEDDED:
             assert result.score == 1.0
             assert result.payload is not None
             assert isinstance(result.payload, dict)
-            assert result.payload["category"] == SAMPLE_PAYLOADS[i]["category"]
-            assert result.payload["author"] == SAMPLE_PAYLOADS[i]["author"]
-            assert result.payload["year"] == SAMPLE_PAYLOADS[i]["year"]
+            assert result.payload["metadata"]["category"] == SAMPLE_PAYLOADS[i]["category"]
+            assert result.payload["metadata"]["author"] == SAMPLE_PAYLOADS[i]["author"]
+            assert result.payload["metadata"]["year"] == SAMPLE_PAYLOADS[i]["year"]
             assert result.text == SAMPLE_CHUNKS[i]
             # Validate vector matches exactly
             assert_result_vector_matches(result, SAMPLE_VECTORS[i], result_index=i)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete(self, provider: ChromaProvider):
         """Test delete operation with validation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        await provider.delete(ids=SAMPLE_IDS[:2])
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        await provider.adelete(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
         # Verify remaining records still exist
-        results = await provider.fetch(ids=SAMPLE_IDS[2:])
+        results = await provider.afetch(ids=SAMPLE_IDS[2:])
         assert len(results) == 3
         for i, result in enumerate(results):
             assert result.id == SAMPLE_IDS[i+2]
-            assert result.payload["category"] == SAMPLE_PAYLOADS[i+2]["category"]
+            assert result.payload["metadata"]["category"] == SAMPLE_PAYLOADS[i+2]["category"]
             # Validate vector matches exactly
             assert_result_vector_matches(result, SAMPLE_VECTORS[i+2], result_index=i)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_filter(self, provider: ChromaProvider):
         """Test delete_by_filter with content validation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        deleted = await provider.delete_by_filter({"category": "science"})
+        deleted = await provider.adelete_by_metadata({"category": "science"})
         assert deleted is True
         # Verify only science documents were deleted
-        results = await provider.fetch(ids=SAMPLE_IDS)
+        results = await provider.afetch(ids=SAMPLE_IDS)
         assert len(results) == 3
         for result in results:
-            assert result.payload.get("category") != "science"
+            assert result.payload["metadata"].get("category") != "science"
             # Validate vector matches exactly
             expected_vector = get_expected_vector_by_id(result.id)
             assert_result_vector_matches(result, expected_vector, result_index=0)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_dense_search(self, provider: ChromaProvider):
         """Test dense search with detailed result validation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=3,
             similarity_threshold=0.0
@@ -1495,8 +1486,8 @@ class TestChromaProviderEMBEDDED:
             assert isinstance(result.score, float)
             assert 0.0 <= result.score <= 1.0
             assert result.payload is not None
-            assert "category" in result.payload
-            assert "author" in result.payload
+            assert "category" in result.payload["metadata"]
+            assert "author" in result.payload["metadata"]
             assert result.text is not None
             assert result.text in SAMPLE_CHUNKS
             # Validate vector matches exactly
@@ -1505,20 +1496,20 @@ class TestChromaProviderEMBEDDED:
         # Verify results are sorted by score (descending)
         scores = [r.score for r in results]
         assert scores == sorted(scores, reverse=True)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_full_text_search(self, provider: ChromaProvider):
         """Test full-text search with content validation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.full_text_search(
+        results = await provider.afull_text_search(
             query_text="physics",
             top_k=3,
             similarity_threshold=0.0
@@ -1535,20 +1526,20 @@ class TestChromaProviderEMBEDDED:
             # Validate vector matches exactly
             expected_vector = get_expected_vector_by_id(result.id)
             assert_result_vector_matches(result, expected_vector, result_index=i)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_hybrid_search(self, provider: ChromaProvider):
         """Test hybrid search with detailed validation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.hybrid_search(
+        results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -1566,195 +1557,194 @@ class TestChromaProviderEMBEDDED:
             assert result.payload is not None
             assert result.text is not None
             assert result.vector is not None
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_search_with_filter(self, provider: ChromaProvider):
         """Test search with metadata filter and validate filtered results."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=5,
             filter={"category": "science"}
         )
         assert len(results) > 0
         for result in results:
-            assert result.payload.get("category") == "science"
-            assert result.payload.get("author") in ["Einstein", "Newton"]
+            assert result.payload["metadata"].get("category") == "science"
+            assert result.payload["metadata"].get("author") in ["Einstein", "Newton"]
             assert result.id in ["doc1", "doc2"]
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_get_count(self, provider: ChromaProvider):
         """Test get_count with validation."""
-        await provider.connect()
-        await provider.create_collection()
-        initial_count = await provider.get_count()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        initial_count = await provider.aget_count()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        assert await provider.get_count() == initial_count + 5
-        await provider.delete(ids=SAMPLE_IDS[:2])
-        assert await provider.get_count() == initial_count + 3
-        await provider.disconnect()
+        assert await provider.aget_count() == initial_count + 5
+        await provider.adelete(ids=SAMPLE_IDS[:2])
+        assert await provider.aget_count() == initial_count + 3
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_update_metadata(self, provider: ChromaProvider):
         """Test update_metadata with content validation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
-            content_ids=["content_1"]
         )
-        updated = provider.update_metadata("content_1", {"new_field": "new_value", "updated": True})
+        updated = provider.update_metadata(SAMPLE_IDS[0], {"new_field": "new_value", "updated": True})
         assert updated is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:1])
+        results = await provider.afetch(ids=SAMPLE_IDS[:1])
         assert len(results) == 1
-        assert results[0].payload.get("new_field") == "new_value"
-        assert results[0].payload.get("updated") is True
-        assert results[0].payload.get("category") == SAMPLE_PAYLOADS[0]["category"]
-        await provider.disconnect()
+        assert results[0].payload["metadata"].get("new_field") == "new_value"
+        assert results[0].payload["metadata"].get("updated") is True
+        assert results[0].payload["metadata"].get("category") == SAMPLE_PAYLOADS[0]["category"]
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_embedded_persistence(self, provider: ChromaProvider, temp_dir: str):
         """Test that embedded mode persists data with full validation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
         # Verify data before disconnect
-        results = await provider.fetch(ids=SAMPLE_IDS)
+        results = await provider.afetch(ids=SAMPLE_IDS)
         assert len(results) == 5
-        await provider.disconnect()
+        await provider.adisconnect()
         
         # Reconnect and verify data persists with exact content
-        await provider.connect()
-        assert await provider.collection_exists()
-        count = await provider.get_count()
+        await provider.aconnect()
+        assert await provider.acollection_exists()
+        count = await provider.aget_count()
         assert count == 5
-        results = await provider.fetch(ids=SAMPLE_IDS)
+        results = await provider.afetch(ids=SAMPLE_IDS)
         assert len(results) == 5
         for i, result in enumerate(results):
             assert result.id == SAMPLE_IDS[i]
-            assert result.payload["category"] == SAMPLE_PAYLOADS[i]["category"]
-            assert result.payload["author"] == SAMPLE_PAYLOADS[i]["author"]
+            assert result.payload["metadata"]["category"] == SAMPLE_PAYLOADS[i]["category"]
+            assert result.payload["metadata"]["author"] == SAMPLE_PAYLOADS[i]["author"]
             assert result.text == SAMPLE_CHUNKS[i]
             # Test that vectors match (with tolerance for floating-point precision in persistent storage)
             assert_result_vector_matches(result, SAMPLE_VECTORS[i], result_index=i)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_disconnect_sync(self, provider: ChromaProvider):
         """Test synchronous disconnection."""
-        provider.connect_sync()
+        provider.connect()
         assert provider._is_connected is True
-        provider.disconnect_sync()
+        provider.disconnect()
         assert provider._is_connected is False
     
     @pytest.mark.asyncio
     async def test_is_ready_sync(self, provider: ChromaProvider):
         """Test synchronous is_ready check."""
-        assert provider.is_ready_sync() is False
-        provider.connect_sync()
-        assert provider.is_ready_sync() is True
-        provider.disconnect_sync()
-        assert provider.is_ready_sync() is False
+        assert provider.is_ready() is False
+        provider.connect()
+        assert provider.is_ready() is True
+        provider.disconnect()
+        assert provider.is_ready() is False
     
     @pytest.mark.asyncio
     async def test_create_collection_sync(self, provider: ChromaProvider):
         """Test synchronous collection creation."""
-        provider.connect_sync()
+        provider.connect()
         try:
-            if provider.collection_exists_sync():
-                provider.delete_collection_sync()
+            if provider.collection_exists():
+                provider.delete_collection()
         except Exception:
             pass
-        assert not provider.collection_exists_sync()
-        provider.create_collection_sync()
-        assert provider.collection_exists_sync()
-        provider.disconnect_sync()
+        assert not provider.collection_exists()
+        provider.create_collection()
+        assert provider.collection_exists()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_collection_exists_sync(self, provider: ChromaProvider):
         """Test synchronous collection existence check."""
-        provider.connect_sync()
+        provider.connect()
         try:
-            if provider.collection_exists_sync():
-                provider.delete_collection_sync()
+            if provider.collection_exists():
+                provider.delete_collection()
         except Exception:
             pass
-        assert not provider.collection_exists_sync()
-        provider.create_collection_sync()
-        assert provider.collection_exists_sync()
-        provider.disconnect_sync()
+        assert not provider.collection_exists()
+        provider.create_collection()
+        assert provider.collection_exists()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_collection_sync(self, provider: ChromaProvider):
         """Test synchronous collection deletion."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        assert provider.collection_exists_sync()
-        provider.delete_collection_sync()
-        assert not provider.collection_exists_sync()
-        provider.disconnect_sync()
+        provider.connect()
+        provider.create_collection()
+        assert provider.collection_exists()
+        provider.delete_collection()
+        assert not provider.collection_exists()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_nonexistent_collection(self, provider: ChromaProvider):
         """Test deleting non-existent collection raises error."""
-        await provider.connect()
+        await provider.aconnect()
         with pytest.raises(CollectionDoesNotExistError):
-            await provider.delete_collection()
-        await provider.disconnect()
+            await provider.adelete_collection()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_sync(self, provider: ChromaProvider):
         """Test synchronous upsert with content validation."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
         # Verify data was actually stored
-        results = provider.fetch_sync(ids=SAMPLE_IDS)
+        results = provider.fetch(ids=SAMPLE_IDS)
         assert len(results) == 5
         for i, result in enumerate(results):
             assert result.id == SAMPLE_IDS[i]
-            assert result.payload.get("category") == SAMPLE_PAYLOADS[i]["category"]
-            assert result.payload.get("author") == SAMPLE_PAYLOADS[i]["author"]
+            assert result.payload["metadata"].get("category") == SAMPLE_PAYLOADS[i]["category"]
+            assert result.payload["metadata"].get("author") == SAMPLE_PAYLOADS[i]["author"]
             assert result.text == SAMPLE_CHUNKS[i]
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_with_sparse_vectors_ignored(self, provider: ChromaProvider):
         """Test that sparse vectors are ignored (ChromaDB doesn't support them)."""
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         sparse_vectors = [
             {"indices": [0, 2, 4], "values": [0.5, 0.3, 0.2]},
             {"indices": [1, 3], "values": [0.4, 0.6]}
         ]
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
@@ -1762,142 +1752,142 @@ class TestChromaProviderEMBEDDED:
             sparse_vectors=sparse_vectors
         )
         # Verify data was stored correctly despite sparse vectors
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 2
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_validation_error(self, provider: ChromaProvider):
         """Test upsert with mismatched lengths raises error."""
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         with pytest.raises(UpsertError):
-            await provider.upsert(
+            await provider.aupsert(
                 vectors=SAMPLE_VECTORS[:2],
                 payloads=SAMPLE_PAYLOADS[:3],
                 ids=SAMPLE_IDS[:2],
                 chunks=SAMPLE_CHUNKS[:2]
             )
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_fetch_sync(self, provider: ChromaProvider):
         """Test synchronous fetch with content validation."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.fetch_sync(ids=SAMPLE_IDS[:2])
+        results = provider.fetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 2
         assert all(isinstance(r, VectorSearchResult) for r in results)
         assert results[0].id == "doc1"
         assert results[0].payload is not None
-        assert results[0].payload.get("category") == SAMPLE_PAYLOADS[0]["category"]
+        assert results[0].payload["metadata"].get("category") == SAMPLE_PAYLOADS[0]["category"]
         assert results[0].text == SAMPLE_CHUNKS[0]
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_fetch_by_id_sync(self, provider: ChromaProvider):
         """Test fetch_by_id_sync alias with content validation."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.fetch_by_id_sync(ids=SAMPLE_IDS[:2])
+        results = provider.fetch_by_id(ids=SAMPLE_IDS[:2])
         assert len(results) == 2
         for i, result in enumerate(results):
             assert result.id == SAMPLE_IDS[i]
-            assert result.payload.get("category") == SAMPLE_PAYLOADS[i]["category"]
-        provider.disconnect_sync()
+            assert result.payload["metadata"].get("category") == SAMPLE_PAYLOADS[i]["category"]
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_sync(self, provider: ChromaProvider):
         """Test synchronous delete with validation."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        provider.delete_sync(ids=SAMPLE_IDS[:2])
-        results = provider.fetch_sync(ids=SAMPLE_IDS[:2])
+        provider.delete(ids=SAMPLE_IDS[:2])
+        results = provider.fetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
         # Verify remaining records
-        results = provider.fetch_sync(ids=SAMPLE_IDS[2:])
+        results = provider.fetch(ids=SAMPLE_IDS[2:])
         assert len(results) == 3
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_id_sync(self, provider: ChromaProvider):
         """Test delete_by_id_sync alias."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        provider.delete_by_id_sync(ids=SAMPLE_IDS[:2])
-        results = provider.fetch_sync(ids=SAMPLE_IDS[:2])
+        provider.delete_by_id(ids=SAMPLE_IDS[:2])
+        results = provider.fetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_document_name(self, provider: ChromaProvider):
         """Test delete_by_document_name with validation."""
-        await provider.connect()
-        await provider.create_collection()
-        initial_count = await provider.get_count()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        initial_count = await provider.aget_count()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
             document_names=["test_doc", "test_doc"]
         )
-        count_before = await provider.get_count()
+        count_before = await provider.aget_count()
         assert count_before == initial_count + 2
         deleted = provider.delete_by_document_name("test_doc")
         assert deleted is True
-        count_after = await provider.get_count()
+        count_after = await provider.aget_count()
         assert count_after == initial_count
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_delete_by_document_name(self, provider: ChromaProvider):
         """Test async_delete_by_document_name."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
             document_names=["test_doc", "test_doc"]
         )
-        deleted = await provider.async_delete_by_document_name("test_doc")
+        deleted = await provider.adelete_by_document_name("test_doc")
         assert deleted is True
-        count = await provider.get_count()
+        count = await provider.aget_count()
         assert count == 0
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_document_id(self, provider: ChromaProvider):
         """Test delete_by_document_id with validation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
@@ -1906,84 +1896,82 @@ class TestChromaProviderEMBEDDED:
         )
         deleted = provider.delete_by_document_id("doc_id_1")
         assert deleted is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_delete_by_document_id(self, provider: ChromaProvider):
         """Test async_delete_by_document_id."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
             document_ids=["doc_id_1", "doc_id_1"]
         )
-        deleted = await provider.async_delete_by_document_id("doc_id_1")
+        deleted = await provider.adelete_by_document_id("doc_id_1")
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_content_id(self, provider: ChromaProvider):
-        """Test delete_by_content_id with validation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        """Test delete_by_chunk_id with validation."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
-            content_ids=["content_1", "content_1"]
         )
-        deleted = provider.delete_by_content_id("content_1")
+        deleted = provider.delete_by_chunk_id(SAMPLE_IDS[0])
         assert deleted is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
-        assert len(results) == 0
-        await provider.disconnect()
-    
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
+        assert len(results) == 1
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
     async def test_async_delete_by_content_id(self, provider: ChromaProvider):
         """Test async_delete_by_content_id."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
-            content_ids=["content_1", "content_1"]
         )
-        deleted = await provider.async_delete_by_content_id("content_1")
+        deleted = await provider.adelete_by_chunk_id(SAMPLE_IDS[0])
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_content_hash(self, provider: ChromaProvider):
-        """Test delete_by_content_hash with validation."""
-        await provider.connect()
-        await provider.create_collection()
+        """Test delete_by_chunk_content_hash with validation."""
+        await provider.aconnect()
+        await provider.acreate_collection()
         content_hash = md5(SAMPLE_CHUNKS[0].encode()).hexdigest()
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        deleted = await provider.delete_by_content_hash(content_hash)
+        deleted = await provider.adelete_by_chunk_content_hash(content_hash)
         assert deleted is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:1])
+        results = await provider.afetch(ids=SAMPLE_IDS[:1])
         assert len(results) == 0
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_metadata(self, provider: ChromaProvider):
         """Test delete_by_metadata with validation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
@@ -1991,48 +1979,48 @@ class TestChromaProviderEMBEDDED:
         )
         deleted = provider.delete_by_metadata({"category": "science"})
         assert deleted is True
-        results = await provider.fetch(ids=SAMPLE_IDS)
+        results = await provider.afetch(ids=SAMPLE_IDS)
         assert len(results) == 3
         for result in results:
-            assert result.payload.get("category") != "science"
-        await provider.disconnect()
+            assert result.payload["metadata"].get("category") != "science"
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_delete_by_metadata(self, provider: ChromaProvider):
         """Test async_delete_by_metadata."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        deleted = await provider.async_delete_by_metadata({"category": "science"})
+        deleted = await provider.adelete_by_metadata({"category": "science"})
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_id_exists(self, provider: ChromaProvider):
         """Test id_exists check."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        assert await provider.id_exists("doc1")
-        assert not await provider.id_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.aid_exists("doc1")
+        assert not await provider.aid_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_document_name_exists(self, provider: ChromaProvider):
         """Test document_name_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
@@ -2041,30 +2029,30 @@ class TestChromaProviderEMBEDDED:
         )
         assert provider.document_name_exists("test_doc")
         assert not provider.document_name_exists("nonexistent")
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_document_name_exists(self, provider: ChromaProvider):
         """Test async_document_name_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
             document_names=["test_doc"]
         )
-        assert await provider.async_document_name_exists("test_doc")
-        assert not await provider.async_document_name_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.adocument_name_exists("test_doc")
+        assert not await provider.adocument_name_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_document_id_exists(self, provider: ChromaProvider):
         """Test document_id_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
@@ -2073,120 +2061,117 @@ class TestChromaProviderEMBEDDED:
         )
         assert provider.document_id_exists("doc_id_1")
         assert not provider.document_id_exists("nonexistent")
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_document_id_exists(self, provider: ChromaProvider):
         """Test async_document_id_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
             document_ids=["doc_id_1"]
         )
-        assert await provider.async_document_id_exists("doc_id_1")
-        assert not await provider.async_document_id_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.adocument_id_exists("doc_id_1")
+        assert not await provider.adocument_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_content_id_exists(self, provider: ChromaProvider):
-        """Test content_id_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        """Test chunk_id_exists."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
-            content_ids=["content_1"]
         )
-        assert provider.content_id_exists("content_1")
-        assert not provider.content_id_exists("nonexistent")
-        await provider.disconnect()
+        assert provider.chunk_id_exists(SAMPLE_IDS[0])
+        assert not provider.chunk_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_content_id_exists(self, provider: ChromaProvider):
         """Test async_content_id_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
-            content_ids=["content_1"]
         )
-        assert await provider.async_content_id_exists("content_1")
-        assert not await provider.async_content_id_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.achunk_id_exists(SAMPLE_IDS[0])
+        assert not await provider.achunk_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_content_hash_exists(self, provider: ChromaProvider):
-        """Test content_hash_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        """Test chunk_content_hash_exists."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
         content_hash = md5(SAMPLE_CHUNKS[0].encode()).hexdigest()
-        assert await provider.content_hash_exists(content_hash)
-        assert not await provider.content_hash_exists("nonexistent_hash")
-        await provider.disconnect()
+        assert await provider.achunk_content_hash_exists(content_hash)
+        assert not await provider.achunk_content_hash_exists("nonexistent_hash")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_update_metadata(self, provider: ChromaProvider):
         """Test async_update_metadata with validation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
-            content_ids=["content_1"]
         )
-        updated = await provider.async_update_metadata("content_1", {"new_field": "new_value", "updated": True})
+        updated = await provider.aupdate_metadata(SAMPLE_IDS[0], {"new_field": "new_value", "updated": True})
         assert updated is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:1])
-        assert results[0].payload.get("new_field") == "new_value"
-        assert results[0].payload.get("updated") is True
-        await provider.disconnect()
+        results = await provider.afetch(ids=SAMPLE_IDS[:1])
+        assert results[0].payload["metadata"].get("new_field") == "new_value"
+        assert results[0].payload["metadata"].get("updated") is True
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_get_count_with_filter(self, provider: ChromaProvider):
         """Test get_count with filter."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        count = await provider.get_count(filter={"category": "science"})
+        count = await provider.aget_count(filter={"category": "science"})
         assert count == 2
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_get_count_sync(self, provider: ChromaProvider):
         """Test synchronous get_count."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        initial_count = provider.get_count_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        initial_count = provider.get_count()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        assert provider.get_count_sync() == initial_count + 5
-        provider.disconnect_sync()
+        assert provider.get_count() == initial_count + 5
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_optimize(self, provider: ChromaProvider):
@@ -2197,7 +2182,7 @@ class TestChromaProviderEMBEDDED:
     @pytest.mark.asyncio
     async def test_async_optimize(self, provider: ChromaProvider):
         """Test async optimize."""
-        result = await provider.async_optimize()
+        result = await provider.aoptimize()
         assert result is True
     
     @pytest.mark.asyncio
@@ -2212,7 +2197,7 @@ class TestChromaProviderEMBEDDED:
     @pytest.mark.asyncio
     async def test_async_get_supported_search_types(self, provider: ChromaProvider):
         """Test async_get_supported_search_types."""
-        supported = await provider.async_get_supported_search_types()
+        supported = await provider.aget_supported_search_types()
         assert isinstance(supported, list)
         assert "dense" in supported
         assert "full_text" in supported
@@ -2221,15 +2206,15 @@ class TestChromaProviderEMBEDDED:
     @pytest.mark.asyncio
     async def test_dense_search_sync(self, provider: ChromaProvider):
         """Test synchronous dense search with content validation."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.dense_search_sync(
+        results = provider.dense_search(
             query_vector=QUERY_VECTOR,
             top_k=3,
             similarity_threshold=0.0
@@ -2244,20 +2229,20 @@ class TestChromaProviderEMBEDDED:
             assert result.payload is not None
             assert result.text is not None
             assert result.vector is not None
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_full_text_search_sync(self, provider: ChromaProvider):
         """Test synchronous full-text search with content validation."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.full_text_search_sync(
+        results = provider.full_text_search(
             query_text="physics",
             top_k=3,
             similarity_threshold=0.0
@@ -2271,20 +2256,20 @@ class TestChromaProviderEMBEDDED:
             assert result.payload is not None
             assert result.text is not None
             assert "physics" in result.text.lower() or "theory" in result.text.lower()
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_hybrid_search_rrf(self, provider: ChromaProvider):
         """Test hybrid search with RRF fusion."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.hybrid_search(
+        results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -2299,20 +2284,20 @@ class TestChromaProviderEMBEDDED:
             assert result.score >= 0.0
             assert result.payload is not None
             assert result.text is not None
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_hybrid_search_sync(self, provider: ChromaProvider):
         """Test synchronous hybrid search with validation."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.hybrid_search_sync(
+        results = provider.hybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -2325,21 +2310,21 @@ class TestChromaProviderEMBEDDED:
             assert result.id in SAMPLE_IDS
             assert result.score >= 0.0
             assert result.payload is not None
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_search_master_method(self, provider: ChromaProvider):
         """Test master search method with content validation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
         # Dense search
-        results = await provider.search(
+        results = await provider.asearch(
             query_vector=QUERY_VECTOR,
             top_k=3
         )
@@ -2347,34 +2332,34 @@ class TestChromaProviderEMBEDDED:
         assert all(isinstance(r, VectorSearchResult) for r in results)
         assert all(r.id in SAMPLE_IDS for r in results)
         # Full-text search
-        results = await provider.search(
+        results = await provider.asearch(
             query_text="physics",
             top_k=3
         )
         assert len(results) > 0
         assert all(isinstance(r, VectorSearchResult) for r in results)
         # Hybrid search
-        results = await provider.search(
+        results = await provider.asearch(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3
         )
         assert len(results) > 0
         assert all(isinstance(r, VectorSearchResult) for r in results)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_search_sync(self, provider: ChromaProvider):
         """Test synchronous master search with validation."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.search_sync(
+        results = provider.search(
             query_vector=QUERY_VECTOR,
             top_k=3
         )
@@ -2382,7 +2367,7 @@ class TestChromaProviderEMBEDDED:
         assert all(isinstance(r, VectorSearchResult) for r in results)
         assert all(r.payload is not None for r in results)
         assert all(r.text is not None for r in results)
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_recreate_if_exists(self, provider: ChromaProvider, temp_dir: str):
@@ -2397,19 +2382,19 @@ class TestChromaProviderEMBEDDED:
             recreate_if_exists=True
         )
         provider2 = ChromaProvider(config)
-        await provider2.connect()
-        await provider2.create_collection()
-        await provider2.upsert(
+        await provider2.aconnect()
+        await provider2.acreate_collection()
+        await provider2.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
         # Create again with recreate_if_exists=True
-        await provider2.create_collection()
-        count = await provider2.get_count()
+        await provider2.acreate_collection()
+        count = await provider2.aget_count()
         assert count == 0
-        await provider2.disconnect()
+        await provider2.adisconnect()
     
     @pytest.mark.asyncio
     async def test_flat_index_config(self, provider: ChromaProvider, temp_dir: str):
@@ -2424,21 +2409,21 @@ class TestChromaProviderEMBEDDED:
             index=FlatIndexConfig()
         )
         provider2 = ChromaProvider(config)
-        await provider2.connect()
-        await provider2.create_collection()
-        await provider2.upsert(
+        await provider2.aconnect()
+        await provider2.acreate_collection()
+        await provider2.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2]
         )
-        results = await provider2.dense_search(
+        results = await provider2.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=2,
             similarity_threshold=0.0
         )
         assert len(results) > 0
-        await provider2.disconnect()
+        await provider2.adisconnect()
     
     @pytest.mark.asyncio
     async def test_distance_metrics(self, provider: ChromaProvider, temp_dir: str):
@@ -2454,15 +2439,15 @@ class TestChromaProviderEMBEDDED:
                 distance_metric=metric
             )
             provider2 = ChromaProvider(config)
-            await provider2.connect()
-            await provider2.create_collection()
-            await provider2.upsert(
+            await provider2.aconnect()
+            await provider2.acreate_collection()
+            await provider2.aupsert(
                 vectors=SAMPLE_VECTORS[:2],
                 payloads=SAMPLE_PAYLOADS[:2],
                 ids=SAMPLE_IDS[:2],
                 chunks=SAMPLE_CHUNKS[:2]
             )
-            results = await provider2.dense_search(
+            results = await provider2.adense_search(
                 query_vector=QUERY_VECTOR,
                 top_k=2,
                 similarity_threshold=0.0
@@ -2470,7 +2455,7 @@ class TestChromaProviderEMBEDDED:
             assert len(results) > 0
             assert all(isinstance(r, VectorSearchResult) for r in results)
             assert all(r.score >= 0.0 for r in results)
-            await provider2.disconnect()
+            await provider2.adisconnect()
 
 
 class TestChromaProviderLOCAL:
@@ -2506,7 +2491,7 @@ class TestChromaProviderLOCAL:
     async def _ensure_connected(self, provider: ChromaProvider):
         """Helper to ensure connection, skip if unavailable."""
         try:
-            await provider.connect()
+            await provider.aconnect()
             return True
         except VectorDBConnectionError:
             pytest.skip("ChromaDB server not accessible")
@@ -2514,7 +2499,7 @@ class TestChromaProviderLOCAL:
     def _ensure_connected_sync(self, provider: ChromaProvider):
         """Helper to ensure sync connection, skip if unavailable."""
         try:
-            provider.connect_sync()
+            provider.connect()
             return True
         except VectorDBConnectionError:
             pytest.skip("ChromaDB server not accessible")
@@ -2528,115 +2513,115 @@ class TestChromaProviderLOCAL:
         assert provider._config.vector_size == 5
         assert provider._config.distance_metric == DistanceMetric.COSINE
         assert not provider._is_connected
-        assert provider._client is None
+        assert provider.client is None
     
     @pytest.mark.asyncio
     async def test_connect(self, provider: Optional[ChromaProvider]):
         """Test connection to ChromaDB."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
+        await self.a_ensure_connected(provider)
         assert provider._is_connected is True
-        assert provider._client is not None
-        assert await provider.is_ready() is True
-        await provider.disconnect()
+        assert provider.client is not None
+        assert await provider.ais_ready() is True
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_create_collection(self, provider: Optional[ChromaProvider]):
         """Test collection creation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
+        await self.a_ensure_connected(provider)
         try:
-            if await provider.collection_exists():
-                await provider.delete_collection()
+            if await provider.acollection_exists():
+                await provider.adelete_collection()
         except Exception:
             pass
-        assert not await provider.collection_exists()
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.disconnect()
+        assert not await provider.acollection_exists()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert(self, provider: Optional[ChromaProvider]):
         """Test upsert operation with content validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.fetch(ids=SAMPLE_IDS)
+        results = await provider.afetch(ids=SAMPLE_IDS)
         assert len(results) == 5
         for i, result in enumerate(results):
             assert result.id == SAMPLE_IDS[i]
-            assert result.payload["category"] == SAMPLE_PAYLOADS[i]["category"]
-            assert result.payload["author"] == SAMPLE_PAYLOADS[i]["author"]
+            assert result.payload["metadata"]["category"] == SAMPLE_PAYLOADS[i]["category"]
+            assert result.payload["metadata"]["author"] == SAMPLE_PAYLOADS[i]["author"]
             assert result.text == SAMPLE_CHUNKS[i]
             # Test that vectors are exactly the same
             vector_list = [float(x) for x in result.vector]
             assert vector_list == SAMPLE_VECTORS[i], f"Vector mismatch for ID {result.id}: {vector_list} != {SAMPLE_VECTORS[i]}"
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_fetch(self, provider: Optional[ChromaProvider]):
         """Test fetch operation with detailed validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.fetch(ids=SAMPLE_IDS[:3])
+        results = await provider.afetch(ids=SAMPLE_IDS[:3])
         assert len(results) == 3
         for i, result in enumerate(results):
             assert isinstance(result, VectorSearchResult)
             assert result.id == SAMPLE_IDS[i]
             assert result.score == 1.0
             assert result.payload is not None
-            assert result.payload["category"] == SAMPLE_PAYLOADS[i]["category"]
+            assert result.payload["metadata"]["category"] == SAMPLE_PAYLOADS[i]["category"]
             assert result.text == SAMPLE_CHUNKS[i]
             # Test that vectors are exactly the same
             vector_list = [float(x) for x in result.vector]
             assert vector_list == SAMPLE_VECTORS[i], f"Vector mismatch for ID {result.id}: {vector_list} != {SAMPLE_VECTORS[i]}"
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete(self, provider: Optional[ChromaProvider]):
         """Test delete operation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        await provider.delete(ids=SAMPLE_IDS[:2])
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        await provider.adelete(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
-        results = await provider.fetch(ids=SAMPLE_IDS[2:])
+        results = await provider.afetch(ids=SAMPLE_IDS[2:])
         assert len(results) == 3
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_dense_search(self, provider: Optional[ChromaProvider]):
         """Test dense search with detailed result validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=3,
             similarity_threshold=0.0
@@ -2654,21 +2639,21 @@ class TestChromaProviderLOCAL:
             assert len(result.vector) == 5
         scores = [r.score for r in results]
         assert scores == sorted(scores, reverse=True)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_full_text_search(self, provider: Optional[ChromaProvider]):
         """Test full-text search with content validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.full_text_search(
+        results = await provider.afull_text_search(
             query_text="physics",
             top_k=3,
             similarity_threshold=0.0
@@ -2681,21 +2666,21 @@ class TestChromaProviderLOCAL:
             assert result.payload is not None
             assert result.text is not None
             assert "physics" in result.text.lower() or "theory" in result.text.lower()
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_hybrid_search(self, provider: Optional[ChromaProvider]):
         """Test hybrid search with detailed validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.hybrid_search(
+        results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -2710,85 +2695,84 @@ class TestChromaProviderLOCAL:
             assert result.payload is not None
             assert result.text is not None
             assert result.vector is not None
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_search_with_filter(self, provider: Optional[ChromaProvider]):
         """Test search with metadata filter."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=5,
             filter={"category": "science"}
         )
         assert len(results) > 0
         for result in results:
-            assert result.payload.get("category") == "science"
+            assert result.payload["metadata"].get("category") == "science"
             assert result.id in ["doc1", "doc2"]
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_get_count(self, provider: Optional[ChromaProvider]):
         """Test get_count."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        initial_count = await provider.get_count()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        initial_count = await provider.aget_count()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        assert await provider.get_count() == initial_count + 5
-        await provider.disconnect()
+        assert await provider.aget_count() == initial_count + 5
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_update_metadata(self, provider: Optional[ChromaProvider]):
         """Test update_metadata with validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
-            content_ids=["content_1"]
         )
-        updated = provider.update_metadata("content_1", {"new_field": "new_value"})
+        updated = provider.update_metadata(SAMPLE_IDS[0], {"new_field": "new_value"})
         assert updated is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:1])
-        assert results[0].payload.get("new_field") == "new_value"
-        assert results[0].payload.get("category") == SAMPLE_PAYLOADS[0]["category"]
-        await provider.disconnect()
+        results = await provider.afetch(ids=SAMPLE_IDS[:1])
+        assert results[0].payload["metadata"].get("new_field") == "new_value"
+        assert results[0].payload["metadata"].get("category") == SAMPLE_PAYLOADS[0]["category"]
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_filter(self, provider: Optional[ChromaProvider]):
         """Test delete_by_filter."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        deleted = await provider.delete_by_filter({"category": "science"})
+        deleted = await provider.adelete_by_metadata({"category": "science"})
         assert deleted is True
-        results = await provider.fetch(ids=SAMPLE_IDS)
+        results = await provider.afetch(ids=SAMPLE_IDS)
         for result in results:
-            assert result.payload.get("category") != "science"
-        await provider.disconnect()
+            assert result.payload["metadata"].get("category") != "science"
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_connect_sync(self, provider: Optional[ChromaProvider]):
@@ -2796,19 +2780,19 @@ class TestChromaProviderLOCAL:
         self._skip_if_unavailable(provider)
         self._ensure_connected_sync(provider)
         assert provider._is_connected is True
-        assert provider._client is not None
-        assert provider.is_ready_sync() is True
-        provider.disconnect_sync()
+        assert provider.client is not None
+        assert provider.is_ready() is True
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_disconnect(self, provider: Optional[ChromaProvider]):
         """Test disconnection."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
+        await self.a_ensure_connected(provider)
         assert provider._is_connected is True
-        await provider.disconnect()
+        await provider.adisconnect()
         assert provider._is_connected is False
-        assert provider._client is None
+        assert provider.client is None
         assert provider._collection_instance is None
     
     @pytest.mark.asyncio
@@ -2817,28 +2801,28 @@ class TestChromaProviderLOCAL:
         self._skip_if_unavailable(provider)
         self._ensure_connected_sync(provider)
         assert provider._is_connected is True
-        provider.disconnect_sync()
+        provider.disconnect()
         assert provider._is_connected is False
     
     @pytest.mark.asyncio
     async def test_is_ready(self, provider: Optional[ChromaProvider]):
         """Test is_ready check."""
         self._skip_if_unavailable(provider)
-        assert await provider.is_ready() is False
-        await self._ensure_connected(provider)
-        assert await provider.is_ready() is True
-        await provider.disconnect()
-        assert await provider.is_ready() is False
+        assert await provider.ais_ready() is False
+        await self.a_ensure_connected(provider)
+        assert await provider.ais_ready() is True
+        await provider.adisconnect()
+        assert await provider.ais_ready() is False
     
     @pytest.mark.asyncio
     async def test_is_ready_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous is_ready check."""
         self._skip_if_unavailable(provider)
-        assert provider.is_ready_sync() is False
+        assert provider.is_ready() is False
         self._ensure_connected_sync(provider)
-        assert provider.is_ready_sync() is True
-        provider.disconnect_sync()
-        assert provider.is_ready_sync() is False
+        assert provider.is_ready() is True
+        provider.disconnect()
+        assert provider.is_ready() is False
     
     @pytest.mark.asyncio
     async def test_create_collection_sync(self, provider: Optional[ChromaProvider]):
@@ -2846,29 +2830,29 @@ class TestChromaProviderLOCAL:
         self._skip_if_unavailable(provider)
         self._ensure_connected_sync(provider)
         try:
-            if provider.collection_exists_sync():
-                provider.delete_collection_sync()
+            if provider.collection_exists():
+                provider.delete_collection()
         except Exception:
             pass
-        assert not provider.collection_exists_sync()
-        provider.create_collection_sync()
-        assert provider.collection_exists_sync()
-        provider.disconnect_sync()
+        assert not provider.collection_exists()
+        provider.create_collection()
+        assert provider.collection_exists()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_collection_exists(self, provider: Optional[ChromaProvider]):
         """Test collection existence check."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
+        await self.a_ensure_connected(provider)
         try:
-            if await provider.collection_exists():
-                await provider.delete_collection()
+            if await provider.acollection_exists():
+                await provider.adelete_collection()
         except Exception:
             pass
-        assert not await provider.collection_exists()
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.disconnect()
+        assert not await provider.acollection_exists()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_collection_exists_sync(self, provider: Optional[ChromaProvider]):
@@ -2876,215 +2860,214 @@ class TestChromaProviderLOCAL:
         self._skip_if_unavailable(provider)
         self._ensure_connected_sync(provider)
         try:
-            if provider.collection_exists_sync():
-                provider.delete_collection_sync()
+            if provider.collection_exists():
+                provider.delete_collection()
         except Exception:
             pass
-        assert not provider.collection_exists_sync()
-        provider.create_collection_sync()
-        assert provider.collection_exists_sync()
-        provider.disconnect_sync()
+        assert not provider.collection_exists()
+        provider.create_collection()
+        assert provider.collection_exists()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_collection(self, provider: Optional[ChromaProvider]):
         """Test collection deletion."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.delete_collection()
-        assert not await provider.collection_exists()
-        await provider.disconnect()
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adelete_collection()
+        assert not await provider.acollection_exists()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_collection_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous collection deletion."""
         self._skip_if_unavailable(provider)
         self._ensure_connected_sync(provider)
-        provider.create_collection_sync()
-        assert provider.collection_exists_sync()
-        provider.delete_collection_sync()
-        assert not provider.collection_exists_sync()
-        provider.disconnect_sync()
+        provider.create_collection()
+        assert provider.collection_exists()
+        provider.delete_collection()
+        assert not provider.collection_exists()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_nonexistent_collection(self, provider: Optional[ChromaProvider]):
         """Test deleting non-existent collection raises error."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
+        await self.a_ensure_connected(provider)
         with pytest.raises(CollectionDoesNotExistError):
-            await provider.delete_collection()
-        await provider.disconnect()
+            await provider.adelete_collection()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous upsert with content validation."""
         self._skip_if_unavailable(provider)
         self._ensure_connected_sync(provider)
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.fetch_sync(ids=SAMPLE_IDS)
+        results = provider.fetch(ids=SAMPLE_IDS)
         assert len(results) == 5
         for i, result in enumerate(results):
             assert result.id == SAMPLE_IDS[i]
-            assert result.payload.get("category") == SAMPLE_PAYLOADS[i]["category"]
-            assert result.payload.get("author") == SAMPLE_PAYLOADS[i]["author"]
+            assert result.payload["metadata"].get("category") == SAMPLE_PAYLOADS[i]["category"]
+            assert result.payload["metadata"].get("author") == SAMPLE_PAYLOADS[i]["author"]
             assert result.text == SAMPLE_CHUNKS[i]
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_with_document_tracking(self, provider: Optional[ChromaProvider]):
         """Test upsert with document tracking and validate metadata."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
             document_names=["local_doc1", "local_doc2"],
             document_ids=["local_doc_id_1", "local_doc_id_2"],
-            content_ids=["local_content_1", "local_content_2"]
         )
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 2
         for i, result in enumerate(results):
             assert result.payload.get("document_name") == f"local_doc{i+1}"
             assert result.payload.get("document_id") == f"local_doc_id_{i+1}"
-            assert result.payload.get("content_id") == f"local_content_{i+1}"
-            assert result.payload.get("category") == SAMPLE_PAYLOADS[i]["category"]
-        await provider.disconnect()
+            assert result.payload.get("chunk_id") == f"local_content_{i+1}"
+            assert result.payload["metadata"].get("category") == SAMPLE_PAYLOADS[i]["category"]
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_with_sparse_vectors_ignored(self, provider: Optional[ChromaProvider]):
         """Test that sparse vectors are ignored (ChromaDB doesn't support them)."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
         sparse_vectors = [
             {"indices": [0, 2, 4], "values": [0.5, 0.3, 0.2]},
             {"indices": [1, 3], "values": [0.4, 0.6]}
         ]
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
             sparse_vectors=sparse_vectors
         )
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 2
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_validation_error(self, provider: Optional[ChromaProvider]):
         """Test upsert with mismatched lengths raises error."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
         with pytest.raises(UpsertError):
-            await provider.upsert(
+            await provider.aupsert(
                 vectors=SAMPLE_VECTORS[:2],
                 payloads=SAMPLE_PAYLOADS[:3],
                 ids=SAMPLE_IDS[:2],
                 chunks=SAMPLE_CHUNKS[:2]
             )
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_fetch_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous fetch with content validation."""
         self._skip_if_unavailable(provider)
         self._ensure_connected_sync(provider)
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.fetch_sync(ids=SAMPLE_IDS[:3])
+        results = provider.fetch(ids=SAMPLE_IDS[:3])
         assert len(results) == 3
         for i, result in enumerate(results):
             assert isinstance(result, VectorSearchResult)
             assert result.id == SAMPLE_IDS[i]
             assert result.score == 1.0
             assert result.payload is not None
-            assert result.payload["category"] == SAMPLE_PAYLOADS[i]["category"]
-            assert result.payload["author"] == SAMPLE_PAYLOADS[i]["author"]
+            assert result.payload["metadata"]["category"] == SAMPLE_PAYLOADS[i]["category"]
+            assert result.payload["metadata"]["author"] == SAMPLE_PAYLOADS[i]["author"]
             assert result.text == SAMPLE_CHUNKS[i]
             assert result.vector is not None
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_fetch_by_id_sync(self, provider: Optional[ChromaProvider]):
         """Test fetch_by_id_sync alias with content validation."""
         self._skip_if_unavailable(provider)
         self._ensure_connected_sync(provider)
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.fetch_by_id_sync(ids=SAMPLE_IDS[:2])
+        results = provider.fetch_by_id(ids=SAMPLE_IDS[:2])
         assert len(results) == 2
         for i, result in enumerate(results):
             assert result.id == SAMPLE_IDS[i]
-            assert result.payload.get("category") == SAMPLE_PAYLOADS[i]["category"]
-        provider.disconnect_sync()
+            assert result.payload["metadata"].get("category") == SAMPLE_PAYLOADS[i]["category"]
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous delete with validation."""
         self._skip_if_unavailable(provider)
         self._ensure_connected_sync(provider)
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        provider.delete_sync(ids=SAMPLE_IDS[:2])
-        results = provider.fetch_sync(ids=SAMPLE_IDS[:2])
+        provider.delete(ids=SAMPLE_IDS[:2])
+        results = provider.fetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
-        results = provider.fetch_sync(ids=SAMPLE_IDS[2:])
+        results = provider.fetch(ids=SAMPLE_IDS[2:])
         assert len(results) == 3
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_id_sync(self, provider: Optional[ChromaProvider]):
         """Test delete_by_id_sync alias."""
         self._skip_if_unavailable(provider)
         self._ensure_connected_sync(provider)
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        provider.delete_by_id_sync(ids=SAMPLE_IDS[:2])
-        results = provider.fetch_sync(ids=SAMPLE_IDS[:2])
+        provider.delete_by_id(ids=SAMPLE_IDS[:2])
+        results = provider.fetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_document_name(self, provider: Optional[ChromaProvider]):
         """Test delete_by_document_name with validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        initial_count = await provider.get_count()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        initial_count = await provider.aget_count()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
@@ -3093,34 +3076,34 @@ class TestChromaProviderLOCAL:
         )
         deleted = provider.delete_by_document_name("local_doc")
         assert deleted is True
-        count = await provider.get_count()
+        count = await provider.aget_count()
         assert count == initial_count
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_delete_by_document_name(self, provider: Optional[ChromaProvider]):
         """Test async_delete_by_document_name."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
             document_names=["local_doc", "local_doc"]
         )
-        deleted = await provider.async_delete_by_document_name("local_doc")
+        deleted = await provider.adelete_by_document_name("local_doc")
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_document_id(self, provider: Optional[ChromaProvider]):
         """Test delete_by_document_id with validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
@@ -3129,89 +3112,87 @@ class TestChromaProviderLOCAL:
         )
         deleted = provider.delete_by_document_id("local_doc_id_1")
         assert deleted is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_delete_by_document_id(self, provider: Optional[ChromaProvider]):
         """Test async_delete_by_document_id."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
             document_ids=["local_doc_id_1", "local_doc_id_1"]
         )
-        deleted = await provider.async_delete_by_document_id("local_doc_id_1")
+        deleted = await provider.adelete_by_document_id("local_doc_id_1")
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_content_id(self, provider: Optional[ChromaProvider]):
-        """Test delete_by_content_id with validation."""
+        """Test delete_by_chunk_id with validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
-            content_ids=["local_content_1", "local_content_1"]
         )
-        deleted = provider.delete_by_content_id("local_content_1")
+        deleted = provider.delete_by_chunk_id(SAMPLE_IDS[0])
         assert deleted is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_delete_by_content_id(self, provider: Optional[ChromaProvider]):
         """Test async_delete_by_content_id."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
-            content_ids=["local_content_1", "local_content_1"]
         )
-        deleted = await provider.async_delete_by_content_id("local_content_1")
+        deleted = await provider.adelete_by_chunk_id(SAMPLE_IDS[0])
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_content_hash(self, provider: Optional[ChromaProvider]):
-        """Test delete_by_content_hash with validation."""
+        """Test delete_by_chunk_content_hash with validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
         content_hash = md5(SAMPLE_CHUNKS[0].encode()).hexdigest()
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        deleted = await provider.delete_by_content_hash(content_hash)
+        deleted = await provider.adelete_by_chunk_content_hash(content_hash)
         assert deleted is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:1])
+        results = await provider.afetch(ids=SAMPLE_IDS[:1])
         assert len(results) == 0
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_metadata(self, provider: Optional[ChromaProvider]):
         """Test delete_by_metadata with validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
@@ -3219,51 +3200,51 @@ class TestChromaProviderLOCAL:
         )
         deleted = provider.delete_by_metadata({"category": "science"})
         assert deleted is True
-        results = await provider.fetch(ids=SAMPLE_IDS)
+        results = await provider.afetch(ids=SAMPLE_IDS)
         assert len(results) == 3
         for result in results:
-            assert result.payload.get("category") != "science"
-        await provider.disconnect()
+            assert result.payload["metadata"].get("category") != "science"
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_delete_by_metadata(self, provider: Optional[ChromaProvider]):
         """Test async_delete_by_metadata."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        deleted = await provider.async_delete_by_metadata({"category": "science"})
+        deleted = await provider.adelete_by_metadata({"category": "science"})
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_id_exists(self, provider: Optional[ChromaProvider]):
         """Test id_exists check."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        assert await provider.id_exists("doc1")
-        assert not await provider.id_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.aid_exists("doc1")
+        assert not await provider.aid_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_document_name_exists(self, provider: Optional[ChromaProvider]):
         """Test document_name_exists."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
@@ -3272,32 +3253,32 @@ class TestChromaProviderLOCAL:
         )
         assert provider.document_name_exists("local_doc")
         assert not provider.document_name_exists("nonexistent")
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_document_name_exists(self, provider: Optional[ChromaProvider]):
         """Test async_document_name_exists."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
             document_names=["local_doc"]
         )
-        assert await provider.async_document_name_exists("local_doc")
-        assert not await provider.async_document_name_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.adocument_name_exists("local_doc")
+        assert not await provider.adocument_name_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_document_id_exists(self, provider: Optional[ChromaProvider]):
         """Test document_id_exists."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
@@ -3306,127 +3287,124 @@ class TestChromaProviderLOCAL:
         )
         assert provider.document_id_exists("local_doc_id_1")
         assert not provider.document_id_exists("nonexistent")
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_document_id_exists(self, provider: Optional[ChromaProvider]):
         """Test async_document_id_exists."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
             document_ids=["local_doc_id_1"]
         )
-        assert await provider.async_document_id_exists("local_doc_id_1")
-        assert not await provider.async_document_id_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.adocument_id_exists("local_doc_id_1")
+        assert not await provider.adocument_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_content_id_exists(self, provider: Optional[ChromaProvider]):
-        """Test content_id_exists."""
+        """Test chunk_id_exists."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
-            content_ids=["local_content_1"]
         )
-        assert provider.content_id_exists("local_content_1")
-        assert not provider.content_id_exists("nonexistent")
-        await provider.disconnect()
+        assert provider.chunk_id_exists(SAMPLE_IDS[0])
+        assert not provider.chunk_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_content_id_exists(self, provider: Optional[ChromaProvider]):
         """Test async_content_id_exists."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
-            content_ids=["local_content_1"]
         )
-        assert await provider.async_content_id_exists("local_content_1")
-        assert not await provider.async_content_id_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.achunk_id_exists(SAMPLE_IDS[0])
+        assert not await provider.achunk_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_content_hash_exists(self, provider: Optional[ChromaProvider]):
-        """Test content_hash_exists."""
+        """Test chunk_content_hash_exists."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
         content_hash = md5(SAMPLE_CHUNKS[0].encode()).hexdigest()
-        assert await provider.content_hash_exists(content_hash)
-        assert not await provider.content_hash_exists("nonexistent_hash")
-        await provider.disconnect()
+        assert await provider.achunk_content_hash_exists(content_hash)
+        assert not await provider.achunk_content_hash_exists("nonexistent_hash")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_update_metadata(self, provider: Optional[ChromaProvider]):
         """Test async_update_metadata with validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
-            content_ids=["local_content_1"]
         )
-        updated = await provider.async_update_metadata("local_content_1", {"new_field": "new_value", "updated": True})
+        updated = await provider.aupdate_metadata(SAMPLE_IDS[0], {"new_field": "new_value", "updated": True})
         assert updated is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:1])
-        assert results[0].payload.get("new_field") == "new_value"
-        assert results[0].payload.get("updated") is True
-        await provider.disconnect()
+        results = await provider.afetch(ids=SAMPLE_IDS[:1])
+        assert results[0].payload["metadata"].get("new_field") == "new_value"
+        assert results[0].payload["metadata"].get("updated") is True
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_get_count_with_filter(self, provider: Optional[ChromaProvider]):
         """Test get_count with filter."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        count = await provider.get_count(filter={"category": "science"})
+        count = await provider.aget_count(filter={"category": "science"})
         assert count == 2
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_get_count_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous get_count."""
         self._skip_if_unavailable(provider)
         self._ensure_connected_sync(provider)
-        provider.create_collection_sync()
-        initial_count = provider.get_count_sync()
-        provider.upsert_sync(
+        provider.create_collection()
+        initial_count = provider.get_count()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        assert provider.get_count_sync() == initial_count + 5
-        provider.disconnect_sync()
+        assert provider.get_count() == initial_count + 5
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_optimize(self, provider: Optional[ChromaProvider]):
@@ -3439,7 +3417,7 @@ class TestChromaProviderLOCAL:
     async def test_async_optimize(self, provider: Optional[ChromaProvider]):
         """Test async optimize."""
         self._skip_if_unavailable(provider)
-        result = await provider.async_optimize()
+        result = await provider.aoptimize()
         assert result is True
     
     @pytest.mark.asyncio
@@ -3456,7 +3434,7 @@ class TestChromaProviderLOCAL:
     async def test_async_get_supported_search_types(self, provider: Optional[ChromaProvider]):
         """Test async_get_supported_search_types."""
         self._skip_if_unavailable(provider)
-        supported = await provider.async_get_supported_search_types()
+        supported = await provider.aget_supported_search_types()
         assert isinstance(supported, list)
         assert "dense" in supported
         assert "full_text" in supported
@@ -3467,14 +3445,14 @@ class TestChromaProviderLOCAL:
         """Test synchronous dense search with content validation."""
         self._skip_if_unavailable(provider)
         self._ensure_connected_sync(provider)
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.dense_search_sync(
+        results = provider.dense_search(
             query_vector=QUERY_VECTOR,
             top_k=3,
             similarity_threshold=0.0
@@ -3489,21 +3467,21 @@ class TestChromaProviderLOCAL:
             assert result.payload is not None
             assert result.text is not None
             assert result.vector is not None
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_full_text_search_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous full-text search with content validation."""
         self._skip_if_unavailable(provider)
         self._ensure_connected_sync(provider)
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.full_text_search_sync(
+        results = provider.full_text_search(
             query_text="physics",
             top_k=3,
             similarity_threshold=0.0
@@ -3517,21 +3495,21 @@ class TestChromaProviderLOCAL:
             assert result.payload is not None
             assert result.text is not None
             assert "physics" in result.text.lower() or "theory" in result.text.lower()
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_hybrid_search_rrf(self, provider: Optional[ChromaProvider]):
         """Test hybrid search with RRF fusion."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.hybrid_search(
+        results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -3546,21 +3524,21 @@ class TestChromaProviderLOCAL:
             assert result.score >= 0.0
             assert result.payload is not None
             assert result.text is not None
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_hybrid_search_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous hybrid search with validation."""
         self._skip_if_unavailable(provider)
         self._ensure_connected_sync(provider)
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.hybrid_search_sync(
+        results = provider.hybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -3573,22 +3551,22 @@ class TestChromaProviderLOCAL:
             assert result.id in SAMPLE_IDS
             assert result.score >= 0.0
             assert result.payload is not None
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_search_master_method(self, provider: Optional[ChromaProvider]):
         """Test master search method with content validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
         # Dense search
-        results = await provider.search(
+        results = await provider.asearch(
             query_vector=QUERY_VECTOR,
             top_k=3
         )
@@ -3597,35 +3575,35 @@ class TestChromaProviderLOCAL:
         assert all(r.id in SAMPLE_IDS for r in results)
         assert all(r.payload is not None for r in results)
         # Full-text search
-        results = await provider.search(
+        results = await provider.asearch(
             query_text="physics",
             top_k=3
         )
         assert len(results) > 0
         assert all(isinstance(r, VectorSearchResult) for r in results)
         # Hybrid search
-        results = await provider.search(
+        results = await provider.asearch(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3
         )
         assert len(results) > 0
         assert all(isinstance(r, VectorSearchResult) for r in results)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_search_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous master search with validation."""
         self._skip_if_unavailable(provider)
         self._ensure_connected_sync(provider)
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.search_sync(
+        results = provider.search(
             query_vector=QUERY_VECTOR,
             top_k=3
         )
@@ -3633,7 +3611,7 @@ class TestChromaProviderLOCAL:
         assert all(isinstance(r, VectorSearchResult) for r in results)
         assert all(r.payload is not None for r in results)
         assert all(r.text is not None for r in results)
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_recreate_if_exists(self, provider: Optional[ChromaProvider]):
@@ -3650,18 +3628,18 @@ class TestChromaProviderLOCAL:
             recreate_if_exists=True
         )
         provider2 = ChromaProvider(config)
-        await self._ensure_connected(provider2)
-        await provider2.create_collection()
-        await provider2.upsert(
+        await self.a_ensure_connected(provider2)
+        await provider2.acreate_collection()
+        await provider2.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        await provider2.create_collection()
-        count = await provider2.get_count()
+        await provider2.acreate_collection()
+        count = await provider2.aget_count()
         assert count == 0
-        await provider2.disconnect()
+        await provider2.adisconnect()
     
     @pytest.mark.asyncio
     async def test_flat_index_config(self, provider: Optional[ChromaProvider]):
@@ -3678,21 +3656,21 @@ class TestChromaProviderLOCAL:
             index=FlatIndexConfig()
         )
         provider2 = ChromaProvider(config)
-        await self._ensure_connected(provider2)
-        await provider2.create_collection()
-        await provider2.upsert(
+        await self.a_ensure_connected(provider2)
+        await provider2.acreate_collection()
+        await provider2.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2]
         )
-        results = await provider2.dense_search(
+        results = await provider2.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=2,
             similarity_threshold=0.0
         )
         assert len(results) > 0
-        await provider2.disconnect()
+        await provider2.adisconnect()
     
     @pytest.mark.asyncio
     async def test_distance_metrics(self, provider: Optional[ChromaProvider]):
@@ -3710,15 +3688,15 @@ class TestChromaProviderLOCAL:
                 distance_metric=metric
             )
             provider2 = ChromaProvider(config)
-            await self._ensure_connected(provider2)
-            await provider2.create_collection()
-            await provider2.upsert(
+            await self.a_ensure_connected(provider2)
+            await provider2.acreate_collection()
+            await provider2.aupsert(
                 vectors=SAMPLE_VECTORS[:2],
                 payloads=SAMPLE_PAYLOADS[:2],
                 ids=SAMPLE_IDS[:2],
                 chunks=SAMPLE_CHUNKS[:2]
             )
-            results = await provider2.dense_search(
+            results = await provider2.adense_search(
                 query_vector=QUERY_VECTOR,
                 top_k=2,
                 similarity_threshold=0.0
@@ -3726,7 +3704,7 @@ class TestChromaProviderLOCAL:
             assert len(results) > 0
             assert all(isinstance(r, VectorSearchResult) for r in results)
             assert all(r.score >= 0.0 for r in results)
-            await provider2.disconnect()
+            await provider2.adisconnect()
 
 
 class TestChromaProviderCLOUD:
@@ -3772,7 +3750,7 @@ class TestChromaProviderCLOUD:
     async def _ensure_connected(self, provider: ChromaProvider):
         """Helper to ensure connection, skip if unavailable."""
         try:
-            await provider.connect()
+            await provider.aconnect()
             return True
         except VectorDBConnectionError:
             pytest.skip("ChromaDB cloud connection failed")
@@ -3786,71 +3764,71 @@ class TestChromaProviderCLOUD:
         assert provider._config.vector_size == 5
         assert provider._config.distance_metric == DistanceMetric.COSINE
         assert not provider._is_connected
-        assert provider._client is None
+        assert provider.client is None
     
     @pytest.mark.asyncio
     async def test_connect(self, provider: Optional[ChromaProvider]):
         """Test connection to ChromaDB."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
+        await self.a_ensure_connected(provider)
         assert provider._is_connected is True
-        assert provider._client is not None
-        assert await provider.is_ready() is True
-        await provider.disconnect()
+        assert provider.client is not None
+        assert await provider.ais_ready() is True
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_create_collection(self, provider: Optional[ChromaProvider]):
         """Test collection creation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
+        await self.a_ensure_connected(provider)
         try:
-            if await provider.collection_exists():
-                await provider.delete_collection()
+            if await provider.acollection_exists():
+                await provider.adelete_collection()
         except Exception:
             pass
-        assert not await provider.collection_exists()
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.disconnect()
+        assert not await provider.acollection_exists()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert(self, provider: Optional[ChromaProvider]):
         """Test upsert operation with content validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.fetch(ids=SAMPLE_IDS)
+        results = await provider.afetch(ids=SAMPLE_IDS)
         assert len(results) == 5
         for i, result in enumerate(results):
             assert result.id == SAMPLE_IDS[i]
-            assert result.payload["category"] == SAMPLE_PAYLOADS[i]["category"]
-            assert result.payload["author"] == SAMPLE_PAYLOADS[i]["author"]
-            assert result.payload["year"] == SAMPLE_PAYLOADS[i]["year"]
+            assert result.payload["metadata"]["category"] == SAMPLE_PAYLOADS[i]["category"]
+            assert result.payload["metadata"]["author"] == SAMPLE_PAYLOADS[i]["author"]
+            assert result.payload["metadata"]["year"] == SAMPLE_PAYLOADS[i]["year"]
             assert result.text == SAMPLE_CHUNKS[i]
             # Test that vectors are exactly the same
             vector_list = [float(x) for x in result.vector]
             assert vector_list == SAMPLE_VECTORS[i], f"Vector mismatch for ID {result.id}: {vector_list} != {SAMPLE_VECTORS[i]}"
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_fetch(self, provider: Optional[ChromaProvider]):
         """Test fetch operation with detailed validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.fetch(ids=SAMPLE_IDS[:3])
+        results = await provider.afetch(ids=SAMPLE_IDS[:3])
         assert len(results) == 3
         for i, result in enumerate(results):
             assert isinstance(result, VectorSearchResult)
@@ -3858,50 +3836,50 @@ class TestChromaProviderCLOUD:
             assert result.score == 1.0
             assert result.payload is not None
             assert isinstance(result.payload, dict)
-            assert result.payload["category"] == SAMPLE_PAYLOADS[i]["category"]
-            assert result.payload["author"] == SAMPLE_PAYLOADS[i]["author"]
+            assert result.payload["metadata"]["category"] == SAMPLE_PAYLOADS[i]["category"]
+            assert result.payload["metadata"]["author"] == SAMPLE_PAYLOADS[i]["author"]
             assert result.text == SAMPLE_CHUNKS[i]
             # Test that vectors are exactly the same
             vector_list = [float(x) for x in result.vector]
             assert vector_list == SAMPLE_VECTORS[i], f"Vector mismatch for ID {result.id}: {vector_list} != {SAMPLE_VECTORS[i]}"
             assert len(result.vector) == 5
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete(self, provider: Optional[ChromaProvider]):
         """Test delete operation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        await provider.delete(ids=SAMPLE_IDS[:2])
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        await provider.adelete(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
-        results = await provider.fetch(ids=SAMPLE_IDS[2:])
+        results = await provider.afetch(ids=SAMPLE_IDS[2:])
         assert len(results) == 3
         for i, result in enumerate(results):
             assert result.id == SAMPLE_IDS[i+2]
-            assert result.payload["category"] == SAMPLE_PAYLOADS[i+2]["category"]
-        await provider.disconnect()
+            assert result.payload["metadata"]["category"] == SAMPLE_PAYLOADS[i+2]["category"]
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_dense_search(self, provider: Optional[ChromaProvider]):
         """Test dense search with detailed result validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=3,
             similarity_threshold=0.0
@@ -3914,29 +3892,29 @@ class TestChromaProviderCLOUD:
             assert isinstance(result.score, float)
             assert 0.0 <= result.score <= 1.0
             assert result.payload is not None
-            assert "category" in result.payload
-            assert "author" in result.payload
+            assert "category" in result.payload["metadata"]
+            assert "author" in result.payload["metadata"]
             assert result.text is not None
             assert result.text in SAMPLE_CHUNKS
             assert result.vector is not None
             assert len(result.vector) == 5
         scores = [r.score for r in results]
         assert scores == sorted(scores, reverse=True)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_full_text_search(self, provider: Optional[ChromaProvider]):
         """Test full-text search with content validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.full_text_search(
+        results = await provider.afull_text_search(
             query_text="physics",
             top_k=3,
             similarity_threshold=0.0
@@ -3951,21 +3929,21 @@ class TestChromaProviderCLOUD:
             assert result.text is not None
             assert "physics" in result.text.lower() or "theory" in result.text.lower()
             assert result.vector is not None
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_hybrid_search(self, provider: Optional[ChromaProvider]):
         """Test hybrid search with detailed validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.hybrid_search(
+        results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -3984,388 +3962,386 @@ class TestChromaProviderCLOUD:
             assert result.text is not None
             assert result.vector is not None
             assert len(result.vector) == 5
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_search_with_filter(self, provider: Optional[ChromaProvider]):
         """Test search with metadata filter."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=5,
             filter={"category": "science"}
         )
         assert len(results) > 0
         for result in results:
-            assert result.payload.get("category") == "science"
-            assert result.payload.get("author") in ["Einstein", "Newton"]
+            assert result.payload["metadata"].get("category") == "science"
+            assert result.payload["metadata"].get("author") in ["Einstein", "Newton"]
             assert result.id in ["doc1", "doc2"]
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_get_count(self, provider: Optional[ChromaProvider]):
         """Test get_count."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        initial_count = await provider.get_count()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        initial_count = await provider.aget_count()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        assert await provider.get_count() == initial_count + 5
-        await provider.delete(ids=SAMPLE_IDS[:2])
-        assert await provider.get_count() == initial_count + 3
-        await provider.disconnect()
+        assert await provider.aget_count() == initial_count + 5
+        await provider.adelete(ids=SAMPLE_IDS[:2])
+        assert await provider.aget_count() == initial_count + 3
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_update_metadata(self, provider: Optional[ChromaProvider]):
         """Test update_metadata with validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
-            content_ids=["content_1"]
         )
-        updated = provider.update_metadata("content_1", {"new_field": "new_value", "updated": True})
+        updated = provider.update_metadata(SAMPLE_IDS[0], {"new_field": "new_value", "updated": True})
         assert updated is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:1])
+        results = await provider.afetch(ids=SAMPLE_IDS[:1])
         assert len(results) == 1
-        assert results[0].payload.get("new_field") == "new_value"
-        assert results[0].payload.get("updated") is True
-        assert results[0].payload.get("category") == SAMPLE_PAYLOADS[0]["category"]
-        await provider.disconnect()
+        assert results[0].payload["metadata"].get("new_field") == "new_value"
+        assert results[0].payload["metadata"].get("updated") is True
+        assert results[0].payload["metadata"].get("category") == SAMPLE_PAYLOADS[0]["category"]
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_filter(self, provider: Optional[ChromaProvider]):
         """Test delete_by_filter."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        deleted = await provider.delete_by_filter({"category": "science"})
+        deleted = await provider.adelete_by_metadata({"category": "science"})
         assert deleted is True
-        results = await provider.fetch(ids=SAMPLE_IDS)
+        results = await provider.afetch(ids=SAMPLE_IDS)
         assert len(results) == 3
         for result in results:
-            assert result.payload.get("category") != "science"
+            assert result.payload["metadata"].get("category") != "science"
             assert result.id in ["doc3", "doc4", "doc5"]
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_with_document_tracking(self, provider: Optional[ChromaProvider]):
         """Test upsert with document tracking and validate metadata."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
             document_names=["cloud_doc1", "cloud_doc2"],
             document_ids=["cloud_doc_id_1", "cloud_doc_id_2"],
-            content_ids=["cloud_content_1", "cloud_content_2"]
         )
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 2
         for i, result in enumerate(results):
             assert result.payload.get("document_name") == f"cloud_doc{i+1}"
             assert result.payload.get("document_id") == f"cloud_doc_id_{i+1}"
-            assert result.payload.get("content_id") == f"cloud_content_{i+1}"
-            assert result.payload.get("category") == SAMPLE_PAYLOADS[i]["category"]
-        await provider.disconnect()
+            assert result.payload.get("chunk_id") == f"cloud_content_{i+1}"
+            assert result.payload["metadata"].get("category") == SAMPLE_PAYLOADS[i]["category"]
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_connect_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous connection."""
         self._skip_if_unavailable(provider)
-        provider.connect_sync()
+        provider.connect()
         assert provider._is_connected is True
-        assert provider._client is not None
-        assert provider.is_ready_sync() is True
-        provider.disconnect_sync()
+        assert provider.client is not None
+        assert provider.is_ready() is True
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_disconnect(self, provider: Optional[ChromaProvider]):
         """Test disconnection."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
+        await self.a_ensure_connected(provider)
         assert provider._is_connected is True
-        await provider.disconnect()
+        await provider.adisconnect()
         assert provider._is_connected is False
-        assert provider._client is None
+        assert provider.client is None
         assert provider._collection_instance is None
     
     @pytest.mark.asyncio
     async def test_disconnect_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous disconnection."""
         self._skip_if_unavailable(provider)
-        provider.connect_sync()
+        provider.connect()
         assert provider._is_connected is True
-        provider.disconnect_sync()
+        provider.disconnect()
         assert provider._is_connected is False
     
     @pytest.mark.asyncio
     async def test_is_ready(self, provider: Optional[ChromaProvider]):
         """Test is_ready check."""
         self._skip_if_unavailable(provider)
-        assert await provider.is_ready() is False
-        await self._ensure_connected(provider)
-        assert await provider.is_ready() is True
-        await provider.disconnect()
-        assert await provider.is_ready() is False
+        assert await provider.ais_ready() is False
+        await self.a_ensure_connected(provider)
+        assert await provider.ais_ready() is True
+        await provider.adisconnect()
+        assert await provider.ais_ready() is False
     
     @pytest.mark.asyncio
     async def test_is_ready_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous is_ready check."""
         self._skip_if_unavailable(provider)
-        assert provider.is_ready_sync() is False
-        provider.connect_sync()
-        assert provider.is_ready_sync() is True
-        provider.disconnect_sync()
-        assert provider.is_ready_sync() is False
+        assert provider.is_ready() is False
+        provider.connect()
+        assert provider.is_ready() is True
+        provider.disconnect()
+        assert provider.is_ready() is False
     
     @pytest.mark.asyncio
     async def test_create_collection_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous collection creation."""
         self._skip_if_unavailable(provider)
-        provider.connect_sync()
+        provider.connect()
         try:
-            if provider.collection_exists_sync():
-                provider.delete_collection_sync()
+            if provider.collection_exists():
+                provider.delete_collection()
         except Exception:
             pass
-        assert not provider.collection_exists_sync()
-        provider.create_collection_sync()
-        assert provider.collection_exists_sync()
-        provider.disconnect_sync()
+        assert not provider.collection_exists()
+        provider.create_collection()
+        assert provider.collection_exists()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_collection_exists(self, provider: Optional[ChromaProvider]):
         """Test collection existence check."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
+        await self.a_ensure_connected(provider)
         try:
-            if await provider.collection_exists():
-                await provider.delete_collection()
+            if await provider.acollection_exists():
+                await provider.adelete_collection()
         except Exception:
             pass
-        assert not await provider.collection_exists()
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.disconnect()
+        assert not await provider.acollection_exists()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_collection_exists_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous collection existence check."""
         self._skip_if_unavailable(provider)
-        provider.connect_sync()
+        provider.connect()
         try:
-            if provider.collection_exists_sync():
-                provider.delete_collection_sync()
+            if provider.collection_exists():
+                provider.delete_collection()
         except Exception:
             pass
-        assert not provider.collection_exists_sync()
-        provider.create_collection_sync()
-        assert provider.collection_exists_sync()
-        provider.disconnect_sync()
+        assert not provider.collection_exists()
+        provider.create_collection()
+        assert provider.collection_exists()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_collection(self, provider: Optional[ChromaProvider]):
         """Test collection deletion."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.delete_collection()
-        assert not await provider.collection_exists()
-        await provider.disconnect()
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adelete_collection()
+        assert not await provider.acollection_exists()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_collection_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous collection deletion."""
         self._skip_if_unavailable(provider)
-        provider.connect_sync()
-        provider.create_collection_sync()
-        assert provider.collection_exists_sync()
-        provider.delete_collection_sync()
-        assert not provider.collection_exists_sync()
-        provider.disconnect_sync()
+        provider.connect()
+        provider.create_collection()
+        assert provider.collection_exists()
+        provider.delete_collection()
+        assert not provider.collection_exists()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_nonexistent_collection(self, provider: Optional[ChromaProvider]):
         """Test deleting non-existent collection raises error."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
+        await self.a_ensure_connected(provider)
         with pytest.raises(CollectionDoesNotExistError):
-            await provider.delete_collection()
-        await provider.disconnect()
+            await provider.adelete_collection()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous upsert with content validation."""
         self._skip_if_unavailable(provider)
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.fetch_sync(ids=SAMPLE_IDS)
+        results = provider.fetch(ids=SAMPLE_IDS)
         assert len(results) == 5
         for i, result in enumerate(results):
             assert result.id == SAMPLE_IDS[i]
-            assert result.payload.get("category") == SAMPLE_PAYLOADS[i]["category"]
-            assert result.payload.get("author") == SAMPLE_PAYLOADS[i]["author"]
+            assert result.payload["metadata"].get("category") == SAMPLE_PAYLOADS[i]["category"]
+            assert result.payload["metadata"].get("author") == SAMPLE_PAYLOADS[i]["author"]
             assert result.text == SAMPLE_CHUNKS[i]
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_with_sparse_vectors_ignored(self, provider: Optional[ChromaProvider]):
         """Test that sparse vectors are ignored (ChromaDB doesn't support them)."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
         sparse_vectors = [
             {"indices": [0, 2, 4], "values": [0.5, 0.3, 0.2]},
             {"indices": [1, 3], "values": [0.4, 0.6]}
         ]
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
             sparse_vectors=sparse_vectors
         )
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 2
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_validation_error(self, provider: Optional[ChromaProvider]):
         """Test upsert with mismatched lengths raises error."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
         with pytest.raises(UpsertError):
-            await provider.upsert(
+            await provider.aupsert(
                 vectors=SAMPLE_VECTORS[:2],
                 payloads=SAMPLE_PAYLOADS[:3],
                 ids=SAMPLE_IDS[:2],
                 chunks=SAMPLE_CHUNKS[:2]
             )
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_fetch_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous fetch with content validation."""
         self._skip_if_unavailable(provider)
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.fetch_sync(ids=SAMPLE_IDS[:3])
+        results = provider.fetch(ids=SAMPLE_IDS[:3])
         assert len(results) == 3
         for i, result in enumerate(results):
             assert isinstance(result, VectorSearchResult)
             assert result.id == SAMPLE_IDS[i]
             assert result.score == 1.0
             assert result.payload is not None
-            assert result.payload["category"] == SAMPLE_PAYLOADS[i]["category"]
-            assert result.payload["author"] == SAMPLE_PAYLOADS[i]["author"]
+            assert result.payload["metadata"]["category"] == SAMPLE_PAYLOADS[i]["category"]
+            assert result.payload["metadata"]["author"] == SAMPLE_PAYLOADS[i]["author"]
             assert result.text == SAMPLE_CHUNKS[i]
             assert result.vector is not None
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_fetch_by_id_sync(self, provider: Optional[ChromaProvider]):
         """Test fetch_by_id_sync alias with content validation."""
         self._skip_if_unavailable(provider)
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.fetch_by_id_sync(ids=SAMPLE_IDS[:2])
+        results = provider.fetch_by_id(ids=SAMPLE_IDS[:2])
         assert len(results) == 2
         for i, result in enumerate(results):
             assert result.id == SAMPLE_IDS[i]
-            assert result.payload.get("category") == SAMPLE_PAYLOADS[i]["category"]
-        provider.disconnect_sync()
+            assert result.payload["metadata"].get("category") == SAMPLE_PAYLOADS[i]["category"]
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous delete with validation."""
         self._skip_if_unavailable(provider)
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        provider.delete_sync(ids=SAMPLE_IDS[:2])
-        results = provider.fetch_sync(ids=SAMPLE_IDS[:2])
+        provider.delete(ids=SAMPLE_IDS[:2])
+        results = provider.fetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
-        results = provider.fetch_sync(ids=SAMPLE_IDS[2:])
+        results = provider.fetch(ids=SAMPLE_IDS[2:])
         assert len(results) == 3
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_id_sync(self, provider: Optional[ChromaProvider]):
         """Test delete_by_id_sync alias."""
         self._skip_if_unavailable(provider)
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        provider.delete_by_id_sync(ids=SAMPLE_IDS[:2])
-        results = provider.fetch_sync(ids=SAMPLE_IDS[:2])
+        provider.delete_by_id(ids=SAMPLE_IDS[:2])
+        results = provider.fetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_document_name(self, provider: Optional[ChromaProvider]):
         """Test delete_by_document_name with validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        initial_count = await provider.get_count()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        initial_count = await provider.aget_count()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
@@ -4374,34 +4350,34 @@ class TestChromaProviderCLOUD:
         )
         deleted = provider.delete_by_document_name("cloud_doc")
         assert deleted is True
-        count = await provider.get_count()
+        count = await provider.aget_count()
         assert count == initial_count
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_delete_by_document_name(self, provider: Optional[ChromaProvider]):
         """Test async_delete_by_document_name."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
             document_names=["cloud_doc", "cloud_doc"]
         )
-        deleted = await provider.async_delete_by_document_name("cloud_doc")
+        deleted = await provider.adelete_by_document_name("cloud_doc")
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_document_id(self, provider: Optional[ChromaProvider]):
         """Test delete_by_document_id with validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
@@ -4410,89 +4386,87 @@ class TestChromaProviderCLOUD:
         )
         deleted = provider.delete_by_document_id("cloud_doc_id_1")
         assert deleted is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_delete_by_document_id(self, provider: Optional[ChromaProvider]):
         """Test async_delete_by_document_id."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
             document_ids=["cloud_doc_id_1", "cloud_doc_id_1"]
         )
-        deleted = await provider.async_delete_by_document_id("cloud_doc_id_1")
+        deleted = await provider.adelete_by_document_id("cloud_doc_id_1")
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_content_id(self, provider: Optional[ChromaProvider]):
-        """Test delete_by_content_id with validation."""
+        """Test delete_by_chunk_id with validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
-            content_ids=["cloud_content_1", "cloud_content_1"]
         )
-        deleted = provider.delete_by_content_id("cloud_content_1")
+        deleted = provider.delete_by_chunk_id("cloud_content_1")
         assert deleted is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_delete_by_content_id(self, provider: Optional[ChromaProvider]):
         """Test async_delete_by_content_id."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2],
-            content_ids=["cloud_content_1", "cloud_content_1"]
         )
-        deleted = await provider.async_delete_by_content_id("cloud_content_1")
+        deleted = await provider.adelete_by_chunk_id("cloud_content_1")
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_content_hash(self, provider: Optional[ChromaProvider]):
-        """Test delete_by_content_hash with validation."""
+        """Test delete_by_chunk_content_hash with validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
         content_hash = md5(SAMPLE_CHUNKS[0].encode()).hexdigest()
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        deleted = await provider.delete_by_content_hash(content_hash)
+        deleted = await provider.adelete_by_chunk_content_hash(content_hash)
         assert deleted is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:1])
+        results = await provider.afetch(ids=SAMPLE_IDS[:1])
         assert len(results) == 0
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_metadata(self, provider: Optional[ChromaProvider]):
         """Test delete_by_metadata with validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
@@ -4500,51 +4474,51 @@ class TestChromaProviderCLOUD:
         )
         deleted = provider.delete_by_metadata({"category": "science"})
         assert deleted is True
-        results = await provider.fetch(ids=SAMPLE_IDS)
+        results = await provider.afetch(ids=SAMPLE_IDS)
         assert len(results) == 3
         for result in results:
-            assert result.payload.get("category") != "science"
-        await provider.disconnect()
+            assert result.payload["metadata"].get("category") != "science"
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_delete_by_metadata(self, provider: Optional[ChromaProvider]):
         """Test async_delete_by_metadata."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        deleted = await provider.async_delete_by_metadata({"category": "science"})
+        deleted = await provider.adelete_by_metadata({"category": "science"})
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_id_exists(self, provider: Optional[ChromaProvider]):
         """Test id_exists check."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        assert await provider.id_exists("doc1")
-        assert not await provider.id_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.aid_exists("doc1")
+        assert not await provider.aid_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_document_name_exists(self, provider: Optional[ChromaProvider]):
         """Test document_name_exists."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
@@ -4553,32 +4527,32 @@ class TestChromaProviderCLOUD:
         )
         assert provider.document_name_exists("cloud_doc")
         assert not provider.document_name_exists("nonexistent")
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_document_name_exists(self, provider: Optional[ChromaProvider]):
         """Test async_document_name_exists."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
             document_names=["cloud_doc"]
         )
-        assert await provider.async_document_name_exists("cloud_doc")
-        assert not await provider.async_document_name_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.adocument_name_exists("cloud_doc")
+        assert not await provider.adocument_name_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_document_id_exists(self, provider: Optional[ChromaProvider]):
         """Test document_id_exists."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
@@ -4587,127 +4561,124 @@ class TestChromaProviderCLOUD:
         )
         assert provider.document_id_exists("cloud_doc_id_1")
         assert not provider.document_id_exists("nonexistent")
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_document_id_exists(self, provider: Optional[ChromaProvider]):
         """Test async_document_id_exists."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
             document_ids=["cloud_doc_id_1"]
         )
-        assert await provider.async_document_id_exists("cloud_doc_id_1")
-        assert not await provider.async_document_id_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.adocument_id_exists("cloud_doc_id_1")
+        assert not await provider.adocument_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_content_id_exists(self, provider: Optional[ChromaProvider]):
-        """Test content_id_exists."""
+        """Test chunk_id_exists."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
-            content_ids=["cloud_content_1"]
         )
-        assert provider.content_id_exists("cloud_content_1")
-        assert not provider.content_id_exists("nonexistent")
-        await provider.disconnect()
+        assert provider.chunk_id_exists("cloud_content_1")
+        assert not provider.chunk_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_content_id_exists(self, provider: Optional[ChromaProvider]):
         """Test async_content_id_exists."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
-            content_ids=["cloud_content_1"]
         )
-        assert await provider.async_content_id_exists("cloud_content_1")
-        assert not await provider.async_content_id_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.achunk_id_exists("cloud_content_1")
+        assert not await provider.achunk_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_content_hash_exists(self, provider: Optional[ChromaProvider]):
-        """Test content_hash_exists."""
+        """Test chunk_content_hash_exists."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
         content_hash = md5(SAMPLE_CHUNKS[0].encode()).hexdigest()
-        assert await provider.content_hash_exists(content_hash)
-        assert not await provider.content_hash_exists("nonexistent_hash")
-        await provider.disconnect()
+        assert await provider.achunk_content_hash_exists(content_hash)
+        assert not await provider.achunk_content_hash_exists("nonexistent_hash")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_update_metadata(self, provider: Optional[ChromaProvider]):
         """Test async_update_metadata with validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1],
-            content_ids=["cloud_content_1"]
         )
-        updated = await provider.async_update_metadata("cloud_content_1", {"new_field": "new_value", "updated": True})
+        updated = await provider.aupdate_metadata("cloud_content_1", {"new_field": "new_value", "updated": True})
         assert updated is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:1])
-        assert results[0].payload.get("new_field") == "new_value"
-        assert results[0].payload.get("updated") is True
-        await provider.disconnect()
+        results = await provider.afetch(ids=SAMPLE_IDS[:1])
+        assert results[0].payload["metadata"].get("new_field") == "new_value"
+        assert results[0].payload["metadata"].get("updated") is True
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_get_count_with_filter(self, provider: Optional[ChromaProvider]):
         """Test get_count with filter."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        count = await provider.get_count(filter={"category": "science"})
+        count = await provider.aget_count(filter={"category": "science"})
         assert count == 2
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_get_count_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous get_count."""
         self._skip_if_unavailable(provider)
-        provider.connect_sync()
-        provider.create_collection_sync()
-        initial_count = provider.get_count_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        initial_count = provider.get_count()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        assert provider.get_count_sync() == initial_count + 5
-        provider.disconnect_sync()
+        assert provider.get_count() == initial_count + 5
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_optimize(self, provider: Optional[ChromaProvider]):
@@ -4720,7 +4691,7 @@ class TestChromaProviderCLOUD:
     async def test_async_optimize(self, provider: Optional[ChromaProvider]):
         """Test async optimize."""
         self._skip_if_unavailable(provider)
-        result = await provider.async_optimize()
+        result = await provider.aoptimize()
         assert result is True
     
     @pytest.mark.asyncio
@@ -4737,7 +4708,7 @@ class TestChromaProviderCLOUD:
     async def test_async_get_supported_search_types(self, provider: Optional[ChromaProvider]):
         """Test async_get_supported_search_types."""
         self._skip_if_unavailable(provider)
-        supported = await provider.async_get_supported_search_types()
+        supported = await provider.aget_supported_search_types()
         assert isinstance(supported, list)
         assert "dense" in supported
         assert "full_text" in supported
@@ -4747,15 +4718,15 @@ class TestChromaProviderCLOUD:
     async def test_dense_search_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous dense search with content validation."""
         self._skip_if_unavailable(provider)
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.dense_search_sync(
+        results = provider.dense_search(
             query_vector=QUERY_VECTOR,
             top_k=3,
             similarity_threshold=0.0
@@ -4770,21 +4741,21 @@ class TestChromaProviderCLOUD:
             assert result.payload is not None
             assert result.text is not None
             assert result.vector is not None
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_full_text_search_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous full-text search with content validation."""
         self._skip_if_unavailable(provider)
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.full_text_search_sync(
+        results = provider.full_text_search(
             query_text="physics",
             top_k=3,
             similarity_threshold=0.0
@@ -4798,21 +4769,21 @@ class TestChromaProviderCLOUD:
             assert result.payload is not None
             assert result.text is not None
             assert "physics" in result.text.lower() or "theory" in result.text.lower()
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_hybrid_search_rrf(self, provider: Optional[ChromaProvider]):
         """Test hybrid search with RRF fusion."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.hybrid_search(
+        results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -4827,21 +4798,21 @@ class TestChromaProviderCLOUD:
             assert result.score >= 0.0
             assert result.payload is not None
             assert result.text is not None
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_hybrid_search_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous hybrid search with validation."""
         self._skip_if_unavailable(provider)
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.hybrid_search_sync(
+        results = provider.hybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -4854,22 +4825,22 @@ class TestChromaProviderCLOUD:
             assert result.id in SAMPLE_IDS
             assert result.score >= 0.0
             assert result.payload is not None
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_search_master_method(self, provider: Optional[ChromaProvider]):
         """Test master search method with content validation."""
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await self.a_ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
         # Dense search
-        results = await provider.search(
+        results = await provider.asearch(
             query_vector=QUERY_VECTOR,
             top_k=3
         )
@@ -4878,35 +4849,35 @@ class TestChromaProviderCLOUD:
         assert all(r.id in SAMPLE_IDS for r in results)
         assert all(r.payload is not None for r in results)
         # Full-text search
-        results = await provider.search(
+        results = await provider.asearch(
             query_text="physics",
             top_k=3
         )
         assert len(results) > 0
         assert all(isinstance(r, VectorSearchResult) for r in results)
         # Hybrid search
-        results = await provider.search(
+        results = await provider.asearch(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3
         )
         assert len(results) > 0
         assert all(isinstance(r, VectorSearchResult) for r in results)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_search_sync(self, provider: Optional[ChromaProvider]):
         """Test synchronous master search with validation."""
         self._skip_if_unavailable(provider)
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.search_sync(
+        results = provider.search(
             query_vector=QUERY_VECTOR,
             top_k=3
         )
@@ -4914,7 +4885,7 @@ class TestChromaProviderCLOUD:
         assert all(isinstance(r, VectorSearchResult) for r in results)
         assert all(r.payload is not None for r in results)
         assert all(r.text is not None for r in results)
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_recreate_if_exists(self, provider: Optional[ChromaProvider]):
@@ -4940,18 +4911,18 @@ class TestChromaProviderCLOUD:
             recreate_if_exists=True
         )
         provider2 = ChromaProvider(config)
-        await self._ensure_connected(provider2)
-        await provider2.create_collection()
-        await provider2.upsert(
+        await self.a_ensure_connected(provider2)
+        await provider2.acreate_collection()
+        await provider2.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        await provider2.create_collection()
-        count = await provider2.get_count()
+        await provider2.acreate_collection()
+        count = await provider2.aget_count()
         assert count == 0
-        await provider2.disconnect()
+        await provider2.adisconnect()
     
     @pytest.mark.asyncio
     async def test_flat_index_config(self, provider: Optional[ChromaProvider]):
@@ -4977,21 +4948,21 @@ class TestChromaProviderCLOUD:
             index=FlatIndexConfig()
         )
         provider2 = ChromaProvider(config)
-        await self._ensure_connected(provider2)
-        await provider2.create_collection()
-        await provider2.upsert(
+        await self.a_ensure_connected(provider2)
+        await provider2.acreate_collection()
+        await provider2.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2]
         )
-        results = await provider2.dense_search(
+        results = await provider2.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=2,
             similarity_threshold=0.0
         )
         assert len(results) > 0
-        await provider2.disconnect()
+        await provider2.adisconnect()
     
     @pytest.mark.asyncio
     async def test_distance_metrics(self, provider: Optional[ChromaProvider]):
@@ -5018,15 +4989,15 @@ class TestChromaProviderCLOUD:
                 distance_metric=metric
             )
             provider2 = ChromaProvider(config)
-            await self._ensure_connected(provider2)
-            await provider2.create_collection()
-            await provider2.upsert(
+            await self.a_ensure_connected(provider2)
+            await provider2.acreate_collection()
+            await provider2.aupsert(
                 vectors=SAMPLE_VECTORS[:2],
                 payloads=SAMPLE_PAYLOADS[:2],
                 ids=SAMPLE_IDS[:2],
                 chunks=SAMPLE_CHUNKS[:2]
             )
-            results = await provider2.dense_search(
+            results = await provider2.adense_search(
                 query_vector=QUERY_VECTOR,
                 top_k=2,
                 similarity_threshold=0.0
@@ -5034,7 +5005,7 @@ class TestChromaProviderCLOUD:
             assert len(results) > 0
             assert all(isinstance(r, VectorSearchResult) for r in results)
             assert all(r.score >= 0.0 for r in results)
-            await provider2.disconnect()
+            await provider2.adisconnect()
 
 
 class TestChromaProviderConfigValidation:
@@ -5124,35 +5095,35 @@ class TestChromaProviderErrorHandling:
     async def test_operations_without_connection(self, provider: ChromaProvider):
         """Test operations fail without connection."""
         with pytest.raises(VectorDBConnectionError):
-            await provider.create_collection()
+            await provider.acreate_collection()
         
         with pytest.raises(VectorDBConnectionError):
-            await provider.collection_exists()
+            await provider.acollection_exists()
     
     @pytest.mark.asyncio
     async def test_operations_without_collection(self, provider: ChromaProvider):
         """Test operations fail without collection."""
-        await provider.connect()
+        await provider.aconnect()
         with pytest.raises(VectorDBError):
-            await provider.upsert(
+            await provider.aupsert(
                 vectors=SAMPLE_VECTORS,
                 payloads=SAMPLE_PAYLOADS,
                 ids=SAMPLE_IDS,
                 chunks=SAMPLE_CHUNKS
             )
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_search_without_data(self, provider: ChromaProvider):
         """Test search returns empty results when no data."""
-        await provider.connect()
-        await provider.create_collection()
-        results = await provider.dense_search(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=5
         )
         assert len(results) == 0
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_search_disabled_types(self, provider: ChromaProvider):
@@ -5166,21 +5137,21 @@ class TestChromaProviderErrorHandling:
             dense_search_enabled=False
         )
         provider2 = ChromaProvider(config)
-        await provider2.connect()
-        await provider2.create_collection()
+        await provider2.aconnect()
+        await provider2.acreate_collection()
         # The search method should check this, not dense_search directly
         with pytest.raises(ConfigurationError, match="Dense search is disabled"):
-            await provider2.search(
+            await provider2.asearch(
                 query_vector=QUERY_VECTOR,
                 top_k=5
             )
-        await provider2.disconnect()
+        await provider2.adisconnect()
     
     @pytest.mark.asyncio
     async def test_search_missing_parameters(self, provider: ChromaProvider):
         """Test search fails without query_vector or query_text."""
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         with pytest.raises(ConfigurationError, match="requires at least one"):
-            await provider.search(top_k=5)
-        await provider.disconnect()
+            await provider.asearch(top_k=5)
+        await provider.adisconnect()

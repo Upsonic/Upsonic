@@ -507,8 +507,8 @@ class TestKnowledgeBaseIntegration:
             # Test setup process
             await kb.setup_async()
             
-            # Verify setup completed (check if knowledge base is ready instead of vectordb)
-            assert kb._is_ready is True
+            health: dict = await kb.health_check_async()
+            assert health["state"] == "indexed"
         finally:
             if hasattr(kb, 'close'):
                 await kb.close()
