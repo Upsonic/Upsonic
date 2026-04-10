@@ -502,6 +502,14 @@ class SuperMemoryProvider(BaseVectorDBProvider):
             context="SuperMemoryVectorDB",
         )
 
+        # SuperMemory indexes asynchronously; wait for content to become searchable
+        if total_succeeded > 0 and self._config.index_delay > 0:
+            info_log(
+                f"Waiting {self._config.index_delay}s for SuperMemory indexing to complete...",
+                context="SuperMemoryVectorDB",
+            )
+            await asyncio.sleep(self._config.index_delay)
+
     async def _batch_find_stale_by_hashes(
         self,
         client: "AsyncSupermemory",

@@ -1213,9 +1213,9 @@ class KnowledgeBase:
             chunk_hashes: List[str] = [chunk.chunk_content_hash for chunk in chunks]
             chunk_payloads: List[Dict[str, Any]] = [dict(chunk.metadata) for chunk in chunks]
 
+            knowledge_base_ids: Optional[List[str]] = None
             if self.isolate_search:
-                for payload in chunk_payloads:
-                    payload["knowledge_base_id"] = self.knowledge_id
+                knowledge_base_ids = [self.knowledge_id] * len(chunks)
 
             await self.vectordb.aupsert(
                 vectors=vectors,
@@ -1225,6 +1225,7 @@ class KnowledgeBase:
                 document_ids=doc_ids,
                 doc_content_hashes=doc_hashes,
                 chunk_content_hashes=chunk_hashes,
+                knowledge_base_ids=knowledge_base_ids,
             )
             
             success_log(f"Stored {len(chunks)} chunks successfully", context="KnowledgeBase")

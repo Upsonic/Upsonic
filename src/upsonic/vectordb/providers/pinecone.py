@@ -1150,7 +1150,7 @@ class PineconeProvider(BaseVectorDBProvider):
         if not self._index:
             raise VectorDBConnectionError("Index not available.")
 
-        final_threshold: float = similarity_threshold if similarity_threshold is not None else self._config.default_similarity_threshold or 0.5
+        final_threshold: float = similarity_threshold if similarity_threshold is not None else (self._config.default_similarity_threshold if self._config.default_similarity_threshold is not None else 0.0)
         namespace: str = self._config.namespace or ""
         include_values: bool = self._config.include_values
 
@@ -1198,7 +1198,7 @@ class PineconeProvider(BaseVectorDBProvider):
             raise ConfigurationError("Full-text search requires use_sparse_vectors to be enabled.")
         
         top_k = top_k or self._config.default_top_k
-        final_threshold: float = similarity_threshold if similarity_threshold is not None else self._config.default_similarity_threshold or 0.5
+        final_threshold: float = similarity_threshold if similarity_threshold is not None else (self._config.default_similarity_threshold if self._config.default_similarity_threshold is not None else 0.0)
         namespace: str = self._config.namespace or ""
 
         native_filter, post_filter = self._split_filter(filter)
@@ -1269,7 +1269,7 @@ class PineconeProvider(BaseVectorDBProvider):
         
         top_k = top_k or self._config.default_top_k
         alpha = alpha if alpha is not None else (self._config.default_hybrid_alpha or 0.5)
-        final_threshold: float = similarity_threshold if similarity_threshold is not None else self._config.default_similarity_threshold or 0.5
+        final_threshold: float = similarity_threshold if similarity_threshold is not None else (self._config.default_similarity_threshold if self._config.default_similarity_threshold is not None else 0.0)
         namespace: str = self._config.namespace or ""
         include_values: bool = self._config.include_values
 

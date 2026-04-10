@@ -1437,7 +1437,7 @@ class ChromaProvider(BaseVectorDBProvider):
         _ = apply_reranking  # accepted for API parity; not applied in dense path
         collection = await self._get_active_collection()
 
-        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.default_similarity_threshold or 0.5
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else (self._config.default_similarity_threshold if self._config.default_similarity_threshold is not None else 0.0)
 
         try:
             native_filter, post_filter = self._split_filter(filter)
@@ -1522,7 +1522,7 @@ class ChromaProvider(BaseVectorDBProvider):
         _ = (apply_reranking, sparse_query_vector)  # accepted for API parity; ChromaDB uses BM25-like scoring with no sparse vectors
         collection = await self._get_active_collection()
 
-        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.default_similarity_threshold or 0.5
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else (self._config.default_similarity_threshold if self._config.default_similarity_threshold is not None else 0.0)
 
         where_document_filter = {"$contains": query_text}
         native_filter, post_filter = self._split_filter(filter)

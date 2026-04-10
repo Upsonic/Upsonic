@@ -539,6 +539,7 @@ class SuperMemoryConfig(BaseVectorDBConfig):
     timeout: float = 60.0
     batch_delay: float = 0.1
     batch_size: int = 50
+    index_delay: float = 7.0  # Seconds to wait after upsert for async indexing to complete
 
     vector_size: int = 0
     dense_search_enabled: bool = False

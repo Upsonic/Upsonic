@@ -1365,7 +1365,7 @@ class QdrantProvider(BaseVectorDBProvider):
         """
         try:
             client = await self.aget_client()
-            final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.default_similarity_threshold or 0.5
+            final_similarity_threshold = similarity_threshold if similarity_threshold is not None else (self._config.default_similarity_threshold if self._config.default_similarity_threshold is not None else 0.0)
             
             search_params = models.SearchParams(
                 hnsw_ef=getattr(self._config.index, 'ef_search', None) or 128,
@@ -1441,7 +1441,7 @@ class QdrantProvider(BaseVectorDBProvider):
         _ = (sparse_query_vector,)  # accepted for API parity; Qdrant uses text-index BM25 not sparse vectors
         await self.aget_client()
 
-        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.default_similarity_threshold or 0.5
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else (self._config.default_similarity_threshold if self._config.default_similarity_threshold is not None else 0.0)
         target_text_field: str = self._config.text_search_field
 
         if self._config.connection.mode == Mode.IN_MEMORY:
