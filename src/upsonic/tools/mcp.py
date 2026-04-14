@@ -7,7 +7,7 @@ import base64
 import json
 import os
 import shutil
-import weakref
+import warnings
 from dataclasses import asdict, dataclass
 from datetime import timedelta
 from shlex import split as shlex_split
@@ -20,11 +20,10 @@ import httpx
 from mcp import types as mcp_types
 from mcp.client.session import ClientSession
 from mcp.client.sse import sse_client
-from mcp.client.stdio import StdioServerParameters, stdio_client, get_default_environment
+from mcp.client.stdio import StdioServerParameters, stdio_client
 
 from upsonic.tools.base import Tool, ToolMetadata
 
-# Try to import streamable HTTP client (may not be available in all MCP versions)
 try:
     from mcp.client.streamable_http import streamable_http_client
     HAS_STREAMABLE_HTTP = True
@@ -36,10 +35,6 @@ _MCP_SECURITY_WARNING_EMITTED = False
 
 
 def _emit_mcp_security_warning() -> None:
-    """
-    Emit a one-time security warning before MCP tool initialization.
-    Must be called before any MCP connection/initialization starts.
-    """
     global _MCP_SECURITY_WARNING_EMITTED
     if _MCP_SECURITY_WARNING_EMITTED:
         return
@@ -58,11 +53,6 @@ def prepare_command(command: str) -> List[str]:
     """
     Sanitize a command and split it into parts before using it to run an MCP server.
     
-    This function provides critical security by:
-    - Blocking dangerous shell metacharacters
-    - Whitelisting allowed executables
-    - Validating paths and binaries
-    
     Args:
         command: The command string to sanitize
         
@@ -72,14 +62,12 @@ def prepare_command(command: str) -> List[str]:
     Raises:
         ValueError: If command contains dangerous characters or disallowed executables
     """
-    # Block dangerous shell metacharacters that could be used for injection
     DANGEROUS_CHARS = ["&", "|", ";", "`", "$", "(", ")"]
     if any(char in command for char in DANGEROUS_CHARS):
         raise ValueError(
             f"MCP command can't contain shell metacharacters: {', '.join(DANGEROUS_CHARS)}"
         )
     
-    # Split command safely using shlex
     try:
         parts = shlex_split(command)
     except ValueError as e:
@@ -88,48 +76,23 @@ def prepare_command(command: str) -> List[str]:
     if not parts:
         raise ValueError("MCP command can't be empty")
     
-    # Whitelist of allowed executables
     ALLOWED_COMMANDS = {
-        # Python
-        "python",
-        "python3",
-        "uv",
-        "uvx",
-        "pipx",
-        # Node
-        "node",
-        "npm",
-        "npx",
-        "yarn",
-        "pnpm",
-        "bun",
-        # Other runtimes
-        "deno",
-        "java",
-        "ruby",
-        "docker",
+        "python", "python3", "uv", "uvx", "pipx",
+        "node", "npm", "npx", "yarn", "pnpm", "bun",
+        "deno", "java", "ruby", "docker",
     }
     
     first_part = parts[0]
     executable = first_part.split("/")[-1]
     
-    # Allow relative paths starting with ./ or ../
     if first_part.startswith(("./", "../")):
         return parts
-    
-    # Allow absolute paths to existing files
     if first_part.startswith("/") and os.path.isfile(first_part):
         return parts
-    
-    # Allow binaries in current directory without ./
     if "/" not in first_part and os.path.isfile(first_part):
         return parts
-    
-    # Check if it's a binary in PATH
     if shutil.which(first_part):
         return parts
-    
-    # Check against whitelist
     if executable not in ALLOWED_COMMANDS:
         raise ValueError(
             f"MCP command must use one of the following executables: {ALLOWED_COMMANDS}. "
@@ -159,34 +122,31 @@ class StreamableHTTPClientParams:
     auth: Optional[Any] = None
     
     def __post_init__(self) -> None:
-        """Set default timeouts."""
         if self.timeout is None:
             self.timeout = timedelta(seconds=30)
         if self.sse_read_timeout is None:
             self.sse_read_timeout = timedelta(seconds=60 * 5)
 
-    def build_http_client(self) -> "httpx.AsyncClient":
-        """Build an httpx.AsyncClient configured with headers, timeout, and auth."""
-
-        kwargs: Dict[str, Any] = {}
+    def build_connect_kwargs(self) -> Dict[str, Any]:
+        """Build kwargs for ``streamable_http_client()``.
+        
+        Creates a managed httpx.AsyncClient internally so the transport
+        context manager can close it properly on exit.
+        """
+        client_kwargs: Dict[str, Any] = {}
         if self.headers:
-            kwargs["headers"] = self.headers
+            client_kwargs["headers"] = self.headers
         if self.timeout:
-            kwargs["timeout"] = httpx.Timeout(self.timeout.total_seconds())
+            client_kwargs["timeout"] = httpx.Timeout(self.timeout.total_seconds())
         if self.auth:
-            kwargs["auth"] = self.auth
-        return httpx.AsyncClient(**kwargs)
+            client_kwargs["auth"] = self.auth
 
-    def to_connect_kwargs(self) -> Dict[str, Any]:
-        """Build kwargs for ``streamable_http_client()``."""
-        result: Dict[str, Any] = {
-            "url": self.url,
-            "http_client": self.build_http_client(),
-        }
+        result: Dict[str, Any] = {"url": self.url}
+        if client_kwargs:
+            result["http_client"] = httpx.AsyncClient(**client_kwargs)
         if self.terminate_on_close is not None:
             result["terminate_on_close"] = self.terminate_on_close
         return result
-
 
 
 class MCPTool(Tool):
@@ -198,14 +158,11 @@ class MCPTool(Tool):
         tool_info: mcp_types.Tool,
         tool_name_prefix: Optional[str] = None
     ):
-        self.handler = handler
-        self.tool_info = tool_info
-        # Store the original tool name for MCP server calls
-        self.original_name = tool_info.name
-        # Apply prefix if provided
-        self.tool_name_prefix = tool_name_prefix
+        self.handler: MCPHandler = handler
+        self.tool_info: mcp_types.Tool = tool_info
+        self.original_name: str = tool_info.name
+        self.tool_name_prefix: Optional[str] = tool_name_prefix
         
-        # Compute the prefixed name for registration
         if tool_name_prefix:
             prefixed_name = f"{tool_name_prefix}_{tool_info.name}"
         else:
@@ -230,7 +187,6 @@ class MCPTool(Tool):
             var_positional_field=None
         )
         
-        # Create metadata with MCP tool info
         metadata = ToolMetadata(
             name=prefixed_name,
             description=tool_info.description,
@@ -239,7 +195,6 @@ class MCPTool(Tool):
             strict=False
         )
         
-        # Store MCP-specific data in custom
         metadata.custom['mcp_server'] = handler.server_name
         metadata.custom['mcp_type'] = handler.connection_type
         metadata.custom['mcp_transport'] = handler.transport
@@ -256,15 +211,12 @@ class MCPTool(Tool):
         
         from upsonic.tools.config import ToolConfig
         self.config = ToolConfig(
-            timeout=60,  # 60 second timeout for MCP operations
-            max_retries=2,  # Reduce retries since each retry takes long
-            sequential=False  # Allow parallel execution
+            timeout=60,
+            max_retries=2,
+            sequential=False
         )
     
     async def execute(self, **kwargs: Any) -> Any:
-        """Execute the MCP tool with enhanced error handling."""
-        # Call tool through MCP handler using the ORIGINAL tool name
-        # (MCP server expects the original name, not the prefixed one)
         result = await self.handler.call_tool(self.original_name, kwargs)
         return result
 
@@ -273,19 +225,16 @@ class MCPHandler:
     """
     Handler for MCP server connections and tool management.
     
-    Features:
-    - Multiple transport types (stdio, SSE, Streamable HTTP)
-    - Command sanitization and security
-    - Health checks via ping
-    - Enhanced image/media handling
-    - Tool filtering (include/exclude)
-    - Proper resource cleanup
-    - Lazy connection support
-    - Tool name prefixing for avoiding collisions
+    Lifecycle:
+        1. ``get_tools()`` (sync) – opens a temporary connection to discover
+           available tools, then closes it.  Tool metadata is cached.
+        2. ``call_tool()`` (async) – auto-reconnects on the caller's event
+           loop if needed, then reuses the persistent session for every call.
+        3. ``close()`` (async) – tears down the persistent connection.
+           Tool metadata survives so the handler can be reconnected later.
     """
 
     def __new__(cls, *args: Any, **kwargs: Any) -> "MCPHandler":
-        """Emit MCP security warning before any initialization."""
         _emit_mcp_security_warning()
         return super().__new__(cls)
 
@@ -304,63 +253,59 @@ class MCPHandler:
         exclude_tools: Optional[List[str]] = None,
         tool_name_prefix: Optional[str] = None,
     ):
-        """
-        Initialize MCP handler.
-        
-        Args:
-            config: Legacy config class with url/command/args/env attributes
-            command: Command to run MCP server (for stdio transport)
-            url: URL for SSE or Streamable HTTP transport
-            env: Environment variables to pass to server
-            transport: Transport protocol ("stdio", "sse", "streamable-http")
-            server_params: Pre-configured server parameters
-            session: Existing MCP ClientSession
-            timeout_seconds: Read timeout in seconds
-            include_tools: Optional list of tool names to include (None = all)
-            exclude_tools: Optional list of tool names to exclude (None = none)
-            tool_name_prefix: Optional prefix for tool names to avoid collisions
-                             when using multiple MCP servers with same tools
-        """
         self.session: Optional[ClientSession] = session
         self.tools: List[MCPTool] = []
-        self.transport = transport
-        self.timeout_seconds = timeout_seconds
-        self.include_tools = include_tools
-        self.exclude_tools = exclude_tools
-        self.tool_name_prefix = tool_name_prefix
-        self._initialized = False
-        self._context = None
-        self._session_context = None
-        self._connection_task = None
-        self._active_contexts: List[Any] = []
+        self.transport: str = transport
+        self.timeout_seconds: int = timeout_seconds
+        self.include_tools: Optional[List[str]] = include_tools
+        self.exclude_tools: Optional[List[str]] = exclude_tools
+        self.tool_name_prefix: Optional[str] = tool_name_prefix
+        self._initialized: bool = False
+        self._transport_ctx: Optional[Any] = None
+        self._session_ctx: Optional[ClientSession] = None
+        self._managed_http_client: Optional[httpx.AsyncClient] = None
+        self._connect_lock: Optional[asyncio.Lock] = None
         
-        # Handle legacy config class
         if config is not None:
             if hasattr(config, 'url'):
                 url = config.url
                 transport = 'sse'
             elif hasattr(config, 'command'):
-                # Extract command and args from legacy config
                 cmd = config.command
                 legacy_args = getattr(config, 'args', [])
-                
-                # Combine command and args into a single command string for sanitization
-                if legacy_args:
-                    command = f"{cmd} {' '.join(str(arg) for arg in legacy_args)}"
-                else:
-                    command = cmd
-                
+                command = f"{cmd} {' '.join(str(arg) for arg in legacy_args)}" if legacy_args else cmd
                 env = getattr(config, 'env', {})
                 transport = 'stdio'
             else:
                 raise ValueError("Config must have either 'url' or 'command' attribute")
             
-            # Extract tool_name_prefix from legacy config if not provided
             if tool_name_prefix is None and hasattr(config, 'tool_name_prefix'):
                 self.tool_name_prefix = config.tool_name_prefix
         
-        # Determine connection type and server name
-        if url:
+        # --- Determine connection_type and server_name from inputs ---
+        if server_params is not None:
+            if isinstance(server_params, SSEClientParams):
+                self.connection_type: str = 'sse'
+                self.transport = 'sse'
+                self.server_name: str = self._extract_server_name(server_params.url)
+            elif isinstance(server_params, StreamableHTTPClientParams):
+                if not HAS_STREAMABLE_HTTP:
+                    from upsonic.utils.printing import import_error
+                    import_error(
+                        package_name="mcp[streamable-http]",
+                        install_command="pip install 'mcp[streamable-http]'",
+                        feature_name="MCP streamable HTTP transport"
+                    )
+                self.connection_type = 'streamable-http'
+                self.transport = 'streamable-http'
+                self.server_name = self._extract_server_name(server_params.url)
+            elif isinstance(server_params, StdioServerParameters):
+                self.connection_type = 'stdio'
+                self.transport = 'stdio'
+                self.server_name = server_params.command.split("/")[-1] if server_params.command else f"mcp_{uuid4().hex[:8]}"
+            else:
+                raise ValueError(f"Unsupported server_params type: {type(server_params)}")
+        elif url:
             if transport == "sse":
                 self.connection_type = 'sse'
             elif transport == "streamable-http":
@@ -375,185 +320,186 @@ class MCPHandler:
             else:
                 raise ValueError(f"Invalid transport for URL: {transport}")
             self.server_name = self._extract_server_name(url)
-        elif command or server_params:
+        elif command:
             self.connection_type = 'stdio'
-            if command:
-                self.server_name = command.split()[0].split("/")[-1]
-            else:
-                # Use UUID to ensure unique server name when server_params provided without command
-                # This prevents tool name collisions when multiple handlers use default name
-                self.server_name = f"mcp_server_{uuid4().hex[:8]}"
+            self.server_name = command.split()[0].split("/")[-1]
         else:
             raise ValueError("Must provide either url, command, or server_params")
         
-        # Setup server parameters
+        # --- Build canonical server_params ---
         if server_params:
-            self.server_params = server_params
-        elif transport == "sse" and url:
+            self.server_params: Union[StdioServerParameters, SSEClientParams, StreamableHTTPClientParams] = server_params
+        elif self.connection_type == 'sse' and url:
             self.server_params = SSEClientParams(url=url)
-        elif transport == "streamable-http" and url:
+        elif self.connection_type == 'streamable-http' and url:
             self.server_params = StreamableHTTPClientParams(url=url)
-        elif transport == "stdio" and command:
-            # Sanitize command for security
+        elif self.connection_type == 'stdio' and command:
             parts = prepare_command(command)
-            cmd = parts[0]
-            args = parts[1:] if len(parts) > 1 else []
-            
-            # Inherit the full current-process environment so that API keys,
-            # PYTHONPATH, and .env-loaded vars are available to the subprocess.
-            # User-provided env overrides take precedence.
             inherited_env: Dict[str, str] = {**os.environ}
             if env is not None:
                 inherited_env.update(env)
-            
             self.server_params = StdioServerParameters(
-                command=cmd,
-                args=args,
+                command=parts[0],
+                args=parts[1:] if len(parts) > 1 else [],
                 env=inherited_env
             )
         else:
             raise ValueError("Invalid configuration for MCP handler")
-        
-        # Setup cleanup finalizer
-        # Note: _cleanup_finalizer is intentionally stored but not explicitly called.
-        # weakref.finalize() stores the finalizer and automatically calls cleanup()
-        # when this object is garbage collected. This ensures no resource leaks.
-        def cleanup():
-            """Cancel active connections before garbage collection."""
-            if self._connection_task and not self._connection_task.done():
-                self._connection_task.cancel()
-        
-        self._cleanup_finalizer = weakref.finalize(self, cleanup)
     
-    def _extract_server_name(self, url: str) -> str:
-        """Extract server name from URL."""
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_server_name(url: str) -> str:
         parsed = urlparse(url)
         return parsed.hostname or parsed.path.split('/')[-1] or 'mcp_server'
     
-    def _create_session(self):
-        """Create a new session for MCP communication."""
+    def _build_transport_context(self) -> Any:
+        """Build the raw transport context manager (not entered yet)."""
         if self.connection_type == 'sse':
-            # SSE connection
             if isinstance(self.server_params, SSEClientParams):
                 return sse_client(**asdict(self.server_params))
-            else:
-                # Fallback for legacy config
-                return sse_client(self.server_params.url if hasattr(self.server_params, 'url') else str(self.server_params))
-            
-        elif self.connection_type == 'streamable-http':
-            # Streamable HTTP connection
+            return sse_client(url=str(getattr(self.server_params, 'url', self.server_params)))
+
+        if self.connection_type == 'streamable-http':
             if not HAS_STREAMABLE_HTTP:
-                from upsonic.utils.printing import import_error
-                import_error(
-                    package_name="mcp[streamable-http]",
-                    install_command="pip install 'mcp[streamable-http]'",
-                    feature_name="MCP streamable HTTP"
-                )
+                raise ImportError("mcp[streamable-http] is required for streamable HTTP transport")
             if isinstance(self.server_params, StreamableHTTPClientParams):
-                return streamable_http_client(**self.server_params.to_connect_kwargs())
-            else:
-                raise ValueError("Streamable HTTP requires StreamableHTTPClientParams")
-            
-        else:  # stdio
-            # Stdio connection
-            if not isinstance(self.server_params, StdioServerParameters):
-                raise ValueError(f"stdio transport requires StdioServerParameters, got {type(self.server_params)}")
-            return stdio_client(self.server_params)
-    
-    def _start_connection(self):
-        """Ensure there are no active connections and setup a new one."""
-        if self._connection_task is None or self._connection_task.done():
-            self._connection_task = asyncio.create_task(self.connect())
-    
+                kwargs = self.server_params.build_connect_kwargs()
+                self._managed_http_client = kwargs.get("http_client")
+                return streamable_http_client(**kwargs)
+            return streamable_http_client(url=str(getattr(self.server_params, 'url', self.server_params)))
+
+        # stdio
+        if not isinstance(self.server_params, StdioServerParameters):
+            raise ValueError(f"stdio transport requires StdioServerParameters, got {type(self.server_params)}")
+        return stdio_client(self.server_params)
+
+    # ------------------------------------------------------------------
+    # Connection lifecycle
+    # ------------------------------------------------------------------
+
+    def _get_connect_lock(self) -> asyncio.Lock:
+        """Lazily create the connection lock on first use.
+        
+        The lock must be created inside a running event loop, so it cannot
+        live in ``__init__``.
+        """
+        if self._connect_lock is None:
+            self._connect_lock = asyncio.Lock()
+        return self._connect_lock
+
     async def connect(self) -> None:
-        """Initialize and connect to the MCP server."""
+        """Open the transport, create a session, and discover tools.
+        
+        Serialised via an ``asyncio.Lock`` so parallel ``call_tool()``
+        invocations don't race to create duplicate transports.
+        """
         if self._initialized:
             return
 
-        from upsonic.utils.printing import console
+        async with self._get_connect_lock():
+            if self._initialized:
+                return
 
-        if self.session is not None:
-            await self._initialize_with_session()
-            return
-        
-        console.print(f"[cyan]Connecting to MCP server: {self.server_name} ({self.connection_type})[/cyan]")
-        
-        try:
-            # Create appropriate client based on transport
-            if self.connection_type == 'sse':
-                sse_params = asdict(self.server_params) if isinstance(self.server_params, SSEClientParams) else {}
-                self._context = sse_client(**sse_params)
-                client_timeout = min(self.timeout_seconds, sse_params.get("timeout", self.timeout_seconds))
+            from upsonic.utils.printing import console
+
+            if self.session is not None:
+                await self._discover_tools()
+                return
+            
+            console.print(f"[cyan]Connecting to MCP server: {self.server_name} ({self.connection_type})[/cyan]")
+            
+            try:
+                self._transport_ctx = self._build_transport_context()
+                transport_tuple = await self._transport_ctx.__aenter__()
                 
-            elif self.connection_type == 'streamable-http':
-                if isinstance(self.server_params, StreamableHTTPClientParams):
-                    self._context = streamable_http_client(**self.server_params.to_connect_kwargs())
-                    params_timeout = self.server_params.timeout
-                    if isinstance(params_timeout, timedelta):
-                        params_timeout = int(params_timeout.total_seconds())
-                    client_timeout = min(self.timeout_seconds, params_timeout or self.timeout_seconds)
-                else:
-                    self._context = streamable_http_client(url=str(self.server_params))
-                    client_timeout = self.timeout_seconds
+                read, write = transport_tuple[0:2]
                 
-            else:  # stdio
-                if not isinstance(self.server_params, StdioServerParameters):
-                    raise ValueError("server_params must be StdioServerParameters for stdio transport")
-                self._context = stdio_client(self.server_params)
-                client_timeout = self.timeout_seconds
-            
-            # Enter context and setup session
-            session_params = await self._context.__aenter__()
-            self._active_contexts.append(self._context)
-            
-            read, write = session_params[0:2]
-            self._session_context = ClientSession(
-                read, 
-                write, 
-                read_timeout_seconds=timedelta(seconds=client_timeout)
-            )
-            self.session = await self._session_context.__aenter__()
-            self._active_contexts.append(self._session_context)
-            
-            # Initialize with the new session
-            await self._initialize_with_session()
-            
-            console.print(f"[green]✅ Connected to MCP server: {self.server_name}[/green]")
-            
-        except Exception as e:
-            console.print(f"[red]❌ Failed to connect to MCP server: {e}[/red]")
-            raise
+                read_timeout = max(self.timeout_seconds, 30)
+                self._session_ctx = ClientSession(
+                    read,
+                    write,
+                    read_timeout_seconds=timedelta(seconds=read_timeout)
+                )
+                self.session = await self._session_ctx.__aenter__()
+                
+                await self._discover_tools()
+                
+                console.print(f"[green]✅ Connected to MCP server: {self.server_name}[/green]")
+                
+            except Exception as e:
+                await self._force_cleanup()
+                console.print(f"[red]❌ Failed to connect to MCP server: {e}[/red]")
+                raise
     
     async def close(self) -> None:
-        """Close the MCP connection and clean up resources."""
+        """Close the persistent connection. Tool metadata survives."""
         from upsonic.utils.printing import console
         
-        if self._session_context is not None:
-            try:
-                await self._session_context.__aexit__(None, None, None)
-            except (RuntimeError, Exception) as e:
-                # Suppress event loop closed errors (common in threaded contexts)
-                error_msg = str(e).lower()
-                if "event loop is closed" not in error_msg and "loop" not in error_msg:
-                    console.print(f"[yellow]Warning: Error closing session: {e}[/yellow]")
-            self.session = None
-            self._session_context = None
+        await self._force_cleanup()
         
-        if self._context is not None:
-            try:
-                await self._context.__aexit__(None, None, None)
-            except (RuntimeError, Exception) as e:
-                # Suppress event loop closed errors (common in threaded contexts)
-                error_msg = str(e).lower()
-                if "event loop is closed" not in error_msg and "loop" not in error_msg:
-                    console.print(f"[yellow]Warning: Error closing context: {e}[/yellow]")
-            self._context = None
-        
-        self._initialized = False
         console.print(f"[cyan]MCP handler for {self.server_name} closed[/cyan]")
+
+    @staticmethod
+    def _cleanup_exception_handler(loop: asyncio.AbstractEventLoop, context: Dict[str, Any]) -> None:
+        """Suppress known harmless errors during cross-task transport cleanup.
+        
+        anyio raises RuntimeError('cancel scope') and asyncio warns about
+        destroyed-but-pending tasks when we ``__aexit__`` a transport context
+        manager from a different async task than the one that ``__aenter__``'d
+        it.  Both are harmless because the underlying OS resources (pipes,
+        sockets) are released regardless.
+        """
+        exc = context.get("exception")
+        if isinstance(exc, RuntimeError) and "cancel scope" in str(exc):
+            return
+        msg = context.get("message", "")
+        if "Task was destroyed" in msg:
+            return
+        loop.default_exception_handler(context)
+
+    async def _force_cleanup(self) -> None:
+        """Tear down session, transport, and any managed httpx clients."""
+        loop = asyncio.get_event_loop()
+        original_handler = loop.get_exception_handler()
+        loop.set_exception_handler(self._cleanup_exception_handler)
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message=".*coroutine.*was never awaited.*")
+            try:
+                if self._session_ctx is not None:
+                    try:
+                        await self._session_ctx.__aexit__(None, None, None)
+                    except BaseException:
+                        pass
+                    self.session = None
+                    self._session_ctx = None
+                
+                if self._transport_ctx is not None:
+                    try:
+                        await self._transport_ctx.__aexit__(None, None, None)
+                    except BaseException:
+                        pass
+                    self._transport_ctx = None
+                
+                if self._managed_http_client is not None:
+                    try:
+                        await self._managed_http_client.aclose()
+                    except BaseException:
+                        pass
+                    self._managed_http_client = None
+                
+                self._initialized = False
+            finally:
+                try:
+                    await asyncio.sleep(0)
+                except BaseException:
+                    pass
+                loop.set_exception_handler(original_handler)
     
     async def __aenter__(self) -> "MCPHandler":
-        """Enter async context manager."""
         await self.connect()
         return self
     
@@ -562,12 +508,15 @@ class MCPHandler:
         exc_type: Optional[Type[BaseException]], 
         exc_val: Optional[BaseException], 
         exc_tb: Optional[TracebackType]
-    ):
-        """Exit async context manager."""
+    ) -> None:
         await self.close()
-    
-    async def _initialize_with_session(self) -> None:
-        """Initialize the MCP session and discover tools."""
+
+    # ------------------------------------------------------------------
+    # Tool discovery
+    # ------------------------------------------------------------------
+
+    async def _discover_tools(self) -> None:
+        """Initialize session and discover tools (skips if tools already cached)."""
         if self._initialized:
             return
         
@@ -576,55 +525,35 @@ class MCPHandler:
         if not self.session:
             raise ValueError("Session not initialized")
         
-        try:
-            # Initialize the session
-            await self.session.initialize()
-            
-            # List available tools
+        await self.session.initialize()
+        
+        if not self.tools:
             tools_response = await self.session.list_tools()
             
-            # Validate tool filters
             available_tool_names = [tool.name for tool in tools_response.tools]
-            self._check_tools_filters(available_tool_names)
-            
-            # Filter tools based on include/exclude lists
-            filtered_tools = self._filter_tools(tools_response.tools)
+            self._validate_tool_filters(available_tool_names)
+            filtered_tools = self._apply_tool_filters(tools_response.tools)
             
             console.print(
                 f"[green]Found {len(filtered_tools)} tools from {self.server_name} "
                 f"(total: {len(tools_response.tools)})[/green]"
             )
             
-            # Create tool wrappers
             self.tools = []
             for tool_info in filtered_tools:
                 try:
                     tool = MCPTool(self, tool_info, tool_name_prefix=self.tool_name_prefix)
                     self.tools.append(tool)
-                    # Show both prefixed name and original name if prefix is used
                     if self.tool_name_prefix:
                         console.print(f"  - {tool.name} (original: {tool.original_name}): {tool.description}")
                     else:
                         console.print(f"  - {tool.name}: {tool.description}")
                 except Exception as e:
                     console.print(f"[yellow]Warning: Failed to register tool {tool_info.name}: {e}[/yellow]")
-            
-            self._initialized = True
-            
-        except Exception as e:
-            console.print(f"[red]Failed to initialize MCP session: {e}[/red]")
-            raise
-    
-    def _check_tools_filters(self, available_tools: List[str]) -> None:
-        """
-        Validate that include/exclude tool filters reference existing tools.
         
-        Args:
-            available_tools: List of tool names available from the MCP server
-            
-        Raises:
-            ValueError: If filters reference non-existent tools
-        """
+        self._initialized = True
+    
+    def _validate_tool_filters(self, available_tools: List[str]) -> None:
         if self.include_tools:
             invalid = set(self.include_tools) - set(available_tools)
             if invalid:
@@ -632,7 +561,6 @@ class MCPHandler:
                     f"include_tools references non-existent tools: {invalid}. "
                     f"Available tools: {available_tools}"
                 )
-        
         if self.exclude_tools:
             invalid = set(self.exclude_tools) - set(available_tools)
             if invalid:
@@ -641,34 +569,193 @@ class MCPHandler:
                     f"Available tools: {available_tools}"
                 )
     
-    def _filter_tools(self, tools: List[mcp_types.Tool]) -> List[mcp_types.Tool]:
-        """
-        Filter tools based on include/exclude lists.
-        
-        Args:
-            tools: List of MCP tools
-            
-        Returns:
-            Filtered list of tools
-        """
-        filtered = []
+    def _apply_tool_filters(self, tools: List[mcp_types.Tool]) -> List[mcp_types.Tool]:
+        filtered: List[mcp_types.Tool] = []
         for tool in tools:
-            # Exclude takes precedence
             if self.exclude_tools and tool.name in self.exclude_tools:
                 continue
-            # Include filter (None means include all)
             if self.include_tools is None or tool.name in self.include_tools:
                 filtered.append(tool)
         return filtered
-    
-    def get_info(self) -> Dict[str, Any]:
-        """
-        Get information about this MCP server connection.
+
+    # ------------------------------------------------------------------
+    # Sync tool discovery (called before agent loop starts)
+    # ------------------------------------------------------------------
+
+    def get_tools(self) -> List[MCPTool]:
+        """Discover tools synchronously. Opens a temp connection, discovers, closes it.
         
-        Returns:
-            Dictionary with server information
+        The actual persistent connection is established lazily on the first
+        ``call_tool()`` invocation inside the agent's async event loop.
         """
-        info = {
+        from upsonic.utils.printing import console
+        
+        if self.tools:
+            return self.tools
+        
+        async def _discover_and_close() -> List[MCPTool]:
+            await self.connect()
+            tools = list(self.tools)
+            await self.close()
+            return tools
+        
+        try:
+            asyncio.get_running_loop()
+            console.print("[yellow]⚠️  MCP async limitation detected. Attempting threaded connection...[/yellow]")
+            
+            import concurrent.futures
+            
+            def _run_in_thread() -> List[MCPTool]:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    return loop.run_until_complete(_discover_and_close())
+                finally:
+                    loop.close()
+            
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(_run_in_thread)
+                self.tools = future.result(timeout=30)
+            
+            console.print("[green]✅ MCP tools discovered via thread[/green]")
+            
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(_discover_and_close())
+            finally:
+                loop.close()
+        except Exception as e:
+            console.print(f"[red]❌ MCP tool discovery failed: {e}[/red]")
+            return []
+        
+        return self.tools
+
+    # ------------------------------------------------------------------
+    # Tool execution (runs inside the agent's async event loop)
+    # ------------------------------------------------------------------
+
+    async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
+        """Call a tool on the MCP server using the persistent session.
+        
+        Auto-reconnects if the session was closed (e.g. after ``get_tools()``
+        discovery phase or a previous error).
+        """
+        from upsonic.utils.printing import console
+        
+        if not self._initialized or self.session is None:
+            await self.connect()
+        
+        try:
+            console.print(f"[blue]Calling MCP tool '{tool_name}' with args: {arguments}[/blue]")
+            
+            result: mcp_types.CallToolResult = await self.session.call_tool(tool_name, arguments)
+            
+            if result.isError:
+                error_msg = f"Error from MCP tool '{tool_name}': {result.content}"
+                console.print(f"[red]{error_msg}[/red]")
+                return {"error": error_msg, "success": False}
+            
+            return self._process_tool_result(result, tool_name)
+            
+        except Exception as e:
+            console.print(f"[red]Failed to call MCP tool '{tool_name}': {e}[/red]")
+            raise
+
+    # ------------------------------------------------------------------
+    # Result processing
+    # ------------------------------------------------------------------
+    
+    def _process_tool_result(self, result: mcp_types.CallToolResult, tool_name: str) -> Any:
+        if not result.content:
+            return None
+        
+        response_parts: List[str] = []
+        images: List[Dict[str, Any]] = []
+        
+        for content_item in result.content:
+            if isinstance(content_item, mcp_types.TextContent):
+                text_content = content_item.text
+                
+                try:
+                    parsed_json = json.loads(text_content)
+                    if (
+                        isinstance(parsed_json, dict)
+                        and parsed_json.get("type") == "image"
+                        and "data" in parsed_json
+                    ):
+                        image_data = parsed_json.get("data")
+                        mime_type = parsed_json.get("mimeType", "image/png")
+                        
+                        if image_data and isinstance(image_data, str):
+                            try:
+                                image_bytes = base64.b64decode(image_data)
+                                images.append({
+                                    'id': str(uuid4()),
+                                    'type': 'image',
+                                    'content': image_bytes,
+                                    'mime_type': mime_type,
+                                    'source': 'mcp_custom_json'
+                                })
+                                response_parts.append("Image has been generated and added to the response.")
+                                continue
+                            except Exception:
+                                pass
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                
+                response_parts.append(text_content)
+                
+            elif isinstance(content_item, mcp_types.ImageContent):
+                image_data = getattr(content_item, "data", None)
+                
+                if image_data and isinstance(image_data, str):
+                    try:
+                        image_bytes = base64.b64decode(image_data)
+                    except Exception:
+                        image_bytes = None
+                else:
+                    image_bytes = image_data
+                
+                images.append({
+                    'id': str(uuid4()),
+                    'type': 'image',
+                    'url': getattr(content_item, "url", None),
+                    'content': image_bytes,
+                    'mime_type': getattr(content_item, "mimeType", "image/png"),
+                    'source': 'mcp_image_content'
+                })
+                response_parts.append("Image has been generated and added to the response.")
+                
+            elif isinstance(content_item, mcp_types.EmbeddedResource):
+                resource_info = {
+                    'type': 'resource',
+                    'uri': str(content_item.resource.uri),
+                    'mime_type': getattr(content_item.resource, 'mimeType', None),
+                    'text': getattr(content_item.resource, 'text', None)
+                }
+                response_parts.append(f"[Embedded resource: {json.dumps(resource_info)}]")
+            
+            else:
+                response_parts.append(f"[Unsupported content type: {getattr(content_item, 'type', 'unknown')}]")
+        
+        response_text = "\n".join(response_parts).strip()
+        
+        if images:
+            return {
+                'content': response_text,
+                'images': images,
+                'success': True
+            }
+        return response_text if response_text else None
+
+    # ------------------------------------------------------------------
+    # Introspection
+    # ------------------------------------------------------------------
+
+    def get_info(self) -> Dict[str, Any]:
+        info: Dict[str, Any] = {
             'server_name': self.server_name,
             'connection_type': self.connection_type,
             'transport': self.transport,
@@ -679,256 +766,19 @@ class MCPHandler:
             'has_filters': bool(self.include_tools or self.exclude_tools),
             'tool_name_prefix': self.tool_name_prefix
         }
-        # Include original tool names if prefix is used
         if self.tool_name_prefix:
             info['original_tool_names'] = [t.original_name for t in self.tools]
         return info
-    
-    def get_tools(self) -> List[MCPTool]:
-        """
-        Get all available tools from this MCP server.
-        
-        This method handles synchronous calling contexts by running
-        the async connection in a thread or new event loop.
-        
-        Returns:
-            List of MCPTool instances
-        """
-        from upsonic.utils.printing import console
-        
-        if self.tools:
-            return self.tools  # Already discovered
-        
-        # Discover tools via async connection
-        try:
-            loop = asyncio.get_running_loop()
-            # If we're in an async context, create tools in a thread
-            console.print(f"[yellow]⚠️  MCP async limitation detected. Attempting threaded connection...[/yellow]")
-            
-            import concurrent.futures
-            
-            def discover_tools_in_thread():
-                """Discover MCP tools in a separate thread."""
-                new_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(new_loop)
-                try:
-                    new_loop.run_until_complete(self.connect())
-                    return self.tools
-                finally:
-                    new_loop.close()
-            
-            # Run discovery in thread
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(discover_tools_in_thread)
-                self.tools = future.result(timeout=30)  # 30 second timeout
-            
-            console.print(f"[green]✅ MCP tools discovered via thread[/green]")
-            
-        except RuntimeError:
-            # No running loop, safe to create one
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                loop.run_until_complete(self.connect())
-            finally:
-                loop.close()
-        except Exception as e:
-            console.print(f"[red]❌ MCP tool discovery failed: {e}[/red]")
-            return []
-        
-        return self.tools
-    
-    async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
-        """
-        Call a tool on the MCP server with enhanced error handling and image support.
-        
-        Args:
-            tool_name: Name of the tool to call
-            arguments: Arguments to pass to the tool
-            
-        Returns:
-            Tool execution result with enhanced image/media handling
-            
-        Raises:
-            Exception: If tool call fails
-        """
-        from upsonic.utils.printing import console
-        
-        try:
-            console.print(f"[blue]Calling MCP tool '{tool_name}' with args: {arguments}[/blue]")
-            
-            client = self._create_session()
-
-            async with client as client_context:
-                from mcp.client.session import ClientSession
-                from datetime import timedelta
-                # All transports (stdio, SSE, streamable-http) return a tuple
-                read_stream, write_stream = client_context[0:2]
-                session = ClientSession(
-                    read_stream,
-                    write_stream,
-                    read_timeout_seconds=timedelta(seconds=max(self.timeout_seconds, 30))
-                )
-
-                async with session:
-                    await session.initialize()
-
-                    # Call the tool
-                    result: mcp_types.CallToolResult = await session.call_tool(tool_name, arguments)
-
-                    # Check for errors in result
-                    if result.isError:
-                        error_msg = f"Error from MCP tool '{tool_name}': {result.content}"
-                        console.print(f"[red]{error_msg}[/red]")
-                        return {"error": error_msg, "success": False}
-
-                    # Process the result content with enhanced image/media handling
-                    return self._process_tool_result(result, tool_name)
-            
-        except Exception as e:
-            console.print(f"[red]Failed to call MCP tool '{tool_name}': {e}[/red]")
-            raise
-    
-    def _process_tool_result(self, result: mcp_types.CallToolResult, tool_name: str) -> Any:
-        """
-        Process tool result with enhanced image and media handling.
-        
-        Features:
-        - Base64 image decoding
-        - Custom JSON image format parsing
-        - Multiple content type support
-        - Embedded resource handling
-        
-        Args:
-            result: The MCP tool call result
-            tool_name: Name of the tool (for logging)
-            
-        Returns:
-            Processed result with images and content
-        """
-        if not result.content:
-            return None
-        
-        response_parts = []
-        images = []
-        
-        for content_item in result.content:
-            if isinstance(content_item, mcp_types.TextContent):
-                text_content = content_item.text
-                
-                # Try to parse as JSON to check for custom image format
-                try:
-                    parsed_json = json.loads(text_content)
-                    if (
-                        isinstance(parsed_json, dict)
-                        and parsed_json.get("type") == "image"
-                        and "data" in parsed_json
-                    ):
-                        # Custom JSON image format found
-                        image_data = parsed_json.get("data")
-                        mime_type = parsed_json.get("mimeType", "image/png")
-                        
-                        if image_data and isinstance(image_data, str):
-                            try:
-                                # Decode base64 image data
-                                image_bytes = base64.b64decode(image_data)
-                                image_obj = {
-                                    'id': str(uuid4()),
-                                    'type': 'image',
-                                    'content': image_bytes,
-                                    'mime_type': mime_type,
-                                    'source': 'mcp_custom_json'
-                                }
-                                images.append(image_obj)
-                                response_parts.append("Image has been generated and added to the response.")
-                                continue
-                            except Exception as e:
-                                # Failed to decode, treat as regular text
-                                pass
-                except (json.JSONDecodeError, TypeError):
-                    # Not JSON or not image format, treat as regular text
-                    pass
-                
-                # Regular text content
-                response_parts.append(text_content)
-                
-            elif isinstance(content_item, mcp_types.ImageContent):
-                # Handle standard MCP ImageContent
-                image_data = getattr(content_item, "data", None)
-                
-                if image_data and isinstance(image_data, str):
-                    try:
-                        # Decode base64 image data
-                        image_bytes = base64.b64decode(image_data)
-                    except Exception as e:
-                        image_bytes = None
-                else:
-                    image_bytes = image_data
-                
-                image_obj = {
-                    'id': str(uuid4()),
-                    'type': 'image',
-                    'url': getattr(content_item, "url", None),
-                    'content': image_bytes,
-                    'mime_type': getattr(content_item, "mimeType", "image/png"),
-                    'source': 'mcp_image_content'
-                }
-                images.append(image_obj)
-                response_parts.append("Image has been generated and added to the response.")
-                
-            elif isinstance(content_item, mcp_types.EmbeddedResource):
-                # Handle embedded resources
-                resource_info = {
-                    'type': 'resource',
-                    'uri': str(content_item.resource.uri),
-                    'mime_type': getattr(content_item.resource, 'mimeType', None),
-                    'text': getattr(content_item.resource, 'text', None)
-                }
-                response_parts.append(f"[Embedded resource: {json.dumps(resource_info)}]")
-            
-            else:
-                # Handle other content types
-                response_parts.append(f"[Unsupported content type: {getattr(content_item, 'type', 'unknown')}]")
-        
-        # Construct final result
-        response_text = "\n".join(response_parts).strip()
-        
-        if images:
-            return {
-                'content': response_text,
-                'images': images,
-                'success': True
-            }
-        else:
-            return response_text if response_text else None
-
-
 
 
 class MultiMCPHandler:
     """
     Coordinator for managing multiple MCP server connections simultaneously.
     
-    This class creates and manages multiple MCPHandler instances, aggregating
-    their tools into a unified interface.
-    
-    Architecture:
-    - Creates one MCPHandler instance per server
-    - Each handler manages its own connection lifecycle
-    - Aggregates tools from all handlers
-    - Provides unified introspection across all servers
-    
-    Features:
-    - Connect to multiple servers (stdio, SSE, Streamable HTTP)
-    - Unified tool discovery across all servers
-    - Server introspection and debugging
-    - Tool filtering across all servers
-    - Proper cleanup delegation to individual handlers
-    - Tool name prefixing for avoiding collisions
+    Creates one MCPHandler instance per server and aggregates their tools.
     """
 
     def __new__(cls, *args: Any, **kwargs: Any) -> "MultiMCPHandler":
-        """Emit MCP security warning before any initialization (before __init__)."""
         _emit_mcp_security_warning()
         return super().__new__(cls)
 
@@ -948,77 +798,52 @@ class MultiMCPHandler:
         tool_name_prefix: Optional[str] = None,
         tool_name_prefixes: Optional[List[str]] = None,
     ):
-        """
-        Initialize multi-MCP handler.
-        
-        Args:
-            commands: List of commands to run MCP servers (stdio transport)
-            urls: List of URLs for SSE or Streamable HTTP endpoints
-            urls_transports: List of transport types for URLs
-            env: Environment variables for stdio servers
-            server_params_list: Pre-configured server parameters
-            timeout_seconds: Read timeout in seconds
-            include_tools: Optional list of tool names to include
-            exclude_tools: Optional list of tool names to exclude
-            tool_name_prefix: Single prefix to apply to all servers (will be
-                             combined with server index, e.g., "db_0_", "db_1_")
-            tool_name_prefixes: List of prefixes, one for each server. Length must
-                               match the number of servers. Takes precedence over
-                               tool_name_prefix if both are provided.
-        """
         if server_params_list is None and commands is None and urls is None:
             raise ValueError("Must provide commands, urls, or server_params_list")
         
-        self.timeout_seconds = timeout_seconds
-        self.include_tools = include_tools
-        self.exclude_tools = exclude_tools
-        self.tool_name_prefix = tool_name_prefix
-        self.tool_name_prefixes = tool_name_prefixes
-        self._initialized = False
-        # Track handlers and tools (each handler manages its own connection)
+        self.timeout_seconds: int = timeout_seconds
+        self.include_tools: Optional[List[str]] = include_tools
+        self.exclude_tools: Optional[List[str]] = exclude_tools
+        self.tool_name_prefix: Optional[str] = tool_name_prefix
+        self.tool_name_prefixes: Optional[List[str]] = tool_name_prefixes
+        self._initialized: bool = False
         self.tools: List[MCPTool] = []
-        self.handlers: List[MCPHandler] = []  # Store MCPHandler for each server
+        self.handlers: List[MCPHandler] = []
         
-        # Build server parameters list
         self.server_params_list: List[Union[SSEClientParams, StdioServerParameters, StreamableHTTPClientParams]] = (
             server_params_list or []
         )
         
-        # Inherit the full current-process environment so that API keys,
-        # PYTHONPATH, and .env-loaded vars are available to subprocesses.
-        # User-provided env overrides take precedence.
         inherited_env: Dict[str, str] = {**os.environ}
         if env is not None:
             inherited_env.update(env)
         env = inherited_env
         
-        # Process commands
         if commands:
             for command in commands:
                 parts = prepare_command(command)
-                cmd = parts[0]
-                args = parts[1:] if len(parts) > 1 else []
                 self.server_params_list.append(
-                    StdioServerParameters(command=cmd, args=args, env=env)
+                    StdioServerParameters(
+                        command=parts[0],
+                        args=parts[1:] if len(parts) > 1 else [],
+                        env=env
+                    )
                 )
         
-        # Process URLs
         if urls:
             if urls_transports:
                 if len(urls) != len(urls_transports):
                     raise ValueError("urls and urls_transports must be same length")
-                for url, transport in zip(urls, urls_transports):
-                    if transport == "streamable-http":
-                        self.server_params_list.append(StreamableHTTPClientParams(url=url))
-                    else:  # sse
-                        self.server_params_list.append(SSEClientParams(url=url))
+                for u, t in zip(urls, urls_transports):
+                    if t == "streamable-http":
+                        self.server_params_list.append(StreamableHTTPClientParams(url=u))
+                    else:
+                        self.server_params_list.append(SSEClientParams(url=u))
             else:
-                # Default to streamable-http
-                for url in urls:
-                    self.server_params_list.append(StreamableHTTPClientParams(url=url))
+                for u in urls:
+                    self.server_params_list.append(StreamableHTTPClientParams(url=u))
     
     async def connect(self) -> None:
-        """Initialize and connect to all MCP servers."""
         if self._initialized:
             return
 
@@ -1026,7 +851,6 @@ class MultiMCPHandler:
 
         console.print(f"[cyan]🔌 Connecting to {len(self.server_params_list)} MCP server(s)...[/cyan]")
         
-        # Validate tool_name_prefixes length if provided (graceful failure: log and skip connection)
         if self.tool_name_prefixes is not None:
             if len(self.tool_name_prefixes) != len(self.server_params_list):
                 console.print(
@@ -1036,20 +860,15 @@ class MultiMCPHandler:
                 self._initialized = True
                 return
         
-        # Create MCPHandler for each server and connect
         for idx, server_params in enumerate(self.server_params_list):
             try:
-                # Determine the prefix for this server
                 if self.tool_name_prefixes is not None:
-                    # Use the specific prefix for this server index
-                    prefix = self.tool_name_prefixes[idx]
+                    prefix: Optional[str] = self.tool_name_prefixes[idx]
                 elif self.tool_name_prefix is not None:
-                    # Use the base prefix combined with server index
                     prefix = f"{self.tool_name_prefix}_{idx}"
                 else:
                     prefix = None
                 
-                # Create a proper MCPHandler instance for this server
                 handler = MCPHandler(
                     server_params=server_params,
                     timeout_seconds=self.timeout_seconds,
@@ -1058,10 +877,8 @@ class MultiMCPHandler:
                     tool_name_prefix=prefix
                 )
                 
-                # Connect handler (this discovers tools automatically)
                 await handler.connect()
                 
-                # Store handler and aggregate its tools
                 self.handlers.append(handler)
                 self.tools.extend(handler.tools)
                 
@@ -1070,31 +887,22 @@ class MultiMCPHandler:
                 
             except Exception as e:
                 console.print(f"[yellow]  ⚠️  Server {idx+1} connection failed: {e}[/yellow]")
-                # Continue with other servers
         
         self._initialized = True
         console.print(f"[green]✅ Successfully connected to {len(self.handlers)} MCP servers with {len(self.tools)} total tools[/green]")
     
     async def close(self) -> None:
-        """Close all MCP connections and clean up resources."""
-        # Close each handler (each manages its own connection)
         for handler in self.handlers:
             try:
                 await handler.close()
-            except (RuntimeError, Exception) as e:
-                # Suppress event loop closed errors (common in threaded contexts)
-                error_msg = str(e).lower()
-                if "event loop is closed" not in error_msg and "loop" not in error_msg:
-                    # Only log non-loop-related errors
-                    from upsonic.utils.printing import console
-                    console.print(f"[yellow]Warning: Error closing handler: {e}[/yellow]")
+            except Exception:
+                pass
         
         self.handlers.clear()
         self.tools.clear()
         self._initialized = False
     
     async def __aenter__(self) -> "MultiMCPHandler":
-        """Enter async context manager."""
         await self.connect()
         return self
     
@@ -1103,122 +911,84 @@ class MultiMCPHandler:
         exc_type: Optional[Type[BaseException]],
         exc_val: Optional[BaseException],
         exc_tb: Optional[TracebackType],
-    ):
-        """Exit async context manager."""
+    ) -> None:
         await self.close()
     
     def get_tools(self) -> List[MCPTool]:
-        """
-        Get all tools from all connected MCP servers.
-        
-        This method handles synchronous calling contexts by running
-        the async connection in a thread or new event loop.
-        
-        Returns:
-            List of all MCPTool instances
-        """
         from upsonic.utils.printing import console
         
         if self.tools:
             return self.tools
         
-        # Discover tools via async connection
+        async def _discover_and_close() -> List[MCPTool]:
+            await self.connect()
+            tools = list(self.tools)
+            handlers = list(self.handlers)
+            await self.close()
+            self.tools = tools
+            self.handlers = handlers
+            return tools
+        
         try:
-            loop = asyncio.get_running_loop()
-            # If we're in an async context, create tools in a thread
-            console.print(f"[yellow]⚠️  MCP async limitation detected. Attempting threaded connection...[/yellow]")
+            asyncio.get_running_loop()
+            console.print("[yellow]⚠️  MCP async limitation detected. Attempting threaded connection...[/yellow]")
             
             import concurrent.futures
             
-            def discover_tools_in_thread():
-                """Discover MCP tools in a separate thread."""
-                new_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(new_loop)
+            def _run_in_thread() -> List[MCPTool]:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
                 try:
-                    new_loop.run_until_complete(self.connect())
-                    return self.tools
+                    return loop.run_until_complete(_discover_and_close())
                 finally:
-                    new_loop.close()
+                    loop.close()
             
-            # Run discovery in thread
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(discover_tools_in_thread)
-                self.tools = future.result(timeout=60)  # 60 second timeout for multiple servers
+                future = executor.submit(_run_in_thread)
+                self.tools = future.result(timeout=60)
             
-            console.print(f"[green]✅ MCP tools discovered via thread[/green]")
+            console.print("[green]✅ MCP tools discovered via thread[/green]")
             
         except RuntimeError:
-            # No running loop, safe to create one
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                loop.run_until_complete(self.connect())
+                loop.run_until_complete(_discover_and_close())
             finally:
                 loop.close()
         except Exception as e:
             console.print(f"[red]❌ MultiMCP tool discovery failed: {e}[/red]")
-            import traceback
-            console.print(f"[red]Traceback: {traceback.format_exc()}[/red]")
             return []
-        
-        if not self.tools:
-            console.print(f"[yellow]⚠️  Warning: MultiMCPHandler connected but found 0 tools. Check server connections.[/yellow]")
-            console.print(f"[yellow]  Server count: {len(self.handlers)}, Server params: {len(self.server_params_list)}[/yellow]")
         
         return self.tools
     
     def get_server_count(self) -> int:
-        """
-        Get the number of connected MCP servers.
-        
-        Returns:
-            Number of active server connections
-        """
         return len(self.handlers)
     
     def get_tool_count(self) -> int:
-        """
-        Get the total number of tools from all servers.
-        
-        Returns:
-            Total number of tools
-        """
         return len(self.tools)
     
     def get_tools_by_server(self) -> Dict[str, List[str]]:
-        """
-        Get tools organized by their source server.
-        
-        Returns:
-            Dictionary mapping server names to lists of tool names
-        """
         servers: Dict[str, List[str]] = {}
         for tool in self.tools:
-            server_name = tool.metadata.custom.get('mcp_server', 'unknown')
+            server_name: str = tool.metadata.custom.get('mcp_server', 'unknown')
             if server_name not in servers:
                 servers[server_name] = []
             servers[server_name].append(tool.name)
         return servers
     
     def get_server_info(self) -> List[Dict[str, Any]]:
-        """
-        Get information about all connected servers.
-        
-        Returns:
-            List of dictionaries with server information
-        """
-        info = []
+        info: List[Dict[str, Any]] = []
         for idx, handler in enumerate(self.handlers):
             handler_tools = [t for t in self.tools if t.handler == handler]
-            server_info = {
+            server_info: Dict[str, Any] = {
                 'index': idx,
-                'server_name': getattr(handler, 'server_name', f'server_{idx}'),
-                'connection_type': getattr(handler, 'connection_type', 'unknown'),
-                'transport': getattr(handler, 'transport', 'unknown'),
-                'tool_name_prefix': getattr(handler, 'tool_name_prefix', None),
+                'server_name': handler.server_name,
+                'connection_type': handler.connection_type,
+                'transport': handler.transport,
+                'tool_name_prefix': handler.tool_name_prefix,
                 'tools': [t.name for t in handler_tools],
             }
-            # Include original tool names if prefix is used
             if handler.tool_name_prefix:
                 server_info['original_tool_names'] = [t.original_name for t in handler_tools]
             info.append(server_info)

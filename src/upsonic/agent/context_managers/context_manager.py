@@ -335,7 +335,7 @@ class ContextManager:
                 if isinstance(item, KnowledgeBase):
                     kb_info: Dict[str, Any] = {
                         "name": item.name,
-                        "is_ready": getattr(item, '_is_ready', False),
+                        "state": getattr(item, '_state', 'unknown').value if hasattr(getattr(item, '_state', None), 'value') else str(getattr(item, '_state', 'unknown')),
                         "knowledge_id": getattr(item, 'knowledge_id', 'unknown'),
                         "sources_count": len(item.sources) if hasattr(item, 'sources') else 0
                     }

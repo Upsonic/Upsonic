@@ -91,7 +91,7 @@ class TestMilvusKnowledgeBaseIntegration:
         # Ensure cleanup after test - force cleanup if still connected
         try:
             if provider._is_connected:
-                provider._async_client = None
+                provider.client = None
                 provider._is_connected = False
         except Exception:
             pass
@@ -123,7 +123,7 @@ class TestMilvusKnowledgeBaseIntegration:
         try:
             if provider._is_connected:
                 # Force cleanup - set to None to prevent resource leaks
-                provider._async_client = None
+                provider.client = None
                 provider._is_connected = False
         except Exception:
             pass
@@ -144,68 +144,68 @@ class TestMilvusKnowledgeBaseIntegration:
         """Test MilvusProvider initialization."""
         assert milvus_provider._config == milvus_config
         assert not milvus_provider._is_connected
-        # MilvusProvider uses _async_client, not _sync_client
-        assert milvus_provider._async_client is None
+        # MilvusProvider stores the async client on ``client`` (from BaseVectorDBProvider)
+        assert milvus_provider.client is None
     
     @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
     @pytest.mark.asyncio
     async def test_milvus_provider_connection(self, milvus_provider):
         """Test MilvusProvider connection."""
         try:
-            await milvus_provider.connect()
+            milvus_provider.connect()
             assert milvus_provider._is_connected
-            assert await milvus_provider.is_ready()
+            assert milvus_provider.is_ready()
         finally:
             if milvus_provider._is_connected:
-                await milvus_provider.disconnect()
+                milvus_provider.disconnect()
     
     @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
     @pytest.mark.asyncio
     async def test_milvus_provider_disconnection(self, milvus_provider):
         """Test MilvusProvider disconnection."""
-        await milvus_provider.connect()
+        milvus_provider.connect()
         assert milvus_provider._is_connected
         
-        await milvus_provider.disconnect()
+        milvus_provider.disconnect()
         assert not milvus_provider._is_connected
-        assert milvus_provider._async_client is None
+        assert milvus_provider.client is None
     
     @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
     @pytest.mark.asyncio
     async def test_milvus_collection_creation(self, milvus_provider):
         """Test MilvusProvider collection creation."""
         try:
-            await milvus_provider.connect()
-            assert not await milvus_provider.collection_exists()
+            milvus_provider.connect()
+            assert not milvus_provider.collection_exists()
             
-            await milvus_provider.create_collection()
-            assert await milvus_provider.collection_exists()
+            milvus_provider.create_collection()
+            assert milvus_provider.collection_exists()
         finally:
             if milvus_provider._is_connected:
-                await milvus_provider.disconnect()
+                milvus_provider.disconnect()
     
     @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
     @pytest.mark.asyncio
     async def test_milvus_collection_deletion(self, milvus_provider):
         """Test MilvusProvider collection deletion."""
         try:
-            await milvus_provider.connect()
-            await milvus_provider.create_collection()
-            assert await milvus_provider.collection_exists()
+            milvus_provider.connect()
+            milvus_provider.create_collection()
+            assert milvus_provider.collection_exists()
             
-            await milvus_provider.delete_collection()
-            assert not await milvus_provider.collection_exists()
+            milvus_provider.delete_collection()
+            assert not milvus_provider.collection_exists()
         finally:
             if milvus_provider._is_connected:
-                await milvus_provider.disconnect()
+                milvus_provider.disconnect()
     
     @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
     @pytest.mark.asyncio
     async def test_milvus_upsert_operations(self, milvus_provider):
         """Test MilvusProvider upsert operations."""
         try:
-            await milvus_provider.connect()
-            await milvus_provider.create_collection()
+            milvus_provider.connect()
+            milvus_provider.create_collection()
             
             # Test data
             vectors = [[0.1] * 384, [0.2] * 384]
@@ -214,24 +214,24 @@ class TestMilvusKnowledgeBaseIntegration:
             chunks = ["chunk1", "chunk2"]
             
             # Upsert data
-            await milvus_provider.upsert(vectors, payloads, ids, chunks)
+            milvus_provider.upsert(vectors, payloads, ids, chunks)
             
             # Verify data was stored
-            results = await milvus_provider.fetch(ids)
+            results = milvus_provider.fetch(ids)
             assert len(results) == 2
             assert results[0].id == "id1"
             assert results[1].id == "id2"
         finally:
             if milvus_provider._is_connected:
-                await milvus_provider.disconnect()
+                milvus_provider.disconnect()
     
     @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
     @pytest.mark.asyncio
     async def test_milvus_search_operations(self, milvus_provider):
         """Test MilvusProvider search operations."""
         try:
-            await milvus_provider.connect()
-            await milvus_provider.create_collection()
+            milvus_provider.connect()
+            milvus_provider.create_collection()
             
             # Insert test data
             vectors = [[0.1] * 384, [0.2] * 384, [0.3] * 384]
@@ -239,24 +239,24 @@ class TestMilvusKnowledgeBaseIntegration:
             ids = ["id1", "id2", "id3"]
             chunks = ["chunk1", "chunk2", "chunk3"]
             
-            await milvus_provider.upsert(vectors, payloads, ids, chunks)
+            milvus_provider.upsert(vectors, payloads, ids, chunks)
             
             # Test dense search
             query_vector = [0.15] * 384
-            results = await milvus_provider.dense_search(query_vector, top_k=2)
+            results = milvus_provider.dense_search(query_vector, top_k=2)
             assert len(results) <= 2
             assert all(isinstance(result, VectorSearchResult) for result in results)
         finally:
             if milvus_provider._is_connected:
-                await milvus_provider.disconnect()
+                milvus_provider.disconnect()
     
     @pytest.mark.skipif(sys.platform == "win32", reason="milvus-lite not available on Windows")
     @pytest.mark.asyncio
     async def test_milvus_delete_operations(self, milvus_provider):
         """Test MilvusProvider delete operations."""
         try:
-            await milvus_provider.connect()
-            await milvus_provider.create_collection()
+            milvus_provider.connect()
+            milvus_provider.create_collection()
             
             # Insert test data
             vectors = [[0.1] * 384, [0.2] * 384]
@@ -264,34 +264,33 @@ class TestMilvusKnowledgeBaseIntegration:
             ids = ["id1", "id2"]
             chunks = ["chunk1", "chunk2"]
             
-            await milvus_provider.upsert(vectors, payloads, ids, chunks)
+            milvus_provider.upsert(vectors, payloads, ids, chunks)
             
             # Verify data exists
-            results = await milvus_provider.fetch(ids)
+            results = milvus_provider.fetch(ids)
             assert len(results) == 2
             
             # Delete one item
-            await milvus_provider.delete(["id1"])
+            milvus_provider.delete(["id1"])
             
             # Verify deletion
-            results = await milvus_provider.fetch(ids)
+            results = milvus_provider.fetch(ids)
             assert len(results) == 1
             assert results[0].id == "id2"
         finally:
             if milvus_provider._is_connected:
-                await milvus_provider.disconnect()
+                milvus_provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_knowledge_base_setup_with_milvus(self, knowledge_base):
         """Test Knowledge Base setup with MilvusProvider."""
         try:
-            # Mock the vectordb methods
-            knowledge_base.vectordb.connect = AsyncMock()
-            knowledge_base.vectordb.create_collection = AsyncMock()
-            knowledge_base.vectordb.upsert = AsyncMock()
-            knowledge_base.vectordb.collection_exists = AsyncMock(return_value=False)
-            knowledge_base.vectordb.is_ready = AsyncMock(return_value=True)
-            knowledge_base.vectordb.disconnect = AsyncMock()
+            knowledge_base.vectordb.aconnect = AsyncMock()
+            knowledge_base.vectordb.acreate_collection = AsyncMock()
+            knowledge_base.vectordb.aupsert = AsyncMock()
+            knowledge_base.vectordb.acollection_exists = AsyncMock(return_value=False)
+            knowledge_base.vectordb.ais_ready = AsyncMock(return_value=True)
+            knowledge_base.vectordb.adisconnect = AsyncMock()
             
             # Mock the embedding provider - return 1 vector per chunk
             async def mock_embed_documents(chunks):
@@ -302,25 +301,24 @@ class TestMilvusKnowledgeBaseIntegration:
             await knowledge_base.setup_async()
             
             # Verify setup was called
-            knowledge_base.vectordb.connect.assert_called_once()
-            knowledge_base.vectordb.create_collection.assert_called_once()
-            knowledge_base.vectordb.upsert.assert_called_once()
+            knowledge_base.vectordb.aconnect.assert_called_once()
+            knowledge_base.vectordb.acreate_collection.assert_called_once()
+            knowledge_base.vectordb.aupsert.assert_called_once()
         finally:
             if hasattr(knowledge_base.vectordb, 'disconnect') and knowledge_base.vectordb._is_connected:
-                await knowledge_base.vectordb.disconnect()
+                knowledge_base.vectordb.disconnect()
     
     @pytest.mark.asyncio
     async def test_knowledge_base_query_with_milvus(self, knowledge_base):
         """Test Knowledge Base query with MilvusProvider."""
         try:
-            # Mock the vectordb methods
-            knowledge_base.vectordb.connect = AsyncMock()
-            knowledge_base.vectordb.create_collection = AsyncMock()
-            knowledge_base.vectordb.upsert = AsyncMock()
-            knowledge_base.vectordb.collection_exists = AsyncMock(return_value=False)
-            knowledge_base.vectordb.is_ready = AsyncMock(return_value=True)
-            knowledge_base.vectordb.disconnect = AsyncMock()
-            knowledge_base.vectordb.search = AsyncMock(return_value=[
+            knowledge_base.vectordb.aconnect = AsyncMock()
+            knowledge_base.vectordb.acreate_collection = AsyncMock()
+            knowledge_base.vectordb.aupsert = AsyncMock()
+            knowledge_base.vectordb.acollection_exists = AsyncMock(return_value=False)
+            knowledge_base.vectordb.ais_ready = AsyncMock(return_value=True)
+            knowledge_base.vectordb.adisconnect = AsyncMock()
+            knowledge_base.vectordb.asearch = AsyncMock(return_value=[
                 create_mock_vector_search_result("id1", 0.9, "Test result 1"),
                 create_mock_vector_search_result("id2", 0.8, "Test result 2")
             ])
@@ -344,7 +342,7 @@ class TestMilvusKnowledgeBaseIntegration:
             assert results[1].text == "Test result 2"
         finally:
             if hasattr(knowledge_base.vectordb, 'disconnect') and knowledge_base.vectordb._is_connected:
-                await knowledge_base.vectordb.disconnect()
+                knowledge_base.vectordb.disconnect()
     
     def test_milvus_hybrid_search(self, milvus_provider):
         """Test MilvusProvider hybrid search functionality (mocked)."""
@@ -480,26 +478,26 @@ class TestMilvusKnowledgeBaseIntegration:
     async def test_milvus_collection_recreation(self, milvus_provider):
         """Test MilvusProvider collection recreation (mocked)."""
         try:
-            # Mock collection operations
-            milvus_provider.connect = AsyncMock()
-            milvus_provider.create_collection = AsyncMock()
-            milvus_provider.collection_exists = AsyncMock(return_value=True)
+            # Mock collection operations (public API is sync wrappers)
+            milvus_provider.connect = Mock()
+            milvus_provider.create_collection = Mock()
+            milvus_provider.collection_exists = Mock(return_value=True)
             
             # Test collection creation
-            await milvus_provider.connect()
-            await milvus_provider.create_collection()
-            assert await milvus_provider.collection_exists()
+            milvus_provider.connect()
+            milvus_provider.create_collection()
+            assert milvus_provider.collection_exists()
             
             # Test recreation
-            await milvus_provider.create_collection()  # Should not raise error
-            assert await milvus_provider.collection_exists()
+            milvus_provider.create_collection()  # Should not raise error
+            assert milvus_provider.collection_exists()
         finally:
             # Ensure cleanup even for mocked tests
             if milvus_provider._is_connected:
                 try:
-                    await milvus_provider.disconnect()
+                    milvus_provider.disconnect()
                 except Exception:
-                    milvus_provider._async_client = None
+                    milvus_provider.client = None
                     milvus_provider._is_connected = False
     
     def test_milvus_distance_metrics(self, milvus_provider):

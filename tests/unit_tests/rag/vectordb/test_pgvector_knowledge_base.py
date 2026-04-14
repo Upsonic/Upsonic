@@ -3,8 +3,8 @@ Test PgvectorProvider integration with Knowledge Base.
 """
 import pytest
 import asyncio
-from unittest.mock import Mock, patch, AsyncMock
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+from unittest.mock import Mock, patch, AsyncMock, MagicMock
 
 from upsonic.knowledge_base.knowledge_base import KnowledgeBase
 from upsonic.vectordb.providers.pgvector import PgvectorProvider
@@ -80,14 +80,26 @@ class TestPgvectorKnowledgeBaseIntegration:
     @patch('upsonic.vectordb.providers.pgvector.create_engine')
     async def test_pgvector_provider_connection(self, mock_create_engine, pgvector_provider):
         """Test PgvectorProvider connection."""
-        # Mock the engine
         mock_engine = Mock()
         mock_create_engine.return_value = mock_engine
-        
-        await pgvector_provider.connect()
+        mock_sess = MagicMock()
+        mock_ctx = MagicMock()
+        mock_ctx.__enter__.return_value = mock_sess
+        mock_ctx.__exit__.return_value = None
+        mock_sf = MagicMock(return_value=mock_ctx)
+
+        async def _fake_aget_client() -> Any:
+            pgvector_provider._engine = mock_engine
+            pgvector_provider._session_factory = mock_sf
+            pgvector_provider._is_connected = True
+            return mock_sf
+
+        pgvector_provider.aget_client = _fake_aget_client
+
+        pgvector_provider.connect()
         assert pgvector_provider._is_connected
         assert pgvector_provider._engine is not None
-        assert await pgvector_provider.is_ready()
+        assert pgvector_provider.is_ready()
     
     @pytest.mark.asyncio
     async def test_pgvector_provider_disconnection(self, pgvector_provider):
@@ -99,7 +111,7 @@ class TestPgvectorKnowledgeBaseIntegration:
         pgvector_provider._session_factory = mock_session_factory
         pgvector_provider._is_connected = True
         
-        await pgvector_provider.disconnect()
+        pgvector_provider.disconnect()
         assert not pgvector_provider._is_connected
         # disconnect() disposes the engine but doesn't set it to None
         mock_engine.dispose.assert_called_once()
@@ -107,39 +119,36 @@ class TestPgvectorKnowledgeBaseIntegration:
     @pytest.mark.asyncio
     async def test_pgvector_collection_creation(self, pgvector_provider):
         """Test PgvectorProvider collection creation (mocked)."""
-        # Mock the operations
-        pgvector_provider.connect = AsyncMock()
-        pgvector_provider.create_collection = AsyncMock()
-        pgvector_provider.collection_exists = AsyncMock(side_effect=[False, True])
+        pgvector_provider.aconnect = AsyncMock()
+        pgvector_provider.acreate_collection = AsyncMock()
+        pgvector_provider.acollection_exists = AsyncMock(side_effect=[False, True])
         
-        await pgvector_provider.connect()
-        assert not await pgvector_provider.collection_exists()
+        await pgvector_provider.aconnect()
+        assert not await pgvector_provider.acollection_exists()
         
-        await pgvector_provider.create_collection()
-        assert await pgvector_provider.collection_exists()
+        await pgvector_provider.acreate_collection()
+        assert await pgvector_provider.acollection_exists()
         
         # Verify methods were called
-        pgvector_provider.connect.assert_called_once()
-        pgvector_provider.create_collection.assert_called_once()
+        pgvector_provider.aconnect.assert_called_once()
+        pgvector_provider.acreate_collection.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_pgvector_collection_deletion(self, pgvector_provider):
         """Test PgvectorProvider collection deletion (mocked)."""
-        # Mock the operations
-        pgvector_provider.connect = AsyncMock()
-        pgvector_provider.create_collection = AsyncMock()
-        pgvector_provider.delete_collection = AsyncMock()
-        pgvector_provider.collection_exists = AsyncMock(side_effect=[True, False])
+        pgvector_provider.aconnect = AsyncMock()
+        pgvector_provider.acreate_collection = AsyncMock()
+        pgvector_provider.adelete_collection = AsyncMock()
+        pgvector_provider.acollection_exists = AsyncMock(side_effect=[True, False])
         
-        await pgvector_provider.connect()
-        await pgvector_provider.create_collection()
-        assert await pgvector_provider.collection_exists()
+        await pgvector_provider.aconnect()
+        await pgvector_provider.acreate_collection()
+        assert await pgvector_provider.acollection_exists()
         
-        await pgvector_provider.delete_collection()
-        assert not await pgvector_provider.collection_exists()
+        await pgvector_provider.adelete_collection()
+        assert not await pgvector_provider.acollection_exists()
         
-        # Verify methods were called
-        pgvector_provider.delete_collection.assert_called_once()
+        pgvector_provider.adelete_collection.assert_called_once()
     
     def test_pgvector_upsert_operations(self, pgvector_provider):
         """Test PgvectorProvider upsert operations (mocked)."""
@@ -204,86 +213,65 @@ class TestPgvectorKnowledgeBaseIntegration:
     @pytest.mark.asyncio
     async def test_knowledge_base_setup_with_pgvector(self, knowledge_base):
         """Test Knowledge Base setup with PgvectorProvider."""
-        # Mock the vectordb methods
-        knowledge_base.vectordb.connect = AsyncMock()
-        knowledge_base.vectordb.create_collection = AsyncMock()
-        knowledge_base.vectordb.upsert = AsyncMock()
-        knowledge_base.vectordb.collection_exists = AsyncMock(return_value=False)
-        knowledge_base.vectordb.is_ready = AsyncMock(return_value=True)
-        
-        # Mock the embedding provider - return 1 vector per chunk
-        async def mock_embed_documents(chunks):
+        knowledge_base.vectordb.aconnect = AsyncMock()
+        knowledge_base.vectordb.acreate_collection = AsyncMock()
+        knowledge_base.vectordb.aupsert = AsyncMock()
+        knowledge_base.vectordb.acollection_exists = AsyncMock(return_value=False)
+        knowledge_base.vectordb.ais_ready = AsyncMock(return_value=True)
+
+        async def mock_embed_documents(chunks: List[Any]) -> List[List[float]]:
             return [[0.1] * 384] * len(chunks)
+
         knowledge_base.embedding_provider.embed_documents = AsyncMock(side_effect=mock_embed_documents)
-        
-        # Setup the knowledge base
+
         await knowledge_base.setup_async()
-        
-        # Verify setup was called
-        knowledge_base.vectordb.connect.assert_called_once()
-        knowledge_base.vectordb.create_collection.assert_called_once()
-        knowledge_base.vectordb.upsert.assert_called_once()
+
+        knowledge_base.vectordb.aconnect.assert_called_once()
+        knowledge_base.vectordb.acreate_collection.assert_called_once()
+        knowledge_base.vectordb.aupsert.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_knowledge_base_query_with_pgvector(self, knowledge_base):
         """Test Knowledge Base query with PgvectorProvider."""
-        # Mock the vectordb methods
-        knowledge_base.vectordb.connect = AsyncMock()
-        knowledge_base.vectordb.create_collection = AsyncMock()
-        knowledge_base.vectordb.upsert = AsyncMock()
-        knowledge_base.vectordb.collection_exists = AsyncMock(return_value=False)
-        knowledge_base.vectordb.is_ready = AsyncMock(return_value=True)
-        knowledge_base.vectordb.search = AsyncMock(return_value=[
-            create_mock_vector_search_result("id1", 0.9, "Test result 1"),
-            create_mock_vector_search_result("id2", 0.8, "Test result 2")
-        ])
-        
-        # Mock the embedding provider - return 1 vector per chunk
-        async def mock_embed_documents(chunks):
+        knowledge_base.vectordb.aconnect = AsyncMock()
+        knowledge_base.vectordb.acreate_collection = AsyncMock()
+        knowledge_base.vectordb.aupsert = AsyncMock()
+        knowledge_base.vectordb.acollection_exists = AsyncMock(return_value=False)
+        knowledge_base.vectordb.ais_ready = AsyncMock(return_value=True)
+        knowledge_base.vectordb.asearch = AsyncMock(
+            return_value=[
+                create_mock_vector_search_result("id1", 0.9, "Test result 1"),
+                create_mock_vector_search_result("id2", 0.8, "Test result 2"),
+            ]
+        )
+
+        async def mock_embed_documents(chunks: List[Any]) -> List[List[float]]:
             return [[0.1] * 384] * len(chunks)
+
         knowledge_base.embedding_provider.embed_documents = AsyncMock(side_effect=mock_embed_documents)
         knowledge_base.embedding_provider.embed_query = AsyncMock(return_value=[0.15] * 384)
-        
-        # Setup the knowledge base
+
         await knowledge_base.setup_async()
-        
-        # Query the knowledge base
+
         results = await knowledge_base.query_async("test query")
-        
-        # Verify results
+
         assert len(results) == 2
         assert all(isinstance(result, RAGSearchResult) for result in results)
         assert results[0].text == "Test result 1"
         assert results[1].text == "Test result 2"
     
-    @pytest.mark.asyncio
-    async def test_pgvector_hybrid_search(self, pgvector_provider):
-        """Test PgvectorProvider hybrid search functionality."""
-        # Set connection state
-        pgvector_provider._is_connected = True
-        
-        # Mock the individual search methods
-        pgvector_provider.dense_search = AsyncMock(return_value=[
-            create_mock_vector_search_result("id1", 0.9, "Test result 1")
-        ])
-        pgvector_provider.full_text_search = AsyncMock(return_value=[
-            create_mock_vector_search_result("id2", 0.8, "Test result 2")
-        ])
-        
-        # Mock the internal hybrid search methods
-        pgvector_provider._hybrid_search_weighted = AsyncMock(return_value=[
+    def test_pgvector_hybrid_search(self, pgvector_provider):
+        """Test PgvectorProvider hybrid search functionality (mocked async path)."""
+        expected: list[VectorSearchResult] = [
             create_mock_vector_search_result("id1", 0.9, "Test result 1"),
-            create_mock_vector_search_result("id2", 0.8, "Test result 2")
-        ])
-        
-        # Test hybrid search
+            create_mock_vector_search_result("id2", 0.8, "Test result 2"),
+        ]
+        pgvector_provider.ahybrid_search = AsyncMock(return_value=expected)
         query_vector = [0.15] * 384
         query_text = "test query"
-        
-        results = await pgvector_provider.hybrid_search(query_vector, query_text, top_k=2)
-        
-        # Verify hybrid search was called
+        results = pgvector_provider.hybrid_search(query_vector, query_text, top_k=2)
         assert len(results) == 2
+        pgvector_provider.ahybrid_search.assert_called_once()
     
     def test_pgvector_full_text_search(self, pgvector_provider):
         """Test PgvectorProvider full-text search (mocked)."""
@@ -336,16 +324,13 @@ class TestPgvectorKnowledgeBaseIntegration:
         # Should not raise error
         assert ivf_config.nlist == 100
     
-    @pytest.mark.asyncio
-    async def test_pgvector_error_handling(self, pgvector_provider):
+    def test_pgvector_error_handling(self, pgvector_provider):
         """Test PgvectorProvider error handling."""
-        # Test connection error
         with pytest.raises(Exception):
-            await pgvector_provider.create_collection()  # Should fail without connection
-        
-        # Test invalid upsert
+            pgvector_provider.create_collection()
+
         with pytest.raises(Exception):
-            await pgvector_provider.upsert([], [], [], [])  # Empty data should be handled gracefully
+            pgvector_provider.upsert([], [], [], [])
     
     def test_pgvector_configuration_validation(self):
         """Test PgvectorProvider configuration validation."""

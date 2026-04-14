@@ -31,6 +31,10 @@ class BaseLoader(ABC):
         self._logger = get_logger(self.__class__.__module__)  # Instance logger for subclasses
 
 
+    def reset(self) -> None:
+        """Clears internal deduplication state so sources can be re-loaded."""
+        self._processed_document_ids.clear()
+
     @abstractmethod
     def load(self, source: Union[str, Path, List[Union[str, Path]]]) -> List[Document]:
         """Loads all documents from the given source synchronously."""
@@ -106,7 +110,7 @@ class BaseLoader(ABC):
         try:
             metadata = {
                 "source": str(source_path.resolve()),
-                "file_name": source_path.name,
+                "document_name": source_path.name,
                 "file_path": str(source_path),
                 "file_size": source_path.stat().st_size,
                 "creation_datetime_utc": source_path.stat().st_ctime,
@@ -118,7 +122,7 @@ class BaseLoader(ABC):
         except FileNotFoundError:
             metadata = {
                 "source": str(source_path),
-                "file_name": source_path.name,
+                "document_name": source_path.name,
                 "file_path": str(source_path),
             }
 

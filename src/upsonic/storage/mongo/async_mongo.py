@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 if TYPE_CHECKING:
     from upsonic.session.base import Session, SessionType
     from upsonic.culture.cultural_knowledge import CulturalKnowledge
+    from upsonic.storage.schemas import KnowledgeRow
 
 try:
     from motor.motor_asyncio import (
@@ -166,6 +167,7 @@ class AsyncMongoStorage(AsyncStorage):
         db_url: Optional[str] = None,
         session_collection: Optional[str] = None,
         user_memory_collection: Optional[str] = None,
+        knowledge_collection: Optional[str] = None,
         id: Optional[str] = None,
     ) -> None:
         """
@@ -179,6 +181,7 @@ class AsyncMongoStorage(AsyncStorage):
             db_url: The database URL to connect to.
             session_collection: Name of the collection to store sessions.
             user_memory_collection: Name of the collection to store user memories.
+            knowledge_collection: Name of the collection to store knowledge entries.
             id: Unique identifier for this storage instance.
         
         Raises:
@@ -186,14 +189,6 @@ class AsyncMongoStorage(AsyncStorage):
                        or if db_client type is unsupported.
             ImportError: If neither motor nor pymongo async is installed.
         """
-        if not PYMONGO_ASYNC_AVAILABLE:
-            from upsonic.utils.printing import import_error
-            import_error(
-                package_name="pymongo",
-                install_command='pip install "upsonic[mongo-storage]"',
-                feature_name="MongoDB async storage provider"
-            )
-        
         if not MOTOR_AVAILABLE and not PYMONGO_ASYNC_AVAILABLE:
             from upsonic.utils.printing import import_error
             import_error(
@@ -205,6 +200,7 @@ class AsyncMongoStorage(AsyncStorage):
         super().__init__(
             session_table=session_collection,
             user_memory_table=user_memory_collection,
+            knowledge_table=knowledge_collection,
             id=id,
         )
 
@@ -242,9 +238,11 @@ class AsyncMongoStorage(AsyncStorage):
         self._session_collection: Optional[AsyncMongoCollectionType] = None
         self._user_memory_collection: Optional[AsyncMongoCollectionType] = None
         self._cultural_knowledge_collection: Optional[AsyncMongoCollectionType] = None
+        self._knowledge_collection: Optional[AsyncMongoCollectionType] = None
         self._sessions_initialized: bool = False
         self._user_memories_initialized: bool = False
         self._cultural_knowledge_initialized: bool = False
+        self._knowledge_initialized: bool = False
 
     # ======================== Client Management ========================
 
@@ -350,6 +348,7 @@ class AsyncMongoStorage(AsyncStorage):
             self._session_collection = None
             self._user_memory_collection = None
             self._cultural_knowledge_collection = None
+            self._knowledge_collection = None
 
     # ======================== Table/Collection Management ========================
 
@@ -372,6 +371,7 @@ class AsyncMongoStorage(AsyncStorage):
             ("sessions", self.session_table_name),
             ("user_memories", self.user_memory_table_name),
             ("cultural_knowledge", self.cultural_knowledge_table_name),
+            ("knowledge", self.knowledge_table_name),
         ]
 
         for collection_type, collection_name in collections_to_create:
@@ -448,6 +448,19 @@ class AsyncMongoStorage(AsyncStorage):
                     create_collection_if_not_found=create_collection_if_not_found,
                 )
             return self._cultural_knowledge_collection
+
+        if collection_type == "knowledge":
+            if reset_cache or self._knowledge_collection is None:
+                if self.knowledge_table_name is None:
+                    raise ValueError(
+                        "Knowledge collection was not provided on initialization"
+                    )
+                self._knowledge_collection = await self._get_or_create_collection(
+                    collection_name=self.knowledge_table_name,
+                    collection_type="knowledge",
+                    create_collection_if_not_found=create_collection_if_not_found,
+                )
+            return self._knowledge_collection
 
         raise ValueError(f"Unknown collection type: {collection_type}")
 
@@ -1385,6 +1398,17 @@ class AsyncMongoStorage(AsyncStorage):
             except ValueError:
                 pass
 
+            # Clear knowledge
+            try:
+                collection = await self._get_collection(
+                    "knowledge", create_collection_if_not_found=False
+                )
+                if collection is not None:
+                    await collection.delete_many({})
+                    _logger.debug("Cleared all knowledge entries")
+            except ValueError:
+                pass
+
             _logger.info("Cleared all data from storage")
 
         except Exception as e:
@@ -1720,4 +1744,157 @@ class AsyncMongoStorage(AsyncStorage):
 
         except Exception as e:
             _logger.error(f"Error upserting cultural knowledge: {e}")
+            raise e
+
+    # ======================== Knowledge Content Methods (Async) ========================
+
+    async def _get_knowledge_collection(
+        self, create_collection_if_not_found: bool = False
+    ) -> Optional[AsyncMongoCollectionType]:
+        """Get the knowledge collection, creating if needed."""
+        return await self._get_collection(
+            "knowledge",
+            create_collection_if_not_found=create_collection_if_not_found,
+        )
+
+    async def aupsert_knowledge_content(
+        self,
+        knowledge_row: "KnowledgeRow",
+    ) -> Optional["KnowledgeRow"]:
+        """Insert or update a knowledge document registry entry (async)."""
+        from upsonic.storage.schemas import KnowledgeRow
+
+        try:
+            collection = await self._get_knowledge_collection(
+                create_collection_if_not_found=True
+            )
+            if collection is None:
+                return None
+
+            current_time = int(time.time())
+
+            data = knowledge_row.to_dict()
+            data.setdefault("created_at", current_time)
+            data["updated_at"] = current_time
+
+            result = await collection.find_one_and_replace(
+                filter={"id": data["id"]},
+                replacement=data,
+                upsert=True,
+                return_document=ReturnDocument.AFTER,
+            )
+
+            if result is None:
+                return None
+
+            return KnowledgeRow.from_dict(remove_mongo_id(result))
+
+        except Exception as e:
+            _logger.error(f"Error upserting knowledge content: {e}")
+            raise e
+
+    async def aget_knowledge_content(
+        self,
+        id: str,
+    ) -> Optional["KnowledgeRow"]:
+        """Get a knowledge document registry entry by ID (async)."""
+        from upsonic.storage.schemas import KnowledgeRow
+
+        try:
+            collection = await self._get_knowledge_collection(
+                create_collection_if_not_found=False
+            )
+            if collection is None:
+                return None
+
+            result = await collection.find_one({"id": id})
+            if result is None:
+                return None
+
+            return KnowledgeRow.from_dict(remove_mongo_id(result))
+
+        except Exception as e:
+            _logger.error(f"Error getting knowledge content: {e}")
+            raise e
+
+    async def aget_knowledge_contents(
+        self,
+        knowledge_base_id: Optional[str] = None,
+        limit: Optional[int] = None,
+        page: Optional[int] = None,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None,
+    ) -> Tuple[List["KnowledgeRow"], int]:
+        """Get knowledge document registry entries with filtering and pagination (async)."""
+        from upsonic.storage.schemas import KnowledgeRow
+
+        try:
+            collection = await self._get_knowledge_collection(
+                create_collection_if_not_found=False
+            )
+            if collection is None:
+                return [], 0
+
+            query: Dict[str, Any] = {}
+            if knowledge_base_id is not None:
+                query["knowledge_base_id"] = knowledge_base_id
+
+            total_count: int = await collection.count_documents(query)
+
+            sort_criteria = apply_sorting({}, sort_by, sort_order)
+            cursor = collection.find(query)
+            if sort_criteria:
+                cursor = cursor.sort(sort_criteria)
+
+            if limit is not None:
+                if page is not None and page > 1:
+                    offset = (page - 1) * limit
+                    cursor = cursor.skip(offset)
+                cursor = cursor.limit(limit)
+
+            rows = [KnowledgeRow.from_dict(remove_mongo_id(item)) async for item in cursor]
+            return rows, total_count
+
+        except Exception as e:
+            _logger.error(f"Error getting knowledge contents: {e}")
+            raise e
+
+    async def adelete_knowledge_content(self, id: str) -> bool:
+        """Delete a knowledge document registry entry by ID (async)."""
+        try:
+            collection = await self._get_knowledge_collection(
+                create_collection_if_not_found=False
+            )
+            if collection is None:
+                return False
+
+            result = await collection.delete_one({"id": id})
+            deleted: bool = result.deleted_count > 0
+            if deleted:
+                _logger.debug(f"Deleted knowledge content: {id}")
+            return deleted
+
+        except Exception as e:
+            _logger.error(f"Error deleting knowledge content: {e}")
+            raise e
+
+    async def adelete_knowledge_contents(self, ids: List[str]) -> int:
+        """Delete multiple knowledge document registry entries (async)."""
+        if not ids:
+            return 0
+
+        try:
+            collection = await self._get_knowledge_collection(
+                create_collection_if_not_found=False
+            )
+            if collection is None:
+                return 0
+
+            result = await collection.delete_many({"id": {"$in": ids}})
+            deleted_count: int = result.deleted_count
+            _logger.debug(f"Deleted {deleted_count} knowledge entries")
+            return deleted_count
+
+        except Exception as e:
+            _logger.error(f"Error deleting knowledge contents: {e}")
             raise e

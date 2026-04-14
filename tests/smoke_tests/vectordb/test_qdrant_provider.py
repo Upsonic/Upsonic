@@ -49,11 +49,11 @@ SAMPLE_VECTORS: List[List[float]] = [
 ]
 
 SAMPLE_PAYLOADS: List[Dict[str, Any]] = [
-    {"content": "The theory of relativity revolutionized physics", "category": "science", "author": "Einstein", "year": 1905},
-    {"content": "Laws of motion and universal gravitation", "category": "science", "author": "Newton", "year": 1687},
-    {"content": "To be or not to be, that is the question", "category": "literature", "author": "Shakespeare", "year": 1600},
-    {"content": "It was the best of times, it was the worst of times", "category": "literature", "author": "Dickens", "year": 1850},
-    {"content": "The unexamined life is not worth living", "category": "philosophy", "author": "Plato", "year": -400}
+    {"category": "science", "author": "Einstein", "year": 1905},
+    {"category": "science", "author": "Newton", "year": 1687},
+    {"category": "literature", "author": "Shakespeare", "year": 1600},
+    {"category": "literature", "author": "Dickens", "year": 1850},
+    {"category": "philosophy", "author": "Plato", "year": -400},
 ]
 
 SAMPLE_CHUNKS: List[str] = [
@@ -64,7 +64,13 @@ SAMPLE_CHUNKS: List[str] = [
     "The unexamined life is not worth living"
 ]
 
-SAMPLE_IDS: List[str] = ["doc1", "doc2", "doc3", "doc4", "doc5"]
+SAMPLE_IDS: List[str] = [
+    "11111111-1111-4111-8111-111111111111",
+    "22222222-2222-4222-8222-222222222222",
+    "33333333-3333-4333-8333-333333333333",
+    "44444444-4444-4444-8444-444444444444",
+    "55555555-5555-4555-8555-555555555555",
+]
 
 QUERY_VECTOR: List[float] = [0.15, 0.25, 0.35, 0.45, 0.55]
 QUERY_TEXT: str = "physics theory"
@@ -153,174 +159,174 @@ class TestQdrantProviderIN_MEMORY:
         assert provider._config.vector_size == 5
         assert provider._config.distance_metric == DistanceMetric.COSINE
         assert not provider._is_connected
-        assert provider._client is None
+        assert provider.client is None
         
         # Test provider metadata attributes
-        assert provider.provider_name is not None
-        assert isinstance(provider.provider_id, str)
-        assert len(provider.provider_id) > 0
+        assert provider.name is not None
+        assert isinstance(provider.id, str)
+        assert len(provider.id) > 0
         assert provider.reranker is None
     
     @pytest.mark.asyncio
     async def test_connect(self, provider: QdrantProvider):
         """Test connection to Qdrant."""
-        await provider.connect()
+        await provider.aconnect()
         assert provider._is_connected
-        assert provider._client is not None
-        assert await provider.is_ready()
+        assert provider.client is not None
+        assert await provider.ais_ready()
     
     @pytest.mark.asyncio
     async def test_connect_sync(self, provider: QdrantProvider):
         """Test synchronous connection."""
-        provider.connect_sync()
+        provider.connect()
         assert provider._is_connected
-        assert provider._client is not None
-        assert provider.is_ready_sync()
+        assert provider.client is not None
+        assert provider.is_ready()
     
     @pytest.mark.asyncio
     async def test_disconnect(self, provider: QdrantProvider):
         """Test disconnection."""
-        await provider.connect()
+        await provider.aconnect()
         assert provider._is_connected
-        await provider.disconnect()
+        await provider.adisconnect()
         assert not provider._is_connected
-        assert provider._client is None
+        assert provider.client is None
     
     @pytest.mark.asyncio
     async def test_disconnect_sync(self, provider: QdrantProvider):
         """Test synchronous disconnection."""
-        provider.connect_sync()
+        provider.connect()
         assert provider._is_connected
-        provider.disconnect_sync()
+        provider.disconnect()
         assert not provider._is_connected
     
     @pytest.mark.asyncio
     async def test_close(self, provider: QdrantProvider):
         """Test close method."""
-        await provider.connect()
+        await provider.aconnect()
         assert provider._is_connected
-        await provider.close()
+        await provider.aclose()
         assert not provider._is_connected
-        assert provider._client is None
+        assert provider.client is None
     
     @pytest.mark.asyncio
     async def test_is_ready(self, provider: QdrantProvider):
         """Test is_ready check."""
-        assert not await provider.is_ready()
-        await provider.connect()
-        assert await provider.is_ready()
-        await provider.disconnect()
-        assert not await provider.is_ready()
+        assert not await provider.ais_ready()
+        await provider.aconnect()
+        assert await provider.ais_ready()
+        await provider.adisconnect()
+        assert not await provider.ais_ready()
     
     @pytest.mark.asyncio
     async def test_is_ready_sync(self, provider: QdrantProvider):
         """Test synchronous is_ready check."""
-        assert not provider.is_ready_sync()
-        provider.connect_sync()
-        assert provider.is_ready_sync()
-        provider.disconnect_sync()
-        assert not provider.is_ready_sync()
+        assert not provider.is_ready()
+        provider.connect()
+        assert provider.is_ready()
+        provider.disconnect()
+        assert not provider.is_ready()
     
     @pytest.mark.asyncio
     async def test_create_collection(self, provider: QdrantProvider):
         """Test collection creation."""
-        await provider.connect()
-        assert not await provider.collection_exists()
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.disconnect()
+        await provider.aconnect()
+        assert not await provider.acollection_exists()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_create_collection_sync(self, provider: QdrantProvider):
         """Test synchronous collection creation."""
-        provider.connect_sync()
+        provider.connect()
         # Delete collection if it exists first
         try:
-            if provider.collection_exists_sync():
-                provider.delete_collection_sync()
+            if provider.collection_exists():
+                provider.delete_collection()
         except Exception:
             pass
-        assert not provider.collection_exists_sync()
-        provider.create_collection_sync()
-        assert provider.collection_exists_sync()
-        provider.disconnect_sync()
+        assert not provider.collection_exists()
+        provider.create_collection()
+        assert provider.collection_exists()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_collection_exists(self, provider: QdrantProvider):
         """Test collection existence check."""
-        await provider.connect()
+        await provider.aconnect()
         # Delete collection if it exists first
         try:
-            if await provider.collection_exists():
-                await provider.delete_collection()
+            if await provider.acollection_exists():
+                await provider.adelete_collection()
         except Exception:
             pass
-        assert not await provider.collection_exists()
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.disconnect()
+        assert not await provider.acollection_exists()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_collection_exists_sync(self, provider: QdrantProvider):
         """Test synchronous collection existence check."""
-        provider.connect_sync()
+        provider.connect()
         # Delete collection if it exists first
         try:
-            if provider.collection_exists_sync():
-                provider.delete_collection_sync()
+            if provider.collection_exists():
+                provider.delete_collection()
         except Exception:
             pass
-        assert not provider.collection_exists_sync()
-        provider.create_collection_sync()
-        assert provider.collection_exists_sync()
-        provider.disconnect_sync()
+        assert not provider.collection_exists()
+        provider.create_collection()
+        assert provider.collection_exists()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_collection(self, provider: QdrantProvider):
         """Test collection deletion."""
-        await provider.connect()
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.delete_collection()
-        assert not await provider.collection_exists()
-        await provider.disconnect()
+        await provider.aconnect()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adelete_collection()
+        assert not await provider.acollection_exists()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_collection_sync(self, provider: QdrantProvider):
         """Test synchronous collection deletion."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        assert provider.collection_exists_sync()
-        provider.delete_collection_sync()
-        assert not provider.collection_exists_sync()
-        provider.disconnect_sync()
+        provider.connect()
+        provider.create_collection()
+        assert provider.collection_exists()
+        provider.delete_collection()
+        assert not provider.collection_exists()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_nonexistent_collection(self, provider: QdrantProvider):
         """Test deleting non-existent collection."""
-        await provider.connect()
+        await provider.aconnect()
         # Qdrant doesn't raise an error when deleting a non-existent collection
         # It just succeeds silently, so we just verify it doesn't crash
         try:
-            await provider.delete_collection()
+            await provider.adelete_collection()
         except CollectionDoesNotExistError:
             # If it does raise, that's also acceptable
             pass
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert(self, provider: QdrantProvider):
         """Test upsert operation with content validation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
         # Verify data was actually stored with correct content
-        results = await provider.fetch(ids=SAMPLE_IDS)
+        results = await provider.afetch(ids=SAMPLE_IDS)
         assert len(results) == 5
         # Qdrant normalizes IDs, so we need to match by content instead
         for result in results:
@@ -329,93 +335,92 @@ class TestQdrantProviderIN_MEMORY:
             content = result.payload.get("content")
             assert content in SAMPLE_CHUNKS
             idx = SAMPLE_CHUNKS.index(content)
-            assert result.payload.get("category") == SAMPLE_PAYLOADS[idx]["category"]
-            assert result.payload.get("author") == SAMPLE_PAYLOADS[idx]["author"]
-            assert result.payload.get("year") == SAMPLE_PAYLOADS[idx]["year"]
+            assert result.payload["metadata"]["category"] == SAMPLE_PAYLOADS[idx]["category"]
+            assert result.payload["metadata"]["author"] == SAMPLE_PAYLOADS[idx]["author"]
+            assert result.payload["metadata"]["year"] == SAMPLE_PAYLOADS[idx]["year"]
             assert result.text == SAMPLE_CHUNKS[idx]
             # Validate vector is retrieved and has correct length
             # Note: Qdrant may normalize vectors for cosine similarity, so we don't compare exact values
             assert result.vector is not None
             assert len(result.vector) == len(SAMPLE_VECTORS[idx])
-        await provider.disconnect()
-    
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
     async def test_upsert_sync(self, provider: QdrantProvider):
         """Test synchronous upsert."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        provider.disconnect_sync()
-    
+        provider.disconnect()
+
     @pytest.mark.asyncio
     async def test_upsert_with_document_tracking(self, provider: QdrantProvider):
-        """Test upsert with document_name, document_id, content_id and validate metadata."""
-        await provider.connect()
-        await provider.create_collection()
+        """Test upsert with document_name, document_id, chunk_id and validate metadata."""
+        await provider.aconnect()
+        await provider.acreate_collection()
         payloads_with_tracking = []
+        document_ids = []
+        document_names = []
         for i, payload in enumerate(SAMPLE_PAYLOADS[:2]):
             payload_copy = payload.copy()
-            payload_copy["document_name"] = f"doc{i+1}"
-            payload_copy["document_id"] = f"doc_id_{i+1}"
-            payload_copy["content_id"] = f"content_{i+1}"
             payloads_with_tracking.append(payload_copy)
-        
-        await provider.upsert(
+            document_ids.append(f"doc_id_{i+1}")
+            document_names.append(f"doc{i+1}")
+
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=payloads_with_tracking,
-            ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+            ids=["content_1", "content_2"],
+            chunks=SAMPLE_CHUNKS[:2],
+            document_ids=document_ids,
+            document_names=document_names,
         )
-        # Verify tracking metadata was stored correctly
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=["content_1", "content_2"])
         assert len(results) == 2
-        # Qdrant normalizes IDs, so we need to match by content_id instead
         for result in results:
-            content_id = result.payload.get("content_id")
-            assert content_id in ["content_1", "content_2"]
-            idx = int(content_id.split("_")[1]) - 1
+            chunk_id = result.payload.get("chunk_id")
+            assert chunk_id in ["content_1", "content_2"]
+            idx = int(chunk_id.split("_")[1]) - 1
             assert result.payload.get("document_name") == f"doc{idx+1}"
             assert result.payload.get("document_id") == f"doc_id_{idx+1}"
-            assert result.payload.get("content_id") == f"content_{idx+1}"
-            assert result.payload.get("category") == SAMPLE_PAYLOADS[idx]["category"]
+            assert result.payload.get("chunk_id") == f"content_{idx+1}"
+            assert result.payload["metadata"]["category"] == SAMPLE_PAYLOADS[idx]["category"]
             assert result.text == SAMPLE_CHUNKS[idx]
-            # Validate vector is retrieved and has correct length
-            # Note: Qdrant may normalize vectors for cosine similarity, so we don't compare exact values
             assert result.vector is not None
             assert len(result.vector) == len(SAMPLE_VECTORS[idx])
-        await provider.disconnect()
-    
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
     async def test_upsert_validation_error(self, provider: QdrantProvider):
         """Test upsert with mismatched lengths raises error."""
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         with pytest.raises(ValueError):
-            await provider.upsert(
+            await provider.aupsert(
                 vectors=SAMPLE_VECTORS[:2],
                 payloads=SAMPLE_PAYLOADS[:3],
                 ids=SAMPLE_IDS[:2],
                 chunks=SAMPLE_CHUNKS[:2]
             )
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_fetch(self, provider: QdrantProvider):
         """Test fetch operation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 2
         assert all(isinstance(r, VectorSearchResult) for r in results)
         assert results[0].payload is not None
@@ -428,20 +433,20 @@ class TestQdrantProviderIN_MEMORY:
             idx = SAMPLE_CHUNKS.index(content)
             assert result.vector is not None
             assert len(result.vector) == len(SAMPLE_VECTORS[idx])
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_fetch_sync(self, provider: QdrantProvider):
         """Test synchronous fetch."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.fetch_sync(ids=SAMPLE_IDS[:2])
+        results = provider.fetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 2
         assert all(isinstance(r, VectorSearchResult) for r in results)
         # Validate vectors are retrieved and have correct length
@@ -452,177 +457,153 @@ class TestQdrantProviderIN_MEMORY:
             idx = SAMPLE_CHUNKS.index(content)
             assert result.vector is not None
             assert len(result.vector) == len(SAMPLE_VECTORS[idx])
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete(self, provider: QdrantProvider):
         """Test delete operation."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        await provider.delete(ids=SAMPLE_IDS[:2])
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        await provider.adelete(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_sync(self, provider: QdrantProvider):
         """Test synchronous delete."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        provider.delete_sync(ids=SAMPLE_IDS[:2])
-        results = provider.fetch_sync(ids=SAMPLE_IDS[:2])
+        provider.delete(ids=SAMPLE_IDS[:2])
+        results = provider.fetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_document_name(self, provider: QdrantProvider):
         """Test delete_by_document_name."""
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         # First ensure collection is empty
-        initial_count = await provider.get_count()
-        payloads_with_doc_name = []
-        for payload in SAMPLE_PAYLOADS[:2]:
-            payload_copy = payload.copy()
-            payload_copy["document_name"] = "test_doc"
-            payloads_with_doc_name.append(payload_copy)
-        
-        await provider.upsert(
+        initial_count = await provider.aget_count()
+        payloads_with_doc_name = [p.copy() for p in SAMPLE_PAYLOADS[:2]]
+
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=payloads_with_doc_name,
             ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+            chunks=SAMPLE_CHUNKS[:2],
+            document_names=["test_doc"] * 2,
         )
-        count_before = await provider.get_count()
+        count_before = await provider.aget_count()
         assert count_before == initial_count + 2
         deleted = provider.delete_by_document_name("test_doc")
         assert deleted is True
-        count_after = await provider.get_count()
+        count_after = await provider.aget_count()
         assert count_after == initial_count
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_delete_by_document_name(self, provider: QdrantProvider):
         """Test async_delete_by_document_name."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_doc_name = []
-        for payload in SAMPLE_PAYLOADS[:2]:
-            payload_copy = payload.copy()
-            payload_copy["document_name"] = "test_doc"
-            payloads_with_doc_name.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        payloads_with_doc_name = [p.copy() for p in SAMPLE_PAYLOADS[:2]]
+
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=payloads_with_doc_name,
             ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+            chunks=SAMPLE_CHUNKS[:2],
+            document_names=["test_doc"] * 2,
         )
-        deleted = await provider.async_delete_by_document_name("test_doc")
+        deleted = await provider.adelete_by_document_name("test_doc")
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_document_id(self, provider: QdrantProvider):
         """Test delete_by_document_id."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_doc_id = []
-        for payload in SAMPLE_PAYLOADS[:2]:
-            payload_copy = payload.copy()
-            payload_copy["document_id"] = "doc_id_1"
-            payloads_with_doc_id.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        payloads_with_doc_id = [p.copy() for p in SAMPLE_PAYLOADS[:2]]
+
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=payloads_with_doc_id,
             ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+            chunks=SAMPLE_CHUNKS[:2],
+            document_ids=["doc_id_1", "doc_id_1"],
         )
         deleted = provider.delete_by_document_id("doc_id_1")
         assert deleted is True
-        await provider.disconnect()
-    
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
     async def test_async_delete_by_document_id(self, provider: QdrantProvider):
         """Test async_delete_by_document_id."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_doc_id = []
-        for payload in SAMPLE_PAYLOADS[:2]:
-            payload_copy = payload.copy()
-            payload_copy["document_id"] = "doc_id_1"
-            payloads_with_doc_id.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        payloads_with_doc_id = [p.copy() for p in SAMPLE_PAYLOADS[:2]]
+
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=payloads_with_doc_id,
             ids=SAMPLE_IDS[:2],
+            chunks=SAMPLE_CHUNKS[:2],
+            document_ids=["doc_id_1", "doc_id_1"],
+        )
+        deleted = await provider.adelete_by_document_id("doc_id_1")
+        assert deleted is True
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_delete_by_chunk_id(self, provider: QdrantProvider):
+        """Test delete_by_chunk_id."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:2],
+            payloads=[p.copy() for p in SAMPLE_PAYLOADS[:2]],
+            ids=["content_1", "content_1b"],
             chunks=SAMPLE_CHUNKS[:2]
         )
-        deleted = await provider.async_delete_by_document_id("doc_id_1")
+        deleted = provider.delete_by_chunk_id("content_1")
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_delete_by_content_id(self, provider: QdrantProvider):
-        """Test delete_by_content_id."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:2]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
+    async def test_adelete_by_chunk_id(self, provider: QdrantProvider):
+        """Test adelete_by_chunk_id."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:2],
+            payloads=[p.copy() for p in SAMPLE_PAYLOADS[:2]],
+            ids=["content_1", "content_1b"],
             chunks=SAMPLE_CHUNKS[:2]
         )
-        deleted = provider.delete_by_content_id("content_1")
+        deleted = await provider.adelete_by_chunk_id("content_1")
         assert deleted is True
-        await provider.disconnect()
-    
-    @pytest.mark.asyncio
-    async def test_async_delete_by_content_id(self, provider: QdrantProvider):
-        """Test async_delete_by_content_id."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:2]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS[:2],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
-        )
-        deleted = await provider.async_delete_by_content_id("content_1")
-        assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_metadata(self, provider: QdrantProvider):
         """Test delete_by_metadata."""
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         # Create payloads with metadata structure
         payloads_with_metadata = []
         for payload in SAMPLE_PAYLOADS:
@@ -631,7 +612,7 @@ class TestQdrantProviderIN_MEMORY:
             payload_copy["metadata"] = {"category": payload["category"]}
             payloads_with_metadata.append(payload_copy)
         
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=payloads_with_metadata,
             ids=SAMPLE_IDS,
@@ -641,13 +622,13 @@ class TestQdrantProviderIN_MEMORY:
         # So we pass {"category": "science"} and it looks for metadata.category
         deleted = provider.delete_by_metadata({"category": "science"})
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_delete_by_metadata(self, provider: QdrantProvider):
         """Test async_delete_by_metadata."""
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         # Create payloads with metadata structure
         payloads_with_metadata = []
         for payload in SAMPLE_PAYLOADS:
@@ -656,7 +637,7 @@ class TestQdrantProviderIN_MEMORY:
             payload_copy["metadata"] = {"category": payload["category"]}
             payloads_with_metadata.append(payload_copy)
         
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=payloads_with_metadata,
             ids=SAMPLE_IDS,
@@ -664,242 +645,226 @@ class TestQdrantProviderIN_MEMORY:
         )
         # delete_by_metadata expects keys that will be accessed as metadata.{key}
         # So we pass {"category": "science"} and it looks for metadata.category
-        deleted = await provider.async_delete_by_metadata({"category": "science"})
+        deleted = await provider.adelete_by_metadata({"category": "science"})
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_id_exists(self, provider: QdrantProvider):
         """Test id_exists check."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        assert await provider.id_exists("doc1")
-        assert not await provider.id_exists("nonexistent")
-        await provider.disconnect()
-    
+        assert await provider.aid_exists(SAMPLE_IDS[0])
+        assert not await provider.aid_exists("99999999-9999-4999-8999-999999999999")
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_chunk_id_preserved_as_uuid(self, provider: QdrantProvider):
+        """chunk_id provided as UUID must be preserved verbatim (not hashed to int)."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:2],
+            payloads=SAMPLE_PAYLOADS[:2],
+            ids=SAMPLE_IDS[:2],
+            chunks=SAMPLE_CHUNKS[:2],
+        )
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
+        assert len(results) == 2
+        fetched_ids = {str(r.id) for r in results}
+        assert fetched_ids == set(SAMPLE_IDS[:2])
+        for r in results:
+            assert r.payload.get("chunk_id") == str(r.id)
+            assert r.payload.get("chunk_id") in SAMPLE_IDS[:2]
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
     async def test_document_name_exists(self, provider: QdrantProvider):
         """Test document_name_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_doc_name = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["document_name"] = "test_doc"
-            payloads_with_doc_name.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        payloads_with_doc_name = [p.copy() for p in SAMPLE_PAYLOADS[:1]]
+
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=payloads_with_doc_name,
             ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+            chunks=SAMPLE_CHUNKS[:1],
+            document_names=["test_doc"],
         )
         assert provider.document_name_exists("test_doc")
         assert not provider.document_name_exists("nonexistent")
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_document_name_exists(self, provider: QdrantProvider):
         """Test async_document_name_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_doc_name = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["document_name"] = "test_doc"
-            payloads_with_doc_name.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        payloads_with_doc_name = [p.copy() for p in SAMPLE_PAYLOADS[:1]]
+
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=payloads_with_doc_name,
             ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+            chunks=SAMPLE_CHUNKS[:1],
+            document_names=["test_doc"],
         )
-        assert await provider.async_document_name_exists("test_doc")
-        assert not await provider.async_document_name_exists("nonexistent")
-        await provider.disconnect()
-    
+        assert await provider.adocument_name_exists("test_doc")
+        assert not await provider.adocument_name_exists("nonexistent")
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
     async def test_document_id_exists(self, provider: QdrantProvider):
         """Test document_id_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_doc_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["document_id"] = "doc_id_1"
-            payloads_with_doc_id.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        payloads_with_doc_id = [p.copy() for p in SAMPLE_PAYLOADS[:1]]
+
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=payloads_with_doc_id,
             ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+            chunks=SAMPLE_CHUNKS[:1],
+            document_ids=["doc_id_1"],
         )
         assert provider.document_id_exists("doc_id_1")
         assert not provider.document_id_exists("nonexistent")
-        await provider.disconnect()
-    
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
     async def test_async_document_id_exists(self, provider: QdrantProvider):
         """Test async_document_id_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_doc_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["document_id"] = "doc_id_1"
-            payloads_with_doc_id.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        payloads_with_doc_id = [p.copy() for p in SAMPLE_PAYLOADS[:1]]
+
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=payloads_with_doc_id,
             ids=SAMPLE_IDS[:1],
+            chunks=SAMPLE_CHUNKS[:1],
+            document_ids=["doc_id_1"],
+        )
+        assert await provider.adocument_id_exists("doc_id_1")
+        assert not await provider.adocument_id_exists("nonexistent")
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_chunk_id_exists(self, provider: QdrantProvider):
+        """Test chunk_id_exists."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:1],
+            payloads=[p.copy() for p in SAMPLE_PAYLOADS[:1]],
+            ids=["content_1"],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        assert await provider.async_document_id_exists("doc_id_1")
-        assert not await provider.async_document_id_exists("nonexistent")
-        await provider.disconnect()
+        assert provider.chunk_id_exists("content_1")
+        assert not provider.chunk_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_content_id_exists(self, provider: QdrantProvider):
-        """Test content_id_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
+    async def test_achunk_id_exists(self, provider: QdrantProvider):
+        """Test achunk_id_exists."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:1],
+            payloads=[p.copy() for p in SAMPLE_PAYLOADS[:1]],
+            ids=["content_1"],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        assert provider.content_id_exists("content_1")
-        assert not provider.content_id_exists("nonexistent")
-        await provider.disconnect()
-    
-    @pytest.mark.asyncio
-    async def test_async_content_id_exists(self, provider: QdrantProvider):
-        """Test async_content_id_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
-        )
-        assert await provider.async_content_id_exists("content_1")
-        assert not await provider.async_content_id_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.achunk_id_exists("content_1")
+        assert not await provider.achunk_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_content_exists(self, provider: QdrantProvider):
         """Test content_exists."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        assert await provider.content_exists(SAMPLE_CHUNKS[0])
-        assert not await provider.content_exists("nonexistent content")
-        await provider.disconnect()
+        assert await provider.achunk_content_hash_exists(md5(SAMPLE_CHUNKS[0].encode("utf-8")).hexdigest())
+        assert not await provider.achunk_content_hash_exists(md5("nonexistent content".encode("utf-8")).hexdigest())
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_update_metadata(self, provider: QdrantProvider):
         """Test update_metadata."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:1],
+            payloads=[p.copy() for p in SAMPLE_PAYLOADS[:1]],
+            ids=["content_1"],
             chunks=SAMPLE_CHUNKS[:1]
         )
         updated = provider.update_metadata("content_1", {"new_field": "new_value"})
         assert updated is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:1])
+        results = await provider.afetch(ids=["content_1"])
         assert results[0].payload.get("metadata", {}).get("new_field") == "new_value"
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_update_metadata(self, provider: QdrantProvider):
         """Test async_update_metadata."""
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:1],
+            payloads=[p.copy() for p in SAMPLE_PAYLOADS[:1]],
+            ids=["content_1"],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        updated = await provider.async_update_metadata("content_1", {"new_field": "new_value"})
+        updated = await provider.aupdate_metadata("content_1", {"new_field": "new_value"})
         assert updated is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_get_count(self, provider: QdrantProvider):
         """Test get_count."""
-        await provider.connect()
-        await provider.create_collection()
-        initial_count = await provider.get_count()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        initial_count = await provider.aget_count()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        assert await provider.get_count() == initial_count + 5
-        await provider.delete(ids=SAMPLE_IDS[:2])
-        assert await provider.get_count() == initial_count + 3
-        await provider.disconnect()
+        assert await provider.aget_count() == initial_count + 5
+        await provider.adelete(ids=SAMPLE_IDS[:1])
+        assert await provider.aget_count() == initial_count + 4
+        await provider.adisconnect()
     
     
     @pytest.mark.asyncio
     async def test_optimize(self, provider: QdrantProvider):
         """Test optimize operation."""
-        await provider.connect()
-        await provider.create_collection()
-        result = await provider.async_optimize()
+        await provider.aconnect()
+        await provider.acreate_collection()
+        result = await provider.aoptimize()
         assert result is True
     
     @pytest.mark.asyncio
     async def test_async_optimize(self, provider: QdrantProvider):
         """Test async optimize."""
-        await provider.connect()
-        await provider.create_collection()
-        result = await provider.async_optimize()
+        await provider.aconnect()
+        await provider.acreate_collection()
+        result = await provider.aoptimize()
         assert result is True
     
     @pytest.mark.asyncio
@@ -914,22 +879,22 @@ class TestQdrantProviderIN_MEMORY:
     @pytest.mark.asyncio
     async def test_async_get_supported_search_types(self, provider: QdrantProvider):
         """Test async_get_supported_search_types."""
-        supported = await provider.async_get_supported_search_types()
+        supported = await provider.aget_supported_search_types()
         assert isinstance(supported, list)
         assert "dense" in supported
     
     @pytest.mark.asyncio
     async def test_dense_search(self, provider: QdrantProvider):
         """Test dense search."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=3,
             similarity_threshold=0.0
@@ -942,20 +907,20 @@ class TestQdrantProviderIN_MEMORY:
         for result in results:
             assert result.vector is not None
             assert len(result.vector) == len(QUERY_VECTOR)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_dense_search_sync(self, provider: QdrantProvider):
         """Test synchronous dense search."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.dense_search_sync(
+        results = provider.dense_search(
             query_vector=QUERY_VECTOR,
             top_k=3,
             similarity_threshold=0.0
@@ -966,20 +931,20 @@ class TestQdrantProviderIN_MEMORY:
         for result in results:
             assert result.vector is not None
             assert len(result.vector) == len(QUERY_VECTOR)
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_full_text_search(self, provider: QdrantProvider):
         """Test full-text search."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.full_text_search(
+        results = await provider.afull_text_search(
             query_text="physics",
             top_k=3,
             similarity_threshold=0.0
@@ -991,20 +956,20 @@ class TestQdrantProviderIN_MEMORY:
         for result in results:
             assert result.vector is not None
             assert len(result.vector) == len(QUERY_VECTOR)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_full_text_search_sync(self, provider: QdrantProvider):
         """Test synchronous full-text search."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.full_text_search_sync(
+        results = provider.full_text_search(
             query_text="physics",
             top_k=3,
             similarity_threshold=0.0
@@ -1015,20 +980,20 @@ class TestQdrantProviderIN_MEMORY:
         for result in results:
             assert result.vector is not None
             assert len(result.vector) == len(QUERY_VECTOR)
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_hybrid_search(self, provider: QdrantProvider):
         """Test hybrid search."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.hybrid_search(
+        results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -1043,20 +1008,20 @@ class TestQdrantProviderIN_MEMORY:
         for result in results:
             assert result.vector is not None
             assert len(result.vector) == len(QUERY_VECTOR)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_hybrid_search_rrf(self, provider: QdrantProvider):
         """Test hybrid search with RRF fusion."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.hybrid_search(
+        results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -1069,20 +1034,20 @@ class TestQdrantProviderIN_MEMORY:
         for result in results:
             assert result.vector is not None
             assert len(result.vector) == len(QUERY_VECTOR)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_hybrid_search_sync(self, provider: QdrantProvider):
         """Test synchronous hybrid search."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.hybrid_search_sync(
+        results = provider.hybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -1095,21 +1060,21 @@ class TestQdrantProviderIN_MEMORY:
         for result in results:
             assert result.vector is not None
             assert len(result.vector) == len(QUERY_VECTOR)
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_search_master_method(self, provider: QdrantProvider):
         """Test master search method."""
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
         # Dense search
-        results = await provider.search(
+        results = await provider.asearch(
             query_vector=QUERY_VECTOR,
             top_k=3
         )
@@ -1120,7 +1085,7 @@ class TestQdrantProviderIN_MEMORY:
             assert result.vector is not None
             assert len(result.vector) == len(QUERY_VECTOR)
         # Full-text search
-        results = await provider.search(
+        results = await provider.asearch(
             query_text="physics",
             top_k=3
         )
@@ -1131,7 +1096,7 @@ class TestQdrantProviderIN_MEMORY:
             assert result.vector is not None
             assert len(result.vector) == len(QUERY_VECTOR)
         # Hybrid search
-        results = await provider.search(
+        results = await provider.asearch(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3
@@ -1142,20 +1107,20 @@ class TestQdrantProviderIN_MEMORY:
         for result in results:
             assert result.vector is not None
             assert len(result.vector) == len(QUERY_VECTOR)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_search_sync(self, provider: QdrantProvider):
         """Test synchronous master search."""
-        provider.connect_sync()
-        provider.create_collection_sync()
-        provider.upsert_sync(
+        provider.connect()
+        provider.create_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = provider.search_sync(
+        results = provider.search(
             query_vector=QUERY_VECTOR,
             top_k=3
         )
@@ -1165,13 +1130,13 @@ class TestQdrantProviderIN_MEMORY:
         for result in results:
             assert result.vector is not None
             assert len(result.vector) == len(QUERY_VECTOR)
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_search_with_filter(self, provider: QdrantProvider):
         """Test search with metadata filter."""
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         # Create payloads with metadata structure
         payloads_with_metadata = []
         for payload in SAMPLE_PAYLOADS:
@@ -1179,7 +1144,7 @@ class TestQdrantProviderIN_MEMORY:
             payload_copy["metadata"] = {"category": payload["category"]}
             payloads_with_metadata.append(payload_copy)
         
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=payloads_with_metadata,
             ids=SAMPLE_IDS,
@@ -1187,7 +1152,7 @@ class TestQdrantProviderIN_MEMORY:
         )
         # For filtering, we need to use the correct path
         # Since metadata is stored in payload["metadata"]["category"], we filter by "metadata.category"
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=5,
             filter={"metadata.category": "science"}
@@ -1198,7 +1163,7 @@ class TestQdrantProviderIN_MEMORY:
         for result in results:
             assert result.vector is not None
             assert len(result.vector) == len(QUERY_VECTOR)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_recreate_if_exists(self, provider: QdrantProvider):
@@ -1210,19 +1175,19 @@ class TestQdrantProviderIN_MEMORY:
             recreate_if_exists=True
         )
         provider2 = QdrantProvider(config)
-        await provider2.connect()
-        await provider2.create_collection()
-        await provider2.upsert(
+        await provider2.aconnect()
+        await provider2.acreate_collection()
+        await provider2.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
         # Create again with recreate_if_exists=True
-        await provider2.create_collection()
-        count = await provider2.get_count()
+        await provider2.acreate_collection()
+        count = await provider2.aget_count()
         assert count == 0
-        await provider2.disconnect()
+        await provider2.adisconnect()
     
     @pytest.mark.asyncio
     async def test_flat_index_config(self, provider: QdrantProvider):
@@ -1234,9 +1199,9 @@ class TestQdrantProviderIN_MEMORY:
             index=FlatIndexConfig()
         )
         provider2 = QdrantProvider(config)
-        await provider2.connect()
-        await provider2.create_collection()
-        await provider2.disconnect()
+        await provider2.aconnect()
+        await provider2.acreate_collection()
+        await provider2.adisconnect()
     
     @pytest.mark.asyncio
     async def test_distance_metrics(self, provider: QdrantProvider):
@@ -1251,21 +1216,130 @@ class TestQdrantProviderIN_MEMORY:
                 distance_metric=metric
             )
             provider2 = QdrantProvider(config)
-            await provider2.connect()
-            await provider2.create_collection()
-            await provider2.upsert(
+            await provider2.aconnect()
+            await provider2.acreate_collection()
+            await provider2.aupsert(
                 vectors=SAMPLE_VECTORS[:2],
                 payloads=SAMPLE_PAYLOADS[:2],
                 ids=SAMPLE_IDS[:2],
                 chunks=SAMPLE_CHUNKS[:2]
             )
-            results = await provider2.dense_search(
+            results = await provider2.adense_search(
                 query_vector=QUERY_VECTOR,
                 top_k=2,
                 similarity_threshold=0.0
             )
             assert len(results) > 0
-            await provider2.disconnect()
+            await provider2.adisconnect()
+
+    # ------------------------------------------------------------------
+    # New capability tests (added for new QdrantProvider API surface)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_achunk_content_hash_exists(self, provider: QdrantProvider):
+        """Test achunk_content_hash_exists for new content-hash dedupe API."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:1],
+            payloads=SAMPLE_PAYLOADS[:1],
+            ids=SAMPLE_IDS[:1],
+            chunks=SAMPLE_CHUNKS[:1],
+        )
+        h = md5(SAMPLE_CHUNKS[0].encode("utf-8")).hexdigest()
+        assert await provider.achunk_content_hash_exists(h)
+        assert not await provider.achunk_content_hash_exists("deadbeef" * 4)
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_adoc_content_hash_exists(self, provider: QdrantProvider):
+        """Test adoc_content_hash_exists with explicit doc_content_hashes."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        doc_hash = md5(b"the-document-body").hexdigest()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:1],
+            payloads=SAMPLE_PAYLOADS[:1],
+            ids=SAMPLE_IDS[:1],
+            chunks=SAMPLE_CHUNKS[:1],
+            doc_content_hashes=[doc_hash],
+        )
+        assert await provider.adoc_content_hash_exists(doc_hash)
+        assert not await provider.adoc_content_hash_exists("nonexistent_hash")
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_adelete_by_chunk_content_hash(self, provider: QdrantProvider):
+        """Test adelete_by_chunk_content_hash deletes points by chunk hash."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:1],
+            payloads=SAMPLE_PAYLOADS[:1],
+            ids=SAMPLE_IDS[:1],
+            chunks=SAMPLE_CHUNKS[:1],
+        )
+        h = md5(SAMPLE_CHUNKS[0].encode("utf-8")).hexdigest()
+        assert await provider.achunk_content_hash_exists(h)
+        result = await provider.adelete_by_chunk_content_hash(h)
+        assert result is True
+        assert not await provider.achunk_content_hash_exists(h)
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_adelete_by_doc_content_hash(self, provider: QdrantProvider):
+        """Test adelete_by_doc_content_hash deletes points by document hash."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        doc_hash = md5(b"another-doc-body").hexdigest()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:2],
+            payloads=SAMPLE_PAYLOADS[:2],
+            ids=SAMPLE_IDS[:2],
+            chunks=SAMPLE_CHUNKS[:2],
+            doc_content_hashes=[doc_hash, doc_hash],
+        )
+        assert await provider.adoc_content_hash_exists(doc_hash)
+        result = await provider.adelete_by_doc_content_hash(doc_hash)
+        assert result is True
+        assert not await provider.adoc_content_hash_exists(doc_hash)
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_afield_exists_and_adelete_by_field(self, provider: QdrantProvider):
+        """Test the new generic afield_exists / adelete_by_field helpers."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:2],
+            payloads=SAMPLE_PAYLOADS[:2],
+            ids=SAMPLE_IDS[:2],
+            chunks=SAMPLE_CHUNKS[:2],
+            document_ids=["docA", "docB"],
+        )
+        assert await provider.afield_exists("document_id", "docA")
+        assert not await provider.afield_exists("document_id", "missing")
+        assert await provider.adelete_by_field("document_id", "docA") is True
+        assert not await provider.afield_exists("document_id", "docA")
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_aupsert_with_chunk_content_hashes(self, provider: QdrantProvider):
+        """Test aupsert accepts explicit chunk_content_hashes (new param)."""
+        await provider.aconnect()
+        await provider.acreate_collection()
+        explicit_hashes = [md5(c.encode("utf-8")).hexdigest() for c in SAMPLE_CHUNKS[:2]]
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:2],
+            payloads=SAMPLE_PAYLOADS[:2],
+            ids=SAMPLE_IDS[:2],
+            chunks=SAMPLE_CHUNKS[:2],
+            chunk_content_hashes=explicit_hashes,
+        )
+        for h in explicit_hashes:
+            assert await provider.achunk_content_hash_exists(h)
+        await provider.adisconnect()
 
 
 class TestQdrantProviderCLOUD:
@@ -1291,7 +1365,8 @@ class TestQdrantProviderCLOUD:
                 api_key=SecretStr(api_key)
             ),
             distance_metric=DistanceMetric.COSINE,
-            index=HNSWIndexConfig(m=16, ef_construction=200)
+            index=HNSWIndexConfig(m=16, ef_construction=200),
+            recreate_if_exists=True,
         )
     
     @pytest.fixture
@@ -1309,7 +1384,7 @@ class TestQdrantProviderCLOUD:
     async def _ensure_connected(self, provider: QdrantProvider):
         """Helper to ensure connection, skip if unavailable."""
         try:
-            await provider.connect()
+            await provider.aconnect()
             return True
         except VectorDBConnectionError:
             pytest.skip("Qdrant Cloud connection failed")
@@ -1318,7 +1393,7 @@ class TestQdrantProviderCLOUD:
         """Helper to create index for a field if needed."""
         try:
             from qdrant_client import models
-            await provider._client.create_payload_index(
+            await provider.client.create_payload_index(
                 collection_name=provider._config.collection_name,
                 field_name=field_name,
                 field_schema=models.KeywordIndexParams(type="keyword"),
@@ -1336,7 +1411,7 @@ class TestQdrantProviderCLOUD:
         assert provider._config.vector_size == 5
         assert provider._config.distance_metric == DistanceMetric.COSINE
         assert not provider._is_connected
-        assert provider._client is None
+        assert provider.client is None
     
     @pytest.mark.asyncio
     async def test_connect(self, provider: Optional[QdrantProvider]):
@@ -1344,9 +1419,9 @@ class TestQdrantProviderCLOUD:
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
         assert provider._is_connected is True
-        assert provider._client is not None
-        assert await provider.is_ready() is True
-        await provider.disconnect()
+        assert provider.client is not None
+        assert await provider.ais_ready() is True
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_create_collection(self, provider: Optional[QdrantProvider]):
@@ -1354,28 +1429,28 @@ class TestQdrantProviderCLOUD:
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
         try:
-            if await provider.collection_exists():
-                await provider.delete_collection()
+            if await provider.acollection_exists():
+                await provider.adelete_collection()
         except Exception:
             pass
-        assert not await provider.collection_exists()
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.disconnect()
+        assert not await provider.acollection_exists()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert(self, provider: Optional[QdrantProvider]):
         """Test upsert operation with content validation."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.fetch(ids=SAMPLE_IDS)
+        results = await provider.afetch(ids=SAMPLE_IDS)
         assert len(results) == 5
         # Qdrant normalizes IDs, so we need to match by content instead
         for result in results:
@@ -1384,28 +1459,28 @@ class TestQdrantProviderCLOUD:
             content = result.payload.get("content")
             assert content in SAMPLE_CHUNKS
             idx = SAMPLE_CHUNKS.index(content)
-            assert result.payload.get("category") == SAMPLE_PAYLOADS[idx]["category"]
-            assert result.payload.get("author") == SAMPLE_PAYLOADS[idx]["author"]
-            assert result.payload.get("year") == SAMPLE_PAYLOADS[idx]["year"]
+            assert result.payload["metadata"]["category"] == SAMPLE_PAYLOADS[idx]["category"]
+            assert result.payload["metadata"]["author"] == SAMPLE_PAYLOADS[idx]["author"]
+            assert result.payload["metadata"]["year"] == SAMPLE_PAYLOADS[idx]["year"]
             assert result.text == SAMPLE_CHUNKS[idx]
             # Validate vector is retrieved and has correct length
             assert result.vector is not None
             assert len(result.vector) == len(SAMPLE_VECTORS[idx])
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_fetch(self, provider: Optional[QdrantProvider]):
         """Test fetch operation with detailed validation."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.fetch(ids=SAMPLE_IDS[:3])
+        results = await provider.afetch(ids=SAMPLE_IDS[:3])
         assert len(results) == 3
         for result in results:
             assert isinstance(result, VectorSearchResult)
@@ -1416,40 +1491,40 @@ class TestQdrantProviderCLOUD:
             assert result.text is not None
             assert result.vector is not None
             assert len(result.vector) == 5
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete(self, provider: Optional[QdrantProvider]):
         """Test delete operation."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        await provider.delete(ids=SAMPLE_IDS[:2])
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        await provider.adelete(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
-        results = await provider.fetch(ids=SAMPLE_IDS[2:])
+        results = await provider.afetch(ids=SAMPLE_IDS[2:])
         assert len(results) == 3
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_dense_search(self, provider: Optional[QdrantProvider]):
         """Test dense search with detailed result validation."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=3,
             similarity_threshold=0.0
@@ -1467,21 +1542,21 @@ class TestQdrantProviderCLOUD:
             assert len(result.vector) == 5
         scores = [r.score for r in results]
         assert scores == sorted(scores, reverse=True)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_full_text_search(self, provider: Optional[QdrantProvider]):
         """Test full-text search with content validation."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.full_text_search(
+        results = await provider.afull_text_search(
             query_text="physics",
             top_k=3,
             similarity_threshold=0.0
@@ -1496,21 +1571,21 @@ class TestQdrantProviderCLOUD:
             assert result.text is not None
             assert "physics" in result.text.lower() or "theory" in result.text.lower()
             assert result.vector is not None
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_hybrid_search(self, provider: Optional[QdrantProvider]):
         """Test hybrid search with detailed validation."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.hybrid_search(
+        results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -1529,14 +1604,14 @@ class TestQdrantProviderCLOUD:
             assert result.text is not None
             assert result.vector is not None
             assert len(result.vector) == 5
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_search_with_filter(self, provider: Optional[QdrantProvider]):
         """Test search with metadata filter."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
+        await provider.acreate_collection()
         # Create payloads with metadata structure
         payloads_with_metadata = []
         for payload in SAMPLE_PAYLOADS:
@@ -1544,7 +1619,7 @@ class TestQdrantProviderCLOUD:
             payload_copy["metadata"] = {"category": payload["category"]}
             payloads_with_metadata.append(payload_copy)
         
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=payloads_with_metadata,
             ids=SAMPLE_IDS,
@@ -1553,7 +1628,7 @@ class TestQdrantProviderCLOUD:
         # Create index for metadata.category to enable filtering
         try:
             from qdrant_client import models
-            await provider._client.create_payload_index(
+            await provider.client.create_payload_index(
                 collection_name=provider._config.collection_name,
                 field_name="metadata.category",
                 field_schema=models.KeywordIndexParams(type="keyword"),
@@ -1564,7 +1639,7 @@ class TestQdrantProviderCLOUD:
         
         # For filtering, we need to use the correct path
         # Since metadata is stored in payload["metadata"]["category"], we filter by "metadata.category"
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=5,
             filter={"metadata.category": "science"}
@@ -1572,60 +1647,54 @@ class TestQdrantProviderCLOUD:
         assert len(results) > 0
         for result in results:
             assert result.payload.get("metadata", {}).get("category") == "science"
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_get_count(self, provider: Optional[QdrantProvider]):
         """Test get_count."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        initial_count = await provider.get_count()
-        await provider.upsert(
+        await provider.acreate_collection()
+        initial_count = await provider.aget_count()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        assert await provider.get_count() == initial_count + 5
-        await provider.delete(ids=SAMPLE_IDS[:2])
-        assert await provider.get_count() == initial_count + 3
-        await provider.disconnect()
+        assert await provider.aget_count() == initial_count + 5
+        await provider.adelete(ids=SAMPLE_IDS[:2])
+        assert await provider.aget_count() == initial_count + 3
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_update_metadata(self, provider: Optional[QdrantProvider]):
         """Test update_metadata with validation."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await self._create_index_if_needed(provider, "content_id")
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "cloud_content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.acreate_collection()
+        await self._create_index_if_needed(provider, "chunk_id")
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:1],
+            payloads=[p.copy() for p in SAMPLE_PAYLOADS[:1]],
+            ids=["cloud_content_1"],
             chunks=SAMPLE_CHUNKS[:1]
         )
         # Use async method directly to avoid event loop issues
-        updated = await provider.async_update_metadata("cloud_content_1", {"new_field": "new_value", "updated": True})
+        updated = await provider.aupdate_metadata("cloud_content_1", {"new_field": "new_value", "updated": True})
         assert updated is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:1])
+        results = await provider.afetch(ids=["cloud_content_1"])
         assert len(results) == 1
         assert results[0].payload.get("metadata", {}).get("new_field") == "new_value"
         assert results[0].payload.get("metadata", {}).get("updated") is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_filter(self, provider: Optional[QdrantProvider]):
         """Test delete_by_metadata."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
+        await provider.acreate_collection()
         # Create payloads with metadata structure
         payloads_with_metadata = []
         for payload in SAMPLE_PAYLOADS:
@@ -1633,7 +1702,7 @@ class TestQdrantProviderCLOUD:
             payload_copy["metadata"] = {"category": payload["category"]}
             payloads_with_metadata.append(payload_copy)
         
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=payloads_with_metadata,
             ids=SAMPLE_IDS,
@@ -1642,7 +1711,7 @@ class TestQdrantProviderCLOUD:
         # Create index for metadata.category to enable filtering
         try:
             from qdrant_client import models
-            await provider._client.create_payload_index(
+            await provider.client.create_payload_index(
                 collection_name=provider._config.collection_name,
                 field_name="metadata.category",
                 field_schema=models.KeywordIndexParams(type="keyword"),
@@ -1651,56 +1720,59 @@ class TestQdrantProviderCLOUD:
         except Exception:
             pass  # Index might already exist
         
-        deleted = await provider.async_delete_by_metadata({"category": "science"})
+        deleted = await provider.adelete_by_metadata({"category": "science"})
         assert deleted is True
-        results = await provider.fetch(ids=SAMPLE_IDS)
+        results = await provider.afetch(ids=SAMPLE_IDS)
         assert len(results) == 3
         for result in results:
             assert result.payload.get("metadata", {}).get("category") != "science"
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_with_document_tracking(self, provider: Optional[QdrantProvider]):
         """Test upsert with document tracking and validate metadata."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
+        await provider.acreate_collection()
         payloads_with_tracking = []
+        document_ids = []
+        document_names = []
         for i, payload in enumerate(SAMPLE_PAYLOADS[:2]):
             payload_copy = payload.copy()
-            payload_copy["document_name"] = f"cloud_doc{i+1}"
-            payload_copy["document_id"] = f"cloud_doc_id_{i+1}"
-            payload_copy["content_id"] = f"cloud_content_{i+1}"
             payloads_with_tracking.append(payload_copy)
-        
-        await provider.upsert(
+            document_ids.append(f"cloud_doc_id_{i+1}")
+            document_names.append(f"cloud_doc{i+1}")
+
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=payloads_with_tracking,
-            ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+            ids=["cloud_content_1", "cloud_content_2"],
+            chunks=SAMPLE_CHUNKS[:2],
+            document_ids=document_ids,
+            document_names=document_names,
         )
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=["cloud_content_1", "cloud_content_2"])
         assert len(results) == 2
-        # Qdrant normalizes IDs, so we need to match by content_id instead
+        # Qdrant normalizes IDs, so we need to match by chunk_id instead
         for result in results:
-            content_id = result.payload.get("content_id")
-            assert content_id in ["cloud_content_1", "cloud_content_2"]
+            chunk_id = result.payload.get("chunk_id")
+            assert chunk_id in ["cloud_content_1", "cloud_content_2"]
             # Extract number from "cloud_content_1" -> 1
-            idx = int(content_id.split("_")[-1]) - 1
+            idx = int(chunk_id.split("_")[-1]) - 1
             assert result.payload.get("document_name") == f"cloud_doc{idx+1}"
             assert result.payload.get("document_id") == f"cloud_doc_id_{idx+1}"
-            assert result.payload.get("category") == SAMPLE_PAYLOADS[idx]["category"]
-        await provider.disconnect()
+            assert result.payload["metadata"]["category"] == SAMPLE_PAYLOADS[idx]["category"]
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_connect_sync(self, provider: Optional[QdrantProvider]):
         """Test synchronous connection."""
         self._skip_if_unavailable(provider)
-        provider.connect_sync()
+        provider.connect()
         assert provider._is_connected is True
-        assert provider._client is not None
-        assert provider.is_ready_sync() is True
-        provider.disconnect_sync()
+        assert provider.client is not None
+        assert provider.is_ready() is True
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_disconnect(self, provider: Optional[QdrantProvider]):
@@ -1708,69 +1780,69 @@ class TestQdrantProviderCLOUD:
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
         assert provider._is_connected is True
-        await provider.disconnect()
+        await provider.adisconnect()
         assert provider._is_connected is False
-        assert provider._client is None
+        assert provider.client is None
     
     @pytest.mark.asyncio
     async def test_disconnect_sync(self, provider: Optional[QdrantProvider]):
         """Test synchronous disconnection."""
         self._skip_if_unavailable(provider)
-        provider.connect_sync()
+        provider.connect()
         assert provider._is_connected is True
-        provider.disconnect_sync()
+        provider.disconnect()
         assert provider._is_connected is False
     
     @pytest.mark.asyncio
     async def test_is_ready(self, provider: Optional[QdrantProvider]):
         """Test is_ready check."""
         self._skip_if_unavailable(provider)
-        assert await provider.is_ready() is False
+        assert await provider.ais_ready() is False
         await self._ensure_connected(provider)
-        assert await provider.is_ready() is True
-        await provider.disconnect()
-        assert await provider.is_ready() is False
+        assert await provider.ais_ready() is True
+        await provider.adisconnect()
+        assert await provider.ais_ready() is False
     
     @pytest.mark.asyncio
     async def test_is_ready_sync(self, provider: Optional[QdrantProvider]):
         """Test synchronous is_ready check."""
         self._skip_if_unavailable(provider)
-        assert provider.is_ready_sync() is False
-        provider.connect_sync()
-        assert provider.is_ready_sync() is True
-        provider.disconnect_sync()
-        assert provider.is_ready_sync() is False
+        assert provider.is_ready() is False
+        provider.connect()
+        assert provider.is_ready() is True
+        provider.disconnect()
+        assert provider.is_ready() is False
     
     @pytest.mark.asyncio
     async def test_create_collection_sync(self, provider: Optional[QdrantProvider]):
         """Test synchronous collection creation."""
         self._skip_if_unavailable(provider)
-        provider.connect_sync()
+        provider.connect()
         try:
-            if provider.collection_exists_sync():
-                provider.delete_collection_sync()
+            if provider.collection_exists():
+                provider.delete_collection()
                 # Wait for deletion to propagate
                 await asyncio.sleep(1.0)
         except Exception:
             pass
-        assert not provider.collection_exists_sync()
-        provider.create_collection_sync()
+        assert not provider.collection_exists()
+        provider.create_collection()
         # Wait for creation to propagate (Qdrant Cloud may have eventual consistency)
         # Try up to 10 times with increasing delays
         collection_exists = False
         for attempt in range(10):
             await asyncio.sleep(0.5 * (attempt + 1))  # Increasing delay: 0.5s, 1s, 1.5s, etc.
-            if provider.collection_exists_sync():
+            if provider.collection_exists():
                 collection_exists = True
                 break
         # If still not found, give it one more long wait
         if not collection_exists:
             await asyncio.sleep(2.0)
-            collection_exists = provider.collection_exists_sync()
+            collection_exists = provider.collection_exists()
         # For cloud, eventual consistency might cause delays, but collection should exist
         # If it still doesn't exist after all retries, that's a real failure
         assert collection_exists, "Collection should exist after creation (eventual consistency delay handled)"
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_collection_exists(self, provider: Optional[QdrantProvider]):
@@ -1778,133 +1850,133 @@ class TestQdrantProviderCLOUD:
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
         try:
-            if await provider.collection_exists():
-                await provider.delete_collection()
+            if await provider.acollection_exists():
+                await provider.adelete_collection()
         except Exception:
             pass
-        assert not await provider.collection_exists()
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.disconnect()
+        assert not await provider.acollection_exists()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_collection_exists_sync(self, provider: Optional[QdrantProvider]):
         """Test synchronous collection existence check."""
         self._skip_if_unavailable(provider)
-        provider.connect_sync()
+        provider.connect()
         try:
-            if provider.collection_exists_sync():
-                provider.delete_collection_sync()
+            if provider.collection_exists():
+                provider.delete_collection()
                 await asyncio.sleep(1.0)
         except Exception:
             pass
-        assert not provider.collection_exists_sync()
-        provider.create_collection_sync()
+        assert not provider.collection_exists()
+        provider.create_collection()
         # Wait for creation to propagate (Qdrant Cloud has eventual consistency)
         collection_exists = False
         for attempt in range(10):
             await asyncio.sleep(0.5 * (attempt + 1))
-            if provider.collection_exists_sync():
+            if provider.collection_exists():
                 collection_exists = True
                 break
         # For cloud, eventual consistency means we might need to be lenient
         # Collection was created (we saw the log), so verify it eventually exists
         if not collection_exists:
             await asyncio.sleep(3.0)
-            collection_exists = provider.collection_exists_sync()
+            collection_exists = provider.collection_exists()
         assert collection_exists, "Collection should exist after creation (eventual consistency delay handled)"
-        provider.disconnect_sync()
+        provider.disconnect()
     
     @pytest.mark.asyncio
     async def test_delete_collection(self, provider: Optional[QdrantProvider]):
         """Test collection deletion."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.delete_collection()
-        assert not await provider.collection_exists()
-        await provider.disconnect()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adelete_collection()
+        assert not await provider.acollection_exists()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_collection_sync(self, provider: Optional[QdrantProvider]):
         """Test synchronous collection deletion."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
+        await provider.acreate_collection()
         # Wait for creation to propagate (Qdrant Cloud has eventual consistency)
         collection_exists = False
         for attempt in range(10):
             await asyncio.sleep(0.5 * (attempt + 1))
-            if await provider.collection_exists():
+            if await provider.acollection_exists():
                 collection_exists = True
                 break
         if not collection_exists:
             await asyncio.sleep(3.0)
-            collection_exists = await provider.collection_exists()
+            collection_exists = await provider.acollection_exists()
         assert collection_exists, "Collection should exist after creation"
-        await provider.delete_collection()
+        await provider.adelete_collection()
         # Wait for deletion to propagate (Qdrant Cloud has eventual consistency)
         collection_deleted = False
         for attempt in range(10):
             await asyncio.sleep(0.5 * (attempt + 1))
-            if not await provider.collection_exists():
+            if not await provider.acollection_exists():
                 collection_deleted = True
                 break
         if not collection_deleted:
             await asyncio.sleep(3.0)
-            collection_deleted = not await provider.collection_exists()
+            collection_deleted = not await provider.acollection_exists()
         assert collection_deleted, "Collection should be deleted (eventual consistency delay handled)"
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_sync(self, provider: Optional[QdrantProvider]):
         """Test synchronous upsert with content validation."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.fetch(ids=SAMPLE_IDS)
+        results = await provider.afetch(ids=SAMPLE_IDS)
         assert len(results) == 5
         for result in results:
             assert result.id is not None
             assert result.payload is not None
             assert result.text is not None
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_upsert_validation_error(self, provider: Optional[QdrantProvider]):
         """Test upsert with mismatched lengths raises error."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
+        await provider.acreate_collection()
         with pytest.raises(ValueError):
-            await provider.upsert(
+            await provider.aupsert(
                 vectors=SAMPLE_VECTORS[:2],
                 payloads=SAMPLE_PAYLOADS[:3],
                 ids=SAMPLE_IDS[:2],
                 chunks=SAMPLE_CHUNKS[:2]
             )
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_fetch_sync(self, provider: Optional[QdrantProvider]):
         """Test synchronous fetch with content validation."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.fetch(ids=SAMPLE_IDS[:3])
+        results = await provider.afetch(ids=SAMPLE_IDS[:3])
         assert len(results) == 3
         for result in results:
             assert isinstance(result, VectorSearchResult)
@@ -1913,37 +1985,37 @@ class TestQdrantProviderCLOUD:
             assert result.payload is not None
             assert result.text is not None
             assert result.vector is not None
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_sync(self, provider: Optional[QdrantProvider]):
         """Test synchronous delete with validation."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        await provider.delete(ids=SAMPLE_IDS[:2])
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        await provider.adelete(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
-        results = await provider.fetch(ids=SAMPLE_IDS[2:])
+        results = await provider.afetch(ids=SAMPLE_IDS[2:])
         assert len(results) == 3
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_document_name(self, provider: Optional[QdrantProvider]):
         """Test delete_by_document_name with validation."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
+        await provider.acreate_collection()
         # Create index for document_name to enable filtering
         try:
             from qdrant_client import models
-            await provider._client.create_payload_index(
+            await provider.client.create_payload_index(
                 collection_name=provider._config.collection_name,
                 field_name="document_name",
                 field_schema=models.KeywordIndexParams(type="keyword"),
@@ -1952,150 +2024,132 @@ class TestQdrantProviderCLOUD:
         except Exception:
             pass  # Index might already exist
         
-        initial_count = await provider.get_count()
-        payloads_with_doc_name = []
-        for payload in SAMPLE_PAYLOADS[:2]:
-            payload_copy = payload.copy()
-            payload_copy["document_name"] = "cloud_doc"
-            payloads_with_doc_name.append(payload_copy)
-        
-        await provider.upsert(
+        initial_count = await provider.aget_count()
+        payloads_with_doc_name = [p.copy() for p in SAMPLE_PAYLOADS[:2]]
+
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=payloads_with_doc_name,
             ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+            chunks=SAMPLE_CHUNKS[:2],
+            document_names=["cloud_doc"] * 2,
         )
-        deleted = await provider.async_delete_by_document_name("cloud_doc")
+        deleted = await provider.adelete_by_document_name("cloud_doc")
         assert deleted is True
-        count = await provider.get_count()
+        count = await provider.aget_count()
         assert count == initial_count
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_delete_by_document_name(self, provider: Optional[QdrantProvider]):
         """Test async_delete_by_document_name."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
+        await provider.acreate_collection()
         await self._create_index_if_needed(provider, "document_name")
-        payloads_with_doc_name = []
-        for payload in SAMPLE_PAYLOADS[:2]:
-            payload_copy = payload.copy()
-            payload_copy["document_name"] = "cloud_doc"
-            payloads_with_doc_name.append(payload_copy)
-        
-        await provider.upsert(
+        payloads_with_doc_name = [p.copy() for p in SAMPLE_PAYLOADS[:2]]
+
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=payloads_with_doc_name,
             ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+            chunks=SAMPLE_CHUNKS[:2],
+            document_names=["cloud_doc"] * 2,
         )
-        deleted = await provider.async_delete_by_document_name("cloud_doc")
+        deleted = await provider.adelete_by_document_name("cloud_doc")
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_delete_by_document_id(self, provider: Optional[QdrantProvider]):
         """Test delete_by_document_id with validation."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
+        await provider.acreate_collection()
         await self._create_index_if_needed(provider, "document_id")
         payloads_with_doc_id = []
         for payload in SAMPLE_PAYLOADS[:2]:
             payload_copy = payload.copy()
-            payload_copy["document_id"] = "cloud_doc_id_1"
             payloads_with_doc_id.append(payload_copy)
-        
-        await provider.upsert(
+
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=payloads_with_doc_id,
             ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+            chunks=SAMPLE_CHUNKS[:2],
+            document_ids=["cloud_doc_id_1", "cloud_doc_id_1"],
         )
-        deleted = await provider.async_delete_by_document_id("cloud_doc_id_1")
+        deleted = await provider.adelete_by_document_id("cloud_doc_id_1")
         assert deleted is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 0
-        await provider.disconnect()
-    
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
     async def test_async_delete_by_document_id(self, provider: Optional[QdrantProvider]):
         """Test async_delete_by_document_id."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
+        await provider.acreate_collection()
         await self._create_index_if_needed(provider, "document_id")
         payloads_with_doc_id = []
         for payload in SAMPLE_PAYLOADS[:2]:
             payload_copy = payload.copy()
-            payload_copy["document_id"] = "cloud_doc_id_1"
             payloads_with_doc_id.append(payload_copy)
-        
-        await provider.upsert(
+
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=payloads_with_doc_id,
             ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+            chunks=SAMPLE_CHUNKS[:2],
+            document_ids=["cloud_doc_id_1", "cloud_doc_id_1"],
         )
-        deleted = await provider.async_delete_by_document_id("cloud_doc_id_1")
+        deleted = await provider.adelete_by_document_id("cloud_doc_id_1")
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_delete_by_content_id(self, provider: Optional[QdrantProvider]):
-        """Test delete_by_content_id with validation."""
+    async def test_delete_by_chunk_id(self, provider: Optional[QdrantProvider]):
+        """Test delete_by_chunk_id with validation."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await self._create_index_if_needed(provider, "content_id")
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:2]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "cloud_content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.acreate_collection()
+        await self._create_index_if_needed(provider, "chunk_id")
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
-            payloads=payloads_with_content_id,
+            payloads=[p.copy() for p in SAMPLE_PAYLOADS[:2]],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2]
         )
-        deleted = await provider.async_delete_by_content_id("cloud_content_1")
+        deleted = await provider.adelete_by_chunk_id(SAMPLE_IDS[0])
         assert deleted is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=[SAMPLE_IDS[0]])
         assert len(results) == 0
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_async_delete_by_content_id(self, provider: Optional[QdrantProvider]):
-        """Test async_delete_by_content_id."""
+    async def test_adelete_by_chunk_id(self, provider: Optional[QdrantProvider]):
+        """Test adelete_by_chunk_id."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await self._create_index_if_needed(provider, "content_id")
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:2]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "cloud_content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.acreate_collection()
+        await self._create_index_if_needed(provider, "chunk_id")
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:2],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:2],
+            payloads=[p.copy() for p in SAMPLE_PAYLOADS[:2]],
+            ids=["cloud_content_1", "cloud_content_1b"],
             chunks=SAMPLE_CHUNKS[:2]
         )
-        deleted = await provider.async_delete_by_content_id("cloud_content_1")
+        deleted = await provider.adelete_by_chunk_id("cloud_content_1")
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_delete_by_metadata(self, provider: Optional[QdrantProvider]):
         """Test async_delete_by_metadata."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
+        await provider.acreate_collection()
         await self._create_index_if_needed(provider, "metadata.category")
         # Create payloads with metadata structure
         payloads_with_metadata = []
@@ -2104,203 +2158,173 @@ class TestQdrantProviderCLOUD:
             payload_copy["metadata"] = {"category": payload["category"]}
             payloads_with_metadata.append(payload_copy)
         
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=payloads_with_metadata,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        deleted = await provider.async_delete_by_metadata({"category": "science"})
+        deleted = await provider.adelete_by_metadata({"category": "science"})
         assert deleted is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_id_exists(self, provider: Optional[QdrantProvider]):
         """Test id_exists check."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        assert await provider.id_exists("doc1")
-        assert not await provider.id_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.aid_exists(SAMPLE_IDS[0])
+        assert not await provider.aid_exists("99999999-9999-4999-8999-999999999999")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_document_name_exists(self, provider: Optional[QdrantProvider]):
         """Test document_name_exists."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
+        await provider.acreate_collection()
         await self._create_index_if_needed(provider, "document_name")
-        payloads_with_doc_name = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["document_name"] = "cloud_doc"
-            payloads_with_doc_name.append(payload_copy)
-        
-        await provider.upsert(
+        payloads_with_doc_name = [p.copy() for p in SAMPLE_PAYLOADS[:1]]
+
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=payloads_with_doc_name,
             ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+            chunks=SAMPLE_CHUNKS[:1],
+            document_names=["cloud_doc"],
         )
-        assert await provider.async_document_name_exists("cloud_doc")
-        assert not await provider.async_document_name_exists("nonexistent")
-        await provider.disconnect()
-    
+        assert await provider.adocument_name_exists("cloud_doc")
+        assert not await provider.adocument_name_exists("nonexistent")
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
     async def test_async_document_name_exists(self, provider: Optional[QdrantProvider]):
         """Test async_document_name_exists."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
+        await provider.acreate_collection()
         await self._create_index_if_needed(provider, "document_name")
-        payloads_with_doc_name = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["document_name"] = "cloud_doc"
-            payloads_with_doc_name.append(payload_copy)
-        
-        await provider.upsert(
+        payloads_with_doc_name = [p.copy() for p in SAMPLE_PAYLOADS[:1]]
+
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=payloads_with_doc_name,
             ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+            chunks=SAMPLE_CHUNKS[:1],
+            document_names=["cloud_doc"],
         )
-        assert await provider.async_document_name_exists("cloud_doc")
-        assert not await provider.async_document_name_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.adocument_name_exists("cloud_doc")
+        assert not await provider.adocument_name_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_document_id_exists(self, provider: Optional[QdrantProvider]):
         """Test document_id_exists."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
+        await provider.acreate_collection()
         await self._create_index_if_needed(provider, "document_id")
-        payloads_with_doc_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["document_id"] = "cloud_doc_id_1"
-            payloads_with_doc_id.append(payload_copy)
-        
-        await provider.upsert(
+        payloads_with_doc_id = [p.copy() for p in SAMPLE_PAYLOADS[:1]]
+
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=payloads_with_doc_id,
             ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+            chunks=SAMPLE_CHUNKS[:1],
+            document_ids=["cloud_doc_id_1"],
         )
-        assert await provider.async_document_id_exists("cloud_doc_id_1")
-        assert not await provider.async_document_id_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.adocument_id_exists("cloud_doc_id_1")
+        assert not await provider.adocument_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_document_id_exists(self, provider: Optional[QdrantProvider]):
         """Test async_document_id_exists."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
+        await provider.acreate_collection()
         await self._create_index_if_needed(provider, "document_id")
-        payloads_with_doc_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["document_id"] = "cloud_doc_id_1"
-            payloads_with_doc_id.append(payload_copy)
-        
-        await provider.upsert(
+        payloads_with_doc_id = [p.copy() for p in SAMPLE_PAYLOADS[:1]]
+
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=payloads_with_doc_id,
             ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+            chunks=SAMPLE_CHUNKS[:1],
+            document_ids=["cloud_doc_id_1"],
         )
-        assert await provider.async_document_id_exists("cloud_doc_id_1")
-        assert not await provider.async_document_id_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.adocument_id_exists("cloud_doc_id_1")
+        assert not await provider.adocument_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_content_id_exists(self, provider: Optional[QdrantProvider]):
-        """Test content_id_exists."""
+    async def test_chunk_id_exists(self, provider: Optional[QdrantProvider]):
+        """Test chunk_id_exists."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await self._create_index_if_needed(provider, "content_id")
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "cloud_content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.acreate_collection()
+        await self._create_index_if_needed(provider, "chunk_id")
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:1],
+            payloads=[p.copy() for p in SAMPLE_PAYLOADS[:1]],
+            ids=["cloud_content_1"],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        assert await provider.async_content_id_exists("cloud_content_1")
-        assert not await provider.async_content_id_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.achunk_id_exists("cloud_content_1")
+        assert not await provider.achunk_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
-    async def test_async_content_id_exists(self, provider: Optional[QdrantProvider]):
-        """Test async_content_id_exists."""
+    async def test_achunk_id_exists(self, provider: Optional[QdrantProvider]):
+        """Test achunk_id_exists."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await self._create_index_if_needed(provider, "content_id")
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "cloud_content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.acreate_collection()
+        await self._create_index_if_needed(provider, "chunk_id")
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:1],
+            payloads=[p.copy() for p in SAMPLE_PAYLOADS[:1]],
+            ids=["cloud_content_1"],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        assert await provider.async_content_id_exists("cloud_content_1")
-        assert not await provider.async_content_id_exists("nonexistent")
-        await provider.disconnect()
+        assert await provider.achunk_id_exists("cloud_content_1")
+        assert not await provider.achunk_id_exists("nonexistent")
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_async_update_metadata(self, provider: Optional[QdrantProvider]):
         """Test async_update_metadata with validation."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await self._create_index_if_needed(provider, "content_id")
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "cloud_content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
+        await provider.acreate_collection()
+        await self._create_index_if_needed(provider, "chunk_id")
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:1],
+            payloads=[p.copy() for p in SAMPLE_PAYLOADS[:1]],
+            ids=["cloud_content_1"],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        updated = await provider.async_update_metadata("cloud_content_1", {"new_field": "new_value", "updated": True})
+        updated = await provider.aupdate_metadata("cloud_content_1", {"new_field": "new_value", "updated": True})
         assert updated is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:1])
+        results = await provider.afetch(ids=["cloud_content_1"])
         assert results[0].payload.get("metadata", {}).get("new_field") == "new_value"
         assert results[0].payload.get("metadata", {}).get("updated") is True
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_optimize(self, provider: Optional[QdrantProvider]):
         """Test optimize operation."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        result = await provider.async_optimize()
+        await provider.acreate_collection()
+        result = await provider.aoptimize()
         assert result is True
     
     @pytest.mark.asyncio
@@ -2308,8 +2332,8 @@ class TestQdrantProviderCLOUD:
         """Test async optimize."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        result = await provider.async_optimize()
+        await provider.acreate_collection()
+        result = await provider.aoptimize()
         assert result is True
     
     @pytest.mark.asyncio
@@ -2326,7 +2350,7 @@ class TestQdrantProviderCLOUD:
     async def test_async_get_supported_search_types(self, provider: Optional[QdrantProvider]):
         """Test async_get_supported_search_types."""
         self._skip_if_unavailable(provider)
-        supported = await provider.async_get_supported_search_types()
+        supported = await provider.aget_supported_search_types()
         assert isinstance(supported, list)
         assert "dense" in supported
         assert "full_text" in supported
@@ -2337,14 +2361,14 @@ class TestQdrantProviderCLOUD:
         """Test synchronous dense search with content validation."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=3,
             similarity_threshold=0.0
@@ -2359,21 +2383,21 @@ class TestQdrantProviderCLOUD:
             assert result.payload is not None
             assert result.text is not None
             assert result.vector is not None
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_full_text_search_sync(self, provider: Optional[QdrantProvider]):
         """Test synchronous full-text search with content validation."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.full_text_search(
+        results = await provider.afull_text_search(
             query_text="physics",
             top_k=3,
             similarity_threshold=0.0
@@ -2387,21 +2411,21 @@ class TestQdrantProviderCLOUD:
             assert result.payload is not None
             assert result.text is not None
             assert "physics" in result.text.lower() or "theory" in result.text.lower()
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_hybrid_search_rrf(self, provider: Optional[QdrantProvider]):
         """Test hybrid search with RRF fusion."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.hybrid_search(
+        results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -2416,21 +2440,21 @@ class TestQdrantProviderCLOUD:
             assert result.score >= 0.0
             assert result.payload is not None
             assert result.text is not None
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_hybrid_search_sync(self, provider: Optional[QdrantProvider]):
         """Test synchronous hybrid search with validation."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.hybrid_search(
+        results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -2443,22 +2467,22 @@ class TestQdrantProviderCLOUD:
             assert result.id is not None
             assert result.score >= 0.0
             assert result.payload is not None
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_search_master_method(self, provider: Optional[QdrantProvider]):
         """Test master search method with content validation."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
         # Dense search
-        results = await provider.search(
+        results = await provider.asearch(
             query_vector=QUERY_VECTOR,
             top_k=3
         )
@@ -2467,35 +2491,35 @@ class TestQdrantProviderCLOUD:
         assert all(r.id is not None for r in results)
         assert all(r.payload is not None for r in results)
         # Full-text search
-        results = await provider.search(
+        results = await provider.asearch(
             query_text="physics",
             top_k=3
         )
         assert len(results) > 0
         assert all(isinstance(r, VectorSearchResult) for r in results)
         # Hybrid search
-        results = await provider.search(
+        results = await provider.asearch(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3
         )
         assert len(results) > 0
         assert all(isinstance(r, VectorSearchResult) for r in results)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_search_sync(self, provider: Optional[QdrantProvider]):
         """Test synchronous master search with validation."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS
         )
-        results = await provider.search(
+        results = await provider.asearch(
             query_vector=QUERY_VECTOR,
             top_k=3
         )
@@ -2503,7 +2527,7 @@ class TestQdrantProviderCLOUD:
         assert all(isinstance(r, VectorSearchResult) for r in results)
         assert all(r.payload is not None for r in results)
         assert all(r.text is not None for r in results)
-        await provider.disconnect()
+        await provider.adisconnect()
     
     @pytest.mark.asyncio
     async def test_recreate_if_exists(self, provider: Optional[QdrantProvider]):
@@ -2528,17 +2552,17 @@ class TestQdrantProviderCLOUD:
         )
         provider2 = QdrantProvider(config)
         await self._ensure_connected(provider2)
-        await provider2.create_collection()
-        await provider2.upsert(
+        await provider2.acreate_collection()
+        await provider2.aupsert(
             vectors=SAMPLE_VECTORS[:1],
             payloads=SAMPLE_PAYLOADS[:1],
             ids=SAMPLE_IDS[:1],
             chunks=SAMPLE_CHUNKS[:1]
         )
-        await provider2.create_collection()
-        count = await provider2.get_count()
+        await provider2.acreate_collection()
+        count = await provider2.aget_count()
         assert count == 0
-        await provider2.disconnect()
+        await provider2.adisconnect()
     
     @pytest.mark.asyncio
     async def test_flat_index_config(self, provider: Optional[QdrantProvider]):
@@ -2563,14 +2587,14 @@ class TestQdrantProviderCLOUD:
         )
         provider2 = QdrantProvider(config)
         await self._ensure_connected(provider2)
-        await provider2.create_collection()
-        await provider2.upsert(
+        await provider2.acreate_collection()
+        await provider2.aupsert(
             vectors=SAMPLE_VECTORS[:2],
             payloads=SAMPLE_PAYLOADS[:2],
             ids=SAMPLE_IDS[:2],
             chunks=SAMPLE_CHUNKS[:2]
         )
-        results = await provider2.dense_search(
+        results = await provider2.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=2,
             similarity_threshold=0.0
@@ -2578,7 +2602,7 @@ class TestQdrantProviderCLOUD:
         assert len(results) > 0
         assert all(isinstance(r, VectorSearchResult) for r in results)
         assert all(r.score >= 0.0 for r in results)
-        await provider2.disconnect()
+        await provider2.adisconnect()
     
     @pytest.mark.asyncio
     async def test_distance_metrics(self, provider: Optional[QdrantProvider]):
@@ -2604,14 +2628,14 @@ class TestQdrantProviderCLOUD:
             )
             provider2 = QdrantProvider(config)
             await self._ensure_connected(provider2)
-            await provider2.create_collection()
-            await provider2.upsert(
+            await provider2.acreate_collection()
+            await provider2.aupsert(
                 vectors=SAMPLE_VECTORS[:2],
                 payloads=SAMPLE_PAYLOADS[:2],
                 ids=SAMPLE_IDS[:2],
                 chunks=SAMPLE_CHUNKS[:2]
             )
-            results = await provider2.dense_search(
+            results = await provider2.adense_search(
                 query_vector=QUERY_VECTOR,
                 top_k=2,
                 similarity_threshold=0.0
@@ -2619,7 +2643,7 @@ class TestQdrantProviderCLOUD:
             assert len(results) > 0
             assert all(isinstance(r, VectorSearchResult) for r in results)
             assert all(r.score >= 0.0 for r in results)
-            await provider2.disconnect()
+            await provider2.adisconnect()
 
 
 
@@ -2650,32 +2674,32 @@ class TestQdrantConfigAttributesIN_MEMORY:
     async def test_provider_name_custom(self):
         config = self._make_config(provider_name="MyCustomProvider")
         provider = self._make_provider(config)
-        assert provider.provider_name == "MyCustomProvider"
+        assert provider.name == "MyCustomProvider"
 
     @pytest.mark.asyncio
     async def test_provider_name_default(self):
         config = self._make_config()
         provider = self._make_provider(config)
-        assert provider.provider_name == f"QdrantProvider_{config.collection_name}"
+        assert provider.name == f"QdrantProvider_{config.collection_name}"
 
     @pytest.mark.asyncio
     async def test_provider_description(self):
         config = self._make_config(provider_description="Test provider for CI")
         provider = self._make_provider(config)
-        assert provider.provider_description == "Test provider for CI"
+        assert provider.description == "Test provider for CI"
 
     @pytest.mark.asyncio
     async def test_provider_id_custom(self):
         config = self._make_config(provider_id="custom-id-123")
         provider = self._make_provider(config)
-        assert provider.provider_id == "custom-id-123"
+        assert provider.id == "custom-id-123"
 
     @pytest.mark.asyncio
     async def test_provider_id_auto_generated(self):
         config = self._make_config()
         provider = self._make_provider(config)
-        assert provider.provider_id is not None
-        assert len(provider.provider_id) == 16
+        assert provider.id is not None
+        assert len(provider.id) == 16
 
     # ------------------------------------------------------------------
     # default_metadata
@@ -2687,21 +2711,21 @@ class TestQdrantConfigAttributesIN_MEMORY:
             default_metadata={"source": "unit_test", "version": "1.0"}
         )
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=[SAMPLE_VECTORS[0]],
             payloads=[SAMPLE_PAYLOADS[0]],
             ids=[SAMPLE_IDS[0]],
             chunks=[SAMPLE_CHUNKS[0]],
         )
-        results = await provider.fetch([SAMPLE_IDS[0]])
+        results = await provider.afetch([SAMPLE_IDS[0]])
         assert len(results) == 1
         payload = results[0].payload
         assert "metadata" in payload
         assert payload["metadata"]["source"] == "unit_test"
         assert payload["metadata"]["version"] == "1.0"
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_default_metadata_overridden_by_per_record_metadata(self):
@@ -2709,39 +2733,39 @@ class TestQdrantConfigAttributesIN_MEMORY:
             default_metadata={"source": "default", "env": "test"}
         )
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         record_payload = {
             "content": SAMPLE_CHUNKS[0],
             "metadata": {"source": "override", "extra": "field"},
         }
-        await provider.upsert(
+        await provider.aupsert(
             vectors=[SAMPLE_VECTORS[0]],
             payloads=[record_payload],
             ids=[SAMPLE_IDS[0]],
         )
-        results = await provider.fetch([SAMPLE_IDS[0]])
+        results = await provider.afetch([SAMPLE_IDS[0]])
         payload = results[0].payload
         assert payload["metadata"]["source"] == "override"
         assert payload["metadata"]["env"] == "test"
         assert payload["metadata"]["extra"] == "field"
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_no_default_metadata(self):
         config = self._make_config()
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=[SAMPLE_VECTORS[0]],
             payloads=[{"content": SAMPLE_CHUNKS[0]}],
             ids=[SAMPLE_IDS[0]],
         )
-        results = await provider.fetch([SAMPLE_IDS[0]])
+        results = await provider.afetch([SAMPLE_IDS[0]])
         payload = results[0].payload
         assert "metadata" not in payload or payload.get("metadata") is None or payload.get("metadata") == {}
-        await provider.disconnect()
+        await provider.adisconnect()
 
     # ------------------------------------------------------------------
     # default_top_k
@@ -2751,79 +2775,79 @@ class TestQdrantConfigAttributesIN_MEMORY:
     async def test_default_top_k_used_when_not_specified(self):
         config = self._make_config(default_top_k=2)
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.search(
+        results = await provider.asearch(
             query_vector=QUERY_VECTOR,
             similarity_threshold=0.0,
         )
         assert len(results) <= 2
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_default_top_k_overridden_by_explicit(self):
         config = self._make_config(default_top_k=1)
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.search(
+        results = await provider.asearch(
             query_vector=QUERY_VECTOR,
             top_k=3,
             similarity_threshold=0.0,
         )
         assert len(results) <= 3
         assert len(results) > 1
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_default_similarity_threshold_filters_results(self):
         config = self._make_config(default_similarity_threshold=0.99)
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=10,
         )
         for r in results:
             assert r.score >= 0.99
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_default_similarity_threshold_overridden(self):
         config = self._make_config(default_similarity_threshold=0.99)
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        strict_results = await provider.dense_search(
+        strict_results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=10,
         )
-        loose_results = await provider.dense_search(
+        loose_results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=10,
             similarity_threshold=0.0,
@@ -2837,22 +2861,22 @@ class TestQdrantConfigAttributesIN_MEMORY:
             assert "content" in r.payload
             assert r.vector is not None
             assert len(r.vector) == 5
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_on_disk_payload_true(self):
         config = self._make_config(on_disk_payload=True)
         provider = self._make_provider(config)
         assert provider._config.on_disk_payload is True
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.fetch(SAMPLE_IDS)
+        results = await provider.afetch(SAMPLE_IDS)
         assert len(results) == 5
         for r in results:
             assert isinstance(r, VectorSearchResult)
@@ -2860,22 +2884,22 @@ class TestQdrantConfigAttributesIN_MEMORY:
             assert r.payload["content"] in SAMPLE_CHUNKS
             assert r.vector is not None
             assert len(r.vector) == 5
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_on_disk_payload_false(self):
         config = self._make_config(on_disk_payload=False)
         provider = self._make_provider(config)
         assert provider._config.on_disk_payload is False
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.fetch(SAMPLE_IDS)
+        results = await provider.afetch(SAMPLE_IDS)
         assert len(results) == 5
         for r in results:
             assert isinstance(r, VectorSearchResult)
@@ -2883,114 +2907,114 @@ class TestQdrantConfigAttributesIN_MEMORY:
             assert r.payload["content"] in SAMPLE_CHUNKS
             assert r.vector is not None
             assert len(r.vector) == 5
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_write_consistency_factor_default(self):
         config = self._make_config()
         provider = self._make_provider(config)
         assert provider._config.write_consistency_factor == 1
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        count = await provider.get_count()
+        count = await provider.aget_count()
         assert count == 5
-        fetched = await provider.fetch(SAMPLE_IDS)
+        fetched = await provider.afetch(SAMPLE_IDS)
         assert len(fetched) == 5
         fetched_contents = {r.payload["content"] for r in fetched}
         assert fetched_contents == set(SAMPLE_CHUNKS)
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_write_consistency_factor_higher(self):
         config = self._make_config(write_consistency_factor=2)
         provider = self._make_provider(config)
         assert provider._config.write_consistency_factor == 2
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        count = await provider.get_count()
+        count = await provider.aget_count()
         assert count == 5
-        fetched = await provider.fetch(SAMPLE_IDS)
+        fetched = await provider.afetch(SAMPLE_IDS)
         assert len(fetched) == 5
         fetched_contents = {r.payload["content"] for r in fetched}
         assert fetched_contents == set(SAMPLE_CHUNKS)
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_shard_number(self):
         config = self._make_config(shard_number=2)
         provider = self._make_provider(config)
         assert provider._config.shard_number == 2
-        await provider.connect()
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        count = await provider.get_count()
+        count = await provider.aget_count()
         assert count == 5
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR, top_k=5, similarity_threshold=0.0
         )
         assert len(results) == 5
         for r in results:
             assert isinstance(r, VectorSearchResult)
             assert r.score >= 0.0
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_replication_factor(self):
         config = self._make_config(replication_factor=1)
         provider = self._make_provider(config)
         assert provider._config.replication_factor == 1
-        await provider.connect()
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        count = await provider.get_count()
+        count = await provider.aget_count()
         assert count == 5
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR, top_k=5, similarity_threshold=0.0
         )
         assert len(results) == 5
         for r in results:
             assert isinstance(r, VectorSearchResult)
             assert r.score >= 0.0
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_quantization_config_scalar(self):
         config = self._make_config(quantization_config={"type": "scalar"})
         provider = self._make_provider(config)
         assert provider._config.quantization_config == {"type": "scalar"}
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=5,
             similarity_threshold=0.0,
@@ -3000,30 +3024,30 @@ class TestQdrantConfigAttributesIN_MEMORY:
             assert isinstance(r, VectorSearchResult)
             assert r.score >= 0.0
             assert "content" in r.payload
-        fetched = await provider.fetch([SAMPLE_IDS[0]])
+        fetched = await provider.afetch([SAMPLE_IDS[0]])
         assert len(fetched) == 1
         assert fetched[0].payload["content"] == SAMPLE_CHUNKS[0]
-        assert fetched[0].payload["category"] == SAMPLE_PAYLOADS[0]["category"]
-        assert fetched[0].payload["author"] == SAMPLE_PAYLOADS[0]["author"]
-        await provider.disconnect()
+        assert fetched[0].payload["metadata"]["category"] == SAMPLE_PAYLOADS[0]["category"]
+        assert fetched[0].payload["metadata"]["author"] == SAMPLE_PAYLOADS[0]["author"]
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_quantization_config_none(self):
         config = self._make_config(quantization_config=None)
         provider = self._make_provider(config)
         assert provider._config.quantization_config is None
-        await provider.connect()
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        count = await provider.get_count()
+        count = await provider.aget_count()
         assert count == 5
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_recreate_if_exists_replaces_data(self):
@@ -3031,24 +3055,24 @@ class TestQdrantConfigAttributesIN_MEMORY:
         name = f"recreate_{uuid.uuid4().hex[:8]}"
         config1 = self._make_config(collection_name=name, recreate_if_exists=False)
         p1 = self._make_provider(config1)
-        await p1.connect()
-        await p1.create_collection()
-        await p1.upsert(
+        await p1.aconnect()
+        await p1.acreate_collection()
+        await p1.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        count_before = await p1.get_count()
+        count_before = await p1.aget_count()
         assert count_before == 5
 
         config2 = self._make_config(collection_name=name, recreate_if_exists=True)
         p2 = self._make_provider(config2)
-        await p2.connect()
-        await p2.create_collection()
-        count_after = await p2.get_count()
+        await p2.aconnect()
+        await p2.acreate_collection()
+        count_after = await p2.aget_count()
         assert count_after == 0
-        await p2.disconnect()
+        await p2.adisconnect()
 
     @pytest.mark.asyncio
     async def test_hnsw_index_custom_params(self):
@@ -3060,15 +3084,15 @@ class TestQdrantConfigAttributesIN_MEMORY:
         assert provider._config.index.ef_construction == 400
         assert provider._config.index.ef_search == 256
         assert isinstance(provider._config.index, HNSWIndexConfig)
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=5,
             similarity_threshold=0.0,
@@ -3081,7 +3105,7 @@ class TestQdrantConfigAttributesIN_MEMORY:
             assert "content" in r.payload
             assert r.vector is not None
             assert len(r.vector) == 5
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_hnsw_ef_search_used_in_dense_search(self):
@@ -3090,15 +3114,15 @@ class TestQdrantConfigAttributesIN_MEMORY:
         )
         provider = self._make_provider(config)
         assert provider._config.index.ef_search == 64
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=5,
             similarity_threshold=0.0,
@@ -3109,22 +3133,22 @@ class TestQdrantConfigAttributesIN_MEMORY:
         for r in results:
             assert isinstance(r, VectorSearchResult)
             assert r.payload["content"] in SAMPLE_CHUNKS
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_flat_index(self):
         config = self._make_config(index=FlatIndexConfig())
         provider = self._make_provider(config)
         assert isinstance(provider._config.index, FlatIndexConfig)
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=5,
             similarity_threshold=0.0,
@@ -3134,22 +3158,22 @@ class TestQdrantConfigAttributesIN_MEMORY:
         assert scores == sorted(scores, reverse=True), "Results must be sorted by score descending"
         fetched_contents = {r.payload["content"] for r in results}
         assert fetched_contents == set(SAMPLE_CHUNKS)
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_cosine_distance(self):
         config = self._make_config(distance_metric=DistanceMetric.COSINE)
         provider = self._make_provider(config)
         assert provider._config.distance_metric == DistanceMetric.COSINE
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR, top_k=5, similarity_threshold=0.0
         )
         assert len(results) == 5
@@ -3159,22 +3183,22 @@ class TestQdrantConfigAttributesIN_MEMORY:
             assert "content" in r.payload
         scores = [r.score for r in results]
         assert scores == sorted(scores, reverse=True)
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_euclidean_distance(self):
         config = self._make_config(distance_metric=DistanceMetric.EUCLIDEAN)
         provider = self._make_provider(config)
         assert provider._config.distance_metric == DistanceMetric.EUCLIDEAN
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR, top_k=5, similarity_threshold=0.0
         )
         assert len(results) == 5
@@ -3185,22 +3209,22 @@ class TestQdrantConfigAttributesIN_MEMORY:
             assert "content" in r.payload
         scores = [r.score for r in results]
         assert scores == sorted(scores), "Euclidean results sorted ascending (closest first)"
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_dot_product_distance(self):
         config = self._make_config(distance_metric=DistanceMetric.DOT_PRODUCT)
         provider = self._make_provider(config)
         assert provider._config.distance_metric == DistanceMetric.DOT_PRODUCT
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR, top_k=5, similarity_threshold=0.0
         )
         assert len(results) == 5
@@ -3210,74 +3234,74 @@ class TestQdrantConfigAttributesIN_MEMORY:
             assert "content" in r.payload
         scores = [r.score for r in results]
         assert scores == sorted(scores, reverse=True)
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_dense_search_disabled_raises(self):
         config = self._make_config(dense_search_enabled=False)
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
         with pytest.raises(ConfigurationError, match="Dense search is disabled"):
-            await provider.search(query_vector=QUERY_VECTOR, similarity_threshold=0.0)
-        await provider.disconnect()
+            await provider.asearch(query_vector=QUERY_VECTOR, similarity_threshold=0.0)
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_full_text_search_disabled_raises(self):
         config = self._make_config(full_text_search_enabled=False)
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
         with pytest.raises(ConfigurationError, match="Full-text search is disabled"):
-            await provider.search(query_text="physics", similarity_threshold=0.0)
-        await provider.disconnect()
+            await provider.asearch(query_text="physics", similarity_threshold=0.0)
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_hybrid_search_disabled_raises(self):
         config = self._make_config(hybrid_search_enabled=False)
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
         with pytest.raises(ConfigurationError, match="Hybrid search is disabled"):
-            await provider.search(
+            await provider.asearch(
                 query_vector=QUERY_VECTOR,
                 query_text="physics",
                 similarity_threshold=0.0,
             )
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_dense_search_enabled(self):
         config = self._make_config(dense_search_enabled=True)
         provider = self._make_provider(config)
         assert provider._config.dense_search_enabled is True
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.search(
+        results = await provider.asearch(
             query_vector=QUERY_VECTOR,
             top_k=5,
             similarity_threshold=0.0,
@@ -3290,7 +3314,7 @@ class TestQdrantConfigAttributesIN_MEMORY:
             assert r.payload["content"] in SAMPLE_CHUNKS
         scores = [r.score for r in results]
         assert scores == sorted(scores, reverse=True)
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_get_supported_search_types_all_enabled(self):
@@ -3332,15 +3356,15 @@ class TestQdrantConfigAttributesIN_MEMORY:
         config = self._make_config(default_hybrid_alpha=0.8)
         provider = self._make_provider(config)
         assert provider._config.default_hybrid_alpha == 0.8
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.hybrid_search(
+        results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=5,
@@ -3351,22 +3375,22 @@ class TestQdrantConfigAttributesIN_MEMORY:
             assert isinstance(r, VectorSearchResult)
             assert r.score is not None
             assert "content" in r.payload
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_default_fusion_method_weighted(self):
         config = self._make_config(default_fusion_method="weighted")
         provider = self._make_provider(config)
         assert provider._config.default_fusion_method == "weighted"
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.hybrid_search(
+        results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=5,
@@ -3377,22 +3401,22 @@ class TestQdrantConfigAttributesIN_MEMORY:
             assert isinstance(r, VectorSearchResult)
             assert r.score is not None
             assert "content" in r.payload
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_default_fusion_method_rrf(self):
         config = self._make_config(default_fusion_method="rrf")
         provider = self._make_provider(config)
         assert provider._config.default_fusion_method == "rrf"
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.hybrid_search(
+        results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=5,
@@ -3403,27 +3427,27 @@ class TestQdrantConfigAttributesIN_MEMORY:
             assert isinstance(r, VectorSearchResult)
             assert r.score is not None
             assert "content" in r.payload
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_hybrid_alpha_override(self):
         config = self._make_config(default_hybrid_alpha=0.9)
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results_default = await provider.hybrid_search(
+        results_default = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=5,
             similarity_threshold=0.0,
         )
-        results_overridden = await provider.hybrid_search(
+        results_overridden = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=5,
@@ -3436,27 +3460,27 @@ class TestQdrantConfigAttributesIN_MEMORY:
             assert isinstance(r, VectorSearchResult)
             assert r.score is not None
             assert "content" in r.payload
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_fusion_method_override(self):
         config = self._make_config(default_fusion_method="weighted")
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results_weighted = await provider.hybrid_search(
+        results_weighted = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=5,
             similarity_threshold=0.0,
         )
-        results_rrf = await provider.hybrid_search(
+        results_rrf = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=5,
@@ -3469,39 +3493,38 @@ class TestQdrantConfigAttributesIN_MEMORY:
             assert isinstance(r, VectorSearchResult)
             assert r.score is not None
             assert "content" in r.payload
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_indexed_fields_creates_indexes(self):
         config = self._make_config(
-            indexed_fields=["content", "document_name", "document_id", "content_id"]
+            indexed_fields=["content", "document_name", "document_id", "chunk_id"]
         )
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
-        payloads_with_fields = [
-            {**p, "document_name": "doc_A", "document_id": "id_A"}
-            for p in SAMPLE_PAYLOADS
-        ]
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        payloads_with_fields = [dict(p) for p in SAMPLE_PAYLOADS]
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=payloads_with_fields,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
+            document_ids=["id_A"] * len(SAMPLE_VECTORS),
+            document_names=["doc_A"] * len(SAMPLE_VECTORS),
         )
-        ft_results = await provider.full_text_search(
+        ft_results = await provider.afull_text_search(
             query_text="relativity", top_k=5, similarity_threshold=0.0
         )
         assert len(ft_results) > 0
         for r in ft_results:
             assert isinstance(r, VectorSearchResult)
             assert "relativity" in r.payload["content"].lower()
-        fetched = await provider.fetch(SAMPLE_IDS)
+        fetched = await provider.afetch(SAMPLE_IDS)
         assert len(fetched) == 5
         for f in fetched:
             assert f.payload["document_name"] == "doc_A"
             assert f.payload["document_id"] == "id_A"
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_indexed_fields_with_metadata_prefix(self):
@@ -3510,19 +3533,19 @@ class TestQdrantConfigAttributesIN_MEMORY:
             default_metadata={"env": "staging"},
         )
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        fetched = await provider.fetch(SAMPLE_IDS)
+        fetched = await provider.afetch(SAMPLE_IDS)
         assert len(fetched) == 5
         for f in fetched:
             assert f.payload["metadata"]["env"] == "staging"
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_payload_field_configs_keyword(self):
@@ -3532,16 +3555,17 @@ class TestQdrantConfigAttributesIN_MEMORY:
             ]
         )
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=[SAMPLE_VECTORS[0]],
-            payloads=[{**SAMPLE_PAYLOADS[0], "document_name": "test_doc"}],
+            payloads=[dict(SAMPLE_PAYLOADS[0])],
             ids=[SAMPLE_IDS[0]],
+            document_names=["test_doc"],
         )
-        results = await provider.fetch([SAMPLE_IDS[0]])
+        results = await provider.afetch([SAMPLE_IDS[0]])
         assert results[0].payload["document_name"] == "test_doc"
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_payload_field_configs_text(self):
@@ -3551,26 +3575,26 @@ class TestQdrantConfigAttributesIN_MEMORY:
             ]
         )
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.full_text_search(
+        results = await provider.afull_text_search(
             query_text="relativity", top_k=5, similarity_threshold=0.0
         )
         assert len(results) > 0
         for r in results:
             assert isinstance(r, VectorSearchResult)
             assert "relativity" in r.payload["content"].lower()
-        no_results = await provider.full_text_search(
+        no_results = await provider.afull_text_search(
             query_text="xyznonexistent", top_k=5, similarity_threshold=0.0
         )
         assert len(no_results) == 0
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_payload_field_configs_integer(self):
@@ -3580,23 +3604,23 @@ class TestQdrantConfigAttributesIN_MEMORY:
             ]
         )
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=5,
             similarity_threshold=0.0,
-            filter={"year": {"$gte": 1800}},
+            filter={"metadata.year": {"$gte": 1800}},
         )
         for r in results:
-            assert r.payload.get("year", 0) >= 1800
-        await provider.disconnect()
+            assert r.payload["metadata"].get("year", 0) >= 1800
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_payload_field_configs_float(self):
@@ -3606,18 +3630,18 @@ class TestQdrantConfigAttributesIN_MEMORY:
             ]
         )
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         payloads = [{**p, "score_val": 0.5 + i * 0.1} for i, p in enumerate(SAMPLE_PAYLOADS)]
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=payloads,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.fetch([SAMPLE_IDS[0]])
-        assert results[0].payload["score_val"] == pytest.approx(0.5, abs=0.01)
-        await provider.disconnect()
+        results = await provider.afetch([SAMPLE_IDS[0]])
+        assert results[0].payload["metadata"]["score_val"] == pytest.approx(0.5, abs=0.01)
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_payload_field_configs_boolean(self):
@@ -3627,20 +3651,20 @@ class TestQdrantConfigAttributesIN_MEMORY:
             ]
         )
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         payloads = [{**p, "is_verified": i % 2 == 0} for i, p in enumerate(SAMPLE_PAYLOADS)]
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=payloads,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.fetch([SAMPLE_IDS[0]])
-        assert results[0].payload["is_verified"] is True
-        results2 = await provider.fetch([SAMPLE_IDS[1]])
-        assert results2[0].payload["is_verified"] is False
-        await provider.disconnect()
+        results = await provider.afetch([SAMPLE_IDS[0]])
+        assert results[0].payload["metadata"]["is_verified"] is True
+        results2 = await provider.afetch([SAMPLE_IDS[1]])
+        assert results2[0].payload["metadata"]["is_verified"] is False
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_payload_field_configs_multiple_types(self):
@@ -3653,26 +3677,27 @@ class TestQdrantConfigAttributesIN_MEMORY:
             ]
         )
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         payloads = [
-            {**p, "document_name": f"doc_{i}", "is_verified": True}
+            {**p, "is_verified": True}
             for i, p in enumerate(SAMPLE_PAYLOADS)
         ]
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=payloads,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
+            document_names=[f"doc_{i}" for i in range(len(SAMPLE_PAYLOADS))],
         )
-        ft_results = await provider.full_text_search(
+        ft_results = await provider.afull_text_search(
             query_text="relativity", top_k=5, similarity_threshold=0.0
         )
         assert len(ft_results) > 0
         for r in ft_results:
             assert "relativity" in r.payload["content"].lower()
 
-        dense_results = await provider.dense_search(
+        dense_results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=5,
             similarity_threshold=0.0,
@@ -3680,14 +3705,14 @@ class TestQdrantConfigAttributesIN_MEMORY:
         assert len(dense_results) == 5
         for r in dense_results:
             assert isinstance(r, VectorSearchResult)
-            assert r.payload["is_verified"] is True
+            assert r.payload["metadata"]["is_verified"] is True
             assert r.payload["document_name"].startswith("doc_")
 
-        fetched = await provider.fetch(SAMPLE_IDS)
-        years_found = {f.payload.get("year") for f in fetched}
+        fetched = await provider.afetch(SAMPLE_IDS)
+        years_found = {f.payload["metadata"].get("year") for f in fetched}
         expected_years = {p.get("year") for p in SAMPLE_PAYLOADS}
         assert years_found == expected_years
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_payload_field_configs_non_indexed_field(self):
@@ -3698,18 +3723,18 @@ class TestQdrantConfigAttributesIN_MEMORY:
             ]
         )
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
+        await provider.aconnect()
+        await provider.acreate_collection()
         payloads = [{**p, "internal_notes": "skip_indexing"} for p in SAMPLE_PAYLOADS]
-        await provider.upsert(
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=payloads,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.fetch([SAMPLE_IDS[0]])
-        assert results[0].payload["internal_notes"] == "skip_indexing"
-        await provider.disconnect()
+        results = await provider.afetch([SAMPLE_IDS[0]])
+        assert results[0].payload["metadata"]["internal_notes"] == "skip_indexing"
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_payload_field_configs_with_custom_params(self):
@@ -3725,51 +3750,51 @@ class TestQdrantConfigAttributesIN_MEMORY:
             ]
         )
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.full_text_search(
+        results = await provider.afull_text_search(
             query_text="relativity", top_k=5, similarity_threshold=0.0
         )
         assert len(results) > 0
         for r in results:
             assert isinstance(r, VectorSearchResult)
             assert "relativity" in r.payload["content"].lower()
-        fetched = await provider.fetch(SAMPLE_IDS)
+        fetched = await provider.afetch(SAMPLE_IDS)
         assert len(fetched) == 5
         fetched_contents = {f.payload["content"] for f in fetched}
         assert fetched_contents == set(SAMPLE_CHUNKS)
-        await provider.disconnect()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
-    async def test_auto_generate_content_id(self):
-        config = self._make_config(auto_generate_content_id=True)
+    async def test_auto_generate_chunk_id(self):
+        config = self._make_config()
         provider = self._make_provider(config)
-        await provider.connect()
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=[SAMPLE_VECTORS[0]],
             payloads=[{"content": "unique content for id gen"}],
             ids=[SAMPLE_IDS[0]],
         )
-        results = await provider.fetch([SAMPLE_IDS[0]])
-        assert "content_id" in results[0].payload
-        assert len(results[0].payload["content_id"]) == 32
-        await provider.disconnect()
+        results = await provider.afetch([SAMPLE_IDS[0]])
+        assert "chunk_id" in results[0].payload
+        assert results[0].payload["chunk_id"]
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_in_memory_connection_mode(self):
         config = self._make_config()
         assert config.connection.mode == Mode.IN_MEMORY
         provider = self._make_provider(config)
-        await provider.connect()
-        assert await provider.is_ready()
-        await provider.disconnect()
+        await provider.aconnect()
+        assert await provider.ais_ready()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_all_config_attributes_together(self):
@@ -3801,31 +3826,29 @@ class TestQdrantConfigAttributesIN_MEMORY:
             provider_id="all-attrs-001",
         )
         provider = self._make_provider(config)
-        assert provider.provider_name == "AllAttrsProvider"
-        assert provider.provider_description == "Full config test"
-        assert provider.provider_id == "all-attrs-001"
+        assert provider.name == "AllAttrsProvider"
+        assert provider.description == "Full config test"
+        assert provider.id == "all-attrs-001"
         assert isinstance(provider._config.index, HNSWIndexConfig)
         assert provider._config.index.m == 32
         assert provider._config.distance_metric == DistanceMetric.COSINE
         assert provider._config.default_top_k == 3
         assert provider._config.on_disk_payload is True
 
-        await provider.connect()
-        await provider.create_collection()
-        payloads = [
-            {**p, "document_name": f"doc_{i}"}
-            for i, p in enumerate(SAMPLE_PAYLOADS)
-        ]
-        await provider.upsert(
+        await provider.aconnect()
+        await provider.acreate_collection()
+        payloads = [dict(p) for p in SAMPLE_PAYLOADS]
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=payloads,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
+            document_names=[f"doc_{i}" for i in range(len(SAMPLE_PAYLOADS))],
         )
-        count = await provider.get_count()
+        count = await provider.aget_count()
         assert count == 5
 
-        dense_results = await provider.dense_search(
+        dense_results = await provider.adense_search(
             query_vector=QUERY_VECTOR, top_k=3, similarity_threshold=0.0
         )
         assert len(dense_results) == 3
@@ -3838,14 +3861,14 @@ class TestQdrantConfigAttributesIN_MEMORY:
             assert r.vector is not None
             assert len(r.vector) == 5
 
-        ft_results = await provider.full_text_search(
+        ft_results = await provider.afull_text_search(
             query_text="physics", top_k=3, similarity_threshold=0.0
         )
         assert len(ft_results) > 0
         for r in ft_results:
             assert "physics" in r.payload["content"].lower()
 
-        hybrid_results = await provider.hybrid_search(
+        hybrid_results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -3856,7 +3879,7 @@ class TestQdrantConfigAttributesIN_MEMORY:
             assert isinstance(r, VectorSearchResult)
             assert r.score is not None
 
-        fetched = await provider.fetch(SAMPLE_IDS)
+        fetched = await provider.afetch(SAMPLE_IDS)
         assert len(fetched) == 5
         for f in fetched:
             assert f.payload["metadata"]["framework"] == "upsonic"
@@ -3867,7 +3890,7 @@ class TestQdrantConfigAttributesIN_MEMORY:
         types = provider.get_supported_search_types()
         assert set(types) == {"dense", "full_text", "hybrid"}
 
-        await provider.disconnect()
+        await provider.adisconnect()
 
 
 class TestQdrantConfigAttributesCLOUD:
@@ -3896,6 +3919,7 @@ class TestQdrantConfigAttributesCLOUD:
                 api_key=SecretStr(api_key),
             ),
             "distance_metric": DistanceMetric.COSINE,
+            "recreate_if_exists": True,
         }
         defaults.update(overrides)
         return QdrantConfig(**defaults)
@@ -3906,7 +3930,7 @@ class TestQdrantConfigAttributesCLOUD:
 
     async def _connect(self, provider: QdrantProvider):
         try:
-            await provider.connect()
+            await provider.aconnect()
         except VectorDBConnectionError:
             pytest.skip("Qdrant Cloud connection failed")
 
@@ -3915,15 +3939,15 @@ class TestQdrantConfigAttributesCLOUD:
         config = self._make_config(provider_name="CloudProvider")
         self._skip_if_no_creds(config)
         provider = QdrantProvider(config)
-        assert provider.provider_name == "CloudProvider"
+        assert provider.name == "CloudProvider"
 
     @pytest.mark.asyncio
     async def test_provider_id_auto_generated(self):
         config = self._make_config()
         self._skip_if_no_creds(config)
         provider = QdrantProvider(config)
-        assert provider.provider_id is not None
-        assert len(provider.provider_id) == 16
+        assert provider.id is not None
+        assert len(provider.id) == 16
 
     @pytest.mark.asyncio
     async def test_default_metadata_cloud(self):
@@ -3933,18 +3957,18 @@ class TestQdrantConfigAttributesCLOUD:
         self._skip_if_no_creds(config)
         provider = QdrantProvider(config)
         await self._connect(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=[SAMPLE_VECTORS[0]],
             payloads=[SAMPLE_PAYLOADS[0]],
             ids=[SAMPLE_IDS[0]],
             chunks=[SAMPLE_CHUNKS[0]],
         )
-        results = await provider.fetch([SAMPLE_IDS[0]])
+        results = await provider.afetch([SAMPLE_IDS[0]])
         assert results[0].payload["metadata"]["cloud_source"] == "ci"
         assert results[0].payload["metadata"]["region"] == "eu"
-        await provider.delete_collection()
-        await provider.disconnect()
+        await provider.adelete_collection()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_payload_field_configs_text_cloud(self):
@@ -3956,109 +3980,107 @@ class TestQdrantConfigAttributesCLOUD:
         self._skip_if_no_creds(config)
         provider = QdrantProvider(config)
         await self._connect(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.full_text_search(
+        results = await provider.afull_text_search(
             query_text="relativity", top_k=5, similarity_threshold=0.0
         )
         assert len(results) > 0
         for r in results:
             assert isinstance(r, VectorSearchResult)
             assert "relativity" in r.payload["content"].lower()
-        no_match = await provider.full_text_search(
+        no_match = await provider.afull_text_search(
             query_text="xyznonexistent", top_k=5, similarity_threshold=0.0
         )
         assert len(no_match) == 0
-        await provider.delete_collection()
-        await provider.disconnect()
+        await provider.adelete_collection()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_payload_field_configs_keyword_cloud(self):
         config = self._make_config(
             payload_field_configs=[
-                PayloadFieldConfig(field_name="category", field_type="keyword", indexed=True),
+                PayloadFieldConfig(field_name="metadata.category", field_type="keyword", indexed=True),
             ]
         )
         self._skip_if_no_creds(config)
         provider = QdrantProvider(config)
         await self._connect(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=5,
             similarity_threshold=0.0,
-            filter={"category": "science"},
+            filter={"metadata.category": "science"},
         )
         assert len(results) > 0
         for r in results:
-            assert r.payload["category"] == "science"
-        await provider.delete_collection()
-        await provider.disconnect()
+            assert r.payload["metadata"]["category"] == "science"
+        await provider.adelete_collection()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_payload_field_configs_integer_cloud(self):
         config = self._make_config(
             payload_field_configs=[
-                PayloadFieldConfig(field_name="year", field_type="integer", indexed=True),
+                PayloadFieldConfig(field_name="metadata.year", field_type="integer", indexed=True),
             ]
         )
         self._skip_if_no_creds(config)
         provider = QdrantProvider(config)
         await self._connect(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=5,
             similarity_threshold=0.0,
-            filter={"year": {"$gte": 1800}},
+            filter={"metadata.year": {"$gte": 1800}},
         )
         for r in results:
-            assert r.payload.get("year", 0) >= 1800
-        await provider.delete_collection()
-        await provider.disconnect()
+            assert r.payload["metadata"].get("year", 0) >= 1800
+        await provider.adelete_collection()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_payload_field_configs_multiple_cloud(self):
         config = self._make_config(
             payload_field_configs=[
                 PayloadFieldConfig(field_name="content", field_type="text", indexed=True),
-                PayloadFieldConfig(field_name="category", field_type="keyword", indexed=True),
-                PayloadFieldConfig(field_name="year", field_type="integer", indexed=True),
+                PayloadFieldConfig(field_name="metadata.category", field_type="keyword", indexed=True),
+                PayloadFieldConfig(field_name="metadata.year", field_type="integer", indexed=True),
                 PayloadFieldConfig(field_name="document_name", field_type="keyword", indexed=True),
             ]
         )
         self._skip_if_no_creds(config)
         provider = QdrantProvider(config)
         await self._connect(provider)
-        await provider.create_collection()
-        payloads = [
-            {**p, "document_name": f"doc_{i}"}
-            for i, p in enumerate(SAMPLE_PAYLOADS)
-        ]
-        await provider.upsert(
+        await provider.acreate_collection()
+        payloads = [dict(p) for p in SAMPLE_PAYLOADS]
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=payloads,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
+            document_names=[f"doc_{i}" for i in range(len(SAMPLE_PAYLOADS))],
         )
-        ft_results = await provider.full_text_search(
+        ft_results = await provider.afull_text_search(
             query_text="physics", top_k=5, similarity_threshold=0.0
         )
         assert len(ft_results) > 0
@@ -4066,24 +4088,24 @@ class TestQdrantConfigAttributesCLOUD:
             assert isinstance(r, VectorSearchResult)
             assert "physics" in r.payload["content"].lower()
 
-        filtered = await provider.dense_search(
+        filtered = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=5,
             similarity_threshold=0.0,
-            filter={"category": "science"},
+            filter={"metadata.category": "science"},
         )
         assert len(filtered) == 2
         for r in filtered:
             assert isinstance(r, VectorSearchResult)
-            assert r.payload["category"] == "science"
-            assert r.payload["author"] in ("Einstein", "Newton")
+            assert r.payload["metadata"]["category"] == "science"
+            assert r.payload["metadata"]["author"] in ("Einstein", "Newton")
 
-        fetched = await provider.fetch(SAMPLE_IDS)
+        fetched = await provider.afetch(SAMPLE_IDS)
         assert len(fetched) == 5
         fetched_doc_names = {f.payload["document_name"] for f in fetched}
         assert fetched_doc_names == {f"doc_{i}" for i in range(5)}
-        await provider.delete_collection()
-        await provider.disconnect()
+        await provider.adelete_collection()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_indexed_fields_cloud(self):
@@ -4093,31 +4115,30 @@ class TestQdrantConfigAttributesCLOUD:
         self._skip_if_no_creds(config)
         provider = QdrantProvider(config)
         await self._connect(provider)
-        await provider.create_collection()
-        payloads = [
-            {**p, "document_name": "cloud_doc", "document_id": "cid_1"}
-            for p in SAMPLE_PAYLOADS
-        ]
-        await provider.upsert(
+        await provider.acreate_collection()
+        payloads = [dict(p) for p in SAMPLE_PAYLOADS]
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=payloads,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
+            document_names=["cloud_doc"] * len(SAMPLE_VECTORS),
+            document_ids=["cid_1"] * len(SAMPLE_VECTORS),
         )
-        ft_results = await provider.full_text_search(
+        ft_results = await provider.afull_text_search(
             query_text="physics", top_k=5, similarity_threshold=0.0
         )
         assert len(ft_results) > 0
         for r in ft_results:
             assert isinstance(r, VectorSearchResult)
             assert "physics" in r.payload["content"].lower()
-        fetched = await provider.fetch(SAMPLE_IDS)
+        fetched = await provider.afetch(SAMPLE_IDS)
         assert len(fetched) == 5
         for f in fetched:
             assert f.payload["document_name"] == "cloud_doc"
             assert f.payload["document_id"] == "cid_1"
-        await provider.delete_collection()
-        await provider.disconnect()
+        await provider.adelete_collection()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_dense_search_disabled_cloud(self):
@@ -4125,17 +4146,17 @@ class TestQdrantConfigAttributesCLOUD:
         self._skip_if_no_creds(config)
         provider = QdrantProvider(config)
         await self._connect(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
         with pytest.raises(ConfigurationError):
-            await provider.search(query_vector=QUERY_VECTOR, similarity_threshold=0.0)
-        await provider.delete_collection()
-        await provider.disconnect()
+            await provider.asearch(query_vector=QUERY_VECTOR, similarity_threshold=0.0)
+        await provider.adelete_collection()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_full_text_search_disabled_cloud(self):
@@ -4143,17 +4164,17 @@ class TestQdrantConfigAttributesCLOUD:
         self._skip_if_no_creds(config)
         provider = QdrantProvider(config)
         await self._connect(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
         with pytest.raises(ConfigurationError):
-            await provider.search(query_text="physics", similarity_threshold=0.0)
-        await provider.delete_collection()
-        await provider.disconnect()
+            await provider.asearch(query_text="physics", similarity_threshold=0.0)
+        await provider.adelete_collection()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_default_top_k_cloud(self):
@@ -4162,14 +4183,14 @@ class TestQdrantConfigAttributesCLOUD:
         provider = QdrantProvider(config)
         assert provider._config.default_top_k == 2
         await self._connect(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.search(
+        results = await provider.asearch(
             query_vector=QUERY_VECTOR, similarity_threshold=0.0
         )
         assert len(results) == 2
@@ -4177,13 +4198,13 @@ class TestQdrantConfigAttributesCLOUD:
             assert isinstance(r, VectorSearchResult)
             assert r.score >= 0.0
             assert "content" in r.payload
-        override_results = await provider.search(
+        override_results = await provider.asearch(
             query_vector=QUERY_VECTOR, top_k=5, similarity_threshold=0.0
         )
         assert len(override_results) == 5
         assert len(override_results) > len(results)
-        await provider.delete_collection()
-        await provider.disconnect()
+        await provider.adelete_collection()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_default_similarity_threshold_cloud(self):
@@ -4192,19 +4213,19 @@ class TestQdrantConfigAttributesCLOUD:
         provider = QdrantProvider(config)
         assert provider._config.default_similarity_threshold == 0.99
         await self._connect(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        strict_results = await provider.dense_search(
+        strict_results = await provider.adense_search(
             query_vector=QUERY_VECTOR, top_k=10
         )
         for r in strict_results:
             assert r.score >= 0.99
-        loose_results = await provider.dense_search(
+        loose_results = await provider.adense_search(
             query_vector=QUERY_VECTOR, top_k=10, similarity_threshold=0.0
         )
         assert len(loose_results) == 5
@@ -4212,8 +4233,8 @@ class TestQdrantConfigAttributesCLOUD:
         for r in loose_results:
             assert isinstance(r, VectorSearchResult)
             assert r.score is not None
-        await provider.delete_collection()
-        await provider.disconnect()
+        await provider.adelete_collection()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_quantization_config_cloud(self):
@@ -4222,14 +4243,14 @@ class TestQdrantConfigAttributesCLOUD:
         provider = QdrantProvider(config)
         assert provider._config.quantization_config == {"type": "scalar"}
         await self._connect(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.dense_search(
+        results = await provider.adense_search(
             query_vector=QUERY_VECTOR, top_k=5, similarity_threshold=0.0
         )
         assert len(results) == 5
@@ -4240,8 +4261,8 @@ class TestQdrantConfigAttributesCLOUD:
             assert r.payload["content"] in SAMPLE_CHUNKS
         scores = [r.score for r in results]
         assert scores == sorted(scores, reverse=True)
-        await provider.delete_collection()
-        await provider.disconnect()
+        await provider.adelete_collection()
+        await provider.adisconnect()
 
 
     @pytest.mark.asyncio
@@ -4258,14 +4279,14 @@ class TestQdrantConfigAttributesCLOUD:
         assert provider._config.default_hybrid_alpha == 0.7
         assert provider._config.default_fusion_method == "weighted"
         await self._connect(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.hybrid_search(
+        results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=5,
@@ -4276,8 +4297,8 @@ class TestQdrantConfigAttributesCLOUD:
             assert isinstance(r, VectorSearchResult)
             assert r.score is not None
             assert "content" in r.payload
-        await provider.delete_collection()
-        await provider.disconnect()
+        await provider.adelete_collection()
+        await provider.adisconnect()
 
     @pytest.mark.asyncio
     async def test_hybrid_rrf_cloud(self):
@@ -4291,14 +4312,14 @@ class TestQdrantConfigAttributesCLOUD:
         provider = QdrantProvider(config)
         assert provider._config.default_fusion_method == "rrf"
         await self._connect(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.hybrid_search(
+        results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=5,
@@ -4309,8 +4330,8 @@ class TestQdrantConfigAttributesCLOUD:
             assert isinstance(r, VectorSearchResult)
             assert r.score is not None
             assert "content" in r.payload
-        await provider.delete_collection()
-        await provider.disconnect()
+        await provider.adelete_collection()
+        await provider.adisconnect()
 
 
     @pytest.mark.asyncio
@@ -4335,8 +4356,8 @@ class TestQdrantConfigAttributesCLOUD:
             payload_field_configs=[
                 PayloadFieldConfig(field_name="content", field_type="text", indexed=True),
                 PayloadFieldConfig(field_name="document_name", field_type="keyword", indexed=True),
-                PayloadFieldConfig(field_name="year", field_type="integer", indexed=True),
-                PayloadFieldConfig(field_name="category", field_type="keyword", indexed=True),
+                PayloadFieldConfig(field_name="metadata.year", field_type="integer", indexed=True),
+                PayloadFieldConfig(field_name="metadata.category", field_type="keyword", indexed=True),
             ],
             provider_name="AllAttrsCloudProvider",
             provider_description="Full config cloud test",
@@ -4344,9 +4365,9 @@ class TestQdrantConfigAttributesCLOUD:
         )
         self._skip_if_no_creds(config)
         provider = QdrantProvider(config)
-        assert provider.provider_name == "AllAttrsCloudProvider"
-        assert provider.provider_description == "Full config cloud test"
-        assert provider.provider_id == "all-attrs-cloud-001"
+        assert provider.name == "AllAttrsCloudProvider"
+        assert provider.description == "Full config cloud test"
+        assert provider.id == "all-attrs-cloud-001"
         assert isinstance(provider._config.index, HNSWIndexConfig)
         assert provider._config.index.m == 16
         assert provider._config.distance_metric == DistanceMetric.COSINE
@@ -4354,21 +4375,19 @@ class TestQdrantConfigAttributesCLOUD:
         assert provider._config.on_disk_payload is True
 
         await self._connect(provider)
-        await provider.create_collection()
-        payloads = [
-            {**p, "document_name": f"cloud_doc_{i}"}
-            for i, p in enumerate(SAMPLE_PAYLOADS)
-        ]
-        await provider.upsert(
+        await provider.acreate_collection()
+        payloads = [dict(p) for p in SAMPLE_PAYLOADS]
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=payloads,
             ids=SAMPLE_IDS,
             chunks=SAMPLE_CHUNKS,
+            document_names=[f"cloud_doc_{i}" for i in range(len(SAMPLE_PAYLOADS))],
         )
-        count = await provider.get_count()
+        count = await provider.aget_count()
         assert count == 5
 
-        dense_results = await provider.dense_search(
+        dense_results = await provider.adense_search(
             query_vector=QUERY_VECTOR, top_k=3, similarity_threshold=0.0
         )
         assert len(dense_results) == 3
@@ -4381,7 +4400,7 @@ class TestQdrantConfigAttributesCLOUD:
             assert r.vector is not None
             assert len(r.vector) == 5
 
-        ft_results = await provider.full_text_search(
+        ft_results = await provider.afull_text_search(
             query_text="physics", top_k=5, similarity_threshold=0.0
         )
         assert len(ft_results) > 0
@@ -4389,7 +4408,7 @@ class TestQdrantConfigAttributesCLOUD:
             assert isinstance(r, VectorSearchResult)
             assert "physics" in r.payload["content"].lower()
 
-        hybrid_results = await provider.hybrid_search(
+        hybrid_results = await provider.ahybrid_search(
             query_vector=QUERY_VECTOR,
             query_text="physics",
             top_k=3,
@@ -4400,25 +4419,25 @@ class TestQdrantConfigAttributesCLOUD:
             assert isinstance(r, VectorSearchResult)
             assert r.score is not None
 
-        fetched = await provider.fetch(SAMPLE_IDS)
+        fetched = await provider.afetch(SAMPLE_IDS)
         assert len(fetched) == 5
         for f in fetched:
             assert f.payload["metadata"]["cloud_env"] == "ci"
         fetched_doc_names = {f.payload["document_name"] for f in fetched}
         assert fetched_doc_names == {f"cloud_doc_{i}" for i in range(5)}
 
-        science_filtered = await provider.dense_search(
+        science_filtered = await provider.adense_search(
             query_vector=QUERY_VECTOR,
             top_k=5,
             similarity_threshold=0.0,
-            filter={"category": "science"},
+            filter={"metadata.category": "science"},
         )
         assert len(science_filtered) == 2
         for r in science_filtered:
-            assert r.payload["category"] == "science"
+            assert r.payload["metadata"]["category"] == "science"
 
         types = provider.get_supported_search_types()
         assert set(types) == {"dense", "full_text", "hybrid"}
 
-        await provider.delete_collection()
-        await provider.disconnect()
+        await provider.adelete_collection()
+        await provider.adisconnect()

@@ -56,12 +56,31 @@ CULTURAL_KNOWLEDGE_TABLE_SCHEMA: Dict[str, Dict[str, Any]] = {
 }
 
 
+KNOWLEDGE_TABLE_SCHEMA: Dict[str, Dict[str, Any]] = {
+    "id": {"type": String, "primary_key": True, "nullable": False},
+    "name": {"type": String, "nullable": False},
+    "description": {"type": String, "nullable": True},
+    "metadata": {"type": JSON, "nullable": True},
+    "type": {"type": String, "nullable": True, "index": True},
+    "size": {"type": BigInteger, "nullable": True},
+    "knowledge_base_id": {"type": String, "nullable": True, "index": True},
+    "content_hash": {"type": String, "nullable": True, "index": True},
+    "chunk_count": {"type": BigInteger, "nullable": True},
+    "source": {"type": String, "nullable": True},
+    "status": {"type": String, "nullable": True, "index": True},
+    "status_message": {"type": String, "nullable": True},
+    "access_count": {"type": BigInteger, "nullable": True},
+    "created_at": {"type": BigInteger, "nullable": True, "index": True},
+    "updated_at": {"type": BigInteger, "nullable": True, "index": True},
+}
+
+
 def get_table_schema_definition(table_type: str) -> Dict[str, Dict[str, Any]]:
     """
     Get the schema definition for a given table type.
     
     Args:
-        table_type: Type of table ('sessions' or 'user_memories')
+        table_type: Type of table ('sessions', 'user_memories', 'cultural_knowledge', or 'knowledge')
     
     Returns:
         Dictionary containing schema definition for the table
@@ -73,6 +92,7 @@ def get_table_schema_definition(table_type: str) -> Dict[str, Dict[str, Any]]:
         "sessions": SESSION_TABLE_SCHEMA,
         "user_memories": USER_MEMORY_TABLE_SCHEMA,
         "cultural_knowledge": CULTURAL_KNOWLEDGE_TABLE_SCHEMA,
+        "knowledge": KNOWLEDGE_TABLE_SCHEMA,
     }
     
     if table_type not in schemas:

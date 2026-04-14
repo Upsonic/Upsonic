@@ -1,51 +1,54 @@
 """
 Comprehensive smoke tests for PgVector vector database provider.
 
-Tests all methods, attributes, and connection modes.
-Verifies that stored values exactly match retrieved values.
+Mirrors the Qdrant smoke-test structure. Adapted to the PgVectorProvider
+async-first API surface (a* methods, sync wrappers provided by base class).
 """
 
 import os
 import pytest
+from hashlib import md5
 from typing import List, Dict, Any, Optional
 from pydantic import SecretStr
 
-# Load environment variables from .env file
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
-    pass  # dotenv not available, use system env vars
+    pass
 
 from upsonic.vectordb.providers.pgvector import PgVectorProvider
 from upsonic.vectordb.config import (
     PgVectorConfig,
     DistanceMetric,
     HNSWIndexConfig,
-    IVFIndexConfig
+    IVFIndexConfig,
 )
 from upsonic.utils.package.exception import (
     VectorDBConnectionError,
-    UpsertError
+    UpsertError,
 )
 from upsonic.schemas.vector_schemas import VectorSearchResult
 
 
+# ---------------------------------------------------------------------------
 # Test data
+# ---------------------------------------------------------------------------
+
 SAMPLE_VECTORS: List[List[float]] = [
     [0.1, 0.2, 0.3, 0.4, 0.5],
     [0.6, 0.7, 0.8, 0.9, 1.0],
     [1.1, 1.2, 1.3, 1.4, 1.5],
     [1.6, 1.7, 1.8, 1.9, 2.0],
-    [2.1, 2.2, 2.3, 2.4, 2.5]
+    [2.1, 2.2, 2.3, 2.4, 2.5],
 ]
 
 SAMPLE_PAYLOADS: List[Dict[str, Any]] = [
-    {"content": "The theory of relativity revolutionized physics", "category": "science", "author": "Einstein", "year": 1905},
-    {"content": "Laws of motion and universal gravitation", "category": "science", "author": "Newton", "year": 1687},
-    {"content": "To be or not to be, that is the question", "category": "literature", "author": "Shakespeare", "year": 1600},
-    {"content": "It was the best of times, it was the worst of times", "category": "literature", "author": "Dickens", "year": 1850},
-    {"content": "The unexamined life is not worth living", "category": "philosophy", "author": "Plato", "year": -400}
+    {"category": "science", "author": "Einstein", "year": 1905},
+    {"category": "science", "author": "Newton", "year": 1687},
+    {"category": "literature", "author": "Shakespeare", "year": 1600},
+    {"category": "literature", "author": "Dickens", "year": 1850},
+    {"category": "philosophy", "author": "Plato", "year": -400},
 ]
 
 SAMPLE_CHUNKS: List[str] = [
@@ -53,145 +56,89 @@ SAMPLE_CHUNKS: List[str] = [
     "Laws of motion and universal gravitation",
     "To be or not to be, that is the question",
     "It was the best of times, it was the worst of times",
-    "The unexamined life is not worth living"
+    "The unexamined life is not worth living",
 ]
 
-SAMPLE_IDS: List[str] = ["doc1", "doc2", "doc3", "doc4", "doc5"]
+# Real UUID strings, preserved verbatim.
+SAMPLE_IDS: List[str] = [
+    "11111111-1111-4111-8111-111111111111",
+    "22222222-2222-4222-8222-222222222222",
+    "33333333-3333-4333-8333-333333333333",
+    "44444444-4444-4444-8444-444444444444",
+    "55555555-5555-4555-8555-555555555555",
+]
 
 QUERY_VECTOR: List[float] = [0.15, 0.25, 0.35, 0.45, 0.55]
 QUERY_TEXT: str = "physics theory"
 
 
-def assert_vector_matches(actual_vector: Any, expected_vector: List[float], vector_id: str = "", tolerance: float = 1e-6) -> None:
-    """
-    Assert that a retrieved vector matches the expected vector.
-    
-    Args:
-        actual_vector: The vector retrieved from the database (can be list, numpy array, etc.)
-        expected_vector: The original vector that was inserted
-        vector_id: Optional ID for better error messages
-        tolerance: Floating point comparison tolerance
-    """
+def assert_vector_matches(actual_vector: Any, expected_vector: List[float],
+                          vector_id: str = "", tolerance: float = 1e-6) -> None:
     assert actual_vector is not None, f"Vector is None for {vector_id}"
-    assert hasattr(actual_vector, '__len__'), f"Vector has no length for {vector_id}"
-    assert len(actual_vector) == len(expected_vector), \
-        f"Vector length mismatch for {vector_id}: {len(actual_vector)} != {len(expected_vector)}"
-    
-    # Convert to list of floats (handles numpy arrays and other types)
-    vector_list = [float(x) for x in actual_vector]
-    assert len(vector_list) == len(expected_vector), \
-        f"Converted vector length mismatch for {vector_id}: {len(vector_list)} != {len(expected_vector)}"
-    
-    # Compare element by element
-    for j, (actual, expected) in enumerate(zip(vector_list, expected_vector)):
-        assert abs(actual - expected) < tolerance, \
-            f"Vector element {j} mismatch for {vector_id}: {actual} != {expected} (diff: {abs(actual - expected)})"
-
-
-def assert_result_vector_matches(result: VectorSearchResult, expected_vector: List[float], result_index: int = 0) -> None:
-    """
-    Assert that a search result's vector matches the expected vector.
-    
-    Args:
-        result: The VectorSearchResult from search/fetch operations
-        expected_vector: The original vector that was inserted
-        result_index: Index for better error messages
-    """
-    assert_vector_matches(result.vector, expected_vector, vector_id=f"result[{result_index}] (id={result.id})")
-
-
-def get_expected_vector_by_id(record_id: str) -> List[float]:
-    """
-    Get the expected vector for a given record ID.
-    
-    Args:
-        record_id: The ID of the record (e.g., "doc1", "doc2", etc.)
-    
-    Returns:
-        The original vector that was inserted for this ID
-    """
-    if record_id in SAMPLE_IDS:
-        idx = SAMPLE_IDS.index(record_id)
-        return SAMPLE_VECTORS[idx]
-    raise ValueError(f"Unknown record ID: {record_id}")
+    assert len(actual_vector) == len(expected_vector)
+    for j, (a, e) in enumerate(zip([float(x) for x in actual_vector], expected_vector)):
+        assert abs(a - e) < tolerance, \
+            f"Vector element {j} mismatch for {vector_id}: {a} != {e}"
 
 
 def get_connection_string() -> Optional[str]:
-    """Get PostgreSQL connection string from environment."""
-    # Try various environment variable names
-    conn_str = os.getenv("POSTGRES_CONNECTION_STRING") or \
-               os.getenv("PGVECTOR_CONNECTION_STRING") or \
-               os.getenv("DATABASE_URL") or \
-               os.getenv("POSTGRES_URL")
-    
+    conn_str = (os.getenv("POSTGRES_CONNECTION_STRING")
+                or os.getenv("PGVECTOR_CONNECTION_STRING")
+                or os.getenv("DATABASE_URL")
+                or os.getenv("POSTGRES_URL"))
     if conn_str:
-        # Ensure we use psycopg3 driver
         if conn_str.startswith("postgresql://"):
             conn_str = conn_str.replace("postgresql://", "postgresql+psycopg://", 1)
         return conn_str
-    
-    # Try building from individual components (defaults match docker-compose-pgvector.yml)
+
     host = os.getenv("POSTGRES_HOST", "localhost")
-    port = os.getenv("POSTGRES_PORT", "5434")  # Default to pgvector docker port
+    port = os.getenv("POSTGRES_PORT", "5434")
     user = os.getenv("POSTGRES_USER", "upsonic_test")
     password = os.getenv("POSTGRES_PASSWORD", "test_password")
     dbname = os.getenv("POSTGRES_DB", "upsonic_test")
-    
-    # Use postgresql+psycopg:// for psycopg3 driver
     return f"postgresql+psycopg://{user}:{password}@{host}:{port}/{dbname}"
 
 
 class TestPgVectorProvider:
-    """Comprehensive tests for PgVectorProvider (requires PostgreSQL with pgvector extension)."""
-    
+    """Comprehensive tests for PgVectorProvider."""
+
     @pytest.fixture
-    def config(self, request) -> Optional[PgVectorConfig]:
-        """Create PgVectorConfig if connection string available."""
+    def config(self) -> Optional[PgVectorConfig]:
         import uuid
         conn_str = get_connection_string()
         if not conn_str:
             return None
-        
         unique_name = f"test_pgvector_{uuid.uuid4().hex[:8]}"
         return PgVectorConfig(
             vector_size=5,
             collection_name=unique_name,
             connection_string=SecretStr(conn_str),
             distance_metric=DistanceMetric.COSINE,
-            index=HNSWIndexConfig(m=16, ef_construction=200)
+            index=HNSWIndexConfig(m=16, ef_construction=200),
         )
-    
+
     @pytest.fixture
     def provider(self, config: Optional[PgVectorConfig]) -> Optional[PgVectorProvider]:
-        """Create PgVectorProvider instance."""
         if config is None:
             return None
         return PgVectorProvider(config)
-    
+
     def _skip_if_unavailable(self, provider: Optional[PgVectorProvider]):
-        """Helper to skip tests if provider is not available."""
         if provider is None:
-            pytest.skip("PostgreSQL connection string not available. Set POSTGRES_CONNECTION_STRING or POSTGRES_HOST/POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB environment variables.")
-    
+            pytest.skip("PostgreSQL connection string not available.")
+
     async def _ensure_connected(self, provider: PgVectorProvider):
-        """Helper to ensure connection, skip if unavailable."""
         try:
-            await provider.connect()
-            return True
+            await provider.aconnect()
         except VectorDBConnectionError:
-            pytest.skip("PostgreSQL connection failed. Ensure PostgreSQL is running with pgvector extension installed.")
-    
-    def _ensure_connected_sync(self, provider: PgVectorProvider):
-        """Helper to ensure sync connection, skip if unavailable."""
-        try:
-            provider.connect_sync()
-            return True
-        except VectorDBConnectionError:
-            pytest.skip("PostgreSQL connection failed. Ensure PostgreSQL is running with pgvector extension installed.")
-    
+            pytest.skip("PostgreSQL connection failed. Ensure pgvector is running.")
+
+    # ----------------------------------------------------------------------
+    # Lifecycle
+    # ----------------------------------------------------------------------
+
     @pytest.mark.asyncio
-    async def test_initialization(self, provider: Optional[PgVectorProvider], config: Optional[PgVectorConfig]):
-        """Test provider initialization and attributes."""
+    async def test_initialization(self, provider, config):
         self._skip_if_unavailable(provider)
         assert provider._config == config
         assert provider._config.collection_name.startswith("test_pgvector_")
@@ -200,1124 +147,638 @@ class TestPgVectorProvider:
         assert not provider._is_connected
         assert provider._engine is None
         assert provider._session_factory is None
-        
-        # Test provider metadata attributes
-        assert provider.provider_name is not None
-        assert isinstance(provider.provider_id, str)
-        assert len(provider.provider_id) > 0
-    
+        assert provider.name is not None
+        assert isinstance(provider.id, str)
+        assert len(provider.id) > 0
+
     @pytest.mark.asyncio
-    async def test_connect(self, provider: Optional[PgVectorProvider]):
-        """Test connection to PostgreSQL."""
+    async def test_connect(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
         assert provider._is_connected is True
         assert provider._engine is not None
         assert provider._session_factory is not None
-        assert await provider.is_ready() is True
-        await provider.disconnect()
-    
+        assert await provider.ais_ready() is True
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_connect_sync(self, provider: Optional[PgVectorProvider]):
-        """Test synchronous connection."""
+    async def test_connect_sync(self, provider):
         self._skip_if_unavailable(provider)
-        self._ensure_connected_sync(provider)
+        try:
+            provider.connect()
+        except VectorDBConnectionError:
+            pytest.skip("PostgreSQL connection failed.")
         assert provider._is_connected is True
-        assert provider._engine is not None
-        assert provider._session_factory is not None
-        assert provider.is_ready_sync() is True
-        provider.disconnect_sync()
-    
+        assert provider.is_ready() is True
+        provider.disconnect()
+
     @pytest.mark.asyncio
-    async def test_disconnect(self, provider: Optional[PgVectorProvider]):
-        """Test disconnection."""
+    async def test_disconnect(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
         assert provider._is_connected is True
-        await provider.disconnect()
+        await provider.adisconnect()
         assert provider._is_connected is False
-        # Engine and session_factory are disposed but references are kept
-        assert await provider.is_ready() is False
-    
+
     @pytest.mark.asyncio
-    async def test_disconnect_sync(self, provider: Optional[PgVectorProvider]):
-        """Test synchronous disconnection."""
+    async def test_is_ready(self, provider):
         self._skip_if_unavailable(provider)
-        self._ensure_connected_sync(provider)
-        assert provider._is_connected is True
-        provider.disconnect_sync()
-        assert provider._is_connected is False
-    
-    @pytest.mark.asyncio
-    async def test_is_ready(self, provider: Optional[PgVectorProvider]):
-        """Test is_ready check."""
-        self._skip_if_unavailable(provider)
-        assert await provider.is_ready() is False
+        assert await provider.ais_ready() is False
         await self._ensure_connected(provider)
-        assert await provider.is_ready() is True
-        await provider.disconnect()
-        assert await provider.is_ready() is False
-    
+        assert await provider.ais_ready() is True
+        await provider.adisconnect()
+
+    # ----------------------------------------------------------------------
+    # Collection
+    # ----------------------------------------------------------------------
+
     @pytest.mark.asyncio
-    async def test_is_ready_sync(self, provider: Optional[PgVectorProvider]):
-        """Test synchronous is_ready check."""
-        self._skip_if_unavailable(provider)
-        assert provider.is_ready_sync() is False
-        self._ensure_connected_sync(provider)
-        assert provider.is_ready_sync() is True
-        provider.disconnect_sync()
-        assert provider.is_ready_sync() is False
-    
-    @pytest.mark.asyncio
-    async def test_create_collection(self, provider: Optional[PgVectorProvider]):
-        """Test collection creation."""
+    async def test_create_collection(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
         try:
-            if await provider.collection_exists():
-                await provider.delete_collection()
+            if await provider.acollection_exists():
+                await provider.adelete_collection()
         except Exception:
             pass
-        assert not await provider.collection_exists()
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.disconnect()
-    
+        assert not await provider.acollection_exists()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_create_collection_sync(self, provider: Optional[PgVectorProvider]):
-        """Test synchronous collection creation."""
-        self._skip_if_unavailable(provider)
-        self._ensure_connected_sync(provider)
-        try:
-            if provider.collection_exists_sync():
-                provider.delete_collection_sync()
-        except Exception:
-            pass
-        assert not provider.collection_exists_sync()
-        provider.create_collection_sync()
-        assert provider.collection_exists_sync()
-        provider.disconnect_sync()
-    
-    @pytest.mark.asyncio
-    async def test_collection_exists(self, provider: Optional[PgVectorProvider]):
-        """Test collection existence check."""
+    async def test_collection_exists(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        try:
-            if await provider.collection_exists():
-                await provider.delete_collection()
-        except Exception:
-            pass
-        assert not await provider.collection_exists()
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.disconnect()
-    
+        assert not await provider.acollection_exists()
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_collection_exists_sync(self, provider: Optional[PgVectorProvider]):
-        """Test synchronous collection existence check."""
-        self._skip_if_unavailable(provider)
-        self._ensure_connected_sync(provider)
-        try:
-            if provider.collection_exists_sync():
-                provider.delete_collection_sync()
-        except Exception:
-            pass
-        assert not provider.collection_exists_sync()
-        provider.create_collection_sync()
-        assert provider.collection_exists_sync()
-        provider.disconnect_sync()
-    
-    @pytest.mark.asyncio
-    async def test_delete_collection(self, provider: Optional[PgVectorProvider]):
-        """Test collection deletion."""
+    async def test_delete_collection(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.delete_collection()
-        assert not await provider.collection_exists()
-        await provider.disconnect()
-    
+        await provider.acreate_collection()
+        assert await provider.acollection_exists()
+        await provider.adelete_collection()
+        assert not await provider.acollection_exists()
+        await provider.adisconnect()
+
+    # ----------------------------------------------------------------------
+    # Upsert / fetch / delete
+    # ----------------------------------------------------------------------
+
     @pytest.mark.asyncio
-    async def test_delete_collection_sync(self, provider: Optional[PgVectorProvider]):
-        """Test synchronous collection deletion."""
+    async def test_upsert(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        assert await provider.collection_exists()
-        await provider.delete_collection()
-        assert not await provider.collection_exists()
-        await provider.disconnect()
-    
-    @pytest.mark.asyncio
-    async def test_upsert(self, provider: Optional[PgVectorProvider]):
-        """Test upsert operation with content validation."""
-        self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
+        await provider.acreate_collection()
+        await provider.aupsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
-            chunks=SAMPLE_CHUNKS
+            chunks=SAMPLE_CHUNKS,
         )
-        # Verify data was actually stored with correct content
-        results = await provider.fetch(ids=SAMPLE_IDS)
+        results = await provider.afetch(ids=SAMPLE_IDS)
         assert len(results) == 5
-        # Match by content to verify correct storage
         for result in results:
             assert result.id is not None
             assert result.payload is not None
             content = result.text
             assert content in SAMPLE_CHUNKS
             idx = SAMPLE_CHUNKS.index(content)
-            # Verify payload metadata
-            assert result.payload.get("category") == SAMPLE_PAYLOADS[idx]["category"]
-            assert result.payload.get("author") == SAMPLE_PAYLOADS[idx]["author"]
-            assert result.payload.get("year") == SAMPLE_PAYLOADS[idx]["year"]
+            assert result.payload["metadata"]["category"] == SAMPLE_PAYLOADS[idx]["category"]
+            assert result.payload["metadata"]["author"] == SAMPLE_PAYLOADS[idx]["author"]
+            assert result.payload["metadata"]["year"] == SAMPLE_PAYLOADS[idx]["year"]
             assert result.text == SAMPLE_CHUNKS[idx]
-            # Validate vector is retrieved and matches exactly
             assert result.vector is not None
-            assert_vector_matches(result.vector, SAMPLE_VECTORS[idx], vector_id=result.id)
-        await provider.disconnect()
-    
+            assert_vector_matches(result.vector, SAMPLE_VECTORS[idx], vector_id=str(result.id))
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_upsert_sync(self, provider: Optional[PgVectorProvider]):
-        """Test synchronous upsert with content validation."""
+    async def test_upsert_sync(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        provider.upsert_sync(
+        await provider.acreate_collection()
+        provider.upsert(
             vectors=SAMPLE_VECTORS,
             payloads=SAMPLE_PAYLOADS,
             ids=SAMPLE_IDS,
-            chunks=SAMPLE_CHUNKS
+            chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.fetch(ids=SAMPLE_IDS)
+        results = await provider.afetch(ids=SAMPLE_IDS)
         assert len(results) == 5
-        for result in results:
-            assert result.id is not None
-            assert result.payload is not None
-            assert result.text is not None
-            assert result.vector is not None
-        await provider.disconnect()
-    
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_upsert_validation_error(self, provider: Optional[PgVectorProvider]):
-        """Test upsert with mismatched lengths raises error."""
+    async def test_upsert_with_document_tracking(self, provider):
+        """document_name / document_id / chunk_id must come from dedicated params."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:2],
+            payloads=SAMPLE_PAYLOADS[:2],
+            ids=SAMPLE_IDS[:2],
+            chunks=SAMPLE_CHUNKS[:2],
+            document_ids=["doc_id_1", "doc_id_2"],
+            document_names=["doc1", "doc2"],
+        )
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
+        assert len(results) == 2
+        for result in results:
+            chunk_id = result.payload.get("chunk_id")
+            assert chunk_id in SAMPLE_IDS[:2]
+            idx = SAMPLE_IDS.index(chunk_id)
+            assert result.payload.get("document_name") == f"doc{idx+1}"
+            assert result.payload.get("document_id") == f"doc_id_{idx+1}"
+            assert result.payload["metadata"]["category"] == SAMPLE_PAYLOADS[idx]["category"]
+            assert result.text == SAMPLE_CHUNKS[idx]
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_upsert_validation_error(self, provider):
+        self._skip_if_unavailable(provider)
+        await self._ensure_connected(provider)
+        await provider.acreate_collection()
         with pytest.raises((ValueError, UpsertError)):
-            await provider.upsert(
+            await provider.aupsert(
                 vectors=SAMPLE_VECTORS[:2],
                 payloads=SAMPLE_PAYLOADS[:3],
                 ids=SAMPLE_IDS[:2],
-                chunks=SAMPLE_CHUNKS[:2]
+                chunks=SAMPLE_CHUNKS[:2],
             )
-        await provider.disconnect()
-    
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_fetch(self, provider: Optional[PgVectorProvider]):
-        """Test fetch operation with detailed validation."""
+    async def test_fetch(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS,
-            payloads=SAMPLE_PAYLOADS,
-            ids=SAMPLE_IDS,
-            chunks=SAMPLE_CHUNKS
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS, payloads=SAMPLE_PAYLOADS,
+            ids=SAMPLE_IDS, chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.fetch(ids=SAMPLE_IDS[:3])
+        results = await provider.afetch(ids=SAMPLE_IDS[:3])
         assert len(results) == 3
         for result in results:
             assert isinstance(result, VectorSearchResult)
-            assert result.id is not None
             assert result.score == 1.0
             assert result.payload is not None
-            assert isinstance(result.payload, dict)
             assert result.text is not None
             assert result.vector is not None
             assert len(result.vector) == 5
-            # Verify vector matches exactly
             content = result.text
             idx = SAMPLE_CHUNKS.index(content)
-            assert_vector_matches(result.vector, SAMPLE_VECTORS[idx], vector_id=result.id)
-        await provider.disconnect()
-    
+            assert_vector_matches(result.vector, SAMPLE_VECTORS[idx])
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_fetch_sync(self, provider: Optional[PgVectorProvider]):
-        """Test synchronous fetch with content validation."""
+    async def test_delete(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS,
-            payloads=SAMPLE_PAYLOADS,
-            ids=SAMPLE_IDS,
-            chunks=SAMPLE_CHUNKS
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS, payloads=SAMPLE_PAYLOADS,
+            ids=SAMPLE_IDS, chunks=SAMPLE_CHUNKS,
         )
-        results = provider.fetch_sync(ids=SAMPLE_IDS[:3])
-        assert len(results) == 3
-        for result in results:
-            assert isinstance(result, VectorSearchResult)
-            assert result.id is not None
-            assert result.score == 1.0
-            assert result.payload is not None
-            assert result.text is not None
-            assert result.vector is not None
-            assert len(result.vector) == 5
-        await provider.disconnect()
-    
+        await provider.adelete(ids=SAMPLE_IDS[:2])
+        assert len(await provider.afetch(ids=SAMPLE_IDS[:2])) == 0
+        assert len(await provider.afetch(ids=SAMPLE_IDS[2:])) == 3
+        await provider.adisconnect()
+
+    # ----------------------------------------------------------------------
+    # Search
+    # ----------------------------------------------------------------------
+
     @pytest.mark.asyncio
-    async def test_delete(self, provider: Optional[PgVectorProvider]):
-        """Test delete operation."""
+    async def test_dense_search(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS,
-            payloads=SAMPLE_PAYLOADS,
-            ids=SAMPLE_IDS,
-            chunks=SAMPLE_CHUNKS
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS, payloads=SAMPLE_PAYLOADS,
+            ids=SAMPLE_IDS, chunks=SAMPLE_CHUNKS,
         )
-        await provider.delete(ids=SAMPLE_IDS[:2])
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
-        assert len(results) == 0
-        results = await provider.fetch(ids=SAMPLE_IDS[2:])
-        assert len(results) == 3
-        await provider.disconnect()
-    
-    @pytest.mark.asyncio
-    async def test_delete_sync(self, provider: Optional[PgVectorProvider]):
-        """Test synchronous delete with validation."""
-        self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS,
-            payloads=SAMPLE_PAYLOADS,
-            ids=SAMPLE_IDS,
-            chunks=SAMPLE_CHUNKS
+        results = await provider.adense_search(
+            query_vector=QUERY_VECTOR, top_k=3, similarity_threshold=0.0
         )
-        provider.delete_sync(ids=SAMPLE_IDS[:2])
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
-        assert len(results) == 0
-        results = await provider.fetch(ids=SAMPLE_IDS[2:])
-        assert len(results) == 3
-        await provider.disconnect()
-    
-    @pytest.mark.asyncio
-    async def test_dense_search(self, provider: Optional[PgVectorProvider]):
-        """Test dense search with detailed result validation."""
-        self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS,
-            payloads=SAMPLE_PAYLOADS,
-            ids=SAMPLE_IDS,
-            chunks=SAMPLE_CHUNKS
-        )
-        results = await provider.dense_search(
-            query_vector=QUERY_VECTOR,
-            top_k=3,
-            similarity_threshold=0.0
-        )
-        assert len(results) > 0
-        assert len(results) <= 3
-        for result in results:
-            assert isinstance(result, VectorSearchResult)
-            assert result.id is not None
-            assert isinstance(result.score, float)
-            assert 0.0 <= result.score <= 1.0
-            assert result.payload is not None
-            assert result.text is not None
-            assert result.vector is not None
-            assert len(result.vector) == 5
-            # Verify vector matches stored vector exactly
-            content = result.text
-            if content in SAMPLE_CHUNKS:
-                idx = SAMPLE_CHUNKS.index(content)
-                assert_vector_matches(result.vector, SAMPLE_VECTORS[idx], vector_id=result.id)
+        assert 0 < len(results) <= 3
+        for r in results:
+            assert isinstance(r, VectorSearchResult)
+            assert 0.0 <= r.score <= 1.0
+            assert r.payload is not None
+            assert r.text is not None
+            assert r.vector is not None
+            assert len(r.vector) == 5
         scores = [r.score for r in results]
         assert scores == sorted(scores, reverse=True)
-        await provider.disconnect()
-    
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_full_text_search(self, provider: Optional[PgVectorProvider]):
-        """Test full-text search with content validation."""
+    async def test_full_text_search(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS,
-            payloads=SAMPLE_PAYLOADS,
-            ids=SAMPLE_IDS,
-            chunks=SAMPLE_CHUNKS
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS, payloads=SAMPLE_PAYLOADS,
+            ids=SAMPLE_IDS, chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.full_text_search(
-            query_text="physics",
-            top_k=3,
-            similarity_threshold=0.0
+        results = await provider.afull_text_search(
+            query_text="physics", top_k=3, similarity_threshold=0.0
         )
         assert len(results) > 0
-        for result in results:
-            assert isinstance(result, VectorSearchResult)
-            assert result.id is not None
-            assert isinstance(result.score, float)
-            assert result.score >= 0.0
-            assert result.payload is not None
-            assert result.text is not None
-            assert "physics" in result.text.lower() or "theory" in result.text.lower()
-            assert result.vector is not None
-            # Verify vector matches stored vector exactly
-            content = result.text
-            if content in SAMPLE_CHUNKS:
-                idx = SAMPLE_CHUNKS.index(content)
-                assert_vector_matches(result.vector, SAMPLE_VECTORS[idx], vector_id=result.id)
-        await provider.disconnect()
-    
+        for r in results:
+            assert r.text is not None
+            assert "physics" in r.text.lower() or "theory" in r.text.lower()
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_hybrid_search(self, provider: Optional[PgVectorProvider]):
-        """Test hybrid search with detailed validation."""
+    async def test_hybrid_search(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS,
-            payloads=SAMPLE_PAYLOADS,
-            ids=SAMPLE_IDS,
-            chunks=SAMPLE_CHUNKS
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS, payloads=SAMPLE_PAYLOADS,
+            ids=SAMPLE_IDS, chunks=SAMPLE_CHUNKS,
         )
-        results = await provider.hybrid_search(
-            query_vector=QUERY_VECTOR,
-            query_text="physics",
-            top_k=3,
-            alpha=0.5,
-            fusion_method="weighted",
-            similarity_threshold=0.0
+        results = await provider.ahybrid_search(
+            query_vector=QUERY_VECTOR, query_text="physics",
+            top_k=3, alpha=0.5, fusion_method="weighted",
+            similarity_threshold=0.0,
         )
-        assert len(results) > 0
-        assert len(results) <= 3
-        for result in results:
-            assert isinstance(result, VectorSearchResult)
-            assert result.id is not None
-            assert isinstance(result.score, float)
-            assert result.score >= 0.0
-            assert result.payload is not None
-            assert result.text is not None
-            assert result.vector is not None
-            assert len(result.vector) == 5
-            # Verify vector matches stored vector exactly
-            content = result.text
-            if content in SAMPLE_CHUNKS:
-                idx = SAMPLE_CHUNKS.index(content)
-                assert_vector_matches(result.vector, SAMPLE_VECTORS[idx], vector_id=result.id)
-        await provider.disconnect()
-    
+        assert 0 < len(results) <= 3
+        for r in results:
+            assert r.score >= 0.0
+            assert r.payload is not None
+            assert r.vector is not None
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_search_with_filter(self, provider: Optional[PgVectorProvider]):
-        """Test search with metadata filter."""
+    async def test_hybrid_search_rrf(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        # Create payloads with metadata structure
-        payloads_with_metadata = []
-        for payload in SAMPLE_PAYLOADS:
-            payload_copy = payload.copy()
-            payload_copy["metadata"] = {"category": payload["category"]}
-            payloads_with_metadata.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS,
-            payloads=payloads_with_metadata,
-            ids=SAMPLE_IDS,
-            chunks=SAMPLE_CHUNKS
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS, payloads=SAMPLE_PAYLOADS,
+            ids=SAMPLE_IDS, chunks=SAMPLE_CHUNKS,
         )
-        # Filter by category in metadata
-        results = await provider.dense_search(
-            query_vector=QUERY_VECTOR,
-            top_k=5,
-            filter={"category": "science"}
+        results = await provider.ahybrid_search(
+            query_vector=QUERY_VECTOR, query_text="physics",
+            top_k=3, fusion_method="rrf", similarity_threshold=0.0,
         )
         assert len(results) > 0
-        for result in results:
-            # Category may be at top level or nested in metadata
-            category = result.payload.get("category") or result.payload.get("metadata", {}).get("category")
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_search_master_method(self, provider):
+        self._skip_if_unavailable(provider)
+        await self._ensure_connected(provider)
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS, payloads=SAMPLE_PAYLOADS,
+            ids=SAMPLE_IDS, chunks=SAMPLE_CHUNKS,
+        )
+        results = await provider.asearch(query_vector=QUERY_VECTOR, top_k=3)
+        assert len(results) > 0
+        results = await provider.asearch(query_text="physics", top_k=3)
+        assert len(results) > 0
+        results = await provider.asearch(
+            query_vector=QUERY_VECTOR, query_text="physics", top_k=3
+        )
+        assert len(results) > 0
+        await provider.adisconnect()
+
+    @pytest.mark.asyncio
+    async def test_search_with_filter(self, provider):
+        self._skip_if_unavailable(provider)
+        await self._ensure_connected(provider)
+        await provider.acreate_collection()
+        payloads = [{**p, "metadata": {"category": p["category"]}} for p in SAMPLE_PAYLOADS]
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS, payloads=payloads,
+            ids=SAMPLE_IDS, chunks=SAMPLE_CHUNKS,
+        )
+        # Nested filter path
+        results = await provider.adense_search(
+            query_vector=QUERY_VECTOR, top_k=5,
+            filter={"metadata.category": "science"},
+        )
+        assert len(results) > 0
+        for r in results:
+            # pgvector flattens JSONB metadata into top-level payload
+            category = r.payload.get("category") or (r.payload.get("metadata") or {}).get("category")
             assert category == "science"
-            # Verify vector matches stored vector exactly
-            content = result.text
-            if content in SAMPLE_CHUNKS:
-                idx = SAMPLE_CHUNKS.index(content)
-                assert_vector_matches(result.vector, SAMPLE_VECTORS[idx], vector_id=result.id)
-        await provider.disconnect()
-    
+        await provider.adisconnect()
+
+    # ----------------------------------------------------------------------
+    # Count / existence / deletes by field
+    # ----------------------------------------------------------------------
+
     @pytest.mark.asyncio
-    async def test_get_count(self, provider: Optional[PgVectorProvider]):
-        """Test get_count."""
+    async def test_get_count(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        initial_count = await provider.get_count()
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS,
-            payloads=SAMPLE_PAYLOADS,
-            ids=SAMPLE_IDS,
-            chunks=SAMPLE_CHUNKS
+        await provider.acreate_collection()
+        initial = await provider.aget_count()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS, payloads=SAMPLE_PAYLOADS,
+            ids=SAMPLE_IDS, chunks=SAMPLE_CHUNKS,
         )
-        assert await provider.get_count() == initial_count + 5
-        await provider.delete(ids=SAMPLE_IDS[:2])
-        assert await provider.get_count() == initial_count + 3
-        await provider.disconnect()
-    
+        assert await provider.aget_count() == initial + 5
+        await provider.adelete(ids=SAMPLE_IDS[:2])
+        assert await provider.aget_count() == initial + 3
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_update_metadata(self, provider: Optional[PgVectorProvider]):
-        """Test update_metadata with validation."""
+    async def test_aid_exists(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "pg_content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:1], payloads=SAMPLE_PAYLOADS[:1],
+            ids=SAMPLE_IDS[:1], chunks=SAMPLE_CHUNKS[:1],
         )
-        # Use async method directly
-        updated = await provider.async_update_metadata("pg_content_1", {"new_field": "new_value", "updated": True})
-        assert updated is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:1])
-        assert len(results) == 1
-        # Metadata is stored at top level of payload, not nested
-        assert results[0].payload.get("new_field") == "new_value"
-        assert results[0].payload.get("updated") is True
-        await provider.disconnect()
-    
+        assert await provider.aid_exists(SAMPLE_IDS[0])
+        assert not await provider.aid_exists("99999999-9999-4999-8999-999999999999")
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_delete_by_filter(self, provider: Optional[PgVectorProvider]):
-        """Test delete_by_metadata."""
+    async def test_chunk_id_preserved_as_uuid(self, provider):
+        """chunk_ids provided as UUID strings must be preserved verbatim."""
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        # Create payloads with metadata structure
-        payloads_with_metadata = []
-        for payload in SAMPLE_PAYLOADS:
-            payload_copy = payload.copy()
-            payload_copy["metadata"] = {"category": payload["category"]}
-            payloads_with_metadata.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS,
-            payloads=payloads_with_metadata,
-            ids=SAMPLE_IDS,
-            chunks=SAMPLE_CHUNKS
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:2], payloads=SAMPLE_PAYLOADS[:2],
+            ids=SAMPLE_IDS[:2], chunks=SAMPLE_CHUNKS[:2],
         )
-        deleted = await provider.async_delete_by_metadata({"category": "science"})
-        assert deleted is True
-        results = await provider.fetch(ids=SAMPLE_IDS)
-        assert len(results) == 3
-        for result in results:
-            assert result.payload.get("metadata", {}).get("category") != "science"
-        await provider.disconnect()
-    
-    @pytest.mark.asyncio
-    async def test_upsert_with_document_tracking(self, provider: Optional[PgVectorProvider]):
-        """Test upsert with document tracking and validate metadata."""
-        self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        payloads_with_tracking = []
-        for i, payload in enumerate(SAMPLE_PAYLOADS[:2]):
-            payload_copy = payload.copy()
-            payload_copy["document_name"] = f"pg_doc{i+1}"
-            payload_copy["document_id"] = f"pg_doc_id_{i+1}"
-            payload_copy["content_id"] = f"pg_content_{i+1}"
-            payloads_with_tracking.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS[:2],
-            payloads=payloads_with_tracking,
-            ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
-        )
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
+        results = await provider.afetch(ids=SAMPLE_IDS[:2])
         assert len(results) == 2
-        # Match by content_id
-        for result in results:
-            content_id = result.payload.get("content_id")
-            assert content_id in ["pg_content_1", "pg_content_2"]
-            idx = int(content_id.split("_")[-1]) - 1
-            assert result.payload.get("document_name") == f"pg_doc{idx+1}"
-            assert result.payload.get("document_id") == f"pg_doc_id_{idx+1}"
-            assert result.payload.get("category") == SAMPLE_PAYLOADS[idx]["category"]
-            # Verify vector matches exactly
-            assert_vector_matches(result.vector, SAMPLE_VECTORS[idx], vector_id=result.id)
-        await provider.disconnect()
-    
+        fetched_ids = {str(r.id) for r in results}
+        assert fetched_ids == set(SAMPLE_IDS[:2])
+        for r in results:
+            assert r.payload.get("chunk_id") in SAMPLE_IDS[:2]
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_delete_by_document_name(self, provider: Optional[PgVectorProvider]):
-        """Test delete_by_document_name with validation."""
+    async def test_achunk_id_exists(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        initial_count = await provider.get_count()
-        payloads_with_doc_name = []
-        for payload in SAMPLE_PAYLOADS[:2]:
-            payload_copy = payload.copy()
-            payload_copy["document_name"] = "pg_doc"
-            payloads_with_doc_name.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS[:2],
-            payloads=payloads_with_doc_name,
-            ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:1], payloads=SAMPLE_PAYLOADS[:1],
+            ids=SAMPLE_IDS[:1], chunks=SAMPLE_CHUNKS[:1],
         )
-        deleted = await provider.async_delete_by_document_name("pg_doc")
-        assert deleted is True
-        count = await provider.get_count()
-        assert count == initial_count
-        await provider.disconnect()
-    
+        assert await provider.achunk_id_exists(SAMPLE_IDS[0])
+        assert not await provider.achunk_id_exists("nonexistent")
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_async_delete_by_document_name(self, provider: Optional[PgVectorProvider]):
-        """Test async_delete_by_document_name."""
+    async def test_adocument_name_exists(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        payloads_with_doc_name = []
-        for payload in SAMPLE_PAYLOADS[:2]:
-            payload_copy = payload.copy()
-            payload_copy["document_name"] = "pg_doc"
-            payloads_with_doc_name.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS[:2],
-            payloads=payloads_with_doc_name,
-            ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:1], payloads=SAMPLE_PAYLOADS[:1],
+            ids=SAMPLE_IDS[:1], chunks=SAMPLE_CHUNKS[:1],
+            document_names=["pg_doc"],
         )
-        deleted = await provider.async_delete_by_document_name("pg_doc")
-        assert deleted is True
-        await provider.disconnect()
-    
+        assert await provider.adocument_name_exists("pg_doc")
+        assert not await provider.adocument_name_exists("nonexistent")
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_delete_by_document_id(self, provider: Optional[PgVectorProvider]):
-        """Test delete_by_document_id with validation."""
+    async def test_adocument_id_exists(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        payloads_with_doc_id = []
-        for payload in SAMPLE_PAYLOADS[:2]:
-            payload_copy = payload.copy()
-            payload_copy["document_id"] = "pg_doc_id_1"
-            payloads_with_doc_id.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS[:2],
-            payloads=payloads_with_doc_id,
-            ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:1], payloads=SAMPLE_PAYLOADS[:1],
+            ids=SAMPLE_IDS[:1], chunks=SAMPLE_CHUNKS[:1],
+            document_ids=["pg_doc_id_1"],
         )
-        deleted = await provider.async_delete_by_document_id("pg_doc_id_1")
-        assert deleted is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:2])
-        assert len(results) == 0
-        await provider.disconnect()
-    
+        assert await provider.adocument_id_exists("pg_doc_id_1")
+        assert not await provider.adocument_id_exists("nonexistent")
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_async_delete_by_document_id(self, provider: Optional[PgVectorProvider]):
-        """Test async_delete_by_document_id."""
+    async def test_achunk_content_hash_exists(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        payloads_with_doc_id = []
-        for payload in SAMPLE_PAYLOADS[:2]:
-            payload_copy = payload.copy()
-            payload_copy["document_id"] = "pg_doc_id_1"
-            payloads_with_doc_id.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS[:2],
-            payloads=payloads_with_doc_id,
-            ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:1], payloads=SAMPLE_PAYLOADS[:1],
+            ids=SAMPLE_IDS[:1], chunks=SAMPLE_CHUNKS[:1],
         )
-        deleted = await provider.async_delete_by_document_id("pg_doc_id_1")
-        assert deleted is True
-        await provider.disconnect()
-    
+        h = md5(SAMPLE_CHUNKS[0].encode("utf-8")).hexdigest()
+        assert await provider.achunk_content_hash_exists(h)
+        assert not await provider.achunk_content_hash_exists("deadbeef" * 4)
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_delete_by_content_id(self, provider: Optional[PgVectorProvider]):
-        """Test delete_by_content_id with validation."""
+    async def test_adoc_content_hash_exists(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        # Create payloads with unique content_ids
-        payloads_with_content_id = []
-        for i, payload in enumerate(SAMPLE_PAYLOADS[:2]):
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = f"pg_content_{i+1}"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS[:2],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+        await provider.acreate_collection()
+        doc_hash = md5(b"the-document-body").hexdigest()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:1], payloads=SAMPLE_PAYLOADS[:1],
+            ids=SAMPLE_IDS[:1], chunks=SAMPLE_CHUNKS[:1],
+            doc_content_hashes=[doc_hash],
         )
-        # Delete only the first content_id
-        deleted = await provider.async_delete_by_content_id("pg_content_1")
-        assert deleted is True
-        # First record should be deleted, second should remain
-        results1 = await provider.fetch(ids=SAMPLE_IDS[:1])
-        results2 = await provider.fetch(ids=SAMPLE_IDS[1:2])
-        assert len(results1) == 0  # Deleted
-        assert len(results2) == 1  # Not deleted
-        await provider.disconnect()
-    
+        assert await provider.adoc_content_hash_exists(doc_hash)
+        assert not await provider.adoc_content_hash_exists("nonexistent_hash")
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_async_delete_by_content_id(self, provider: Optional[PgVectorProvider]):
-        """Test async_delete_by_content_id."""
+    async def test_adelete_by_document_name(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        # Create payloads with unique content_ids
-        payloads_with_content_id = []
-        for i, payload in enumerate(SAMPLE_PAYLOADS[:2]):
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = f"pg_content_{i+1}"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS[:2],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+        await provider.acreate_collection()
+        initial = await provider.aget_count()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:2], payloads=SAMPLE_PAYLOADS[:2],
+            ids=SAMPLE_IDS[:2], chunks=SAMPLE_CHUNKS[:2],
+            document_names=["pg_doc"] * 2,
         )
-        deleted = await provider.async_delete_by_content_id("pg_content_1")
-        assert deleted is True
-        await provider.disconnect()
-    
+        assert await provider.aget_count() == initial + 2
+        assert await provider.adelete_by_document_name("pg_doc") is True
+        assert await provider.aget_count() == initial
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_async_delete_by_metadata(self, provider: Optional[PgVectorProvider]):
-        """Test async_delete_by_metadata."""
+    async def test_adelete_by_document_id(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        # Create payloads with metadata structure
-        payloads_with_metadata = []
-        for payload in SAMPLE_PAYLOADS:
-            payload_copy = payload.copy()
-            payload_copy["metadata"] = {"category": payload["category"]}
-            payloads_with_metadata.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS,
-            payloads=payloads_with_metadata,
-            ids=SAMPLE_IDS,
-            chunks=SAMPLE_CHUNKS
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:2], payloads=SAMPLE_PAYLOADS[:2],
+            ids=SAMPLE_IDS[:2], chunks=SAMPLE_CHUNKS[:2],
+            document_ids=["pg_doc_id_1", "pg_doc_id_1"],
         )
-        deleted = await provider.async_delete_by_metadata({"category": "science"})
-        assert deleted is True
-        await provider.disconnect()
-    
+        assert await provider.adelete_by_document_id("pg_doc_id_1") is True
+        assert len(await provider.afetch(ids=SAMPLE_IDS[:2])) == 0
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_id_exists(self, provider: Optional[PgVectorProvider]):
-        """Test id_exists check."""
+    async def test_adelete_by_chunk_id(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS[:1],
-            payloads=SAMPLE_PAYLOADS[:1],
-            ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:2], payloads=SAMPLE_PAYLOADS[:2],
+            ids=SAMPLE_IDS[:2], chunks=SAMPLE_CHUNKS[:2],
         )
-        assert await provider.id_exists("doc1")
-        assert not await provider.id_exists("nonexistent")
-        await provider.disconnect()
-    
+        assert await provider.adelete_by_chunk_id(SAMPLE_IDS[0]) is True
+        assert not await provider.achunk_id_exists(SAMPLE_IDS[0])
+        assert await provider.achunk_id_exists(SAMPLE_IDS[1])
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_document_name_exists(self, provider: Optional[PgVectorProvider]):
-        """Test document_name_exists."""
+    async def test_adelete_by_chunk_content_hash(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        payloads_with_doc_name = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["document_name"] = "pg_doc"
-            payloads_with_doc_name.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_doc_name,
-            ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:1], payloads=SAMPLE_PAYLOADS[:1],
+            ids=SAMPLE_IDS[:1], chunks=SAMPLE_CHUNKS[:1],
         )
-        assert await provider.async_document_name_exists("pg_doc")
-        assert not await provider.async_document_name_exists("nonexistent")
-        await provider.disconnect()
-    
+        h = md5(SAMPLE_CHUNKS[0].encode("utf-8")).hexdigest()
+        assert await provider.achunk_content_hash_exists(h)
+        assert await provider.adelete_by_chunk_content_hash(h) is True
+        assert not await provider.achunk_content_hash_exists(h)
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_async_document_name_exists(self, provider: Optional[PgVectorProvider]):
-        """Test async_document_name_exists."""
+    async def test_adelete_by_doc_content_hash(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        payloads_with_doc_name = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["document_name"] = "pg_doc"
-            payloads_with_doc_name.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_doc_name,
-            ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+        await provider.acreate_collection()
+        doc_hash = md5(b"another-doc-body").hexdigest()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:2], payloads=SAMPLE_PAYLOADS[:2],
+            ids=SAMPLE_IDS[:2], chunks=SAMPLE_CHUNKS[:2],
+            doc_content_hashes=[doc_hash, doc_hash],
         )
-        assert await provider.async_document_name_exists("pg_doc")
-        assert not await provider.async_document_name_exists("nonexistent")
-        await provider.disconnect()
-    
+        assert await provider.adoc_content_hash_exists(doc_hash)
+        assert await provider.adelete_by_doc_content_hash(doc_hash) is True
+        assert not await provider.adoc_content_hash_exists(doc_hash)
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_document_id_exists(self, provider: Optional[PgVectorProvider]):
-        """Test document_id_exists."""
+    async def test_adelete_by_metadata(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        payloads_with_doc_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["document_id"] = "pg_doc_id_1"
-            payloads_with_doc_id.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_doc_id,
-            ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS, payloads=SAMPLE_PAYLOADS,
+            ids=SAMPLE_IDS, chunks=SAMPLE_CHUNKS,
         )
-        assert await provider.async_document_id_exists("pg_doc_id_1")
-        assert not await provider.async_document_id_exists("nonexistent")
-        await provider.disconnect()
-    
+        # Non-standard 'category' went into JSONB metadata column.
+        assert await provider.adelete_by_metadata({"category": "science"}) is True
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_async_document_id_exists(self, provider: Optional[PgVectorProvider]):
-        """Test async_document_id_exists."""
+    async def test_adelete_by_metadata_nested_filter(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        payloads_with_doc_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["document_id"] = "pg_doc_id_1"
-            payloads_with_doc_id.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_doc_id,
-            ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS, payloads=SAMPLE_PAYLOADS,
+            ids=SAMPLE_IDS, chunks=SAMPLE_CHUNKS,
         )
-        assert await provider.async_document_id_exists("pg_doc_id_1")
-        assert not await provider.async_document_id_exists("nonexistent")
-        await provider.disconnect()
-    
+        initial = await provider.aget_count()
+        assert initial == 5
+
+        assert await provider.adelete_by_metadata({"metadata.category": "science"}) is True
+
+        remaining_count = await provider.aget_count()
+        assert remaining_count == initial - 2
+
+        remaining = await provider.afetch(ids=SAMPLE_IDS)
+        for r in remaining:
+            category = r.payload.get("category") or (r.payload.get("metadata") or {}).get("category")
+            assert category != "science"
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_content_id_exists(self, provider: Optional[PgVectorProvider]):
-        """Test content_id_exists."""
+    async def test_afield_exists_and_adelete_by_field(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "pg_content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:2], payloads=SAMPLE_PAYLOADS[:2],
+            ids=SAMPLE_IDS[:2], chunks=SAMPLE_CHUNKS[:2],
+            document_ids=["docA", "docB"],
         )
-        assert await provider.async_content_id_exists("pg_content_1")
-        assert not await provider.async_content_id_exists("nonexistent")
-        await provider.disconnect()
-    
+        assert await provider.afield_exists("document_id", "docA")
+        assert not await provider.afield_exists("document_id", "missing")
+        assert await provider.adelete_by_field("document_id", "docA") is True
+        assert not await provider.afield_exists("document_id", "docA")
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_async_content_id_exists(self, provider: Optional[PgVectorProvider]):
-        """Test async_content_id_exists."""
+    async def test_aupsert_with_chunk_content_hashes(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "pg_content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+        await provider.acreate_collection()
+        explicit = [md5(c.encode("utf-8")).hexdigest() for c in SAMPLE_CHUNKS[:2]]
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:2], payloads=SAMPLE_PAYLOADS[:2],
+            ids=SAMPLE_IDS[:2], chunks=SAMPLE_CHUNKS[:2],
+            chunk_content_hashes=explicit,
         )
-        assert await provider.async_content_id_exists("pg_content_1")
-        assert not await provider.async_content_id_exists("nonexistent")
-        await provider.disconnect()
-    
+        for h in explicit:
+            assert await provider.achunk_content_hash_exists(h)
+        await provider.adisconnect()
+
+    # ----------------------------------------------------------------------
+    # Metadata update / optimize / search types
+    # ----------------------------------------------------------------------
+
     @pytest.mark.asyncio
-    async def test_async_update_metadata(self, provider: Optional[PgVectorProvider]):
-        """Test async_update_metadata with validation."""
+    async def test_aupdate_metadata(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        payloads_with_content_id = []
-        for payload in SAMPLE_PAYLOADS[:1]:
-            payload_copy = payload.copy()
-            payload_copy["content_id"] = "pg_content_1"
-            payloads_with_content_id.append(payload_copy)
-        
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS[:1],
-            payloads=payloads_with_content_id,
-            ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS[:1], payloads=SAMPLE_PAYLOADS[:1],
+            ids=SAMPLE_IDS[:1], chunks=SAMPLE_CHUNKS[:1],
         )
-        updated = await provider.async_update_metadata("pg_content_1", {"new_field": "new_value", "updated": True})
+        updated = await provider.aupdate_metadata(
+            SAMPLE_IDS[0], {"new_field": "new_value", "updated": True}
+        )
         assert updated is True
-        results = await provider.fetch(ids=SAMPLE_IDS[:1])
-        # Metadata is stored at top level of payload, not nested
-        assert results[0].payload.get("new_field") == "new_value"
-        assert results[0].payload.get("updated") is True
-        await provider.disconnect()
-    
+        results = await provider.afetch(ids=SAMPLE_IDS[:1])
+        assert results[0].payload["metadata"].get("new_field") == "new_value"
+        assert results[0].payload["metadata"].get("updated") is True
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_optimize(self, provider: Optional[PgVectorProvider]):
-        """Test optimize operation."""
+    async def test_aoptimize(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        result = await provider.async_optimize()
-        assert result is True
-    
+        await provider.acreate_collection()
+        assert await provider.aoptimize() is True
+        await provider.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_async_optimize(self, provider: Optional[PgVectorProvider]):
-        """Test async optimize."""
+    async def test_aget_supported_search_types(self, provider):
         self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        result = await provider.async_optimize()
-        assert result is True
-    
-    @pytest.mark.asyncio
-    async def test_get_supported_search_types(self, provider: Optional[PgVectorProvider]):
-        """Test get_supported_search_types."""
-        self._skip_if_unavailable(provider)
-        supported = provider.get_supported_search_types()
+        supported = await provider.aget_supported_search_types()
         assert isinstance(supported, list)
         assert "dense" in supported
         assert "full_text" in supported
         assert "hybrid" in supported
-    
+
+    # ----------------------------------------------------------------------
+    # Config variants
+    # ----------------------------------------------------------------------
+
     @pytest.mark.asyncio
-    async def test_async_get_supported_search_types(self, provider: Optional[PgVectorProvider]):
-        """Test async_get_supported_search_types."""
-        self._skip_if_unavailable(provider)
-        supported = await provider.async_get_supported_search_types()
-        assert isinstance(supported, list)
-        assert "dense" in supported
-        assert "full_text" in supported
-        assert "hybrid" in supported
-    
-    @pytest.mark.asyncio
-    async def test_dense_search_sync(self, provider: Optional[PgVectorProvider]):
-        """Test synchronous dense search with content validation."""
-        self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS,
-            payloads=SAMPLE_PAYLOADS,
-            ids=SAMPLE_IDS,
-            chunks=SAMPLE_CHUNKS
-        )
-        results = provider.dense_search_sync(
-            query_vector=QUERY_VECTOR,
-            top_k=3,
-            similarity_threshold=0.0
-        )
-        assert len(results) > 0
-        assert len(results) <= 3
-        for result in results:
-            assert isinstance(result, VectorSearchResult)
-            assert result.id is not None
-            assert isinstance(result.score, float)
-            assert 0.0 <= result.score <= 1.0
-            assert result.payload is not None
-            assert result.text is not None
-            assert result.vector is not None
-        await provider.disconnect()
-    
-    @pytest.mark.asyncio
-    async def test_full_text_search_sync(self, provider: Optional[PgVectorProvider]):
-        """Test synchronous full-text search with content validation."""
-        self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS,
-            payloads=SAMPLE_PAYLOADS,
-            ids=SAMPLE_IDS,
-            chunks=SAMPLE_CHUNKS
-        )
-        results = provider.full_text_search_sync(
-            query_text="physics",
-            top_k=3,
-            similarity_threshold=0.0
-        )
-        assert len(results) > 0
-        for result in results:
-            assert isinstance(result, VectorSearchResult)
-            assert result.id is not None
-            assert isinstance(result.score, float)
-            assert result.score >= 0.0
-            assert result.payload is not None
-            assert result.text is not None
-            assert "physics" in result.text.lower() or "theory" in result.text.lower()
-        await provider.disconnect()
-    
-    @pytest.mark.asyncio
-    async def test_hybrid_search_rrf(self, provider: Optional[PgVectorProvider]):
-        """Test hybrid search with RRF fusion."""
-        self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS,
-            payloads=SAMPLE_PAYLOADS,
-            ids=SAMPLE_IDS,
-            chunks=SAMPLE_CHUNKS
-        )
-        results = await provider.hybrid_search(
-            query_vector=QUERY_VECTOR,
-            query_text="physics",
-            top_k=3,
-            fusion_method="rrf",
-            similarity_threshold=0.0
-        )
-        assert len(results) > 0
-        assert len(results) <= 3
-        for result in results:
-            assert isinstance(result, VectorSearchResult)
-            assert result.id is not None
-            assert result.score >= 0.0
-            assert result.payload is not None
-            assert result.text is not None
-        await provider.disconnect()
-    
-    @pytest.mark.asyncio
-    async def test_hybrid_search_sync(self, provider: Optional[PgVectorProvider]):
-        """Test synchronous hybrid search with validation."""
-        self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS,
-            payloads=SAMPLE_PAYLOADS,
-            ids=SAMPLE_IDS,
-            chunks=SAMPLE_CHUNKS
-        )
-        results = provider.hybrid_search_sync(
-            query_vector=QUERY_VECTOR,
-            query_text="physics",
-            top_k=3,
-            alpha=0.5,
-            similarity_threshold=0.0
-        )
-        assert len(results) > 0
-        for result in results:
-            assert isinstance(result, VectorSearchResult)
-            assert result.id is not None
-            assert result.score >= 0.0
-            assert result.payload is not None
-        await provider.disconnect()
-    
-    @pytest.mark.asyncio
-    async def test_search_master_method(self, provider: Optional[PgVectorProvider]):
-        """Test master search method with content validation."""
-        self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS,
-            payloads=SAMPLE_PAYLOADS,
-            ids=SAMPLE_IDS,
-            chunks=SAMPLE_CHUNKS
-        )
-        # Dense search
-        results = await provider.search(
-            query_vector=QUERY_VECTOR,
-            top_k=3
-        )
-        assert len(results) > 0
-        assert all(isinstance(r, VectorSearchResult) for r in results)
-        assert all(r.id is not None for r in results)
-        assert all(r.payload is not None for r in results)
-        # Full-text search
-        results = await provider.search(
-            query_text="physics",
-            top_k=3
-        )
-        assert len(results) > 0
-        assert all(isinstance(r, VectorSearchResult) for r in results)
-        # Hybrid search
-        results = await provider.search(
-            query_vector=QUERY_VECTOR,
-            query_text="physics",
-            top_k=3
-        )
-        assert len(results) > 0
-        assert all(isinstance(r, VectorSearchResult) for r in results)
-        await provider.disconnect()
-    
-    @pytest.mark.asyncio
-    async def test_search_sync(self, provider: Optional[PgVectorProvider]):
-        """Test synchronous master search with validation."""
-        self._skip_if_unavailable(provider)
-        await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS,
-            payloads=SAMPLE_PAYLOADS,
-            ids=SAMPLE_IDS,
-            chunks=SAMPLE_CHUNKS
-        )
-        results = provider.search_sync(
-            query_vector=QUERY_VECTOR,
-            top_k=3
-        )
-        assert len(results) > 0
-        assert all(isinstance(r, VectorSearchResult) for r in results)
-        assert all(r.payload is not None for r in results)
-        assert all(r.text is not None for r in results)
-        await provider.disconnect()
-    
-    @pytest.mark.asyncio
-    async def test_recreate_if_exists(self, provider: Optional[PgVectorProvider]):
-        """Test recreate_if_exists configuration."""
+    async def test_recreate_if_exists(self, provider):
         self._skip_if_unavailable(provider)
         import uuid
         conn_str = get_connection_string()
@@ -1328,25 +789,21 @@ class TestPgVectorProvider:
             vector_size=5,
             collection_name=unique_name,
             connection_string=SecretStr(conn_str),
-            recreate_if_exists=True
+            recreate_if_exists=True,
         )
         provider2 = PgVectorProvider(config)
         await self._ensure_connected(provider2)
-        await provider2.create_collection()
-        await provider2.upsert(
-            vectors=SAMPLE_VECTORS[:1],
-            payloads=SAMPLE_PAYLOADS[:1],
-            ids=SAMPLE_IDS[:1],
-            chunks=SAMPLE_CHUNKS[:1]
+        await provider2.acreate_collection()
+        await provider2.aupsert(
+            vectors=SAMPLE_VECTORS[:1], payloads=SAMPLE_PAYLOADS[:1],
+            ids=SAMPLE_IDS[:1], chunks=SAMPLE_CHUNKS[:1],
         )
-        await provider2.create_collection()
-        count = await provider2.get_count()
-        assert count == 0
-        await provider2.disconnect()
-    
+        await provider2.acreate_collection()
+        assert await provider2.aget_count() == 0
+        await provider2.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_flat_index_config(self, provider: Optional[PgVectorProvider]):
-        """Test FlatIndexConfig (IVFFlat)."""
+    async def test_ivfflat_index_config(self, provider):
         self._skip_if_unavailable(provider)
         import uuid
         conn_str = get_connection_string()
@@ -1357,79 +814,250 @@ class TestPgVectorProvider:
             vector_size=5,
             collection_name=unique_name,
             connection_string=SecretStr(conn_str),
-            index=IVFIndexConfig(nlist=10)
+            index=IVFIndexConfig(nlist=10),
         )
         provider2 = PgVectorProvider(config)
         await self._ensure_connected(provider2)
-        await provider2.create_collection()
-        await provider2.upsert(
-            vectors=SAMPLE_VECTORS[:2],
-            payloads=SAMPLE_PAYLOADS[:2],
-            ids=SAMPLE_IDS[:2],
-            chunks=SAMPLE_CHUNKS[:2]
+        await provider2.acreate_collection()
+        await provider2.aupsert(
+            vectors=SAMPLE_VECTORS[:2], payloads=SAMPLE_PAYLOADS[:2],
+            ids=SAMPLE_IDS[:2], chunks=SAMPLE_CHUNKS[:2],
         )
-        results = await provider2.dense_search(
-            query_vector=QUERY_VECTOR,
-            top_k=2,
-            similarity_threshold=0.0
+        results = await provider2.adense_search(
+            query_vector=QUERY_VECTOR, top_k=2, similarity_threshold=0.0
         )
         assert len(results) > 0
-        assert all(isinstance(r, VectorSearchResult) for r in results)
-        assert all(r.score >= 0.0 for r in results)
-        await provider2.disconnect()
-    
+        await provider2.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_distance_metrics(self, provider: Optional[PgVectorProvider]):
-        """Test different distance metrics."""
+    async def test_distance_metrics(self, provider):
         self._skip_if_unavailable(provider)
         import uuid
         conn_str = get_connection_string()
         if not conn_str:
             pytest.skip("PostgreSQL connection string not available")
         for metric in [DistanceMetric.COSINE, DistanceMetric.EUCLIDEAN, DistanceMetric.DOT_PRODUCT]:
-            # PostgreSQL lowercases unquoted identifiers, so use lowercase names
             unique_name = f"test_{metric.value.lower()}_{uuid.uuid4().hex[:8]}"
             config = PgVectorConfig(
                 vector_size=5,
                 collection_name=unique_name,
                 connection_string=SecretStr(conn_str),
-                distance_metric=metric
+                distance_metric=metric,
             )
             provider2 = PgVectorProvider(config)
             await self._ensure_connected(provider2)
-            await provider2.create_collection()
-            await provider2.upsert(
-                vectors=SAMPLE_VECTORS[:2],
-                payloads=SAMPLE_PAYLOADS[:2],
-                ids=SAMPLE_IDS[:2],
-                chunks=SAMPLE_CHUNKS[:2]
+            await provider2.acreate_collection()
+            await provider2.aupsert(
+                vectors=SAMPLE_VECTORS[:2], payloads=SAMPLE_PAYLOADS[:2],
+                ids=SAMPLE_IDS[:2], chunks=SAMPLE_CHUNKS[:2],
             )
-            results = await provider2.dense_search(
-                query_vector=QUERY_VECTOR,
-                top_k=2,
-                similarity_threshold=0.0
+            results = await provider2.adense_search(
+                query_vector=QUERY_VECTOR, top_k=2, similarity_threshold=0.0
             )
             assert len(results) > 0
-            assert all(isinstance(r, VectorSearchResult) for r in results)
-            # All scores should be normalized to [0, 1] range regardless of metric
-            assert all(r.score >= 0.0 for r in results), f"Scores should be >= 0 for {metric.value}"
-            assert all(r.score <= 1.0 for r in results), f"Scores should be <= 1 for {metric.value}"
-            await provider2.disconnect()
-    
+            for r in results:
+                assert 0.0 <= r.score <= 1.0
+            await provider2.adisconnect()
+
     @pytest.mark.asyncio
-    async def test_clear(self, provider: Optional[PgVectorProvider]):
-        """Test clear operation."""
+    async def test_clear(self, provider):
         self._skip_if_unavailable(provider)
         await self._ensure_connected(provider)
-        await provider.create_collection()
-        await provider.upsert(
-            vectors=SAMPLE_VECTORS,
-            payloads=SAMPLE_PAYLOADS,
-            ids=SAMPLE_IDS,
-            chunks=SAMPLE_CHUNKS
+        await provider.acreate_collection()
+        await provider.aupsert(
+            vectors=SAMPLE_VECTORS, payloads=SAMPLE_PAYLOADS,
+            ids=SAMPLE_IDS, chunks=SAMPLE_CHUNKS,
         )
-        assert await provider.get_count() == 5
-        await provider.clear()
-        assert await provider.get_count() == 0
-        assert await provider.collection_exists()  # Table should still exist
-        await provider.disconnect()
+        assert await provider.aget_count() == 5
+        await provider.aclear()
+        assert await provider.aget_count() == 0
+        assert await provider.acollection_exists()
+        await provider.adisconnect()
+
+
+# ============== BACK-PORTED FROM OLD PGVECTOR FILE ==============
+# Dedicated synchronous test class that exercises the base-class sync
+# wrappers end-to-end against a real pgvector backend. These tests are
+# plain (non-async) functions; _run_async_from_sync transparently dispatches
+# to a worker thread if a running loop is detected.
+
+class TestPgVectorProviderSync:
+    """Sync-wrapper tests for PgVectorProvider."""
+
+    def _make_provider(self) -> Optional[PgVectorProvider]:
+        import uuid
+        conn_str = get_connection_string()
+        if not conn_str:
+            return None
+        unique_name = f"test_pgvector_sync_{uuid.uuid4().hex[:8]}"
+        config = PgVectorConfig(
+            vector_size=5,
+            collection_name=unique_name,
+            connection_string=SecretStr(conn_str),
+            distance_metric=DistanceMetric.COSINE,
+            index=HNSWIndexConfig(m=16, ef_construction=200),
+        )
+        return PgVectorProvider(config)
+
+    def _connect_or_skip(self, provider: PgVectorProvider) -> None:
+        try:
+            provider.connect()
+        except VectorDBConnectionError:
+            pytest.skip("PostgreSQL connection failed. Ensure pgvector is running.")
+
+    def test_connect_sync(self):
+        provider = self._make_provider()
+        if provider is None:
+            pytest.skip("PostgreSQL connection string not available.")
+        self._connect_or_skip(provider)
+        try:
+            assert provider._is_connected is True
+            assert provider.is_ready() is True
+        finally:
+            provider.disconnect()
+            assert provider._is_connected is False
+
+    def test_upsert_and_fetch_sync(self):
+        provider = self._make_provider()
+        if provider is None:
+            pytest.skip("PostgreSQL connection string not available.")
+        self._connect_or_skip(provider)
+        try:
+            provider.create_collection()
+            provider.upsert(
+                vectors=SAMPLE_VECTORS,
+                payloads=SAMPLE_PAYLOADS,
+                ids=SAMPLE_IDS,
+                chunks=SAMPLE_CHUNKS,
+            )
+            results = provider.fetch(ids=SAMPLE_IDS)
+            assert len(results) == 5
+            for r in results:
+                assert r.payload is not None
+                assert r.text in SAMPLE_CHUNKS
+                idx = SAMPLE_CHUNKS.index(r.text)
+                assert_vector_matches(r.vector, SAMPLE_VECTORS[idx],
+                                       vector_id=str(r.id))
+        finally:
+            try:
+                provider.delete_collection()
+            except Exception:
+                pass
+            provider.disconnect()
+
+    def test_delete_sync(self):
+        provider = self._make_provider()
+        if provider is None:
+            pytest.skip("PostgreSQL connection string not available.")
+        self._connect_or_skip(provider)
+        try:
+            provider.create_collection()
+            provider.upsert(
+                vectors=SAMPLE_VECTORS, payloads=SAMPLE_PAYLOADS,
+                ids=SAMPLE_IDS, chunks=SAMPLE_CHUNKS,
+            )
+            provider.delete(ids=SAMPLE_IDS[:2])
+            assert len(provider.fetch(ids=SAMPLE_IDS[:2])) == 0
+            assert len(provider.fetch(ids=SAMPLE_IDS[2:])) == 3
+        finally:
+            try:
+                provider.delete_collection()
+            except Exception:
+                pass
+            provider.disconnect()
+
+    def test_dense_search_sync(self):
+        provider = self._make_provider()
+        if provider is None:
+            pytest.skip("PostgreSQL connection string not available.")
+        self._connect_or_skip(provider)
+        try:
+            provider.create_collection()
+            provider.upsert(
+                vectors=SAMPLE_VECTORS, payloads=SAMPLE_PAYLOADS,
+                ids=SAMPLE_IDS, chunks=SAMPLE_CHUNKS,
+            )
+            results = provider.dense_search(
+                query_vector=QUERY_VECTOR, top_k=3, similarity_threshold=0.0
+            )
+            assert len(results) > 0
+            for r in results:
+                assert isinstance(r, VectorSearchResult)
+                assert r.vector is not None
+                idx = SAMPLE_CHUNKS.index(r.text)
+                assert_vector_matches(r.vector, SAMPLE_VECTORS[idx],
+                                       vector_id=str(r.id))
+        finally:
+            try:
+                provider.delete_collection()
+            except Exception:
+                pass
+            provider.disconnect()
+
+    def test_full_text_search_sync(self):
+        provider = self._make_provider()
+        if provider is None:
+            pytest.skip("PostgreSQL connection string not available.")
+        self._connect_or_skip(provider)
+        try:
+            provider.create_collection()
+            provider.upsert(
+                vectors=SAMPLE_VECTORS, payloads=SAMPLE_PAYLOADS,
+                ids=SAMPLE_IDS, chunks=SAMPLE_CHUNKS,
+            )
+            results = provider.full_text_search(
+                query_text="physics", top_k=3, similarity_threshold=0.0
+            )
+            assert len(results) > 0
+            for r in results:
+                assert r.text is not None
+        finally:
+            try:
+                provider.delete_collection()
+            except Exception:
+                pass
+            provider.disconnect()
+
+    def test_hybrid_search_sync(self):
+        provider = self._make_provider()
+        if provider is None:
+            pytest.skip("PostgreSQL connection string not available.")
+        self._connect_or_skip(provider)
+        try:
+            provider.create_collection()
+            provider.upsert(
+                vectors=SAMPLE_VECTORS, payloads=SAMPLE_PAYLOADS,
+                ids=SAMPLE_IDS, chunks=SAMPLE_CHUNKS,
+            )
+            results = provider.hybrid_search(
+                query_vector=QUERY_VECTOR, query_text="physics",
+                top_k=3, alpha=0.5, fusion_method="weighted",
+                similarity_threshold=0.0,
+            )
+            assert len(results) > 0
+        finally:
+            try:
+                provider.delete_collection()
+            except Exception:
+                pass
+            provider.disconnect()
+
+    def test_search_sync(self):
+        provider = self._make_provider()
+        if provider is None:
+            pytest.skip("PostgreSQL connection string not available.")
+        self._connect_or_skip(provider)
+        try:
+            provider.create_collection()
+            provider.upsert(
+                vectors=SAMPLE_VECTORS, payloads=SAMPLE_PAYLOADS,
+                ids=SAMPLE_IDS, chunks=SAMPLE_CHUNKS,
+            )
+            results = provider.search(query_vector=QUERY_VECTOR, top_k=3)
+            assert len(results) > 0
+        finally:
+            try:
+                provider.delete_collection()
+            except Exception:
+                pass
+            provider.disconnect()

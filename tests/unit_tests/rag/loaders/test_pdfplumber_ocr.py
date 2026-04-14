@@ -257,7 +257,7 @@ class TestPdfPlumberLoaderOCRSafe(unittest.TestCase):
         # Check metadata
         metadata = doc.metadata
         self.assertIn("source", metadata)
-        self.assertIn("file_name", metadata)
+        self.assertIn("document_name", metadata)
         self.assertIn("file_extension", metadata)
         self.assertIn("loader_type", metadata)
         self.assertEqual(metadata["file_extension"], ".pdf")

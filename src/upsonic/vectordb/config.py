@@ -63,7 +63,6 @@ class BaseVectorDBConfig(pydantic.BaseModel, ABC):
     provider_id: Optional[str] = None
 
     default_metadata: Optional[Dict[str, Any]] = None
-    auto_generate_content_id: bool = True
     indexed_fields: Optional[List[Union[str, Dict[str, Any]]]] = None  # Can be ["field"] or [{"field": "name", "type": "keyword"}]
     
     @pydantic.field_validator('default_similarity_threshold')
@@ -243,6 +242,9 @@ class QdrantConfig(BaseVectorDBConfig):
     sparse_vector_name: str = "sparse"
     use_sparse_vectors: bool = False  # Enable sparse vector support
     
+    # Full-text search field name in payload
+    text_search_field: str = "content"
+    
     @pydantic.model_validator(mode='after')
     def validate_qdrant_config(self):
         """Validate Qdrant-specific constraints."""
@@ -307,6 +309,9 @@ class PineconeConfig(BaseVectorDBConfig):
     # Reranking
     reranker: Optional[Any] = None  # Reranker instance for post-processing results
     
+    # Whether to include vector values in search results
+    include_values: bool = True
+    
     def model_post_init(self, __context):
         """Map distance metric to Pinecone format and validate configuration."""
         metric_map = {
@@ -339,6 +344,13 @@ class MilvusConfig(BaseVectorDBConfig):
     
     Milvus supports both dense and sparse vectors for hybrid search scenarios.
     Sparse vectors enable full-text search capabilities when combined with dense vectors.
+
+    Note: On Milvus, all standard text fields (document_id, document_name,
+    knowledge_base_id, doc_content_hash, chunk_content_hash) are stored as
+    non-nullable VARCHAR columns with empty-string defaults when not provided.
+    This is a MilvusLite constraint (Embedded mode rejects nullable fields).
+    To query records without a knowledge_base_id, use
+    filter={"knowledge_base_id": ""} rather than filter={"knowledge_base_id": None}.
     """
     connection: ConnectionConfig
     index: IndexConfig = HNSWIndexConfig()
@@ -418,6 +430,9 @@ class WeaviateConfig(BaseVectorDBConfig):
     # Format: {'provider_name': 'api_key_value'}
     api_keys: Optional[Dict[str, str]] = None  # e.g., {'openai': 'sk-...', 'cohere': '...'}
     
+    # Reranking property for search-time rerank operations
+    rerank_property: str = "content"
+    
     @pydantic.model_validator(mode='after')
     def validate_weaviate_config(self):
         """Validate Weaviate-specific constraints."""
@@ -466,6 +481,9 @@ class PgVectorConfig(BaseVectorDBConfig):
     
     # Batch processing
     batch_size: int = 100  # Batch size for upsert operations
+    
+    # Hybrid search RRF ranking
+    rrf_k: int = 60
     
     # Connection pool settings
     pool_size: int = 5
@@ -521,6 +539,7 @@ class SuperMemoryConfig(BaseVectorDBConfig):
     timeout: float = 60.0
     batch_delay: float = 0.1
     batch_size: int = 50
+    index_delay: float = 7.0  # Seconds to wait after upsert for async indexing to complete
 
     vector_size: int = 0
     dense_search_enabled: bool = False

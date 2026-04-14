@@ -10,13 +10,18 @@ Success criteria:
 import pytest
 import tempfile
 import os
-from pathlib import Path
 from upsonic import Agent, Task
 from upsonic.knowledge_base import KnowledgeBase
 from upsonic.embeddings import OpenAIEmbedding
+from upsonic.tools.wrappers import FunctionTool
 from upsonic.vectordb import ChromaProvider
 from io import StringIO
 from contextlib import redirect_stdout
+
+pytest.importorskip(
+    "chromadb",
+    reason="Chroma-backed KnowledgeBase smoke tests require: uv sync --extra chroma",
+)
 
 pytestmark = pytest.mark.timeout(180)
 
@@ -233,8 +238,8 @@ async def test_knowledgebase_agent_calls_search(test_document, temp_vectordb_dir
 
 
 @pytest.mark.asyncio
-async def test_knowledgebase_toolkit_registration(test_document, temp_vectordb_dir):
-    """Test that KnowledgeBase is properly registered as a ToolKit."""
+async def test_knowledgebase_tool_provider_registration(test_document, temp_vectordb_dir):
+    """Test that KnowledgeBase is properly registered via the tool provider protocol."""
     from upsonic.vectordb.config import ChromaConfig, ConnectionConfig, Mode, DistanceMetric, HNSWIndexConfig
     
     # Create KnowledgeBase
@@ -262,9 +267,19 @@ async def test_knowledgebase_toolkit_registration(test_document, temp_vectordb_d
     # Setup KnowledgeBase
     await kb.setup_async()
     
-    # Verify KnowledgeBase is a ToolKit
-    from upsonic.tools import ToolKit
-    assert isinstance(kb, ToolKit), "KnowledgeBase should be a ToolKit instance"
+    # Verify KnowledgeBase implements the tool provider protocol
+    assert hasattr(kb, 'get_tools') and callable(kb.get_tools), \
+        "KnowledgeBase should implement the get_tools() protocol"
+    assert hasattr(kb, 'build_context') and callable(kb.build_context), \
+        "KnowledgeBase should implement the build_context() protocol"
+    
+    # Verify get_tools() returns FunctionTool instances (Agno-style provider API)
+    tools = kb.get_tools()
+    assert len(tools) == 1, f"get_tools() should return exactly 1 tool, got {len(tools)}"
+    assert isinstance(tools[0], FunctionTool), f"Expected FunctionTool, got {type(tools[0])}"
+    assert tools[0].name == "search_test_knowledgebase", (
+        f"Tool name should be 'search_test_knowledgebase', got '{tools[0].name}'"
+    )
     
     # Create agent
     agent = Agent(model="openai/gpt-4o", name="Test Agent", debug=True)
@@ -276,6 +291,8 @@ async def test_knowledgebase_toolkit_registration(test_document, temp_vectordb_d
     kb_id = id(kb)
     assert kb_id in agent.tool_manager.processor.knowledge_base_instances, \
         "KnowledgeBase should be tracked in processor.knowledge_base_instances"
+    assert kb_id in agent.tool_manager.processor.tool_provider_instances, \
+        "KnowledgeBase should be tracked in processor.tool_provider_instances"
     
     # Verify search tool is registered with unique name
     expected_tool_name = "search_test_knowledgebase"

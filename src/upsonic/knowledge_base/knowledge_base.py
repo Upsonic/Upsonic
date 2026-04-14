@@ -3,9 +3,14 @@ import asyncio
 import hashlib
 import json
 import re
-import types
-from typing import List, Optional, Dict, Any, Union, Literal
+from enum import Enum
+from typing import TYPE_CHECKING, List, Literal, Optional, Dict, Any, Union
 from pathlib import Path
+
+if TYPE_CHECKING:
+    from upsonic.storage.base import Storage
+    from upsonic.storage.schemas import KnowledgeRow
+    from upsonic.tools.base import Tool
 
 from ..text_splitter.base import BaseChunker
 from ..embeddings.base import EmbeddingProvider
@@ -20,11 +25,16 @@ from upsonic.utils.package.exception import (
     VectorDBConnectionError, 
     UpsertError,
 )
-from upsonic.tools import ToolKit, tool
-from upsonic.tools.config import ToolConfig
 
 
-class KnowledgeBase(ToolKit):
+class KBState(str, Enum):
+    UNINITIALIZED = "uninitialized"
+    CONNECTED = "connected"
+    INDEXED = "indexed"
+    CLOSED = "closed"
+
+
+class KnowledgeBase:
     """
     The central, intelligent orchestrator for a collection of knowledge in an AI Agent Framework.
 
@@ -39,6 +49,7 @@ class KnowledgeBase(ToolKit):
     - **Document Management**: Track, update, and delete documents by various identifiers
     - **Health Monitoring**: Comprehensive health checks and diagnostics
     - **Resource Management**: Proper connection lifecycle and cleanup
+    - **Tool Provider Protocol**: Exposes ``get_tools()`` for agent integration without inheritance
 
     This class serves as the bridge between raw documents and the vector database,
     providing a high-level, framework-agnostic interface for knowledge management.
@@ -58,6 +69,8 @@ class KnowledgeBase(ToolKit):
         quality_preference: str = "balanced",
         loader_config: Optional[Dict[str, Any]] = None,
         splitter_config: Optional[Dict[str, Any]] = None,
+        isolate_search: bool = True,
+        storage: Optional["Storage"] = None,
         **config_kwargs
     ):
         """
@@ -118,6 +131,8 @@ class KnowledgeBase(ToolKit):
         self.sources: List[Union[str, Path]] = self._resolve_sources(sources)
         self.embedding_provider: Optional[EmbeddingProvider] = embedding_provider
         self.vectordb: BaseVectorDBProvider = vectordb
+        self.isolate_search: bool = isolate_search
+        self.storage: Optional["Storage"] = storage
         
         # Setup loaders with intelligent auto-detection
         self.loaders: List[BaseLoader] = self._setup_loaders(
@@ -137,15 +152,22 @@ class KnowledgeBase(ToolKit):
         self.name: str = name or self.knowledge_id[:16]  # Use first 16 chars of ID if no name
         
         # State management
-        self._is_ready: bool = False
-        self._is_closed: bool = False
+        self._state: KBState = KBState.UNINITIALIZED
         self._setup_lock: asyncio.Lock = asyncio.Lock()
-        self._processing_stats: Dict[str, Any] = {}  # Track processing statistics
+        self._processing_stats: Dict[str, Any] = {}
         
-        # Create dynamically named search tool method
-        # This allows multiple KnowledgeBase instances to have unique tool names
-        # e.g., search_technical_docs, search_user_guides instead of all being "search"
-        self._create_dynamic_search_tool()
+        # Auto-derive collection_name when the user didn't explicitly set one
+        if self.vectordb._config.collection_name == "default_collection":
+            sanitized: str = re.sub(r'[^a-zA-Z0-9_]', '_', self.name)[:50]
+            derived_name: str = f"kb_{sanitized}_{self.knowledge_id[:8]}"
+            object.__setattr__(self.vectordb._config, 'collection_name', derived_name)
+            info_log(
+                f"Auto-derived collection name: '{derived_name}' for KnowledgeBase '{self.name}'",
+                context="KnowledgeBase",
+            )
+
+        # Precompute the search tool name for get_tools() / build_context()
+        self._search_tool_name: str = f"search_{self._sanitize_tool_name(self.name)}"
 
         info_log(
             f"Initialized KnowledgeBase '{self.name}' with {len(self.sources)} sources, "
@@ -176,82 +198,92 @@ class KnowledgeBase(ToolKit):
             sanitized = f"kb_{sanitized}"
         return sanitized.lower() if sanitized else "unnamed"
     
-    def _create_dynamic_search_tool(self) -> None:
-        """
-        Create a dynamically named search tool method based on the KnowledgeBase name.
-        
-        This method creates a unique tool for each KnowledgeBase instance, allowing
-        multiple KnowledgeBases to be used as tools without name collisions.
-        
-        For example:
-        - KnowledgeBase(name="technical_docs") -> search_technical_docs tool
-        - KnowledgeBase(name="user_guides") -> search_user_guides tool
-        
-        The tool is created as an instance method with:
-        - Unique name based on self.name
-        - Docstring including the KB description
-        - @tool decorator attributes for ToolProcessor detection
-        """
-        # Generate unique tool name
-        sanitized_name = self._sanitize_tool_name(self.name)
-        tool_name = f"search_{sanitized_name}"
-        
-        # Store the tool name for external reference
-        self._search_tool_name = tool_name
-        
-        # Build dynamic docstring with KB-specific information
-        topics_str = ", ".join(self.topics) if self.topics else "general"
-        docstring = f"""Search the '{self.name}' knowledge base for relevant information.
+    # ------------------------------------------------------------------
+    # Tool Provider Protocol
+    # ------------------------------------------------------------------
 
-        This tool performs intelligent retrieval from the '{self.name}' knowledge base.
-        Topics covered: {topics_str}
+    def get_tools(self) -> List["Tool"]:
+        """Produce fully-formed ``FunctionTool`` objects for agent registration.
 
-        Description: {self.description}
+        Creates an async search tool whose name is derived from
+        ``self.name`` (e.g. ``KnowledgeBase(name="technical_docs")`` →
+        ``search_technical_docs``), guaranteeing uniqueness when multiple
+        KnowledgeBase instances are registered with the same agent.
 
-        Args:
-            query: The question, topic, or search query to find relevant information.
-                  Can be a natural language question, a topic description, or keywords.
-                  Examples: "What is machine learning?", "How does authentication work?",
-                  "Python best practices", "API documentation for user management".
+        Uses ``FunctionTool.from_callable`` — the framework's standard
+        one-step tool creation — so no manual schema or attribute
+        manipulation is needed.
 
         Returns:
-            A formatted string containing the most relevant information found in the
-            '{self.name}' knowledge base. Results are ranked by relevance and presented
-            in a readable format. Returns "No relevant information found in the knowledge base."
-            if no matches are found.
+            List containing a single ``FunctionTool`` wrapping the search
+            callable.
         """
-        
-        # Create the search implementation as a closure that captures self
-        kb_instance = self
-        
-        async def dynamic_search(self_placeholder, query: str) -> str:
-            """Dynamically generated search method."""
+        from upsonic.tools.wrappers import FunctionTool
+
+        kb_instance: KnowledgeBase = self
+        tool_name: str = self._search_tool_name
+        topics_str: str = ", ".join(self.topics) if self.topics else "general"
+
+        async def search_knowledge_base(query: str) -> str:
+            """Search the knowledge base for information about a query.
+
+            Args:
+                query: The query to search for.
+
+            Returns:
+                A string containing the response from the knowledge base.
+            """
             return await kb_instance._search_impl(query)
-        
-        # Set the function name and docstring
-        dynamic_search.__name__ = tool_name
-        dynamic_search.__qualname__ = f"KnowledgeBase.{tool_name}"
-        dynamic_search.__doc__ = docstring
-        
-        # Add type annotations for proper schema generation
-        dynamic_search.__annotations__ = {'query': str, 'return': str}
-        
-        # Apply tool decorator attributes (same as @tool decorator does)
-        # These are set on the function before binding - bound methods will
-        # automatically delegate attribute lookups to the underlying function
-        dynamic_search._upsonic_is_tool = True
-        dynamic_search._upsonic_tool_config = ToolConfig()
-        
-        # Bind the function to this instance as a method
-        bound_method = types.MethodType(dynamic_search, self)
-        
-        # Set as instance attribute so inspect.getmembers finds it
-        setattr(self, tool_name, bound_method)
-        
-        debug_log(
-            f"Created dynamic search tool '{tool_name}' for KnowledgeBase '{self.name}'",
-            context="KnowledgeBase"
+
+        return [
+            FunctionTool.from_callable(
+                search_knowledge_base,
+                name=tool_name,
+                description=(
+                    f"Search the '{self.name}' knowledge base for relevant information.\n\n"
+                    f"This tool performs intelligent retrieval from the '{self.name}' "
+                    f"knowledge base.\n"
+                    f"Topics covered: {topics_str}\n"
+                    f"Description: {self.description}"
+                ),
+            )
+        ]
+
+    async def aget_tools(self) -> List["Tool"]:
+        """Async version of get_tools."""
+        return self.get_tools()
+
+    def build_context(self) -> str:
+        """Build context instructions for the agent's system prompt.
+
+        Returns a structured instruction block telling the model about this
+        knowledge base, its search tool, and best-practice usage guidance.
+
+        Returns:
+            Context string to inject into the system prompt.
+        """
+        parts: List[str] = [
+            f"You have access to a knowledge base called '{self.name}' "
+            f"that you can search using the {self._search_tool_name} tool.",
+        ]
+
+        if self.description:
+            parts.append(f"Knowledge base description: {self.description}")
+
+        if self.topics:
+            parts.append(f"Topics covered: {', '.join(self.topics)}")
+
+        parts.append(
+            "Always search this knowledge base before answering questions related to "
+            "its topics — do not assume you already know the answer. "
+            "For ambiguous questions, search first rather than asking for clarification."
         )
+
+        return "<knowledge_base>\n" + "\n".join(parts) + "\n</knowledge_base>"
+
+    async def abuild_context(self) -> str:
+        """Async version of build_context."""
+        return self.build_context()
     
     async def _search_impl(self, query: str) -> str:
         """
@@ -602,7 +634,7 @@ class KnowledgeBase(ToolKit):
         current_time = time.time()
         metadata = {
             "source": f"direct_content_{source_index}",
-            "file_name": f"direct_content_{source_index}.txt",
+            "document_name": f"direct_content_{source_index}.txt",
             "file_path": f"direct_content_{source_index}",
             "file_size": len(content.encode("utf-8")),
             "creation_datetime_utc": current_time,
@@ -612,7 +644,8 @@ class KnowledgeBase(ToolKit):
         return Document(
             content=content,
             metadata=metadata,
-            document_id=content_hash
+            document_id=content_hash,
+            doc_content_hash=content_hash,
         )
 
     def _get_component_for_source(self, source_index: int, component_list: List, component_name: str):
@@ -665,82 +698,167 @@ class KnowledgeBase(ToolKit):
         return hashlib.sha256(config_string.encode('utf-8')).hexdigest()
 
     # ============================================================================
-    # Lifecycle Management - Connection and Setup
+    # Storage Helpers
     # ============================================================================
 
-    async def setup_async(self) -> None:
+    def _build_knowledge_row(
+        self,
+        doc: Document,
+        chunk_count: int,
+        status: str = "indexed",
+    ) -> "KnowledgeRow":
+        """Build a KnowledgeRow from a Document for storage persistence.
+
+        Args:
+            doc: The source Document.
+            chunk_count: Number of chunks produced from this document.
+            status: Processing status (e.g. "indexed", "failed").
+
+        Returns:
+            A populated KnowledgeRow instance.
+        """
+        from upsonic.storage.schemas import KnowledgeRow
+
+        file_path: Optional[str] = doc.metadata.get("file_path")
+        file_ext: Optional[str] = None
+        if file_path:
+            file_ext = Path(file_path).suffix.lstrip(".") or None
+
+        return KnowledgeRow(
+            id=doc.document_id,
+            name=doc.metadata.get("document_name", doc.document_id),
+            description=doc.metadata.get("description"),
+            metadata=doc.metadata,
+            type=file_ext,
+            size=doc.metadata.get("file_size"),
+            knowledge_base_id=self.knowledge_id,
+            content_hash=doc.doc_content_hash,
+            chunk_count=chunk_count,
+            source=str(file_path) if file_path else None,
+            status=status,
+            status_message=None,
+            access_count=0,
+        )
+
+    def _remove_source_for_document(self, document_id: str) -> None:
+        """Remove the source entry corresponding to a document from self.sources.
+
+        Looks up the document's source path from storage first, then falls
+        back to a best-effort match against resolved source paths.
+
+        Args:
+            document_id: The document ID being removed.
+        """
+        if self.storage is not None:
+            row = self.storage.get_knowledge_content(document_id)
+            if row is not None and row.source:
+                source_path = Path(row.source)
+                self.sources = [
+                    s for s in self.sources
+                    if Path(str(s)).resolve() != source_path.resolve()
+                ]
+                return
+
+
+
+    async def setup_async(self, force: bool = False) -> None:
         """
         The main just-in-time engine for processing and indexing knowledge.
 
         This method is **idempotent** and **thread-safe**. It:
-        1. Checks if knowledge is already indexed (skip if yes)
-        2. Connects to the vector database
-        3. Loads documents from sources
-        4. Chunks documents into embeddable pieces
-        5. Generates embeddings
-        6. Stores everything in the vector database
+        1. Connects to the vector database
+        2. Loads documents from all sources
+        3. Computes content hashes for change detection
+        4. Filters out unchanged documents (skips), deletes stale chunks (edits)
+        5. Chunks only new/changed documents
+        6. Generates embeddings
+        7. Stores everything in the vector database
 
-        The lock prevents race conditions in concurrent environments.
-        Indexed processing is supported where each source uses its corresponding
-        loader and splitter.
+        On first run the full pipeline executes.  On subsequent runs only
+        documents whose content has actually changed are re-processed, saving
+        embedding and storage costs.
+
+        Args:
+            force: If True, re-runs the full pipeline even if already indexed.
 
         Raises:
             VectorDBConnectionError: If database connection fails
             UpsertError: If data ingestion fails
-            Exception: For various processing errors
-
-        Example:
-            ```python
-            kb = KnowledgeBase(sources=["docs/"], ...)
-            await kb.setup_async()  # Idempotent - safe to call multiple times
-            ```
+            RuntimeError: If the KnowledgeBase has been closed
         """
         async with self._setup_lock:
-            if self._is_ready:
+            if self._state == KBState.INDEXED and not force:
                 debug_log(
                     f"KnowledgeBase '{self.name}' already set up. Skipping.",
-                    context="KnowledgeBase"
+                    context="KnowledgeBase",
                 )
                 return
+
+            if self._state == KBState.CLOSED:
+                raise RuntimeError("Cannot setup a closed KnowledgeBase. Create a new instance.")
+
+            collection_existed: bool = False
 
             try:
                 # Step 0: Connect to vector database
                 await self._ensure_connection()
+                self._state = KBState.CONNECTED
 
-                # Check if collection already exists (idempotency)
-                if await self.vectordb.collection_exists():
-                    info_log(
-                        f"Collection for '{self.name}' already exists. Setup complete.",
-                        context="KnowledgeBase"
-                    )
-                    self._is_ready = True
-                    return
-
-                info_log(
-                    f"Collection not found. Starting indexing pipeline for '{self.name}'...",
-                    context="KnowledgeBase"
-                )
-
-                # Step 1: Load documents
+                # Step 1: Load documents from all sources
                 all_documents, processing_metadata = await self._load_documents()
 
                 if not all_documents:
                     warning_log(
-                        "No documents loaded. Marking as ready but empty.",
-                        context="KnowledgeBase"
+                        "No documents loaded. Marking as indexed but empty.",
+                        context="KnowledgeBase",
                     )
-                    self._is_ready = True
+                    self._state = KBState.INDEXED
                     return
 
+                for source_docs in processing_metadata['source_to_documents'].values():
+                    for doc in source_docs:
+                        if not doc.doc_content_hash:
+                            doc.doc_content_hash = hashlib.md5(
+                                doc.content.encode("utf-8")
+                            ).hexdigest()
+
+                # Step 1.5: Determine which documents actually need processing
+                collection_existed = await self.vectordb.acollection_exists()
+
+                if collection_existed:
+                    documents_to_process, processing_metadata = (
+                        await self._filter_changed_documents(
+                            all_documents, processing_metadata
+                        )
+                    )
+                    if not documents_to_process:
+                        info_log(
+                            f"All documents in '{self.name}' are up-to-date. "
+                            f"Nothing to re-index.",
+                            context="KnowledgeBase",
+                        )
+                        self._state = KBState.INDEXED
+                        return
+                else:
+                    documents_to_process = all_documents
+
+                info_log(
+                    f"Processing {len(documents_to_process)} document(s) for "
+                    f"'{self.name}'...",
+                    context="KnowledgeBase",
+                )
+
                 # Step 2: Chunk documents
-                all_chunks = await self._chunk_documents(all_documents, processing_metadata)
+                all_chunks = await self._chunk_documents(
+                    documents_to_process, processing_metadata
+                )
 
                 if not all_chunks:
                     warning_log(
-                        "No chunks created. Marking as ready but empty.",
-                        context="KnowledgeBase"
+                        "No chunks created. Marking as indexed but empty.",
+                        context="KnowledgeBase",
                     )
-                    self._is_ready = True
+                    self._state = KBState.INDEXED
                     return
 
                 # Step 3: Generate embeddings
@@ -749,59 +867,74 @@ class KnowledgeBase(ToolKit):
                 # Step 4: Store in vector database
                 await self._store_in_vectordb(all_chunks, vectors)
 
+                if self.storage is not None:
+                    doc_chunk_counts: Dict[str, int] = {}
+                    for chunk in all_chunks:
+                        doc_chunk_counts[chunk.document_id] = doc_chunk_counts.get(chunk.document_id, 0) + 1
+
+                    for doc in documents_to_process:
+                        row = self._build_knowledge_row(
+                            doc=doc,
+                            chunk_count=doc_chunk_counts.get(doc.document_id, 0),
+                            status="indexed",
+                        )
+                        self.storage.upsert_knowledge_content(row)
+
                 # Update stats
                 self._processing_stats = {
                     "sources_count": len(self.sources),
-                    "documents_count": len(all_documents),
+                    "documents_count": len(documents_to_process),
                     "chunks_count": len(all_chunks),
                     "vectors_count": len(vectors),
-                    "indexed_at": __import__('datetime').datetime.now().isoformat()
+                    "indexed_at": __import__('datetime').datetime.now().isoformat(),
                 }
 
-                self._is_ready = True
+                self._state = KBState.INDEXED
                 success_log(
                     f"KnowledgeBase '{self.name}' indexing completed! "
-                    f"{len(all_documents)} docs → {len(all_chunks)} chunks",
-                    context="KnowledgeBase"
+                    f"{len(documents_to_process)} docs → {len(all_chunks)} chunks",
+                    context="KnowledgeBase",
                 )
 
             except Exception as e:
-                error_log(f"Setup failed for '{self.name}': {e}", context="KnowledgeBase")
-                # Clean up partial state if needed
-                try:
-                    if await self.vectordb.collection_exists():
-                        warning_log(
-                            "Cleaning up partially created collection...",
-                            context="KnowledgeBase"
-                        )
-                        await self.vectordb.delete_collection()
-                except:
-                    pass  # Best effort cleanup
+                error_log(
+                    f"Setup failed for '{self.name}': {e}",
+                    context="KnowledgeBase",
+                )
+                if not collection_existed:
+                    try:
+                        if await self.vectordb.acollection_exists():
+                            warning_log(
+                                "Cleaning up partially created collection...",
+                                context="KnowledgeBase",
+                            )
+                            await self.vectordb.adelete_collection()
+                    except Exception:
+                        pass
                 raise
 
-    async def _ensure_connection(self) -> None:
-        """
-        Ensures the vector database is connected.
-        Uses async connection if available, falls back to sync.
-        """
-        if hasattr(self.vectordb, '_is_connected') and self.vectordb._is_connected:
-            return
-        
+    def setup(self, force: bool = False) -> None:
+        """Synchronous wrapper for setup_async."""
+        import asyncio
         try:
-            # Prefer async connection
-            if hasattr(self.vectordb, 'connect'):
-                await self.vectordb.connect()
-            elif hasattr(self.vectordb, 'connect_sync'):
-                self.vectordb.connect_sync()
-            else:
-                # Some providers might auto-connect
-                debug_log(
-                    "No explicit connect method. Assuming auto-connection.",
-                    context="KnowledgeBase"
-                )
-            
+            asyncio.get_running_loop()
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                def _run() -> None:
+                    loop = asyncio.new_event_loop()
+                    loop.run_until_complete(self.setup_async(force))
+                executor.submit(_run).result()
+        except RuntimeError:
+            asyncio.new_event_loop().run_until_complete(self.setup_async(force))
+
+    async def _ensure_connection(self) -> None:
+        """Ensures the vector database is connected."""
+        if self.vectordb._is_connected:
+            return
+
+        try:
+            await self.vectordb.aconnect()
             info_log("Vector database connected successfully", context="KnowledgeBase")
-            
         except Exception as e:
             error_log(f"Failed to connect to vector database: {e}", context="KnowledgeBase")
             raise VectorDBConnectionError(f"Connection failed: {e}")
@@ -864,6 +997,70 @@ class KnowledgeBase(ToolKit):
         
         info_log(f"Loaded {len(all_documents)} documents from {len(processing_metadata['source_to_documents'])} sources", context="KnowledgeBase")
         return all_documents, processing_metadata
+
+    async def _filter_changed_documents(
+        self,
+        documents: List[Document],
+        processing_metadata: Dict[int, Any],
+    ) -> tuple[List[Document], Dict[int, Any]]:
+        """
+        Filter out unchanged documents and delete stale chunks for edited ones.
+
+        For each loaded document this method:
+        1. Checks if its content_hash already exists in the vector DB (unchanged → skip).
+        2. If the hash is new but the document_id exists, deletes old chunks (edited → replace).
+        3. If neither exists, the document is new.
+
+        Args:
+            documents: All loaded documents (with content_hash already computed).
+            processing_metadata: Source-to-document mapping from the loading phase.
+
+        Returns:
+            Tuple of (documents_that_need_processing, filtered_processing_metadata).
+        """
+        filtered_docs: List[Document] = []
+        filtered_source_to_docs: Dict[int, List[Document]] = {}
+
+        source_to_documents: Dict[int, List[Document]] = processing_metadata.get(
+            'source_to_documents', {}
+        )
+
+        for source_index, source_docs in source_to_documents.items():
+            changed_docs: List[Document] = []
+
+            for doc in source_docs:
+                if await self.vectordb.adoc_content_hash_exists(doc.doc_content_hash):
+                    debug_log(
+                        f"Document '{doc.document_id[:16]}...' unchanged (hash match), skipping.",
+                        context="KnowledgeBase",
+                    )
+                    continue
+
+                if await self.vectordb.adocument_id_exists(doc.document_id):
+                    await self.vectordb.adelete_by_document_id(doc.document_id)
+                    info_log(
+                        f"Document '{doc.document_id[:16]}...' changed, deleted old chunks.",
+                        context="KnowledgeBase",
+                    )
+
+                changed_docs.append(doc)
+
+            if changed_docs:
+                filtered_docs.extend(changed_docs)
+                filtered_source_to_docs[source_index] = changed_docs
+
+        filtered_metadata: Dict[int, Any] = {
+            'source_to_documents': filtered_source_to_docs,
+            'source_to_loader': processing_metadata.get('source_to_loader', {}),
+        }
+
+        info_log(
+            f"Document filter: {len(documents)} total, {len(filtered_docs)} need processing, "
+            f"{len(documents) - len(filtered_docs)} unchanged.",
+            context="KnowledgeBase",
+        )
+
+        return filtered_docs, filtered_metadata
 
     async def _chunk_documents(
         self, 
@@ -1006,37 +1203,30 @@ class KnowledgeBase(ToolKit):
         info_log(f"[Step 4/4] Storing {len(chunks)} chunks in vector database...", context="KnowledgeBase")
         
         try:
-            # Create collection if it doesn't exist
-            if not await self.vectordb.collection_exists():
-                if hasattr(self.vectordb, 'create_collection'):
-                    await self.vectordb.create_collection()
-                elif hasattr(self.vectordb, 'create_collection_sync'):
-                    self.vectordb.create_collection_sync()
-                else:
-                    raise VectorDBConnectionError("No create_collection method available")
-            
-            # Prepare data for upsert
-            chunk_texts = [chunk.text_content for chunk in chunks]
-            chunk_ids = [chunk.chunk_id for chunk in chunks]
-            chunk_payloads = [chunk.metadata for chunk in chunks]
-            
-            # Upsert data
-            if hasattr(self.vectordb, 'upsert'):
-                await self.vectordb.upsert(
-                    vectors=vectors,
-                    payloads=chunk_payloads,
-                    ids=chunk_ids,
-                    chunks=chunk_texts
-                )
-            elif hasattr(self.vectordb, 'upsert_sync'):
-                self.vectordb.upsert_sync(
-                    vectors=vectors,
-                    payloads=chunk_payloads,
-                    ids=chunk_ids,
-                    chunks=chunk_texts
-                )
-            else:
-                raise VectorDBConnectionError("No upsert method available")
+            if not await self.vectordb.acollection_exists():
+                await self.vectordb.acreate_collection()
+
+            chunk_texts: List[str] = [chunk.text_content for chunk in chunks]
+            chunk_ids: List[str] = [chunk.chunk_id for chunk in chunks]
+            doc_ids: List[str] = [chunk.document_id for chunk in chunks]
+            doc_hashes: List[str] = [chunk.doc_content_hash for chunk in chunks]
+            chunk_hashes: List[str] = [chunk.chunk_content_hash for chunk in chunks]
+            chunk_payloads: List[Dict[str, Any]] = [dict(chunk.metadata) for chunk in chunks]
+
+            knowledge_base_ids: Optional[List[str]] = None
+            if self.isolate_search:
+                knowledge_base_ids = [self.knowledge_id] * len(chunks)
+
+            await self.vectordb.aupsert(
+                vectors=vectors,
+                payloads=chunk_payloads,
+                ids=chunk_ids,
+                chunks=chunk_texts,
+                document_ids=doc_ids,
+                doc_content_hashes=doc_hashes,
+                chunk_content_hashes=chunk_hashes,
+                knowledge_base_ids=knowledge_base_ids,
+            )
             
             success_log(f"Stored {len(chunks)} chunks successfully", context="KnowledgeBase")
             
@@ -1055,54 +1245,41 @@ class KnowledgeBase(ToolKit):
         query: str,
         top_k: Optional[int] = None,
         filter: Optional[Dict[str, Any]] = None,
-        search_type: Literal['auto', 'dense', 'full_text', 'hybrid'] = 'auto',
         task: Optional[Any] = None,
-        **search_kwargs
+        alpha: Optional[float] = None,
+        fusion_method: Optional[Literal['rrf', 'weighted']] = None,
+        similarity_threshold: Optional[float] = None,
+        apply_reranking: bool = True,
+        sparse_query_vector: Optional[Dict[str, Any]] = None,
     ) -> List[RAGSearchResult]:
         """
         Performs a search to retrieve relevant knowledge chunks.
 
         This is the primary retrieval method. It automatically triggers setup
-        if not done yet, embeds the query, and searches the vector database
-        using the most appropriate search method.
+        if not done yet, embeds the query, and searches the vector database.
+        The vectordb's asearch method internally determines the best search
+        strategy (dense, full-text, or hybrid) based on provider configuration.
 
         Args:
             query: The user's query string.
             top_k: Number of results to return. If None, uses provider's default or Task's vector_search_top_k.
             filter: Optional metadata filter to apply. If None, uses Task's vector_search_filter if provided.
-            search_type: Type of search to perform:
-                - 'auto': Automatically choose based on provider capabilities (default)
-                - 'dense': Pure vector similarity search
-                - 'full_text': Text-based search (if supported)
-                - 'hybrid': Combined vector + text search (if supported)
             task: Optional Task object. If provided, uses Task's vector search parameters to override config defaults.
-            **search_kwargs: Additional search parameters (alpha, fusion_method, etc.)
+            alpha: Balance between dense and sparse search (0.0 = pure sparse, 1.0 = pure dense).
+            fusion_method: Method for combining search results ('rrf' or 'weighted').
+            similarity_threshold: Minimum similarity score for results.
+            apply_reranking: Whether to apply reranking if configured on the provider.
+            sparse_query_vector: Pre-computed sparse vector for providers that support sparse search.
 
         Returns:
             List of RAGSearchResult objects containing text content and metadata.
 
         Raises:
             ValueError: If search results are invalid
-
-        Example:
-            ```python
-            # Simple query
-            results = await kb.query_async("What is machine learning?")
-            
-            # Advanced query with filtering
-            results = await kb.query_async(
-                "What is ML?",
-                top_k=5,
-                filter={"source": "ml_book.pdf"},
-                search_type='hybrid',
-                alpha=0.7
-            )
-            ```
         """
-        # Ensure setup has completed
         await self.setup_async()
 
-        if not self._is_ready:
+        if self._state != KBState.INDEXED:
             warning_log(
                 f"KnowledgeBase '{self.name}' is not ready. Returning empty results.",
                 context="KnowledgeBase"
@@ -1112,22 +1289,23 @@ class KnowledgeBase(ToolKit):
         info_log(f"Querying '{self.name}': '{query[:100]}...'", context="KnowledgeBase")
         
         try:
-            # Generate query embedding (skip for providers that embed internally)
             if self.embedding_provider is not None:
                 query_vector: List[float] = await self.embedding_provider.embed_query(query)
             else:
                 vector_size: int = getattr(self.vectordb._config, "vector_size", 0) or 1
                 query_vector = [0.0] * vector_size
 
-            # Perform search based on type
             search_results = await self._perform_search(
                 query=query,
                 query_vector=query_vector,
                 top_k=top_k,
                 filter=filter,
-                search_type=search_type,
                 task=task,
-                **search_kwargs
+                alpha=alpha,
+                fusion_method=fusion_method,
+                similarity_threshold=similarity_threshold,
+                apply_reranking=apply_reranking,
+                sparse_query_vector=sparse_query_vector,
             )
             # Convert to RAG results
             rag_results = self._convert_to_rag_results(search_results)
@@ -1175,118 +1353,38 @@ class KnowledgeBase(ToolKit):
         query_vector: List[float],
         top_k: Optional[int],
         filter: Optional[Dict[str, Any]],
-        search_type: str,
         task: Optional[Any] = None,
-        **search_kwargs
+        alpha: Optional[float] = None,
+        fusion_method: Optional[Literal['rrf', 'weighted']] = None,
+        similarity_threshold: Optional[float] = None,
+        apply_reranking: bool = True,
+        sparse_query_vector: Optional[Dict[str, Any]] = None,
     ) -> List[VectorSearchResult]:
-        """
-        Perform the appropriate search based on type and provider capabilities.
-        
-        Args:
-            query: Query text
-            query_vector: Query embedding
-            top_k: Number of results
-            filter: Metadata filter
-            search_type: Type of search
-            task: Optional Task object to get search parameters from
-            **search_kwargs: Additional search parameters
-            
-        Returns:
-            List of VectorSearchResult objects
-        """
-        # Get search parameters from Task if provided, otherwise use config defaults
-        config = getattr(self.vectordb, '_config', None)
-        
-        # Extract Task parameters if provided (override method parameters and config defaults)
-        alpha = search_kwargs.pop('alpha', None) if 'alpha' in search_kwargs else None
-        fusion_method = search_kwargs.pop('fusion_method', None) if 'fusion_method' in search_kwargs else None
-        similarity_threshold = search_kwargs.pop('similarity_threshold', None) if 'similarity_threshold' in search_kwargs else None
-        
-        # Override with Task parameters if provided and not already set
         if task is not None:
             top_k = top_k if top_k is not None else getattr(task, 'vector_search_top_k', None)
             alpha = alpha if alpha is not None else getattr(task, 'vector_search_alpha', None)
             fusion_method = fusion_method if fusion_method is not None else getattr(task, 'vector_search_fusion_method', None)
             similarity_threshold = similarity_threshold if similarity_threshold is not None else getattr(task, 'vector_search_similarity_threshold', None)
             filter = filter if filter is not None else getattr(task, 'vector_search_filter', None)
-        
-        # Determine search capabilities
-        hybrid_enabled = getattr(config, 'hybrid_search_enabled', False) if config else False
-        full_text_enabled = getattr(config, 'full_text_search_enabled', False) if config else False
-        
-        # Auto-select search type
-        if search_type == 'auto':
-            if hybrid_enabled:
-                search_type = 'hybrid'
-            elif full_text_enabled:
-                search_type = 'dense'  # Prefer dense for auto
+
+        if self.isolate_search:
+            isolation_filter: Dict[str, str] = {"knowledge_base_id": self.knowledge_id}
+            if filter is None:
+                filter = isolation_filter
             else:
-                search_type = 'dense'
-        
-        # Perform search
-        if search_type == 'hybrid' and hybrid_enabled:
-            debug_log("Performing hybrid search", context="KnowledgeBase")
-            if hasattr(self.vectordb, 'search'):
-                return await self.vectordb.search(
-                    query_vector=query_vector,
-                    query_text=query,
-                    top_k=top_k,
-                    filter=filter,
-                    alpha=alpha,
-                    fusion_method=fusion_method,
-                    similarity_threshold=similarity_threshold,
-                    **search_kwargs
-                )
-            elif hasattr(self.vectordb, 'search_sync'):
-                return self.vectordb.search_sync(
-                    query_vector=query_vector,
-                    query_text=query,
-                    top_k=top_k,
-                    filter=filter,
-                    alpha=alpha,
-                    fusion_method=fusion_method,
-                    similarity_threshold=similarity_threshold,
-                    **search_kwargs
-                )
-        elif search_type == 'full_text' and full_text_enabled:
-            debug_log("Performing full-text search", context="KnowledgeBase")
-            if hasattr(self.vectordb, 'full_text_search'):
-                return await self.vectordb.full_text_search(
-                    query_text=query,
-                    top_k=top_k or 10,
-                    filter=filter,
-                    similarity_threshold=similarity_threshold,
-                    **search_kwargs
-                )
-            elif hasattr(self.vectordb, 'full_text_search_sync'):
-                return self.vectordb.full_text_search_sync(
-                    query_text=query,
-                    top_k=top_k or 10,
-                    filter=filter,
-                    similarity_threshold=similarity_threshold,
-                    **search_kwargs
-                )
-        else:
-            # Default to dense search
-            debug_log("Performing dense vector search", context="KnowledgeBase")
-            if hasattr(self.vectordb, 'search'):
-                return await self.vectordb.search(
-                    query_vector=query_vector,
-                    top_k=top_k,
-                    filter=filter,
-                    similarity_threshold=similarity_threshold,
-                    **search_kwargs
-                )
-            elif hasattr(self.vectordb, 'search_sync'):
-                return self.vectordb.search_sync(
-                    query_vector=query_vector,
-                    top_k=top_k,
-                    filter=filter,
-                    similarity_threshold=similarity_threshold,
-                    **search_kwargs
-                )
-        
-        raise VectorDBConnectionError("No search method available")
+                filter = {**filter, **isolation_filter}
+
+        return await self.vectordb.asearch(
+            query_vector=query_vector,
+            query_text=query,
+            top_k=top_k,
+            filter=filter,
+            alpha=alpha,
+            fusion_method=fusion_method,
+            similarity_threshold=similarity_threshold,
+            apply_reranking=apply_reranking,
+            sparse_query_vector=sparse_query_vector,
+        )
 
     def _convert_to_rag_results(self, search_results: List[VectorSearchResult]) -> List[RAGSearchResult]:
         """
@@ -1330,178 +1428,397 @@ class KnowledgeBase(ToolKit):
         return rag_results
 
     # ============================================================================
-    # Document Management Methods
+    # Dynamic Content Management
     # ============================================================================
 
-    async def document_exists(self, document_id: str) -> bool:
+    async def aadd_source(
+        self,
+        source: Union[str, Path],
+        loader: Optional[BaseLoader] = None,
+        splitter: Optional[BaseChunker] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> List[str]:
         """
-        Check if a document exists in the knowledge base.
-        
+        Add and process a new source after initial setup.
+
         Args:
-            document_id: The document ID to check
-            
+            source: File path, directory path, or direct content string.
+            loader: Optional loader override. If None, auto-detects.
+            splitter: Optional splitter override. If None, auto-detects.
+            metadata: Extra metadata to inject into every chunk.
+
         Returns:
-            True if the document exists, False otherwise
+            List of document_ids that were ingested.
+
+        Raises:
+            RuntimeError: If the KnowledgeBase has been closed.
         """
-        await self.setup_async()
-        
-        if hasattr(self.vectordb, 'async_document_id_exists'):
-            return await self.vectordb.async_document_id_exists(document_id)
-        elif hasattr(self.vectordb, 'document_id_exists'):
-            return self.vectordb.document_id_exists(document_id)
+        if self._state == KBState.CLOSED:
+            raise RuntimeError("Cannot add source to a closed KnowledgeBase.")
+
+        await self._ensure_connection()
+
+        resolved: List[Union[str, Path]] = self._resolve_sources(source)
+
+        if loader is None:
+            loader_list: List[BaseLoader] = create_intelligent_loaders(resolved)
         else:
-            warning_log(
-                "Vector database does not support document_id_exists check",
-                context="KnowledgeBase"
+            loader_list = [loader] * len(resolved)
+
+        if splitter is None:
+            splitter_list: List[BaseChunker] = create_intelligent_splitters(
+                resolved,
+                embedding_provider=self.embedding_provider,
             )
-            return False
+        else:
+            splitter_list = [splitter] * len(resolved)
 
-    async def delete_document(self, document_id: str) -> bool:
-        """
-        Delete all chunks associated with a document.
-        
-        Args:
-            document_id: The document ID to delete
-            
-        Returns:
-            True if deletion was successful, False otherwise
-        """
-        await self.setup_async()
-        
+        document_ids: List[str] = []
+        all_chunks: List[Chunk] = []
+        processed_docs: List[Document] = []
+
+        for i, src in enumerate(resolved):
+            try:
+                if isinstance(src, str) and self._is_direct_content(src):
+                    docs: List[Document] = [self._create_document_from_content(src, len(self.sources) + i)]
+                else:
+                    current_loader: BaseLoader = loader_list[i] if i < len(loader_list) else loader_list[0]
+                    docs = current_loader.load(src)
+
+                for doc in docs:
+                    if not doc.doc_content_hash:
+                        doc.doc_content_hash = hashlib.md5(doc.content.encode("utf-8")).hexdigest()
+
+                    if await self.vectordb.adoc_content_hash_exists(doc.doc_content_hash):
+                        continue
+
+                    if await self.vectordb.adocument_id_exists(doc.document_id):
+                        await self.vectordb.adelete_by_document_id(doc.document_id)
+
+                    current_splitter: BaseChunker = splitter_list[i] if i < len(splitter_list) else splitter_list[0]
+                    chunks: List[Chunk] = current_splitter.chunk([doc])
+                    all_chunks.extend(chunks)
+                    document_ids.append(doc.document_id)
+                    processed_docs.append(doc)
+
+                    if metadata:
+                        for chunk in chunks:
+                            chunk.metadata.update(metadata)
+
+            except Exception as e:
+                error_log(f"Error adding source {src}: {e}", context="KnowledgeBase")
+                continue
+
+        if all_chunks:
+            vectors: List[List[float]] = await self._generate_embeddings(all_chunks)
+            await self._store_in_vectordb(all_chunks, vectors)
+            self.sources.extend(resolved)
+
+            if self.storage is not None:
+                doc_chunk_counts: Dict[str, int] = {}
+                for chunk in all_chunks:
+                    doc_chunk_counts[chunk.document_id] = doc_chunk_counts.get(chunk.document_id, 0) + 1
+
+                for doc in processed_docs:
+                    row = self._build_knowledge_row(
+                        doc=doc,
+                        chunk_count=doc_chunk_counts.get(doc.document_id, 0),
+                        status="indexed",
+                    )
+                    self.storage.upsert_knowledge_content(row)
+
+        if self._state == KBState.UNINITIALIZED:
+            self._state = KBState.INDEXED
+
+        return document_ids
+
+    def add_source(
+        self,
+        source: Union[str, Path],
+        loader: Optional[BaseLoader] = None,
+        splitter: Optional[BaseChunker] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> List[str]:
+        """Synchronous wrapper for aadd_source."""
+        import asyncio
         try:
-            if hasattr(self.vectordb, 'async_delete_by_document_id'):
-                result = await self.vectordb.async_delete_by_document_id(document_id)
-            elif hasattr(self.vectordb, 'delete_by_document_id'):
-                result = self.vectordb.delete_by_document_id(document_id)
-            else:
-                warning_log(
-                    "Vector database does not support delete_by_document_id",
-                    context="KnowledgeBase"
-                )
-                return False
-            
-            if result:
-                success_log(
-                    f"Deleted document '{document_id}' from knowledge base",
-                    context="KnowledgeBase"
-                )
-            
-            return result
-            
-        except Exception as e:
-            error_log(f"Failed to delete document '{document_id}': {e}", context="KnowledgeBase")
-            return False
+            asyncio.get_running_loop()
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                def _run() -> List[str]:
+                    loop = asyncio.new_event_loop()
+                    return loop.run_until_complete(self.aadd_source(source, loader, splitter, metadata))
+                return executor.submit(_run).result()
+        except RuntimeError:
+            return asyncio.new_event_loop().run_until_complete(
+                self.aadd_source(source, loader, splitter, metadata)
+            )
 
-    async def delete_by_filter(self, metadata_filter: Dict[str, Any]) -> bool:
+    async def aadd_text(
+        self,
+        text: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        document_name: Optional[str] = None,
+        splitter: Optional[BaseChunker] = None,
+    ) -> str:
+        """
+        Insert raw text content directly into the knowledge base.
+
+        Args:
+            text: The text content to ingest.
+            metadata: Optional metadata to attach to every chunk.
+            document_name: Human-readable name. Defaults to "text_<hash>".
+            splitter: Optional chunker override. Defaults to recursive.
+
+        Returns:
+            The document_id of the ingested (or deduplicated) document.
+
+        Raises:
+            RuntimeError: If the KnowledgeBase has been closed.
+        """
+        if self._state == KBState.CLOSED:
+            raise RuntimeError("Cannot add text to a closed KnowledgeBase.")
+
+        await self._ensure_connection()
+
+        content_hash: str = hashlib.md5(text.encode("utf-8")).hexdigest()
+        doc_name: str = document_name or f"text_{content_hash[:8]}"
+
+        doc_metadata: Dict[str, Any] = {
+            "source": doc_name,
+            "document_name": doc_name,
+            **(metadata or {}),
+        }
+
+        doc: Document = Document(
+            content=text,
+            metadata=doc_metadata,
+            document_id=content_hash,
+            doc_content_hash=content_hash,
+        )
+
+        if await self.vectordb.adoc_content_hash_exists(content_hash):
+            return doc.document_id
+
+        if splitter is None:
+            from ..text_splitter.factory import create_chunking_strategy
+            splitter = create_chunking_strategy("recursive")
+
+        chunks: List[Chunk] = splitter.chunk([doc])
+
+        if not chunks:
+            warning_log(f"No chunks created for text '{doc_name}'", context="KnowledgeBase")
+            return doc.document_id
+
+        vectors: List[List[float]] = await self._generate_embeddings(chunks)
+        await self._store_in_vectordb(chunks, vectors)
+
+        if self.storage is not None:
+            row = self._build_knowledge_row(doc=doc, chunk_count=len(chunks), status="indexed")
+            self.storage.upsert_knowledge_content(row)
+
+        if self._state == KBState.UNINITIALIZED:
+            self._state = KBState.INDEXED
+
+        return doc.document_id
+
+    def add_text(
+        self,
+        text: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        document_name: Optional[str] = None,
+        splitter: Optional[BaseChunker] = None,
+    ) -> str:
+        """Synchronous wrapper for aadd_text."""
+        import asyncio
+        try:
+            asyncio.get_running_loop()
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                def _run() -> str:
+                    loop = asyncio.new_event_loop()
+                    return loop.run_until_complete(self.aadd_text(text, metadata, document_name, splitter))
+                return executor.submit(_run).result()
+        except RuntimeError:
+            return asyncio.new_event_loop().run_until_complete(
+                self.aadd_text(text, metadata, document_name, splitter)
+            )
+
+    async def aremove_document(self, document_id: str) -> bool:
+        """
+        Remove a document and all its chunks from the knowledge base.
+
+        Args:
+            document_id: The document ID to remove.
+
+        Returns:
+            True if deletion was successful.
+
+        Raises:
+            RuntimeError: If the KnowledgeBase has been closed.
+        """
+        if self._state == KBState.CLOSED:
+            raise RuntimeError("Cannot remove document from a closed KnowledgeBase.")
+
+        await self._ensure_connection()
+
+        self._remove_source_for_document(document_id)
+
+        result: bool = await self.vectordb.adelete_by_document_id(document_id)
+        if result:
+            if self.storage is not None:
+                self.storage.delete_knowledge_content(document_id)
+            success_log(f"Removed document '{document_id}' from knowledge base", context="KnowledgeBase")
+        return result
+
+    def remove_document(self, document_id: str) -> bool:
+        """Synchronous wrapper for aremove_document."""
+        import asyncio
+        try:
+            asyncio.get_running_loop()
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                def _run() -> bool:
+                    loop = asyncio.new_event_loop()
+                    return loop.run_until_complete(self.aremove_document(document_id))
+                return executor.submit(_run).result()
+        except RuntimeError:
+            return asyncio.new_event_loop().run_until_complete(self.aremove_document(document_id))
+
+    async def arefresh(self) -> Dict[str, Any]:
+        """
+        Re-scan existing sources for changes and re-index modified documents.
+
+        Returns:
+            Processing stats dictionary.
+
+        Raises:
+            RuntimeError: If the KnowledgeBase has been closed.
+        """
+        if self._state == KBState.CLOSED:
+            raise RuntimeError("Cannot refresh a closed KnowledgeBase.")
+
+        for loader in self.loaders:
+            loader.reset()
+
+        self._state = KBState.CONNECTED
+        await self.setup_async(force=True)
+        return self._processing_stats
+
+    def refresh(self) -> Dict[str, Any]:
+        """Synchronous wrapper for arefresh."""
+        import asyncio
+        try:
+            asyncio.get_running_loop()
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                def _run() -> Dict[str, Any]:
+                    loop = asyncio.new_event_loop()
+                    return loop.run_until_complete(self.arefresh())
+                return executor.submit(_run).result()
+        except RuntimeError:
+            return asyncio.new_event_loop().run_until_complete(self.arefresh())
+
+    async def adelete_by_filter(self, metadata_filter: Dict[str, Any]) -> bool:
         """
         Delete all chunks matching a metadata filter.
-        
+
         Args:
-            metadata_filter: Metadata filter to match for deletion
-            
+            metadata_filter: Metadata filter to match for deletion.
+
         Returns:
-            True if deletion was successful, False otherwise
+            True if deletion was successful.
         """
         await self.setup_async()
-        
+
         try:
-            if hasattr(self.vectordb, 'async_delete_by_metadata'):
-                result = await self.vectordb.async_delete_by_metadata(metadata_filter)
-            elif hasattr(self.vectordb, 'delete_by_metadata'):
-                result = self.vectordb.delete_by_metadata(metadata_filter)
-            else:
-                warning_log(
-                    "Vector database does not support delete_by_metadata",
-                    context="KnowledgeBase"
-                )
-                return False
-            
+            result: bool = await self.vectordb.adelete_by_metadata(metadata_filter)
             if result:
-                success_log(
-                    f"Deleted chunks matching filter: {metadata_filter}",
-                    context="KnowledgeBase"
-                )
-            
+                success_log(f"Deleted chunks matching filter: {metadata_filter}", context="KnowledgeBase")
             return result
-            
         except Exception as e:
             error_log(f"Failed to delete by filter: {e}", context="KnowledgeBase")
             return False
 
-    async def update_document_metadata(
-        self, 
-        document_id: str, 
-        metadata_updates: Dict[str, Any]
+    def delete_by_filter(self, metadata_filter: Dict[str, Any]) -> bool:
+        """Synchronous wrapper for adelete_by_filter."""
+        import asyncio
+        try:
+            asyncio.get_running_loop()
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                def _run() -> bool:
+                    loop = asyncio.new_event_loop()
+                    return loop.run_until_complete(self.adelete_by_filter(metadata_filter))
+                return executor.submit(_run).result()
+        except RuntimeError:
+            return asyncio.new_event_loop().run_until_complete(self.adelete_by_filter(metadata_filter))
+
+    async def aupdate_document_metadata(
+        self,
+        document_id: str,
+        metadata_updates: Dict[str, Any],
     ) -> bool:
         """
         Update metadata for all chunks of a document.
-        
+
         Args:
-            document_id: The document ID
-            metadata_updates: Metadata fields to update
-            
+            document_id: The document ID.
+            metadata_updates: Metadata fields to update.
+
         Returns:
-            True if update was successful, False otherwise
+            True if update was successful.
         """
         await self.setup_async()
-        
+
         try:
-            # Get all chunks for this document
-            if hasattr(self.vectordb, 'search_sync'):
-                chunks = self.vectordb.search_sync(
-                    query_vector=None,
-                    query_text=None,
-                    filter={"document_id": document_id}
-                )
-            else:
-                warning_log(
-                    "Cannot update metadata: search not supported",
-                    context="KnowledgeBase"
-                )
-                return False
-            
-            # Update each chunk's metadata
-            success = True
+            chunks: List[VectorSearchResult] = await self.vectordb.asearch(
+                query_vector=None,
+                query_text=None,
+                filter={"document_id": document_id},
+            )
+
+            success: bool = True
             for chunk in chunks:
-                if hasattr(self.vectordb, 'async_update_metadata'):
-                    result = await self.vectordb.async_update_metadata(
-                        chunk.id, metadata_updates
-                    )
-                elif hasattr(self.vectordb, 'update_metadata'):
-                    result = self.vectordb.update_metadata(chunk.id, metadata_updates)
-                else:
-                    return False
-                
+                result: bool = await self.vectordb.aupdate_metadata(chunk.id, metadata_updates)
                 if not result:
                     success = False
-            
+
             if success:
-                success_log(
-                    f"Updated metadata for document '{document_id}'",
-                    context="KnowledgeBase"
-                )
-            
+                success_log(f"Updated metadata for document '{document_id}'", context="KnowledgeBase")
             return success
-            
+
         except Exception as e:
-            error_log(
-                f"Failed to update metadata for document '{document_id}': {e}",
-                context="KnowledgeBase"
-            )
+            error_log(f"Failed to update metadata for document '{document_id}': {e}", context="KnowledgeBase")
             return False
 
-    # ============================================================================
-    # Utility and Compatibility Methods
-    # ============================================================================
+    def update_document_metadata(
+        self,
+        document_id: str,
+        metadata_updates: Dict[str, Any],
+    ) -> bool:
+        """Synchronous wrapper for aupdate_document_metadata."""
+        import asyncio
+        try:
+            asyncio.get_running_loop()
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                def _run() -> bool:
+                    loop = asyncio.new_event_loop()
+                    return loop.run_until_complete(self.aupdate_document_metadata(document_id, metadata_updates))
+                return executor.submit(_run).result()
+        except RuntimeError:
+            return asyncio.new_event_loop().run_until_complete(
+                self.aupdate_document_metadata(document_id, metadata_updates)
+            )
+
+
 
     def markdown(self) -> str:
         """Return a markdown representation of the knowledge base."""
         source_strs: List[str] = [str(source) for source in self.sources]
         return f"# Knowledge Base: {self.name}\n\nSources: {', '.join(source_strs)}"
     
-    # ============================================================================
-    # Collection and Health Management
-    # ============================================================================
 
     async def get_collection_info_async(self) -> Dict[str, Any]:
         """
@@ -1520,8 +1837,7 @@ class KnowledgeBase(ToolKit):
                 else:
                     return self.vectordb.get_collection_info()
             
-            # Fallback to basic info
-            exists = await self.vectordb.collection_exists() if hasattr(self.vectordb, 'collection_exists') else False
+            exists: bool = await self.vectordb.acollection_exists()
             
             return {
                 "collection_name": getattr(self.vectordb._config, 'collection_name', self.knowledge_id),
@@ -1547,17 +1863,8 @@ class KnowledgeBase(ToolKit):
         await self.setup_async()
         
         try:
-            if hasattr(self.vectordb, 'async_optimize'):
-                result = await self.vectordb.async_optimize()
-            elif hasattr(self.vectordb, 'optimize'):
-                result = self.vectordb.optimize()
-            else:
-                debug_log(
-                    "Vector database does not support optimization",
-                    context="KnowledgeBase"
-                )
-                return False
-            
+            result: bool = await self.vectordb.aoptimize()
+
             if result:
                 success_log("Vector database optimized successfully", context="KnowledgeBase")
             
@@ -1596,8 +1903,8 @@ class KnowledgeBase(ToolKit):
                 "name": self.name,
                 "knowledge_id": self.knowledge_id,
                 "sources_count": len(self.sources),
-                "is_ready": self._is_ready,
-                "is_closed": self._is_closed
+                "state": self._state.value,
+                "isolate_search": self.isolate_search,
             },
             "sources": [str(source) for source in self.sources],
             "loaders": {
@@ -1627,13 +1934,13 @@ class KnowledgeBase(ToolKit):
         Returns:
             Dictionary containing health status and diagnostic information for all components.
         """
-        health_status = {
+        health_status: Dict[str, Any] = {
             "name": self.name,
             "healthy": False,
-            "is_ready": self._is_ready,
-            "is_closed": self._is_closed,
+            "state": self._state.value,
             "knowledge_id": self.knowledge_id,
             "sources_count": len(self.sources),
+            "isolate_search": self.isolate_search,
             "components": {},
             "timestamp": __import__('datetime').datetime.now().isoformat()
         }
@@ -1659,7 +1966,7 @@ class KnowledgeBase(ToolKit):
             health_status["components"]["vectordb"] = await self._check_vectordb_health()
             
             # Add collection info if ready
-            if self._is_ready:
+            if self._state == KBState.INDEXED:
                 try:
                     health_status["collection_info"] = await self.get_collection_info_async()
                 except Exception as e:
@@ -1674,7 +1981,7 @@ class KnowledgeBase(ToolKit):
                 comp.get("healthy", False)
                 for comp in health_status["components"].values()
             )
-            health_status["healthy"] = all_healthy and self._is_ready and not self._is_closed
+            health_status["healthy"] = all_healthy and self._state == KBState.INDEXED
             
             return health_status
             
@@ -1762,36 +2069,21 @@ class KnowledgeBase(ToolKit):
     async def _check_vectordb_health(self) -> Dict[str, Any]:
         """Check vector database health."""
         try:
-            # Try provider-specific health check
-            if hasattr(self.vectordb, 'is_ready'):
-                if asyncio.iscoroutinefunction(self.vectordb.is_ready):
-                    is_ready = await self.vectordb.is_ready()
-                else:
-                    is_ready = self.vectordb.is_ready()
-                
-                return {
-                    "healthy": is_ready,
-                    "provider": self.vectordb.__class__.__name__,
-                    "connected": getattr(self.vectordb, '_is_connected', False)
-                }
-            else:
-                # Fallback check
-                return {
-                    "healthy": getattr(self.vectordb, '_is_connected', False),
-                    "provider": self.vectordb.__class__.__name__,
-                    "note": "No is_ready method available"
-                }
+            is_ready: bool = await self.vectordb.ais_ready()
+            return {
+                "healthy": is_ready,
+                "provider": self.vectordb.__class__.__name__,
+                "connected": self.vectordb._is_connected,
+            }
         except Exception as e:
             return {
                 "healthy": False,
                 "error": str(e),
-                "provider": self.vectordb.__class__.__name__
+                "provider": self.vectordb.__class__.__name__,
             }
     
 
-    # ============================================================================
-    # Resource Management and Cleanup
-    # ============================================================================
+
 
     async def close(self) -> None:
         """
@@ -1810,14 +2102,13 @@ class KnowledgeBase(ToolKit):
                 await kb.close()  # Always clean up
             ```
         """
-        if self._is_closed:
+        if self._state == KBState.CLOSED:
             debug_log(f"KnowledgeBase '{self.name}' already closed", context="KnowledgeBase")
             return
         
         debug_log(f"Closing KnowledgeBase '{self.name}'...", context="KnowledgeBase")
         
         try:
-            # Close embedding provider (if configured)
             if self.embedding_provider is not None and hasattr(self.embedding_provider, 'close'):
                 try:
                     if asyncio.iscoroutinefunction(self.embedding_provider.close):
@@ -1828,25 +2119,13 @@ class KnowledgeBase(ToolKit):
                 except Exception as e:
                     warning_log(f"Error closing embedding provider: {e}", context="KnowledgeBase")
             
-            # Close vector database
-            if hasattr(self.vectordb, 'disconnect'):
-                try:
-                    if asyncio.iscoroutinefunction(self.vectordb.disconnect):
-                        await self.vectordb.disconnect()
-                    else:
-                        self.vectordb.disconnect()
-                    debug_log("Vector database disconnected", context="KnowledgeBase")
-                except Exception as e:
-                    warning_log(f"Error disconnecting vector database: {e}", context="KnowledgeBase")
-            elif hasattr(self.vectordb, 'disconnect_sync'):
-                try:
-                    self.vectordb.disconnect_sync()
-                    debug_log("Vector database disconnected (sync)", context="KnowledgeBase")
-                except Exception as e:
-                    warning_log(f"Error disconnecting vector database: {e}", context="KnowledgeBase")
+            try:
+                await self.vectordb.adisconnect()
+                debug_log("Vector database disconnected", context="KnowledgeBase")
+            except Exception as e:
+                warning_log(f"Error disconnecting vector database: {e}", context="KnowledgeBase")
             
-            # Mark as closed
-            self._is_closed = True
+            self._state = KBState.CLOSED
             success_log(
                 f"KnowledgeBase '{self.name}' resources cleaned up successfully",
                 context="KnowledgeBase"
@@ -1854,39 +2133,28 @@ class KnowledgeBase(ToolKit):
             
         except Exception as e:
             error_log(f"Error during cleanup: {e}", context="KnowledgeBase")
-            self._is_closed = True  # Mark as closed even if cleanup had errors
+            self._state = KBState.CLOSED
 
-    def __del__(self):
-        """
-        Destructor to ensure cleanup when object is garbage collected.
-        
-        Note: This is a best-effort cleanup. It's better to explicitly call close().
-        """
+    def __del__(self) -> None:
+        """Best-effort cleanup when garbage collected. Prefer explicit close()."""
         try:
-            if not hasattr(self, '_is_closed'):
+            if not hasattr(self, '_state'):
                 return
             
-            if self._is_ready and not self._is_closed:
-                # Try sync disconnect as last resort
+            if self._state in (KBState.CONNECTED, KBState.INDEXED):
                 if hasattr(self, 'vectordb'):
                     try:
-                        if hasattr(self.vectordb, 'disconnect_sync'):
-                            self.vectordb.disconnect_sync()
-                        elif hasattr(self.vectordb, 'disconnect'):
-                            # Only call if it's not async
-                            if not asyncio.iscoroutinefunction(self.vectordb.disconnect):
-                                self.vectordb.disconnect()
+                        self.vectordb.disconnect()
                     except Exception:
-                        pass  # Ignore errors in destructor
-                
-                # Warn about improper cleanup
+                        pass
+
                 warning_log(
                     f"KnowledgeBase '{getattr(self, 'name', 'Unknown')}' was not explicitly closed. "
                     "Consider using 'async with' context manager or calling close() explicitly.",
                     context="KnowledgeBase"
                 )
         except:
-            pass  # Never let destructor raise exceptions
+            pass
 
     async def __aenter__(self):
         """Async context manager entry."""

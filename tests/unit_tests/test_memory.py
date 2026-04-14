@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from upsonic.storage.memory.memory import Memory
 from upsonic.storage.base import Storage
 from upsonic.storage.in_memory import InMemoryStorage
+from upsonic.storage.schemas import KnowledgeRow
 from upsonic.session.agent import AgentSession
 from upsonic.messages.messages import (
     ModelRequest, ModelResponse, TextPart, UserPromptPart, 
@@ -25,6 +26,7 @@ class MockStorage(Storage):
         self._sessions: Dict[str, Any] = {}
         self._user_memories: Dict[str, Any] = {}
         self._cultural_knowledge: Dict[str, Any] = {}
+        self._knowledge_rows: Dict[str, KnowledgeRow] = {}
         # Support _data attribute for test compatibility
         self._data: Dict[tuple, Any] = {}
     
@@ -128,6 +130,7 @@ class MockStorage(Storage):
         self._sessions.clear()
         self._user_memories.clear()
         self._cultural_knowledge.clear()
+        self._knowledge_rows.clear()
     
     def delete_cultural_knowledge(self, id: str) -> None:
         if id in self._cultural_knowledge:
@@ -218,6 +221,48 @@ class MockStorage(Storage):
         if isinstance(cultural_knowledge, dict):
             return cultural_knowledge
         return {}
+
+    def upsert_knowledge_content(
+        self,
+        knowledge_row: KnowledgeRow,
+    ) -> Optional[KnowledgeRow]:
+        self._knowledge_rows[knowledge_row.id] = knowledge_row
+        return knowledge_row
+
+    def get_knowledge_content(self, id: str) -> Optional[KnowledgeRow]:
+        return self._knowledge_rows.get(id)
+
+    def get_knowledge_contents(
+        self,
+        knowledge_base_id: Optional[str] = None,
+        limit: Optional[int] = None,
+        page: Optional[int] = None,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None,
+    ) -> Tuple[List[KnowledgeRow], int]:
+        rows: List[KnowledgeRow] = list(self._knowledge_rows.values())
+        if knowledge_base_id is not None:
+            rows = [r for r in rows if r.knowledge_base_id == knowledge_base_id]
+        total: int = len(rows)
+        if page is not None and limit is not None:
+            offset: int = (page - 1) * limit
+            rows = rows[offset : offset + limit]
+        elif limit is not None:
+            rows = rows[:limit]
+        return rows, total
+
+    def delete_knowledge_content(self, id: str) -> bool:
+        if id in self._knowledge_rows:
+            del self._knowledge_rows[id]
+            return True
+        return False
+
+    def delete_knowledge_contents(self, ids: List[str]) -> int:
+        deleted: int = 0
+        for row_id in ids:
+            if self.delete_knowledge_content(row_id):
+                deleted += 1
+        return deleted
 
 
 class MockModel:

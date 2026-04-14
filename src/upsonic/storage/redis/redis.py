@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 from upsonic.storage.base import Storage
 from upsonic.storage.redis.schemas import (
     CULTURAL_KNOWLEDGE_INDEX_FIELDS,
+    KNOWLEDGE_INDEX_FIELDS,
     SESSION_INDEX_FIELDS,
     USER_MEMORY_INDEX_FIELDS,
 )
@@ -34,6 +35,7 @@ if TYPE_CHECKING:
     from redis import Redis, RedisCluster
     from upsonic.session.base import SessionType, Session
     from upsonic.culture.cultural_knowledge import CulturalKnowledge
+    from upsonic.storage.schemas import KnowledgeRow
 
 _logger = get_logger("upsonic.storage.redis")
 
@@ -81,6 +83,7 @@ class RedisStorage(Storage):
         expire: Optional[int] = None,
         session_table: Optional[str] = None,
         user_memory_table: Optional[str] = None,
+        knowledge_table: Optional[str] = None,
     ) -> None:
         """
         Initialize the Redis storage backend.
@@ -114,6 +117,7 @@ class RedisStorage(Storage):
         super().__init__(
             session_table=session_table or "sessions",
             user_memory_table=user_memory_table or "user_memories",
+            knowledge_table=knowledge_table,
             id=id,
         )
         
@@ -1050,7 +1054,20 @@ class RedisStorage(Storage):
             # Clear user memory indexes
             memory_idx_pattern = f"{self.db_prefix}:user_memories:index:*"
             self._delete_keys_by_pattern(memory_idx_pattern)
-            
+
+            # Clear knowledge
+            knowledge_keys = get_all_keys_for_table(
+                redis_client=self.redis_client,
+                prefix=self.db_prefix,
+                table_type="knowledge",
+            )
+            if knowledge_keys:
+                self.redis_client.delete(*knowledge_keys)
+
+            # Clear knowledge indexes
+            knowledge_idx_pattern = f"{self.db_prefix}:knowledge:index:*"
+            self._delete_keys_by_pattern(knowledge_idx_pattern)
+
             _logger.info("Cleared all data from Redis storage")
         except Exception as e:
             _logger.error(f"Error clearing all data: {e}")
@@ -1445,3 +1462,165 @@ class RedisStorage(Storage):
         except Exception as e:
             _logger.error(f"Error upserting cultural knowledge: {e}")
             raise e
+
+    # ======================== Knowledge Content Methods ========================
+
+    def upsert_knowledge_content(
+        self,
+        knowledge_row: "KnowledgeRow",
+    ) -> Optional["KnowledgeRow"]:
+        """Insert or update a knowledge document registry entry."""
+        from upsonic.storage.schemas import KnowledgeRow
+
+        try:
+            current_time = int(time.time())
+
+            data = knowledge_row.to_dict()
+            data.setdefault("created_at", current_time)
+            data["updated_at"] = current_time
+
+            key = generate_redis_key(self.db_prefix, "knowledge", data["id"])
+
+            existing_data = self.redis_client.get(key)
+            if existing_data:
+                old_record = deserialize_data(existing_data)
+                remove_index_entries(
+                    redis_client=self.redis_client,
+                    prefix=self.db_prefix,
+                    table_type="knowledge",
+                    record_id=data["id"],
+                    record_data=old_record,
+                    index_fields=KNOWLEDGE_INDEX_FIELDS,
+                )
+
+            serialized = serialize_data(data)
+            if self.expire:
+                self.redis_client.setex(key, self.expire, serialized)
+            else:
+                self.redis_client.set(key, serialized)
+
+            create_index_entries(
+                redis_client=self.redis_client,
+                prefix=self.db_prefix,
+                table_type="knowledge",
+                record_id=data["id"],
+                record_data=data,
+                index_fields=KNOWLEDGE_INDEX_FIELDS,
+                expire=self.expire,
+            )
+
+            return KnowledgeRow.from_dict(data)
+
+        except Exception as e:
+            _logger.error(f"Error upserting knowledge content: {e}")
+            raise e
+
+    def get_knowledge_content(
+        self,
+        id: str,
+    ) -> Optional["KnowledgeRow"]:
+        """Get a knowledge document registry entry by ID."""
+        from upsonic.storage.schemas import KnowledgeRow
+
+        try:
+            key = generate_redis_key(self.db_prefix, "knowledge", id)
+            data = self.redis_client.get(key)
+
+            if data is None:
+                return None
+
+            return KnowledgeRow.from_dict(deserialize_data(data))
+
+        except Exception as e:
+            _logger.error(f"Error getting knowledge content: {e}")
+            raise e
+
+    def get_knowledge_contents(
+        self,
+        knowledge_base_id: Optional[str] = None,
+        limit: Optional[int] = None,
+        page: Optional[int] = None,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None,
+    ) -> Tuple[List["KnowledgeRow"], int]:
+        """Get knowledge document registry entries with filtering and pagination."""
+        from upsonic.storage.schemas import KnowledgeRow
+
+        try:
+            keys = get_all_keys_for_table(
+                redis_client=self.redis_client,
+                prefix=self.db_prefix,
+                table_type="knowledge",
+            )
+
+            all_items: List[Dict[str, Any]] = []
+            for key in keys:
+                data = self.redis_client.get(key)
+                if data:
+                    all_items.append(deserialize_data(data))
+
+            filtered_items: List[Dict[str, Any]] = []
+            for item in all_items:
+                if knowledge_base_id is not None and item.get("knowledge_base_id") != knowledge_base_id:
+                    continue
+                filtered_items.append(item)
+
+            total_count: int = len(filtered_items)
+
+            sorted_items = apply_sorting(
+                records=filtered_items,
+                sort_by=sort_by or "created_at",
+                sort_order=sort_order or "desc",
+            )
+
+            paginated_items = apply_pagination(
+                records=sorted_items,
+                limit=limit,
+                page=page,
+            )
+
+            rows = [KnowledgeRow.from_dict(item) for item in paginated_items]
+            return rows, total_count
+
+        except Exception as e:
+            _logger.error(f"Error getting knowledge contents: {e}")
+            raise e
+
+    def delete_knowledge_content(self, id: str) -> bool:
+        """Delete a knowledge document registry entry by ID."""
+        try:
+            key = generate_redis_key(self.db_prefix, "knowledge", id)
+
+            existing_data = self.redis_client.get(key)
+            if existing_data:
+                record_data = deserialize_data(existing_data)
+                remove_index_entries(
+                    redis_client=self.redis_client,
+                    prefix=self.db_prefix,
+                    table_type="knowledge",
+                    record_id=id,
+                    record_data=record_data,
+                    index_fields=KNOWLEDGE_INDEX_FIELDS,
+                )
+                self.redis_client.delete(key)
+                _logger.debug(f"Deleted knowledge content: {id}")
+                return True
+
+            return False
+
+        except Exception as e:
+            _logger.error(f"Error deleting knowledge content: {e}")
+            raise e
+
+    def delete_knowledge_contents(self, ids: List[str]) -> int:
+        """Delete multiple knowledge document registry entries."""
+        if not ids:
+            return 0
+
+        deleted_count: int = 0
+        for doc_id in ids:
+            if self.delete_knowledge_content(doc_id):
+                deleted_count += 1
+
+        _logger.debug(f"Deleted {deleted_count} knowledge entries")
+        return deleted_count

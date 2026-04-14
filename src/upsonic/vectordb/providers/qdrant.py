@@ -29,7 +29,6 @@ from upsonic.vectordb.config import (
     DistanceMetric,
     HNSWIndexConfig,
     IVFIndexConfig,
-    FlatIndexConfig
 )
 
 from upsonic.utils.package.exception import(
@@ -48,13 +47,21 @@ class QdrantProvider(BaseVectorDBProvider):
     """
     A comprehensive, async-first vector database provider for Qdrant.
     
+    Standard properties stored per point:
+    - chunk_id (keyword) — unique per-chunk identifier
+    - document_id (keyword) — parent document identifier
+    - doc_content_hash (keyword) — MD5 of parent document content for change detection
+    - chunk_content_hash (keyword) — MD5 of chunk text content for deduplication
+    - document_name (keyword) — human-readable source name
+    - content (text) — the chunk text
+    - metadata (dict) — all non-standard data
+    
     This implementation provides:
     - Full async/await support using AsyncQdrantClient
-    - Flexible payload schema with document_name, document_id, content_id, metadata, content
     - Dynamic field indexing based on configuration
     - Sparse vector support for hybrid search
     - Advanced filtering and search capabilities
-    - Embedder and reranker integration for end-to-end workflows
+    - Reranker integration for end-to-end workflows
     - Seamless integration with the framework's configuration system
     """
 
@@ -78,7 +85,6 @@ class QdrantProvider(BaseVectorDBProvider):
                 feature_name="Qdrant vector database provider"
             )
 
-        # Handle dict configuration
         if isinstance(config, dict):
             config = QdrantConfig.from_dict(config)
         
@@ -93,15 +99,9 @@ class QdrantProvider(BaseVectorDBProvider):
         
         super().__init__(config)
         self._config: QdrantConfig = config
-        self._client: Optional[AsyncQdrantClient] = None
+        self.client: Optional[Any] = None
         
-        # Integration components
         self.reranker = reranker
-        
-        # Provider metadata
-        self.provider_name = config.provider_name or f"QdrantProvider_{config.collection_name}"
-        self.provider_description = config.provider_description
-        self.provider_id = config.provider_id or self._generate_provider_id()
     
 
     
@@ -137,170 +137,227 @@ class QdrantProvider(BaseVectorDBProvider):
             uuid_obj = uuid.UUID(str(id_value))
             return str(uuid_obj)
         except ValueError:
-            # Not a valid UUID, convert to deterministic integer using hash
             hash_obj = hashlib.md5(str(id_value).encode())
             return int.from_bytes(hash_obj.digest()[:8], byteorder='big', signed=False)
     
-    def _generate_content_id(self, content: str) -> str:
+    async def _create_async_client(self) -> None:
         """
-        Generates a unique content_id from content using MD5 hash.
-        
-        Args:
-            content: The content string
-            
-        Returns:
-            A hex string representing the content hash
-        """
-        cleaned_content = content.replace("\x00", "\ufffd")
-        return hashlib.md5(cleaned_content.encode()).hexdigest()
-    
+        Creates the async Qdrant client based on the connection configuration.
+        Does not verify readiness — only instantiates the client object.
 
-    
-    async def connect(self) -> None:
-        """
-        Establishes an async connection to the Qdrant vector database.
-        
-        Uses all available connection parameters including:
-        - Standard: host, port, api_key
-        - Advanced: grpc_port, prefer_grpc, https, prefix, timeout
-        - Alternative: url, location
-        
         Raises:
-            VectorDBConnectionError: If the connection fails for any reason.
+            ConfigurationError: If the connection configuration is invalid.
+            VectorDBConnectionError: If client instantiation fails.
         """
-        if self._is_connected and self._client is not None:
-            info_log("Already connected to Qdrant.", context="QdrantVectorDB")
-            return
-
         conn = self._config.connection
+
         try:
-            # Handle special location strings (e.g., ":memory:")
             if conn.location:
-                self._client = AsyncQdrantClient(location=conn.location)
-            
-            # Handle different modes
+                self.client = AsyncQdrantClient(location=conn.location)
+
             elif conn.mode == Mode.IN_MEMORY:
-                self._client = AsyncQdrantClient(":memory:")
-            
+                self.client = AsyncQdrantClient(":memory:")
+
             elif conn.mode == Mode.EMBEDDED:
                 if not conn.db_path:
                     raise ConfigurationError("'db_path' must be set for embedded mode.")
-                self._client = AsyncQdrantClient(path=conn.db_path)
-            
+                self.client = AsyncQdrantClient(path=conn.db_path)
+
             elif conn.mode == Mode.LOCAL:
-                # Determine grpc_port
-                grpc_port = conn.grpc_port
+                grpc_port: Optional[int] = conn.grpc_port
                 if grpc_port is None and conn.port:
                     grpc_port = conn.port + 1
                 elif grpc_port is None:
                     grpc_port = 6334
-                
-                client_kwargs = {
+
+                client_kwargs: Dict[str, Any] = {
                     "host": conn.host or "localhost",
                     "port": conn.port or 6333,
                     "grpc_port": grpc_port,
                     "prefer_grpc": conn.prefer_grpc,
                 }
-                
-                # Add optional parameters if specified
+
                 if conn.https is not None:
                     client_kwargs["https"] = conn.https
                 if conn.prefix:
                     client_kwargs["prefix"] = conn.prefix
                 if conn.timeout is not None:
                     client_kwargs["timeout"] = int(conn.timeout) if conn.timeout else None
-                
-                self._client = AsyncQdrantClient(**client_kwargs)
-            
+
+                self.client = AsyncQdrantClient(**client_kwargs)
+
             elif conn.mode == Mode.CLOUD:
-                # Use full URL if provided, otherwise construct from host
-                target_url = conn.url or conn.host
+                target_url: Optional[str] = conn.url or conn.host
                 if target_url and ":6333" in target_url:
                     target_url = target_url.replace(":6333", "")
-                
+
                 client_kwargs = {
                     "url": target_url,
                     "api_key": conn.api_key.get_secret_value() if conn.api_key else None,
                 }
-                
-                # Add optional parameters
+
                 if conn.prefer_grpc:
                     client_kwargs["prefer_grpc"] = conn.prefer_grpc
                 if conn.prefix:
                     client_kwargs["prefix"] = conn.prefix
                 if conn.timeout is not None:
                     client_kwargs["timeout"] = int(conn.timeout) if conn.timeout else None
-                
-                self._client = AsyncQdrantClient(**client_kwargs)
-            
+
+                self.client = AsyncQdrantClient(**client_kwargs)
+
             else:
                 raise ConfigurationError(f"Unsupported mode for Qdrant: {conn.mode.value}")
 
-            self._is_connected = True
-            info_log(f"Successfully connected to Qdrant (async) - {self.provider_name}", context="QdrantVectorDB")
-
+        except (ConfigurationError, VectorDBConnectionError):
+            raise
         except Exception as e:
-            self._client = None
+            raise VectorDBConnectionError(f"Failed to create Qdrant async client: {e}") from e
+
+    async def aget_client(self) -> Any:
+        """
+        Gets or creates the async Qdrant client, ensuring it is connected and ready.
+
+        Follows a singleton pattern: reuses the existing client if available,
+        creates a new one if needed, verifies readiness, and auto-recovers
+        if the existing client is unresponsive.
+
+        Returns:
+            A connected and ready AsyncQdrantClient instance.
+
+        Raises:
+            VectorDBConnectionError: If the client cannot be created or is not ready.
+        """
+        if self.client is None:
+            debug_log(
+                f"Creating async client for '{self._config.connection.mode.value}' mode...",
+                context="QdrantVectorDB",
+            )
+            await self._create_async_client()
+
+        try:
+            await self.client.get_collections()  # type: ignore[union-attr]
+        except Exception:
+            debug_log("Existing client is unresponsive, recreating...", context="QdrantVectorDB")
+            try:
+                await self.aclose()
+            except Exception:
+                self.client = None
+                self._is_connected = False
+            await self._create_async_client()
+
+            try:
+                await self.client.get_collections()  # type: ignore[union-attr]
+            except Exception as e:
+                self.client = None
+                self._is_connected = False
+                raise VectorDBConnectionError(f"Qdrant client is not ready after recreation: {e}") from e
+
+        self._is_connected = True
+        return self.client  # type: ignore[return-value]
+
+    def get_client(self) -> Any:
+        """
+        Gets or creates the async Qdrant client, ensuring it is connected and ready (sync).
+
+        Returns:
+            A connected and ready AsyncQdrantClient instance.
+
+        Raises:
+            VectorDBConnectionError: If the client cannot be created or is not ready.
+        """
+        return self._run_async_from_sync(self.aget_client())
+
+    async def ais_client_connected(self) -> bool:
+        """
+        Checks whether the Qdrant client exists and is responsive.
+        Does not create or reconnect — purely a read-only status check.
+
+        Returns:
+            True if the client exists and is responsive, False otherwise.
+        """
+        if self.client is None:
+            return False
+
+        try:
+            await self.client.get_collections()
+            return True
+        except Exception:
+            return False
+
+    def is_client_connected(self) -> bool:
+        """
+        Checks whether the Qdrant client exists and is responsive (sync).
+
+        Returns:
+            True if the client exists and is responsive, False otherwise.
+        """
+        return self._run_async_from_sync(self.ais_client_connected())
+
+    async def aconnect(self) -> None:
+        """
+        Establishes an async connection to the Qdrant vector database instance.
+
+        Delegates to aget_client() which handles client creation and
+        readiness verification. This method is idempotent.
+
+        Raises:
+            VectorDBConnectionError: If the connection fails for any reason.
+        """
+        if await self.ais_client_connected():
+            info_log("Already connected to Qdrant.", context="QdrantVectorDB")
+            return
+
+        debug_log(
+            f"Attempting to connect to Qdrant in '{self._config.connection.mode.value}' mode...",
+            context="QdrantVectorDB",
+        )
+
+        try:
+            await self.aget_client()
+            info_log(
+                f"Successfully connected to Qdrant and health check passed. - {self.name}",
+                context="QdrantVectorDB",
+            )
+        except (VectorDBConnectionError, ConfigurationError):
+            self.client = None
+            self._is_connected = False
+            raise
+        except Exception as e:
+            self.client = None
             self._is_connected = False
             raise VectorDBConnectionError(f"Failed to connect to Qdrant: {e}") from e
-    
-    async def disconnect(self) -> None:
+
+    async def adisconnect(self) -> None:
         """
         Gracefully terminates the async connection to Qdrant.
         Alias for close() for framework compatibility.
         """
-        await self.close()
-    
-    def disconnect_sync(self) -> None:
-        """
-        Gracefully terminates the connection to the vector database (sync).
-        """
-        self._run_async_from_sync(self.disconnect())
-    
-    async def close(self) -> None:
+        await self.aclose()
+
+    async def aclose(self) -> None:
         """
         Close the async Qdrant client connection properly.
         This is the recommended method for cleanup.
         """
-        if self._client:
+        if self.client:
             try:
-                await self._client.close()
+                await self.client.close()
                 from upsonic.utils.printing import success_log
                 success_log("Successfully closed Qdrant connection.", "QdrantProvider")
             except Exception as e:
                 from upsonic.utils.printing import error_log
                 error_log(f"Error closing Qdrant connection: {e}", "QdrantProvider")
             finally:
-                self._client = None
+                self.client = None
                 self._is_connected = False
-    
-    async def is_ready(self) -> bool:
-        """
-        Performs a health check to ensure the Qdrant instance is responsive.
-        """
-        if not self._is_connected or not self._client:
-            return False
-        try:
-            await self._client.get_collections()
-            return True
-        except Exception:
-            return False
-    
-    def connect_sync(self) -> None:
-        """
-        Establishes a connection to the vector database (sync).
-        """
-        self._run_async_from_sync(self.connect())
-    
-    def is_ready_sync(self) -> bool:
-        """
-        Performs a health check to ensure the database is responsive (sync).
-        """
-        return self._run_async_from_sync(self.is_ready())
+
+    async def ais_ready(self) -> bool:
+        """Performs a health check to ensure the Qdrant instance is responsive."""
+        return await self.ais_client_connected()
     
 
     
-    async def create_collection(self) -> None:
+    async def acreate_collection(self) -> None:
         """
         Creates the collection in Qdrant with full configuration support.
         
@@ -310,24 +367,21 @@ class QdrantProvider(BaseVectorDBProvider):
         - Named vectors when sparse vectors are enabled
         - Dynamic payload indexing based on indexed_fields config
         """
-        if not self._is_connected or not self._client:
-            raise VectorDBConnectionError("Must be connected to Qdrant to create a collection.")
+        client = await self.aget_client()
 
         collection_name = self._config.collection_name
         
         try:
-            if self._config.recreate_if_exists and await self.collection_exists():
+            if self._config.recreate_if_exists and await self.acollection_exists():
                 info_log(f"Collection '{collection_name}' exists and `recreate_if_exists` is True. Deleting...", context="QdrantVectorDB")
-                await self.delete_collection()
+                await self.adelete_collection()
             
-            # Map distance metrics
             distance_map = {
                 DistanceMetric.COSINE: models.Distance.COSINE,
                 DistanceMetric.EUCLIDEAN: models.Distance.EUCLID,
                 DistanceMetric.DOT_PRODUCT: models.Distance.DOT,
             }
             
-            # Configure vectors (named if sparse enabled, otherwise simple)
             if self._config.use_sparse_vectors:
                 vectors_config = {
                     self._config.dense_vector_name: models.VectorParams(
@@ -345,7 +399,6 @@ class QdrantProvider(BaseVectorDBProvider):
                 )
                 sparse_vectors_config = None
             
-            # Configure HNSW parameters
             hnsw_config = None
             index_cfg = self._config.index
             if isinstance(index_cfg, HNSWIndexConfig):
@@ -354,7 +407,6 @@ class QdrantProvider(BaseVectorDBProvider):
                     ef_construct=index_cfg.ef_construction
                 )
             
-            # Configure quantization
             quantization_config = None
             if self._config.quantization_config:
                 quant_cfg = self._config.quantization_config
@@ -366,7 +418,7 @@ class QdrantProvider(BaseVectorDBProvider):
                         )
                     )
 
-            await self._client.create_collection(
+            await client.create_collection(
                 collection_name=collection_name,
                 vectors_config=vectors_config,
                 sparse_vectors_config=sparse_vectors_config,
@@ -379,34 +431,26 @@ class QdrantProvider(BaseVectorDBProvider):
             
             info_log(f"Successfully created collection '{collection_name}'.", context="QdrantVectorDB")
             
-            # Create indexes for specified fields
             await self._create_field_indexes(collection_name)
 
         except Exception as e:
             raise VectorDBError(f"Failed to create collection '{collection_name}': {e}") from e
     
-    def create_collection_sync(self) -> None:
-        """
-        Creates the collection in the database according to the full config (sync).
-        """
-        self._run_async_from_sync(self.create_collection())
-    
-    async def delete_collection(self) -> None:
+    async def adelete_collection(self) -> None:
         """
         Permanently deletes the collection specified in the config.
         """
-        if not self._is_connected or not self._client:
-            raise VectorDBConnectionError("Must be connected to Qdrant to delete a collection.")
+        client = await self.aget_client()
 
         collection_name = self._config.collection_name
         try:
-            result = await self._client.delete_collection(collection_name=collection_name)
+            result = await client.delete_collection(collection_name=collection_name)
             if isinstance(result, bool):
-                if not result and not await self.collection_exists():
+                if not result and not await self.acollection_exists():
                     raise CollectionDoesNotExistError(f"Collection '{collection_name}' does not exist.")
             else:
                 if hasattr(result, 'result') and not result.result:
-                    if not await self.collection_exists():
+                    if not await self.acollection_exists():
                         raise CollectionDoesNotExistError(f"Collection '{collection_name}' does not exist.")
                     
             info_log(f"Successfully deleted collection '{collection_name}'.", context="QdrantVectorDB")
@@ -417,94 +461,101 @@ class QdrantProvider(BaseVectorDBProvider):
         except Exception as e:
             raise VectorDBError(f"An unexpected error occurred while deleting collection: {e}") from e
     
-    def delete_collection_sync(self) -> None:
-        """
-        Permanently deletes the collection specified in `self._config.collection_name` (sync).
-        """
-        self._run_async_from_sync(self.delete_collection())
-    
-    async def collection_exists(self) -> bool:
+    async def acollection_exists(self) -> bool:
         """
         Checks if the collection specified in the config already exists.
         """
-        if not self._is_connected or not self._client:
-            raise VectorDBConnectionError("Must be connected to Qdrant to check for a collection.")
-            
-        collection_name = self._config.collection_name
-        try:
-            await self._client.get_collection(collection_name=collection_name)
-            return True
-        except UnexpectedResponse as e:
-            if e.status_code == 404:
-                return False
-            raise VectorDBError(f"API error while checking for collection '{collection_name}': {e}") from e
-        except Exception as e:
-            if "not found" in str(e).lower() or "doesn't exist" in str(e).lower():
-                return False
-            raise VectorDBError(f"Error checking collection '{collection_name}': {e}") from e
-    
-    def collection_exists_sync(self) -> bool:
-        """
-        Checks if the collection specified in the config already exists (sync).
-        """
-        return self._run_async_from_sync(self.collection_exists())
+        client = await self.aget_client()
+        return await client.collection_exists(collection_name=self._config.collection_name)
     
 
     
+    _STANDARD_FIELDS: frozenset = frozenset({
+        'chunk_id', 'document_id', 'doc_content_hash',
+        'chunk_content_hash', 'document_name', 'content', 'metadata',
+        'knowledge_base_id',
+    })
+
     def _build_payload(
         self,
         content: str,
-        document_name: Optional[str] = None,
-        document_id: Optional[str] = None,
-        content_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        **kwargs
+        chunk_id: str,
+        chunk_content_hash: str = "",
+        document_id: str = "",
+        doc_content_hash: str = "",
+        document_name: str = "",
+        knowledge_base_id: Optional[str] = None,
+        extra_payload: Optional[Dict[str, Any]] = None,
+        extra_metadata: Optional[Dict[str, Any]] = None,
+        _warned_standard_keys: Optional[set] = None,
     ) -> Dict[str, Any]:
         """
-        Builds a standardized payload structure.
-        
+        Builds a standardized payload with the standard properties.
+
+        Primary (chunk-focused) identifiers are always set. Document-level
+        identifiers are optional and default to empty strings.
+
         Args:
-            content: The text content (required)
-            document_name: Optional document name
-            document_id: Optional document ID
-            content_id: Optional content ID (generated if not provided)
-            metadata: Optional custom metadata dict
-            **kwargs: Additional fields to include in payload
-            
+            content: The chunk text (required).
+            chunk_id: The unique chunk identifier.
+            chunk_content_hash: MD5 hash of the chunk's text content.
+            document_id: The parent document identifier.
+            doc_content_hash: MD5 hash of the parent document content.
+            document_name: Human-readable source name.
+            extra_payload: Caller-provided payload dict (non-standard keys → metadata).
+            extra_metadata: Additional metadata to merge into the payload.
+
         Returns:
-            A dictionary with the structured payload
+            A properly structured payload dict for Qdrant.
         """
-        # Generate content_id if not provided
-        if content_id is None:
-            content_id = self._generate_content_id(content)
-        
-        # Start with base payload
-        payload = {
-            "content": content,
-            "content_id": content_id,
-        }
-        
-        # Add optional fields
-        if document_name:
-            payload["document_name"] = document_name
-        if document_id:
-            payload["document_id"] = document_id
-        
-        # Merge metadata
-        combined_metadata = {}
+        combined_metadata: Dict[str, Any] = {}
+
         if self._config.default_metadata:
             combined_metadata.update(self._config.default_metadata)
-        if metadata:
-            combined_metadata.update(metadata)
-        
-        if combined_metadata:
-            payload["metadata"] = combined_metadata
-        
-        # Add any additional kwargs
-        payload.update(kwargs)
-        
+
+        if extra_payload:
+            if 'metadata' in extra_payload and isinstance(extra_payload['metadata'], dict):
+                combined_metadata.update(extra_payload['metadata'])
+            for key, value in extra_payload.items():
+                if key in self._STANDARD_FIELDS:
+                    if key == 'metadata':
+                        continue
+                    if _warned_standard_keys is not None and key not in _warned_standard_keys:
+                        debug_log(
+                            f"Standard field '{key}' found in payload dict and will be ignored. "
+                            f"Standard fields must be passed via dedicated parameters "
+                            f"(ids, document_ids, document_names, doc_content_hashes, "
+                            f"chunk_content_hashes, knowledge_base_ids).",
+                            context="QdrantVectorDB",
+                        )
+                        _warned_standard_keys.add(key)
+                else:
+                    combined_metadata[key] = value
+
+        if extra_metadata:
+            combined_metadata.update(extra_metadata)
+
+        payload: Dict[str, Any] = {
+            "chunk_id": chunk_id,
+            "chunk_content_hash": chunk_content_hash,
+            "document_id": document_id,
+            "doc_content_hash": doc_content_hash,
+            "document_name": document_name,
+            "content": content,
+            "knowledge_base_id": knowledge_base_id or "",
+            "metadata": combined_metadata,
+        }
+
         return payload
-    
+
+    def _flatten_payload(self, payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Return the Qdrant payload unchanged. The provider now stores the
+        contract-compliant shape natively ({<standards>, "metadata": <dict>}),
+        so no hoisting/flattening is performed.
+        """
+        return payload if payload else {}
+
     async def _create_field_indexes(self, collection_name: str) -> None:
         """
         Creates indexes for fields specified in config.
@@ -512,15 +563,9 @@ class QdrantProvider(BaseVectorDBProvider):
         Supports two modes:
         1. Advanced: payload_field_configs (explicit types and params)
         2. Simple: indexed_fields (auto-determines types)
-        
-        Standard indexable fields:
-        - content (text)
-        - document_name (keyword)
-        - document_id (keyword)
-        - content_id (keyword)
-        - metadata.* (various types)
         """
-        # Priority 1: Use advanced payload_field_configs if provided
+        client = await self.aget_client()
+
         if self._config.payload_field_configs:
             debug_log(f"Creating indexes from payload_field_configs: {len(self._config.payload_field_configs)} fields", context="QdrantVectorDB")
             
@@ -533,7 +578,7 @@ class QdrantProvider(BaseVectorDBProvider):
                 
                 debug_log(f"Creating index for field '{field_config.field_name}' (type: {field_config.field_type})...", context="QdrantVectorDB")
                 try:
-                    await self._client.create_payload_index(
+                    await client.create_payload_index(
                         collection_name=collection_name,
                         field_name=field_config.field_name,
                         field_schema=field_schema,
@@ -549,7 +594,6 @@ class QdrantProvider(BaseVectorDBProvider):
             info_log("Field indexes created successfully from payload_field_configs.", context="QdrantVectorDB")
             return
         
-        # Priority 2: Use simple indexed_fields (auto-determine types)
         if self._config.indexed_fields:
             debug_log(f"Creating indexes for fields: {self._config.indexed_fields}", context="QdrantVectorDB")
             
@@ -557,7 +601,9 @@ class QdrantProvider(BaseVectorDBProvider):
                 'content': models.TextIndexParams(type='text', tokenizer=models.TokenizerType.WORD, min_token_len=2, max_token_len=20, lowercase=True),
                 'document_name': models.KeywordIndexParams(type='keyword'),
                 'document_id': models.KeywordIndexParams(type='keyword'),
-                'content_id': models.KeywordIndexParams(type='keyword'),
+                'chunk_id': models.KeywordIndexParams(type='keyword'),
+                'doc_content_hash': models.KeywordIndexParams(type='keyword'),
+                'chunk_content_hash': models.KeywordIndexParams(type='keyword'),
             }
             
             failed_fields: List[tuple[str, Exception]] = []
@@ -571,7 +617,7 @@ class QdrantProvider(BaseVectorDBProvider):
                 
                 debug_log(f"Creating index for field '{field_name}'...", context="QdrantVectorDB")
                 try:
-                    await self._client.create_payload_index(
+                    await client.create_payload_index(
                         collection_name=collection_name,
                         field_name=field_name,
                         field_schema=field_schema,
@@ -616,152 +662,285 @@ class QdrantProvider(BaseVectorDBProvider):
         elif field_type == 'geo':
             return models.GeoIndexParams(type='geo', **params) if params else models.GeoIndexParams(type='geo')
         else:
-            # Default to keyword
             return models.KeywordIndexParams(type='keyword')
     
     
-    async def upsert(
+    async def _batch_find_existing_by_hashes(
         self,
-        vectors: List[List[float]],
-        payloads: List[Dict[str, Any]],
-        ids: List[Union[str, int]],
+        chunk_hashes: List[str],
+    ) -> Dict[str, List[Union[str, int]]]:
+        """
+        Single-query batch lookup: finds which chunk_content_hash values
+        already exist and returns the point IDs that own them.
+
+        Args:
+            chunk_hashes: The chunk_content_hash values to check.
+
+        Returns:
+            Mapping of chunk_content_hash → list of existing point IDs that
+            carry that hash.  Empty dict when none match.
+        """
+        if not chunk_hashes:
+            return {}
+
+        unique_hashes: List[str] = list(set(chunk_hashes))
+
+        try:
+            client = await self.aget_client()
+            hash_filter = models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="chunk_content_hash",
+                        match=models.MatchAny(any=unique_hashes),
+                    )
+                ]
+            )
+
+            existing: Dict[str, List[Union[str, int]]] = defaultdict(list)
+            offset: Optional[Union[str, int]] = None
+            batch_limit: int = 100
+
+            while True:
+                scroll_result = await client.scroll(
+                    collection_name=self._config.collection_name,
+                    scroll_filter=hash_filter,
+                    limit=batch_limit,
+                    offset=offset,
+                    with_payload=["chunk_content_hash"],
+                    with_vectors=False,
+                )
+                points, next_offset = scroll_result
+
+                for point in points:
+                    h: str = (point.payload or {}).get("chunk_content_hash", "")
+                    if h:
+                        existing[h].append(point.id)
+
+                if next_offset is None or not points:
+                    break
+                offset = next_offset
+
+            return dict(existing)
+
+        except Exception as e:
+            debug_log(
+                f"Batch hash lookup failed, treating all as new: {e}",
+                context="QdrantVectorDB",
+            )
+            return {}
+
+    async def aupsert(
+        self,
+        vectors: Optional[List[List[float]]] = None,
+        payloads: Optional[List[Dict[str, Any]]] = None,
+        ids: Optional[List[Union[str, int]]] = None,
         chunks: Optional[List[str]] = None,
+        document_ids: Optional[List[str]] = None,
+        document_names: Optional[List[str]] = None,
+        doc_content_hashes: Optional[List[str]] = None,
+        chunk_content_hashes: Optional[List[str]] = None,
         sparse_vectors: Optional[List[Dict[str, Any]]] = None,
-        **kwargs
+        metadata: Optional[Dict[str, Any]] = None,
+        knowledge_base_ids: Optional[List[str]] = None,
     ) -> None:
         """
         Adds or updates data in the Qdrant collection.
-        
-        This method supports:
-        - Dense vectors only
-        - Dense + Sparse vectors for hybrid search
-        - Structured payloads with document_name, document_id, content_id, metadata, content
-        - Custom metadata via payloads or config
-        
-        Args:
-            vectors: List of dense vector embeddings
-            payloads: List of payload dicts (can include document_name, document_id, content, metadata, etc.)
-            ids: List of unique identifiers
-            chunks: Optional list of text chunks (deprecated, use 'content' in payloads)
-            sparse_vectors: Optional list of sparse vectors for hybrid search
-                           Each should be {'indices': [...], 'values': [...]}
-            **kwargs: Additional options
-            
-        Raises:
-            UpsertError: If the data ingestion fails
+
+        Uses chunk_content_hash for content-based deduplication via a single
+        batch pre-check.  If identical chunk content already exists under a
+        different point ID, the old point is deleted first to avoid duplicates.
         """
-        if not self._is_connected or not self._client:
-            raise VectorDBConnectionError("Must be connected to upsert data.")
-        
-        if not (len(vectors) == len(payloads) == len(ids)):
-            raise ValueError("The lengths of vectors, payloads, and ids lists must be identical.")
-        
-        if chunks is not None and len(chunks) != len(vectors):
-            raise ValueError("The length of the chunks list must be identical to the other lists.")
-        
-        if sparse_vectors is not None:
-            if not self._config.use_sparse_vectors:
-                raise ConfigurationError("Sparse vectors provided but use_sparse_vectors is False in config")
-            if len(sparse_vectors) != len(vectors):
-                raise ValueError("The length of sparse_vectors must match the other lists.")
-        
-        points = []
-        
-        # TODO: HANDLE SPARSE VECTORS IN THE LOOP CORRECTLY OR OUTSIDE OF THE LOOP! (DIMENSIONS HAS TO MATCH?)
-        for i, (point_id, vector, payload) in enumerate(zip(ids, vectors, payloads)):
-            # Build structured payload
-            content = payload.get('content', chunks[i] if chunks else '')
-            if not content:
-                raise ValueError(f"Content is required for point at index {i}")
-            
-            structured_payload = self._build_payload(
-                content=content,
-                document_name=payload.get('document_name'),
-                document_id=payload.get('document_id'),
-                content_id=payload.get('content_id'),
-                metadata=payload.get('metadata'),
-                **{k: v for k, v in payload.items() if k not in ['content', 'document_name', 'document_id', 'content_id', 'metadata']}
+        client = await self.aget_client()
+
+        if (vectors is None or len(vectors) == 0) and (sparse_vectors is None or len(sparse_vectors) == 0):
+            info_log("Nothing to upsert: no dense or sparse vectors provided.", context="QdrantVectorDB")
+            return
+
+        n: int = len(vectors) if vectors else len(sparse_vectors)  # type: ignore[arg-type]
+
+        if payloads is not None and len(payloads) != n:
+            raise ValueError(
+                f"Length mismatch: payloads ({len(payloads)}) != vectors ({n})."
             )
-            
-            # Normalize ID
-            normalized_id = self._normalize_id(point_id)
-            
-            # Build vector structure
+        if ids is not None and len(ids) != n:
+            raise ValueError(
+                f"Length mismatch: ids ({len(ids)}) != vectors ({n})."
+            )
+        if chunks is not None and len(chunks) != n:
+            raise ValueError(
+                f"Length mismatch: chunks ({len(chunks)}) != vectors ({n})."
+            )
+        for _arr_name, _arr in (
+            ("document_ids", document_ids),
+            ("document_names", document_names),
+            ("doc_content_hashes", doc_content_hashes),
+            ("chunk_content_hashes", chunk_content_hashes),
+            ("sparse_vectors", sparse_vectors),
+            ("knowledge_base_ids", knowledge_base_ids),
+        ):
+            if _arr is not None and len(_arr) != n:
+                raise ValueError(
+                    f"Length mismatch in aupsert: '{_arr_name}' has length {len(_arr)}, expected {n}"
+                )
+
+        extra_metadata: Dict[str, Any] = metadata or {}
+        _warned_standard_keys: set = set()
+
+        computed_hashes: List[str] = []
+        for i in range(n):
+            # payload: Dict[str, Any] = payloads[i] if payloads and i < len(payloads) else {}
+            content: str = chunks[i] if chunks and i < len(chunks) else ""
+            if chunk_content_hashes and i < len(chunk_content_hashes):
+                computed_hashes.append(chunk_content_hashes[i])
+            else:
+                computed_hashes.append(hashlib.md5(content.encode("utf-8")).hexdigest())
+
+        existing_hash_map: Dict[str, List[Union[str, int]]] = (
+            await self._batch_find_existing_by_hashes(computed_hashes)
+        )
+
+        stale_point_ids: List[Union[str, int]] = []
+        points: List[Any] = []
+
+        for i in range(n):
+            payload = payloads[i] if payloads and i < len(payloads) else {}
+            content = chunks[i] if chunks and i < len(chunks) else ""
+            point_id: Union[str, int] = ids[i] if ids and i < len(ids) else str(uuid.uuid4())
+            chunk_id_str: str = str(point_id)
+            doc_id: str = document_ids[i] if document_ids and i < len(document_ids) else ''
+            doc_hash: str = doc_content_hashes[i] if doc_content_hashes and i < len(doc_content_hashes) else ""
+            chunk_hash: str = computed_hashes[i]
+            doc_name: str = document_names[i] if document_names and i < len(document_names) else ''
+
+            normalized_id: Union[str, int] = self._normalize_id(point_id)
+
+            old_ids: List[Union[str, int]] = existing_hash_map.get(chunk_hash, [])
+            for old_id in old_ids:
+                if old_id != normalized_id:
+                    stale_point_ids.append(old_id)
+
+            kbi: Optional[str] = knowledge_base_ids[i] if knowledge_base_ids else None
+            structured_payload: Dict[str, Any] = self._build_payload(
+                content=content,
+                chunk_id=chunk_id_str,
+                chunk_content_hash=chunk_hash,
+                document_id=doc_id,
+                doc_content_hash=doc_hash,
+                document_name=doc_name,
+                knowledge_base_id=kbi,
+                extra_payload=payload,
+                extra_metadata=extra_metadata,
+                _warned_standard_keys=_warned_standard_keys,
+            )
+
+            vector_data: Any
             if self._config.use_sparse_vectors:
-                # Named vectors for hybrid search
-                vector_data = {self._config.dense_vector_name: vector}
+                vector_data = {}
+                if vectors and i < len(vectors):
+                    vector_data[self._config.dense_vector_name] = vectors[i]
                 if sparse_vectors and i < len(sparse_vectors):
-                    sparse_vec = sparse_vectors[i]
+                    sparse_vec: Dict[str, Any] = sparse_vectors[i]
                     vector_data[self._config.sparse_vector_name] = models.SparseVector(
                         indices=sparse_vec.get('indices', []),
                         values=sparse_vec.get('values', [])
                     )
             else:
-                # Simple vector
-                vector_data = vector
-            
+                vector_data = vectors[i] if vectors and i < len(vectors) else []
+
             points.append(
                 models.PointStruct(
                     id=normalized_id,
                     vector=vector_data,
-                    payload=structured_payload
+                    payload=structured_payload,
                 )
             )
-        
-        # Upsert with consistency settings
-        wait_for_result = self._config.write_consistency_factor > 1
-        
+
+        if stale_point_ids:
+            try:
+                await client.delete(
+                    collection_name=self._config.collection_name,
+                    points_selector=models.PointIdsList(points=stale_point_ids),
+                    wait=True,
+                )
+                debug_log(
+                    f"Deleted {len(stale_point_ids)} stale points with duplicate chunk_content_hash.",
+                    context="QdrantVectorDB",
+                )
+            except Exception as e:
+                debug_log(
+                    f"Failed to delete stale duplicate points: {e}",
+                    context="QdrantVectorDB",
+                )
+
+        wait_for_result: bool = self._config.write_consistency_factor > 1
+
         try:
-            await self._client.upsert(
+            await client.upsert(
                 collection_name=self._config.collection_name,
                 points=points,
                 wait=wait_for_result,
             )
-            debug_log(f"Successfully upserted {len(points)} points.", context="QdrantVectorDB")
+            replaced_count: int = sum(1 for h in computed_hashes if h in existing_hash_map)
+            new_count: int = len(points) - replaced_count
+            debug_log(
+                f"Successfully upserted {len(points)} points "
+                f"({new_count} new, {replaced_count} replaced by content hash).",
+                context="QdrantVectorDB",
+            )
         except Exception as e:
             raise UpsertError(f"Failed to upsert data into collection '{self._config.collection_name}': {e}") from e
-    
-    def upsert_sync(self, vectors: List[List[float]], payloads: List[Dict[str, Any]], ids: List[Union[str, int]], chunks: Optional[List[str]] = None, sparse_vectors: Optional[List[Dict[str, Any]]] = None, **kwargs) -> None:
-        """
-        Adds new data or updates existing data in the collection (sync).
-        """
-        self._run_async_from_sync(self.upsert(vectors, payloads, ids, chunks, sparse_vectors, **kwargs))
-    
-    async def delete(self, ids: List[Union[str, int]], **kwargs) -> None:
+
+    async def adelete(self, ids: List[Union[str, int]]) -> None:
         """
         Removes data from the collection by their unique identifiers.
+        Pre-checks existence and skips non-existent IDs with debug log.
         """
-        if not self._is_connected or not self._client:
-            raise VectorDBConnectionError("Must be connected to delete data.")
+        client = await self.aget_client()
 
         if not ids:
             return
 
-        normalized_ids = [self._normalize_id(id_val) for id_val in ids]
-        wait_for_result = self._config.write_consistency_factor > 1
+        normalized_ids: List[Union[str, int]] = [self._normalize_id(id_val) for id_val in ids]
+        wait_for_result: bool = self._config.write_consistency_factor > 1
 
         try:
-            await self._client.delete(
+            retrieved: List[Any] = await client.retrieve(
                 collection_name=self._config.collection_name,
-                points_selector=models.PointIdsList(points=normalized_ids),
-                wait=wait_for_result
+                ids=normalized_ids,
+                with_payload=False,
+                with_vectors=False,
             )
-            debug_log(f"Successfully deleted {len(normalized_ids)} points.", context="QdrantVectorDB")
+            existing_ids: set[Union[str, int]] = {r.id for r in retrieved}
+
+            for nid in normalized_ids:
+                if nid not in existing_ids:
+                    debug_log(
+                        f"Point with ID '{nid}' does not exist, skipping deletion.",
+                        context="QdrantVectorDB",
+                    )
+
+            if not existing_ids:
+                info_log("No matching points found to delete. No action taken.", context="QdrantVectorDB")
+                return
+
+            await client.delete(
+                collection_name=self._config.collection_name,
+                points_selector=models.PointIdsList(points=list(existing_ids)),
+                wait=wait_for_result,
+            )
+            info_log(
+                f"Successfully processed deletion request for {len(normalized_ids)} IDs. "
+                f"Existed: {len(existing_ids)}, Deleted: {len(existing_ids)}.",
+                context="QdrantVectorDB",
+            )
         except Exception as e:
             raise VectorDBError(f"Failed to delete points from collection '{self._config.collection_name}': {e}") from e
     
-    def delete_sync(self, ids: List[Union[str, int]], **kwargs) -> None:
-        """
-        Removes data from the collection by their unique identifiers (sync).
-        """
-        self._run_async_from_sync(self.delete(ids, **kwargs))
-    
-    async def fetch(self, ids: List[Union[str, int]], **kwargs) -> List[VectorSearchResult]:
+    async def afetch(self, ids: List[Union[str, int]]) -> List[VectorSearchResult]:
         """
         Retrieves full records (payload and vector) by their unique IDs.
         """
-        if not self._is_connected or not self._client:
-            raise VectorDBConnectionError("Must be connected to fetch data.")
+        client = await self.aget_client()
 
         if not ids:
             return []
@@ -769,7 +948,7 @@ class QdrantProvider(BaseVectorDBProvider):
         normalized_ids = [self._normalize_id(id_val) for id_val in ids]
 
         try:
-            retrieved_records: List[models.Record] = await self._client.retrieve(
+            retrieved_records: List[Any] = await client.retrieve(
                 collection_name=self._config.collection_name,
                 ids=normalized_ids,
                 with_payload=True,
@@ -778,7 +957,6 @@ class QdrantProvider(BaseVectorDBProvider):
 
             search_results = []
             for record in retrieved_records:
-                # Extract vector (handle named vectors)
                 vector = None
                 if isinstance(record.vector, dict):
                     vector = record.vector.get(self._config.dense_vector_name)
@@ -788,7 +966,7 @@ class QdrantProvider(BaseVectorDBProvider):
                 search_results.append(VectorSearchResult(
                     id=record.id,
                     score=1.0,
-                    payload=record.payload,
+                    payload=self._flatten_payload(record.payload),
                     vector=vector,
                     text=record.payload.get("content", "") if record.payload else ""
                 ))
@@ -798,15 +976,9 @@ class QdrantProvider(BaseVectorDBProvider):
         except Exception as e:
             raise VectorDBError(f"Failed to fetch points from collection '{self._config.collection_name}': {e}") from e
     
-    def fetch_sync(self, ids: List[Union[str, int]], **kwargs) -> List[VectorSearchResult]:
-        """
-        Retrieves full records (payload and vector) by their IDs (sync).
-        """
-        return self._run_async_from_sync(self.fetch(ids, **kwargs))
-    
 
     
-    async def get_count(self) -> int:
+    async def aget_count(self) -> int:
         """
         Get the total number of points/documents in the collection.
         
@@ -816,11 +988,10 @@ class QdrantProvider(BaseVectorDBProvider):
         Raises:
             VectorDBError: If the count operation fails
         """
-        if not self._is_connected or not self._client:
-            raise VectorDBConnectionError("Must be connected to get count.")
+        client = await self.aget_client()
         
         try:
-            count_result = await self._client.count(
+            count_result = await client.count(
                 collection_name=self._config.collection_name,
                 exact=True
             )
@@ -828,22 +999,93 @@ class QdrantProvider(BaseVectorDBProvider):
         except Exception as e:
             raise VectorDBError(f"Failed to get count from collection '{self._config.collection_name}': {e}") from e
     
-    async def id_exists(self, id: Union[str, int]) -> bool:
+    async def afield_exists(self, field_name: str, field_value: Any) -> bool:
+        """
+        Generic check if any point with the given field value exists.
+
+        Args:
+            field_name: The payload field name to filter on.
+            field_value: The value to match.
+
+        Returns:
+            True if at least one matching point exists, False otherwise.
+        """
+        try:
+            client = await self.aget_client()
+            filter_condition = models.Filter(
+                must=[models.FieldCondition(key=field_name, match=models.MatchValue(value=field_value))]
+            )
+            count_result = await client.count(
+                collection_name=self._config.collection_name,
+                count_filter=filter_condition,
+                exact=True,
+            )
+            return count_result.count > 0
+        except Exception as e:
+            debug_log(f"Error checking if {field_name}='{field_value}' exists: {e}", context="QdrantVectorDB")
+            return False
+
+    async def adelete_by_field(self, field_name: str, field_value: Any) -> bool:
+        """
+        Generic deletion of all points matching a payload field value.
+
+        Includes a pre-existence check. Returns True if no matches found (idempotent).
+
+        Args:
+            field_name: The payload field name to filter on.
+            field_value: The value to match for deletion.
+
+        Returns:
+            True if deletion was successful or no matches found, False on failure.
+        """
+        try:
+            client = await self.aget_client()
+            filter_condition = models.Filter(
+                must=[models.FieldCondition(key=field_name, match=models.MatchValue(value=field_value))]
+            )
+
+            count_result = await client.count(
+                collection_name=self._config.collection_name,
+                count_filter=filter_condition,
+                exact=True,
+            )
+
+            if count_result.count == 0:
+                warning_log(f"No points found with {field_name}: {field_value}", context="QdrantVectorDB")
+                return True
+
+            info_log(f"Found {count_result.count} points to delete with {field_name}: {field_value}", context="QdrantVectorDB")
+
+            result = await client.delete(
+                collection_name=self._config.collection_name,
+                points_selector=filter_condition,
+                wait=True,
+            )
+
+            if result.status == models.UpdateStatus.COMPLETED:
+                info_log(f"Successfully deleted {count_result.count} points with {field_name}: {field_value}", context="QdrantVectorDB")
+                return True
+            else:
+                warning_log(f"Deletion failed for {field_name} {field_value}. Status: {result.status}", context="QdrantVectorDB")
+                return False
+        except Exception as e:
+            warning_log(f"Error deleting points with {field_name} {field_value}: {e}", context="QdrantVectorDB")
+            return False
+
+    async def aid_exists(self, id: Union[str, int]) -> bool:
         """
         Check if a point with the given ID exists in the collection.
-        
+
         Args:
             id: The ID to check
-            
+
         Returns:
-            bool: True if the point exists, False otherwise
+            True if the point exists, False otherwise.
         """
-        if not self._is_connected or not self._client:
-            return False
-        
         try:
+            client = await self.aget_client()
             normalized_id = self._normalize_id(id)
-            points = await self._client.retrieve(
+            points = await client.retrieve(
                 collection_name=self._config.collection_name,
                 ids=[normalized_id],
                 with_payload=False,
@@ -853,116 +1095,28 @@ class QdrantProvider(BaseVectorDBProvider):
         except Exception as e:
             debug_log(f"Error checking if point {id} exists: {e}", context="QdrantVectorDB")
             return False
+
+    async def achunk_id_exists(self, chunk_id: str) -> bool:
+        """Check if any points with the given chunk_id exist in the collection."""
+        return await self.afield_exists("chunk_id", chunk_id)
+
+    async def adoc_content_hash_exists(self, doc_content_hash: str) -> bool:
+        """Check if any points with the given doc_content_hash exist in the collection."""
+        return await self.afield_exists("doc_content_hash", doc_content_hash)
+
+    async def achunk_content_hash_exists(self, chunk_content_hash: str) -> bool:
+        """Check if any points with the given chunk_content_hash exist in the collection."""
+        return await self.afield_exists("chunk_content_hash", chunk_content_hash)
     
-    def content_id_exists(self, content_id: str) -> bool:
-        """Check if any points with the given content_id exist in the collection (sync)."""
-        return self._run_async_from_sync(self.async_content_id_exists(content_id))
+    async def adocument_name_exists(self, document_name: str) -> bool:
+        """Check if a document with the given name exists in the collection."""
+        return await self.afield_exists("document_name", document_name)
     
-    async def async_content_id_exists(self, content_id: str) -> bool:
-        """
-        Check if any points with the given content_id exist in the collection (async).
-        
-        Args:
-            content_id: The content_id to check
-            
-        Returns:
-            bool: True if points with the content_id exist, False otherwise
-        """
-        if not self._is_connected or not self._client:
-            return False
-        
-        try:
-            filter_condition = models.Filter(
-                must=[models.FieldCondition(key="content_id", match=models.MatchValue(value=content_id))]
-            )
-            count_result = await self._client.count(
-                collection_name=self._config.collection_name,
-                count_filter=filter_condition,
-                exact=True
-            )
-            return count_result.count > 0
-        except Exception as e:
-            debug_log(f"Error checking if content_id {content_id} exists: {e}", context="QdrantVectorDB")
-            return False
+    async def adocument_id_exists(self, document_id: str) -> bool:
+        """Check if a document with the given document_id exists in the collection."""
+        return await self.afield_exists("document_id", document_id)
     
-    def document_name_exists(self, document_name: str) -> bool:
-        """Check if a document with the given name exists in the collection (sync)."""
-        return self._run_async_from_sync(self.async_document_name_exists(document_name))
-    
-    async def async_document_name_exists(self, document_name: str) -> bool:
-        """
-        Check if a document with the given name exists in the collection (async).
-        
-        Args:
-            document_name: The document name to check
-            
-        Returns:
-            bool: True if a document with the given name exists, False otherwise
-        """
-        if not self._is_connected or not self._client:
-            return False
-        
-        try:
-            scroll_result = await self._client.scroll(
-                collection_name=self._config.collection_name,
-                scroll_filter=models.Filter(
-                    must=[models.FieldCondition(key="document_name", match=models.MatchValue(value=document_name))]
-                ),
-                limit=1,
-                with_payload=False,
-                with_vectors=False
-            )
-            return len(scroll_result[0]) > 0
-        except Exception as e:
-            debug_log(f"Error checking if document_name {document_name} exists: {e}", context="QdrantVectorDB")
-            return False
-    
-    def document_id_exists(self, document_id: str) -> bool:
-        """Check if a document with the given document_id exists in the collection (sync)."""
-        return self._run_async_from_sync(self.async_document_id_exists(document_id))
-    
-    async def async_document_id_exists(self, document_id: str) -> bool:
-        """
-        Check if a document with the given document_id exists in the collection (async).
-        
-        Args:
-            document_id: The document ID to check
-            
-        Returns:
-            bool: True if a document with the given document_id exists, False otherwise
-        """
-        if not self._is_connected or not self._client:
-            return False
-        
-        try:
-            scroll_result = await self._client.scroll(
-                collection_name=self._config.collection_name,
-                scroll_filter=models.Filter(
-                    must=[models.FieldCondition(key="document_id", match=models.MatchValue(value=document_id))]
-                ),
-                limit=1,
-                with_payload=False,
-                with_vectors=False
-            )
-            return len(scroll_result[0]) > 0
-        except Exception as e:
-            debug_log(f"Error checking if document_id {document_id} exists: {e}", context="QdrantVectorDB")
-            return False
-    
-    async def content_exists(self, content: str) -> bool:
-        """
-        Check if content already exists in the collection (by content hash).
-        
-        Args:
-            content: The content text to check
-            
-        Returns:
-            bool: True if the content exists, False otherwise
-        """
-        content_id = self._generate_content_id(content)
-        return await self.async_content_id_exists(content_id)
-    
-    async def delete_by_id(self, id: Union[str, int]) -> bool:
+    async def adelete_by_id(self, id: Union[str, int]) -> bool:
         """
         Delete a single point by its ID.
         
@@ -970,20 +1124,16 @@ class QdrantProvider(BaseVectorDBProvider):
             id: The ID of the point to delete
             
         Returns:
-            bool: True if deletion was successful, False otherwise
+            True if deletion was successful, False otherwise.
         """
-        if not self._is_connected or not self._client:
-            warning_log("Not connected to Qdrant", context="QdrantVectorDB")
-            return False
-        
         try:
-            # Check if point exists before deletion
-            if not await self.id_exists(id):
+            if not await self.aid_exists(id):
                 warning_log(f"Point with ID {id} does not exist", context="QdrantVectorDB")
                 return True
             
+            client = await self.aget_client()
             normalized_id = self._normalize_id(id)
-            await self._client.delete(
+            await client.delete(
                 collection_name=self._config.collection_name,
                 points_selector=models.PointIdsList(points=[normalized_id]),
                 wait=True
@@ -994,141 +1144,29 @@ class QdrantProvider(BaseVectorDBProvider):
             warning_log(f"Error deleting point with ID {id}: {e}", context="QdrantVectorDB")
             return False
     
-    def delete_by_document_name(self, document_name: str) -> bool:
-        """Delete all points that have the specified document_name in their payload (sync)."""
-        return self._run_async_from_sync(self.async_delete_by_document_name(document_name))
+    async def adelete_by_document_name(self, document_name: str) -> bool:
+        """Delete all points that have the specified document_name in their payload."""
+        return await self.adelete_by_field("document_name", document_name)
     
-    async def async_delete_by_document_name(self, document_name: str) -> bool:
-        """
-        Delete all points that have the specified document_name in their payload (async).
-        
-        Args:
-            document_name: The document name to match for deletion
-            
-        Returns:
-            bool: True if deletion was successful, False otherwise
-        """
-        if not self._is_connected or not self._client:
-            warning_log("Not connected to Qdrant", context="QdrantVectorDB")
-            return False
-        
-        try:
-            info_log(f"Attempting to delete all points with document_name: {document_name}", context="QdrantVectorDB")
-            
-            filter_condition = models.Filter(
-                must=[models.FieldCondition(key="document_name", match=models.MatchValue(value=document_name))]
-            )
-            
-            # Count how many points will be deleted
-            count_result = await self._client.count(
-                collection_name=self._config.collection_name,
-                count_filter=filter_condition,
-                exact=True
-            )
-            
-            if count_result.count == 0:
-                warning_log(f"No points found with document_name: {document_name}", context="QdrantVectorDB")
-                return True
-            
-            info_log(f"Found {count_result.count} points to delete with document_name: {document_name}", context="QdrantVectorDB")
-            
-            # Delete all points matching the filter
-            result = await self._client.delete(
-                collection_name=self._config.collection_name,
-                points_selector=filter_condition,
-                wait=True
-            )
-            
-            # Check if the deletion was successful
-            if result.status == models.UpdateStatus.COMPLETED:
-                info_log(f"Successfully deleted {count_result.count} points with document_name: {document_name}", context="QdrantVectorDB")
-                return True
-            else:
-                warning_log(f"Deletion failed for document_name {document_name}. Status: {result.status}", context="QdrantVectorDB")
-                return False
-        except Exception as e:
-            warning_log(f"Error deleting points with document_name {document_name}: {e}", context="QdrantVectorDB")
-            return False
+    async def adelete_by_document_id(self, document_id: str) -> bool:
+        """Delete all points that have the specified document_id in their payload."""
+        return await self.adelete_by_field("document_id", document_id)
     
-    def delete_by_document_id(self, document_id: str) -> bool:
-        """Delete all points that have the specified document_id in their payload (sync)."""
-        return self._run_async_from_sync(self.async_delete_by_document_id(document_id))
-    
-    async def async_delete_by_document_id(self, document_id: str) -> bool:
+    async def adelete_by_metadata(self, metadata: Dict[str, Any]) -> bool:
         """
-        Delete all points that have the specified document_id in their payload (async).
-        
-        Args:
-            document_id: The document ID to match for deletion
-            
-        Returns:
-            bool: True if deletion was successful, False otherwise
-        """
-        if not self._is_connected or not self._client:
-            warning_log("Not connected to Qdrant", context="QdrantVectorDB")
-            return False
-        
-        try:
-            info_log(f"Attempting to delete all points with document_id: {document_id}", context="QdrantVectorDB")
-            
-            filter_condition = models.Filter(
-                must=[models.FieldCondition(key="document_id", match=models.MatchValue(value=document_id))]
-            )
-            
-            # Count how many points will be deleted
-            count_result = await self._client.count(
-                collection_name=self._config.collection_name,
-                count_filter=filter_condition,
-                exact=True
-            )
-            
-            if count_result.count == 0:
-                warning_log(f"No points found with document_id: {document_id}", context="QdrantVectorDB")
-                return True
-            
-            info_log(f"Found {count_result.count} points to delete with document_id: {document_id}", context="QdrantVectorDB")
-            
-            # Delete all points matching the filter
-            result = await self._client.delete(
-                collection_name=self._config.collection_name,
-                points_selector=filter_condition,
-                wait=True
-            )
-            
-            # Check if the deletion was successful
-            if result.status == models.UpdateStatus.COMPLETED:
-                info_log(f"Successfully deleted {count_result.count} points with document_id: {document_id}", context="QdrantVectorDB")
-                return True
-            else:
-                warning_log(f"Deletion failed for document_id {document_id}. Status: {result.status}", context="QdrantVectorDB")
-                return False
-        except Exception as e:
-            warning_log(f"Error deleting points with document_id {document_id}: {e}", context="QdrantVectorDB")
-            return False
-    
-    def delete_by_metadata(self, metadata: Dict[str, Any]) -> bool:
-        """Delete all points where the given metadata matches (sync)."""
-        return self._run_async_from_sync(self.async_delete_by_metadata(metadata))
-    
-    async def async_delete_by_metadata(self, metadata: Dict[str, Any]) -> bool:
-        """
-        Delete all points where the given metadata matches (async).
+        Delete all points where the given metadata matches.
         
         Args:
             metadata: Dictionary of metadata key-value pairs to match
             
         Returns:
-            bool: True if deletion was successful, False otherwise
+            True if deletion was successful, False otherwise.
         """
-        if not self._is_connected or not self._client:
-            warning_log("Not connected to Qdrant", context="QdrantVectorDB")
-            return False
-        
         try:
+            client = await self.aget_client()
             info_log(f"Attempting to delete all points with metadata: {metadata}", context="QdrantVectorDB")
             
-            # Create filter conditions for each metadata key-value pair
-            filter_conditions = []
+            filter_conditions: List[Any] = []
             for key, value in metadata.items():
                 filter_conditions.append(
                     models.FieldCondition(key=f"metadata.{key}", match=models.MatchValue(value=value))
@@ -1136,8 +1174,7 @@ class QdrantProvider(BaseVectorDBProvider):
             
             filter_condition = models.Filter(must=filter_conditions)
             
-            # Count how many points will be deleted
-            count_result = await self._client.count(
+            count_result = await client.count(
                 collection_name=self._config.collection_name,
                 count_filter=filter_condition,
                 exact=True
@@ -1149,8 +1186,7 @@ class QdrantProvider(BaseVectorDBProvider):
             
             info_log(f"Found {count_result.count} points to delete with metadata: {metadata}", context="QdrantVectorDB")
             
-            # Delete all points matching the filter
-            result = await self._client.delete(
+            result = await client.delete(
                 collection_name=self._config.collection_name,
                 points_selector=filter_condition,
                 wait=True
@@ -1166,150 +1202,78 @@ class QdrantProvider(BaseVectorDBProvider):
             warning_log(f"Error deleting points with metadata {metadata}: {e}", context="QdrantVectorDB")
             return False
     
-    def delete_by_content_id(self, content_id: str) -> bool:
-        """Delete all points that have the specified content_id in their payload (sync)."""
-        return self._run_async_from_sync(self.async_delete_by_content_id(content_id))
-    
-    async def async_delete_by_content_id(self, content_id: str) -> bool:
+    async def adelete_by_chunk_id(self, chunk_id: str) -> bool:
+        """Delete all points that have the specified chunk_id in their payload."""
+        return await self.adelete_by_field("chunk_id", chunk_id)
+
+    async def adelete_by_doc_content_hash(self, doc_content_hash: str) -> bool:
+        """Delete all points that have the specified doc_content_hash in their payload."""
+        return await self.adelete_by_field("doc_content_hash", doc_content_hash)
+
+    async def adelete_by_chunk_content_hash(self, chunk_content_hash: str) -> bool:
+        """Delete all points that have the specified chunk_content_hash in their payload."""
+        return await self.adelete_by_field("chunk_content_hash", chunk_content_hash)
+
+    async def aupdate_metadata(self, chunk_id: str, metadata: Dict[str, Any]) -> bool:
         """
-        Delete all points that have the specified content_id in their payload (async).
-        
+        Updates the metadata for a specific chunk ID.
+
         Args:
-            content_id: The content_id to match for deletion
-            
-        Returns:
-            bool: True if deletion was successful, False otherwise
-        """
-        if not self._is_connected or not self._client:
-            warning_log("Not connected to Qdrant", context="QdrantVectorDB")
-            return False
-        
-        try:
-            info_log(f"Attempting to delete all points with content_id: {content_id}", context="QdrantVectorDB")
-            
-            filter_condition = models.Filter(
-                must=[models.FieldCondition(key="content_id", match=models.MatchValue(value=content_id))]
-            )
-            
-            count_result = await self._client.count(
-                collection_name=self._config.collection_name,
-                count_filter=filter_condition,
-                exact=True
-            )
-            
-            if count_result.count == 0:
-                warning_log(f"No points found with content_id: {content_id}", context="QdrantVectorDB")
-                return True
-            
-            info_log(f"Found {count_result.count} points to delete with content_id: {content_id}", context="QdrantVectorDB")
-            
-            result = await self._client.delete(
-                collection_name=self._config.collection_name,
-                points_selector=filter_condition,
-                wait=True
-            )
-            
-            if result.status == models.UpdateStatus.COMPLETED:
-                info_log(f"Successfully deleted {count_result.count} points with content_id: {content_id}", context="QdrantVectorDB")
-                return True
-            else:
-                warning_log(f"Deletion failed for content_id {content_id}. Status: {result.status}", context="QdrantVectorDB")
-                return False
-        except Exception as e:
-            warning_log(f"Error deleting points with content_id {content_id}: {e}", context="QdrantVectorDB")
-            return False
-    
-    def update_metadata(self, content_id: str, metadata: Dict[str, Any]) -> bool:
-        """
-        Updates the metadata for a specific content ID (sync).
-        
-        Args:
-            content_id: The content ID to update.
+            chunk_id: The chunk ID to update.
             metadata: The metadata to update/merge.
-            
+
         Returns:
             True if the update was successful, False otherwise.
-        """
-        return self._run_async_from_sync(self.async_update_metadata(content_id, metadata))
-    
-    async def async_update_metadata(self, content_id: str, metadata: Dict[str, Any]) -> bool:
-        """
-        Updates the metadata for a specific content ID (async).
-        
-        Args:
-            content_id: The content ID to update.
-            metadata: The metadata to update/merge.
-            
-        Returns:
-            True if the update was successful, False otherwise.
-            
+
         Raises:
-            VectorDBError: If the update operation fails critically
+            VectorDBError: If the update operation fails critically.
         """
-        if not self._is_connected or not self._client:
-            raise VectorDBConnectionError("Must be connected to update metadata.")
-        
+        client = await self.aget_client()
+
         try:
-            # Create filter for content_id
             filter_condition = models.Filter(
-                must=[models.FieldCondition(key="content_id", match=models.MatchValue(value=content_id))]
+                must=[models.FieldCondition(key="chunk_id", match=models.MatchValue(value=chunk_id))]
             )
-            
-            # Scroll to get all points with the given content_id
-            search_result = await self._client.scroll(
+
+            search_result = await client.scroll(
                 collection_name=self._config.collection_name,
                 scroll_filter=filter_condition,
-                limit=10000,  # Get all matching points
+                limit=1,
                 with_payload=True,
-                with_vectors=False
+                with_vectors=False,
             )
-            
+
             if not search_result[0]:
-                warning_log(f"No documents found with content_id: {content_id}", context="QdrantVectorDB")
+                warning_log(f"No documents found with chunk_id: {chunk_id}", context="QdrantVectorDB")
                 return False
-            
-            points = search_result[0]
-            updated_count = 0
-            
-            # Update metadata for each point
-            for point in points:
-                point_id = point.id
-                current_payload = point.payload or {}
-                
-                # Merge existing metadata with new metadata
-                updated_payload = current_payload.copy()
-                
-                # Update the metadata field
-                if "metadata" in updated_payload:
-                    if isinstance(updated_payload["metadata"], dict):
-                        updated_payload["metadata"].update(metadata)
-                    else:
-                        updated_payload["metadata"] = metadata
-                else:
-                    updated_payload["metadata"] = metadata
-                
-                # Set the updated payload
-                await self._client.set_payload(
-                    collection_name=self._config.collection_name,
-                    payload=updated_payload,
-                    points=[point_id],
-                    wait=True
-                )
-                updated_count += 1
-            
-            info_log(f"Updated metadata for {updated_count} documents with content_id: {content_id}", context="QdrantVectorDB")
+
+            point = search_result[0][0]
+            point_id = point.id
+            current_payload: Dict[str, Any] = point.payload or {}
+            updated_payload: Dict[str, Any] = current_payload.copy()
+
+            if "metadata" in updated_payload and isinstance(updated_payload["metadata"], dict):
+                updated_payload["metadata"].update(metadata)
+            else:
+                updated_payload["metadata"] = metadata
+
+            await client.set_payload(
+                collection_name=self._config.collection_name,
+                payload=updated_payload,
+                points=[point_id],
+                wait=True,
+            )
+            updated_count: int = 1
+
+            info_log(f"Updated metadata for {updated_count} document with chunk_id: {chunk_id}", context="QdrantVectorDB")
             return True
-            
+
         except Exception as e:
-            raise VectorDBError(f"Error updating metadata for content_id '{content_id}': {e}") from e
+            raise VectorDBError(f"Error updating metadata for chunk_id '{chunk_id}': {e}") from e
     
-    def optimize(self) -> bool:
-        """Trigger optimization of the Qdrant collection (sync)."""
-        return self._run_async_from_sync(self.async_optimize())
-    
-    async def async_optimize(self) -> bool:
+    async def aoptimize(self) -> bool:
         """
-        Trigger optimization of the Qdrant collection (async).
+        Trigger optimization of the Qdrant collection.
         
         This operation optimizes indexes and improves search performance.
         Useful to call periodically or after bulk operations.
@@ -1319,17 +1283,11 @@ class QdrantProvider(BaseVectorDBProvider):
         Returns:
             True if optimization was successful, False otherwise
         """
-        if not self._is_connected or not self._client:
-            warning_log("Not connected to Qdrant", context="QdrantVectorDB")
-            return False
-        
         try:
-            # Qdrant doesn't have explicit optimize, but we can trigger indexing
+            client = await self.aget_client()
             info_log(f"Optimization requested for collection '{self._config.collection_name}'", context="QdrantVectorDB")
             
-            # In Qdrant, optimization happens automatically
-            # We can optionally trigger a collection info refresh
-            await self._client.get_collection(collection_name=self._config.collection_name)
+            await client.get_collection(collection_name=self._config.collection_name)
             
             debug_log("Collection optimization acknowledged", context="QdrantVectorDB")
             return True
@@ -1337,14 +1295,14 @@ class QdrantProvider(BaseVectorDBProvider):
             warning_log(f"Error during optimization: {e}", context="QdrantVectorDB")
             return False
     
-    def get_supported_search_types(self) -> List[str]:
+    async def aget_supported_search_types(self) -> List[str]:
         """
-        Get the list of supported search types for this provider (sync).
+        Get the list of supported search types for this provider.
         
         Returns:
             List of search type strings: ['dense', 'full_text', 'hybrid']
         """
-        supported = []
+        supported: List[str] = []
         if self._config.dense_search_enabled:
             supported.append('dense')
         if self._config.full_text_search_enabled:
@@ -1353,16 +1311,7 @@ class QdrantProvider(BaseVectorDBProvider):
             supported.append('hybrid')
         return supported
     
-    async def async_get_supported_search_types(self) -> List[str]:
-        """
-        Get the list of supported search types for this provider (async).
-        
-        Returns:
-            List of search type strings: ['dense', 'full_text', 'hybrid']
-        """
-        return self.get_supported_search_types()
-    
-    async def search(
+    async def asearch(
         self,
         top_k: Optional[int] = None,
         query_vector: Optional[List[float]] = None,
@@ -1371,13 +1320,13 @@ class QdrantProvider(BaseVectorDBProvider):
         alpha: Optional[float] = None,
         fusion_method: Optional[Literal['rrf', 'weighted']] = None,
         similarity_threshold: Optional[float] = None,
-        **kwargs
+        apply_reranking: bool = True,
+        sparse_query_vector: Optional[Dict[str, Any]] = None,
     ) -> List[VectorSearchResult]:
         """
         Master search method that dispatches to the appropriate search type.
         """
-        if not self._is_connected or not self._client:
-            raise VectorDBConnectionError("Must be connected to perform a search.")
+        await self.aget_client()
 
         effective_top_k = top_k if top_k is not None else self._config.default_top_k or 10
 
@@ -1388,53 +1337,45 @@ class QdrantProvider(BaseVectorDBProvider):
         if is_dense:
             if self._config.dense_search_enabled is False:
                 raise ConfigurationError("Dense search is disabled by the current configuration.")
-            return await self.dense_search(query_vector, effective_top_k, filter, similarity_threshold, **kwargs)
+            return await self.adense_search(query_vector, effective_top_k, filter, similarity_threshold, apply_reranking=apply_reranking)
         
         elif is_hybrid:
             if self._config.hybrid_search_enabled is False:
                 raise ConfigurationError("Hybrid search is disabled by the current configuration.")
-            return await self.hybrid_search(query_vector, query_text, effective_top_k, filter, alpha, fusion_method, similarity_threshold, **kwargs)
+            return await self.ahybrid_search(query_vector, query_text, effective_top_k, filter, alpha, fusion_method, similarity_threshold, apply_reranking=apply_reranking, sparse_query_vector=sparse_query_vector)
 
         elif is_full_text:
             if self._config.full_text_search_enabled is False:
                 raise ConfigurationError("Full-text search is disabled by the current configuration.")
-            return await self.full_text_search(query_text, effective_top_k, filter, similarity_threshold, **kwargs)
+            return await self.afull_text_search(query_text, effective_top_k, filter, similarity_threshold, apply_reranking=apply_reranking)
         
         else:
             raise SearchError("Invalid search query: You must provide a 'query_vector' and/or 'query_text'.")
     
-    def search_sync(self, top_k: Optional[int] = None, query_vector: Optional[List[float]] = None, query_text: Optional[str] = None, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
-        """
-        A master search method that dispatches to the appropriate specialized
-        search function based on the provided arguments and the provider's
-        configured capabilities (sync).
-        """
-        return self._run_async_from_sync(self.search(top_k, query_vector, query_text, filter, alpha, fusion_method, similarity_threshold, **kwargs))
-    
-    async def dense_search(
+    async def adense_search(
         self,
         query_vector: List[float],
         top_k: int,
         filter: Optional[Dict[str, Any]] = None,
         similarity_threshold: Optional[float] = None,
-        **kwargs
+        apply_reranking: bool = True,
     ) -> List[VectorSearchResult]:
         """
         Performs pure vector similarity search.
         """
         try:
-            final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.default_similarity_threshold or 0.5
+            client = await self.aget_client()
+            final_similarity_threshold = similarity_threshold if similarity_threshold is not None else (self._config.default_similarity_threshold if self._config.default_similarity_threshold is not None else 0.0)
             
             search_params = models.SearchParams(
-                hnsw_ef=kwargs.get('ef_search', getattr(self._config.index, 'ef_search', None) or 128),
+                hnsw_ef=getattr(self._config.index, 'ef_search', None) or 128,
                 exact=False,
             )
 
             qdrant_filter = self._build_qdrant_filter(filter) if filter else None
 
-            # Use query_points for consistency
             if self._config.use_sparse_vectors:
-                query_response = await self._client.query_points(
+                query_response = await client.query_points(
                     collection_name=self._config.collection_name,
                     query=query_vector,
                     using=self._config.dense_vector_name,
@@ -1445,7 +1386,7 @@ class QdrantProvider(BaseVectorDBProvider):
                     with_vectors=True
                 )
             else:
-                query_response = await self._client.query_points(
+                query_response = await client.query_points(
                     collection_name=self._config.collection_name,
                     query=query_vector,
                     query_filter=qdrant_filter,
@@ -1461,7 +1402,6 @@ class QdrantProvider(BaseVectorDBProvider):
                 should_include = self._check_similarity_threshold(point.score, final_similarity_threshold)
                 
                 if should_include:
-                    # Extract vector (handle named vectors)
                     vector = None
                     if isinstance(point.vector, dict):
                         vector = point.vector.get(self._config.dense_vector_name)
@@ -1471,51 +1411,43 @@ class QdrantProvider(BaseVectorDBProvider):
                     filtered_results.append(VectorSearchResult(
                         id=point.id,
                         score=point.score,
-                        payload=point.payload,
+                        payload=self._flatten_payload(point.payload),
                         vector=vector,
                         text=point.payload.get("content", "") if point.payload else ""
                     ))
 
-            # Apply reranking if configured
-            if self.reranker and kwargs.get('apply_reranking', True):
+            if self.reranker and apply_reranking:
                 filtered_results = self._apply_reranking(filtered_results, str(query_vector))
             
             return filtered_results
         except Exception as e:
             raise SearchError(f"An error occurred during dense search: {e}") from e
     
-    def dense_search_sync(self, query_vector: List[float], top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
-        """
-        Performs a pure vector similarity search (sync).
-        """
-        return self._run_async_from_sync(self.dense_search(query_vector, top_k, filter, similarity_threshold, **kwargs))
-    
-    async def full_text_search(
+    async def afull_text_search(
         self,
         query_text: str,
         top_k: int,
         filter: Optional[Dict[str, Any]] = None,
         similarity_threshold: Optional[float] = None,
-        **kwargs
+        apply_reranking: bool = True,
+        sparse_query_vector: Optional[Dict[str, Any]] = None,
     ) -> List[VectorSearchResult]:
         """
         Performs full-text search using Qdrant's text indexing.
-        
+
         For IN_MEMORY mode, falls back to client-side search.
         For other modes, uses server-side text indexing.
         """
-        if not self._is_connected or not self._client:
-            raise VectorDBConnectionError("Must be connected to perform a full-text search.")
+        _ = (sparse_query_vector,)  # accepted for API parity; Qdrant uses text-index BM25 not sparse vectors
+        await self.aget_client()
 
-        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else self._config.default_similarity_threshold or 0.5
-        target_text_field = kwargs.get("text_search_field", "content")
+        final_similarity_threshold = similarity_threshold if similarity_threshold is not None else (self._config.default_similarity_threshold if self._config.default_similarity_threshold is not None else 0.0)
+        target_text_field: str = self._config.text_search_field
 
         if self._config.connection.mode == Mode.IN_MEMORY:
-            # Client-side full-text search for in-memory mode
-            return await self._client_side_full_text_search(query_text, top_k, filter, final_similarity_threshold, target_text_field, **kwargs)
+            return await self._client_side_full_text_search(query_text, top_k, filter, final_similarity_threshold, target_text_field, apply_reranking=apply_reranking)
         else:
-            # Server-side full-text search
-            return await self._server_side_full_text_search(query_text, top_k, filter, final_similarity_threshold, target_text_field, **kwargs)
+            return await self._server_side_full_text_search(query_text, top_k, filter, final_similarity_threshold, target_text_field, apply_reranking=apply_reranking)
     
     async def _client_side_full_text_search(
         self,
@@ -1524,11 +1456,13 @@ class QdrantProvider(BaseVectorDBProvider):
         filter: Optional[Dict[str, Any]],
         similarity_threshold: float,
         target_text_field: str,
-        **kwargs
+        apply_reranking: bool = True,
     ) -> List[VectorSearchResult]:
         """Client-side full-text search implementation."""
+        _ = (filter,)  # TODO: client-side path currently does not apply the filter to scroll results
         try:
-            records = await self._client.scroll(
+            client = await self.aget_client()
+            records = await client.scroll(
                 collection_name=self._config.collection_name,
                 limit=10000,
                 with_payload=True,
@@ -1562,7 +1496,6 @@ class QdrantProvider(BaseVectorDBProvider):
                             relevance_score = 0.0
                         
                         if relevance_score >= similarity_threshold:
-                            # Extract vector (handle named vectors)
                             vector = None
                             if isinstance(record.vector, dict):
                                 vector = record.vector.get(self._config.dense_vector_name)
@@ -1572,7 +1505,7 @@ class QdrantProvider(BaseVectorDBProvider):
                             matching_records.append(VectorSearchResult(
                                 id=record.id,
                                 score=relevance_score,
-                                payload=record.payload,
+                                payload=self._flatten_payload(record.payload),
                                 vector=vector,
                                 text=record.payload.get("content", "")
                             ))
@@ -1580,8 +1513,7 @@ class QdrantProvider(BaseVectorDBProvider):
             matching_records.sort(key=lambda x: x.score, reverse=True)
             matching_records = matching_records[:top_k]
             
-            # Apply reranking if configured
-            if self.reranker and kwargs.get('apply_reranking', True):
+            if self.reranker and apply_reranking:
                 matching_records = self._apply_reranking(matching_records, query_text)
             
             return matching_records
@@ -1596,11 +1528,12 @@ class QdrantProvider(BaseVectorDBProvider):
         filter: Optional[Dict[str, Any]],
         similarity_threshold: float,
         target_text_field: str,
-        **kwargs
+        apply_reranking: bool = True,
     ) -> List[VectorSearchResult]:
         """Server-side full-text search implementation."""
         try:
-            await self._client.create_payload_index(
+            client = await self.aget_client()
+            await client.create_payload_index(
                 collection_name=self._config.collection_name,
                 field_name=target_text_field,
                 field_schema=models.TextIndexParams(type="text", tokenizer=models.TokenizerType.WORD, min_token_len=2, max_token_len=20, lowercase=True),
@@ -1619,7 +1552,7 @@ class QdrantProvider(BaseVectorDBProvider):
             else:
                 final_filter = models.Filter(must=[text_condition])
             
-            records = await self._client.scroll(
+            records = await client.scroll(
                 collection_name=self._config.collection_name,
                 scroll_filter=final_filter,
                 limit=top_k,
@@ -1662,7 +1595,6 @@ class QdrantProvider(BaseVectorDBProvider):
             
             filtered_results = []
             for score, r in scored_results:
-                # Extract vector (handle named vectors)
                 vector = None
                 if isinstance(r.vector, dict):
                     vector = r.vector.get(self._config.dense_vector_name)
@@ -1672,26 +1604,19 @@ class QdrantProvider(BaseVectorDBProvider):
                 filtered_results.append(VectorSearchResult(
                     id=r.id,
                     score=score,
-                    payload=r.payload,
+                    payload=self._flatten_payload(r.payload),
                     vector=vector,
                     text=r.payload.get("content", "")
                 ))
             
-            # Apply reranking if configured
-            if self.reranker and kwargs.get('apply_reranking', True):
+            if self.reranker and apply_reranking:
                 filtered_results = self._apply_reranking(filtered_results, query_text)
             
             return filtered_results
         except Exception as e:
             raise SearchError(f"An error occurred during server-side full-text search: {e}") from e
     
-    def full_text_search_sync(self, query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
-        """
-        Performs a full-text search if the provider supports it (sync).
-        """
-        return self._run_async_from_sync(self.full_text_search(query_text, top_k, filter, similarity_threshold, **kwargs))
-    
-    async def hybrid_search(
+    async def ahybrid_search(
         self,
         query_vector: List[float],
         query_text: str,
@@ -1700,28 +1625,25 @@ class QdrantProvider(BaseVectorDBProvider):
         alpha: Optional[float] = None,
         fusion_method: Optional[Literal['rrf', 'weighted']] = None,
         similarity_threshold: Optional[float] = None,
-        **kwargs
+        apply_reranking: bool = True,
+        sparse_query_vector: Optional[Dict[str, Any]] = None,
     ) -> List[VectorSearchResult]:
         """
         Combines dense and full-text search results using fusion.
         
-        If sparse vectors are enabled and provided in kwargs, uses native Qdrant hybrid search.
+        If sparse vectors are enabled and a sparse_query_vector is provided, uses native Qdrant hybrid search.
         Otherwise, performs manual fusion of dense + full-text search results.
         """
         effective_alpha = alpha if alpha is not None else self._config.default_hybrid_alpha or 0.5
         effective_fusion = fusion_method if fusion_method is not None else self._config.default_fusion_method or 'weighted'
-
-        # Check if we should use native sparse vector hybrid search
-        sparse_query_vector = kwargs.get('sparse_query_vector')
         
         if self._config.use_sparse_vectors and sparse_query_vector:
             return await self._native_hybrid_search(
-                query_vector, sparse_query_vector, top_k, filter, effective_fusion, similarity_threshold, **kwargs
+                query_vector, sparse_query_vector, top_k, filter, effective_fusion, similarity_threshold
             )
         else:
-            # Manual fusion of dense + full-text
-            dense_results = await self.dense_search(query_vector, top_k, filter, similarity_threshold, **kwargs)
-            ft_results = await self.full_text_search(query_text, top_k, filter, similarity_threshold, **kwargs)
+            dense_results = await self.adense_search(query_vector, top_k, filter, similarity_threshold, apply_reranking=apply_reranking)
+            ft_results = await self.afull_text_search(query_text, top_k, filter, similarity_threshold, apply_reranking=apply_reranking)
 
             if effective_fusion == 'weighted':
                 fused_results = self._fuse_weighted(dense_results, ft_results, effective_alpha)
@@ -1733,17 +1655,10 @@ class QdrantProvider(BaseVectorDBProvider):
             fused_results.sort(key=lambda x: x.score, reverse=True)
             fused_results = fused_results[:top_k]
             
-            # Apply reranking if configured
-            if self.reranker and kwargs.get('apply_reranking', True):
+            if self.reranker and apply_reranking:
                 fused_results = self._apply_reranking(fused_results, query_text)
             
             return fused_results
-    
-    def hybrid_search_sync(self, query_vector: List[float], query_text: str, top_k: int, filter: Optional[Dict[str, Any]] = None, alpha: Optional[float] = None, fusion_method: Optional[Literal['rrf', 'weighted']] = None, similarity_threshold: Optional[float] = None, **kwargs) -> List[VectorSearchResult]:
-        """
-        Combines dense and sparse/keyword search results (sync).
-        """
-        return self._run_async_from_sync(self.hybrid_search(query_vector, query_text, top_k, filter, alpha, fusion_method, similarity_threshold, **kwargs))
     
     async def _native_hybrid_search(
         self,
@@ -1753,15 +1668,15 @@ class QdrantProvider(BaseVectorDBProvider):
         filter: Optional[Dict[str, Any]],
         fusion_method: str,
         similarity_threshold: Optional[float],
-        **kwargs
     ) -> List[VectorSearchResult]:
         """
         Performs native Qdrant hybrid search using named dense and sparse vectors.
         """
+        _ = (similarity_threshold,)  # TODO: native hybrid path currently does not apply threshold filtering to point.score
         try:
+            client = await self.aget_client()
             qdrant_filter = self._build_qdrant_filter(filter) if filter else None
             
-            # Map fusion method
             fusion_map = {
                 'rrf': models.Fusion.RRF,
                 'dbsf': models.Fusion.DBSF
@@ -1769,7 +1684,7 @@ class QdrantProvider(BaseVectorDBProvider):
             
             final_fusion = fusion_method if fusion_method is not None else self._config.default_fusion_method or 'rrf'
 
-            query_response = await self._client.query_points(
+            query_response = await client.query_points(
                 collection_name=self._config.collection_name,
                 prefetch=[
                     models.Prefetch(
@@ -1795,7 +1710,6 @@ class QdrantProvider(BaseVectorDBProvider):
             
             results = []
             for point in query_response.points:
-                # Extract dense vector
                 vector = None
                 if isinstance(point.vector, dict):
                     vector = point.vector.get(self._config.dense_vector_name)
@@ -1805,7 +1719,7 @@ class QdrantProvider(BaseVectorDBProvider):
                 results.append(VectorSearchResult(
                     id=point.id,
                     score=point.score,
-                    payload=point.payload,
+                    payload=self._flatten_payload(point.payload),
                     vector=vector,
                     text=point.payload.get("content", "") if point.payload else ""
                 ))
@@ -1838,12 +1752,9 @@ class QdrantProvider(BaseVectorDBProvider):
             return results
         
         try:
-            # Check if reranker has a rerank method
             if hasattr(self.reranker, 'rerank'):
-                # Convert to format expected by reranker
                 documents = []
                 for result in results:
-                    # Create document-like object
                     doc = {
                         'id': result.id,
                         'content': result.text or result.payload.get('content', ''),
@@ -1852,10 +1763,8 @@ class QdrantProvider(BaseVectorDBProvider):
                     }
                     documents.append(doc)
                 
-                # Apply reranking
                 reranked_docs = self.reranker.rerank(query=query, documents=documents)
                 
-                # Convert back to VectorSearchResult
                 reranked_results = []
                 for doc in reranked_docs:
                     if isinstance(doc, dict):
@@ -1863,11 +1772,10 @@ class QdrantProvider(BaseVectorDBProvider):
                             id=doc.get('id'),
                             score=doc.get('score', 0.0),
                             payload=doc.get('payload'),
-                            vector=None,  # Vector not needed after reranking
+                            vector=None,
                             text=doc.get('content', '')
                         ))
                     else:
-                        # Handle object-based reranker response
                         original_result = next((r for r in results if r.id == getattr(doc, 'id', None)), None)
                         if original_result:
                             reranked_results.append(VectorSearchResult(
@@ -1963,7 +1871,7 @@ class QdrantProvider(BaseVectorDBProvider):
             
         return final_results
 
-    def _build_qdrant_filter(self, filter_dict: Dict[str, Any]) -> models.Filter:
+    def _build_qdrant_filter(self, filter_dict: Dict[str, Any]) -> Any:
         """
         Translates MongoDB-style filter dict into Qdrant Filter.
         
@@ -1992,4 +1900,3 @@ class QdrantProvider(BaseVectorDBProvider):
                 conditions.append(models.FieldCondition(key=key, match=models.MatchValue(value=value)))
         
         return models.Filter(must=conditions)
-    

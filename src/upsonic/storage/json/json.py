@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 if TYPE_CHECKING:
     from upsonic.session.base import SessionType, Session
     from upsonic.culture.cultural_knowledge import CulturalKnowledge
+    from upsonic.storage.schemas import KnowledgeRow
 
 from upsonic.storage.base import Storage
 from upsonic.storage.json.utils import (
@@ -64,6 +65,7 @@ class JSONStorage(Storage):
         db_path: Optional[str] = None,
         session_table: Optional[str] = None,
         user_memory_table: Optional[str] = None,
+        knowledge_table: Optional[str] = None,
         id: Optional[str] = None,
     ) -> None:
         """
@@ -73,11 +75,13 @@ class JSONStorage(Storage):
             db_path: Path to the directory where JSON files will be stored.
             session_table: Name of the session table (JSON file name without extension).
             user_memory_table: Name of the user memory table (JSON file name without extension).
+            knowledge_table: Name of the knowledge table (JSON file name without extension).
             id: Unique identifier for this storage instance.
         """
         super().__init__(
             session_table=session_table,
             user_memory_table=user_memory_table,
+            knowledge_table=knowledge_table,
             id=id,
         )
 
@@ -104,12 +108,11 @@ class JSONStorage(Storage):
 
     def _create_all_tables(self) -> None:
         """Create all required tables (JSON files) for this storage."""
-        # Create directory if it doesn't exist
         self.db_path.mkdir(parents=True, exist_ok=True)
         
-        # Initialize empty JSON files if they don't exist
         self._read_json_file(self.session_table_name, create_if_not_found=True)
         self._read_json_file(self.user_memory_table_name, create_if_not_found=True)
+        self._read_json_file(self.knowledge_table_name, create_if_not_found=True)
 
     def close(self) -> None:
         """Close the storage (no-op for JSON file storage)."""
@@ -1017,6 +1020,13 @@ class JSONStorage(Storage):
             except Exception:
                 pass
 
+            # Clear knowledge
+            try:
+                self._write_json_file(self.knowledge_table_name, [])
+                _logger.debug("Cleared all knowledge entries")
+            except Exception:
+                pass
+
             _logger.info("Cleared all data from storage")
 
         except Exception as e:
@@ -1331,4 +1341,157 @@ class JSONStorage(Storage):
 
         except Exception as e:
             _logger.error(f"Error upserting cultural knowledge: {e}")
+            raise e
+
+    # ======================== Knowledge Content Methods ========================
+
+    def upsert_knowledge_content(
+        self,
+        knowledge_row: "KnowledgeRow",
+    ) -> Optional["KnowledgeRow"]:
+        """Insert or update a knowledge document registry entry."""
+        from upsonic.storage.schemas import KnowledgeRow
+
+        try:
+            current_time = int(time.time())
+            data = knowledge_row.to_dict()
+            data.setdefault("created_at", current_time)
+            data["updated_at"] = current_time
+
+            all_items = self._read_json_file(
+                self.knowledge_table_name,
+                create_if_not_found=True,
+            )
+
+            all_items = [item for item in all_items if item.get("id") != data["id"]]
+            all_items.append(data)
+
+            self._write_json_file(self.knowledge_table_name, all_items)
+            _logger.debug(f"Upserted knowledge content: {data['id']}")
+
+            return KnowledgeRow.from_dict(data)
+
+        except Exception as e:
+            _logger.error(f"Error upserting knowledge content: {e}")
+            raise e
+
+    def get_knowledge_content(
+        self,
+        id: str,
+    ) -> Optional["KnowledgeRow"]:
+        """Get a knowledge document registry entry by ID."""
+        from upsonic.storage.schemas import KnowledgeRow
+
+        try:
+            all_items = self._read_json_file(
+                self.knowledge_table_name,
+                create_if_not_found=False,
+            )
+        except FileNotFoundError:
+            return None
+
+        try:
+            for item in all_items:
+                if item.get("id") == id:
+                    return KnowledgeRow.from_dict(item)
+            return None
+
+        except Exception as e:
+            _logger.error(f"Error getting knowledge content: {e}")
+            raise e
+
+    def get_knowledge_contents(
+        self,
+        knowledge_base_id: Optional[str] = None,
+        limit: Optional[int] = None,
+        page: Optional[int] = None,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = None,
+    ) -> Tuple[List["KnowledgeRow"], int]:
+        """Get knowledge document registry entries with filtering and pagination."""
+        from upsonic.storage.schemas import KnowledgeRow
+
+        try:
+            all_items = self._read_json_file(
+                self.knowledge_table_name,
+                create_if_not_found=False,
+            )
+        except FileNotFoundError:
+            return [], 0
+
+        try:
+            filtered: List[Dict[str, Any]] = []
+            for item in all_items:
+                if knowledge_base_id is not None and item.get("knowledge_base_id") != knowledge_base_id:
+                    continue
+                filtered.append(item)
+
+            total_count: int = len(filtered)
+
+            sorted_items = apply_sorting(
+                filtered,
+                sort_by=sort_by or "created_at",
+                sort_order=sort_order or "desc",
+            )
+
+            paginated = apply_pagination(sorted_items, limit, page)
+
+            rows = [KnowledgeRow.from_dict(item) for item in paginated]
+            return rows, total_count
+
+        except Exception as e:
+            _logger.error(f"Error getting knowledge contents: {e}")
+            raise e
+
+    def delete_knowledge_content(self, id: str) -> bool:
+        """Delete a knowledge document registry entry by ID."""
+        try:
+            all_items = self._read_json_file(
+                self.knowledge_table_name,
+                create_if_not_found=False,
+            )
+        except FileNotFoundError:
+            return False
+
+        try:
+            original_count = len(all_items)
+            all_items = [item for item in all_items if item.get("id") != id]
+
+            if len(all_items) < original_count:
+                self._write_json_file(self.knowledge_table_name, all_items)
+                _logger.debug(f"Deleted knowledge content: {id}")
+                return True
+            return False
+
+        except Exception as e:
+            _logger.error(f"Error deleting knowledge content: {e}")
+            raise e
+
+    def delete_knowledge_contents(self, ids: List[str]) -> int:
+        """Delete multiple knowledge document registry entries."""
+        if not ids:
+            return 0
+
+        try:
+            all_items = self._read_json_file(
+                self.knowledge_table_name,
+                create_if_not_found=False,
+            )
+        except FileNotFoundError:
+            return 0
+
+        try:
+            ids_set = set(ids)
+            original_count = len(all_items)
+            all_items = [item for item in all_items if item.get("id") not in ids_set]
+
+            deleted_count: int = original_count - len(all_items)
+            if deleted_count > 0:
+                self._write_json_file(self.knowledge_table_name, all_items)
+
+            _logger.debug(f"Deleted {deleted_count} knowledge entries")
+            return deleted_count
+
+        except Exception as e:
+            _logger.error(f"Error deleting knowledge contents: {e}")
             raise e
