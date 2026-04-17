@@ -17,9 +17,9 @@ Maintain a **machine-readable** progress file so dashboards, CLIs, and notebooks
 experiments/{research_name}/progress.json
 ```
 
-## Format
+## Format (CANONICAL — emit exactly)
 
-The file is **overwritten** each time (not appended). It is always the full current snapshot. Use UTC ISO-8601 timestamps.
+The file is **overwritten** each time (not appended). It is always the full current snapshot. Use UTC ISO-8601 timestamps. Match this schema **byte-for-byte** — do not invent alternative field names, do not use a dict where a list is specified, do not translate status values to synonyms.
 
 ```json
 {
@@ -40,14 +40,17 @@ The file is **overwritten** each time (not appended). It is always the full curr
 }
 ```
 
-### Field rules
+### Field rules (strict)
 
-- `status`: exactly one of `"RUNNING"`, `"COMPLETED"`, `"FAILED"`.
-- `phases[].status`: exactly one of `"done"`, `"current"`, `"pending"`, `"failed"`.
-- Exactly one phase may have status `"current"` while `status == "RUNNING"`; on `COMPLETED`/`FAILED` no phase should be `"current"`.
-- `phases[].summary` is one short sentence, or `null` if the phase has not run yet.
-- `current_activity` is one or two sentences about what is happening **right now**.
-- `issues` is an array of short strings; `[]` when clean.
+- **`status`** is one of: `"RUNNING"`, `"COMPLETED"`, `"FAILED"`. Uppercase. Nothing else.
+- **`phases`** is a **JSON array**, never an object. Exactly six elements, in order: Setup, Analyze Current, Research, Benchmark, Implement, Evaluate. Use those exact `name` values.
+- **`phases[].status`** is one of: `"done"`, `"current"`, `"pending"`, `"failed"`. Lowercase. Do **not** use `"completed"`, `"in_progress"`, `"todo"`, or any other synonym.
+- **`phases[].index`** is a 0-based integer matching the position in the array.
+- Exactly one phase may have `status == "current"` while the top-level `status == "RUNNING"`. On `COMPLETED` / `FAILED`, no phase should be `"current"`.
+- **`phases[].summary`** is one short sentence, or `null` if the phase has not run yet.
+- **`current_activity`** is one or two sentences describing what is happening **right now**.
+- **`issues`** is an array of short strings; use `[]` when clean, never `null`.
+- Do **not** add extra top-level keys (e.g. `current_phase`), and do not use dict-of-phases shapes like `{"phase_0_setup": {...}}`.
 
 ## Rules
 
