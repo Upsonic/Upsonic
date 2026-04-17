@@ -96,6 +96,9 @@ def _get_RalphLoop():
 def _get_AutonomousAgent():
     return _lazy_import("upsonic.agent.autonomous_agent.autonomous_agent", "AutonomousAgent")()
 
+def _get_PrebuiltAutonomousAgent():
+    return _lazy_import("upsonic.agent.prebuilt_autonomous_agent.prebuilt_autonomous_agent", "PrebuiltAutonomousAgent")()
+
 def hello() -> str:
     return "Hello from upsonic!"
 
@@ -129,6 +132,8 @@ def __getattr__(name: str) -> Any:
         return _get_RalphLoop()
     elif name == "AutonomousAgent":
         return _get_AutonomousAgent()
+    elif name == "PrebuiltAutonomousAgent":
+        return _get_PrebuiltAutonomousAgent()
     
     # All other imports must come from sub-modules
     raise AttributeError(
@@ -144,6 +149,7 @@ __all__ = [
     "Clanker",
     "Agent",
     "AutonomousAgent",
+    "PrebuiltAutonomousAgent",
     "Graph",
     "Team",
     "Chat",
