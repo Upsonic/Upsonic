@@ -11,15 +11,15 @@ Phase 2 — after the current implementation has been analyzed.
 |-----------|------|-------------|
 | experiment_path | path | `experiments/{research_name}/` |
 
-The research source was materialized into `{experiment_path}` during Phase 0. Its local path is recorded in `{experiment_path}/log.json` under `metadata.research_source`, and its kind (`pdf`, `file`, `git`, `kaggle_notebook`, `kaggle_dataset`, `web`, `other`) under `metadata.research_source_kind`. Expected layouts:
+The research source was materialized into `{experiment_path}` during Phase 0. Its local path is recorded in `{experiment_path}/log.json` under `metadata.research_source`, and a short descriptive label Phase 0 chose is under `metadata.research_source_kind`. The label is free-form (common values: `pdf`, `file`, `git`, `kaggle_notebook`, `kaggle_dataset`, `arxiv`, `huggingface_model`, `html`, `idea`, `other`), but treat it as a hint only — always follow the actual path in `metadata.research_source`.
 
-- `pdf` → `{experiment_path}/research.pdf`
-- `file` → `{experiment_path}/research_source.{ext}` (Markdown, HTML, `.ipynb`, text, …)
-- `git` → `{experiment_path}/research_source/` (cloned repository — read `README*`, `docs/`, the top-level code, and any papers/notebooks inside)
-- `kaggle_notebook` → `{experiment_path}/research_source/` (pulled Kaggle kernel — read the `.ipynb` and any accompanying metadata; fall back to the saved HTML if the CLI was unavailable)
-- `kaggle_dataset` → `{experiment_path}/research_source/` (downloaded Kaggle dataset — read the dataset description / README and skim files to understand the data; fall back to the saved HTML if the CLI was unavailable)
-- `web` → `{experiment_path}/research_source.html` (and possibly `research_source.md` or `research.pdf`)
-- `other` → whatever Phase 0 saved (check `metadata.research_source`)
+Inspect that path and read whatever is there:
+
+- A single file (PDF, Markdown, HTML, `.ipynb`, text, …) → read it directly.
+- A directory → read the obvious entry points first (`README*`, `*.ipynb`, top-level notebooks or code, `docs/`, dataset descriptions), then skim the rest as needed.
+- A text **idea** (`research_source_kind == "idea"`, typically a short `research_source.md`) → read the user's description carefully and turn it into a concrete method plan. Pick a specific algorithm / library that matches the description, define the hyperparameters you will use, and document your interpretation explicitly in the Phase 2 log entry. If the idea is ambiguous, commit to a reasonable default and note the trade-off — do not invent a citation or claim the idea came from a paper.
+
+Do not try to re-fetch the source. If the content is insufficient, note what is missing in the Phase 2 log entry and proceed with the best analysis you can.
 
 ## Actions
 

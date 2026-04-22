@@ -49,7 +49,7 @@ You will receive exactly five things:
 | Input | What It Is | Example |
 |---|---|---|
 | `research_name` | The exact folder name and JSON `"name"` to use for this experiment. **Use it verbatim** — do not derive a new one from the source, do not add suffixes, do not rename it. | `tabpfn_adult` |
-| `research_source` | Any reference that describes the new method. Accepted forms: local file (PDF, Markdown, HTML, .ipynb, text), web URL (blog post, arXiv, documentation), git repository URL (`https://…/repo.git` or `git@…`), Kaggle notebook or dataset page, or any other fetchable resource. | `example_1/tabpfn.pdf`, `https://arxiv.org/abs/2207.01848`, `https://github.com/automl/TabPFN`, `https://www.kaggle.com/code/<user>/<slug>` |
+| `research_source` | Anything that describes the new method. Accepted forms: local file or folder (PDF, Markdown, HTML, .ipynb, text), any URL (blog post, arXiv, documentation, Hugging Face, …), git repository URL, Kaggle notebook or dataset page, an arXiv / paper ID, **or a plain free-text idea** describing the approach to try. Do not reject unusual values; use your judgment to bring whatever is given into the experiment folder. | `example_1/tabpfn.pdf`, `https://arxiv.org/abs/2207.01848`, `https://github.com/automl/TabPFN`, `https://www.kaggle.com/code/<user>/<slug>`, `"swap XGBoost for CatBoost with ordered boosting"` |
 | `current_notebook` | A Jupyter notebook (.ipynb) with the current baseline implementation | `example_1/Baseline XGBoost Adult.ipynb` |
 | `current_data` | The dataset used by the current notebook (file or directory) | `example_1/data/` or downloaded via code in notebook |
 | `experiments_directory` | The directory inside your workspace where experiment folders live | `./experiments` |
@@ -58,19 +58,22 @@ The experiment folder is always `{experiments_directory}/{research_name}/`. If t
 
 ### Research source handling
 
-At Phase 0 you must inspect `research_source` and materialize it inside the experiment folder. The resulting path is what Phase 2 (`research` skill) reads from, and what you record in `log.json.metadata.research_source` and `result.json.file_locations.research_source`.
+`research_source` is intentionally free-form. Treat it as an opaque reference from the user and figure out yourself what it is and how to bring its content into the experiment folder — do not refuse it just because it does not match a known pattern. In particular, `research_source` may be a **free-text idea or method description** rather than anything retrievable; in that case the text itself *is* the research source.
 
-| Source type | How to detect | How to materialize | Local path |
-|---|---|---|---|
-| Local PDF | existing path ending in `.pdf` | `cp {research_source} experiments/{research_name}/research.pdf` | `research.pdf` |
-| Other local file (`.md`, `.html`, `.txt`, `.ipynb`, …) | existing path with a non-PDF extension | copy preserving extension | `research_source.{ext}` |
-| Git repository URL | starts with `git@`, ends in `.git`, or matches a known git host (`github.com`, `gitlab.com`, `bitbucket.org`, …) | `git clone --depth 1 {research_source} experiments/{research_name}/research_source/` | `research_source/` (directory) |
-| Kaggle notebook URL | `https://www.kaggle.com/code/<user>/<slug>` (or legacy `/kernels/…`) | pull the notebook with the Kaggle CLI when available (`kaggle kernels pull <user>/<slug> -p experiments/{research_name}/research_source/`), otherwise fetch the page HTML. Also save the rendered `.ipynb` if retrievable. | `research_source/` |
-| Kaggle dataset URL | `https://www.kaggle.com/datasets/<user>/<slug>` | download with `kaggle datasets download -d <user>/<slug> -p experiments/{research_name}/research_source/ --unzip` when available, otherwise save the page HTML. | `research_source/` |
-| Web URL (http/https, non-git, non-Kaggle) | URL scheme is `http` / `https` and not matched above | fetch the page; save raw HTML as `research_source.html` and, if useful, a cleaned Markdown version as `research_source.md`. For arXiv abstract URLs, also download the matching PDF to `research.pdf`. | `research_source.html` (+ optional `research.pdf` / `.md`) |
-| Anything else | fallback | do your best to fetch and save a readable local copy; document the choice in `log.json.metadata` | whatever you wrote |
+At Phase 0:
 
-In all cases, once materialized, use only the local path for Phase 2 onwards — never re-fetch during later phases.
+1. **Inspect the value.** Use any signal available to you — file existence on disk, URL structure, content sniffed with `curl -I` / `file`, known services, the user's own description, etc. Do not rely on a fixed list of prefixes. If the value does not look like a path or URL at all, treat it as an **idea / text description** (see step 3).
+2. **Fetch / clone / copy** a retrievable source into `experiments/{research_name}/` using whichever tool is appropriate: `cp`, `git clone`, `curl`, `wget`, `kaggle` CLI, `huggingface-cli`, language-specific downloaders, or the filesystem/shell tools at your disposal. Install missing CLIs if you need them.
+3. **If the source is a text idea**, do not try to fetch anything — just save the description itself to `experiments/{research_name}/research_source.md` verbatim (optionally with a leading `# Idea` heading). Use your Phase 2 work to flesh the idea out: pick a concrete method consistent with the description, decide the implementation plan, and document your interpretation in `log.json`. Do not invent a fake paper, author, or URL.
+4. **Pick a sensible local filename or folder** based on what you actually produced. Common outcomes (non-exhaustive — use your own judgment for anything novel):
+   - A PDF → `research.pdf`
+   - Any other single file (including a free-text idea) → `research_source.{ext}` (e.g. `research_source.md` for ideas)
+   - A cloned git repository or a bundle of files → `research_source/` (a directory)
+   - A fetched web page → `research_source.html` (+ optional `research_source.md` / `research.pdf` if that helps readability)
+5. **Record the outcome** in `log.json.metadata`: at minimum the original `research_source` value, the local path you produced, and a short free-form `research_source_kind` label you picked yourself (e.g. `"pdf"`, `"git"`, `"kaggle_notebook"`, `"html"`, `"arxiv"`, `"huggingface_model"`, `"idea"`, …). This label is for observability — there is no closed enum.
+6. **Fail loudly only after trying.** If a retrievable source genuinely cannot be fetched (404, auth required, unsupported scheme), log the attempt(s) in `log.json`, mark the experiment `FAILED`, and explain in `result.json.explanation` what you tried. A text idea can never "fail to fetch" — it is always saved verbatim.
+
+Once materialized, use only the local path for Phase 2 onwards — never re-fetch during later phases.
 
 ---
 
@@ -146,7 +149,7 @@ experiments/
 - Create `experiments/{research_name}/` directory
 - COPY the current notebook → `experiments/{research_name}/current.ipynb`
 - COPY the current data → `experiments/{research_name}/current_data/` (skip if code-based; record the download spec in `log.json`)
-- MATERIALIZE the research source into the experiment folder using the table above (PDF → `research.pdf`; other local file → `research_source.{ext}`; git repo → `research_source/`; Kaggle notebook or dataset → `research_source/`; generic web URL → `research_source.html` + optional extras). Record the chosen local path as `metadata.research_source` in `log.json`.
+- MATERIALIZE the research source into the experiment folder using the guidance in **Research source handling** above. Figure out what the value is (path, URL, git, Kaggle, arXiv, Hugging Face, …), fetch it with whichever tool fits, and save it under a sensible local name (`research.pdf`, `research_source.{ext}`, or `research_source/`). Record the resulting local path, the original value, and your chosen `research_source_kind` label in `log.json.metadata`.
 - Initialize `experiments/{research_name}/log.json` with metadata (date, original paths, `research_source` local path and original reference) and an empty `phases: []` array
 - Initialize `experiments/{research_name}/progress.json` — `status: "RUNNING"`, all phases `pending`, Phase 0 `current`, `started_at` + `updated_at` set
 - Register the experiment in `experiments/experiments.json` with `status: "in_progress"`
