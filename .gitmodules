@@ -1,3 +1,6 @@
 [submodule "examples"]
 	path = examples
 	url = https://github.com/Upsonic/Examples.git
+[submodule "Docs"]
+	path = Docs
+	url = https://github.com/Upsonic/Docs.git

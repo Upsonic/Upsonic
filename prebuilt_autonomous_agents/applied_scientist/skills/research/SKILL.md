@@ -1,7 +1,7 @@
 # Research Skill
 
 ## Purpose
-Read a research paper and extract actionable information needed to implement the proposed method. Record the findings as a structured JSON entry.
+Read the materialized research source and extract actionable information needed to implement the proposed method. Record the findings as a structured JSON entry.
 
 ## When to Use
 Phase 2 — after the current implementation has been analyzed.
@@ -11,9 +11,19 @@ Phase 2 — after the current implementation has been analyzed.
 |-----------|------|-------------|
 | experiment_path | path | `experiments/{research_name}/` |
 
+The research source was materialized into `{experiment_path}` during Phase 0. Its local path is recorded in `{experiment_path}/log.json` under `metadata.research_source`, and its kind (`pdf`, `file`, `git`, `kaggle_notebook`, `kaggle_dataset`, `web`, `other`) under `metadata.research_source_kind`. Expected layouts:
+
+- `pdf` → `{experiment_path}/research.pdf`
+- `file` → `{experiment_path}/research_source.{ext}` (Markdown, HTML, `.ipynb`, text, …)
+- `git` → `{experiment_path}/research_source/` (cloned repository — read `README*`, `docs/`, the top-level code, and any papers/notebooks inside)
+- `kaggle_notebook` → `{experiment_path}/research_source/` (pulled Kaggle kernel — read the `.ipynb` and any accompanying metadata; fall back to the saved HTML if the CLI was unavailable)
+- `kaggle_dataset` → `{experiment_path}/research_source/` (downloaded Kaggle dataset — read the dataset description / README and skim files to understand the data; fall back to the saved HTML if the CLI was unavailable)
+- `web` → `{experiment_path}/research_source.html` (and possibly `research_source.md` or `research.pdf`)
+- `other` → whatever Phase 0 saved (check `metadata.research_source`)
+
 ## Actions
 
-1. **Read `{experiment_path}/research.pdf`** and extract:
+1. **Read the materialized research source** at `metadata.research_source` (falling back to `research.pdf` for legacy experiments) and extract:
 
    - **Method Summary:** 2-3 short paragraphs describing what the paper proposes, what problem it solves, and how it differs from traditional approaches.
    - **Pros:** each advantage the paper claims or demonstrates.
