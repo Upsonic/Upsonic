@@ -214,3 +214,6 @@ cython_debug/
 
 .claude
 .serena
+
+# Internal release-note drafts (not committed)
+RELEASE_NOTES_v*.md
