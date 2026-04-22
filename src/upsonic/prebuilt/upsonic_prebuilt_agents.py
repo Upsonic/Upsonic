@@ -23,6 +23,45 @@ if TYPE_CHECKING:
 
 
 # --------------------------------------------------------------------------- #
+# Helpers
+# --------------------------------------------------------------------------- #
+
+
+def _auto_inputs(*candidates: str) -> List[str]:
+    """
+    Derive a sandbox inputs list from free-form user arguments.
+
+    A candidate is kept when it happens to point at an existing local file
+    or directory (after ``~`` expansion). Everything else — URLs, git or
+    Kaggle references, arXiv links, descriptive text, anything novel — is
+    silently skipped and left for the agent's own skill to fetch at run
+    time. No scheme sniffing, no hardcoded remote prefixes; the existence
+    check on disk is the sole gate. Duplicates (by resolved path) are
+    removed while preserving the original order.
+    """
+    out: List[str] = []
+    seen: set = set()
+    for raw in candidates:
+        if not isinstance(raw, str):
+            continue
+        value = raw.strip()
+        if not value:
+            continue
+        try:
+            path = Path(value).expanduser()
+            if not path.exists():
+                continue
+            key = str(path.resolve())
+        except (OSError, ValueError):
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(value)
+    return out
+
+
+# --------------------------------------------------------------------------- #
 # Experiment — the "about to run / running / finished run" object
 # --------------------------------------------------------------------------- #
 
@@ -974,7 +1013,7 @@ class AppliedScientist(PrebuiltAutonomousAgent):
         *,
         model: Union[str, "Model"] = "openai/gpt-4o",
         workspace: Optional[str] = None,
-        experiments_directory: str = "experiments",
+        experiments_directory: str = "./experiments",
         **kwargs: Any,
     ) -> None:
         kwargs.pop("agent_repo", None)
@@ -1008,16 +1047,30 @@ class AppliedScientist(PrebuiltAutonomousAgent):
         verbatim — no derivation from the source title, no suffixes — so
         ``scientist.experiments[name]`` always points at this run.
 
-        ``research_source`` is the material describing the new method. It can
-        be a local PDF path, a web page / blog post URL, a git repository URL,
-        or any other reference the agent can fetch and read (e.g. a Markdown
-        or HTML file path, an arXiv link). The agent detects the source type
-        and materializes it under ``experiments/{research_name}/`` before
-        reading it.
+        ``research_source`` is intentionally free-form. It can be a local
+        path (PDF, Markdown, HTML, `.ipynb`, text, a folder), any URL (blog
+        post, arXiv, documentation, Hugging Face page, …), a git or Kaggle
+        link, an arXiv/paper ID, or just a free-text idea / description of
+        the method you want to try ("use a CatBoost classifier with ordered
+        boosting on the same features", "try Mamba-style state-space layers
+        instead of attention", …). The agent inspects the value at Phase 0,
+        materializes whatever content it can retrieve under
+        ``experiments/{research_name}/``, and for pure-text ideas records
+        the description itself as the source.
 
-        ``experiments_directory`` defaults to the value supplied at
-        construction (``"experiments"`` unless overridden). It is always
-        relative to the agent's workspace.
+        ``experiments_directory`` is optional; it defaults to the value
+        supplied at construction (``"./experiments"`` unless overridden) and
+        is always resolved relative to the agent's workspace.
+
+        ``inputs`` is the list of local paths copied into the agent's
+        workspace so it can read them. When left as ``None`` (the default),
+        it is auto-derived from ``research_source``, ``current_notebook``,
+        and ``current_data``: each value that refers to an existing local
+        file or directory is added. Values that are URLs, git / Kaggle
+        links, or free-text descriptions (e.g. ``"downloaded in notebook
+        (ucimlrepo, id=2)"``) are ignored — the agent handles those at run
+        time. Pass an explicit list to override the auto-derivation; pass
+        ``[]`` to disable copying entirely.
         """
         if not isinstance(name, str) or not name.strip():
             raise ValueError(
@@ -1026,6 +1079,11 @@ class AppliedScientist(PrebuiltAutonomousAgent):
         exp_dir = experiments_directory or self._experiments_directory
         if experiments_directory is not None:
             self._experiments_directory = experiments_directory
+        resolved_inputs = (
+            inputs
+            if inputs is not None
+            else _auto_inputs(research_source, current_notebook, current_data)
+        )
         return Experiment(
             agent=self,
             name=name,
@@ -1036,7 +1094,7 @@ class AppliedScientist(PrebuiltAutonomousAgent):
                 "current_data": current_data,
                 "experiments_directory": exp_dir,
             },
-            inputs=inputs,
+            inputs=resolved_inputs,
         )
 
     @property

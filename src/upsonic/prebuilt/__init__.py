@@ -13,11 +13,14 @@ Usage:
     scientist = AppliedScientist(model="openai/gpt-4o", workspace="./ws")
     exp = scientist.new_experiment(
         name="tabpfn_adult",
-        research_source="example_1/tabpfn.pdf",          # PDF, web URL, git repo, …
+        # Anything: local path, URL, git / Kaggle / arXiv / HF link,
+        # or a free-text idea like "swap XGBoost for CatBoost".
+        research_source="example_1/tabpfn.pdf",
         current_notebook="example_1/baseline.ipynb",
         current_data="downloaded in notebook (ucimlrepo, id=2)",
-        experiments_directory="./experiments",
-        inputs=["example_1/"],
+        # `experiments_directory` and `inputs` are both optional —
+        # experiments_directory defaults to "./experiments" and inputs is
+        # auto-derived from the arguments above.
     )
     exp.run()
     ```

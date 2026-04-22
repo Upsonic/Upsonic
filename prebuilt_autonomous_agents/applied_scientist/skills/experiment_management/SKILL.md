@@ -11,7 +11,7 @@ Set up and manage the experiment folder structure. This is Phase 0 — it runs b
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | research_name | string | The experiment name **as given by the caller**. Use it verbatim — do not rename it, do not re-derive it from the source title. |
-| research_source | ref | A reference describing the new method. Any of: local file path (PDF, Markdown, HTML, `.ipynb`, …), web URL (blog post, arXiv, docs), git repository URL, Kaggle notebook or dataset page, or another fetchable resource. |
+| research_source | ref | A free-form reference describing the new method. The caller can pass anything that identifies the content — a local file path, any URL (blog post, arXiv, docs, Hugging Face page, …), a git repository, a Kaggle link, a paper ID, or **a plain text idea** describing the approach to try. Do not reject unusual values; investigate and fetch whatever was given, or, for pure text ideas, save the text verbatim. |
 | current_notebook | path | Path to the current baseline .ipynb |
 | current_data | path | Path to the current dataset (file or directory) |
 | experiments_directory | path | The directory (inside the workspace) where experiment folders live (e.g. `./experiments`). |
@@ -33,17 +33,18 @@ Set up and manage the experiment folder structure. This is Phase 0 — it runs b
 
    If `current_data` is a code-based download (e.g. `fetch_ucirepo(id=2)`), leave `current_data/` empty and record the download spec in `log.json`'s metadata.
 
-3. **Materialize the research source.** Detect the kind of `{research_source}` and save a local copy inside the experiment folder:
+3. **Materialize the research source.** `{research_source}` can be anything — a local file, a URL of any kind, a git or Kaggle link, an arXiv / paper ID, a Hugging Face page, **or a plain text idea** describing the method to try. Your job is to bring its content into the experiment folder using whatever tool fits:
 
-   | Kind | Detection | Command / action | Local path |
-   |---|---|---|---|
-   | Local PDF | existing path, `.pdf` extension | `cp {research_source} experiments/{research_name}/research.pdf` | `research.pdf` |
-   | Other local file | existing path, non-PDF (`.md`, `.html`, `.txt`, `.ipynb`, …) | `cp {research_source} experiments/{research_name}/research_source.{ext}` | `research_source.{ext}` |
-   | Git repository | `git@…`, ends in `.git`, or known git host (`github.com`, `gitlab.com`, `bitbucket.org`, …) | `git clone --depth 1 {research_source} experiments/{research_name}/research_source/` | `research_source/` |
-   | Kaggle notebook | `https://www.kaggle.com/code/<user>/<slug>` (or legacy `/kernels/…`) | if the Kaggle CLI is installed and authenticated: `kaggle kernels pull <user>/<slug> -p experiments/{research_name}/research_source/`. Otherwise fall back to fetching the page HTML. | `research_source/` |
-   | Kaggle dataset | `https://www.kaggle.com/datasets/<user>/<slug>` | if the Kaggle CLI is installed and authenticated: `kaggle datasets download -d <user>/<slug> -p experiments/{research_name}/research_source/ --unzip`. Otherwise save the page HTML. | `research_source/` |
-   | Web URL | `http(s)://` and not matched above | fetch the page (e.g. `curl -L -o research_source.html {research_source}`). If the URL clearly points at a PDF (e.g. arXiv `/pdf/...` link), save as `research.pdf`. Optionally also save a cleaned Markdown version as `research_source.md`. | `research_source.html` (or `research.pdf` / `research_source.md`) |
-   | Other | fallback | fetch and save a readable local copy; document the choice in `log.json.metadata` | as chosen |
+   - **Investigate first.** Check if the value is a path on disk (`ls` / `test -e`); if it looks like a URL, poke it with `curl -I`; look at the hostname; read any hint in the value itself. If the value does not look like a path or URL at all, treat it as a **text idea** (see below). Do not rely on a fixed detection list.
+   - **Retrievable source** → fetch it with the most appropriate tool: `cp`, `git clone --depth 1`, `curl -L` / `wget`, `kaggle kernels pull …` / `kaggle datasets download …`, `huggingface-cli`, an arXiv PDF helper, Python downloaders, or anything else available. Install a missing CLI with `pip install` / `uv pip install` if it is the right tool for this source.
+   - **Text idea** → do not fabricate a paper or URL. Save the description verbatim to `experiments/{research_name}/research_source.md` (optionally with a leading `# Idea` heading) and let Phase 2 turn it into a concrete implementation plan.
+   - **Pick a sensible local name** based on what you actually produced:
+     - A single PDF → `experiments/{research_name}/research.pdf`
+     - Any other single file (including a text idea) → `experiments/{research_name}/research_source.{ext}` (`.md` for ideas; preserve the real extension for files you copied)
+     - Multiple files or a cloned repo / dataset → `experiments/{research_name}/research_source/` (a directory)
+     - A fetched HTML page → `research_source.html`, optionally with a cleaned `research_source.md` and/or a linked `research.pdf`
+   - **Choose your own `research_source_kind` label** to describe what you did (e.g. `pdf`, `file`, `git`, `kaggle_notebook`, `kaggle_dataset`, `arxiv`, `huggingface_model`, `html`, `idea`, `other`). This label is just for observability — there is no closed enum.
+   - **If fetching fails**, try an alternative (different CLI, raw HTML fallback, `curl` instead of a specialized tool). Only after genuine failure, log the attempts in `log.json`, mark the experiment `FAILED`, and explain what you tried in `result.json.explanation`. A text idea can never "fail to fetch" — it is always saved verbatim.
 
    Let `research_source_local` be whichever local path you produced. Use that path for Phase 2 onwards — never re-fetch.
 
@@ -57,7 +58,7 @@ Set up and manage the experiment folder structure. This is Phase 0 — it runs b
        "original_data":          "{current_data}",
        "research_source":        "{research_source_local}",
        "research_source_origin": "{research_source}",
-       "research_source_kind":   "pdf | file | git | kaggle_notebook | kaggle_dataset | web | other"
+       "research_source_kind":   "a short label you pick, e.g. pdf, file, git, kaggle_notebook, kaggle_dataset, arxiv, huggingface_model, html, idea, other"
      },
      "phases": []
    }
