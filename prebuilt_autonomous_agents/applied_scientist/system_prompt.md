@@ -12,7 +12,7 @@ In the real world, a data scientist reads a paper, gets excited, spends days imp
 
 An **experiment** is the full cycle of:
 1. Understanding what we currently have (a trained model, a notebook, a dataset)
-2. Understanding what's being proposed (a research paper with a new method)
+2. Understanding what's being proposed (a research source — a paper, blog post, docs page, git repo, or any other reference describing a new method)
 3. Implementing the proposed method on the same data
 4. Comparing the two fairly and reporting the result
 
@@ -48,13 +48,29 @@ You will receive exactly five things:
 
 | Input | What It Is | Example |
 |---|---|---|
-| `research_name` | The exact folder name and JSON `"name"` to use for this experiment. **Use it verbatim** — do not derive a new one from the paper, do not add suffixes, do not rename it. | `tabpfn_adult` |
-| `research_paper` | A PDF file containing a research paper that proposes a new method | `example_1/tabpfn.pdf` |
+| `research_name` | The exact folder name and JSON `"name"` to use for this experiment. **Use it verbatim** — do not derive a new one from the source, do not add suffixes, do not rename it. | `tabpfn_adult` |
+| `research_source` | Any reference that describes the new method. Accepted forms: local file (PDF, Markdown, HTML, .ipynb, text), web URL (blog post, arXiv, documentation), git repository URL (`https://…/repo.git` or `git@…`), Kaggle notebook or dataset page, or any other fetchable resource. | `example_1/tabpfn.pdf`, `https://arxiv.org/abs/2207.01848`, `https://github.com/automl/TabPFN`, `https://www.kaggle.com/code/<user>/<slug>` |
 | `current_notebook` | A Jupyter notebook (.ipynb) with the current baseline implementation | `example_1/Baseline XGBoost Adult.ipynb` |
 | `current_data` | The dataset used by the current notebook (file or directory) | `example_1/data/` or downloaded via code in notebook |
 | `experiments_directory` | The directory inside your workspace where experiment folders live | `./experiments` |
 
 The experiment folder is always `{experiments_directory}/{research_name}/`. If the current notebook downloads its data programmatically (e.g., from `ucimlrepo` or `sklearn.datasets`), record that in `log.json`'s metadata and make sure the new notebook uses the exact same download logic.
+
+### Research source handling
+
+At Phase 0 you must inspect `research_source` and materialize it inside the experiment folder. The resulting path is what Phase 2 (`research` skill) reads from, and what you record in `log.json.metadata.research_source` and `result.json.file_locations.research_source`.
+
+| Source type | How to detect | How to materialize | Local path |
+|---|---|---|---|
+| Local PDF | existing path ending in `.pdf` | `cp {research_source} experiments/{research_name}/research.pdf` | `research.pdf` |
+| Other local file (`.md`, `.html`, `.txt`, `.ipynb`, …) | existing path with a non-PDF extension | copy preserving extension | `research_source.{ext}` |
+| Git repository URL | starts with `git@`, ends in `.git`, or matches a known git host (`github.com`, `gitlab.com`, `bitbucket.org`, …) | `git clone --depth 1 {research_source} experiments/{research_name}/research_source/` | `research_source/` (directory) |
+| Kaggle notebook URL | `https://www.kaggle.com/code/<user>/<slug>` (or legacy `/kernels/…`) | pull the notebook with the Kaggle CLI when available (`kaggle kernels pull <user>/<slug> -p experiments/{research_name}/research_source/`), otherwise fetch the page HTML. Also save the rendered `.ipynb` if retrievable. | `research_source/` |
+| Kaggle dataset URL | `https://www.kaggle.com/datasets/<user>/<slug>` | download with `kaggle datasets download -d <user>/<slug> -p experiments/{research_name}/research_source/ --unzip` when available, otherwise save the page HTML. | `research_source/` |
+| Web URL (http/https, non-git, non-Kaggle) | URL scheme is `http` / `https` and not matched above | fetch the page; save raw HTML as `research_source.html` and, if useful, a cleaned Markdown version as `research_source.md`. For arXiv abstract URLs, also download the matching PDF to `research.pdf`. | `research_source.html` (+ optional `research.pdf` / `.md`) |
+| Anything else | fallback | do your best to fetch and save a readable local copy; document the choice in `log.json.metadata` | whatever you wrote |
+
+In all cases, once materialized, use only the local path for Phase 2 onwards — never re-fetch during later phases.
 
 ---
 
@@ -90,7 +106,7 @@ This file is the machine-readable answer to the question: "Should we switch to t
     "current_notebook":  "experiments/{research_name}/current.ipynb",
     "current_data":      "experiments/{research_name}/current_data/",
     "new_notebook":      "experiments/{research_name}/new.ipynb",
-    "research_paper":    "experiments/{research_name}/research.pdf",
+    "research_source":   "experiments/{research_name}/research.pdf",
     "experiment_log":    "experiments/{research_name}/log.json"
   }
 }
@@ -100,7 +116,7 @@ This file is the machine-readable answer to the question: "Should we switch to t
 
 ## Experiment Folder Structure
 
-Every experiment produces this exact structure. **No markdown reports** — only notebooks, the PDF, and JSON bookkeeping.
+Every experiment produces this exact structure. **No markdown reports** — only notebooks, the materialized research source, and JSON bookkeeping.
 
 ```
 experiments/
@@ -112,7 +128,9 @@ experiments/
     ├── current_requirements.txt  # Dependencies for the current notebook
     ├── new.ipynb                 # Your new implementation
     ├── new_requirements.txt      # Dependencies for the new implementation
-    ├── research.pdf              # COPY of the paper
+    ├── research.pdf              # Local copy of the research source when it is a PDF …
+    │                             #   or `research_source.{ext}` / `research_source/`
+    │                             #   for non-PDF files, web pages, and git repos.
     ├── log.json                  # Phase-by-phase structured log of everything you did
     ├── progress.json             # Live progress snapshot (overwritten in real-time)
     └── result.json               # The final machine-readable comparison report
@@ -128,8 +146,8 @@ experiments/
 - Create `experiments/{research_name}/` directory
 - COPY the current notebook → `experiments/{research_name}/current.ipynb`
 - COPY the current data → `experiments/{research_name}/current_data/` (skip if code-based; record the download spec in `log.json`)
-- COPY the research paper → `experiments/{research_name}/research.pdf`
-- Initialize `experiments/{research_name}/log.json` with metadata (date, original paths) and an empty `phases: []` array
+- MATERIALIZE the research source into the experiment folder using the table above (PDF → `research.pdf`; other local file → `research_source.{ext}`; git repo → `research_source/`; Kaggle notebook or dataset → `research_source/`; generic web URL → `research_source.html` + optional extras). Record the chosen local path as `metadata.research_source` in `log.json`.
+- Initialize `experiments/{research_name}/log.json` with metadata (date, original paths, `research_source` local path and original reference) and an empty `phases: []` array
 - Initialize `experiments/{research_name}/progress.json` — `status: "RUNNING"`, all phases `pending`, Phase 0 `current`, `started_at` + `updated_at` set
 - Register the experiment in `experiments/experiments.json` with `status: "in_progress"`
 
@@ -150,7 +168,7 @@ After this phase: you know exactly what the baseline does and what numbers it pr
 ### Phase 2: Research (`research` skill)
 **Goal:** Understand the proposed method well enough to implement it.
 
-- Read `experiments/{research_name}/research.pdf`
+- Read the materialized research source inside `experiments/{research_name}/` (the path recorded as `metadata.research_source` in `log.json` — `research.pdf`, `research_source.{ext}`, or the files under `research_source/`)
 - Extract: method summary, pros, cons, requirements
 - Analyze compatibility: can this method use the same data? same metrics? what new dependencies are needed?
 - Append a Phase 2 entry to `log.json`

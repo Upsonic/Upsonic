@@ -12,7 +12,8 @@ Usage:
 
     scientist = AppliedScientist(model="openai/gpt-4o", workspace="./ws")
     exp = scientist.new_experiment(
-        research_paper="example_1/tabpfn.pdf",
+        name="tabpfn_adult",
+        research_source="example_1/tabpfn.pdf",          # PDF, web URL, git repo, …
         current_notebook="example_1/baseline.ipynb",
         current_data="downloaded in notebook (ucimlrepo, id=2)",
         experiments_directory="./experiments",

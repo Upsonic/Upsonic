@@ -58,7 +58,7 @@ Phase 5 — after the new implementation is complete and metrics are collected.
        "current_notebook":   "experiments/{research_name}/current.ipynb",
        "current_data":       "experiments/{research_name}/current_data/",
        "new_notebook":       "experiments/{research_name}/new.ipynb",
-       "research_paper":     "experiments/{research_name}/research.pdf",
+       "research_source":    "experiments/{research_name}/research.pdf",
        "experiment_log":     "experiments/{research_name}/log.json"
      }
    }
@@ -72,7 +72,7 @@ Phase 5 — after the new implementation is complete and metrics are collected.
      - `diff = new - current` (raw number). `diff_display` is the short string with sign (`"+0.019"`, `"-0.03"`).
      - `better`: `"new"` | `"current"` | `"tie"` | `null` — computed from `diff` and `higher_is_better`.
      - `unit` is a short unit string (`"seconds"`, `"%"`, etc.) or `null`.
-   - `file_locations` uses paths relative to the experiments directory root.
+   - `file_locations` uses paths relative to the experiments directory root. `research_source` must match whatever Phase 0 materialized — `research.pdf`, `research_source.{ext}`, or the `research_source/` directory for a cloned repo.
 
 4. **Update `experiments/experiments.json`:**
    - Set `status` to `"completed"` (or `"failed"` if the experiment failed).

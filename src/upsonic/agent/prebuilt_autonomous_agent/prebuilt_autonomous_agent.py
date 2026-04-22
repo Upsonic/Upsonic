@@ -66,7 +66,7 @@ class PrebuiltAutonomousAgent(AutonomousAgent):
         agent.run_console(
             workspace="./ws",
             inputs=["example_1/"],
-            research_paper="example_1/paper.pdf",
+            research_source="example_1/paper.pdf",
             current_notebook="example_1/baseline.ipynb",
         )
         ```

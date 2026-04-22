@@ -213,7 +213,7 @@ class Experiment:
 
         self._thread = threading.Thread(
             target=worker,
-            name=f"Experiment-{self._template_params.get('research_paper', 'run')}",
+            name=f"Experiment-{self._template_params.get('research_source', 'run')}",
             daemon=True,
         )
         self._thread.start()
@@ -992,7 +992,7 @@ class AppliedScientist(PrebuiltAutonomousAgent):
         self,
         name: str,
         *,
-        research_paper: str,
+        research_source: str,
         current_notebook: str,
         current_data: str,
         experiments_directory: Optional[str] = None,
@@ -1005,8 +1005,15 @@ class AppliedScientist(PrebuiltAutonomousAgent):
 
         ``name`` is the exact folder name / ``"name"`` field used by the agent
         in every JSON file it writes. The agent is instructed to use it
-        verbatim — no derivation from the paper title, no suffixes — so
+        verbatim — no derivation from the source title, no suffixes — so
         ``scientist.experiments[name]`` always points at this run.
+
+        ``research_source`` is the material describing the new method. It can
+        be a local PDF path, a web page / blog post URL, a git repository URL,
+        or any other reference the agent can fetch and read (e.g. a Markdown
+        or HTML file path, an arXiv link). The agent detects the source type
+        and materializes it under ``experiments/{research_name}/`` before
+        reading it.
 
         ``experiments_directory`` defaults to the value supplied at
         construction (``"experiments"`` unless overridden). It is always
@@ -1024,7 +1031,7 @@ class AppliedScientist(PrebuiltAutonomousAgent):
             name=name,
             template_params={
                 "research_name": name,
-                "research_paper": research_paper,
+                "research_source": research_source,
                 "current_notebook": current_notebook,
                 "current_data": current_data,
                 "experiments_directory": exp_dir,
