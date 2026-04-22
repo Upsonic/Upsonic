@@ -1033,7 +1033,7 @@ class AppliedScientist(PrebuiltAutonomousAgent):
         *,
         research_source: str,
         current_notebook: str,
-        current_data: str,
+        current_data: Optional[str] = None,
         experiments_directory: Optional[str] = None,
         inputs: Optional[List[str]] = None,
     ) -> Experiment:
@@ -1058,6 +1058,15 @@ class AppliedScientist(PrebuiltAutonomousAgent):
         ``experiments/{research_name}/``, and for pure-text ideas records
         the description itself as the source.
 
+        ``current_data`` is optional. If left as ``None`` (the default),
+        the agent is told to infer the data source by reading the current
+        notebook itself — locating the cells that load or download the
+        dataset and using that as the single source of truth for both the
+        baseline and the new implementation. Pass a value only when you
+        want to pin the data source explicitly (a path like ``./data/``,
+        a short description such as ``"downloaded in notebook (ucimlrepo,
+        id=2)"``, etc.).
+
         ``experiments_directory`` is optional; it defaults to the value
         supplied at construction (``"./experiments"`` unless overridden) and
         is always resolved relative to the agent's workspace.
@@ -1079,10 +1088,15 @@ class AppliedScientist(PrebuiltAutonomousAgent):
         exp_dir = experiments_directory or self._experiments_directory
         if experiments_directory is not None:
             self._experiments_directory = experiments_directory
+        template_current_data = (
+            current_data
+            if current_data is not None
+            else "(not provided — infer it from the current notebook's data-loading cells)"
+        )
         resolved_inputs = (
             inputs
             if inputs is not None
-            else _auto_inputs(research_source, current_notebook, current_data)
+            else _auto_inputs(research_source, current_notebook, current_data or "")
         )
         return Experiment(
             agent=self,
@@ -1091,7 +1105,7 @@ class AppliedScientist(PrebuiltAutonomousAgent):
                 "research_name": name,
                 "research_source": research_source,
                 "current_notebook": current_notebook,
-                "current_data": current_data,
+                "current_data": template_current_data,
                 "experiments_directory": exp_dir,
             },
             inputs=resolved_inputs,

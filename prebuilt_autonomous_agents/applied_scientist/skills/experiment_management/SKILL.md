@@ -13,7 +13,7 @@ Set up and manage the experiment folder structure. This is Phase 0 — it runs b
 | research_name | string | The experiment name **as given by the caller**. Use it verbatim — do not rename it, do not re-derive it from the source title. |
 | research_source | ref | A free-form reference describing the new method. The caller can pass anything that identifies the content — a local file path, any URL (blog post, arXiv, docs, Hugging Face page, …), a git repository, a Kaggle link, a paper ID, or **a plain text idea** describing the approach to try. Do not reject unusual values; investigate and fetch whatever was given, or, for pure text ideas, save the text verbatim. |
 | current_notebook | path | Path to the current baseline .ipynb |
-| current_data | path | Path to the current dataset (file or directory) |
+| current_data | ref \| placeholder | Path to the current dataset (file or directory), a short description of how the notebook loads data, **or** the literal placeholder `"(not provided — infer it from the current notebook's data-loading cells)"`. When you see that placeholder, read the current notebook yourself and infer the source from its data-loading cells; do not ask the user. |
 | experiments_directory | path | The directory (inside the workspace) where experiment folders live (e.g. `./experiments`). |
 
 ## Actions
@@ -28,10 +28,15 @@ Set up and manage the experiment folder structure. This is Phase 0 — it runs b
 2. **Copy baseline files (NEVER move, NEVER modify originals):**
    ```bash
    cp {current_notebook} experiments/{research_name}/current.ipynb
+   # Only when current_data is a real path on disk:
    cp -r {current_data}  experiments/{research_name}/current_data/
    ```
 
-   If `current_data` is a code-based download (e.g. `fetch_ucirepo(id=2)`), leave `current_data/` empty and record the download spec in `log.json`'s metadata.
+   Resolve `{current_data}` as follows before copying:
+
+   - **Real local path** (file or directory that exists on disk) → `cp` / `cp -r` it into `current_data/`.
+   - **Short description of a code-based download** (e.g. `"downloaded in notebook (ucimlrepo, id=2)"`) → leave `current_data/` empty and record the description verbatim in `log.json.metadata.original_data`.
+   - **Placeholder `"(not provided — infer it from the current notebook's data-loading cells)"`** → open `current.ipynb` yourself, scan for data-loading cells (`pd.read_csv`, `fetch_openml`, `fetch_ucirepo`, `load_dataset`, `kaggle.api...`, `urllib`/`requests` downloads, `np.load`, local paths, …), write down the exact loader you found as `log.json.metadata.original_data`, and make sure Phase 4's `new.ipynb` uses the same loader. Do not ask the user for clarification — do the investigation yourself.
 
 3. **Materialize the research source.** `{research_source}` can be anything — a local file, a URL of any kind, a git or Kaggle link, an arXiv / paper ID, a Hugging Face page, **or a plain text idea** describing the method to try. Your job is to bring its content into the experiment folder using whatever tool fits:
 

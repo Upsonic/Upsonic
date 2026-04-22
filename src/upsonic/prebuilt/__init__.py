@@ -17,10 +17,10 @@ Usage:
         # or a free-text idea like "swap XGBoost for CatBoost".
         research_source="example_1/tabpfn.pdf",
         current_notebook="example_1/baseline.ipynb",
-        current_data="downloaded in notebook (ucimlrepo, id=2)",
-        # `experiments_directory` and `inputs` are both optional —
-        # experiments_directory defaults to "./experiments" and inputs is
-        # auto-derived from the arguments above.
+        # `current_data`, `experiments_directory`, and `inputs` are all
+        # optional. When `current_data` is omitted, the agent reads the
+        # notebook itself and infers the data source from its loading
+        # cells. `experiments_directory` defaults to "./experiments".
     )
     exp.run()
     ```

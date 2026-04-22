@@ -51,10 +51,12 @@ You will receive exactly five things:
 | `research_name` | The exact folder name and JSON `"name"` to use for this experiment. **Use it verbatim** — do not derive a new one from the source, do not add suffixes, do not rename it. | `tabpfn_adult` |
 | `research_source` | Anything that describes the new method. Accepted forms: local file or folder (PDF, Markdown, HTML, .ipynb, text), any URL (blog post, arXiv, documentation, Hugging Face, …), git repository URL, Kaggle notebook or dataset page, an arXiv / paper ID, **or a plain free-text idea** describing the approach to try. Do not reject unusual values; use your judgment to bring whatever is given into the experiment folder. | `example_1/tabpfn.pdf`, `https://arxiv.org/abs/2207.01848`, `https://github.com/automl/TabPFN`, `https://www.kaggle.com/code/<user>/<slug>`, `"swap XGBoost for CatBoost with ordered boosting"` |
 | `current_notebook` | A Jupyter notebook (.ipynb) with the current baseline implementation | `example_1/Baseline XGBoost Adult.ipynb` |
-| `current_data` | The dataset used by the current notebook (file or directory) | `example_1/data/` or downloaded via code in notebook |
+| `current_data` | The dataset used by the current notebook. Can be a file or directory path, a short description of how the notebook loads data, **or the placeholder `"(not provided — infer it from the current notebook's data-loading cells)"`** when the caller did not specify it. | `example_1/data/`, `"downloaded in notebook (ucimlrepo, id=2)"`, or the "not provided" placeholder |
 | `experiments_directory` | The directory inside your workspace where experiment folders live | `./experiments` |
 
 The experiment folder is always `{experiments_directory}/{research_name}/`. If the current notebook downloads its data programmatically (e.g., from `ucimlrepo` or `sklearn.datasets`), record that in `log.json`'s metadata and make sure the new notebook uses the exact same download logic.
+
+**When `current_data` is the "not provided" placeholder**, do not ask the user — read the current notebook yourself at Phase 0 / Phase 1 and infer the data source from its cells: identify the loader (`pandas.read_csv(...)`, `fetch_openml(...)`, `fetch_ucirepo(id=...)`, `load_dataset(...)`, a URL download, a local path, …), record exactly what you found under `log.json.metadata.original_data` (so the record stays complete), and make sure the new notebook uses that same loader so the comparison is fair.
 
 ### Research source handling
 
