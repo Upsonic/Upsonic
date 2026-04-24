@@ -22,7 +22,7 @@
 
 ## Overview
 
-Upsonic is a Python framework for building autonomous agents like OpenClaw and Claude CoWork, as well as more traditional agent systems.
+Upsonic is a Python framework for building autonomous agents like OpenClaw and Claude Cowork, as well as more traditional agent systems.
 
 ## Quick Start
 
