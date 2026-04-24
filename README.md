@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="https://github.com/user-attachments/assets/fbe7219f-55bc-4748-ac4a-dd2fb2b8d9e5" width="600" />
+<img width="947" alt="Upsonic_README" src="https://github.com/user-attachments/assets/acb3f413-e4fe-44a6-9aff-40d4e9031188" />
 
 # Upsonic
 
-**Production-Ready AI Agent Framework with Safety First**
+**Build Autonomous AI Agents in Python**
 
 [![PyPI version](https://badge.fury.io/py/upsonic.svg)](https://badge.fury.io/py/upsonic)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENCE)
@@ -22,16 +22,7 @@
 
 ## Overview
 
-Upsonic is an open-source AI agent framework for building production-ready agents. It supports multiple AI providers (OpenAI, Anthropic, Azure, Bedrock) and includes built-in safety policies, OCR, memory, multi-agent coordination, and MCP tool integration.
-
-## What Can You Build?
-
-- **Document Analysis**: Extract and process text from images and PDFs
-- **Customer Service Automation**: Agents with memory and session context
-- **Financial Analysis**: Agents that analyze data, generate reports, and provide insights
-- **Compliance Monitoring**: Enforce safety policies across all agent interactions
-- **Research & Data Gathering**: Automate research workflows with multi-agent collaboration
-- **Multi-Agent Workflows**: Orchestrate tasks across specialized agent teams
+Upsonic is a Python framework for building autonomous agents like OpenClaw and Claude Cowork, as well as more traditional agent systems.
 
 ## Quick Start
 
@@ -42,7 +33,46 @@ uv pip install upsonic
 # pip install upsonic
 ```
 
-### Basic Agent
+### IDE Integration
+
+Add Upsonic docs as a source in your coding tools:
+
+**Cursor:** Settings → Indexing & Docs → Add `https://docs.upsonic.ai/llms-full.txt`
+
+Also works with VSCode, Windsurf, and similar tools.
+
+---
+
+## Create Autonomous Agent
+
+### Build Your Own
+
+```python
+from upsonic import AutonomousAgent, Task
+
+agent = AutonomousAgent(
+    model="anthropic/claude-sonnet-4-5",
+    workspace="/path/to/logs"
+)
+
+task = Task("Analyze server logs and detect anomaly patterns")
+
+agent.print_do(task)
+```
+
+All file and shell operations are restricted to `workspace`. Path traversal and dangerous commands are blocked.
+
+### Use Our Prebuilt Ones
+
+Prebuilt autonomous agents are ready-to-run agents built by the Upsonic community, each packaging a skill, system prompt, and first message so you can go from install to running in seconds. The collection is [open to contributions](https://github.com/Upsonic/Upsonic/tree/master/prebuilt_autonomous_agents), bring your agent and open a PR.
+
+Learn more: [Prebuilt Autonomous Agents](https://docs.upsonic.ai/concepts/prebuilt-autonomous-agents/overview)
+
+> **Next steps:** Connect a [Sandbox Provider (E2B)](https://docs.upsonic.ai/concepts/autonomous-agent/overview) for isolated cloud execution environments.
+
+---
+
+## Create Traditional Agent
 
 ```python
 from upsonic import Agent, Task
@@ -54,106 +84,41 @@ task = Task(description="Analyze the current market trends")
 agent.print_do(task)
 ```
 
-### Agent with Tools
+### Add Custom Tools
 
 ```python
 from upsonic import Agent, Task
-from upsonic.tools.common_tools import YFinanceTools
+from upsonic.tools import tool
 
-agent = Agent(model="anthropic/claude-sonnet-4-5", name="Stock Analyst Agent")
+@tool
+def sum_tool(a: float, b: float) -> float:
+    """
+    Add two numbers together.
+
+    Args:
+        a: First number
+        b: Second number
+
+    Returns:
+        The sum of a and b
+    """
+    return a + b
 
 task = Task(
-    description="Give me a summary about tesla stock with tesla car models",
-    tools=[YFinanceTools()]
+    description="Calculate 15 + 27",
+    tools=[sum_tool]
 )
 
-agent.print_do(task)
+agent = Agent(model="anthropic/claude-sonnet-4-5", name="Calculator Agent")
+
+result = agent.print_do(task)
 ```
 
-### Agent with Memory
-
-```python
-from upsonic import Agent, Task
-from upsonic.storage import Memory, InMemoryStorage
-
-memory = Memory(
-    storage=InMemoryStorage(),
-    session_id="session_001",
-    full_session_memory=True
-)
-
-agent = Agent(model="anthropic/claude-sonnet-4-5", memory=memory)
-
-task1 = Task(description="My name is John")
-agent.print_do(task1)
-
-task2 = Task(description="What is my name?")
-agent.print_do(task2)  # Agent remembers: "Your name is John"
-```
-
-**Ready for more?** Check out the [Quickstart Guide](https://docs.upsonic.ai/get-started/quickstart) for additional examples including Knowledge Base and Team workflows.
-
-## Key Features
-
-- **Autonomous Agent**: An agent that can read, write, and execute code inside a sandboxed workspace, no tool setup required
-- **Safety Engine**: Policy-based content filtering applied to user inputs, agent outputs, and tool interactions
-- **OCR Support**: Unified interface for multiple OCR engines with PDF and image support
-- **Memory Management**: Session memory and long-term storage with multiple backend options
-- **Multi-Agent Teams**: Sequential and parallel agent coordination
-- **Tool Integration**: MCP tools, custom tools, and human-in-the-loop workflows
-- **Production Ready**: Monitoring, metrics, and enterprise deployment support
-
-## Core Capabilities
-
-### Autonomous Agent
-
-`AutonomousAgent` extends `Agent` with built-in filesystem and shell tools, automatic session memory, and workspace sandboxing. Useful for coding assistants, DevOps automation, and any task that needs direct file or terminal access.
-
-```python
-from upsonic import AutonomousAgent, Task
-
-agent = AutonomousAgent(
-    model="anthropic/claude-sonnet-4-5",
-    workspace="/path/to/project"
-)
-
-task = Task("Read the main.py file and add error handling to every function")
-agent.print_do(task)
-```
-
-All file and shell operations are restricted to `workspace`. Path traversal and dangerous commands are blocked.
+> **Next steps:** Integrate [MCP Tools](https://docs.upsonic.ai/concepts/tools/mcp-tools/overview) to connect your agents to thousands of external data sources and services.
 
 ---
 
-### Safety Engine
-
-The Safety Engine applies policies at three points: user inputs, agent outputs, and tool interactions. Policies can block, anonymize, replace, or raise exceptions on matched content.
-
-```python
-from upsonic import Agent, Task
-from upsonic.safety_engine.policies.pii_policies import PIIAnonymizePolicy
-
-agent = Agent(
-    model="anthropic/claude-sonnet-4-5",
-    user_policy=PIIAnonymizePolicy,  # anonymizes PII before sending to the LLM
-)
-
-task = Task(
-    description="My email is john.doe@example.com and phone is 555-1234. What are my email and phone?"
-)
-
-# PII is anonymized before reaching the LLM, then de-anonymized in the response
-result = agent.do(task)
-print(result)  # "Your email is john.doe@example.com and phone is 555-1234"
-```
-
-Pre-built policies cover PII, adult content, profanity, financial data, and more. Custom policies are also supported.
-
-Learn more: [Safety Engine Documentation](https://docs.upsonic.ai/concepts/safety-engine/overview)
-
----
-
-### OCR and Document Processing
+## OCR and Document Processing
 
 Upsonic provides a unified OCR interface with a layered pipeline: Layer 0 handles document preparation (PDF to image conversion, preprocessing), Layer 1 runs the OCR engine.
 
@@ -176,24 +141,26 @@ Supported engines: EasyOCR, RapidOCR, Tesseract, PaddleOCR, DeepSeek OCR, DeepSe
 
 Learn more: [OCR Documentation](https://docs.upsonic.ai/concepts/ocr/overview)
 
-## Upsonic AgentOS
+---
 
-AgentOS is an optional deployment platform for running agents in production. It provides a Kubernetes-based runtime, metrics dashboard, and self-hosted deployment.
+## Check Our Videos
 
-- **Kubernetes-based FastAPI Runtime**: Deploy agents as isolated, scalable microservices
-- **Metrics Dashboard**: Track LLM costs, token usage, and performance per transaction
-- **Self-Hosted**: Full control over your data and infrastructure
-- **One-Click Deployment**: Automated deployment pipelines
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://www.youtube.com/watch?v=GOYko0KfBtg">
+        <img src="https://img.youtube.com/vi/GOYko0KfBtg/maxresdefault.jpg" width="400" alt="Upsonic Demo Video 1"/>
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://www.youtube.com/watch?v=ulUEFIolesQ">
+        <img src="https://img.youtube.com/vi/ulUEFIolesQ/maxresdefault.jpg" width="400" alt="Upsonic Demo Video 2"/>
+      </a>
+    </td>
+  </tr>
+</table>
 
-<img width="3024" height="1590" alt="AgentOS Dashboard" src="https://github.com/user-attachments/assets/42fceaca-2dec-4496-ab67-4b9067caca42" />
-
-## IDE Integration
-
-Add Upsonic docs as a source in your coding tools:
-
-**Cursor:** Settings → Indexing & Docs → Add `https://docs.upsonic.ai/llms-full.txt`
-
-Also works with VSCode, Windsurf, and similar tools.
+---
 
 ## Documentation and Resources
 
@@ -216,8 +183,4 @@ Upsonic is released under the MIT License. See [LICENCE](LICENCE) for details.
 
 ## Contributing
 
-We welcome contributions from the community! Please read our contributing guidelines and code of conduct before submitting pull requests.
-
----
-
-**Learn more at [upsonic.ai](https://upsonic.ai)**
+We welcome contributions from the community! Please read our [Contributing Guide](CONTRIBUTING.md) and code of conduct before submitting pull requests.
