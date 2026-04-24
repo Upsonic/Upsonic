@@ -1,5 +1,7 @@
 <div align="center">
 
+<img width="947" alt="Upsonic_README" src="https://github.com/user-attachments/assets/acb3f413-e4fe-44a6-9aff-40d4e9031188" />
+
 # Upsonic
 
 **Build Autonomous AI Agents in Python**
