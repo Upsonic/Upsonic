@@ -689,7 +689,15 @@ class Team:
         Returns:
             A :class:`fastmcp.FastMCP` server instance ready to ``.run()``.
         """
-        from fastmcp import FastMCP as _FastMCP
+        try:
+            from fastmcp import FastMCP as _FastMCP  # type: ignore[import-not-found]
+        except ImportError:
+            from upsonic.utils.printing import import_error
+            import_error(
+                package_name="fastmcp",
+                install_command="pip install 'upsonic[mcp]'",
+                feature_name="Team.as_mcp() (expose team as an MCP server)",
+            )
 
         server_name: str = name or self.name or "Upsonic Team"
         server: _FastMCP = _FastMCP(server_name)
