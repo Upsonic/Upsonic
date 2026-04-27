@@ -8855,7 +8855,6 @@ dependencies = [
     { name = "toml" },
     { name = "typing-extensions" },
     { name = "typing-inspection" },
-    { name = "uv" },
     { name = "uvicorn" },
 ]
 
@@ -9125,6 +9124,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-timeout" },
     { name = "tomlkit" },
+    { name = "uv" },
 ]
 
 [package.metadata]
@@ -9297,7 +9297,6 @@ requires-dist = [
     { name = "upsonic", extras = ["postgres-storage"], marker = "extra == 'storage'" },
     { name = "upsonic", extras = ["redis-storage"], marker = "extra == 'storage'" },
     { name = "upsonic", extras = ["sqlite-storage"], marker = "extra == 'storage'" },
-    { name = "uv", specifier = ">=0.5.20" },
     { name = "uvicorn", specifier = ">=0.34.0" },
     { name = "uvicorn", marker = "extra == 'web'", specifier = ">=0.35.0" },
     { name = "weaviate-client", marker = "extra == 'vectordb'", specifier = ">=4.16.9" },
@@ -9316,6 +9315,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=0.25.1" },
     { name = "pytest-timeout", specifier = ">=2.3.1" },
     { name = "tomlkit", specifier = ">=0.13.3" },
+    { name = "uv", specifier = ">=0.5.20" },
 ]
 
 [[package]]
