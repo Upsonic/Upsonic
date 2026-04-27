@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from upsonic.integrations.tracing import DefaultTracingProvider as DefaultTracingProvider
     from upsonic.integrations.langfuse import Langfuse as Langfuse
     from upsonic.integrations.promptlayer import PromptLayer as PromptLayer
+    from upsonic.integrations.asqav import AsqavGovernance as AsqavGovernance
 
 
 def __getattr__(name: str) -> Any:
@@ -24,7 +25,10 @@ def __getattr__(name: str) -> Any:
     if name == "PromptLayer":
         from upsonic.integrations.promptlayer import PromptLayer
         return PromptLayer
+    if name == "AsqavGovernance":
+        from upsonic.integrations.asqav import AsqavGovernance
+        return AsqavGovernance
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-__all__ = ["TracingProvider", "DefaultTracingProvider", "Langfuse", "PromptLayer"]
+__all__ = ["TracingProvider", "DefaultTracingProvider", "Langfuse", "PromptLayer", "AsqavGovernance"]
