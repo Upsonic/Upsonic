@@ -43,6 +43,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+asqav = [
+    "asqav>=0.2.21",
+]
 chroma = [
     "chromadb>=1.0.20; python_version < '3.14'",
 ]
