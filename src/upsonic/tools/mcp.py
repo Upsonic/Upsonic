@@ -17,18 +17,49 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 import httpx
-from mcp import types as mcp_types
-from mcp.client.session import ClientSession
-from mcp.client.sse import sse_client
-from mcp.client.stdio import StdioServerParameters, stdio_client
 
 from upsonic.tools.base import Tool, ToolMetadata
 
+# The `mcp` SDK is an optional extra (install with `pip install upsonic[mcp]`).
+# We let the module import succeed without it so that downstream isinstance
+# checks (e.g. processor.py) keep working; instantiating MCPHandler / MultiMCPHandler
+# without the SDK raises a clear ImportError instead.
 try:
-    from mcp.client.streamable_http import streamable_http_client
-    HAS_STREAMABLE_HTTP = True
+    from mcp import types as mcp_types  # type: ignore[import-not-found]
+    from mcp.client.session import ClientSession  # type: ignore[import-not-found]
+    from mcp.client.sse import sse_client  # type: ignore[import-not-found]
+    from mcp.client.stdio import StdioServerParameters, stdio_client  # type: ignore[import-not-found]
+    _MCP_AVAILABLE = True
 except ImportError:
+    _MCP_AVAILABLE = False
+    mcp_types = None  # type: ignore[assignment]
+    ClientSession = None  # type: ignore[assignment,misc]
+    sse_client = None  # type: ignore[assignment]
+    stdio_client = None  # type: ignore[assignment]
+    StdioServerParameters = None  # type: ignore[assignment,misc]
+
+if _MCP_AVAILABLE:
+    try:
+        from mcp.client.streamable_http import streamable_http_client  # type: ignore[import-not-found]
+        HAS_STREAMABLE_HTTP = True
+    except ImportError:
+        HAS_STREAMABLE_HTTP = False
+        streamable_http_client = None  # type: ignore[assignment]
+else:
     HAS_STREAMABLE_HTTP = False
+    streamable_http_client = None  # type: ignore[assignment]
+
+
+def _require_mcp() -> None:
+    """Raise a friendly ImportError if the optional `mcp` SDK is missing."""
+    if _MCP_AVAILABLE:
+        return
+    from upsonic.utils.printing import import_error
+    import_error(
+        package_name="mcp",
+        install_command="pip install 'upsonic[mcp]'",
+        feature_name="MCP (Model Context Protocol) tool integration",
+    )
 
 
 _MCP_SECURITY_WARNING_EMITTED = False
@@ -235,6 +266,7 @@ class MCPHandler:
     """
 
     def __new__(cls, *args: Any, **kwargs: Any) -> "MCPHandler":
+        _require_mcp()
         _emit_mcp_security_warning()
         return super().__new__(cls)
 
@@ -779,6 +811,7 @@ class MultiMCPHandler:
     """
 
     def __new__(cls, *args: Any, **kwargs: Any) -> "MultiMCPHandler":
+        _require_mcp()
         _emit_mcp_security_warning()
         return super().__new__(cls)
 

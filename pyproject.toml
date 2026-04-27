@@ -22,7 +22,6 @@ dependencies = [
     "sentry-sdk[opentelemetry]>=2.35.0",
     "toml>=0.10.2",
     "uv>=0.5.20",
-    "mcp[cli]>=1.26.0",
     "python-dotenv>=1.0.1",
     "uvicorn>=0.34.0",
     "nest-asyncio>=1.6.0",
@@ -39,10 +38,13 @@ dependencies = [
     "genai-prices>=0.0.38",
     "protobuf>=5.27.2,<6.0.0",
     "cloudpickle>=3.1.2",
-    "fastmcp>=2.14.5",
 ]
 
 [project.optional-dependencies]
+mcp = [
+    "mcp[cli]>=1.26.0",
+    "fastmcp>=2.14.5",
+]
 chroma = [
     "chromadb>=1.0.20; python_version < '3.14'",
 ]

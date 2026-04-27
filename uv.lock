@@ -8830,11 +8830,9 @@ dependencies = [
     { name = "aiohttp" },
     { name = "anyio" },
     { name = "cloudpickle" },
-    { name = "fastmcp" },
     { name = "genai-prices" },
     { name = "griffe" },
     { name = "httpx" },
-    { name = "mcp", extra = ["cli"] },
     { name = "nest-asyncio" },
     { name = "openai" },
     { name = "protobuf" },
@@ -8953,6 +8951,10 @@ mail-interface = [
 markdown-loader = [
     { name = "markdown-it-py" },
     { name = "python-frontmatter" },
+]
+mcp = [
+    { name = "fastmcp" },
+    { name = "mcp", extra = ["cli"] },
 ]
 mem0-storage = [
     { name = "mem0ai" },
@@ -9161,7 +9163,7 @@ requires-dist = [
     { name = "fastapi", marker = "extra == 'slack-interface'", specifier = ">=0.128.0" },
     { name = "fastapi", marker = "extra == 'web'" },
     { name = "fastembed", marker = "python_full_version < '3.14' and extra == 'embeddings'", specifier = ">=0.7.3" },
-    { name = "fastmcp", specifier = ">=2.14.5" },
+    { name = "fastmcp", marker = "extra == 'mcp'", specifier = ">=2.14.5" },
     { name = "firecrawl-py", marker = "extra == 'custom-tools'", specifier = ">=4.14.1" },
     { name = "genai-prices", specifier = ">=0.0.38" },
     { name = "genai-prices", marker = "extra == 'tools'", specifier = ">=0.0.29" },
@@ -9189,7 +9191,7 @@ requires-dist = [
     { name = "lxml", marker = "extra == 'xml-loader'", specifier = ">=4.9.1" },
     { name = "markdown-it-py", marker = "extra == 'loaders'", specifier = ">=4.0.0" },
     { name = "markdown-it-py", marker = "extra == 'markdown-loader'", specifier = ">=4.0.0" },
-    { name = "mcp", extras = ["cli"], specifier = ">=1.26.0" },
+    { name = "mcp", extras = ["cli"], marker = "extra == 'mcp'", specifier = ">=1.26.0" },
     { name = "mem0ai", marker = "extra == 'mem0-storage'", specifier = ">=0.1.116" },
     { name = "mistralai", marker = "extra == 'models'", specifier = ">=1.9.11" },
     { name = "motor", marker = "extra == 'mongo-storage'", specifier = ">=3.7.1" },
@@ -9291,7 +9293,7 @@ requires-dist = [
     { name = "xai-sdk", marker = "extra == 'models'", specifier = ">=1.4.0" },
     { name = "yfinance", marker = "extra == 'tools'", specifier = ">=0.2.66" },
 ]
-provides-extras = ["chroma", "qdrant", "milvus", "weaviate", "pinecone", "faiss", "pgvector", "supermemory", "vectordb", "sqlite-storage", "redis-storage", "postgres-storage", "mongo-storage", "mem0-storage", "storage", "models", "embeddings", "csv-loader", "docling-loader", "docx-loader", "html-loader", "json-loader", "markdown-loader", "pdf-loader", "pdfplumber-loader", "pymupdf-loader", "text-loader", "xml-loader", "yaml-loader", "loaders", "tools", "web", "ocr", "custom-tools", "apify-tool", "crawlee-browser", "gmail-interface", "safety-engine", "slack-interface", "mail-interface", "discord-interface", "otel", "langfuse", "gmail-tool"]
+provides-extras = ["mcp", "chroma", "qdrant", "milvus", "weaviate", "pinecone", "faiss", "pgvector", "supermemory", "vectordb", "sqlite-storage", "redis-storage", "postgres-storage", "mongo-storage", "mem0-storage", "storage", "models", "embeddings", "csv-loader", "docling-loader", "docx-loader", "html-loader", "json-loader", "markdown-loader", "pdf-loader", "pdfplumber-loader", "pymupdf-loader", "text-loader", "xml-loader", "yaml-loader", "loaders", "tools", "web", "ocr", "custom-tools", "apify-tool", "crawlee-browser", "gmail-interface", "safety-engine", "slack-interface", "mail-interface", "discord-interface", "otel", "langfuse", "gmail-tool"]
 
 [package.metadata.requires-dev]
 dev = [
