@@ -339,6 +339,15 @@ wheels = [
 ]
 
 [[package]]
+name = "asqav"
+version = "0.2.21"
+source = { registry = "https://pypi.org/simple/" }
+sdist = { url = "https://files.pythonhosted.org/packages/6c/0e/9c84b2c8bf5587e44f7cbf52aa07208fff1c118ce85040075d978a5d36b1/asqav-0.2.21.tar.gz", hash = "sha256:a0cf7627e0be29990dd38174e50c41c33f00708d057fe1926c56ea90f369a0cb", size = 63278, upload-time = "2026-04-25T16:56:05.968Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b3/df/89e7ca0fc5ca7fa12d3c82e23ed05cd8933b203fc07c7be709d94bcb2cf7/asqav-0.2.21-py3-none-any.whl", hash = "sha256:e88d8ba840bdd796d13309cf1c6e1df66eddda647c3f48b36ab52597898bdcff", size = 76435, upload-time = "2026-04-25T16:56:04.364Z" },
+]
+
+[[package]]
 name = "async-timeout"
 version = "5.0.1"
 source = { registry = "https://pypi.org/simple/" }
@@ -8854,6 +8863,9 @@ dependencies = [
 apify-tool = [
     { name = "apify-client" },
 ]
+asqav = [
+    { name = "asqav" },
+]
 chroma = [
     { name = "chromadb", marker = "python_full_version < '3.14'" },
 ]
@@ -9131,6 +9143,7 @@ requires-dist = [
     { name = "anyio", marker = "extra == 'models'", specifier = ">=4.10.0" },
     { name = "apify-client", marker = "extra == 'apify-tool'", specifier = ">=1.8.1" },
     { name = "apify-client", marker = "extra == 'custom-tools'", specifier = ">=1.8.1" },
+    { name = "asqav", marker = "extra == 'asqav'", specifier = ">=0.2.21" },
     { name = "asyncpg", marker = "extra == 'postgres-storage'", specifier = ">=0.30.0" },
     { name = "azure-core", marker = "extra == 'embeddings'", specifier = ">=1.35.1" },
     { name = "azure-core", marker = "extra == 'models'", specifier = ">=1.35.1" },
@@ -9293,7 +9306,7 @@ requires-dist = [
     { name = "xai-sdk", marker = "extra == 'models'", specifier = ">=1.4.0" },
     { name = "yfinance", marker = "extra == 'tools'", specifier = ">=0.2.66" },
 ]
-provides-extras = ["mcp", "chroma", "qdrant", "milvus", "weaviate", "pinecone", "faiss", "pgvector", "supermemory", "vectordb", "sqlite-storage", "redis-storage", "postgres-storage", "mongo-storage", "mem0-storage", "storage", "models", "embeddings", "csv-loader", "docling-loader", "docx-loader", "html-loader", "json-loader", "markdown-loader", "pdf-loader", "pdfplumber-loader", "pymupdf-loader", "text-loader", "xml-loader", "yaml-loader", "loaders", "tools", "web", "ocr", "custom-tools", "apify-tool", "crawlee-browser", "gmail-interface", "safety-engine", "slack-interface", "mail-interface", "discord-interface", "otel", "langfuse", "gmail-tool"]
+provides-extras = ["mcp", "asqav", "chroma", "qdrant", "milvus", "weaviate", "pinecone", "faiss", "pgvector", "supermemory", "vectordb", "sqlite-storage", "redis-storage", "postgres-storage", "mongo-storage", "mem0-storage", "storage", "models", "embeddings", "csv-loader", "docling-loader", "docx-loader", "html-loader", "json-loader", "markdown-loader", "pdf-loader", "pdfplumber-loader", "pymupdf-loader", "text-loader", "xml-loader", "yaml-loader", "loaders", "tools", "web", "ocr", "custom-tools", "apify-tool", "crawlee-browser", "gmail-interface", "safety-engine", "slack-interface", "mail-interface", "discord-interface", "otel", "langfuse", "gmail-tool"]
 
 [package.metadata.requires-dev]
 dev = [
