@@ -29,7 +29,7 @@ Usage:
     exp.run()
     ```
 
-See ``Docs/ai/new_prebuilt_agent_adding.md`` for instructions on how to
+See ``documents/ai/guides/new_prebuilt_agent_adding.md`` for instructions on how to
 contribute a new prebuilt agent.
 """
 from __future__ import annotations

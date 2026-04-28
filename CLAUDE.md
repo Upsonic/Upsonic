@@ -23,7 +23,7 @@ Upsonic is a reliability-focused AI agent framework for building production-read
 - **Storage**: Multi-provider storage system in `src/upsonic/storage/` (In-Memory, JSON, SQLite, Redis, PostgreSQL, MongoDB)
 - **Team/Multi-Agent**: Team coordination and delegation in `src/upsonic/team/`
 - **Knowledge Base & RAG**: Document processing and retrieval in `src/upsonic/knowledge_base/` and `src/upsonic/rag/`
-- **Prebuilt Autonomous Agents**: Ready-to-run agents that bundle a system prompt, first-message template, and skills under `src/upsonic/prebuilt/<agent>/template/`. The shared base class lives in `src/upsonic/prebuilt/prebuilt_agent_base.py`. To add a new prebuilt, follow `Docs/ai/new_prebuilt_agent_adding.md`.
+- **Prebuilt Autonomous Agents**: Ready-to-run agents that bundle a system prompt, first-message template, and skills under `src/upsonic/prebuilt/<agent>/template/`. The shared base class lives in `src/upsonic/prebuilt/prebuilt_agent_base.py`. To add a new prebuilt, follow `documents/ai/guides/new_prebuilt_agent_adding.md`.
 
 ### Main Entry Points
 
@@ -126,7 +126,7 @@ Key environment variables:
 
 - Source code: `src/upsonic/`
 - Tests: `tests/`
-- Documentation: `README.md`, inline docstrings, and contributor guides under `Docs/`
-  - `Docs/ai/new_prebuilt_agent_adding.md` — how to add a new prebuilt autonomous agent (file layout, base-class wiring, template conventions).
+- Documentation: `README.md`, inline docstrings, and contributor guides under `documents/`
+  - `documents/ai/guides/new_prebuilt_agent_adding.md` — how to add a new prebuilt autonomous agent (file layout, base-class wiring, template conventions).
 - Configuration: `pyproject.toml`, `.pre-commit-config.yaml`, `pytest.ini`
 - Dependencies: Managed by `uv` with `uv.lock`
