@@ -1,18 +1,22 @@
 """
-Prebuilt Autonomous Agent.
+Base class for Upsonic prebuilt autonomous agents.
 
 A thin subclass of :class:`AutonomousAgent` that bootstraps its
 ``system_prompt.md`` and ``first_message.md`` from a remote git repository
 subfolder, copies user inputs into the workspace, and renders the first
 message from a ``str.format`` template.
 
+Concrete prebuilts (e.g. :class:`upsonic.prebuilt.applied_scientist.AppliedScientist`)
+inherit from :class:`PrebuiltAutonomousAgentBase` and pin ``agent_repo`` /
+``agent_folder`` to a specific template directory inside the Upsonic repo.
+
 The main entry points are:
 
-- :meth:`PrebuiltAutonomousAgent.run` — run to completion and return result.
-- :meth:`PrebuiltAutonomousAgent.run_async` — async variant of ``run``.
-- :meth:`PrebuiltAutonomousAgent.run_stream` — yield text chunks live.
-- :meth:`PrebuiltAutonomousAgent.run_stream_async` — async variant of stream.
-- :meth:`PrebuiltAutonomousAgent.run_console` — pretty terminal output with
+- :meth:`PrebuiltAutonomousAgentBase.run` — run to completion and return result.
+- :meth:`PrebuiltAutonomousAgentBase.run_async` — async variant of ``run``.
+- :meth:`PrebuiltAutonomousAgentBase.run_stream` — yield text chunks live.
+- :meth:`PrebuiltAutonomousAgentBase.run_stream_async` — async variant of stream.
+- :meth:`PrebuiltAutonomousAgentBase.run_console` — pretty terminal output with
   tool calls, results, and streamed text.
 """
 from __future__ import annotations
@@ -43,9 +47,10 @@ if TYPE_CHECKING:
     from upsonic.tasks.tasks import Task
 
 
-class PrebuiltAutonomousAgent(AutonomousAgent):
+class PrebuiltAutonomousAgentBase(AutonomousAgent):
     """
-    Autonomous agent whose system prompt and first message come from a git repo.
+    Base class for prebuilt autonomous agents whose system prompt and first
+    message come from a git repo.
 
     Constructor stores the repo coordinates; every call to :meth:`run`,
     :meth:`run_stream`, or :meth:`run_console` performs a fresh shallow
@@ -55,12 +60,16 @@ class PrebuiltAutonomousAgent(AutonomousAgent):
     ``workspace`` can be set either at construction time or per-run. If omitted
     at both, a :class:`ValueError` is raised when the agent is invoked.
 
+    Subclasses typically pin ``agent_repo`` and ``agent_folder`` to a specific
+    template directory and expose a higher-level, template-aware API on top of
+    this class.
+
     Example:
         ```python
-        agent = PrebuiltAutonomousAgent(
+        agent = PrebuiltAutonomousAgentBase(
             model="anthropic/claude-sonnet-4-5",
-            agent_repo="https://github.com/Upsonic/AutonomousAgents",
-            agent_folder="applied_scientist",
+            agent_repo="https://github.com/Upsonic/Upsonic",
+            agent_folder="src/upsonic/prebuilt/applied_scientist/template",
         )
 
         agent.run_console(
@@ -92,7 +101,7 @@ class PrebuiltAutonomousAgent(AutonomousAgent):
     def _log(self, verbose: bool, message: str) -> None:
         """Emit a prefixed progress line when ``verbose`` is True."""
         if verbose:
-            print(f"[PrebuiltAutonomousAgent] {message}")
+            print(f"[{type(self).__name__}] {message}")
 
     def _apply_workspace(self, workspace: Union[str, Path]) -> Path:
         """
@@ -343,7 +352,7 @@ class PrebuiltAutonomousAgent(AutonomousAgent):
             self._apply_workspace(workspace)
         elif self.autonomous_workspace is None:
             raise ValueError(
-                "PrebuiltAutonomousAgent requires a workspace. Pass workspace=... "
+                f"{type(self).__name__} requires a workspace. Pass workspace=... "
                 "or set it at construction."
             )
 
@@ -574,7 +583,7 @@ class PrebuiltAutonomousAgent(AutonomousAgent):
 
         console.print(
             Panel.fit(
-                f"[bold]PrebuiltAutonomousAgent starting[/bold]\n"
+                f"[bold]{type(self).__name__} starting[/bold]\n"
                 f"workspace: [cyan]{self.autonomous_workspace}[/cyan]\n"
                 f"model: [cyan]{self.model_name}[/cyan]",
                 border_style="blue",
@@ -651,7 +660,7 @@ class PrebuiltAutonomousAgent(AutonomousAgent):
     def __repr__(self) -> str:
         ws = str(self.autonomous_workspace) if self.autonomous_workspace else None
         return (
-            f"PrebuiltAutonomousAgent("
+            f"{type(self).__name__}("
             f"model={self.model_name!r}, "
             f"workspace={ws!r}, "
             f"agent_repo={self.agent_repo!r}, "
