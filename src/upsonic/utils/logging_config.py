@@ -43,12 +43,35 @@ import logging
 import os
 import sys
 import atexit
-from typing import Optional, Dict, Literal, Any
+from typing import Optional, Dict, Literal, Any, TYPE_CHECKING
 from pathlib import Path
 import dotenv
 
-# Sentry SDK imports
-import sentry_sdk
+if TYPE_CHECKING:  # for type hints only — never executed at runtime
+    import sentry_sdk
+
+# NOTE: ``sentry_sdk`` is intentionally NOT imported at module top-level.
+# Importing it here would pull the entire Sentry SDK (and its transitive
+# integrations) into every worker that touches upsonic, even when telemetry
+# is disabled. The module-level ``__getattr__`` below performs a lazy import
+# on first attribute access, and ``enable_telemetry()`` reaches the module
+# through that same channel (so existing ``patch(...sentry_sdk)`` tests keep
+# working without modification).
+
+
+def __getattr__(name: str) -> Any:
+    """Lazy module attribute access.
+
+    Defers ``import sentry_sdk`` until something actually reads the
+    ``sentry_sdk`` attribute on this module. Result is cached in module
+    globals so subsequent accesses are free.
+    """
+    if name == "sentry_sdk":
+        import sentry_sdk as _sentry_sdk  # local import — runs once
+        globals()["sentry_sdk"] = _sentry_sdk
+        return _sentry_sdk
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # Load environment variables from current working directory (where user runs their script)
 # This ensures .env is found even when package is installed in site-packages
@@ -190,6 +213,11 @@ def enable_telemetry(
         release = f"upsonic@{get_library_version()}"
     except (ImportError, AttributeError, ValueError):
         release = "upsonic@unknown"
+
+    # Resolve sentry_sdk through the module attribute so that:
+    #   - the lazy ``__getattr__`` performs the actual import on demand
+    #   - unittest.mock.patch('logging_config.sentry_sdk') replacements are honored
+    sentry_sdk = sys.modules[__name__].sentry_sdk
 
     # Build an ISOLATED client. No integrations are passed, which means:
     #  * no LoggingIntegration -> we do not monkey-patch logging.Logger.callHandlers

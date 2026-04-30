@@ -40,40 +40,124 @@ def _reset_logging_config_state() -> None:
 
 
 class TestNoImportTimeSideEffects(unittest.TestCase):
-    """Importing the module must not touch the global Sentry SDK."""
+    """Importing the module must not touch the global Sentry SDK.
 
-    def setUp(self) -> None:
-        self.original_env = os.environ.copy()
+    These tests run in subprocesses so the fresh-import behavior can be
+    observed without polluting sys.modules for sibling test files (which
+    would leave their top-level ``from upsonic.utils.logging_config
+    import ...`` references bound to an orphan module).
+    """
 
-    def tearDown(self) -> None:
-        os.environ.clear()
-        os.environ.update(self.original_env)
+    def _run_in_subprocess(self, script: str) -> "subprocess.CompletedProcess":
+        import subprocess
+
+        env = os.environ.copy()
+        env.pop("UPSONIC_TELEMETRY", None)
+        # Bypass the repo's .env, which sets UPSONIC_TELEMETRY=false and
+        # would mask the bug we are reproducing.
+        env["DOTENV_DISABLE"] = "1"
+        return subprocess.run(
+            [sys.executable, "-c", script],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
 
     def test_importing_module_does_not_call_sentry_init(self) -> None:
         """Re-importing logging_config must not invoke sentry_sdk.init().
 
         The original bug shipped a hard-coded default DSN, so even a host
         that never set UPSONIC_TELEMETRY had its global Sentry client
-        silently replaced. We force-clear the env var (and stub load_dotenv
-        so the repo's .env can't put it back) to reproduce that scenario.
+        silently replaced.
         """
-        os.environ.pop("UPSONIC_TELEMETRY", None)
-        sys.modules.pop("upsonic.utils.logging_config", None)
-
-        with patch("dotenv.load_dotenv"), patch("sentry_sdk.init") as mock_init:
-            importlib.import_module("upsonic.utils.logging_config")
-            mock_init.assert_not_called()
+        result = self._run_in_subprocess(
+            "import sys; "
+            "from unittest.mock import patch; "
+            # Stub load_dotenv so the repo's .env cannot reintroduce
+            # UPSONIC_TELEMETRY=false (which would mask the bug).
+            "patch('dotenv.load_dotenv').start(); "
+            "init_calls = []; "
+            "import sentry_sdk; "
+            "sentry_sdk.init = lambda *a, **kw: init_calls.append((a, kw)); "
+            "import upsonic.utils.logging_config; "
+            "print(f'INIT_CALLS={len(init_calls)}')"
+        )
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        self.assertIn("INIT_CALLS=0", result.stdout)
 
     def test_importing_module_does_not_register_logging_integration(self) -> None:
         """No LoggingIntegration may be installed at import time."""
-        os.environ.pop("UPSONIC_TELEMETRY", None)
-        sys.modules.pop("upsonic.utils.logging_config", None)
+        result = self._run_in_subprocess(
+            "import sys; "
+            "from unittest.mock import patch; "
+            "patch('dotenv.load_dotenv').start(); "
+            "calls = []; "
+            "import sentry_sdk.integrations.logging as li; "
+            "_orig = li.LoggingIntegration; "
+            "li.LoggingIntegration = lambda *a, **kw: calls.append((a, kw)) or _orig(*a, **kw); "
+            "import upsonic.utils.logging_config; "
+            "print(f'INTEGRATION_CALLS={len(calls)}')"
+        )
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        self.assertIn("INTEGRATION_CALLS=0", result.stdout)
 
-        with patch("dotenv.load_dotenv"), patch(
-            "sentry_sdk.integrations.logging.LoggingIntegration"
-        ) as mock_integration:
-            importlib.import_module("upsonic.utils.logging_config")
-            mock_integration.assert_not_called()
+
+class TestSentrySdkLazyImport(unittest.TestCase):
+    """sentry_sdk must not be loaded into sys.modules until first use.
+
+    Even when telemetry is disabled, the previous code paid the cost of
+    importing the entire Sentry SDK (and its transitive integrations) in
+    every worker. The lazy ``__getattr__`` defers that cost until something
+    actually reads ``logging_config.sentry_sdk``.
+
+    Each test runs in a fresh subprocess so reimport state pollution can
+    never leak into other tests in this file.
+    """
+
+    def _run_in_subprocess(self, script: str) -> "subprocess.CompletedProcess":
+        import subprocess
+
+        env = os.environ.copy()
+        env.pop("UPSONIC_TELEMETRY", None)
+        env.pop("UPSONIC_LOG_LEVEL", None)
+        env.pop("UPSONIC_LOG_FILE", None)
+        return subprocess.run(
+            [sys.executable, "-c", script],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+    def test_fresh_import_of_logging_config_does_not_load_sentry_sdk(self) -> None:
+        """Importing logging_config must not pull sentry_sdk into sys.modules."""
+        result = self._run_in_subprocess(
+            "import sys; "
+            "import upsonic.utils.logging_config; "
+            "print('LOADED' if 'sentry_sdk' in sys.modules else 'NOT_LOADED')"
+        )
+        self.assertEqual(
+            result.returncode, 0, msg=f"stderr: {result.stderr}"
+        )
+        self.assertIn("NOT_LOADED", result.stdout)
+
+    def test_attribute_access_triggers_lazy_load(self) -> None:
+        """Reading logging_config.sentry_sdk lazily imports the SDK."""
+        result = self._run_in_subprocess(
+            "import sys; "
+            "from upsonic.utils import logging_config; "
+            "before = 'sentry_sdk' in sys.modules; "
+            "_ = logging_config.sentry_sdk; "
+            "after = 'sentry_sdk' in sys.modules; "
+            "print(f'BEFORE={before} AFTER={after}')"
+        )
+        self.assertEqual(
+            result.returncode, 0, msg=f"stderr: {result.stderr}"
+        )
+        self.assertIn("BEFORE=False AFTER=True", result.stdout)
 
 
 class TestNoDefaultDSN(unittest.TestCase):
@@ -161,11 +245,14 @@ class TestIsolatedClientNotGlobalInit(unittest.TestCase):
             mock_client.assert_called_once()
 
     def test_enable_telemetry_does_not_construct_hub(self) -> None:
-        """sentry_sdk.Hub must NOT be used — its 2.x ctor mutates global state.
+        """REGRESSION GUARD — do not delete this test.
 
-        Reading sentry_sdk 2.48 source: Hub.__init__ calls
-        get_global_scope().set_client(client), which is exactly the global
-        mutation we are trying to avoid. The fix uses a bare Scope instead.
+        sentry_sdk.Hub must NOT be used — its 2.x ctor mutates global state.
+        Reading sentry_sdk 2.48 source: ``Hub.__init__`` calls
+        ``get_global_scope().set_client(client)``, which is exactly the
+        global mutation we are trying to avoid. The fix uses a bare Scope
+        instead. If a future refactor reintroduces ``sentry_sdk.Hub(...)``,
+        this test will fail loudly.
         """
         from upsonic.utils import logging_config
 
