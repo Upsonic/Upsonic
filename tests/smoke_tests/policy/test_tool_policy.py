@@ -93,10 +93,10 @@ def _assert_tool_fully_absent_from_agent(agent: Agent, tool_name: str) -> None:
     assert tool_name not in agent.registered_agent_tools, (
         f"'{tool_name}' must not be in registered_agent_tools"
     )
-    assert tool_name not in agent.tool_manager.wrapped_tools, (
+    assert tool_name not in agent.tool_manager.registry.wrapped_tools, (
         f"'{tool_name}' must not be in tool_manager.wrapped_tools"
     )
-    assert tool_name not in agent.tool_manager.processor.registered_tools, (
+    assert tool_name not in agent.tool_manager.registry.registered_tools, (
         f"'{tool_name}' must not be in tool_manager.processor.registered_tools"
     )
 
@@ -106,10 +106,10 @@ def _assert_tool_present_in_agent(agent: Agent, tool_name: str) -> None:
     assert tool_name in agent.registered_agent_tools, (
         f"'{tool_name}' must be in registered_agent_tools"
     )
-    assert tool_name in agent.tool_manager.wrapped_tools, (
+    assert tool_name in agent.tool_manager.registry.wrapped_tools, (
         f"'{tool_name}' must be in tool_manager.wrapped_tools"
     )
-    assert tool_name in agent.tool_manager.processor.registered_tools, (
+    assert tool_name in agent.tool_manager.registry.registered_tools, (
         f"'{tool_name}' must be in tool_manager.processor.registered_tools"
     )
 
@@ -120,11 +120,11 @@ def _assert_tool_fully_absent_from_task(task: Task, tool_name: str) -> None:
         f"'{tool_name}' must not be in task.registered_task_tools"
     )
     if task.tool_manager is not None:
-        assert tool_name not in task.tool_manager.wrapped_tools, (
-            f"'{tool_name}' must not be in task.tool_manager.wrapped_tools"
+        assert tool_name not in task.tool_manager.registry.wrapped_tools, (
+            f"'{tool_name}' must not be in task.tool_manager.registry.wrapped_tools"
         )
-        assert tool_name not in task.tool_manager.processor.registered_tools, (
-            f"'{tool_name}' must not be in task.tool_manager.processor.registered_tools"
+        assert tool_name not in task.tool_manager.registry.registered_tools, (
+            f"'{tool_name}' must not be in task.tool_manager.registry.registered_tools"
         )
 
 
@@ -230,8 +230,8 @@ class TestToolPolicyPreAgentLevel:
             debug=True,
         )
 
-        wrapped_count: int = len(agent.tool_manager.wrapped_tools)
-        processor_count: int = len(agent.tool_manager.processor.registered_tools)
+        wrapped_count: int = len(agent.tool_manager.registry.wrapped_tools)
+        processor_count: int = len(agent.tool_manager.registry.registered_tools)
 
         assert "delete_all_files" not in agent.registered_agent_tools
         assert wrapped_count == processor_count, (
@@ -336,7 +336,7 @@ class TestToolPolicyPreTaskLevel:
         _assert_tool_fully_absent_from_task(task, "destroy_database")
 
         if task.tool_manager is not None:
-            for name in task.tool_manager.processor.registered_tools:
+            for name in task.tool_manager.registry.registered_tools:
                 assert name != "destroy_database", (
                     "destroy_database must not exist in task tool_manager processor"
                 )

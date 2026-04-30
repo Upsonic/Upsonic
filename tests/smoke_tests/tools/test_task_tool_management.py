@@ -470,7 +470,7 @@ async def test_task_tool_manager_processor_has_tools():
 
     agent._setup_task_tools(task)
 
-    processor = task.tool_manager.processor
+    processor = task.tool_manager.registry
     assert "add_numbers" in processor.registered_tools
     assert len(processor.registered_tools) >= 1
 
@@ -483,8 +483,8 @@ async def test_task_tool_manager_processor_isolated_from_agent():
 
     agent._setup_task_tools(task)
 
-    agent_processor = agent.tool_manager.processor
-    task_processor = task.tool_manager.processor
+    agent_processor = agent.tool_manager.registry
+    task_processor = task.tool_manager.registry
 
     assert "greet" in agent_processor.registered_tools
     assert "greet" not in task_processor.registered_tools
@@ -501,11 +501,11 @@ async def test_task_tool_manager_wrapped_tools():
 
     agent._setup_task_tools(task)
 
-    assert "add_numbers" in task.tool_manager.wrapped_tools
-    assert "greet" not in task.tool_manager.wrapped_tools
+    assert "add_numbers" in task.tool_manager.registry.wrapped_tools
+    assert "greet" not in task.tool_manager.registry.wrapped_tools
 
-    assert "greet" in agent.tool_manager.wrapped_tools
-    assert "add_numbers" not in agent.tool_manager.wrapped_tools
+    assert "greet" in agent.tool_manager.registry.wrapped_tools
+    assert "add_numbers" not in agent.tool_manager.registry.wrapped_tools
 
 
 # ============================================================
@@ -844,7 +844,7 @@ async def test_task_toolkit_use_async_dedup():
     task = Task(description="test", tools=[kit])
     agent._setup_task_tools(task)
 
-    processor = task.tool_manager.processor
+    processor = task.tool_manager.registry
     kit_id = id(kit)
     assert kit_id in processor.class_instance_to_tools
     tracking = list(processor.class_instance_to_tools[kit_id])
@@ -860,13 +860,13 @@ async def test_task_toolkit_use_async_re_add_after_removal():
     task = Task(description="test", tools=[kit])
     agent._setup_task_tools(task)
 
-    processor = task.tool_manager.processor
+    processor = task.tool_manager.registry
     kit_id = id(kit)
-    assert kit_id in processor._raw_tool_ids
+    assert kit_id in processor.raw_object_ids
     assert kit_id in processor.class_instance_to_tools
 
     task.remove_tools(kit)
-    assert kit_id not in processor._raw_tool_ids
+    assert kit_id not in processor.raw_object_ids
     assert kit_id not in processor.class_instance_to_tools
     assert len(task.registered_task_tools) == 0
 
@@ -875,5 +875,5 @@ async def test_task_toolkit_use_async_re_add_after_removal():
 
     assert "multiply_async" in task.registered_task_tools
     assert "divide_async" in task.registered_task_tools
-    assert kit_id in processor._raw_tool_ids
+    assert kit_id in processor.raw_object_ids
     assert kit_id in processor.class_instance_to_tools

@@ -47,9 +47,8 @@ ACTOR_TOOL_NAMES = {
 
 
 def _process_toolkit(toolkit: Any) -> None:
-    from upsonic.tools.processor import ToolProcessor
-    processor: ToolProcessor = ToolProcessor()
-    processor._process_toolkit(toolkit)
+    from upsonic.tools import ToolManager
+    ToolManager().register_tools([toolkit])
 
 
 def _enable_print_capture() -> None:

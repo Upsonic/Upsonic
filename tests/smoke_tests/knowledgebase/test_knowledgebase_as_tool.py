@@ -289,9 +289,9 @@ async def test_knowledgebase_tool_provider_registration(test_document, temp_vect
     
     # Verify it's tracked in tool_manager processor
     kb_id = id(kb)
-    assert kb_id in agent.tool_manager.processor.knowledge_base_instances, \
+    assert kb_id in agent.tool_manager.registry.knowledge_base_instances, \
         "KnowledgeBase should be tracked in processor.knowledge_base_instances"
-    assert kb_id in agent.tool_manager.processor.tool_provider_instances, \
+    assert kb_id in agent.tool_manager.registry.tool_provider_instances, \
         "KnowledgeBase should be tracked in processor.tool_provider_instances"
     
     # Verify search tool is registered with unique name

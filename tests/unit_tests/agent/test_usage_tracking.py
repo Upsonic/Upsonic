@@ -414,8 +414,8 @@ class TestAgentDrainAgentToolUsage:
         run_output.usage = TaskUsage()
         agent._agent_run_output = run_output
         agent.tool_manager = Mock()
-        agent.tool_manager.processor = Mock()
-        agent.tool_manager.processor.registered_tools = {
+        agent.tool_manager.registry = Mock()
+        agent.tool_manager.registry.registered_tools = {
             "some_tool": Mock(),
         }
 
@@ -453,8 +453,8 @@ class TestAgentDrainAgentToolUsage:
         )
 
         agent.tool_manager = Mock()
-        agent.tool_manager.processor = Mock()
-        agent.tool_manager.processor.registered_tools = {
+        agent.tool_manager.registry = Mock()
+        agent.tool_manager.registry.registered_tools = {
             "ask_sub": agent_tool,
         }
 
@@ -483,8 +483,8 @@ class TestAgentDrainAgentToolUsage:
         run_output.usage = TaskUsage()
         agent._agent_run_output = run_output
         agent.tool_manager = Mock()
-        agent.tool_manager.processor = Mock()
-        agent.tool_manager.processor.registered_tools = {}
+        agent.tool_manager.registry = Mock()
+        agent.tool_manager.registry.registered_tools = {}
 
         agent._drain_agent_tool_usage("nonexistent_tool")
 
