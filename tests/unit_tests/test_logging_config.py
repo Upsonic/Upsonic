@@ -105,21 +105,24 @@ class TestLoggingConfig(unittest.TestCase):
     @patch('upsonic.utils.logging_config.sentry_sdk')
     @patch('upsonic.utils.logging_config.atexit.register')
     def test_setup_sentry_enabled(self, mock_atexit, mock_sentry):
-        """Test setup_sentry when telemetry is enabled."""
+        """Test setup_sentry uses an isolated Client (not sentry_sdk.init())."""
         os.environ["UPSONIC_TELEMETRY"] = "https://test@sentry.io/123"
 
-        # Force reconfiguration
         from upsonic.utils import logging_config
         logging_config._SENTRY_CONFIGURED = False
+        logging_config._upsonic_client = None
+        logging_config._upsonic_scope = None
 
         setup_sentry()
 
-        # Sentry should be initialized with DSN
-        mock_sentry.init.assert_called_once()
-        call_kwargs = mock_sentry.init.call_args[1]
+        # init() must NEVER be called — that would replace the host's Sentry client.
+        mock_sentry.init.assert_not_called()
+        # An isolated Client must be constructed with the configured DSN.
+        mock_sentry.Client.assert_called_once()
+        call_kwargs = mock_sentry.Client.call_args[1]
         self.assertEqual(call_kwargs['dsn'], "https://test@sentry.io/123")
 
-        # atexit handler should be registered
+        # Flush handler is registered for graceful shutdown.
         mock_atexit.assert_called_once()
 
     def test_setup_logging_basic(self):
@@ -280,18 +283,21 @@ class TestSentryIntegration(unittest.TestCase):
 
     @patch('upsonic.utils.logging_config.sentry_sdk')
     def test_sentry_environment_config(self, mock_sentry: MagicMock) -> None:
-        """Test Sentry environment configuration."""
+        """Test Sentry config flows through to the isolated Client."""
         os.environ["UPSONIC_TELEMETRY"] = self._TEST_DSN
         os.environ["UPSONIC_ENVIRONMENT"] = "development"
         os.environ["UPSONIC_SENTRY_SAMPLE_RATE"] = "0.5"
 
         from upsonic.utils import logging_config
         logging_config._SENTRY_CONFIGURED = False
+        logging_config._upsonic_client = None
+        logging_config._upsonic_scope = None
 
         setup_sentry()
 
-        mock_sentry.init.assert_called_once()
-        call_kwargs = mock_sentry.init.call_args[1]
+        mock_sentry.init.assert_not_called()
+        mock_sentry.Client.assert_called_once()
+        call_kwargs = mock_sentry.Client.call_args[1]
         self.assertEqual(call_kwargs['dsn'], self._TEST_DSN)
         self.assertEqual(call_kwargs['environment'], "development")
         self.assertEqual(call_kwargs['traces_sample_rate'], 0.5)
@@ -299,30 +305,39 @@ class TestSentryIntegration(unittest.TestCase):
     @patch('upsonic.utils.logging_config.sentry_sdk')
     @patch('upsonic.utils.package.system_id.get_system_id')
     def test_sentry_user_id_tracking(self, mock_get_system_id: MagicMock, mock_sentry: MagicMock) -> None:
-        """Test Sentry user ID tracking."""
+        """User ID is set on the isolated Scope, not the global SDK."""
         os.environ["UPSONIC_TELEMETRY"] = self._TEST_DSN
         mock_get_system_id.return_value = "test-system-id-123"
 
         from upsonic.utils import logging_config
         logging_config._SENTRY_CONFIGURED = False
+        logging_config._upsonic_client = None
+        logging_config._upsonic_scope = None
 
         setup_sentry()
 
-        mock_sentry.set_user.assert_called_once_with({"id": "test-system-id-123"})
+        # Global sentry_sdk.set_user must NOT be touched (would mutate host scope).
+        mock_sentry.set_user.assert_not_called()
+        # The isolated scope receives the user id.
+        scope_instance = mock_sentry.Scope.return_value
+        scope_instance.set_user.assert_called_once_with({"id": "test-system-id-123"})
 
     @patch('upsonic.utils.logging_config.sentry_sdk')
     @patch('upsonic.utils.package.system_id.get_system_id')
     def test_sentry_user_id_failure_graceful(self, mock_get_system_id: MagicMock, mock_sentry: MagicMock) -> None:
-        """Test Sentry handles system ID failure gracefully."""
+        """A failing get_system_id() must not block Client construction."""
         os.environ["UPSONIC_TELEMETRY"] = self._TEST_DSN
         mock_get_system_id.side_effect = Exception("System ID error")
 
         from upsonic.utils import logging_config
         logging_config._SENTRY_CONFIGURED = False
+        logging_config._upsonic_client = None
+        logging_config._upsonic_scope = None
 
         setup_sentry()
 
-        mock_sentry.init.assert_called_once()
+        mock_sentry.init.assert_not_called()
+        mock_sentry.Client.assert_called_once()
 
 
 if __name__ == '__main__':

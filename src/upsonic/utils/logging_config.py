@@ -12,10 +12,14 @@ Environment Variables:
     UPSONIC_DISABLE_LOGGING: Tüm logging'i kapat (true/false)
     UPSONIC_DISABLE_CONSOLE_LOGGING: Console logging'i kapat (user-facing apps için)
 
-    # Sentry Telemetry Configuration (ERROR-ONLY by default for performance):
-    UPSONIC_TELEMETRY: Sentry DSN (ya da "false" to disable)
+    # Sentry Telemetry Configuration (STRICTLY OPT-IN):
+    # Telemetry is fully disabled unless the host explicitly sets a DSN.
+    # There is no default DSN — upsonic never ships data to a third party
+    # by default, and never calls sentry_sdk.init() (so the host's own
+    # Sentry configuration is never replaced).
+    UPSONIC_TELEMETRY: Sentry DSN (must be explicitly set; "false" or unset disables)
     UPSONIC_ENVIRONMENT: Environment name (production, development, staging)
-    UPSONIC_SENTRY_SAMPLE_RATE: Traces sample rate (0.0 - 1.0, default: 0.0 for performance)
+    UPSONIC_SENTRY_SAMPLE_RATE: Traces sample rate (0.0 - 1.0, default: 0.0)
     UPSONIC_SENTRY_PROFILE_SESSION_SAMPLE_RATE: Profile sample rate (0.0 - 1.0, default: 0.0)
 
     # Modül bazlı seviye kontrolü:
@@ -25,21 +29,14 @@ Environment Variables:
     UPSONIC_LOG_LEVEL_AGENT: Sadece agent için
 
 Kullanım:
-    # Otomatik konfigürasyon (import ederken çalışır)
-    from upsonic.utils.logging_config import setup_logging, sentry_sdk
+    from upsonic.utils.logging_config import setup_logging, enable_telemetry
 
-    # Ya da manuel
+    # Logging
     setup_logging(level="DEBUG", log_file="upsonic.log")
 
-    # Sentry tracing kullanımı
-    with sentry_sdk.start_transaction(op="task", name="My Task"):
-        # your code here
-        pass
-
-    # Environment variable ile
-    export UPSONIC_LOG_LEVEL=DEBUG
-    export UPSONIC_TELEMETRY="your-sentry-dsn"
-    export UPSONIC_ENVIRONMENT="production"
+    # Telemetry (opt-in)
+    enable_telemetry(dsn="https://...@sentry.io/123")
+    # or set UPSONIC_TELEMETRY env var and call enable_telemetry() with no args
 """
 
 import logging
@@ -48,21 +45,20 @@ import sys
 import atexit
 from typing import Optional, Dict, Literal, Any
 from pathlib import Path
-from dotenv import load_dotenv
+import dotenv
 
 # Sentry SDK imports
 import sentry_sdk
-from sentry_sdk.integrations.logging import LoggingIntegration
 
 # Load environment variables from current working directory (where user runs their script)
 # This ensures .env is found even when package is installed in site-packages
 cwd = Path(os.getcwd())
 env_path = cwd / ".env"
 if env_path.exists():
-    load_dotenv(env_path, override=False)
+    dotenv.load_dotenv(env_path, override=False)
 else:
     # Fallback: search from current directory upwards (default behavior)
-    load_dotenv(override=False)
+    dotenv.load_dotenv(override=False)
 
 # Log level mapping
 LOG_LEVELS = {
@@ -96,6 +92,13 @@ MODULE_PATTERNS = {
 # Global flags to track configuration
 _LOGGING_CONFIGURED = False
 _SENTRY_CONFIGURED = False
+
+# Isolated Sentry state for upsonic. We deliberately do NOT mutate the global
+# sentry_sdk hub/scope (no sentry_sdk.init() and no Hub() construction — Hub's
+# 2.x ctor mutates the global isolation scope). capture_exception() routes
+# through this private Scope instead of the global one.
+_upsonic_client: "Optional[sentry_sdk.Client]" = None
+_upsonic_scope: "Optional[sentry_sdk.Scope]" = None
 
 
 def get_env_log_level(key: str, default: str = "INFO") -> int:
@@ -133,110 +136,138 @@ def get_env_bool_optional(key: str) -> "Optional[bool]":
     return value_lower in ("true", "1", "yes", "on")
 
 
-def setup_sentry() -> None:
+def enable_telemetry(
+    dsn: Optional[str] = None,
+    environment: Optional[str] = None,
+    sample_rate: Optional[float] = None,
+    profile_session_sample_rate: Optional[float] = None,
+) -> bool:
     """
-    Sentry telemetry sistemini yapılandır (ERROR-ONLY mode by default).
+    Explicit opt-in for upsonic telemetry.
 
-    PERFORMANCE NOTE:
-        By default, Sentry only captures errors (exceptions and ERROR+ logs).
-        Tracing/profiling is disabled (sample_rate=0.0) to avoid runtime overhead.
-        To enable tracing, set UPSONIC_SENTRY_SAMPLE_RATE to a value > 0.
+    Constructs an isolated ``sentry_sdk.Client`` bound to a local ``Hub``.
+    This deliberately does NOT call ``sentry_sdk.init()``, so the host
+    application's global Sentry configuration (DSN, integrations,
+    before_send hooks, etc.) is left untouched.
 
-    Environment Variables:
-        UPSONIC_TELEMETRY: Sentry DSN URL'i veya "false" to disable
-        UPSONIC_ENVIRONMENT: Environment adı (production, development, staging)
-        UPSONIC_SENTRY_SAMPLE_RATE: Traces sample rate (0.0 - 1.0, default: 0.0)
-        UPSONIC_SENTRY_PROFILE_SESSION_SAMPLE_RATE: Profile sample rate (default: 0.0)
+    Args:
+        dsn: Sentry DSN. If ``None``, falls back to ``UPSONIC_TELEMETRY``
+            env var. There is no default DSN — if neither is provided,
+            this is a no-op.
+        environment: Environment label. Defaults to ``UPSONIC_ENVIRONMENT``
+            or ``"production"``.
+        sample_rate: Traces sample rate (0.0 - 1.0). Defaults to
+            ``UPSONIC_SENTRY_SAMPLE_RATE`` or ``0.0``.
+        profile_session_sample_rate: Profile session sample rate. Defaults
+            to ``UPSONIC_SENTRY_PROFILE_SESSION_SAMPLE_RATE`` or ``0.0``.
 
-    Bu fonksiyon:
-    1. Sentry SDK'yı initialize eder (error-only mode)
-    2. User ID tracking ayarlar
-    3. Release bilgisi ekler
-    4. Logging integration'ı aktif eder (ERROR+ loglar Sentry event olarak gider)
+    Returns:
+        ``True`` if telemetry was enabled, ``False`` otherwise.
+    """
+    global _upsonic_client, _upsonic_scope  # noqa: PLW0603
+
+    # Skip Sentry on Python 3.14+ (pydantic/fastapi compat issues)
+    if sys.version_info >= (3, 14):
+        return False
+
+    if dsn is None:
+        dsn = os.getenv("UPSONIC_TELEMETRY", "").strip()
+
+    if not dsn or dsn.lower() == "false":
+        return False
+
+    if environment is None:
+        environment = os.getenv("UPSONIC_ENVIRONMENT", "production")
+    if sample_rate is None:
+        sample_rate = float(os.getenv("UPSONIC_SENTRY_SAMPLE_RATE", "0.0"))
+    if profile_session_sample_rate is None:
+        profile_session_sample_rate = float(
+            os.getenv("UPSONIC_SENTRY_PROFILE_SESSION_SAMPLE_RATE", "0.0")
+        )
+
+    try:
+        from upsonic.utils.package.get_version import get_library_version
+        release = f"upsonic@{get_library_version()}"
+    except (ImportError, AttributeError, ValueError):
+        release = "upsonic@unknown"
+
+    # Build an ISOLATED client. No integrations are passed, which means:
+    #  * no LoggingIntegration -> we do not monkey-patch logging.Logger.callHandlers
+    #    (this was the source of the Temporal sandbox _DeadlockError)
+    #  * default integrations are skipped to keep the surface minimal in
+    #    sandboxed/restricted-import environments
+    _upsonic_client = sentry_sdk.Client(
+        dsn=dsn,
+        traces_sample_rate=sample_rate,
+        release=release,
+        server_name="upsonic_client",
+        environment=environment,
+        profile_session_sample_rate=profile_session_sample_rate,
+        integrations=[],
+        default_integrations=False,
+    )
+    # Bind the client to a private Scope. Unlike sentry_sdk.Hub(client) — whose
+    # 2.x ctor mutates the global isolation scope — Scope().set_client() leaves
+    # the global hub untouched.
+    _upsonic_scope = sentry_sdk.Scope()
+    _upsonic_scope.set_client(_upsonic_client)
+
+    try:
+        from upsonic.utils.package.system_id import get_system_id
+        _upsonic_scope.set_user({"id": get_system_id()})
+    except Exception:
+        pass
+
+    def _flush_upsonic_client() -> None:
+        try:
+            if _upsonic_client is not None:
+                _upsonic_client.flush(timeout=2.0)
+        except (RuntimeError, TimeoutError, OSError):
+            pass
+
+    atexit.register(_flush_upsonic_client)
+
+    logger = logging.getLogger(__name__)
+    logger.debug("Upsonic telemetry enabled (isolated Sentry client)")
+    return True
+
+
+def disable_telemetry() -> None:
+    """Disable upsonic telemetry by clearing the isolated client/scope."""
+    global _upsonic_client, _upsonic_scope  # noqa: PLW0603
+    _upsonic_client = None
+    _upsonic_scope = None
+
+
+def is_telemetry_enabled() -> bool:
+    """Return ``True`` if upsonic's isolated telemetry client is active."""
+    return _upsonic_client is not None
+
+
+def capture_exception(exc: "Optional[BaseException]" = None) -> None:
+    """Capture an exception via upsonic's isolated Sentry scope.
+
+    Silently no-ops when telemetry is disabled. Does NOT touch the global
+    Sentry hub, so host applications never see upsonic's events.
+    """
+    if _upsonic_scope is not None:
+        _upsonic_scope.capture_exception(exc)
+
+
+def setup_sentry() -> None:
+    """Backward-compatible entry point — strictly opt-in.
+
+    Reads ``UPSONIC_TELEMETRY`` and, only if explicitly set to a DSN,
+    enables an *isolated* Sentry client. There is no default DSN and
+    ``sentry_sdk.init()`` is never called, so the host application's
+    global Sentry configuration is left untouched.
     """
     global _SENTRY_CONFIGURED  # noqa: PLW0603
 
-    # Eğer daha önce konfigüre edildiyse, skip et
     if _SENTRY_CONFIGURED:
         return
-    
-    # Skip Sentry on Python 3.14+ due to pydantic/fastapi compatibility issues
-    import sys
-    if sys.version_info >= (3, 14):
-        _SENTRY_CONFIGURED = True
-        return
-
-    # Get configuration from environment
-    the_dsn = os.getenv(
-        "UPSONIC_TELEMETRY",
-        "https://f9b529d9b67a30fae4d5b6462256ee9e@o4508336623583232.ingest.us.sentry.io/4510211809542144"
-    )
-    the_environment = os.getenv("UPSONIC_ENVIRONMENT", "production")
-    
-    # PERFORMANCE OPTIMIZATION: Default to 0.0 to disable tracing overhead
-    # Tracing (start_transaction/start_span) adds significant runtime overhead
-    # Set to higher values only if you need performance monitoring
-    the_sample_rate = float(os.getenv("UPSONIC_SENTRY_SAMPLE_RATE", "0.0"))
-    the_profile_session_sample_rate = float(os.getenv("UPSONIC_SENTRY_PROFILE_SESSION_SAMPLE_RATE", "0.0"))
-
-    # "false" değeri varsa Sentry'yi devre dışı bırak
-    if the_dsn.lower() == "false":
-        the_dsn = ""
-
-    if not the_dsn or not the_dsn.strip():
-        _SENTRY_CONFIGURED = True
-        return
-
-    # Get version for release tag
-    try:
-        from upsonic.utils.package.get_version import get_library_version
-        the_release = f"upsonic@{get_library_version()}"
-    except (ImportError, AttributeError, ValueError):
-        the_release = "upsonic@unknown"
-
-    # Initialize Sentry SDK - ERROR ONLY MODE
-    # Only capture actual exceptions and ERROR+ level logs
-    # Tracing is disabled by default for performance
-    sentry_sdk.init(
-        dsn=the_dsn,
-        traces_sample_rate=the_sample_rate,
-        release=the_release,
-        server_name="upsonic_client",
-        environment=the_environment,
-        integrations=[
-            LoggingIntegration(
-                level=logging.WARNING,  # Breadcrumbs for WARNING+ (context for errors)
-                event_level=logging.ERROR,  # Only ERROR+ logs become Sentry events
-            ),
-        ],
-        profile_session_sample_rate=the_profile_session_sample_rate,
-    )
-
-    # Set user ID for tracking
-    try:
-        from upsonic.utils.package.system_id import get_system_id
-        sentry_sdk.set_user({"id": get_system_id()})
-    except Exception:
-        pass  # System ID alınamazsa skip et
-
     _SENTRY_CONFIGURED = True
-
-    # Register atexit handler to flush pending events on program exit
-    # Bu sayede script/CLI kullanımında pending event'ler kaybolmaz
-    if the_dsn:
-        def _flush_sentry():
-            """Flush pending Sentry events before program exit."""
-            try:
-                sentry_sdk.flush(timeout=2.0)
-            except (RuntimeError, TimeoutError, OSError):
-                pass  # Silent failure on exit, don't block program termination
-
-        atexit.register(_flush_sentry)
-
-    # Log initialization (sadece DSN varsa)
-    if the_dsn:
-        logger = logging.getLogger(__name__)
-        logger.debug("Sentry initialized for Upsonic")
+    enable_telemetry()
 
 
 def setup_logging(
@@ -542,9 +573,9 @@ def setup_opentelemetry() -> None:
         logger.warning("Failed to configure OpenTelemetry: %s", exc)
 
 
-# Library import edildiğinde otomatik konfigüre et
-# Sentry her zaman initialize edilir (DSN kontrolü setup_sentry içinde)
-setup_sentry()
+# NOTE: Telemetry is NOT initialized at import time. It is strictly opt-in.
+# Hosts that want it must either set UPSONIC_TELEMETRY=<dsn> and call
+# setup_sentry()/enable_telemetry(), or call enable_telemetry(dsn=...) directly.
 
 # Logging sadece env var varsa otomatik konfigüre edilir
 if os.getenv("UPSONIC_LOG_LEVEL") or os.getenv("UPSONIC_LOG_FILE"):
