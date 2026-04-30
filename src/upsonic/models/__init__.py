@@ -1190,7 +1190,7 @@ class Model(Runnable[Any, Any]):
         
         if self._tools and self._tool_manager:
             tool_definitions = self._tool_manager.get_tool_definitions()
-            builtin_tools = self._tool_manager.processor.extract_builtin_tools(self._tools)
+            builtin_tools = self._tool_manager.normalizer.extract_builtin_tools(self._tools)
         
         output_mode = 'text'
         output_object = None

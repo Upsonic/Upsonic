@@ -1590,7 +1590,7 @@ class ModelExecutionStep(Step):
         """Execute model request with guardrail support and memory manager."""
         from upsonic.run.cancel import raise_if_cancelled
         from upsonic.exceptions import RunCancelledException
-        from upsonic.tools.processor import ExternalExecutionPause, ConfirmationPause, UserInputPause
+        from upsonic.tools.hitl import ExternalExecutionPause, ConfirmationPause, UserInputPause
         
         start_time = time.time()
         step_result: Optional[StepResult] = None
