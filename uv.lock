@@ -340,11 +340,11 @@ wheels = [
 
 [[package]]
 name = "asqav"
-version = "0.3.1"
+version = "0.2.21"
 source = { registry = "https://pypi.org/simple/" }
-sdist = { url = "https://files.pythonhosted.org/packages/fb/98/caa933c09c5585546d952274f3faec9392223a3b0de17e0dbec06b156ab5/asqav-0.3.1.tar.gz", hash = "sha256:75b9e00498ef5a338faf2d2757928d25e07476494d141f1a120602ae49156640", size = 62867, upload-time = "2026-04-29T21:05:42.133Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6c/0e/9c84b2c8bf5587e44f7cbf52aa07208fff1c118ce85040075d978a5d36b1/asqav-0.2.21.tar.gz", hash = "sha256:a0cf7627e0be29990dd38174e50c41c33f00708d057fe1926c56ea90f369a0cb", size = 63278, upload-time = "2026-04-25T16:56:05.968Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7b/cc/d688857eeecec9bdfd7b50989355b9f5e4e6a8c655736b9e7d928ec2b274/asqav-0.3.1-py3-none-any.whl", hash = "sha256:160474187a952ad00fafa8a2610d4a992f4568823bdd312e88095662f4b9bfe9", size = 77544, upload-time = "2026-04-29T21:05:40.513Z" },
+    { url = "https://files.pythonhosted.org/packages/b3/df/89e7ca0fc5ca7fa12d3c82e23ed05cd8933b203fc07c7be709d94bcb2cf7/asqav-0.2.21-py3-none-any.whl", hash = "sha256:e88d8ba840bdd796d13309cf1c6e1df66eddda647c3f48b36ab52597898bdcff", size = 76435, upload-time = "2026-04-25T16:56:04.364Z" },
 ]
 
 [[package]]
@@ -8839,11 +8839,9 @@ dependencies = [
     { name = "aiohttp" },
     { name = "anyio" },
     { name = "cloudpickle" },
-    { name = "fastmcp" },
     { name = "genai-prices" },
     { name = "griffe" },
     { name = "httpx" },
-    { name = "mcp", extra = ["cli"] },
     { name = "nest-asyncio" },
     { name = "openai" },
     { name = "protobuf" },
@@ -8857,7 +8855,6 @@ dependencies = [
     { name = "toml" },
     { name = "typing-extensions" },
     { name = "typing-inspection" },
-    { name = "uv" },
     { name = "uvicorn" },
 ]
 
@@ -8965,6 +8962,10 @@ mail-interface = [
 markdown-loader = [
     { name = "markdown-it-py" },
     { name = "python-frontmatter" },
+]
+mcp = [
+    { name = "fastmcp" },
+    { name = "mcp", extra = ["cli"] },
 ]
 mem0-storage = [
     { name = "mem0ai" },
@@ -9123,6 +9124,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-timeout" },
     { name = "tomlkit" },
+    { name = "uv" },
 ]
 
 [package.metadata]
@@ -9174,7 +9176,7 @@ requires-dist = [
     { name = "fastapi", marker = "extra == 'slack-interface'", specifier = ">=0.128.0" },
     { name = "fastapi", marker = "extra == 'web'" },
     { name = "fastembed", marker = "python_full_version < '3.14' and extra == 'embeddings'", specifier = ">=0.7.3" },
-    { name = "fastmcp", specifier = ">=2.14.5" },
+    { name = "fastmcp", marker = "extra == 'mcp'", specifier = ">=2.14.5" },
     { name = "firecrawl-py", marker = "extra == 'custom-tools'", specifier = ">=4.14.1" },
     { name = "genai-prices", specifier = ">=0.0.38" },
     { name = "genai-prices", marker = "extra == 'tools'", specifier = ">=0.0.29" },
@@ -9202,7 +9204,7 @@ requires-dist = [
     { name = "lxml", marker = "extra == 'xml-loader'", specifier = ">=4.9.1" },
     { name = "markdown-it-py", marker = "extra == 'loaders'", specifier = ">=4.0.0" },
     { name = "markdown-it-py", marker = "extra == 'markdown-loader'", specifier = ">=4.0.0" },
-    { name = "mcp", extras = ["cli"], specifier = ">=1.26.0" },
+    { name = "mcp", extras = ["cli"], marker = "extra == 'mcp'", specifier = ">=1.26.0" },
     { name = "mem0ai", marker = "extra == 'mem0-storage'", specifier = ">=0.1.116" },
     { name = "mistralai", marker = "extra == 'models'", specifier = ">=1.9.11" },
     { name = "motor", marker = "extra == 'mongo-storage'", specifier = ">=3.7.1" },
@@ -9295,7 +9297,6 @@ requires-dist = [
     { name = "upsonic", extras = ["postgres-storage"], marker = "extra == 'storage'" },
     { name = "upsonic", extras = ["redis-storage"], marker = "extra == 'storage'" },
     { name = "upsonic", extras = ["sqlite-storage"], marker = "extra == 'storage'" },
-    { name = "uv", specifier = ">=0.5.20" },
     { name = "uvicorn", specifier = ">=0.34.0" },
     { name = "uvicorn", marker = "extra == 'web'", specifier = ">=0.35.0" },
     { name = "weaviate-client", marker = "extra == 'vectordb'", specifier = ">=4.16.9" },
@@ -9304,7 +9305,7 @@ requires-dist = [
     { name = "xai-sdk", marker = "extra == 'models'", specifier = ">=1.4.0" },
     { name = "yfinance", marker = "extra == 'tools'", specifier = ">=0.2.66" },
 ]
-provides-extras = ["asqav", "chroma", "qdrant", "milvus", "weaviate", "pinecone", "faiss", "pgvector", "supermemory", "vectordb", "sqlite-storage", "redis-storage", "postgres-storage", "mongo-storage", "mem0-storage", "storage", "models", "embeddings", "csv-loader", "docling-loader", "docx-loader", "html-loader", "json-loader", "markdown-loader", "pdf-loader", "pdfplumber-loader", "pymupdf-loader", "text-loader", "xml-loader", "yaml-loader", "loaders", "tools", "web", "ocr", "custom-tools", "apify-tool", "crawlee-browser", "gmail-interface", "safety-engine", "slack-interface", "mail-interface", "discord-interface", "otel", "langfuse", "gmail-tool"]
+provides-extras = ["mcp", "asqav", "chroma", "qdrant", "milvus", "weaviate", "pinecone", "faiss", "pgvector", "supermemory", "vectordb", "sqlite-storage", "redis-storage", "postgres-storage", "mongo-storage", "mem0-storage", "storage", "models", "embeddings", "csv-loader", "docling-loader", "docx-loader", "html-loader", "json-loader", "markdown-loader", "pdf-loader", "pdfplumber-loader", "pymupdf-loader", "text-loader", "xml-loader", "yaml-loader", "loaders", "tools", "web", "ocr", "custom-tools", "apify-tool", "crawlee-browser", "gmail-interface", "safety-engine", "slack-interface", "mail-interface", "discord-interface", "otel", "langfuse", "gmail-tool"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -9314,6 +9315,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=0.25.1" },
     { name = "pytest-timeout", specifier = ">=2.3.1" },
     { name = "tomlkit", specifier = ">=0.13.3" },
+    { name = "uv", specifier = ">=0.5.20" },
 ]
 
 [[package]]
