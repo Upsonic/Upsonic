@@ -892,7 +892,58 @@ class Agent(BaseAgent):
             return session.get_session_usage()
 
         return TaskUsageCls()
-    
+
+    @property
+    def cost(self) -> Optional[Dict[str, Any]]:
+        """
+        Aggregated token usage and estimated cost across every task this
+        agent has executed.
+
+        Mirrors the shape of :meth:`Task.get_total_cost` but accumulates
+        across all ``do`` / ``do_async`` / ``run`` / ``run_async`` calls
+        on this agent instance. Autonomous agents (and prebuilts like
+        :class:`AppliedScientist`) frequently dispatch several tasks per
+        run — bootstrap, workspace greeting, the user's prompt, internal
+        sub-agents — so ``autonomous_agent.cost`` reports the full session
+        spend, not just the last task.
+
+        Returns:
+            Dict with ``input_tokens``, ``output_tokens``, ``total_tokens``,
+            ``estimated_cost`` (USD), ``requests``, ``tool_calls``,
+            ``cache_read_tokens``, ``cache_write_tokens``, and
+            ``reasoning_tokens``. ``estimated_cost`` is ``None`` when the
+            model's pricing cannot be resolved. Returns ``None`` if no
+            tasks have been executed yet.
+        """
+        usage = self.usage
+        if usage is None:
+            return None
+
+        input_tokens: int = usage.input_tokens or 0
+        output_tokens: int = usage.output_tokens or 0
+
+        estimated_cost: Optional[float] = usage.cost
+        if estimated_cost is None:
+            try:
+                from upsonic.utils.usage import calculate_cost_from_usage
+                model = self.model or self.model_name
+                if model is not None:
+                    estimated_cost = calculate_cost_from_usage(usage, model)
+            except Exception:
+                estimated_cost = None
+
+        return {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+            "estimated_cost": float(estimated_cost) if estimated_cost is not None else None,
+            "requests": usage.requests,
+            "tool_calls": usage.tool_calls,
+            "cache_read_tokens": usage.cache_read_tokens,
+            "cache_write_tokens": usage.cache_write_tokens,
+            "reasoning_tokens": usage.reasoning_tokens,
+        }
+
     def _create_agent_run_input(self, task: "Task") -> AgentRunInput:
         """
         Create AgentRunInput from Task, separating images and documents.
