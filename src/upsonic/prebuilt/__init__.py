@@ -1,10 +1,14 @@
 """
 Upsonic prebuilt agents.
 
-Ready-to-use autonomous agents backed by templates in the
-``Upsonic/AutonomousAgents`` repository. Each class auto-wires the repo and
-folder and exposes a template-aware API on top of
-:class:`~upsonic.agent.prebuilt_autonomous_agent.PrebuiltAutonomousAgent`.
+Ready-to-use autonomous agents whose system prompt, first-message template,
+and skills are bundled inside this package. Each prebuilt lives in its own
+subfolder (e.g. ``applied_scientist/``) with the source code in
+``agent.py`` and the agent's prompt template in ``template/``.
+
+Every prebuilt class is a subclass of
+:class:`~upsonic.prebuilt.prebuilt_agent_base.PrebuiltAutonomousAgentBase`,
+which clones the template folder into the user's workspace on every run.
 
 Usage:
     ```python
@@ -24,13 +28,17 @@ Usage:
     )
     exp.run()
     ```
+
+See ``documents/ai/guides/new_prebuilt_agent_adding.md`` for instructions on how to
+contribute a new prebuilt agent.
 """
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .upsonic_prebuilt_agents import (
+    from .prebuilt_agent_base import PrebuiltAutonomousAgentBase
+    from .applied_scientist.agent import (
         AppliedScientist,
         Experiment,
         ExperimentResult,
@@ -38,12 +46,14 @@ if TYPE_CHECKING:
 
 
 def _get_classes() -> dict[str, Any]:
-    from .upsonic_prebuilt_agents import (
+    from .prebuilt_agent_base import PrebuiltAutonomousAgentBase
+    from .applied_scientist.agent import (
         AppliedScientist,
         Experiment,
         ExperimentResult,
     )
     return {
+        "PrebuiltAutonomousAgentBase": PrebuiltAutonomousAgentBase,
         "AppliedScientist": AppliedScientist,
         "Experiment": Experiment,
         "ExperimentResult": ExperimentResult,
@@ -61,6 +71,7 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
+    "PrebuiltAutonomousAgentBase",
     "AppliedScientist",
     "Experiment",
     "ExperimentResult",

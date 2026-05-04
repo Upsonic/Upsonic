@@ -64,7 +64,7 @@ All file and shell operations are restricted to `workspace`. Path traversal and 
 
 ### Use Our Prebuilt Ones
 
-Prebuilt autonomous agents are ready-to-run agents built by the Upsonic community, each packaging a skill, system prompt, and first message so you can go from install to running in seconds. The collection is [open to contributions](https://github.com/Upsonic/Upsonic/tree/master/prebuilt_autonomous_agents), bring your agent and open a PR.
+Prebuilt autonomous agents are ready-to-run agents built by the Upsonic community, each packaging a skill, system prompt, and first message so you can go from install to running in seconds. The collection is [open to contributions](https://github.com/Upsonic/Upsonic/tree/master/src/upsonic/prebuilt), bring your agent and open a PR.
 
 Learn more: [Prebuilt Autonomous Agents](https://docs.upsonic.ai/concepts/prebuilt-autonomous-agents/overview)
 

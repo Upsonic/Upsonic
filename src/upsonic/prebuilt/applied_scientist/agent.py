@@ -1,11 +1,11 @@
 """
-Upsonic-maintained prebuilt autonomous agents.
+Applied scientist prebuilt autonomous agent.
 
-Each class in this module wires
-:class:`~upsonic.agent.prebuilt_autonomous_agent.PrebuiltAutonomousAgent` to a
-specific upstream template repo/folder and exposes a high-level,
-template-aware API (``new_experiment()``, ``new_task()``, etc.) so users do
-not have to remember the placeholders in ``first_message.md``.
+Wires :class:`~upsonic.prebuilt.prebuilt_agent_base.PrebuiltAutonomousAgentBase`
+to the ``applied_scientist`` template directory shipped under ``template/``
+inside this package and exposes a high-level, template-aware API
+(``new_experiment()``) so users do not have to remember the placeholders in
+``first_message.md``.
 """
 from __future__ import annotations
 
@@ -14,9 +14,7 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, TYPE_CHECKING, Union
 
-from upsonic.agent.prebuilt_autonomous_agent.prebuilt_autonomous_agent import (
-    PrebuiltAutonomousAgent,
-)
+from upsonic.prebuilt.prebuilt_agent_base import PrebuiltAutonomousAgentBase
 
 if TYPE_CHECKING:
     from upsonic.models import Model
@@ -121,7 +119,7 @@ class Experiment:
     ) -> str:
         """
         Execute the experiment with pretty terminal output (calls
-        :meth:`PrebuiltAutonomousAgent.run_console`). Blocks until the run
+        :meth:`PrebuiltAutonomousAgentBase.run_console`). Blocks until the run
         completes and returns the concatenated assistant text.
         """
         if self._started:
@@ -985,10 +983,11 @@ class ExperimentRegistry:
 # --------------------------------------------------------------------------- #
 
 
-class AppliedScientist(PrebuiltAutonomousAgent):
+class AppliedScientist(PrebuiltAutonomousAgentBase):
     """
-    Prebuilt "applied scientist" agent backed by
-    ``Upsonic/AutonomousAgents/applied_scientist``.
+    Prebuilt "applied scientist" agent backed by the
+    ``src/upsonic/prebuilt/applied_scientist/template`` directory of the
+    Upsonic repo.
 
     The agent repo and folder are hard-coded, so callers only supply model and
     workspace. Each experiment is created via :meth:`new_experiment` and then
@@ -1006,7 +1005,7 @@ class AppliedScientist(PrebuiltAutonomousAgent):
     """
 
     AGENT_REPO: str = "https://github.com/Upsonic/Upsonic"
-    AGENT_FOLDER: str = "prebuilt_autonomous_agents/applied_scientist"
+    AGENT_FOLDER: str = "src/upsonic/prebuilt/applied_scientist/template"
 
     def __init__(
         self,
