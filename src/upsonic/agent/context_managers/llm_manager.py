@@ -1,9 +1,11 @@
 import os
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
+
 if TYPE_CHECKING:
     from upsonic.agent.agent import Agent
+    from upsonic.models import Model
 else:
     Agent = "Agent"
 
@@ -11,34 +13,27 @@ load_dotenv()
 
 
 class LLMManager:
-    def __init__(self, default_model, agent: "Agent", requested_model: Optional[str] = None):
-        self.agent = agent
-        self.default_model = default_model
-        self.requested_model = requested_model
-        self.selected_model = None
-        
-    def _model_set(self, model):
+    def __init__(
+        self,
+        default_model: Optional[str],
+        agent: "Agent",
+        requested_model: Optional[str] = None,
+    ) -> None:
+        self.agent: "Agent" = agent
+        self.default_model: Optional[str] = default_model
+        self.requested_model: Optional[str] = requested_model
+        self.selected_model: Optional["Model"] = None
+
+    def _model_set(self, model: Optional[str]) -> "Model":
+        from upsonic.models import infer_model
+
+        resolved: str
         if model is None:
-            model = os.getenv("LLM_MODEL_KEY").split(":")[0] if os.getenv("LLM_MODEL_KEY", None) else "openai/gpt-4o"
-            from upsonic.models import infer_model
-            try:
-                from celery import current_task
-
-                task_id = current_task.request.id
-                task_args = current_task.request.args
-                task_kwargs = current_task.request.kwargs
-
-                
-                if task_kwargs.get("bypass_llm_model", None) is not None:
-                    model = task_kwargs.get("bypass_llm_model")
-
-                model = infer_model(model)
-                return model
-
-            except Exception as e:
-                raise e
-
-        return None
+            raw_key: str | None = os.getenv("LLM_MODEL_KEY")
+            resolved = raw_key.split(":")[0] if raw_key else "openai/gpt-4o"
+        else:
+            resolved = model
+        return infer_model(resolved)
         
     def get_model(self):
         return self.selected_model
