@@ -25,8 +25,10 @@ from upsonic.agent.context_managers.memory_manager import MemoryManager
 class MockModel:
     """Mock model for testing."""
 
-    def __init__(self, name="test-model"):
+    def __init__(self, name: str = "test-model", system: str = "openai", profile: object | None = None):
         self.model_name = name
+        self.system = system
+        self.profile = profile
 
 
 class MockTask:
@@ -89,6 +91,11 @@ class MockAgent:
         self.company_objective = None
         self.company_description = None
         self._culture_manager = None  # Added for culture support
+        self.model = None
+        self._agent_run_output = Mock()
+        self._agent_run_output.model_name = None
+        self._agent_run_output.model_provider = None
+        self._agent_run_output.model_provider_profile = None
 
     def get_agent_id(self):
         return self.agent_id
@@ -405,22 +412,25 @@ class TestLLMManager:
         assert manager.get_model() == "test-model"
 
     @pytest.mark.asyncio
+    @patch("upsonic.models.infer_model")
     @patch.dict("os.environ", {}, clear=True)
-    async def test_llm_manager_context_manager_default_model(self):
+    async def test_llm_manager_context_manager_default_model(self, mock_infer_model):
         """Test LLMManager context manager with default model."""
+        mock_infer_model.return_value = MockModel("openai/gpt-4o")
         agent = MockAgent()
         default_model = "openai/gpt-4o"
         manager = LLMManager(default_model, agent, None)
 
         async with manager.manage_llm() as ctx:
             assert ctx is manager
-            # Note: _model_set returns None in test environment, so selected_model may be None
-            # The actual model selection happens in the pipeline step
+        mock_infer_model.assert_called_once_with("openai/gpt-4o")
 
     @pytest.mark.asyncio
+    @patch("upsonic.models.infer_model")
     @patch.dict("os.environ", {}, clear=True)
-    async def test_llm_manager_context_manager_requested_model(self):
+    async def test_llm_manager_context_manager_requested_model(self, mock_infer_model):
         """Test LLMManager context manager with requested model."""
+        mock_infer_model.return_value = MockModel("anthropic/claude-3")
         agent = MockAgent()
         default_model = "openai/gpt-4o"
         requested_model = "anthropic/claude-3"
@@ -428,8 +438,7 @@ class TestLLMManager:
 
         async with manager.manage_llm() as ctx:
             assert ctx is manager
-            # Note: _model_set returns None in test environment, so selected_model may be None
-            # The actual model selection happens in the pipeline step
+        mock_infer_model.assert_called_once_with("anthropic/claude-3")
 
     @pytest.mark.asyncio
     @patch("upsonic.models.infer_model")
@@ -438,15 +447,13 @@ class TestLLMManager:
         """Test LLMManager uses environment variable when model is None."""
         mock_model = MockModel("openai/gpt-3.5-turbo")
         mock_infer_model.return_value = mock_model
-        
+
         agent = MockAgent()
         manager = LLMManager(None, agent, None)
 
-        # The _model_set method will raise an exception when Celery is not available
-        # This is expected behavior in test environment
-        with pytest.raises((AttributeError, Exception)):
-            async with manager.manage_llm():
-                pass
+        async with manager.manage_llm():
+            assert manager.selected_model is mock_model
+        mock_infer_model.assert_called_once_with("openai/gpt-3.5-turbo")
 
 
 # ============================================================================
