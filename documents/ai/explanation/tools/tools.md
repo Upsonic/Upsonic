@@ -27,10 +27,10 @@ It owns five separable but cooperating concerns:
 | Concern | Purpose | Files |
 |---|---|---|
 | Type system | Defines what a "tool" is across the codebase | `base.py`, `metrics.py`, `config.py`, `schema.py` |
-| Registration | Walks user-supplied objects and produces uniform `Tool` instances | `processor.py`, `__init__.py` (`ToolManager`) |
-| Wrapping | Adds caching, retries, hooks, HITL pause points around raw tools | `processor.py` (`create_behavioral_wrapper`), `wrappers.py` |
+| Registration | Walks user-supplied objects and produces uniform `Tool` instances | `normalizer.py`, `registry.py`, `__init__.py` (`ToolManager`) |
+| Wrapping | Adds caching, retries, hooks, HITL pause points around raw tools | `execution.py` (`ToolWrapper`), `wrappers.py` |
 | Multi-step planning | Treats `plan_and_execute` as a "meta-tool" the LLM emits to drive a loop | `orchestration.py` |
-| Execution boundaries | Lets tool code **pause** the agent for confirmation, user input, or external execution | `processor.py` (the three `*Pause` exceptions), `deferred.py`, `user_input.py` |
+| Execution boundaries | Lets tool code **pause** the agent for confirmation, user input, or external execution | `hitl.py` (`PauseHandler` + the three `*Pause` exceptions), `user_input.py` |
 
 In addition, two further concerns are anchored here:
 
@@ -421,7 +421,7 @@ multiple paused calls from a single LLM turn into one paused output.
 
 #### Behavioral wrapper
 
-`create_behavioral_wrapper(tool)` returns an `async wrapper(**kwargs)`
+`ToolWrapper(registry).wrap(tool)` returns an `async wrapper(**kwargs)`
 closure that:
 
 1. Triggers KnowledgeBase `setup_async()` lazily if the tool came from a KB.
@@ -480,11 +480,11 @@ collected into the system prompt by `collect_instructions()`.
 
 #### `register_tools` vs. `process_tools`
 
-`process_tools(tools)` is the one-shot processor. `register_tools(tools)`
-filters out any tool whose `id(...)` was previously seen (via
-`_raw_tool_ids`) and only processes the new ones — this is what
-`ToolManager.register_tools` calls so that re-registering the same agent
-tools or task tools doesn't double-create wrappers.
+`ToolNormalizer.normalize(tools, already_registered)` filters out any
+tool whose `id(...)` was previously seen (via `ToolRegistry.raw_object_ids`)
+and only processes the new ones — this is what `ToolManager.register_tools`
+relies on so that re-registering the same agent tools or task tools
+doesn't double-create wrappers.
 
 ### 3.6 `wrappers.py` — `FunctionTool` and `AgentTool`
 
@@ -1021,7 +1021,7 @@ CodeExecutionTool, UrlContextTool, WebSearch, WebRead
 Helpful but **not** in `__all__` (must be imported from their submodule):
 
 ```python
-from upsonic.tools.processor import ConfirmationPause, UserInputPause
+from upsonic.tools.hitl import ConfirmationPause, UserInputPause
 from upsonic.tools.user_input import UserInputField, UserControlFlowTools
 from upsonic.tools.builtin_tools import (
     WebFetchTool, ImageGenerationTool, MemoryTool, MCPServerTool, FileSearchTool,
@@ -1144,10 +1144,9 @@ out = agent.do(Task("Fetch user 42"))
 
 ```
 ToolManager.register_tools
-  ├─ processor.register_tools([fetch_user])
-  │    ├─ id(fetch_user) ∉ _raw_tool_ids → kept
-  │    └─ process_tools:
-  │         inspect.isfunction(fetch_user) → True
+  ├─ normalizer.normalize([fetch_user], registry.raw_object_ids)
+  │    ├─ id(fetch_user) ∉ raw_object_ids → kept
+  │    └─ inspect.isfunction(fetch_user) → True
   │         _process_function_tool(fetch_user):
   │             config := fetch_user._upsonic_tool_config   (set by @tool)
   │             schema := function_schema(fetch_user, GenerateToolJsonSchema,
@@ -1155,11 +1154,14 @@ ToolManager.register_tools
   │             tool_obj := FunctionTool(function=fetch_user,
   │                                      schema=schema, config=config)
   │             returns tool_obj
-  │         processed_tools = {'fetch_user': tool_obj}
-  │         registered_tools.update(processed_tools)
+  │         result.tools = {'fetch_user': tool_obj}
   │
-  └─ for 'fetch_user' in newly_registered:
-        wrapped_tools['fetch_user'] = create_behavioral_wrapper(tool_obj)
+  ├─ registry.add(result)
+  │    └─ registered_tools.update(result.tools)
+  │       raw_object_ids.update(result.raw_object_ids)
+  │
+  └─ for 'fetch_user' in new_tools:
+        registry.store_wrapped('fetch_user', wrapper.wrap(tool_obj))
 ```
 
 `wrapped_tools['fetch_user']` is now an `async def wrapper(**kwargs)` with
