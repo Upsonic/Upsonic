@@ -24,6 +24,11 @@ ObjectJsonSchema: TypeAlias = Dict[str, Any]
 # Tool kinds
 ToolKind: TypeAlias = Literal['function', 'output', 'external', 'unapproved', 'mcp']
 
+class ToolValidationError(Exception):
+    """Error raised when tool validation fails."""
+    pass
+
+
 @dataclass
 class ToolMetadata:
     """Universal metadata for all tools."""

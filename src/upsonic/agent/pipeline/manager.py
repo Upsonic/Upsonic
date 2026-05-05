@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from upsonic.tasks.tasks import Task
     from upsonic.models import Model
     from upsonic.agent.agent import Agent
-    from upsonic.tools.processor import ExternalExecutionPause, ConfirmationPause, UserInputPause
+    from upsonic.tools.hitl import ExternalExecutionPause, ConfirmationPause, UserInputPause
     from upsonic.run.events.events import AgentEvent
     from upsonic.agent.otel_manager import AgentOTelManager
 else:
@@ -404,7 +404,7 @@ class PipelineManager:
 
             except Exception as e:
                 from upsonic.exceptions import RunCancelledException
-                from upsonic.tools.processor import ExternalExecutionPause, ConfirmationPause, UserInputPause
+                from upsonic.tools.hitl import ExternalExecutionPause, ConfirmationPause, UserInputPause
                 
                 # Confirmation pause - return normally with paused status
                 if isinstance(e, ConfirmationPause):

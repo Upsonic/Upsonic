@@ -11,6 +11,7 @@ from upsonic.tools.config import tool
 
 if TYPE_CHECKING:
     from upsonic.tasks.tasks import Task
+    from upsonic.tools.registry import ToolRegistry
 
 
 class PlanStep(BaseModel):
@@ -374,6 +375,111 @@ class Orchestrator(Tool):
         
         # Propagate sub-agent usage to parent agent's run output
         self._propagate_sub_agent_usage(final_response)
-        
+
         return final_response.output if hasattr(final_response, 'output') else final_response
+
+
+class OrchestratorLifecycle:
+    """Manages the lifecycle of the ``plan_and_execute`` ``Orchestrator``.
+
+    Owns ``Orchestrator`` create / update / discard around tool
+    registration and removal. Reads ``wrapped_tools`` from a
+    ``ToolRegistry`` reference so that the orchestrator can be wired up
+    with a live reference to the manager's wrapped-tools dict.
+    """
+
+    def __init__(self, registry: "ToolRegistry") -> None:
+        self._registry = registry
+        self._orchestrator: Optional[Orchestrator] = None
+        self._current_task: Optional["Task"] = None
+
+    def get_orchestrator(self) -> Optional[Orchestrator]:
+        return self._orchestrator
+
+    def maybe_create(
+        self,
+        new_tools: Dict[str, Tool],
+        task: Optional["Task"],
+        agent_instance: Optional[Any],
+    ) -> None:
+        """Handle ``plan_and_execute`` orchestrator creation/update.
+
+        If ``plan_and_execute`` was newly registered and the agent has
+        ``enable_thinking_tool=True``, this creates or updates the
+        ``Orchestrator`` and rewires ``wrapped_tools['plan_and_execute']``
+        to the orchestrator's executor closure (overriding the regular
+        behavioral wrapper installed earlier).
+        """
+        self._current_task = task
+
+        wrapped_tools = self._registry.wrapped_tools
+
+        if 'plan_and_execute' in new_tools:
+            if agent_instance and agent_instance.enable_thinking_tool:
+                if self._orchestrator:
+                    self._orchestrator.wrapped_tools = wrapped_tools
+                    self._orchestrator.all_tools = {
+                        name: func
+                        for name, func in wrapped_tools.items()
+                        if name != 'plan_and_execute'
+                    }
+                    if task:
+                        self._orchestrator.task = task
+                        self._orchestrator.original_user_request = task.description
+                else:
+                    self._orchestrator = Orchestrator(
+                        agent_instance=agent_instance,
+                        task=task,
+                        wrapped_tools=wrapped_tools,
+                    )
+
+                orchestrator = self._orchestrator
+                assert orchestrator is not None  # mypy narrowing
+
+                async def orchestrator_executor(thought) -> Any:
+                    return await orchestrator.execute(thought)
+
+                wrapped_tools['plan_and_execute'] = orchestrator_executor
+            # else: keep regular behavioral wrapper installed earlier
+
+    def update_context(self, task: "Task") -> None:
+        """Refresh the existing orchestrator with a new task context.
+
+        Idempotent: if ``maybe_create`` already updated the orchestrator
+        in this call, this re-applies the same values (no-op effect).
+        """
+        if not self._orchestrator or not task:
+            return
+        self._orchestrator.task = task
+        self._orchestrator.original_user_request = task.description
+        wrapped_tools = self._registry.wrapped_tools
+        self._orchestrator.wrapped_tools = wrapped_tools
+        self._orchestrator.all_tools = {
+            name: func
+            for name, func in wrapped_tools.items()
+            if name != 'plan_and_execute'
+        }
+
+    def maybe_discard(self, removed_names: List[str]) -> None:
+        """Discard or refresh the orchestrator after tools were removed.
+
+        If ``plan_and_execute`` was removed, drop the orchestrator
+        entirely. Otherwise refresh its tool maps to reflect the new
+        registry state.
+        """
+        if not self._orchestrator:
+            return
+
+        if 'plan_and_execute' in removed_names:
+            self._orchestrator = None
+            return
+
+        wrapped_tools = self._registry.wrapped_tools
+        self._orchestrator.wrapped_tools = wrapped_tools
+        self._orchestrator.all_tools = {
+            name: func
+            for name, func in wrapped_tools.items()
+            if name != 'plan_and_execute'
+        }
+
     

@@ -641,7 +641,7 @@ async def test_mcp_handler_to_tools_tracking_with_prefix():
         debug=True
     )
     
-    processor = agent.tool_manager.processor
+    processor = agent.tool_manager.registry
     handler_id = id(handler)
     
     # Verify handler is tracked
@@ -671,7 +671,7 @@ async def test_cleanup_on_prefixed_handler_removal():
         debug=True
     )
     
-    processor = agent.tool_manager.processor
+    processor = agent.tool_manager.registry
     handler_id = id(handler)
     
     # Verify handler is tracked initially

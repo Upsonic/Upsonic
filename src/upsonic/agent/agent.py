@@ -68,7 +68,7 @@ from upsonic.run.base import RunStatus
 
 from upsonic._utils import now_utc
 from upsonic.utils.retry import retryable
-from upsonic.tools.processor import ExternalExecutionPause, ConfirmationPause, UserInputPause
+from upsonic.tools.hitl import ExternalExecutionPause, ConfirmationPause, UserInputPause
 from upsonic.run.cancel import register_run, cleanup_run, raise_if_cancelled, cancel_run as cancel_run_func, is_cancelled
 from upsonic.session.base import SessionType
 from upsonic.output import DEFAULT_OUTPUT_TOOL_NAME
@@ -1857,7 +1857,7 @@ class Agent(BaseAgent):
                 for registered_tools_dict in registered_tools_dicts:
                     if tool_def.name in registered_tools_dict:
                         target_manager = self.tool_manager
-                        if task is not None and task.tool_manager is not None and tool_def.name in (task.tool_manager.wrapped_tools or {}):
+                        if task is not None and task.tool_manager is not None and tool_def.name in (task.tool_manager.registry.wrapped_tools or {}):
                             target_manager = task.tool_manager
                         target_manager.remove_tools(
                             tools=[tool_def.name],
@@ -2165,11 +2165,11 @@ class Agent(BaseAgent):
         Raises:
             ValueError: If the tool is not found in any manager
         """
-        if tool_name in self.tool_manager.wrapped_tools:
+        if tool_name in self.tool_manager.registry.wrapped_tools:
             return self.tool_manager
         current_task = getattr(self, 'current_task', None)
         if current_task is not None and current_task.tool_manager is not None:
-            if tool_name in current_task.tool_manager.wrapped_tools:
+            if tool_name in current_task.tool_manager.registry.wrapped_tools:
                 return current_task.tool_manager
         raise ValueError(f"Tool '{tool_name}' not found in any ToolManager")
 
@@ -3015,11 +3015,11 @@ class Agent(BaseAgent):
         """
         from upsonic.tools.wrappers import AgentTool
         
-        registered_tool = self.tool_manager.processor.registered_tools.get(tool_name)
+        registered_tool = self.tool_manager.registry.registered_tools.get(tool_name)
         if registered_tool is None:
             current_task = getattr(self, 'current_task', None)
             if current_task is not None and current_task.tool_manager is not None:
-                registered_tool = current_task.tool_manager.processor.registered_tools.get(tool_name)
+                registered_tool = current_task.tool_manager.registry.registered_tools.get(tool_name)
         if registered_tool and isinstance(registered_tool, AgentTool):
             agent_tool_usage = registered_tool.drain_accumulated_usage()
             if agent_tool_usage is not None:
@@ -4904,7 +4904,7 @@ class Agent(BaseAgent):
         HITL pause exceptions are NOT caught — they propagate to the caller.
         """
         import asyncio
-        from upsonic.tools.processor import (
+        from upsonic.tools.hitl import (
             ExternalExecutionPause as _hitl_ExternalExecutionPause,
             ConfirmationPause as _hitl_ConfirmationPause,
             UserInputPause as _hitl_UserInputPause,
@@ -4915,7 +4915,7 @@ class Agent(BaseAgent):
         except ValueError:
             return f"Error: Tool '{tool_name}' not found in any ToolManager"
 
-        tool_obj = manager.processor.registered_tools.get(tool_name)
+        tool_obj = manager.registry.registered_tools.get(tool_name)
         if not tool_obj:
             return f"Error: Tool '{tool_name}' not registered"
 
@@ -4976,7 +4976,7 @@ class Agent(BaseAgent):
                     user_provided[field_dict["name"]] = field_dict["value"]
             merged_args.update(user_provided)
 
-        from upsonic.tools.processor import UserInputPause
+        from upsonic.tools.hitl import UserInputPause
         try:
             return await self._execute_hitl_tool_directly(te.tool_name, merged_args)
         except (UserInputPause, TypeError):

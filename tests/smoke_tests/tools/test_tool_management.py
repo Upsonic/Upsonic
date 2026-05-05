@@ -582,7 +582,7 @@ async def test_builtin_tools_not_in_tool_processor():
     agent = Agent(model=MODEL, name="Test Agent", debug=True)
     
     # Get initial count of registered tools in processor
-    initial_processor_count = len(agent.tool_manager.processor.registered_tools)
+    initial_processor_count = len(agent.tool_manager.registry.registered_tools)
     
     # Add builtin tools
     web_search = WebSearchTool()
@@ -590,7 +590,7 @@ async def test_builtin_tools_not_in_tool_processor():
     agent.add_tools([web_search, code_exec])
     
     # ToolProcessor should NOT have processed builtin tools
-    after_builtin_count = len(agent.tool_manager.processor.registered_tools)
+    after_builtin_count = len(agent.tool_manager.registry.registered_tools)
     assert after_builtin_count == initial_processor_count, \
         f"ToolProcessor should not process builtin tools. Before: {initial_processor_count}, After: {after_builtin_count}"
     
@@ -601,7 +601,7 @@ async def test_builtin_tools_not_in_tool_processor():
     agent.add_tools([add_numbers])
     
     # ToolProcessor SHOULD have processed regular tool
-    after_regular_count = len(agent.tool_manager.processor.registered_tools)
+    after_regular_count = len(agent.tool_manager.registry.registered_tools)
     assert after_regular_count == initial_processor_count + 1, \
         f"ToolProcessor should process regular tools. Before: {initial_processor_count}, After regular: {after_regular_count}"
     
@@ -678,7 +678,7 @@ async def test_agent_add_remove_mcp_handler():
         assert handler in agent.tools, "MCP handler should be in agent.tools"
         
         # Verify handler is tracked in tool processor
-        assert len(agent.tool_manager.processor.mcp_handlers) > 0, "MCP handler should be tracked in processor"
+        assert len(agent.tool_manager.registry.mcp_handlers) > 0, "MCP handler should be tracked in processor"
         
         # Remove ENTIRE handler by object (removes handler + ALL its tools)
         agent.remove_tools(handler)
@@ -1479,7 +1479,7 @@ async def test_toolkit_with_exclude_and_mixed_tools():
 async def test_toolkit_dedup_with_use_async():
     """Deduplication works correctly with use_async ToolKit."""
     agent = Agent(model=MODEL, name="Test Agent", debug=True)
-    processor = agent.tool_manager.processor
+    processor = agent.tool_manager.registry
 
     kit = AsyncMathToolKit(use_async=True)
     agent.add_tools(kit)
@@ -1498,24 +1498,24 @@ async def test_toolkit_dedup_with_use_async():
 async def test_toolkit_re_add_use_async_after_removal():
     """Remove and re-add a use_async ToolKit -- tracking is properly reset."""
     agent = Agent(model=MODEL, name="Test Agent", debug=True)
-    processor = agent.tool_manager.processor
+    processor = agent.tool_manager.registry
 
     kit = AsyncMathToolKit(use_async=True)
     agent.add_tools(kit)
 
     kit_id = id(kit)
-    assert kit_id in processor._raw_tool_ids
+    assert kit_id in processor.raw_object_ids
     assert kit_id in processor.class_instance_to_tools
 
     agent.remove_tools(kit)
-    assert kit_id not in processor._raw_tool_ids
+    assert kit_id not in processor.raw_object_ids
     assert kit_id not in processor.class_instance_to_tools
     assert len(agent.registered_agent_tools) == 0
 
     agent.add_tools(kit)
     assert "multiply_async" in agent.registered_agent_tools
     assert "divide_async" in agent.registered_agent_tools
-    assert kit_id in processor._raw_tool_ids
+    assert kit_id in processor.raw_object_ids
     assert kit_id in processor.class_instance_to_tools
 
 
@@ -1703,13 +1703,13 @@ async def test_deduplication_prevents_reprocessing():
     agent = Agent(model=MODEL, name="Test Agent", debug=True)
     
     # Get initial state
-    processor = agent.tool_manager.processor
-    initial_raw_ids_count = len(processor._raw_tool_ids)
+    processor = agent.tool_manager.registry
+    initial_raw_ids_count = len(processor.raw_object_ids)
     
     # Add tool first time
     agent.add_tools(add_numbers)
     assert "add_numbers" in agent.registered_agent_tools, "Tool should be registered"
-    first_raw_ids_count = len(processor._raw_tool_ids)
+    first_raw_ids_count = len(processor.raw_object_ids)
     assert first_raw_ids_count == initial_raw_ids_count + 1, "Raw tool ID should be tracked"
     
     # Get the registered tool object
@@ -1719,7 +1719,7 @@ async def test_deduplication_prevents_reprocessing():
     agent.add_tools(add_numbers)
     
     # Should not change anything (deduplication)
-    assert len(processor._raw_tool_ids) == first_raw_ids_count, "Raw tool ID count should not change"
+    assert len(processor.raw_object_ids) == first_raw_ids_count, "Raw tool ID count should not change"
     assert len(agent.registered_agent_tools) == 1, "Should still have exactly 1 tool"
     
     # Same tool object should be used (not re-processed)
@@ -1731,7 +1731,7 @@ async def test_deduplication_prevents_reprocessing():
 async def test_toolkit_deduplication_no_duplicate_tracking():
     """Test that registering the same ToolKit twice doesn't create duplicate tracking entries."""
     agent = Agent(model=MODEL, name="Test Agent", debug=True)
-    processor = agent.tool_manager.processor
+    processor = agent.tool_manager.registry
     
     # Create and add ToolKit
     math_kit = MathToolKit()
@@ -1758,7 +1758,7 @@ async def test_toolkit_deduplication_no_duplicate_tracking():
 async def test_class_instance_to_tools_cleanup_on_individual_removal():
     """Test that class_instance_to_tools is properly cleaned up when removing individual tools."""
     agent = Agent(model=MODEL, name="Test Agent", debug=True)
-    processor = agent.tool_manager.processor
+    processor = agent.tool_manager.registry
     
     # Add ToolKit
     math_kit = MathToolKit()
@@ -1788,49 +1788,49 @@ async def test_class_instance_to_tools_cleanup_on_individual_removal():
 async def test_raw_tool_ids_cleanup_on_removal():
     """Test that _raw_tool_ids is properly cleaned up when tools are removed."""
     agent = Agent(model=MODEL, name="Test Agent", debug=True)
-    processor = agent.tool_manager.processor
+    processor = agent.tool_manager.registry
     
     # Track initial state
-    initial_count = len(processor._raw_tool_ids)
+    initial_count = len(processor.raw_object_ids)
     
     # Add ToolKit
     math_kit = MathToolKit()
     agent.add_tools(math_kit)
     
     kit_id = id(math_kit)
-    assert kit_id in processor._raw_tool_ids, "ToolKit raw ID should be tracked"
+    assert kit_id in processor.raw_object_ids, "ToolKit raw ID should be tracked"
     
     # Remove all tools from ToolKit by removing individually
     agent.remove_tools("subtract")
     agent.remove_tools("divide")
     
     # Raw ID should be cleaned up when all tools are gone
-    assert kit_id not in processor._raw_tool_ids, "ToolKit raw ID should be cleaned up"
-    assert len(processor._raw_tool_ids) == initial_count, "Should return to initial raw IDs count"
+    assert kit_id not in processor.raw_object_ids, "ToolKit raw ID should be cleaned up"
+    assert len(processor.raw_object_ids) == initial_count, "Should return to initial raw IDs count"
 
 
 @pytest.mark.asyncio
 async def test_raw_tool_ids_cleanup_on_object_removal():
     """Test that _raw_tool_ids is properly cleaned up when removing by object."""
     agent = Agent(model=MODEL, name="Test Agent", debug=True)
-    processor = agent.tool_manager.processor
+    processor = agent.tool_manager.registry
     
     # Track initial state
-    initial_count = len(processor._raw_tool_ids)
+    initial_count = len(processor.raw_object_ids)
     
     # Add ToolKit
     math_kit = MathToolKit()
     agent.add_tools(math_kit)
     
     kit_id = id(math_kit)
-    assert kit_id in processor._raw_tool_ids, "ToolKit raw ID should be tracked"
+    assert kit_id in processor.raw_object_ids, "ToolKit raw ID should be tracked"
     
     # Remove entire ToolKit by object
     agent.remove_tools(math_kit)
     
     # Raw ID should be cleaned up
-    assert kit_id not in processor._raw_tool_ids, "ToolKit raw ID should be cleaned up"
-    assert len(processor._raw_tool_ids) == initial_count, "Should return to initial raw IDs count"
+    assert kit_id not in processor.raw_object_ids, "ToolKit raw ID should be cleaned up"
+    assert len(processor.raw_object_ids) == initial_count, "Should return to initial raw IDs count"
 
 
 @pytest.mark.asyncio
@@ -1840,7 +1840,7 @@ async def test_mcp_handlers_list_cleanup_on_individual_removal():
         from upsonic.tools.mcp import MCPHandler
         
         agent = Agent(model=MODEL, name="Test Agent", debug=True)
-        processor = agent.tool_manager.processor
+        processor = agent.tool_manager.registry
         
         # Create MCP handler
         handler = MCPHandler(
@@ -1879,12 +1879,12 @@ async def test_mcp_handlers_list_cleanup_on_individual_removal():
 async def test_function_tool_deduplication():
     """Test that registering the same function tool twice doesn't create duplicates."""
     agent = Agent(model=MODEL, name="Test Agent", debug=True)
-    processor = agent.tool_manager.processor
+    processor = agent.tool_manager.registry
     
     # Add function tool
     agent.add_tools(add_numbers)
     initial_count = len(agent.registered_agent_tools)
-    initial_raw_count = len(processor._raw_tool_ids)
+    initial_raw_count = len(processor.raw_object_ids)
     
     # Add same function again multiple times
     agent.add_tools(add_numbers)
@@ -1893,7 +1893,7 @@ async def test_function_tool_deduplication():
     
     # Should still have only 1 tool
     assert len(agent.registered_agent_tools) == initial_count, "Should have same number of tools"
-    assert len(processor._raw_tool_ids) == initial_raw_count, "Raw IDs should not increase"
+    assert len(processor.raw_object_ids) == initial_raw_count, "Raw IDs should not increase"
     assert "add_numbers" in agent.registered_agent_tools, "add_numbers should be registered"
 
 
@@ -1901,13 +1901,13 @@ async def test_function_tool_deduplication():
 async def test_re_add_after_removal():
     """Test that removing and re-adding a tool works correctly."""
     agent = Agent(model=MODEL, name="Test Agent", debug=True)
-    processor = agent.tool_manager.processor
+    processor = agent.tool_manager.registry
     
     # Add tool
     agent.add_tools(add_numbers)
     assert "add_numbers" in agent.registered_agent_tools, "Tool should be registered"
     func_id = id(add_numbers)
-    assert func_id in processor._raw_tool_ids, "Raw ID should be tracked"
+    assert func_id in processor.raw_object_ids, "Raw ID should be tracked"
     
     # Remove tool
     agent.remove_tools("add_numbers")
@@ -1933,7 +1933,7 @@ async def test_re_add_after_removal():
 async def test_toolkit_re_add_after_removal():
     """Test that removing and re-adding a ToolKit works correctly."""
     agent = Agent(model=MODEL, name="Test Agent", debug=True)
-    processor = agent.tool_manager.processor
+    processor = agent.tool_manager.registry
     
     # Add ToolKit
     math_kit = MathToolKit()
@@ -1942,21 +1942,21 @@ async def test_toolkit_re_add_after_removal():
     assert "divide" in agent.registered_agent_tools, "Tool should be registered"
     
     kit_id = id(math_kit)
-    assert kit_id in processor._raw_tool_ids, "Raw ID should be tracked"
+    assert kit_id in processor.raw_object_ids, "Raw ID should be tracked"
     assert kit_id in processor.class_instance_to_tools, "Class instance should be tracked"
     
     # Remove entire ToolKit
     agent.remove_tools(math_kit)
     assert "subtract" not in agent.registered_agent_tools, "Tool should be removed"
     assert "divide" not in agent.registered_agent_tools, "Tool should be removed"
-    assert kit_id not in processor._raw_tool_ids, "Raw ID should be cleaned up"
+    assert kit_id not in processor.raw_object_ids, "Raw ID should be cleaned up"
     assert kit_id not in processor.class_instance_to_tools, "Class instance tracking should be cleaned up"
     
     # Re-add same ToolKit (should work since tracking was cleaned up)
     agent.add_tools(math_kit)
     assert "subtract" in agent.registered_agent_tools, "Tool should be re-registered"
     assert "divide" in agent.registered_agent_tools, "Tool should be re-registered"
-    assert kit_id in processor._raw_tool_ids, "Raw ID should be tracked again"
+    assert kit_id in processor.raw_object_ids, "Raw ID should be tracked again"
     assert kit_id in processor.class_instance_to_tools, "Class instance should be tracked again"
 
 
@@ -1987,12 +1987,12 @@ async def test_mixed_deduplication():
 async def test_processor_tracking_consistency():
     """Test that processor tracking dictionaries stay consistent through operations."""
     agent = Agent(model=MODEL, name="Test Agent", debug=True)
-    processor = agent.tool_manager.processor
+    processor = agent.tool_manager.registry
     
     # Start clean
     assert len(processor.registered_tools) == 0
     assert len(processor.class_instance_to_tools) == 0
-    assert len(processor._raw_tool_ids) == 0
+    assert len(processor.raw_object_ids) == 0
     
     # Add ToolKit
     math_kit = MathToolKit()
@@ -2004,7 +2004,7 @@ async def test_processor_tracking_consistency():
     assert len(processor.registered_tools) == 2
     assert kit_id in processor.class_instance_to_tools
     assert len(processor.class_instance_to_tools[kit_id]) == 2
-    assert kit_id in processor._raw_tool_ids
+    assert kit_id in processor.raw_object_ids
     
     # Remove one tool
     agent.remove_tools("subtract")
@@ -2013,7 +2013,7 @@ async def test_processor_tracking_consistency():
     assert len(processor.registered_tools) == 1
     assert kit_id in processor.class_instance_to_tools
     assert len(processor.class_instance_to_tools[kit_id]) == 1
-    assert kit_id in processor._raw_tool_ids  # Still tracked (has remaining tools)
+    assert kit_id in processor.raw_object_ids  # Still tracked (has remaining tools)
     
     # Remove last tool
     agent.remove_tools("divide")
@@ -2021,7 +2021,7 @@ async def test_processor_tracking_consistency():
     # Verify complete cleanup
     assert len(processor.registered_tools) == 0
     assert kit_id not in processor.class_instance_to_tools
-    assert kit_id not in processor._raw_tool_ids
+    assert kit_id not in processor.raw_object_ids
     
     # Verify agent state
     assert len(agent.registered_agent_tools) == 0
@@ -2554,7 +2554,7 @@ async def test_mcp_handler_processor_tracking_with_prefix():
         from upsonic.tools.mcp import MCPHandler
         
         agent = Agent(model=MODEL, name="Test Agent", debug=True)
-        processor = agent.tool_manager.processor
+        processor = agent.tool_manager.registry
         
         # Create MCP handler with prefix
         handler = MCPHandler(
@@ -2896,7 +2896,7 @@ async def test_task_builtin_tools_not_in_tool_processor():
 
     agent._setup_task_tools(task)
 
-    processor = task.tool_manager.processor
+    processor = task.tool_manager.registry
     processor_count = len(processor.registered_tools)
 
     assert "add_numbers" in processor.registered_tools
@@ -2923,21 +2923,21 @@ async def test_task_tool_manager_attributes_full():
     assert "add_numbers" in tool_names
     assert "multiply_numbers" in tool_names
 
-    assert "add_numbers" in task.tool_manager.wrapped_tools
-    assert "multiply_numbers" in task.tool_manager.wrapped_tools
-    assert "add_numbers" in task.tool_manager.processor.registered_tools
-    assert "multiply_numbers" in task.tool_manager.processor.registered_tools
+    assert "add_numbers" in task.tool_manager.registry.wrapped_tools
+    assert "multiply_numbers" in task.tool_manager.registry.wrapped_tools
+    assert "add_numbers" in task.tool_manager.registry.registered_tools
+    assert "multiply_numbers" in task.tool_manager.registry.registered_tools
 
     task.remove_tools("add_numbers")
 
     tool_defs_after = task.tool_manager.get_tool_definitions()
     tool_names_after = [t.name for t in tool_defs_after]
     assert "add_numbers" not in tool_names_after
-    assert "add_numbers" not in task.tool_manager.wrapped_tools
-    assert "add_numbers" not in task.tool_manager.processor.registered_tools
+    assert "add_numbers" not in task.tool_manager.registry.wrapped_tools
+    assert "add_numbers" not in task.tool_manager.registry.registered_tools
 
     assert "multiply_numbers" in tool_names_after
-    assert "multiply_numbers" in task.tool_manager.wrapped_tools
+    assert "multiply_numbers" in task.tool_manager.registry.wrapped_tools
 
 
 @pytest.mark.asyncio
@@ -3069,7 +3069,7 @@ async def test_task_toolkit_deduplication_no_duplicate_tracking():
     task = Task(description="test", tools=[math_kit])
     agent._setup_task_tools(task)
 
-    processor = task.tool_manager.processor
+    processor = task.tool_manager.registry
     kit_id = id(math_kit)
     assert kit_id in processor.class_instance_to_tools
     first_tracking = list(processor.class_instance_to_tools[kit_id])
@@ -3087,7 +3087,7 @@ async def test_task_class_instance_to_tools_cleanup_on_individual_removal():
     task = Task(description="test", tools=[math_kit])
     agent._setup_task_tools(task)
 
-    processor = task.tool_manager.processor
+    processor = task.tool_manager.registry
     kit_id = id(math_kit)
     assert kit_id in processor.class_instance_to_tools
     assert len(processor.class_instance_to_tools[kit_id]) == 2
@@ -3113,14 +3113,14 @@ async def test_task_raw_tool_ids_cleanup_on_removal():
     task = Task(description="test", tools=[math_kit])
     agent._setup_task_tools(task)
 
-    processor = task.tool_manager.processor
+    processor = task.tool_manager.registry
     kit_id = id(math_kit)
-    assert kit_id in processor._raw_tool_ids
+    assert kit_id in processor.raw_object_ids
 
     task.remove_tools("subtract")
     task.remove_tools("divide")
 
-    assert kit_id not in processor._raw_tool_ids
+    assert kit_id not in processor.raw_object_ids
 
 
 @pytest.mark.asyncio
@@ -3132,13 +3132,13 @@ async def test_task_raw_tool_ids_cleanup_on_object_removal():
     task = Task(description="test", tools=[math_kit])
     agent._setup_task_tools(task)
 
-    processor = task.tool_manager.processor
+    processor = task.tool_manager.registry
     kit_id = id(math_kit)
-    assert kit_id in processor._raw_tool_ids
+    assert kit_id in processor.raw_object_ids
 
     task.remove_tools(math_kit)
 
-    assert kit_id not in processor._raw_tool_ids
+    assert kit_id not in processor.raw_object_ids
 
 
 @pytest.mark.asyncio
@@ -3164,19 +3164,19 @@ async def test_task_toolkit_re_add_after_removal():
     task = Task(description="test", tools=[math_kit])
     agent._setup_task_tools(task)
 
-    processor = task.tool_manager.processor
+    processor = task.tool_manager.registry
     kit_id = id(math_kit)
 
     assert "subtract" in task.registered_task_tools
     assert "divide" in task.registered_task_tools
-    assert kit_id in processor._raw_tool_ids
+    assert kit_id in processor.raw_object_ids
     assert kit_id in processor.class_instance_to_tools
 
     task.remove_tools(math_kit)
 
     assert "subtract" not in task.registered_task_tools
     assert "divide" not in task.registered_task_tools
-    assert kit_id not in processor._raw_tool_ids
+    assert kit_id not in processor.raw_object_ids
     assert kit_id not in processor.class_instance_to_tools
 
     newly_registered = task.tool_manager.register_tools(tools=[math_kit])
@@ -3184,7 +3184,7 @@ async def test_task_toolkit_re_add_after_removal():
 
     assert "subtract" in task.registered_task_tools
     assert "divide" in task.registered_task_tools
-    assert kit_id in processor._raw_tool_ids
+    assert kit_id in processor.raw_object_ids
     assert kit_id in processor.class_instance_to_tools
 
 
@@ -3217,26 +3217,26 @@ async def test_task_processor_tracking_consistency():
     task = Task(description="test", tools=[math_kit])
     agent._setup_task_tools(task)
 
-    processor = task.tool_manager.processor
+    processor = task.tool_manager.registry
     kit_id = id(math_kit)
 
     assert len(processor.registered_tools) == 2
     assert kit_id in processor.class_instance_to_tools
     assert len(processor.class_instance_to_tools[kit_id]) == 2
-    assert kit_id in processor._raw_tool_ids
+    assert kit_id in processor.raw_object_ids
 
     task.remove_tools("subtract")
 
     assert len(processor.registered_tools) == 1
     assert kit_id in processor.class_instance_to_tools
     assert len(processor.class_instance_to_tools[kit_id]) == 1
-    assert kit_id in processor._raw_tool_ids
+    assert kit_id in processor.raw_object_ids
 
     task.remove_tools("divide")
 
     assert len(processor.registered_tools) == 0
     assert kit_id not in processor.class_instance_to_tools
-    assert kit_id not in processor._raw_tool_ids
+    assert kit_id not in processor.raw_object_ids
     assert len(task.registered_task_tools) == 0
 
 
@@ -3254,7 +3254,7 @@ async def test_task_mcp_handlers_list_cleanup_on_individual_removal():
         task = Task(description="test", tools=[handler])
         agent._setup_task_tools(task)
 
-        processor = task.tool_manager.processor
+        processor = task.tool_manager.registry
         assert handler in processor.mcp_handlers
 
         handler_id = id(handler)

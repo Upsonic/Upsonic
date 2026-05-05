@@ -198,7 +198,7 @@ class UserControlFlowTools(ToolKit):
         Args:
             fields: List of field definitions the agent needs from the user.
         """
-        from upsonic.tools.processor import UserInputPause
+        from upsonic.tools.hitl import UserInputPause
 
         schema = _build_dynamic_user_input_schema(fields)
         raise UserInputPause(user_input_schema=schema)

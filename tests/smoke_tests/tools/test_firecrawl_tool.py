@@ -147,9 +147,8 @@ def _assert_extract_status(parsed: Dict[str, Any]) -> None:
 
 
 def _process_toolkit(toolkit: Any) -> None:
-    from upsonic.tools.processor import ToolProcessor
-    processor: ToolProcessor = ToolProcessor()
-    processor._process_toolkit(toolkit)
+    from upsonic.tools import ToolManager
+    ToolManager().register_tools([toolkit])
 
 
 # ──────────────────────────────────────────────────────────────────────
