@@ -889,30 +889,6 @@ class ChatHistoryLoadedEvent(AgentEvent):
 
 
 @dataclass(repr=False, kw_only=True)
-class CultureUpdateEvent(AgentEvent):
-    """
-    Event emitted when cultural knowledge is updated.
-
-    Attributes:
-        culture_enabled: Whether culture update is enabled
-        extraction_triggered: Whether extraction was triggered
-        knowledge_updated: Whether any knowledge was added/updated
-    """
-    
-    culture_enabled: bool = False
-    """Whether culture update is enabled for this agent."""
-    
-    extraction_triggered: bool = False
-    """Whether culture extraction was triggered."""
-    
-    knowledge_updated: bool = False
-    """Whether any cultural knowledge was added or updated."""
-    
-    event_kind: Literal['culture_update'] = 'culture_update'
-    """Event type identifier."""
-
-
-@dataclass(repr=False, kw_only=True)
 class ReliabilityEvent(AgentEvent):
     """
     Event emitted when reliability layer processing occurs.
@@ -1203,6 +1179,35 @@ class FinalOutputEvent(AgentEvent):
     """Event type identifier."""
 
 
+@dataclass(repr=False, kw_only=True)
+class FinalAnswerStartEvent(AgentEvent):
+    """
+    Prospective marker: every TextDeltaEvent emitted after this event belongs
+    to the final user-visible answer (text or structured-output tool args).
+
+    Emitted at most once per run, and ONLY prospectively. If the trigger
+    condition never fires (e.g., model disobeys the sentinel directive,
+    policy block, or no streaming entry-point), the event is not emitted; the
+    consumer falls back to the existing FinalOutputEvent for retrospective
+    "run is complete" signaling.
+
+    Triggered by one of three deterministic paths:
+        - 'sentinel'    — model called the framework-injected
+                          __final_answer_marker__ tool.
+        - 'cache_hit'   — task._cached_result fired; the entire upcoming
+                          text-delta stream is the final answer.
+        - 'output_tool' — model called the structured-output tool
+                          (DEFAULT_OUTPUT_TOOL_NAME); the upcoming
+                          tool-arg deltas are the structured final answer.
+    """
+
+    triggered_by: Literal['sentinel', 'cache_hit', 'output_tool'] = 'sentinel'
+    """Which trigger fired the marker."""
+
+    event_kind: Literal['final_answer_start'] = 'final_answer_start'
+    """Event type identifier."""
+
+
 class AgentRunEvent(str, Enum):
     """
     Enum of all agent run event kinds.
@@ -1229,7 +1234,6 @@ class AgentRunEvent(str, Enum):
     POLICY_FEEDBACK = "policy_feedback"
     LLM_PREPARED = "llm_prepared"
     MODEL_SELECTED = "model_selected"
-    VALIDATION = "validation"
     TOOLS_CONFIGURED = "tools_configured"
     MESSAGES_BUILT = "messages_built"
     MODEL_REQUEST_START = "model_request_start"
@@ -1239,7 +1243,6 @@ class AgentRunEvent(str, Enum):
     EXTERNAL_TOOL_PAUSE = "external_tool_pause"
     REFLECTION = "reflection"
     MEMORY_UPDATE = "memory_update"
-    CULTURE_UPDATE = "culture_update"
     RELIABILITY = "reliability"
     CACHE_STORED = "cache_stored"
     RUN_STARTED = "run_started"
@@ -1252,6 +1255,7 @@ class AgentRunEvent(str, Enum):
     THINKING_DELTA = "thinking_delta"
     TOOL_CALL_DELTA = "tool_call_delta"
     FINAL_OUTPUT = "final_output"
+    FINAL_ANSWER_START = "final_answer_start"
 
 
 
@@ -1270,50 +1274,8 @@ StepEvent = Annotated[
 # Step-specific events
 StepSpecificEvent = Annotated[
     AgentInitializedEvent |
-    MemoryPreparedEvent |
-    SystemPromptBuiltEvent |
-    ContextBuiltEvent |
-    UserInputBuiltEvent |
-    ChatHistoryLoadedEvent |
-    CacheCheckEvent |
-    CacheHitEvent |
-    CacheMissEvent |
-    PolicyCheckEvent |
-    ModelSelectedEvent |
-    ToolsConfiguredEvent |
-    MessagesBuiltEvent |
-    CultureUpdateEvent |
-    ModelRequestStartEvent |
-    ModelResponseEvent |
-    ToolCallEvent |
-    ToolResultEvent |
-    ExternalToolPauseEvent |
-    ReflectionEvent |
-    MemoryUpdateEvent |
-    ReliabilityEvent |
-    CacheStoredEvent |
-    RunCancelledEvent |
-    ExecutionCompleteEvent,
-    pydantic.Discriminator('event_kind')
-]
-
-# LLM streaming events (our wrappers)
-LLMStreamEvent = Annotated[
-    TextDeltaEvent |
-    TextCompleteEvent |
-    ThinkingDeltaEvent |
-    ToolCallDeltaEvent |
-    FinalOutputEvent,
-    pydantic.Discriminator('event_kind')
-]
-
-# All agent events combined
-AgentStreamEvent = Annotated[
-    PipelineStartEvent |
-    PipelineEndEvent |
-    StepStartEvent |
-    StepEndEvent |
-    AgentInitializedEvent |
+    StorageConnectionEvent |
+    LLMPreparedEvent |
     MemoryPreparedEvent |
     SystemPromptBuiltEvent |
     ContextBuiltEvent |
@@ -1336,7 +1298,53 @@ AgentStreamEvent = Annotated[
     MemoryUpdateEvent |
     ReliabilityEvent |
     CacheStoredEvent |
-    CultureUpdateEvent |
+    RunCancelledEvent |
+    ExecutionCompleteEvent,
+    pydantic.Discriminator('event_kind')
+]
+
+# LLM streaming events (our wrappers)
+LLMStreamEvent = Annotated[
+    TextDeltaEvent |
+    TextCompleteEvent |
+    ThinkingDeltaEvent |
+    ToolCallDeltaEvent |
+    FinalOutputEvent |
+    FinalAnswerStartEvent,
+    pydantic.Discriminator('event_kind')
+]
+
+# All agent events combined
+AgentStreamEvent = Annotated[
+    PipelineStartEvent |
+    PipelineEndEvent |
+    StepStartEvent |
+    StepEndEvent |
+    AgentInitializedEvent |
+    StorageConnectionEvent |
+    LLMPreparedEvent |
+    MemoryPreparedEvent |
+    SystemPromptBuiltEvent |
+    ContextBuiltEvent |
+    UserInputBuiltEvent |
+    ChatHistoryLoadedEvent |
+    CacheCheckEvent |
+    CacheHitEvent |
+    CacheMissEvent |
+    PolicyCheckEvent |
+    PolicyFeedbackEvent |
+    ModelSelectedEvent |
+    ToolsConfiguredEvent |
+    MessagesBuiltEvent |
+    ModelRequestStartEvent |
+    ModelResponseEvent |
+    ToolCallEvent |
+    ToolResultEvent |
+    ExternalToolPauseEvent |
+    ReflectionEvent |
+    MemoryUpdateEvent |
+    ReliabilityEvent |
+    CacheStoredEvent |
     RunStartedEvent |
     RunCompletedEvent |
     RunPausedEvent |
@@ -1346,7 +1354,8 @@ AgentStreamEvent = Annotated[
     TextCompleteEvent |
     ThinkingDeltaEvent |
     ToolCallDeltaEvent |
-    FinalOutputEvent,
+    FinalOutputEvent |
+    FinalAnswerStartEvent,
     pydantic.Discriminator('event_kind')
 ]
 
@@ -1492,7 +1501,6 @@ _EVENT_CLASS_REGISTRY: Dict[str, type] = {
     "ExternalToolPauseEvent": ExternalToolPauseEvent,
     "ReflectionEvent": ReflectionEvent,
     "MemoryUpdateEvent": MemoryUpdateEvent,
-    "CultureUpdateEvent": CultureUpdateEvent,
     "ReliabilityEvent": ReliabilityEvent,
     "CacheStoredEvent": CacheStoredEvent,
     "ExecutionCompleteEvent": ExecutionCompleteEvent,
@@ -1505,6 +1513,7 @@ _EVENT_CLASS_REGISTRY: Dict[str, type] = {
     "ThinkingDeltaEvent": ThinkingDeltaEvent,
     "ToolCallDeltaEvent": ToolCallDeltaEvent,
     "FinalOutputEvent": FinalOutputEvent,
+    "FinalAnswerStartEvent": FinalAnswerStartEvent,
     "StorageConnectionEvent": StorageConnectionEvent,
     "LLMPreparedEvent": LLMPreparedEvent,
 }

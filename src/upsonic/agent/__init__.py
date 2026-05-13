@@ -35,7 +35,6 @@ if TYPE_CHECKING:
         ExternalToolPauseEvent,
         ReflectionEvent,
         MemoryUpdateEvent,
-        CultureUpdateEvent,
         ReliabilityEvent,
         CacheStoredEvent,
         RunStartedEvent,
@@ -48,6 +47,7 @@ if TYPE_CHECKING:
         ThinkingDeltaEvent,
         ToolCallDeltaEvent,
         FinalOutputEvent,
+        FinalAnswerStartEvent,
         convert_llm_event_to_agent_event,
         AgentStreamEvent,
     )
@@ -102,7 +102,6 @@ def _get_event_classes():
         ExternalToolPauseEvent,
         ReflectionEvent,
         MemoryUpdateEvent,
-        CultureUpdateEvent,
         ReliabilityEvent,
         CacheStoredEvent,
         RunStartedEvent,
@@ -115,10 +114,11 @@ def _get_event_classes():
         ThinkingDeltaEvent,
         ToolCallDeltaEvent,
         FinalOutputEvent,
+        FinalAnswerStartEvent,
         convert_llm_event_to_agent_event,
         AgentStreamEvent,
     )
-    
+
     return {
         'AgentEvent': AgentEvent,
         'PipelineStartEvent': PipelineStartEvent,
@@ -141,7 +141,6 @@ def _get_event_classes():
         'ExternalToolPauseEvent': ExternalToolPauseEvent,
         'ReflectionEvent': ReflectionEvent,
         'MemoryUpdateEvent': MemoryUpdateEvent,
-        'CultureUpdateEvent': CultureUpdateEvent,
         'ReliabilityEvent': ReliabilityEvent,
         'CacheStoredEvent': CacheStoredEvent,
         'RunStartedEvent': RunStartedEvent,
@@ -154,6 +153,7 @@ def _get_event_classes():
         'ThinkingDeltaEvent': ThinkingDeltaEvent,
         'ToolCallDeltaEvent': ToolCallDeltaEvent,
         'FinalOutputEvent': FinalOutputEvent,
+        'FinalAnswerStartEvent': FinalAnswerStartEvent,
         'convert_llm_event_to_agent_event': convert_llm_event_to_agent_event,
         'AgentStreamEvent': AgentStreamEvent,
     }
@@ -219,7 +219,6 @@ __all__ = [
     'ExternalToolPauseEvent',
     'ReflectionEvent',
     'MemoryUpdateEvent',
-    'CultureUpdateEvent',
     'ReliabilityEvent',
     'CacheStoredEvent',
     'RunStartedEvent',
@@ -234,7 +233,8 @@ __all__ = [
     'ThinkingDeltaEvent',
     'ToolCallDeltaEvent',
     'FinalOutputEvent',
-    
+    'FinalAnswerStartEvent',
+
     # Helper function
     'convert_llm_event_to_agent_event',
     

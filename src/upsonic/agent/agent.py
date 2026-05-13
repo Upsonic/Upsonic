@@ -69,6 +69,11 @@ from upsonic.run.base import RunStatus
 from upsonic._utils import now_utc
 from upsonic.utils.retry import retryable
 from upsonic.tools.hitl import ExternalExecutionPause, ConfirmationPause, UserInputPause
+from upsonic.tools.framework_tools import (
+    FINAL_ANSWER_MARKER_TOOL_NAME,
+    FRAMEWORK_INJECTED_TOOL_NAMES,
+    is_count_exempt_tool,
+)
 from upsonic.run.cancel import register_run, cleanup_run, raise_if_cancelled, cancel_run as cancel_run_func, is_cancelled
 from upsonic.session.base import SessionType
 from upsonic.output import DEFAULT_OUTPUT_TOOL_NAME
@@ -2251,18 +2256,38 @@ class Agent(BaseAgent):
             tool_definitions = list(self.tool_manager.get_tool_definitions())
             if task is not None and task.tool_manager is not None:
                 tool_definitions.extend(task.tool_manager.get_tool_definitions())
-        
-        # Combine agent-level and task-level builtin tools
+
+        # Combine agent-level and task-level builtin tools (provider-side server
+        # tools — sent on a separate channel, but still user-attributable work
+        # that the skip-when-no-user-tools rule must count).
         agent_builtin_tools = getattr(self, 'agent_builtin_tools', [])
         task_builtin_tools = getattr(task, 'task_builtin_tools', [])
 
-        # Merge builtin tools, avoiding duplicates based on unique_id
         builtin_tools_dict = {}
         for tool in agent_builtin_tools:
             builtin_tools_dict[tool.unique_id] = tool
         for tool in task_builtin_tools:
             builtin_tools_dict[tool.unique_id] = tool
         builtin_tools = list(builtin_tools_dict.values())
+
+        # Conditional sentinel tool injection for stream_final_answer.
+        # Only when (a) the flag is active for this run AND (b) the agent has
+        # at least one user tool registered — function tools OR builtin server
+        # tools. The skip-when-no-user-tools rule (Scope §2.1 of the plan)
+        # avoids the extra round-trip for agents that have no tools to chain
+        # anyway.
+        if getattr(self, '_stream_final_answer_active', False):
+            user_tool_count = sum(
+                1 for td in tool_definitions
+                if td.name not in FRAMEWORK_INJECTED_TOOL_NAMES
+            )
+            # Builtin tools (WebSearchTool, etc.) are user-attributable too.
+            user_tool_count += len(builtin_tools)
+            if user_tool_count >= 1:
+                from upsonic.tools.final_answer_marker import (
+                    build_final_answer_marker_tool_definition,
+                )
+                tool_definitions.append(build_final_answer_marker_tool_definition())
         
         output_mode = 'text'
         output_object = None
@@ -2458,12 +2483,13 @@ class Agent(BaseAgent):
                     if hasattr(self, '_agent_run_output') and self._agent_run_output:
                         self._agent_run_output.add_tool_execution_time(tool_execution_time)
 
-                    self._tool_call_count += 1
-                    if hasattr(self, '_tool_metrics') and self._tool_metrics:
-                        self._tool_metrics.tool_call_count = self._tool_call_count
-                    if hasattr(self, '_agent_run_output') and self._agent_run_output is not None:
-                        self._agent_run_output.tool_call_count = self._tool_call_count
-                        self._agent_run_output.increment_tool_calls(1)
+                    if not is_count_exempt_tool(result.tool_name):
+                        self._tool_call_count += 1
+                        if hasattr(self, '_tool_metrics') and self._tool_metrics:
+                            self._tool_metrics.tool_call_count = self._tool_call_count
+                        if hasattr(self, '_agent_run_output') and self._agent_run_output is not None:
+                            self._agent_run_output.tool_call_count = self._tool_call_count
+                            self._agent_run_output.increment_tool_calls(1)
 
                     tool_return = ToolReturnPart(
                         tool_name=result.tool_name,
@@ -2694,12 +2720,17 @@ class Agent(BaseAgent):
                         all_paused_calls.extend(pause.paused_calls)
                 raise ExternalExecutionPause(paused_calls=all_paused_calls)
             
-            self._tool_call_count += len(parallel_calls)
-            if hasattr(self, '_tool_metrics') and self._tool_metrics:
-                self._tool_metrics.tool_call_count = self._tool_call_count
-            if hasattr(self, '_agent_run_output') and self._agent_run_output is not None:
-                self._agent_run_output.tool_call_count = self._tool_call_count
-                self._agent_run_output.increment_tool_calls(len(parallel_calls))
+            countable_parallel_calls = sum(
+                1 for tc in parallel_calls
+                if not is_count_exempt_tool(getattr(tc, 'tool_name', ''))
+            )
+            if countable_parallel_calls:
+                self._tool_call_count += countable_parallel_calls
+                if hasattr(self, '_tool_metrics') and self._tool_metrics:
+                    self._tool_metrics.tool_call_count = self._tool_call_count
+                if hasattr(self, '_agent_run_output') and self._agent_run_output is not None:
+                    self._agent_run_output.tool_call_count = self._tool_call_count
+                    self._agent_run_output.increment_tool_calls(countable_parallel_calls)
             
             results.extend(successful_results)
         
@@ -4346,12 +4377,13 @@ class Agent(BaseAgent):
         state: Optional["State"] = None,
         *,
         event: Optional[bool] = None,
+        stream_final_answer: bool = False,
     ) -> Iterator[Union[str, "AgentStreamEvent"]]:
         """
         Stream task execution synchronously - yields events/text as they arrive.
-        
+
         For async streaming, use `astream()` instead.
-        
+
         Args:
             task: Task to execute
             model: Override model for this execution
@@ -4360,16 +4392,29 @@ class Agent(BaseAgent):
             events: If True, yield AgentEvent objects. If False (default), yield text chunks.
             state: Graph execution state
             event: Deprecated, use 'events' instead.
-            
+            stream_final_answer: When True, injects a sentinel tool and emits
+                ``FinalAnswerStartEvent`` before the final-answer token stream.
+                See :meth:`astream` for full semantics. Default False.
+
+                v1 surface: ``bool``. Forward-compatible — may widen to
+                ``Union[bool, Literal[...]]`` in a future version; True/False
+                semantics will remain stable.
+
+                Note: post-stream mutating steps (``reliability_layer`` with
+                ``prevent_hallucination > 0``, ``agent_policy`` with mutating
+                actions) may rewrite the output AFTER streaming completes.
+                The marker reflects the raw model output; consumers needing
+                post-mutation truth should rely on ``FinalOutputEvent``.
+
         Yields:
             AgentEvent if events=True, str if events=False
-            
+
         Example:
             ```python
             # Stream text synchronously
             for text in agent.stream(task):
                 print(text, end='', flush=True)
-            
+
             # Stream events
             from upsonic.run.events import RunEvent
             for chunk in agent.stream(task, events=True):
@@ -4379,16 +4424,19 @@ class Agent(BaseAgent):
         """
         import queue
         import threading
-        
+
         if event is not None:
             events = event
-        
+
         result_queue: queue.Queue = queue.Queue()
         error_holder: List[Exception] = []
-        
+
         async def stream_to_queue():
             try:
-                async for item in self.astream(task, model, debug, retry, events, state):
+                async for item in self.astream(
+                    task, model, debug, retry, events, state,
+                    stream_final_answer=stream_final_answer,
+                ):
                     result_queue.put(item)
             except Exception as e:
                 error_holder.append(e)
@@ -4420,13 +4468,14 @@ class Agent(BaseAgent):
         state: Optional["State"] = None,
         *,
         event: Optional[bool] = None,
+        stream_final_answer: bool = False,
     ) -> AsyncIterator[Union[str, "AgentStreamEvent"]]:
         """
         Stream task execution asynchronously - yields events or text as they arrive.
-        
+
         Note: HITL (Human-in-the-Loop) features are not supported in streaming mode.
         Use do_async() for HITL functionality.
-        
+
         Args:
             task: Task to execute
             model: Override model for this execution
@@ -4435,32 +4484,60 @@ class Agent(BaseAgent):
             events: If True, yield AgentEvent objects. If False (default), yield text chunks.
             state: Graph execution state
             event: Deprecated, use 'events' instead.
-            
+            stream_final_answer: When True, injects a sentinel tool
+                (``__final_answer_marker__``) and a one-line system-prompt
+                directive, and emits ``FinalAnswerStartEvent`` before the
+                final-answer token stream. Default False — no behavioral
+                change.
+
+                v1 surface: ``bool``. Forward-compatible — may widen to
+                ``Union[bool, Literal[...]]`` in a future version; True/False
+                semantics will remain stable.
+
+                Note: when combined with a mutating post-stream step
+                (e.g. ``reliability_layer`` with ``prevent_hallucination > 0``,
+                or ``agent_policy`` actions that modify the response), the
+                marker reflects the RAW model output. Any post-stream
+                rewrite is reflected in ``FinalOutputEvent.output`` /
+                ``RunCompletedEvent.output_preview`` but NOT in the
+                already-streamed ``TextDeltaEvent`` sequence. Consumers
+                that need post-mutation truth should rely on
+                ``FinalOutputEvent`` rather than buffer the delta stream.
+
         Yields:
             AgentEvent if events=True, str if events=False
-            
+
         Example:
             ```python
             # Stream text
             async for text in agent.astream(task):
                 print(text, end='', flush=True)
-            
+
             # Stream events
             from upsonic.run.events import RunEvent
             async for evt in agent.astream(task, events=True):
                 if evt.event_kind == RunEvent.run_content:
                     print(evt.content, end='')
+
+            # Stream only the final answer (with prospective marker)
+            from upsonic.run.events import FinalAnswerStartEvent, TextDeltaEvent
+            printing = False
+            async for evt in agent.astream(task, events=True, stream_final_answer=True):
+                if isinstance(evt, FinalAnswerStartEvent):
+                    printing = True
+                elif isinstance(evt, TextDeltaEvent) and printing:
+                    print(evt.content, end='', flush=True)
             ```
         """
         if event is not None:
             events = event
-        
+
         from upsonic.agent.pipeline import PipelineManager
         from upsonic.utils.printing import warning_log
-        
+
         # Convert string to Task if needed
         task = self._convert_to_task(task)
-        
+
         # Validate task state (completed/problematic checks)
         # For streaming, we just return early instead of yielding error output
         validation_error = self._validate_task_for_new_run(task, is_resuming=False)
@@ -4479,6 +4556,15 @@ class Agent(BaseAgent):
         self._tool_call_count = 0
         self._tool_limit_reached = False
         self._last_built_system_prompt = None
+
+        # Per-run final-answer-streaming state.
+        # Both attributes are read by:
+        #   - SystemPromptManager.aprepare (directive injection)
+        #   - Agent._build_model_request_parameters (sentinel tool injection)
+        #   - StreamModelExecutionStep._stream_with_tool_calls (marker emit)
+        # Reset at run start; explicitly cleared in the `finally` below.
+        self._stream_final_answer_active = bool(stream_final_answer)
+        self._final_answer_marker_emitted = False
 
         run_id = str(uuid.uuid4())
         self.run_id = run_id
@@ -4564,7 +4650,12 @@ class Agent(BaseAgent):
             self._finalize_agent_usage(stream_print_flag)
             cleanup_run(run_id)
             self.run_id = None
-    
+            # Clear per-run final-answer-streaming state so a subsequent
+            # non-streaming do/do_async on the same Agent instance does not
+            # see leaked flags.
+            self._stream_final_answer_active = False
+            self._final_answer_marker_emitted = False
+
     def _extract_text_from_stream_event(self, event: Any) -> Optional[str]:
         """Extract text content from a streaming event.
         
@@ -4887,8 +4978,9 @@ class Agent(BaseAgent):
                     timestamp=now_utc(),
                 ))
                 output.tools.append(te)
-                self._tool_call_count += 1
-                output.increment_tool_calls(1)
+                if not is_count_exempt_tool(te.tool_name):
+                    self._tool_call_count += 1
+                    output.increment_tool_calls(1)
 
         if tool_return_parts:
             output.chat_history.append(ModelRequest(parts=tool_return_parts))

@@ -15,9 +15,9 @@ from upsonic.run.events.events import (
     CacheStoredEvent,
     ChatHistoryLoadedEvent,
     ContextBuiltEvent,
-    CultureUpdateEvent,
     ExecutionCompleteEvent,
     ExternalToolPauseEvent,
+    FinalAnswerStartEvent,
     FinalOutputEvent,
     LLMPreparedEvent,
     MemoryPreparedEvent,
@@ -1193,6 +1193,28 @@ def yield_final_output_event(
     )
 
 
+async def ayield_final_answer_start_event(
+    run_id: str,
+    triggered_by: Literal['sentinel', 'cache_hit', 'output_tool'] = 'sentinel',
+) -> AsyncIterator[FinalAnswerStartEvent]:
+    """Yield a FinalAnswerStartEvent (async)."""
+    yield FinalAnswerStartEvent(
+        run_id=run_id,
+        triggered_by=triggered_by,
+    )
+
+
+def yield_final_answer_start_event(
+    run_id: str,
+    triggered_by: Literal['sentinel', 'cache_hit', 'output_tool'] = 'sentinel',
+) -> Iterator[FinalAnswerStartEvent]:
+    """Yield a FinalAnswerStartEvent (sync)."""
+    yield FinalAnswerStartEvent(
+        run_id=run_id,
+        triggered_by=triggered_by,
+    )
+
+
 __all__ = [
     # Pipeline events
     "ayield_pipeline_start_event",
@@ -1289,6 +1311,8 @@ __all__ = [
     "yield_execution_complete_event",
     "ayield_final_output_event",
     "yield_final_output_event",
+    "ayield_final_answer_start_event",
+    "yield_final_answer_start_event",
 ]
 
 

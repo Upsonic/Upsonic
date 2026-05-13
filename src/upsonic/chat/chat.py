@@ -721,11 +721,11 @@ class Chat:
         # If events=True, force stream=True
         if events and not stream:
             stream = True
-        
+
         # return_run_output only applies to blocking (non-streaming) invocation
         if stream and return_run_output:
             return_run_output = False
-        
+
         # State and concurrency checks
         if not self._session_manager.can_accept_invocation():
             if self._session_manager.state == SessionState.ERROR:
@@ -1002,18 +1002,18 @@ class Chat:
                 print(event)
         """
         task = self._normalize_input(input_data, context)
-        
+
         self._session_manager.start_invocation()
         self._transition_state(SessionState.STREAMING)
-        
+
         response_start_time = self._session_manager.start_response_timer()
-        
+
         if events:
             return self._invoke_streaming_events(task, response_start_time, **kwargs)
         else:
             return self._invoke_streaming(task, response_start_time, **kwargs)
-    
-    
+
+
     async def close(self) -> None:
         """Close the chat session and cleanup resources."""
         await self._session_manager.aclose_session()
