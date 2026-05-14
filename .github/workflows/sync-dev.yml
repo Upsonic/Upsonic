@@ -1,0 +1,41 @@
+name: Sync dev with master
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-dev
+  cancel-in-progress: false
+
+jobs:
+  sync-dev:
+    if: github.event_name != 'release' || github.event.release.target_commitish == 'master'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+
+      - name: Configure git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch branches
+        run: |
+          git fetch origin master
+          git fetch origin dev
+
+      - name: Merge master into dev
+        run: |
+          git checkout dev
+          git merge origin/master --no-edit
+
+      - name: Push updated dev
+        run: git push origin dev

@@ -1,54 +1,105 @@
-name: "Test Publish"
+name: Test Publish
 
 on:
+  push:
+    branches:
+      - dev
   workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to publish from
+        required: true
+        type: choice
+        options:
+          - dev
+          - master
 
 jobs:
-
   generate_version:
-    name: "Generate Random Version"
+    name: Generate Random Version
+    # Pushes from sync-dev.yml use github-actions[bot]; skip test publish for those.
+    if: github.event_name != 'push' || github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     outputs:
       random_version: ${{ steps.set_version.outputs.random_version }}
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: >-
+            ${{ github.event_name == 'workflow_dispatch' && inputs.branch ||
+            github.ref_name }}
 
-      - name: Install Poetry
-        run: pip install poetry>=2.0.0
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "latest"
 
       - name: Generate Randomized Alpha Version
         id: set_version
         run: |
-          BASE_VERSION=$(poetry version | awk '{print $2}')
+          BASE_VERSION=$(uv version --short)
           RANDOM_VERSION="${BASE_VERSION}a$(date +%s)"
           echo "Generated Version: $RANDOM_VERSION"
-          echo "random_version=$RANDOM_VERSION" >> $GITHUB_OUTPUT
+          echo "random_version=$RANDOM_VERSION" >> "$GITHUB_OUTPUT"
 
   pypi:
-    name: "Build and Publish Test Release"
+    name: Build and Publish Test Release
     needs: generate_version
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv and Dependencies
-        uses: astral-sh/setup-uv@v3
+      - name: Check out the repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
+          ref: >-
+            ${{ github.event_name == 'workflow_dispatch' && inputs.branch ||
+            github.ref_name }}
 
-      - name: dev
-        run: pip install poetry>=2.0.0
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "latest"
 
       - name: Set Version from generate_version
-        run: |
-          poetry version ${{ needs.generate_version.outputs.random_version }}
+        run: uv version "${{ needs.generate_version.outputs.random_version }}"
 
       - name: Build
         run: uv build
 
       - name: Publish to TestPyPI
-        run: uv publish -t ${{ secrets.THE_PYPI_TOKEN }}
+        run: uv publish -t "${{ secrets.THE_PYPI_TOKEN }}"
 
+  notify-slack:
+    name: Slack notification
+    needs: [generate_version, pypi]
+    if: always() && needs.generate_version.result != 'skipped'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Slack (published)
+        if: needs.pypi.result == 'success'
+        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: ":test_tube: *Upsonic* test publish `${{ needs.generate_version.outputs.random_version }}` to TestPyPI\nGithub: <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|workflow run>"
+
+      - name: Notify Slack (failed)
+        if: needs.pypi.result == 'failure' || needs.generate_version.result == 'failure'
+        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: ":x: *Upsonic* test publish failed\nGithub: <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|workflow run>"
