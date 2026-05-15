@@ -1,14 +1,33 @@
-import warnings
 import importlib
 import os
+import warnings
+from importlib.metadata import PackageNotFoundError, version as get_installed_version
 from pathlib import Path
 from typing import Any
-
-__version__ = "0.1.0"
 
 from dotenv import load_dotenv
 
 from upsonic.utils.logging_config import *
+
+
+def _resolve_package_version() -> str:
+    try:
+        return get_installed_version("upsonic")
+    except PackageNotFoundError:
+        pyproject_path = Path(__file__).resolve().parents[2] / "pyproject.toml"
+        if pyproject_path.exists():
+            import re
+            match = re.search(
+                r'^version\\s*=\\s*"(?P<version>[^"]+)"',
+                pyproject_path.read_text(),
+                re.MULTILINE,
+            )
+            if match:
+                return match.group("version")
+        return "0.0.0"
+
+
+__version__ = _resolve_package_version()
 
 warnings.filterwarnings("ignore", category=ResourceWarning)
 warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
@@ -26,7 +45,7 @@ else:
     # Fallback: search from current directory upwards (default behavior)
     load_dotenv(override=False)
 
-def _lazy_import(module_name: str, class_name: str = None):
+def _lazy_import(module_name: str, class_name: str | None = None):
     """Lazy import function to defer heavy imports until actually needed."""
     def _import():
         if module_name not in _lazy_imports:
