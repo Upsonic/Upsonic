@@ -17,11 +17,180 @@ from pathlib import Path
 
 from upsonic import Agent, Chat, Task
 from upsonic.chat import SessionState, ChatMessage, SessionMetrics, ChatAttachment
+from upsonic.storage import InMemoryStorage, Memory
 
 # Get project root (4 levels up from this test file)
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 
 pytestmark = pytest.mark.timeout(120)
+
+
+# ---------------------------------------------------------------------------
+# Regression: ``Chat`` follows an **agent-first** policy.
+#
+# Resolution order (highest → lowest):
+#   1. ``agent.memory`` (and its ``storage``)   — kept as-is, Chat does NOT
+#                                                  override it; ``storage=``
+#                                                  kwarg on Chat is ignored.
+#   2. ``Chat(storage=…)`` kwarg                — only when the agent has
+#                                                  no memory.
+#   3. New ``InMemoryStorage()``                — fallback, wired to agent.
+#
+# All checks below are synchronous — no LLM call required.
+# Bare ``Agent(...)`` has ``memory=None`` unless memory is supplied, so we
+# drive the regression through an explicitly-wired ``Memory``. The
+# ``AutonomousAgent`` path (which seeds a default storage) is covered under
+# ``tests/smoke_tests/autonomous_agent/test_autonomous_agent.py``.
+# ---------------------------------------------------------------------------
+
+def test_chat_reuses_agent_memory_and_storage():
+    """Agent has Memory ⇒ Chat reuses both the Memory *and* the storage."""
+    shared = InMemoryStorage()
+    # Build Memory with matching ids so no alignment warning is triggered.
+    agent_memory = Memory(storage=shared, session_id="reuse-default", user_id="u")
+    agent = Agent(
+        model="openai/gpt-4o-mini",
+        name="Storage Reuse Agent",
+        memory=agent_memory,
+    )
+
+    chat = Chat(session_id="reuse-default", user_id="u", agent=agent)
+
+    # Storage is shared
+    assert chat._storage is shared
+    # Memory is the *same* instance (Chat does not build a new one)
+    assert chat._memory is agent_memory
+    assert agent.memory is agent_memory
+    assert agent.memory.storage is shared
+
+
+def test_chat_creates_storage_when_agent_has_none():
+    """No memory on the agent ⇒ Chat creates one and wires it into the agent."""
+    agent = Agent(model="openai/gpt-4o-mini", name="Storage Reuse Agent")
+    assert agent.memory is None
+
+    chat = Chat(session_id="reuse-fresh", user_id="u", agent=agent)
+
+    assert isinstance(chat._storage, InMemoryStorage)
+    # Chat builds a Memory and attaches it to the agent.
+    assert agent.memory is not None
+    assert agent.memory is chat._memory
+    assert agent.memory.storage is chat._storage
+
+
+def test_chat_explicit_storage_used_only_when_agent_has_no_memory():
+    """No agent memory + explicit Chat storage ⇒ Chat's storage is used."""
+    chat_storage = InMemoryStorage()
+    agent = Agent(model="openai/gpt-4o-mini", name="Storage Reuse Agent")
+    assert agent.memory is None
+
+    chat = Chat(
+        session_id="explicit-used",
+        user_id="u",
+        agent=agent,
+        storage=chat_storage,
+    )
+
+    assert chat._storage is chat_storage
+    assert agent.memory.storage is chat_storage
+
+
+def test_agent_storage_wins_over_chat_explicit_storage():
+    """Agent has Memory + Chat also passes ``storage=`` ⇒ agent wins.
+
+    Under the agent-first policy, ``Chat(storage=…)`` is silently ignored
+    when the agent already has a memory wrapper.
+    """
+    agent_storage = InMemoryStorage()
+    agent_memory = Memory(storage=agent_storage, session_id="agent-wins", user_id="u")
+    agent = Agent(
+        model="openai/gpt-4o-mini",
+        name="Storage Reuse Agent",
+        memory=agent_memory,
+    )
+    rejected_storage = InMemoryStorage()
+
+    chat = Chat(
+        session_id="agent-wins",
+        user_id="u",
+        agent=agent,
+        storage=rejected_storage,   # ← agent already has memory → ignored
+    )
+
+    assert chat._storage is agent_storage
+    assert chat._storage is not rejected_storage
+    assert chat._memory is agent_memory
+    assert agent.memory is agent_memory
+
+
+def test_chat_aligns_session_id_with_agent_memory():
+    """Chat session_id mismatched with agent.memory ⇒ agent wins + UserWarning."""
+    import pytest
+
+    agent_memory = Memory(
+        storage=InMemoryStorage(),
+        session_id="agent-session",
+        user_id="u",
+    )
+    agent = Agent(
+        model="openai/gpt-4o-mini",
+        name="Align Agent",
+        memory=agent_memory,
+    )
+
+    with pytest.warns(UserWarning, match=r"session_id.*overridden by agent\.memory"):
+        chat = Chat(session_id="chat-session", user_id="u", agent=agent)
+
+    # Chat's label is realigned to the agent's memory.
+    assert chat.session_id == "agent-session"
+    assert chat._memory is agent_memory
+    # The SessionManager must also key against the aligned id.
+    assert chat._session_manager.session_id == "agent-session"
+
+
+def test_chat_aligns_user_id_with_agent_memory():
+    """Chat user_id mismatched with agent.memory ⇒ agent wins + UserWarning."""
+    import pytest
+
+    agent_memory = Memory(
+        storage=InMemoryStorage(),
+        session_id="s",
+        user_id="agent-user",
+    )
+    agent = Agent(
+        model="openai/gpt-4o-mini",
+        name="Align Agent",
+        memory=agent_memory,
+    )
+
+    with pytest.warns(UserWarning, match=r"user_id.*overridden by agent\.memory"):
+        chat = Chat(session_id="s", user_id="chat-user", agent=agent)
+
+    assert chat.user_id == "agent-user"
+    assert chat._session_manager.user_id == "agent-user"
+
+
+def test_chat_no_warning_when_ids_match_agent_memory():
+    """Matching ids ⇒ no warning, ids stay as-is."""
+    import warnings
+
+    agent_memory = Memory(
+        storage=InMemoryStorage(),
+        session_id="s-match",
+        user_id="u-match",
+    )
+    agent = Agent(
+        model="openai/gpt-4o-mini",
+        name="Match Agent",
+        memory=agent_memory,
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # any warning ⇒ failure
+        chat = Chat(session_id="s-match", user_id="u-match", agent=agent)
+
+    assert chat.session_id == "s-match"
+    assert chat.user_id == "u-match"
 
 
 @pytest.mark.asyncio

@@ -230,6 +230,145 @@ class TestAutonomousAgentInitialization:
 
 
 # ---------------------------------------------------------------------------
+# Test: Storage sharing with Chat
+# ---------------------------------------------------------------------------
+
+class TestAutonomousAgentChatStorageSharing:
+    """Regression for the **agent-first** storage/memory policy in ``Chat``.
+
+    Priority order:
+      1. ``agent.memory`` (and its ``storage``) — kept as-is, Chat does NOT
+         override it; ``storage=`` kwarg on Chat is ignored when the agent
+         already has memory.
+      2. ``Chat(storage=…)``                    — used only when the agent
+         has no memory.
+      3. New ``InMemoryStorage()``              — final fallback.
+    """
+
+    def test_chat_reuses_agent_default_memory_and_storage(self, temp_workspace):
+        """Default ``AutonomousAgent`` already has Memory ⇒ Chat reuses both."""
+        from upsonic import Chat
+
+        agent = AutonomousAgent(
+            model="openai/gpt-4o-mini",
+            workspace=temp_workspace,
+            session_id="s-default",
+            user_id="u",
+            print=False,
+        )
+        agent_storage = agent.autonomous_storage
+        agent_memory = agent.memory
+        assert isinstance(agent_storage, InMemoryStorage)
+        assert agent_memory is not None
+
+        chat = Chat(session_id="s-default", user_id="u", agent=agent)
+
+        # Storage shared
+        assert chat._storage is agent_storage
+        # Memory is the same instance — Chat does NOT build a new wrapper.
+        assert chat._memory is agent_memory
+        assert agent.memory is agent_memory
+
+    def test_chat_reuses_agent_custom_storage(self, temp_workspace):
+        """Custom storage on the agent ⇒ Chat reuses both Memory and storage."""
+        from upsonic import Chat
+
+        shared = InMemoryStorage()
+        agent = AutonomousAgent(
+            model="openai/gpt-4o-mini",
+            workspace=temp_workspace,
+            storage=shared,
+            session_id="s-custom",
+            user_id="u",
+            print=False,
+        )
+        agent_memory = agent.memory
+
+        chat = Chat(session_id="s-custom", user_id="u", agent=agent)
+
+        assert chat._storage is shared
+        assert chat._memory is agent_memory
+        assert agent.memory is agent_memory
+
+    def test_agent_storage_wins_over_chat_explicit_storage(self, temp_workspace):
+        """Agent already has Memory + Chat also passes ``storage=`` ⇒ agent wins.
+
+        Under the agent-first policy, ``Chat(storage=…)`` is silently ignored
+        when the agent already has a memory wrapper.
+        """
+        from upsonic import Chat
+
+        agent = AutonomousAgent(
+            model="openai/gpt-4o-mini",
+            workspace=temp_workspace,
+            session_id="s-explicit",
+            user_id="u",
+            print=False,
+        )
+        agent_storage = agent.autonomous_storage
+        agent_memory = agent.memory
+        rejected_storage = InMemoryStorage()
+
+        chat = Chat(
+            session_id="s-explicit",
+            user_id="u",
+            agent=agent,
+            storage=rejected_storage,   # ← ignored: agent has memory already
+        )
+
+        assert chat._storage is agent_storage
+        assert chat._storage is not rejected_storage
+        assert chat._memory is agent_memory
+        assert agent.memory is agent_memory
+
+    def test_autonomous_memory_property_tracks_active_memory(self, temp_workspace):
+        """``autonomous_memory`` keeps reflecting ``self.memory`` across Chat
+        construction. Under the agent-first policy ``Chat`` no longer
+        overrides ``agent.memory``, so the property must stay stable."""
+        from upsonic import Chat
+
+        agent = AutonomousAgent(
+            model="openai/gpt-4o-mini",
+            workspace=temp_workspace,
+            session_id="s-live",
+            user_id="u",
+            print=False,
+        )
+        memory_before_chat = agent.memory
+        assert agent.autonomous_memory is memory_before_chat
+        assert agent.autonomous_storage is memory_before_chat.storage
+
+        chat = Chat(session_id="s-live", user_id="u", agent=agent)
+
+        # Chat must NOT replace agent.memory under the agent-first policy.
+        assert agent.memory is memory_before_chat
+        assert agent.autonomous_memory is agent.memory
+        assert agent.autonomous_memory is chat._memory
+        # Storage stays shared (same instance throughout).
+        assert agent.autonomous_storage is agent.memory.storage
+
+    def test_chat_session_id_aligned_when_mismatched_with_agent(self, temp_workspace):
+        """Chat session_id ≠ agent.memory.session_id ⇒ agent wins + warning."""
+        import pytest
+        from upsonic import Chat
+
+        agent = AutonomousAgent(
+            model="openai/gpt-4o-mini",
+            workspace=temp_workspace,
+            session_id="agent-side",
+            user_id="u",
+            print=False,
+        )
+
+        with pytest.warns(UserWarning, match=r"session_id.*overridden by agent\.memory"):
+            chat = Chat(session_id="chat-side", user_id="u", agent=agent)
+
+        assert chat.session_id == "agent-side"
+        assert chat._memory is agent.memory
+        assert chat._session_manager.session_id == "agent-side"
+
+
+# ---------------------------------------------------------------------------
 # Test: Filesystem Toolkit Operations (Direct)
 # ---------------------------------------------------------------------------
 

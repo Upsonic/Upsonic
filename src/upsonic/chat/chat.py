@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import warnings
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -155,37 +156,84 @@ class Chat:
         self.debug = debug
         self.debug_level = debug_level if debug else 1
         
-        # Initialize storage (single source of truth)
-        self._storage = storage or InMemoryStorage()
+        # Storage + Memory resolution — **agent-first** policy.
+        #
+        # Priority (highest to lowest):
+        #   1. ``agent.memory`` (and its ``storage``). When the agent already
+        #      arrives wired with memory we keep it as-is. Both the
+        #      ``storage`` kwarg and the memory-config kwargs passed to
+        #      ``Chat`` are intentionally ignored in that case — the agent
+        #      is treated as the source of truth.
+        #   2. The explicit ``storage`` kwarg on ``Chat`` (only consulted
+        #      when the agent has no memory), wrapped in a fresh ``Memory``
+        #      configured from ``Chat``'s memory-config kwargs.
+        #   3. A brand-new ``InMemoryStorage`` + ``Memory`` pair, also
+        #      attached to the agent so it can persist its state.
+        if self.agent.memory is not None:
+            self._memory = self.agent.memory
+            self._storage = self.agent.memory.storage
+
+            # Align Chat's session_id / user_id with the agent's memory under
+            # the agent-first policy. ``Memory`` always carries non-empty
+            # values (auto-generates uuids when not supplied), so a mismatch
+            # here means the caller passed a different id than the one the
+            # agent's memory is keyed on. The agent's memory wins; we emit
+            # a ``UserWarning`` so the override is observable.
+            if self._memory.session_id and self._memory.session_id != self.session_id:
+                warnings.warn(
+                    (
+                        f"Chat session_id={self.session_id!r} was overridden by "
+                        f"agent.memory.session_id={self._memory.session_id!r} under "
+                        f"the agent-first policy. Pass session_id when building "
+                        f"the Memory you give the agent if you want it to take effect."
+                    ),
+                    UserWarning,
+                    stacklevel=2,
+                )
+                self.session_id = self._memory.session_id
+            if self._memory.user_id and self._memory.user_id != self.user_id:
+                warnings.warn(
+                    (
+                        f"Chat user_id={self.user_id!r} was overridden by "
+                        f"agent.memory.user_id={self._memory.user_id!r} under "
+                        f"the agent-first policy. Pass user_id when building "
+                        f"the Memory you give the agent if you want it to take effect."
+                    ),
+                    UserWarning,
+                    stacklevel=2,
+                )
+                self.user_id = self._memory.user_id
+        else:
+            self._storage = storage if storage is not None else InMemoryStorage()
+            self._memory = Memory(
+                storage=self._storage,
+                session_id=session_id,
+                user_id=user_id,
+                full_session_memory=full_session_memory,
+                summary_memory=summary_memory,
+                user_analysis_memory=user_analysis_memory,
+                load_full_session_memory=load_full_session_memory,
+                load_summary_memory=load_summary_memory,
+                load_user_analysis_memory=load_user_analysis_memory,
+                user_profile_schema=user_profile_schema,
+                dynamic_user_profile=dynamic_user_profile,
+                num_last_messages=num_last_messages,
+                model=agent.model,
+                debug=debug,
+                debug_level=debug_level,
+                feed_tool_call_results=feed_tool_call_results,
+                user_memory_mode=user_memory_mode,
+            )
+            # Wire the freshly-created memory back onto the agent so it can
+            # see chat history during its own runs.
+            self.agent.memory = self._memory
         
-        # Initialize memory with all configuration
-        self._memory = Memory(
-            storage=self._storage,
-            session_id=session_id,
-            user_id=user_id,
-            full_session_memory=full_session_memory,
-            summary_memory=summary_memory,
-            user_analysis_memory=user_analysis_memory,
-            load_full_session_memory=load_full_session_memory,
-            load_summary_memory=load_summary_memory,
-            load_user_analysis_memory=load_user_analysis_memory,
-            user_profile_schema=user_profile_schema,
-            dynamic_user_profile=dynamic_user_profile,
-            num_last_messages=num_last_messages,
-            model=agent.model,
-            debug=debug,
-            debug_level=debug_level,
-            feed_tool_call_results=feed_tool_call_results,
-            user_memory_mode=user_memory_mode
-        )
-        
-        # Update agent's memory to use our configured memory
-        self.agent.memory = self._memory
-        
-        # Initialize session manager with storage binding
+        # Initialize session manager with storage binding. Use the aligned
+        # ``self.session_id`` / ``self.user_id`` (not the raw kwargs) so the
+        # session manager keys against the same id Memory writes under.
         self._session_manager = SessionManager(
-            session_id=session_id,
-            user_id=user_id,
+            session_id=self.session_id,
+            user_id=self.user_id,
             storage=self._storage,
             debug=debug,
             debug_level=debug_level,
