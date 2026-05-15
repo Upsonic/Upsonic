@@ -14,7 +14,6 @@ This test suite validates:
 7. Event streaming parameter handling
 """
 import pytest
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 from typing import List, Any, AsyncIterator
 
@@ -135,30 +134,6 @@ class TestChatInitialization:
                 max_concurrent_invocations=0
             )
     
-    def test_chat_init_negative_retry_attempts_raises(self):
-        """Test that negative retry_attempts raises ValueError."""
-        agent = MockAgent()
-        
-        with pytest.raises(ValueError, match="retry_attempts must be non-negative"):
-            Chat(
-                session_id="test_session",
-                user_id="test_user",
-                agent=agent,
-                retry_attempts=-1
-            )
-    
-    def test_chat_init_negative_retry_delay_raises(self):
-        """Test that negative retry_delay raises ValueError."""
-        agent = MockAgent()
-        
-        with pytest.raises(ValueError, match="retry_delay must be non-negative"):
-            Chat(
-                session_id="test_session",
-                user_id="test_user",
-                agent=agent,
-                retry_delay=-1.0
-            )
-    
     def test_chat_init_invalid_num_last_messages_raises(self):
         """Test that invalid num_last_messages raises ValueError."""
         agent = MockAgent()
@@ -251,59 +226,6 @@ class TestChatInputNormalization:
         
         with pytest.raises(TypeError, match="Unsupported input type"):
             chat._normalize_input(123)
-
-
-class TestChatRetryLogic:
-    """Test retry logic for error handling."""
-    
-    def test_is_retryable_connection_error(self):
-        """Test that ConnectionError is retryable."""
-        agent = MockAgent()
-        chat = Chat(session_id="test", user_id="user", agent=agent)
-        
-        assert chat._is_retryable_error(ConnectionError("Connection failed"))
-    
-    def test_is_retryable_timeout_error(self):
-        """Test that TimeoutError is retryable."""
-        agent = MockAgent()
-        chat = Chat(session_id="test", user_id="user", agent=agent)
-        
-        assert chat._is_retryable_error(TimeoutError("Request timed out"))
-    
-    def test_is_retryable_asyncio_timeout(self):
-        """Test that asyncio.TimeoutError is retryable."""
-        agent = MockAgent()
-        chat = Chat(session_id="test", user_id="user", agent=agent)
-        
-        assert chat._is_retryable_error(asyncio.TimeoutError())
-    
-    def test_is_retryable_rate_limit_message(self):
-        """Test that rate limit error message is retryable."""
-        agent = MockAgent()
-        chat = Chat(session_id="test", user_id="user", agent=agent)
-        
-        assert chat._is_retryable_error(Exception("rate limit exceeded"))
-    
-    def test_is_retryable_service_unavailable(self):
-        """Test that service unavailable is retryable."""
-        agent = MockAgent()
-        chat = Chat(session_id="test", user_id="user", agent=agent)
-        
-        assert chat._is_retryable_error(Exception("503 service unavailable"))
-    
-    def test_is_not_retryable_value_error(self):
-        """Test that ValueError is not retryable."""
-        agent = MockAgent()
-        chat = Chat(session_id="test", user_id="user", agent=agent)
-        
-        assert not chat._is_retryable_error(ValueError("Invalid input"))
-    
-    def test_is_not_retryable_generic_error(self):
-        """Test that generic Exception is not retryable."""
-        agent = MockAgent()
-        chat = Chat(session_id="test", user_id="user", agent=agent)
-        
-        assert not chat._is_retryable_error(Exception("Some error"))
 
 
 class TestChatSessionState:

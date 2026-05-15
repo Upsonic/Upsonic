@@ -378,11 +378,16 @@ def check_error_injection(step_name: str) -> None:
     """Check and raise injected error if applicable.
 
     Called at the beginning of ``Step.run()`` so that the step fails
-    before its real logic executes.
+    before its real logic executes. The raised exception's message is
+    prefixed with ``"INJECTED ERROR: "`` so test assertions can reliably
+    distinguish a deliberately-injected failure from a real one.
     """
     injection = _ERROR_INJECTIONS.get(step_name)
     if injection is None:
         return
     if injection["triggered"] < injection["trigger_count"]:
         injection["triggered"] += 1
-        raise injection["exception_type"](injection["message"])
+        msg = injection["message"]
+        if "INJECTED ERROR" not in msg:
+            msg = f"INJECTED ERROR: {msg}"
+        raise injection["exception_type"](msg)

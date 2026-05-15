@@ -563,8 +563,13 @@ class UpsonicLLMProvider:
             result = output.output
             translated = result.translated_text.strip()
             if not translated or translated == text.strip():
-                task.description += "\n\nWARNING: Previous attempt returned original text. Please ensure to translate to " + target_lang_name
-                output2 = await self.agent.do_async(task, return_output=True)
+                retry_task = Task(
+                    task.description
+                    + "\n\nWARNING: Previous attempt returned original text. "
+                    + f"Please ensure to translate to {target_lang_name}",
+                    response_format=TranslationResponse,
+                )
+                output2 = await self.agent.do_async(retry_task, return_output=True)
                 self._accumulate_usage_from_output(output2)
                 result = output2.output
                 translated = result.translated_text.strip()

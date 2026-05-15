@@ -96,6 +96,18 @@ def retryable(
                         time.sleep(current_delay)
                         current_delay *= backoff
 
+            # All retries exhausted. Invoke optional sync hook on the
+            # wrapped instance to let it flush per-attempt state.
+            hook = getattr(self, '_on_retries_exhausted', None)
+            if callable(hook):
+                try:
+                    hook_result = hook()
+                    # Sync wrapper: ignore the result if it happens to be a coroutine
+                    if inspect.iscoroutine(hook_result):
+                        hook_result.close()
+                except Exception:
+                    pass
+
             from upsonic.utils.printing import error_log
             error_log(f"Call to '{self.__class__.__name__}.{func.__name__}' failed after {final_retries} attempts.", "RetryHandler")
             if final_mode == "raise":
@@ -136,6 +148,19 @@ def retryable(
                         warning_log(f"Call to '{self.__class__.__name__}.{func.__name__}' failed (Attempt {attempt}/{final_retries}). Retrying in {current_delay:.2f}s... Error: {e}", "RetryHandler")
                         await asyncio.sleep(current_delay)
                         current_delay *= backoff
+
+            # All retries exhausted. Invoke optional hook so the wrapped
+            # instance can flush per-attempt state (e.g., agent-level usage
+            # accumulation that the final failed attempt's finally block
+            # skipped because the pipeline marked the task as paused).
+            hook = getattr(self, '_on_retries_exhausted', None)
+            if callable(hook):
+                try:
+                    hook_result = hook()
+                    if inspect.iscoroutine(hook_result):
+                        await hook_result
+                except Exception:
+                    pass  # Don't let hook errors mask the original exception
 
             from upsonic.utils.printing import error_log
             error_log(f"Call to '{self.__class__.__name__}.{func.__name__}' failed after {final_retries} attempts.", "RetryHandler")

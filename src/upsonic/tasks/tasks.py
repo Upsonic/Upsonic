@@ -872,25 +872,69 @@ class Task(BaseModel):
 
 
 
+    def reset_run_state(self) -> None:
+        """Clear per-attempt state so a fresh pipeline run does not inherit
+        leftover values from a previous (failed or completed) attempt.
+
+        Called from ``task_start()`` so every fresh pipeline run starts clean,
+        and from the agent retry path so re-attempts after a failure cannot
+        carry stale flags. In particular ``is_paused`` is set to True by the
+        pipeline manager when a run errors or is cancelled, which makes
+        ``_finalize_agent_usage`` skip agent-level accumulation; without
+        clearing it here, a successful retry attempt would also be skipped.
+
+        Does NOT touch user-provided configuration (description, tools,
+        response_format, ...) or persistent fields (price_id_, task_id_,
+        agent, _cache_manager, _tool_manager). Does NOT recreate ``_usage``
+        — ``task_start()`` owns that lifecycle.
+        """
+        self.is_paused = False
+        self.status = None
+        # NOTE: do NOT reset ``_run_id`` here. ``do_async`` assigns
+        # ``task.run_id = run_id`` BEFORE the pipeline runs (so InitStep can
+        # find it), and this method is called from ``task_start()`` inside
+        # InitStep — clearing the run_id here would null the just-assigned
+        # value and break cross-process resume that relies on
+        # ``task.run_id`` to locate the checkpoint in storage.
+        self.start_time = None
+        self.end_time = None
+
+        self._response = None
+        self._tool_calls = None
+
+        self._cache_hit = False
+        self._last_cache_entry = None
+        self._cached_result = False
+
+        self._policy_blocked = False
+        self._saved_context_for_policy = None
+        self._policy_originals = None
+        self._policy_scope_tool_outputs = False
+
+        self._anonymization_map = None
+
+        self._reliability_sub_agent_usage = None
+
+        self._context_formatted = None
+
+        self._promptlayer_request_id = None
+
     def task_start(self, agent: Any) -> None:
         """Initialize task for a fresh pipeline run.
 
         This is called by InitStep (step 0) and always means the start of a
-        brand-new pipeline execution. It creates fresh TaskUsage and resets
-        per-run state. Must NOT be called during HITL resume — the pipeline
-        skips InitStep when resuming from a later step, which is the correct
-        behavior. If this is ever called while _usage already has accumulated
-        data, it means a full restart was intended.
+        brand-new pipeline execution. It clears per-run state via
+        ``reset_run_state()`` and then creates fresh ``TaskUsage``. Must NOT
+        be called during HITL resume — the pipeline skips InitStep when
+        resuming from a later step, which is the correct behavior. If this
+        is ever called while ``_usage`` already has accumulated data, it
+        means a full restart was intended.
         """
+        self.reset_run_state()
         self.start_time = time.time()
-        self.end_time = None
         from upsonic.usage import TaskUsage
         self._usage = TaskUsage()
         self._usage.start_timer()
-        # Reset per-run state
-        self._context_formatted = None
-        self._cached_result = False
-        self._policy_blocked = False
         if agent.canvas:
             self.add_canvas(agent.canvas)
 

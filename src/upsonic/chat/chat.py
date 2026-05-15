@@ -45,7 +45,7 @@ class Chat:
     - Memory integration and persistence
     - Cost and token tracking from session usage
     - Both blocking and streaming interfaces
-    - Error handling and retry mechanisms
+    - Error handling
     
     Key Architecture:
     - Storage is the single source of truth for session data
@@ -116,8 +116,6 @@ class Chat:
         debug: bool = False,
         debug_level: int = 1,
         max_concurrent_invocations: int = 1,
-        retry_attempts: int = 3,
-        retry_delay: float = 1.0,
     ) -> None:
         """
         Initialize a Chat session.
@@ -138,8 +136,6 @@ class Chat:
             debug: Enable debug logging
             debug_level: Debug level (1 = standard, 2 = detailed)
             max_concurrent_invocations: Maximum concurrent invoke calls
-            retry_attempts: Number of retry attempts for failed calls
-            retry_delay: Delay between retry attempts
         """
         # Input validation
         if not session_id or not isinstance(session_id, str) or not session_id.strip():
@@ -150,10 +146,6 @@ class Chat:
             raise ValueError("agent cannot be None")
         if max_concurrent_invocations < 1:
             raise ValueError("max_concurrent_invocations must be at least 1")
-        if retry_attempts < 0:
-            raise ValueError("retry_attempts must be non-negative")
-        if retry_delay < 0:
-            raise ValueError("retry_delay must be non-negative")
         if num_last_messages is not None and num_last_messages < 1:
             raise ValueError("num_last_messages must be at least 1 if specified")
         
@@ -200,10 +192,14 @@ class Chat:
             max_concurrent_invocations=max_concurrent_invocations
         )
         
-        # Retry configuration
-        self._retry_attempts = retry_attempts
-        self._retry_delay = retry_delay
         self._max_concurrent_invocations = max_concurrent_invocations
+
+        # Tracks the currently-active streaming generator (if any) so the
+        # next invoke can force-close a stream the consumer abandoned
+        # without calling `aclose()`. Only honoured when
+        # max_concurrent_invocations == 1; under explicit parallelism the
+        # caller is expected to manage stream lifetimes themselves.
+        self._active_stream: Optional[AsyncIterator[Any]] = None
         
         if self.debug:
             from upsonic.utils.printing import debug_log, debug_log_level2
@@ -544,77 +540,6 @@ class Chat:
                 f"Unsupported input type: {type(input_data)}. "
                 f"Expected str or Task, got {type(input_data)}"
             )
-    
-    # ========================================================================
-    # Retry Logic
-    # ========================================================================
-    
-    async def _execute_with_retry(self, coro_func: Any, *args: Any, **kwargs: Any) -> Any:
-        """Execute a coroutine with retry logic."""
-        last_exception = None
-        
-        for attempt in range(self._retry_attempts + 1):
-            try:
-                return await coro_func(*args, **kwargs)
-            except Exception as e:
-                last_exception = e
-                
-                if not self._is_retryable_error(e):
-                    if self.debug:
-                        from upsonic.utils.printing import debug_log
-                        debug_log(f"Non-retryable error: {e}", "Chat")
-                    self._transition_state(SessionState.ERROR)
-                    raise e
-                
-                if attempt < self._retry_attempts:
-                    if self.debug:
-                        from upsonic.utils.printing import debug_log
-                        debug_log(
-                            f"Attempt {attempt + 1} failed: {e}. "
-                            f"Retrying in {self._retry_delay}s...",
-                            "Chat"
-                        )
-                    await asyncio.sleep(self._retry_delay * (2 ** attempt))
-                else:
-                    if self.debug:
-                        from upsonic.utils.printing import debug_log
-                        debug_log(
-                            f"All {self._retry_attempts + 1} attempts failed. "
-                            f"Last error: {e}",
-                            "Chat"
-                        )
-        
-        self._transition_state(SessionState.ERROR)
-        raise last_exception
-    
-    def _is_retryable_error(self, error: Exception) -> bool:
-        """Check if an error is retryable."""
-        retryable_errors = (
-            ConnectionError,
-            TimeoutError,
-            asyncio.TimeoutError,
-            OSError,
-        )
-        
-        if isinstance(error, retryable_errors):
-            return True
-        
-        error_msg = str(error).lower()
-        retryable_patterns = [
-            'timeout',
-            'connection',
-            'network',
-            'rate limit',
-            'temporary',
-            'service unavailable',
-            'internal server error',
-            'bad gateway',
-            'gateway timeout'
-        ]
-        
-        return any(pattern in error_msg for pattern in retryable_patterns)
-    
-    
     @overload
     async def invoke(
         self,
@@ -721,11 +646,23 @@ class Chat:
         # If events=True, force stream=True
         if events and not stream:
             stream = True
-        
+
         # return_run_output only applies to blocking (non-streaming) invocation
         if stream and return_run_output:
             return_run_output = False
-        
+        if (
+            self._max_concurrent_invocations == 1
+            and self._active_stream is not None
+            and not self._session_manager.can_accept_invocation()
+        ):
+            stale_stream = self._active_stream
+            self._active_stream = None
+            try:
+                await stale_stream.aclose()
+            except Exception:
+                pass
+            await asyncio.sleep(0)
+
         # State and concurrency checks
         if not self._session_manager.can_accept_invocation():
             if self._session_manager.state == SessionState.ERROR:
@@ -767,10 +704,10 @@ class Chat:
         return_run_output: bool = False,
         **kwargs: Any
     ) -> Union[str, InvokeResult]:
-        """Handle blocking invocation."""
+        """Handle blocking invocation. Retries are owned by ``agent.retry``."""
         from upsonic.run.agent.output import AgentRunOutput as AgentRunOutputConcrete
 
-        async def _execute() -> Union[str, InvokeResult]:
+        try:
             if self.debug and self.debug_level >= 2:
                 from upsonic.utils.printing import debug_log_level2
                 debug_log_level2(
@@ -782,41 +719,41 @@ class Chat:
                     user_id=self.user_id,
                     task_description=task.description[:300] if task.description else None,
                 )
-            
+
             if return_run_output:
                 result = await self.agent.do_async(task, debug=self.debug, return_output=True, **kwargs)
                 if not isinstance(result, AgentRunOutputConcrete):
                     response_text = str(result)
-                    return InvokeResult(text=response_text, run_output=None)
-                response_text = str(result.output) if result.output else (str(result) if hasattr(result, "__str__") else "")
-                if result.is_paused:
-                    return InvokeResult(text=response_text, run_output=result)
-                return InvokeResult(text=response_text, run_output=None)
-            
-            result = await self.agent.do_async(task, debug=self.debug, **kwargs)
-            response_text = str(result)
-            
-            if self.debug and self.debug_level >= 2:
-                from upsonic.utils.printing import debug_log_level2
-                execution_time = time.time() - response_start_time
-                debug_log_level2(
-                    "Chat invocation completed",
-                    "Chat",
-                    debug=self.debug,
-                    debug_level=self.debug_level,
-                    session_id=self.session_id,
-                    execution_time=execution_time,
-                    response_preview=response_text[:500],
-                )
-            
-            return response_text
-        
-        try:
-            result = await self._execute_with_retry(_execute)
+                    invoke_result: Union[str, InvokeResult] = InvokeResult(text=response_text, run_output=None)
+                else:
+                    response_text = str(result.output) if result.output else (str(result) if hasattr(result, "__str__") else "")
+                    if result.is_paused:
+                        invoke_result = InvokeResult(text=response_text, run_output=result)
+                    else:
+                        invoke_result = InvokeResult(text=response_text, run_output=None)
+            else:
+                result = await self.agent.do_async(task, debug=self.debug, **kwargs)
+                response_text = str(result)
+                invoke_result = response_text
+
+                if self.debug and self.debug_level >= 2:
+                    from upsonic.utils.printing import debug_log_level2
+                    execution_time = time.time() - response_start_time
+                    debug_log_level2(
+                        "Chat invocation completed",
+                        "Chat",
+                        debug=self.debug,
+                        debug_level=self.debug_level,
+                        session_id=self.session_id,
+                        execution_time=execution_time,
+                        response_preview=response_text[:500],
+                    )
+
             self._session_manager.end_response_timer(response_start_time)
-            return result
+            return invoke_result
         except Exception:
             self._session_manager.end_response_timer(response_start_time)
+            self._transition_state(SessionState.ERROR)
             raise
         finally:
             self._session_manager.end_invocation()
@@ -829,61 +766,39 @@ class Chat:
         **kwargs: Any
     ) -> AsyncIterator[str]:
         """Handle streaming invocation (text chunks)."""
-        async def _execute_streaming() -> AsyncIterator[str]:
-            async for chunk in self.agent.astream(task, debug=self.debug, events=False, **kwargs):
-                if isinstance(chunk, str):
-                    yield chunk
-        
-        async def _stream_with_retry() -> AsyncIterator[str]:
-            last_exception = None
-            stream_generator = None
-            
+        async def _stream() -> AsyncIterator[str]:
+            stream_generator: Optional[AsyncIterator[Any]] = None
             try:
-                for attempt in range(self._retry_attempts + 1):
-                    try:
-                        stream_generator = _execute_streaming()
-                        async for chunk in stream_generator:
-                            yield chunk
-                        return
-                    except Exception as exc:
-                        last_exception = exc
-                        if stream_generator:
-                            try:
-                                await stream_generator.aclose()
-                            except Exception:
-                                pass
-                            stream_generator = None
-                        
-                        if "context manager is already active" in str(exc):
-                            if self.debug:
-                                from upsonic.utils.printing import debug_log
-                                debug_log(
-                                    f"Streaming context conflict on attempt {attempt + 1}",
-                                    "Chat"
-                                )
-                            await asyncio.sleep(self._retry_delay * (3 ** attempt))
-                        elif attempt < self._retry_attempts:
-                            if self.debug:
-                                from upsonic.utils.printing import debug_log
-                                debug_log(
-                                    f"Streaming attempt {attempt + 1} failed: {last_exception}",
-                                    "Chat"
-                                )
-                            await asyncio.sleep(self._retry_delay * (2 ** attempt))
-                        else:
-                            raise last_exception
-            finally:
-                if stream_generator:
+                stream_generator = self.agent.astream(task, debug=self.debug, events=False, **kwargs)
+                async for chunk in stream_generator:
+                    if isinstance(chunk, str):
+                        yield chunk
+            except Exception:
+                self._transition_state(SessionState.ERROR)
+                if stream_generator is not None:
                     try:
                         await stream_generator.aclose()
                     except Exception:
                         pass
-                
+                    stream_generator = None
+                raise
+            finally:
+                # Counter / state first — sync, GeneratorExit-safe.
                 self._session_manager.end_response_timer(response_start_time)
                 self._session_manager.end_invocation()
                 self._transition_state(SessionState.IDLE)
-        
-        return _stream_with_retry()
+                if self._active_stream is gen:
+                    self._active_stream = None
+
+                if stream_generator is not None:
+                    try:
+                        await stream_generator.aclose()
+                    except Exception:
+                        pass
+
+        gen = _stream()
+        self._active_stream = gen
+        return gen
     
     def _invoke_streaming_events(
         self,
@@ -892,62 +807,38 @@ class Chat:
         **kwargs: Any
     ) -> AsyncIterator["AgentEvent"]:
         """Handle streaming invocation with events (yields AgentEvent objects)."""
-        from upsonic.run.events.events import AgentEvent
-        
-        async def _execute_streaming_events() -> AsyncIterator[AgentEvent]:
-            async for event in self.agent.astream(task, debug=self.debug, events=True, **kwargs):
-                yield event
-        
-        async def _stream_events_with_retry() -> AsyncIterator[AgentEvent]:
-            last_exception = None
-            stream_generator = None
-            
+        async def _stream() -> AsyncIterator[Any]:
+            stream_generator: Optional[AsyncIterator[Any]] = None
             try:
-                for attempt in range(self._retry_attempts + 1):
-                    try:
-                        stream_generator = _execute_streaming_events()
-                        async for event in stream_generator:
-                            yield event
-                        return
-                    except Exception as exc:
-                        last_exception = exc
-                        if stream_generator:
-                            try:
-                                await stream_generator.aclose()
-                            except Exception:
-                                pass
-                            stream_generator = None
-                        
-                        if "context manager is already active" in str(exc):
-                            if self.debug:
-                                from upsonic.utils.printing import debug_log
-                                debug_log(
-                                    f"Event streaming context conflict on attempt {attempt + 1}",
-                                    "Chat"
-                                )
-                            await asyncio.sleep(self._retry_delay * (3 ** attempt))
-                        elif attempt < self._retry_attempts:
-                            if self.debug:
-                                from upsonic.utils.printing import debug_log
-                                debug_log(
-                                    f"Event streaming attempt {attempt + 1} failed: {last_exception}",
-                                    "Chat"
-                                )
-                            await asyncio.sleep(self._retry_delay * (2 ** attempt))
-                        else:
-                            raise last_exception
-            finally:
-                if stream_generator:
+                stream_generator = self.agent.astream(task, debug=self.debug, events=True, **kwargs)
+                async for event in stream_generator:
+                    yield event
+            except Exception:
+                self._transition_state(SessionState.ERROR)
+                if stream_generator is not None:
                     try:
                         await stream_generator.aclose()
                     except Exception:
                         pass
-                
+                    stream_generator = None
+                raise
+            finally:
+                # Counter / state first — sync, GeneratorExit-safe.
                 self._session_manager.end_response_timer(response_start_time)
                 self._session_manager.end_invocation()
                 self._transition_state(SessionState.IDLE)
-        
-        return _stream_events_with_retry()
+                if self._active_stream is gen:
+                    self._active_stream = None
+
+                if stream_generator is not None:
+                    try:
+                        await stream_generator.aclose()
+                    except Exception:
+                        pass
+
+        gen = _stream()
+        self._active_stream = gen
+        return gen
     
     @overload
     def stream(

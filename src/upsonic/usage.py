@@ -414,6 +414,83 @@ class TaskUsage(UsageBase):
             return self
         return self + other
 
+    def snapshot(self) -> "TaskUsage":
+        """Return a deep copy of the current counter values.
+
+        Used by the agent to record an accumulation baseline on an
+        ``AgentRunOutput`` after capturing this usage into agent-level usage.
+        A subsequent accumulation can then add only the delta between the
+        current state and this snapshot — preventing double-count when the
+        same run is later resumed via ``continue_run_async``.
+
+        The timer is intentionally NOT copied so the snapshot is a pure
+        value object: snapshotting must not affect timing of the live
+        TaskUsage it was taken from.
+        """
+        snap = TaskUsage(
+            requests=self.requests,
+            tool_calls=self.tool_calls,
+            input_tokens=self.input_tokens,
+            cache_write_tokens=self.cache_write_tokens,
+            cache_read_tokens=self.cache_read_tokens,
+            input_audio_tokens=self.input_audio_tokens,
+            cache_audio_read_tokens=self.cache_audio_read_tokens,
+            output_tokens=self.output_tokens,
+            output_audio_tokens=self.output_audio_tokens,
+            reasoning_tokens=self.reasoning_tokens,
+            details=dict(self.details) if self.details else {},
+            time_to_first_token=self.time_to_first_token,
+            duration=self.duration,
+            model_execution_time=self.model_execution_time,
+            tool_execution_time=self.tool_execution_time,
+            pause_time=self.pause_time,
+            cost=self.cost,
+            provider_metrics=dict(self.provider_metrics) if self.provider_metrics else None,
+            additional_metrics=dict(self.additional_metrics) if self.additional_metrics else None,
+        )
+        return snap
+
+    def subtract(self, baseline: "TaskUsage") -> "TaskUsage":
+        """Return a new ``TaskUsage`` whose counters are ``self - baseline``.
+
+        Used to compute the delta of work performed since a baseline was
+        recorded (see :meth:`snapshot`). Counters are clamped to ``>= 0``
+        so a stale or shrunk baseline cannot produce negative metrics.
+
+        Timing fields (``duration``, ``model_execution_time``,
+        ``tool_execution_time``, ``pause_time``) are also delta-clamped.
+        ``cost`` follows the same rule. ``details`` and ``provider_metrics``
+        are copied from ``self`` as-is because they are not numeric counters
+        we can safely subtract.
+        """
+        def _sub(a, b):
+            if a is None or b is None:
+                return a
+            v = a - b
+            return v if v > 0 else 0.0 if isinstance(a, float) else 0
+
+        delta = TaskUsage(
+            requests=max(self.requests - baseline.requests, 0),
+            tool_calls=max(self.tool_calls - baseline.tool_calls, 0),
+            input_tokens=max(self.input_tokens - baseline.input_tokens, 0),
+            cache_write_tokens=max(self.cache_write_tokens - baseline.cache_write_tokens, 0),
+            cache_read_tokens=max(self.cache_read_tokens - baseline.cache_read_tokens, 0),
+            input_audio_tokens=max(self.input_audio_tokens - baseline.input_audio_tokens, 0),
+            cache_audio_read_tokens=max(self.cache_audio_read_tokens - baseline.cache_audio_read_tokens, 0),
+            output_tokens=max(self.output_tokens - baseline.output_tokens, 0),
+            output_audio_tokens=max(self.output_audio_tokens - baseline.output_audio_tokens, 0),
+            reasoning_tokens=max(self.reasoning_tokens - baseline.reasoning_tokens, 0),
+            details=dict(self.details) if self.details else {},
+            duration=_sub(self.duration, baseline.duration),
+            model_execution_time=_sub(self.model_execution_time, baseline.model_execution_time),
+            tool_execution_time=_sub(self.tool_execution_time, baseline.tool_execution_time),
+            pause_time=_sub(self.pause_time, baseline.pause_time),
+            cost=_sub(self.cost, baseline.cost),
+            provider_metrics=dict(self.provider_metrics) if self.provider_metrics else None,
+            additional_metrics=dict(self.additional_metrics) if self.additional_metrics else None,
+        )
+        return delta
+
     def start_timer(self) -> None:
         """Start the internal timer for tracking execution time.
 

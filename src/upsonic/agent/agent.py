@@ -3801,8 +3801,26 @@ class Agent(BaseAgent):
             return validation_error.output
 
         if not is_resuming and effective_retry > 1 and task.is_problematic:
-            task.status = None
-            task.run_id = None
+            # The failed attempt's TaskUsage is about to be discarded by
+            # reset_run_state + a fresh TaskUsage in InitStep. Its
+            # _finalize_agent_usage skipped accumulation (is_paused=True set
+            # by the pipeline manager on error). Capture the partial usage
+            # into agent-level here so retry attempts don't silently drop
+            # token / cost data. This runs ONLY on the retry path —
+            # continue_run_async preserves task._usage across resume, so its
+            # accumulation happens after final completion (no double count).
+            prev_output = getattr(self, '_agent_run_output', None)
+            prev_usage = getattr(prev_output, 'usage', None) if prev_output else None
+            if prev_usage is not None:
+                self._accumulate_run_usage(prev_usage)
+
+            # Clear all per-attempt state on the task (status, run_id, is_paused,
+            # _response, _tool_calls, cache/policy/anonymization state, etc.) so
+            # the retried attempt starts from a clean slate. Critically, this
+            # clears is_paused=True set by the pipeline manager on error, which
+            # would otherwise cause _finalize_agent_usage to skip agent-level
+            # accumulation even on the successful retry attempt.
+            task.reset_run_state()
             # Clear the stale output from the previous failed attempt so no code
             # can accidentally read its error status before the new output is created.
             self._agent_run_output = None
@@ -4072,30 +4090,117 @@ class Agent(BaseAgent):
 
     def _finalize_agent_usage(self, print_flag: bool) -> None:
         """Accumulate current run usage into agent-level usage and optionally print agent metrics.
-        
+
         Should be called at the end of every do_async / astream execution.
-        Skips both accumulation AND printing when the task is paused (waiting
-        for HITL) because the TaskUsage object persists across rounds and
-        accumulates model_execution_time cumulatively.  Accumulating while
-        paused would double-count the initial round's metrics once the
-        continuation completes and accumulates the full cumulative TaskUsage.
-        
+        Skips both accumulation AND printing when the task is paused
+        (``is_paused=True``, set for HITL pause, error, and cancellation
+        because all three may be resumed via ``continue_run_async`` — the
+        same ``TaskUsage`` instance persists across resume rounds and is
+        accumulated once the run finally completes).
+
+        Uses a baseline snapshot on the output (``_agent_usage_baseline``) to
+        avoid double-counting when the run has already been accumulated once
+        (e.g. by the retry-exhaustion hook before the user resumed via
+        ``continue_run_async``). When a baseline is present, only the delta
+        of work performed since the baseline is accumulated. The baseline is
+        refreshed after each accumulation so successive calls remain correct.
+
+        For the in-process retry path the failed attempt's usage is captured
+        separately by the retry block in ``do_async`` (before
+        ``reset_run_state`` discards the TaskUsage), so this method does not
+        need to special-case retry.
+
         Args:
             print_flag: Whether printing is enabled for this execution.
         """
         output = getattr(self, '_agent_run_output', None)
         if output is None:
             return
-        
+
         task = output.task
         is_paused: bool = getattr(task, 'is_paused', False) if task else False
-        
+
         if not is_paused:
-            self._accumulate_run_usage(output.usage)
-        
+            usage = getattr(output, 'usage', None)
+            if usage is not None:
+                baseline = getattr(output, '_agent_usage_baseline', None)
+                if baseline is None:
+                    self._accumulate_run_usage(usage)
+                else:
+                    delta = usage.subtract(baseline)
+                    self._accumulate_run_usage(delta)
+                # Refresh baseline so any subsequent finalize only counts new work.
+                output._agent_usage_baseline = usage.snapshot()
+
         if print_flag and task and not getattr(task, 'not_main_task', False) and not is_paused:
             from upsonic.utils.printing import print_agent_metrics
             print_agent_metrics(self, print_output=print_flag)
+
+    async def _on_retries_exhausted(self) -> None:
+        """Hook invoked by ``@retryable`` after all retry attempts have failed.
+
+        Captures the final failed attempt's usage into agent-level usage so
+        retry metrics stay complete even when the user discards the failed
+        task. Records a baseline snapshot on the output so that any
+        subsequent ``continue_run_async`` (resume after retry exhaustion)
+        will only add the *delta* of post-resume work — preventing the
+        previously-captured portion from being double-counted.
+
+        Re-persists the *output state only* to storage (if memory is
+        configured) so the baseline survives a cross-process resume. The
+        pipeline's durable error save already wrote the session's messages
+        and the initial output before this hook ran, so we cannot call the
+        full ``save_session_async`` here — it would append the same
+        messages a second time. Instead we directly upsert the existing
+        session's run output through the storage layer, which is
+        idempotent for the run dict.
+        """
+        output = getattr(self, '_agent_run_output', None)
+        if output is None:
+            return
+        usage = getattr(output, 'usage', None)
+        if usage is None:
+            return
+        self._accumulate_run_usage(usage)
+        output._agent_usage_baseline = usage.snapshot()
+
+        if self.memory is None:
+            return
+
+        try:
+            from upsonic.session.base import SessionType
+            from upsonic.storage.memory.storage_dispatch import is_async_storage_backend
+
+            storage = self.memory.storage
+            session_id = self.memory.session_id
+            if storage is None or session_id is None:
+                return
+
+            if is_async_storage_backend(storage):
+                session = await storage.aget_session(
+                    session_id=session_id,
+                    session_type=SessionType.AGENT,
+                    deserialize=True,
+                )
+            else:
+                session = storage.get_session(
+                    session_id=session_id,
+                    session_type=SessionType.AGENT,
+                    deserialize=True,
+                )
+
+            if session is None:
+                return
+
+            # Idempotent: only updates the run dict's output, doesn't touch messages.
+            session.upsert_run(output)
+
+            if is_async_storage_backend(storage):
+                await storage.aupsert_session(session, deserialize=True)
+            else:
+                storage.upsert_session(session, deserialize=True)
+        except Exception:
+            pass  # Best-effort — don't let storage errors mask the original exception
 
     def _extract_output(self, task: "Task", response: "ModelResponse") -> Any:
         """Extract the output from a model response."""
@@ -5230,21 +5335,13 @@ class Agent(BaseAgent):
         if task is None:
             raise ValueError("Cannot extract task from checkpoint")
 
-        from upsonic.usage import TaskUsage
-        if getattr(task, "_usage", None) is None:
-            # Restore usage from the stored output if available (cross-process resume),
-            # otherwise create a fresh TaskUsage.
-            stored_usage = getattr(output, 'usage', None)
-            if stored_usage is not None:
-                if isinstance(stored_usage, dict):
-                    task._usage = TaskUsage.from_dict(stored_usage)
-                elif isinstance(stored_usage, TaskUsage):
-                    task._usage = stored_usage
-                else:
-                    task._usage = TaskUsage()
-            else:
-                task._usage = TaskUsage()
-        output.usage = task._usage
+        # AgentRunOutput is the single source of truth for usage. After
+        # cross-process resume both Task._usage and AgentRunOutput.usage may
+        # have been deserialized into separate TaskUsage instances; rebind
+        # task._usage to output.usage so subsequent increments on either side
+        # mutate the same object.
+        output._ensure_usage()
+        task._usage = output.usage
 
         run_status = output.status
         
