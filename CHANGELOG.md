@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.77.0](https://github.com/Upsonic/Upsonic/compare/v0.76.2...v0.77.0) (2026-05-15)
+
+
+### Features
+
+* add asqav governance integration ([9ac7645](https://github.com/Upsonic/Upsonic/commit/9ac76456ec1d2773905b323df190d82f702a384d))
+* **agent:** add cost property ([#579](https://github.com/Upsonic/Upsonic/issues/579)) ([14363e0](https://github.com/Upsonic/Upsonic/commit/14363e0ad5da42715631257a5cdb09fc46e3f882))
+* **ci:** introduce automated release pipeline ([#589](https://github.com/Upsonic/Upsonic/issues/589)) ([#590](https://github.com/Upsonic/Upsonic/issues/590)) ([15faa20](https://github.com/Upsonic/Upsonic/commit/15faa205d0a922f309f014e5ec3899ed4c11ea22))
+
+
+### Bug Fixes
+
+* asqav integration bugs ([0e4f371](https://github.com/Upsonic/Upsonic/commit/0e4f371d58fbea99bf69e58b84a844418593c156))
+* **telemetry:** make Sentry strictly opt-in ([#583](https://github.com/Upsonic/Upsonic/issues/583)) ([8365a22](https://github.com/Upsonic/Upsonic/commit/8365a223ade3d9d20d12670b0693308e51e739bd))
+
+
+### Documentation
+
+* add banner image to README ([eaa341c](https://github.com/Upsonic/Upsonic/commit/eaa341c9463679309e123becd704b638acaa6d0e))
+* fix Cowork capitalization per review ([270cb48](https://github.com/Upsonic/Upsonic/commit/270cb482570724f95ae3d77462b2b6917336793c))
+* restructure README around autonomous agents ([f8a4887](https://github.com/Upsonic/Upsonic/commit/f8a48875982bc0393526a0b35a7a93ffaaec6935))
+
 ## 0.76.3
 
 Released on 2026-05-12.
