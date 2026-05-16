@@ -770,7 +770,18 @@ class Chat:
         """Handle blocking invocation."""
         from upsonic.run.agent.output import AgentRunOutput as AgentRunOutputConcrete
 
+        attempt_counter = {"n": 0}
+
         async def _execute() -> Union[str, InvokeResult]:
+            if attempt_counter["n"] > 0:
+                # Reset task state so the next attempt is treated as a fresh
+                # run. Without this, do_async's _validate_task_for_new_run
+                # would short-circuit with "Task is already completed" once
+                # the previous attempt's pipeline marked the task.
+                task.status = None
+                task.run_id = None
+            attempt_counter["n"] += 1
+
             if self.debug and self.debug_level >= 2:
                 from upsonic.utils.printing import debug_log_level2
                 debug_log_level2(
@@ -782,7 +793,7 @@ class Chat:
                     user_id=self.user_id,
                     task_description=task.description[:300] if task.description else None,
                 )
-            
+
             if return_run_output:
                 result = await self.agent.do_async(task, debug=self.debug, return_output=True, **kwargs)
                 if not isinstance(result, AgentRunOutputConcrete):
@@ -837,9 +848,17 @@ class Chat:
         async def _stream_with_retry() -> AsyncIterator[str]:
             last_exception = None
             stream_generator = None
-            
+
             try:
                 for attempt in range(self._retry_attempts + 1):
+                    if attempt > 0:
+                        # Reset task state so the next attempt is treated as a
+                        # fresh run. The previous attempt's pipeline may have
+                        # synced a completed/error status onto the task; without
+                        # this reset, _validate_task_for_new_run would short-
+                        # circuit with "Task is already completed".
+                        task.status = None
+                        task.run_id = None
                     try:
                         stream_generator = _execute_streaming()
                         async for chunk in stream_generator:
@@ -853,7 +872,7 @@ class Chat:
                             except Exception:
                                 pass
                             stream_generator = None
-                        
+
                         if "context manager is already active" in str(exc):
                             if self.debug:
                                 from upsonic.utils.printing import debug_log
@@ -904,6 +923,11 @@ class Chat:
             
             try:
                 for attempt in range(self._retry_attempts + 1):
+                    if attempt > 0:
+                        # Reset task state so the next attempt is treated as a
+                        # fresh run (see _stream_with_retry for rationale).
+                        task.status = None
+                        task.run_id = None
                     try:
                         stream_generator = _execute_streaming_events()
                         async for event in stream_generator:
