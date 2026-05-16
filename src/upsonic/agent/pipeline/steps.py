@@ -3055,12 +3055,25 @@ class StreamModelExecutionStep(Step):
         # Skip if we have cached result or policy blocked
         if task._cached_result:
             cached_content = str(context.output)
-            
+
+            # Prospective marker for stream_final_answer: the cached
+            # per-character stream IS the final answer in its entirety.
+            if (
+                getattr(agent, "_stream_final_answer_active", False)
+                and not getattr(agent, "_final_answer_marker_emitted", False)
+            ):
+                from upsonic.run.events.events import FinalAnswerStartEvent
+                yield FinalAnswerStartEvent(
+                    run_id=run_id,
+                    triggered_by='cache_hit',
+                )
+                agent._final_answer_marker_emitted = True
+
             # Stream the cached content character by character
             for char in cached_content:
                 yield TextDeltaEvent(run_id=run_id, content=char)
                 accumulated_text += char
-            
+
             yield TextCompleteEvent(run_id=run_id, content=cached_content)
             yield FinalOutputEvent(run_id=run_id, output=cached_content, output_type='cached')
             
@@ -3198,13 +3211,18 @@ class StreamModelExecutionStep(Step):
             TextCompleteEvent,
             ToolCallEvent,
             ToolResultEvent,
+            ToolCallDeltaEvent,
+            FinalAnswerStartEvent,
             convert_llm_event_to_agent_event,
         )
-        
+        from upsonic.tools.framework_tools import FINAL_ANSWER_MARKER_TOOL_NAME
+        from upsonic.output import DEFAULT_OUTPUT_TOOL_NAME as _DEFAULT_OUTPUT_TOOL_NAME
+
         if context.tool_limit_reached:
             return
-        
+
         run_id = context.run_id or ""
+        stream_final_answer_active = getattr(agent, "_stream_final_answer_active", False)
         
         from upsonic.safety_engine.anonymization import StreamDeanonymizer as _StreamDeanonymizer
         stream_deanonymizer: Optional[_StreamDeanonymizer] = None
@@ -3219,14 +3237,40 @@ class StreamModelExecutionStep(Step):
         ) as stream:
             async for event in stream:
                 agent_event = convert_llm_event_to_agent_event(event, accumulated_text=accumulated_text)
-                
+
                 if agent_event:
+                    # Sentinel detection (stream_final_answer): suppress sentinel
+                    # tool_call deltas entirely from the consumer-facing stream.
+                    # The marker emit itself is deferred to batch validation
+                    # below (parallel-batch policy may invalidate the sentinel).
+                    if (
+                        stream_final_answer_active
+                        and isinstance(agent_event, ToolCallDeltaEvent)
+                        and agent_event.tool_name == FINAL_ANSWER_MARKER_TOOL_NAME
+                    ):
+                        continue
+
+                    # Structured-output (__output__ / DEFAULT_OUTPUT_TOOL_NAME)
+                    # onset: emit the prospective marker on the first sighting,
+                    # then pass through the delta normally (real call).
+                    if (
+                        stream_final_answer_active
+                        and isinstance(agent_event, ToolCallDeltaEvent)
+                        and agent_event.tool_name == _DEFAULT_OUTPUT_TOOL_NAME
+                        and not getattr(agent, "_final_answer_marker_emitted", False)
+                    ):
+                        yield FinalAnswerStartEvent(
+                            run_id=run_id,
+                            triggered_by='output_tool',
+                        )
+                        agent._final_answer_marker_emitted = True
+
                     if isinstance(agent_event, TextDeltaEvent):
                         accumulated_text += agent_event.content
                         if first_token_time is None:
                             first_token_time = time.time()
                             context.set_usage_time_to_first_token()
-                        
+
                         if stream_deanonymizer:
                             deanon_delta: str = stream_deanonymizer.process_token(agent_event.content)
                             if deanon_delta:
@@ -3267,10 +3311,61 @@ class StreamModelExecutionStep(Step):
         
         # Check for tool calls
         tool_calls = [
-            part for part in final_response.parts 
+            part for part in final_response.parts
             if isinstance(part, ToolCallPart)
         ]
-        
+
+        # Sentinel parallel-batch policy:
+        #   - If batch contains __final_answer_marker__ AND any non-sentinel
+        #     non-output tool: sentinel is INVALID. Drop it from the batch.
+        #     Do NOT emit FinalAnswerStartEvent; execute real tools normally.
+        #   - If batch contains only sentinel (optionally with output_tool):
+        #     sentinel is VALID. Emit FinalAnswerStartEvent(triggered_by='sentinel')
+        #     once. Drop sentinel from execution. Continue with whatever
+        #     non-sentinel calls remain (typically none, recursing to next turn).
+        #
+        # IMPORTANT: final_response (containing the sentinel ToolCallPart) was
+        # already appended to chat_history above. Providers like Anthropic
+        # enforce a tool_use → tool_result invariant in the conversation: every
+        # tool_use block must be immediately followed by a matching tool_result
+        # block. Since we drop the sentinel from execution (no real result),
+        # we synthesize a no-op ToolReturnPart for it to preserve the invariant.
+        sentinel_only_batch = False
+        synthetic_sentinel_returns: list = []
+        if stream_final_answer_active and tool_calls:
+            sentinel_calls = [tc for tc in tool_calls if tc.tool_name == FINAL_ANSWER_MARKER_TOOL_NAME]
+            if sentinel_calls:
+                from upsonic.messages import ToolReturnPart
+                from upsonic._utils import now_utc as _now_utc_local
+                non_sentinel_non_output = [
+                    tc for tc in tool_calls
+                    if tc.tool_name not in (FINAL_ANSWER_MARKER_TOOL_NAME, _DEFAULT_OUTPUT_TOOL_NAME)
+                ]
+                sentinel_valid = not non_sentinel_non_output
+                if sentinel_valid and not getattr(agent, "_final_answer_marker_emitted", False):
+                    yield FinalAnswerStartEvent(
+                        run_id=run_id,
+                        triggered_by='sentinel',
+                    )
+                    agent._final_answer_marker_emitted = True
+                # Synthesize no-op tool_results for every sentinel call so
+                # the chat-history invariant (tool_use must be followed by
+                # tool_result) holds across recursion. These are NOT emitted
+                # as ToolResultEvent to the public stream — they exist only
+                # to satisfy the provider's conversation grammar.
+                for sc in sentinel_calls:
+                    synthetic_sentinel_returns.append(ToolReturnPart(
+                        tool_name=sc.tool_name,
+                        content="",
+                        tool_call_id=sc.tool_call_id,
+                        timestamp=_now_utc_local(),
+                    ))
+                # Strip sentinel from execution batch (no ToolCallEvent,
+                # no ToolResultEvent, no executor invocation, no count).
+                tool_calls = [tc for tc in tool_calls if tc.tool_name != FINAL_ANSWER_MARKER_TOOL_NAME]
+                if sentinel_valid and not tool_calls:
+                    sentinel_only_batch = True
+
         if tool_calls:
             # Emit tool call events
             for i, tc in enumerate(tool_calls):
@@ -3281,7 +3376,7 @@ class StreamModelExecutionStep(Step):
                     tool_call_id=tc.tool_call_id,
                     tool_index=i
                 )
-            
+
             # Execute tool calls - ExternalExecutionPause will bubble up to PipelineManager
             # _execute_tool_calls already records per-tool time via
             # self._agent_run_output.add_tool_execution_time() internally,
@@ -3405,14 +3500,28 @@ class StreamModelExecutionStep(Step):
                 context.response = stop_response
                 return
             
-            # Add tool results to chat_history (response already added above)
-            context.chat_history.append(ModelRequest(parts=tool_results))
-            
+            # Add tool results to chat_history (response already added above).
+            # Synthetic sentinel returns (if any) MUST be included so the
+            # provider sees a tool_result for every tool_use in the prior
+            # ModelResponse.
+            combined_results = list(synthetic_sentinel_returns) + list(tool_results)
+            context.chat_history.append(ModelRequest(parts=combined_results))
+
             # Emit separator only if this round produced visible text
             if accumulated_text.strip():
                 yield TextDeltaEvent(run_id=run_id, content="\n\n")
             accumulated_text = ""
             # Recursively continue streaming with tool results
+            async for event in self._stream_with_tool_calls(context, task, agent, model, model_params, accumulated_text, first_token_time):
+                yield event
+        elif sentinel_only_batch:
+            # The model called the sentinel and nothing else. No real execution
+            # happens (sentinel is a no-op). We must still append a synthetic
+            # tool_result for the sentinel tool_use so the provider's
+            # conversation grammar (tool_use → tool_result) holds when we
+            # recurse for the next model turn.
+            context.chat_history.append(ModelRequest(parts=synthetic_sentinel_returns))
+            accumulated_text = ""
             async for event in self._stream_with_tool_calls(context, task, agent, model, model_params, accumulated_text, first_token_time):
                 yield event
 

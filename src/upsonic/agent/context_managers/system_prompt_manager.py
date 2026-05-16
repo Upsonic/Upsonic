@@ -429,7 +429,43 @@ class SystemPromptManager:
         
         # Build system prompt (culture will be injected in _build_system_prompt if prepared)
         self.system_prompt = self._build_system_prompt(memory_handler)
-    
+
+        # Conditional final-answer-streaming directive injection.
+        # Only when (a) the per-run flag is active AND (b) the agent has at
+        # least one user tool registered — function tools OR builtin server
+        # tools. Matches the same condition used by
+        # Agent._build_model_request_parameters for the tool-definition
+        # injection, so prompt and tool stay in lockstep.
+        if getattr(self.agent, "_stream_final_answer_active", False):
+            from upsonic.tools.final_answer_marker import (
+                FINAL_ANSWER_MARKER_DIRECTIVE,
+            )
+            from upsonic.tools.framework_tools import FRAMEWORK_INJECTED_TOOL_NAMES
+
+            user_tool_count = 0
+            try:
+                tool_defs = list(self.agent.tool_manager.get_tool_definitions())
+                if (
+                    self.task is not None
+                    and getattr(self.task, "tool_manager", None) is not None
+                ):
+                    tool_defs.extend(self.task.tool_manager.get_tool_definitions())
+                user_tool_count = sum(
+                    1
+                    for td in tool_defs
+                    if td.name not in FRAMEWORK_INJECTED_TOOL_NAMES
+                )
+                # Builtin tools (WebSearchTool, etc.) are user-attributable too.
+                agent_builtin = getattr(self.agent, "agent_builtin_tools", []) or []
+                task_builtin = getattr(self.task, "task_builtin_tools", []) or []
+                user_tool_count += len(agent_builtin) + len(task_builtin)
+            except Exception:
+                # Defensive: never let directive plumbing break prompt build.
+                user_tool_count = 0
+
+            if user_tool_count >= 1:
+                self.system_prompt = (self.system_prompt or "") + FINAL_ANSWER_MARKER_DIRECTIVE
+
     async def afinalize(self) -> None:
         """Finalize system prompt after the LLM call."""
         pass

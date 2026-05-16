@@ -57,7 +57,6 @@ from upsonic.run.events.events import (
     # Processing events
     ReflectionEvent,
     MemoryUpdateEvent,
-    CultureUpdateEvent,
     ReliabilityEvent,
     
     # Run events
@@ -72,6 +71,7 @@ from upsonic.run.events.events import (
     TextCompleteEvent,
     ThinkingDeltaEvent,
     FinalOutputEvent,
+    FinalAnswerStartEvent,
 )
 
 
@@ -457,7 +457,6 @@ async def test_all_event_types_comprehensive():
         MemoryUpdateEvent,
         StorageConnectionEvent,
         ReflectionEvent,
-        CultureUpdateEvent,
         ReliabilityEvent,
         RunCompletedEvent,
         ThinkingDeltaEvent,
