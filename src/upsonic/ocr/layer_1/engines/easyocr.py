@@ -1,10 +1,17 @@
 from __future__ import annotations
 
-from typing import List, Optional
+import os
+import ssl
+from contextlib import contextmanager
+from typing import Iterator, List, Optional
+
 import numpy as np
 
 from upsonic.ocr.base import OCRProvider, OCRConfig, OCRResult, OCRTextBlock, BoundingBox
 from upsonic.ocr.exceptions import OCRProviderError, OCRProcessingError
+from upsonic.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 try:
     import easyocr
@@ -12,6 +19,48 @@ try:
 except ImportError:
     easyocr = None
     _EASYOCR_AVAILABLE = False
+
+
+def _truthy_env(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+@contextmanager
+def _optional_ssl_bypass(disable: bool) -> Iterator[None]:
+    """Optionally swap in an unverified default SSL context.
+
+    EasyOCR downloads models on first use and routes the request through
+    ``urllib`` with the process-wide default SSL context. Some corporate
+    networks ship intermediate CAs that the system trust store cannot
+    validate, so historically this code unconditionally replaced
+    ``ssl._create_default_https_context`` with the unverified variant for
+    the duration of ``easyocr.Reader(...)``. That is a global, process-wide
+    side effect — any concurrent HTTPS call in another thread inherits the
+    unverified context for the same window.
+
+    The bypass is now opt-out via ``UPSONIC_OCR_DISABLE_SSL_BYPASS``. The
+    preferred long-term fix is to pre-download EasyOCR models with
+    ``model_storage_directory`` so the runtime never needs to fetch over
+    HTTPS at all (see :class:`EasyOCREngine` docstring).
+    """
+    if disable:
+        yield
+        return
+
+    logger.warning(
+        "EasyOCREngine is temporarily replacing the process-wide default "
+        "SSL context with an unverified one to allow EasyOCR model download. "
+        "Concurrent HTTPS calls in other threads will inherit the unverified "
+        "context until Reader init completes. Set "
+        "UPSONIC_OCR_DISABLE_SSL_BYPASS=1 to disable this behavior, or "
+        "pre-download models with `model_storage_directory` to avoid it."
+    )
+    original_context = ssl._create_default_https_context
+    ssl._create_default_https_context = ssl._create_unverified_context
+    try:
+        yield
+    finally:
+        ssl._create_default_https_context = original_context
 
 
 class EasyOCREngine(OCRProvider):
@@ -35,14 +84,28 @@ class EasyOCREngine(OCRProvider):
         **kwargs
     ):
         """Initialize EasyOCR provider.
-        
+
         Args:
             config: OCRConfig object
             gpu: Whether to use GPU acceleration
             model_storage_directory: Path to directory where models are stored/downloaded.
-                If None, uses EasyOCR's default location (~/.EasyOCR/model)
+                If None, uses EasyOCR's default location (~/.EasyOCR/model). Pre-populating
+                this directory at deploy time is the recommended way to avoid running the
+                first-use model download with global SSL verification disabled (see below).
             download_enabled: Whether to allow automatic model downloads (default: True)
             **kwargs: Additional configuration arguments
+
+        Notes:
+            On first use, EasyOCR downloads its models over HTTPS. To tolerate corporate
+            networks with broken intermediate CAs, ``EasyOCREngine`` temporarily replaces
+            the process-wide default SSL context with an unverified one for the duration
+            of ``easyocr.Reader(...)``. This is a global side effect — concurrent HTTPS
+            calls in other threads inherit the unverified context for the same window,
+            and a warning is logged each time it happens. Set
+            ``UPSONIC_OCR_DISABLE_SSL_BYPASS=1`` (truthy values: ``1``, ``true``, ``yes``,
+            ``on``) to disable the bypass and rely on the system trust store, or
+            pre-populate ``model_storage_directory`` so the runtime never needs to
+            download models at all.
         """
         self.gpu = gpu
         self.model_storage_directory = model_storage_directory
@@ -107,17 +170,12 @@ class EasyOCREngine(OCRProvider):
                 }
                 ocr_loading("EasyOCR", self.config.languages, extra_info)
 
-                # Handle SSL certificate issues during model download
-                # EasyOCR downloads models on first use
-                import ssl
+                # EasyOCR fetches model weights from the network on first use.
+                # The bypass is opt-out via UPSONIC_OCR_DISABLE_SSL_BYPASS; see the
+                # `_optional_ssl_bypass` context manager and the class docstring.
+                disable_bypass = _truthy_env("UPSONIC_OCR_DISABLE_SSL_BYPASS")
 
-                # Save original SSL context
-                original_context = ssl._create_default_https_context
-
-                try:
-                    # Temporarily disable SSL verification for model download
-                    ssl._create_default_https_context = ssl._create_unverified_context
-
+                with _optional_ssl_bypass(disable=disable_bypass):
                     # Build Reader arguments
                     reader_kwargs = {
                         'gpu': self.gpu,
@@ -135,9 +193,6 @@ class EasyOCREngine(OCRProvider):
                     )
 
                     ocr_initialized("EasyOCR")
-                finally:
-                    # Restore original SSL context
-                    ssl._create_default_https_context = original_context
 
             except Exception as e:
                 raise OCRProviderError(
