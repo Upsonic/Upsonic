@@ -425,6 +425,12 @@ class Direct:
             # all metrics are set when stop_timer finalizes duration.
             if hasattr(response, 'usage') and response.usage:
                 task._usage.incr(response.usage)
+                from upsonic.usage_registry import record_request_usage
+                record_request_usage(
+                    response.usage,
+                    model=getattr(model, "model_name", None),
+                    pipeline_step="direct",
+                )
 
             task._usage.stop_timer()
             

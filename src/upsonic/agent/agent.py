@@ -2820,6 +2820,14 @@ class Agent(BaseAgent):
                         from upsonic.utils.usage import calculate_cost_from_usage
                         cost_value: float = calculate_cost_from_usage(retry_response.usage, self.model)
                         self._agent_run_output.set_usage_cost(cost_value)
+
+                        from upsonic.usage_registry import record_request_usage
+                        record_request_usage(
+                            retry_response.usage,
+                            model=getattr(self.model, "model_name", None),
+                            pipeline_step="model_call_retry",
+                            cost_usd=cost_value,
+                        )
                     except Exception:
                         pass
             
@@ -2908,6 +2916,14 @@ class Agent(BaseAgent):
                             from upsonic.utils.usage import calculate_cost_from_usage
                             cost_value: float = calculate_cost_from_usage(final_response.usage, self.model)
                             self._agent_run_output.set_usage_cost(cost_value)
+
+                            from upsonic.usage_registry import record_request_usage
+                            record_request_usage(
+                                final_response.usage,
+                                model=getattr(self.model, "model_name", None),
+                                pipeline_step="model_call_final",
+                                cost_usd=cost_value,
+                            )
                         except Exception:
                             pass
                 
@@ -2981,6 +2997,14 @@ class Agent(BaseAgent):
                         from upsonic.utils.usage import calculate_cost_from_usage
                         cost_value: float = calculate_cost_from_usage(follow_up_response.usage, self.model)
                         self._agent_run_output.set_usage_cost(cost_value)
+
+                        from upsonic.usage_registry import record_request_usage
+                        record_request_usage(
+                            follow_up_response.usage,
+                            model=getattr(self.model, "model_name", None),
+                            pipeline_step="model_call_follow_up",
+                            cost_usd=cost_value,
+                        )
                     except Exception:
                         pass
             
@@ -3004,6 +3028,14 @@ class Agent(BaseAgent):
                 summarization_model: "Model" = self._context_management_middleware._get_summarization_model()
                 cost_value: float = calculate_cost_from_usage(summarization_usage, summarization_model)
                 self._agent_run_output.set_usage_cost(cost_value)
+
+                from upsonic.usage_registry import record_request_usage
+                record_request_usage(
+                    summarization_usage,
+                    model=getattr(summarization_model, "model_name", None),
+                    pipeline_step="summarization",
+                    cost_usd=cost_value,
+                )
             except Exception:
                 pass
             # Reset to prevent double-counting on next apply() call
@@ -3371,9 +3403,17 @@ class Agent(BaseAgent):
                         from upsonic.utils.usage import calculate_cost_from_usage
                         cost_value: float = calculate_cost_from_usage(response.usage, self.model)
                         self._agent_run_output.set_usage_cost(cost_value)
+
+                        from upsonic.usage_registry import record_request_usage
+                        record_request_usage(
+                            response.usage,
+                            model=getattr(self.model, "model_name", None),
+                            pipeline_step="guardrail",
+                            cost_usd=cost_value,
+                        )
                     except Exception:
                         pass
-            
+
             current_model_response = await self._handle_model_response(response, messages)
             
             if task.guardrail is None:

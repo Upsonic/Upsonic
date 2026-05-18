@@ -1831,13 +1831,21 @@ class ModelExecutionStep(Step):
             if response is not None and hasattr(response, 'usage') and response.usage:
                 try:
                     context._ensure_usage().incr(response.usage)
-                    
+
                     from upsonic.utils.usage import calculate_cost_from_usage
                     cost_value = calculate_cost_from_usage(response.usage, model)
                     context.set_usage_cost(cost_value)
+
+                    from upsonic.usage_registry import record_request_usage
+                    record_request_usage(
+                        response.usage,
+                        model=getattr(model, "model_name", None),
+                        pipeline_step="model_call",
+                        cost_usd=cost_value,
+                    )
                 except Exception:
                     pass
-            
+
             if step_result:
                 self._finalize_step_result(step_result, context)
             
@@ -2837,6 +2845,14 @@ class AgentPolicyStep(Step):
                 from upsonic.utils.usage import calculate_cost_from_usage
                 cost_value: float = calculate_cost_from_usage(response.usage, model)
                 context.set_usage_cost(cost_value)
+
+                from upsonic.usage_registry import record_request_usage
+                record_request_usage(
+                    response.usage,
+                    model=getattr(model, "model_name", None),
+                    pipeline_step="policy_feedback",
+                    cost_usd=cost_value,
+                )
             except Exception:
                 pass
         
@@ -3254,14 +3270,22 @@ class StreamModelExecutionStep(Step):
         
         if hasattr(final_response, 'usage') and final_response.usage:
             context._ensure_usage().incr(final_response.usage)
-            
+
             try:
                 from upsonic.utils.usage import calculate_cost_from_usage
                 cost_value = calculate_cost_from_usage(final_response.usage, model)
                 context.set_usage_cost(cost_value)
+
+                from upsonic.usage_registry import record_request_usage
+                record_request_usage(
+                    final_response.usage,
+                    model=getattr(model, "model_name", None),
+                    pipeline_step="model_call_stream",
+                    cost_usd=cost_value,
+                )
             except Exception:
                 pass
-        
+
         # Note: TextCompleteEvent is already yielded by convert_llm_event_to_agent_event
         # when PartEndEvent with TextPart is received, so we don't yield it again here
         
