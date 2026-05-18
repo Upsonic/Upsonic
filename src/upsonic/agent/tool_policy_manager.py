@@ -315,39 +315,6 @@ class ToolPolicyManager:
                     model=model
                 )
     
-    def drain_accumulated_usage(self) -> Optional["RunUsage"]:
-        """Drain and return accumulated sub-agent usage from all LLM providers used by tool policies.
-        
-        Returns:
-            Aggregated RunUsage from all tool policy LLM calls, or None if no usage.
-        """
-        aggregated: Optional["RunUsage"] = None
-        
-        for policy in self.policies:
-            # Drain rule-level LLM usage (text_finder_llm on the rule)
-            rule = getattr(policy, 'rule', None)
-            if rule is not None:
-                text_finder = getattr(rule, 'text_finder_llm', None)
-                if text_finder is not None and hasattr(text_finder, 'drain_accumulated_usage'):
-                    provider_usage = text_finder.drain_accumulated_usage()
-                    if provider_usage is not None:
-                        if aggregated is None:
-                            aggregated = RunUsage()
-                        aggregated.incr(provider_usage)
-            
-            # Drain action-level LLM usage (base_llm on the action)
-            action = getattr(policy, 'action', None)
-            if action is not None:
-                base_llm = getattr(action, 'base_llm', None)
-                if base_llm is not None and hasattr(base_llm, 'drain_accumulated_usage'):
-                    provider_usage = base_llm.drain_accumulated_usage()
-                    if provider_usage is not None:
-                        if aggregated is None:
-                            aggregated = RunUsage()
-                        aggregated.incr(provider_usage)
-        
-        return aggregated
-    
     def __repr__(self) -> str:
         """String representation of the tool policy manager."""
         policy_names = [p.name for p in self.policies]

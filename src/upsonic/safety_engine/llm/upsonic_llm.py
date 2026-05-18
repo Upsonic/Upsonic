@@ -81,22 +81,14 @@ class UpsonicLLMProvider:
             self.agent = Agent(model=model, name=agent_name)
         else:
             self.agent = Agent(name=agent_name)
-        self._accumulated_usage: Optional["RunUsage"] = None
-    
+
     def _accumulate_usage_from_output(self, agent_output: "AgentRunOutput") -> None:
-        """Accumulate usage from a sub-agent run output into this provider's usage tracker."""
-        if not hasattr(agent_output, 'usage') or agent_output.usage is None:
-            return
-        from upsonic.usage import RunUsage
-        if self._accumulated_usage is None:
-            self._accumulated_usage = RunUsage()
-        self._accumulated_usage.incr(agent_output.usage)
-    
-    def drain_accumulated_usage(self) -> Optional["RunUsage"]:
-        """Return and reset accumulated usage from all LLM calls made by this provider."""
-        usage = self._accumulated_usage
-        self._accumulated_usage = None
-        return usage
+        """No-op retained for call-site stability.
+
+        Every LLM call this provider's sub-agent makes lands in the
+        usage registry under the inherited scope tags via the Phase-2
+        emission hook, so no manual accumulator is needed."""
+        return
     
     def find_keywords(self, content_type: str, text: str, language: str = "en") -> List[str]:
         """Find keywords of specified content type in text using Upsonic Agent"""

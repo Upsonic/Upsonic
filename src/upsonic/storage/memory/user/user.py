@@ -212,16 +212,11 @@ class UserMemory(BaseUserMemory):
             if user_memory and hasattr(user_memory, 'user_memory') and user_memory.user_memory:
                 current_profile = user_memory.user_memory
             
-            # Analyze interaction for traits
+            # Analyze interaction for traits. The trait-analyser sub-agent
+            # records its LLM usage directly into the usage registry under
+            # the parent's inherited scope tags; no manual rollup needed.
             updated_traits = await self._analyze_interaction_for_traits(output, current_profile)
-            
-            # Aggregate trait analysis sub-agent LLM usage into output.usage
-            trait_llm_usage = getattr(self, '_last_llm_usage', None)
-            if trait_llm_usage is not None and output is not None:
-                output_usage = output._ensure_usage()
-                output_usage.incr(trait_llm_usage)
-                self._last_llm_usage = None
-            
+
             if self.debug:
                 info_log(f"Extracted traits: {updated_traits}", "UserMemory")
             
@@ -391,14 +386,8 @@ You MUST provide at least 2-3 fields based on what the user explicitly mentioned
             
             try:
                 schema_output = await analyzer.do_async(schema_task, return_output=True)
-                # Store sub-agent usage for parent context aggregation
-                if hasattr(schema_output, 'usage') and schema_output.usage:
-                    if not hasattr(self, '_last_llm_usage'):
-                        self._last_llm_usage = None
-                    from upsonic.usage import RunUsage
-                    if self._last_llm_usage is None:
-                        self._last_llm_usage = RunUsage()
-                    self._last_llm_usage.incr(schema_output.usage)
+                # Schema-extractor sub-agent's LLM usage is captured by
+                # the registry under the inherited scope tags.
                 proposed_schema = schema_output.output
                 if not proposed_schema or not hasattr(proposed_schema, 'fields') or not proposed_schema.fields:
                     warning_log("Dynamic schema generation returned no fields", "UserMemory")
@@ -428,14 +417,7 @@ YOUR TASK: Fill in the trait fields based on what the user explicitly stated.
 """
                 trait_task = Task(description=trait_prompt, response_format=DynamicUserTraitModel)
                 trait_output = await analyzer.do_async(trait_task, return_output=True)
-                # Store sub-agent usage for parent context aggregation
-                if hasattr(trait_output, 'usage') and trait_output.usage:
-                    if not hasattr(self, '_last_llm_usage'):
-                        self._last_llm_usage = None
-                    from upsonic.usage import RunUsage
-                    if self._last_llm_usage is None:
-                        self._last_llm_usage = RunUsage()
-                    self._last_llm_usage.incr(trait_output.usage)
+                # Trait sub-agent's LLM usage is captured by the registry.
                 trait_response = trait_output.output
                 
                 if trait_response and hasattr(trait_response, 'model_dump'):
@@ -463,14 +445,7 @@ Leave fields as None if information is not available.
             task = Task(description=prompt, response_format=self._profile_schema_model)
             
             trait_output = await analyzer.do_async(task, return_output=True)
-            # Store sub-agent usage for parent context aggregation
-            if hasattr(trait_output, 'usage') and trait_output.usage:
-                if not hasattr(self, '_last_llm_usage'):
-                    self._last_llm_usage = None
-                from upsonic.usage import RunUsage
-                if self._last_llm_usage is None:
-                    self._last_llm_usage = RunUsage()
-                self._last_llm_usage.incr(trait_output.usage)
+            # Trait sub-agent's LLM usage is captured by the registry.
             trait_response = trait_output.output
             if trait_response and hasattr(trait_response, 'model_dump'):
                 return trait_response.model_dump()

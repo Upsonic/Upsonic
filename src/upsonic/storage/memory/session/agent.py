@@ -421,12 +421,10 @@ class AgentSessionMemory(BaseSessionMemory):
                 except Exception as e:
                     warning_log(f"Failed to generate summary: {e}", "AgentSessionMemory")
         
-        summary_llm_usage = getattr(self, '_last_llm_usage', None)
-        if summary_llm_usage is not None and output is not None:
-            usage = output._ensure_usage()
-            usage.incr(summary_llm_usage)
-            self._last_llm_usage = None
-        
+        # Summary-extractor sub-agent's LLM usage already lands in the
+        # usage registry under the inherited agent_usage_id /
+        # task_usage_id, so no manual rollup onto output.usage is needed.
+
         if self.enabled:
             new_message_count = session.append_new_messages_from_run_output(output)
             if self.debug:
@@ -948,16 +946,11 @@ Focus on important information, user preferences, and topics discussed.
         
         summary_output = await summarizer.do_async(task, return_output=True)
         summary_text = str(summary_output.output)
-        
-        # Store sub-agent usage for parent context aggregation
-        if hasattr(summary_output, 'usage') and summary_output.usage:
-            if not hasattr(self, '_last_llm_usage'):
-                self._last_llm_usage = None
-            from upsonic.usage import RunUsage
-            if self._last_llm_usage is None:
-                self._last_llm_usage = RunUsage()
-            self._last_llm_usage.incr(summary_output.usage)
-        
+
+        # Summary sub-agent's LLM usage is recorded directly into the
+        # usage registry under the parent's inherited scope tags; no
+        # local accumulator needed.
+
         if self.debug:
             info_log(f"Summary generated: {len(summary_text)} chars", "AgentSessionMemory")
         

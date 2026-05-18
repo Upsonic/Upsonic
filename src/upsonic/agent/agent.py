@@ -2498,10 +2498,7 @@ class Agent(BaseAgent):
                         if self._agent_run_output.tools is None:
                             self._agent_run_output.tools = []
                         self._agent_run_output.tools.append(tool_exec)
-                    
-                    if hasattr(self, '_agent_run_output') and self._agent_run_output:
-                        self._drain_agent_tool_usage(tool_call.tool_name)
-                    
+
                     if self.debug and self.debug_level >= 2:
                         from upsonic.utils.printing import debug_log_level2
                         tool_def = tool_defs.get(tool_call.tool_name)
@@ -2619,9 +2616,6 @@ class Agent(BaseAgent):
                             if self._agent_run_output.tools is None:
                                 self._agent_run_output.tools = []
                             self._agent_run_output.tools.append(tool_exec)
-
-                        if hasattr(self, '_agent_run_output') and self._agent_run_output:
-                            self._drain_agent_tool_usage(tool_call.tool_name)
 
                         self._otel.set_tool_result(otel_tool_span, _tool_elapsed, success=True, output=result.content)
                         
@@ -3045,18 +3039,6 @@ class Agent(BaseAgent):
                 pass
             # Reset to prevent double-counting on next apply() call
             self._context_management_middleware._last_summarization_usage = None
-    
-    def _drain_agent_tool_usage(self, tool_name: str) -> None:
-        """No-op retained for call-site stability.
-
-        Sub-agent tool executions inherit this agent's scope contextvars
-        (Phase 1c + 3a), so every model.request from inside them lands
-        in the usage registry under the parent's ``agent_usage_id`` /
-        ``task_usage_id`` automatically. The old "drain into
-        ``_agent_run_output.usage``" fold was a parallel write to the
-        legacy mutable that nothing reads any more.
-        """
-        return
     
     async def _handle_cache(self, task: "Task") -> Optional[Any]:
         """Handle cache operations for the task."""

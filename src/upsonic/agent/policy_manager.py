@@ -471,36 +471,6 @@ class PolicyManager:
                 model=model
             )
     
-    def drain_accumulated_usage(self) -> Optional["RunUsage"]:
-        """Drain and return accumulated sub-agent usage from all LLM providers used by policies.
-        
-        Returns:
-            Aggregated RunUsage from all policy LLM calls, or None if no usage.
-        """
-        from upsonic.usage import RunUsage
-        aggregated: Optional[RunUsage] = None
-        
-        # Drain feedback LLM usage
-        if self._feedback_llm is not None:
-            feedback_usage = self._feedback_llm.drain_accumulated_usage()
-            if feedback_usage is not None:
-                if aggregated is None:
-                    aggregated = RunUsage()
-                aggregated.incr(feedback_usage)
-        
-        # Drain usage from individual policy LLM providers
-        for policy in self.policies:
-            for attr_name in ('base_llm', 'text_finder_llm'):
-                llm_provider = getattr(policy, attr_name, None)
-                if llm_provider is not None and hasattr(llm_provider, 'drain_accumulated_usage'):
-                    provider_usage = llm_provider.drain_accumulated_usage()
-                    if provider_usage is not None:
-                        if aggregated is None:
-                            aggregated = RunUsage()
-                        aggregated.incr(provider_usage)
-        
-        return aggregated
-    
     def __repr__(self) -> str:
         """String representation of the policy manager."""
         policy_names = [p.name for p in self.policies]

@@ -148,18 +148,6 @@ class Orchestrator(Tool):
             if name != 'plan_and_execute'
         }
     
-    def _propagate_sub_agent_usage(self, sub_agent_output: Any) -> None:
-        """No-op retained for call-site stability.
-
-        Sub-agents spawned by the orchestrator inherit the parent's
-        ``agent_usage_id`` / ``task_usage_id`` contextvars, so every
-        model.request inside them is already emitted to the usage
-        registry under the parent's scope. The old manual roll-up onto
-        ``parent_run_output.usage`` was a parallel write to a legacy
-        mutable nothing reads any more.
-        """
-        return
-    
     async def execute(self, thought: Thought) -> Any:
         """Main entry point for orchestrator execution."""
         from upsonic.utils.printing import console, spacing
@@ -255,10 +243,7 @@ class Orchestrator(Tool):
         analysis_run_result = await analysis_agent.do_async(analysis_task, return_output=True)
         analysis_result: AnalysisResult = analysis_run_result.output if hasattr(analysis_run_result, 'output') else analysis_run_result
         self.execution_history += f"\n--- Injected Analysis ---\nEvaluation: {analysis_result.evaluation}\n"
-        
-        # Propagate sub-agent usage to parent agent's run output
-        self._propagate_sub_agent_usage(analysis_run_result)
-        
+
         return analysis_result
     
     async def _handle_reasoning_step(self, tool_name: str, result: Any) -> bool:
@@ -323,10 +308,7 @@ class Orchestrator(Tool):
         
         revision_run_result = await revision_agent.do_async(revision_task, return_output=True)
         new_thought: Thought = revision_run_result.output if hasattr(revision_run_result, 'output') else revision_run_result
-        
-        # Propagate sub-agent usage to parent agent's run output
-        self._propagate_sub_agent_usage(revision_run_result)
-        
+
         console.print("[bold magenta]Orchestrator:[/bold magenta] Received revised plan. Restarting execution.")
         self.pending_plan = new_thought.plan
         self.program_counter = 0
@@ -372,9 +354,6 @@ class Orchestrator(Tool):
         )
         
         final_response = await synthesis_agent.do_async(synthesis_task, return_output=True)
-        
-        # Propagate sub-agent usage to parent agent's run output
-        self._propagate_sub_agent_usage(final_response)
 
         return final_response.output if hasattr(final_response, 'output') else final_response
 

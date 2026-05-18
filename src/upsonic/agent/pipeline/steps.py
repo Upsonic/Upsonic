@@ -175,14 +175,6 @@ class CacheCheckStep(Step):
             cached_response = await task.get_cached_response(input_text, model)
             
             # Propagate sub-agent usage from cache LLM comparison (if any)
-            cache_mgr = getattr(agent, '_cache_manager', None)
-            if cache_mgr is not None:
-                # The cache layer's own LLM-based lookup is recorded into
-                # the usage registry under the active scope tags by its
-                # emission hook, so no manual incr onto the run snapshot
-                # is needed; just clear the staging field.
-                cache_mgr._last_llm_usage = None
-            
             if cached_response is not None:
                 similarity = None
                 cache_key = None
