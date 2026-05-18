@@ -34,14 +34,6 @@ Before any non-trivial task, the always-on guides compose into a single pre-work
 
 Trivial work (single-line typo, comment edit) skips this and says so explicitly: *"Skipping memory / Serena lookup — single-line cosmetic edit."*
 
-## Outstanding documentation updates (TECH-1588)
-
-The following `documents/ai/explanation/` files describe behaviour contracts that changed on this branch and have **not yet been resynced**. A future session should reconcile them before treating them as authoritative — or before making decisions that lean on what they say. All three stem from commits `34c3c1b7`, `a9fb0f51`, and the merge `de73647a` on TECH-1588 and can be tackled as a single "docs: sync explanation/" pass.
-
-- **`documents/ai/explanation/chat/chat.md`** (around lines 257–280, 398, 430, 462) — still describes the pre-TECH-1588 wiring where `Chat.__init__` always seeds a fresh `InMemoryStorage()` and monkey-patches `agent.memory`. The current contract is **agent-first**: when `agent.memory` is present, `Chat` reuses both the memory and its storage verbatim; the `storage=` kwarg and every memory-config kwarg are silently ignored. `Chat` only creates a fresh `InMemoryStorage()` + `Memory()` (and attaches it to the agent) when `agent.memory is None`. Additionally, `Chat.session_id` / `user_id` are realigned to `agent.memory.session_id` / `agent.memory.user_id` on mismatch and a `UserWarning` is emitted. Implementation: storage/memory resolution block in `src/upsonic/chat/chat.py`'s `__init__`.
-- **`documents/ai/explanation/messages/messages.md`** (around line 345) — claims `ToolCallPart.args_as_dict() … asserts dict`. It now falls back to `{}` when both `pydantic_core.from_json` and `json.JSONDecoder().raw_decode` fail (truncated / unterminated args mid-stream, in addition to the existing trailing-junk shape).
-- **`documents/ai/explanation/tools/tools.md`** (around §3.2 / line 264 — the `ToolConfig` defaults table; and the MCPTool override note at line 719) — `ShellToolKit.run_command` / `run_python` override the generic `ToolConfig` defaults with `@tool(timeout=None, max_retries=0)` because the subprocess owns its own timeout (the prior defaults caused the outer `asyncio.wait_for` to fire long before the subprocess could finish, triggering a 6× retry loop and leaking child processes on cancel). Document the override next to the existing MCPTool one.
-
 ## Core Architecture
 
 ### Key Components

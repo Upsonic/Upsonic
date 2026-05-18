@@ -261,8 +261,8 @@ this on the function object via `setattr(func, '_upsonic_tool_config', cfg)`.
 | `cache_results` | `False` | SHA-256-key cache to `cache_dir` with optional `cache_ttl`. |
 | `cache_dir`, `cache_ttl` | `None`, `None` | Cache location / TTL in seconds. |
 | `tool_hooks` | `None` | A `ToolHooks` instance. |
-| `max_retries` | `5` | Retry on any non-pause exception with `2 ** attempt` backoff. |
-| `timeout` | `30.0` | `asyncio.wait_for` timeout. |
+| `max_retries` | `5` | Retry on any non-pause exception with `2 ** attempt` backoff. Toolkits whose tools manage their own timeout/retry (e.g. `ShellToolKit.run_command` / `run_python` — subprocess-backed) override to `0` to avoid duplicating the wait and leaking child processes on cancel. |
+| `timeout` | `30.0` | `asyncio.wait_for` timeout. `MCPTool` raises this to `60` (see the MCPTool default further below); subprocess-backed shell tools set it to `None` since `subprocess.run` / `asyncio.subprocess` owns its own timeout. |
 | `strict` | `None` | Forwarded into `ToolMetadata.strict`. |
 | `docstring_format` | `'auto'` | `'google' \| 'numpy' \| 'sphinx' \| 'auto'` — drives docstring parsing in `function_schema`. |
 | `require_parameter_descriptions` | `False` | If `True`, schema generation fails when a parameter lacks a docstring description. |

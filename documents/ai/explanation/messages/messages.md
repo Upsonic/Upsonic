@@ -342,7 +342,7 @@ A model-generated file (typically an image). `content` is a `BinaryContent`, but
 
 Methods:
 
-- `args_as_dict() -> dict[str, Any]` — parses JSON if needed, asserts dict.
+- `args_as_dict() -> dict[str, Any]` — parses JSON if needed. If `pydantic_core.from_json` fails, falls back to `json.JSONDecoder().raw_decode` to peel off trailing junk (e.g. Gemma's harmony-format suffixes); if that also fails (truncated / unterminated args mid-stream), returns `{}` so the tool layer can reject the call cleanly instead of crashing the stream.
 - `args_as_json_str() -> str` — stringifies dict if needed, returns `'{}'` for empty.
 - `has_content() -> bool` — `any(self.args.values())` for dicts, `bool(self.args)` otherwise.
 

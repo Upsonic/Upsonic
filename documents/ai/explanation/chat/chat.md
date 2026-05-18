@@ -265,20 +265,21 @@ Long signature broken into three groups (see table). All inputs are validated up
 | Group | Parameters |
 | --- | --- |
 | Identity | `session_id: str`, `user_id: str`, `agent: Agent` |
-| Storage | `storage: Optional[Storage] = None` (defaults to `InMemoryStorage()`) |
+| Storage | `storage: Optional[Storage] = None` — **agent-first**: when `agent.memory` is present `Chat` reuses its storage and this kwarg is ignored; otherwise falls back to the kwarg, or `InMemoryStorage()` when both are absent. |
 | Memory save flags | `full_session_memory=True`, `summary_memory=False`, `user_analysis_memory=False` |
 | Memory load flags | `load_full_session_memory=True`, `load_summary_memory=None`, `load_user_analysis_memory=None` |
 | Profile config | `user_profile_schema=None`, `dynamic_user_profile=False` |
 | Memory tuning | `num_last_messages=None`, `feed_tool_call_results=False`, `user_memory_mode='update'\|'replace'` |
 | Chat ops | `debug=False`, `debug_level=1`, `max_concurrent_invocations=1`, `retry_attempts=3`, `retry_delay=1.0` |
 
-After validation it creates:
+After validation it resolves storage and memory under an **agent-first** policy, then realigns its identifiers:
 
-1. `self._storage` (caller-provided or `InMemoryStorage()`).
-2. `self._memory = Memory(storage=self._storage, session_id, user_id, all the memory flags, model=agent.model, …)`.
-3. **Side effect**: `self.agent.memory = self._memory`. This monkey-patches the agent so its runs persist through the chat's storage.
-4. `self._session_manager = SessionManager(session_id, user_id, self._storage, debug, debug_level, max_concurrent_invocations)`.
-5. `self._retry_attempts`, `self._retry_delay`, `self._max_concurrent_invocations` for retry logic.
+1. **Storage + Memory resolution**:
+   - If `agent.memory is not None` → `self._memory = agent.memory`, `self._storage = agent.memory.storage`. The `storage=` kwarg and every memory-config kwarg are silently ignored; the agent is treated as the source of truth.
+   - Else → `self._storage = storage or InMemoryStorage()`, `self._memory = Memory(storage=self._storage, session_id, user_id, all the memory flags, model=agent.model, …)`, then `self.agent.memory = self._memory` so the agent persists through the chat's storage.
+2. **`session_id` / `user_id` alignment** (only when reusing `agent.memory`): if `agent.memory.session_id` (resp. `user_id`) differs from the value passed to `Chat`, the agent's value wins, `Chat`'s field is realigned, and a `UserWarning` is emitted so the override is observable.
+3. `self._session_manager = SessionManager(self.session_id, self.user_id, self._storage, debug, debug_level, max_concurrent_invocations)` — keyed against the aligned ids.
+4. `self._max_concurrent_invocations` and stream-tracking state.
 
 ##### Read-only state properties
 
@@ -395,7 +396,8 @@ Chat (chat.py)
   │     ├── returns SessionMetrics dataclass
   │     └── tracks SessionState (runtime only)
   ├── owns 1 Memory (upsonic.storage.memory.memory)
-  │     └── monkey-patched onto self.agent.memory
+  │     └── either is agent.memory (agent-first reuse) or is freshly built and
+  │       attached to self.agent.memory (when the agent had none)
   ├── delegates to Agent (upsonic.agent.agent) for actual model runs
   ├── normalizes input into Task (upsonic.tasks.tasks)
   ├── may return InvokeResult (schemas.py) wrapping AgentRunOutput
@@ -427,10 +429,10 @@ The names below are the supported import surface from `upsonic.chat`. Anything e
 
 ## 7. Integration with the rest of Upsonic
 
-* **`upsonic.agent.agent.Agent`** — `Chat` holds an `Agent` instance, replaces `agent.memory` with its own `Memory`, and dispatches all model work to `agent.do_async(task, ...)` (blocking) or `agent.astream(task, events=…)` (streaming).
+* **`upsonic.agent.agent.Agent`** — `Chat` holds an `Agent` instance, reuses `agent.memory` when present (only attaches a freshly-built `Memory` when `agent.memory is None`), and dispatches all model work to `agent.do_async(task, ...)` (blocking) or `agent.astream(task, events=…)` (streaming).
 * **`upsonic.tasks.tasks.Task`** — Strings passed to `Chat.invoke` / `Chat.stream` are wrapped in `Task(description=…, context=…)`. Task instances are passed through verbatim after description validation.
 * **`upsonic.storage.base.Storage` / `AsyncStorage`** — `SessionManager` checks `isinstance(self._storage, AsyncStorage)` to decide whether to call sync or async storage methods. Both `Storage.get_session` / `upsert_session` / `delete_session` and their async counterparts are used.
-* **`upsonic.storage.in_memory.in_memory.InMemoryStorage`** — Default storage when none is supplied to the `Chat` constructor.
+* **`upsonic.storage.in_memory.in_memory.InMemoryStorage`** — Last-resort fallback storage when neither `agent.memory` nor a `storage=` kwarg is supplied.
 * **`upsonic.storage.memory.memory.Memory`** — The chat layer instantiates `Memory` with the same storage and forwards every memory flag (`full_session_memory`, `summary_memory`, `user_analysis_memory`, `load_*`, `user_profile_schema`, `dynamic_user_profile`, `num_last_messages`, `feed_tool_call_results`, `user_memory_mode`, `model=agent.model`).
 * **`upsonic.session.agent.AgentSession` / `upsonic.session.base.SessionType`** — `_get_or_create_session` constructs `AgentSession(session_id, user_id, SessionType.AGENT, created_at=now_epoch_s(), messages=[], runs={})` if the session doesn't exist.
 * **`upsonic.usage.RunUsage`** — Every cost / token / request property on `Chat` and `SessionManager` reads through `session.usage: RunUsage`.
@@ -458,9 +460,9 @@ chat = Chat(
 ```
 
 * Constructor validates the strings and integers.
-* Creates `Memory(storage, session_id, user_id, …)`.
-* **Mutates the agent**: `agent.memory = self._memory`. From this point any direct call to `agent.do(task)` outside the chat will also persist into this session.
-* Creates `SessionManager(session_id, user_id, storage)`.
+* Resolves storage and memory **agent-first**: if `agent.memory` exists it is reused verbatim (and `storage=` is ignored); otherwise `Memory(storage, session_id, user_id, …)` is built and assigned to `agent.memory` so direct `agent.do(task)` calls outside the chat persist into the same session.
+* Realigns `self.session_id` / `self.user_id` to `agent.memory.session_id` / `agent.memory.user_id` if they differ (emits a `UserWarning`).
+* Creates `SessionManager(self.session_id, self.user_id, self._storage)`.
 * Records local `_start_time`.
 
 ### 8.2 Blocking invocation
