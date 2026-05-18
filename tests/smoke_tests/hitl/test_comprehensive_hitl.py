@@ -25,7 +25,8 @@ from upsonic.run.base import RunStatus
 from upsonic.run.cancel import cancel_run
 from upsonic.db.database import SqliteDatabase
 from upsonic.session.agent import AgentSession
-from upsonic.agent.pipeline.step import inject_error_into_step, clear_error_injection, StepResult, StepStatus
+from upsonic.agent.pipeline.step import StepResult, StepStatus
+from tests._pipeline_injection import inject_error_into_step, clear_error_injection
 from upsonic.run.agent.output import AgentRunOutput
 from upsonic.run.requirements import RunRequirement
 from upsonic.run.tools.tools import ToolExecution

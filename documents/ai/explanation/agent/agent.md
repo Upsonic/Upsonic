@@ -248,7 +248,7 @@ pipeline/
 - `supports_streaming` — `True` only for `StreamModelExecutionStep`.
 - `execute(context, task, agent, model, step_number, pipeline_manager)` — the real work, returning a `StepResult`.
 
-The default `run()` wrapper calls `check_error_injection(self.name)` before the step body — `inject_error_into_step("model_execution", trigger_count=1)` lets tests force a step to fail N times to exercise durable execution. After the step returns, `_finalize_step_result()` appends the `StepResult` to `context.step_results` and increments `context.execution_stats`.
+The default `run()` wrapper just delegates to `execute()` and calls `_finalize_step_result()` on the way out, appending the `StepResult` to `context.step_results` and incrementing `context.execution_stats`. Error injection for durable-execution tests is no longer part of production; the same surface API (`inject_error_into_step`, `clear_error_injection`) lives in `tests/_pipeline_injection.py`, which monkey-patches `Step.run` on first use, raises `INJECTED ERROR: <msg>` on the first N invocations of a named step, and finalizes an ERROR `StepResult` on the context first so `get_problematic_step()` / `continue_run_async` can still find a resume point.
 
 Streaming steps yield events instead of returning. The default `execute_stream()` snapshots `len(context.events)` before calling `execute()` and yields anything new — so non-streaming steps can still emit events into a streaming pipeline by appending to `context.events`. Dedicated streaming steps override `execute_stream()` and emit deltas live (e.g. `TextDeltaEvent`, `TextCompleteEvent`).
 

@@ -35,7 +35,7 @@ from upsonic import Agent, Task
 from upsonic.tools import tool
 from upsonic.usage import TaskUsage
 from upsonic.db.database import SqliteDatabase
-from upsonic.agent.pipeline.step import (
+from tests._pipeline_injection import (
     inject_error_into_step,
     clear_error_injection,
 )

@@ -14,6 +14,10 @@ _root = Path(__file__).resolve().parent.parent
 _src = _root / "src"
 if _src.exists() and str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
+# Make the ``tests`` package importable (``from tests._pipeline_injection
+# import ...``) so test-only helpers can live next to the suites.
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
 
 try:
     from dotenv import load_dotenv

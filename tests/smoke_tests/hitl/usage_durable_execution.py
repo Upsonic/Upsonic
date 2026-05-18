@@ -13,7 +13,7 @@ import asyncio
 import os
 from upsonic import Agent, Task
 from upsonic.db.database import SqliteDatabase
-from upsonic.agent.pipeline.step import inject_error_into_step, clear_error_injection
+from tests._pipeline_injection import inject_error_into_step, clear_error_injection
 
 pytestmark = pytest.mark.timeout(300)
 

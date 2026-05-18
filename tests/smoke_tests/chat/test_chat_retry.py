@@ -29,7 +29,7 @@ import pytest
 
 from upsonic import Agent, Chat
 from upsonic.tools import tool
-from upsonic.agent.pipeline.step import (
+from tests._pipeline_injection import (
     inject_error_into_step,
     clear_error_injection,
 )
