@@ -183,4 +183,155 @@ Upsonic is released under the MIT License. See [LICENCE](LICENCE) for details.
 
 ## Contributing
 
-We welcome contributions from the community! Please read our [Contributing Guide](CONTRIBUTING.md) and code of conduct before submitting pull requests.
+We welcome contributions from the community! Please read our [Contributing Guide](CONTRIBUTING.md) and code of conduct before submitting pull requests.## FAQ
+
+### General
+
+**What is Upsonic?**
+
+Upsonic is a Python framework for building autonomous AI agents. It supports both autonomous agents (like OpenClaw and Claude Cowork) and traditional agent systems with tool integration.
+
+**How does Upsonic compare to LangChain or CrewAI?**
+
+- **LangChain**: Chain-based approach for LLM applications. Upsonic focuses on autonomous agents with built-in workspace isolation and safety.
+- **CrewAI**: Role-based multi-agent orchestration. Upsonic provides both autonomous and traditional agent modes with simpler setup.
+
+**Is Upsonic production-ready?**
+
+Yes. Upsonic is designed for production use with workspace isolation, path traversal blocking, dangerous command prevention, and E2B sandbox integration for cloud execution.
+
+### Getting Started
+
+**How do I install Upsonic?**
+
+```bash
+uv pip install upsonic
+# or
+pip install upsonic
+```
+
+**What Python version is required?**
+
+Python 3.8+ is supported.
+
+**How do I add Upsonic docs to my IDE?**
+
+For Cursor: Settings → Indexing & Docs → Add `https://docs.upsonic.ai/llms-full.txt`
+Also works with VSCode, Windsurf, and similar tools.
+
+### Autonomous Agents
+
+**What is an Autonomous Agent?**
+
+An autonomous agent in Upsonic runs the full agent loop: model → tool selection → execution → observation → next step, with workspace isolation and safety restrictions.
+
+**How do I create an autonomous agent?**
+
+```python
+from upsonic import AutonomousAgent, Task
+
+agent = AutonomousAgent(
+    model="anthropic/claude-sonnet-4-5",
+    workspace="/path/to/logs"
+)
+
+task = Task("Analyze server logs and detect anomaly patterns")
+agent.print_do(task)
+```
+
+**What safety measures are built-in?**
+
+- All file and shell operations restricted to `workspace`
+- Path traversal blocked
+- Dangerous commands blocked
+- Optional E2B sandbox for isolated cloud execution
+
+**What are Prebuilt Autonomous Agents?**
+
+Prebuilt autonomous agents are ready-to-run agents built by the community, each packaging a skill, system prompt, and first message. The collection is open to contributions.
+
+### Traditional Agents
+
+**What is a Traditional Agent?**
+
+A traditional agent follows a simpler pattern with explicit task descriptions and optional tool integration.
+
+**How do I create a traditional agent?**
+
+```python
+from upsonic import Agent, Task
+
+agent = Agent(model="anthropic/claude-sonnet-4-5", name="Stock Analyst Agent")
+task = Task(description="Analyze the current market trends")
+agent.print_do(task)
+```
+
+### Tools
+
+**How do I add custom tools?**
+
+```python
+from upsonic import Agent, Task
+from upsonic.tools import tool
+
+@tool
+def sum_tool(a: float, b: float) -> float:
+    """Add two numbers together."""
+    return a + b
+
+task = Task(description="Calculate 15 + 27", tools=[sum_tool])
+agent = Agent(model="anthropic/claude-sonnet-4-5", name="Calculator Agent")
+agent.print_do(task)
+```
+
+**Does Upsonic support MCP tools?**
+
+Yes, Upsonic supports MCP Tools to connect agents to thousands of external data sources and services.
+
+### LLM Providers
+
+**What LLM providers are supported?**
+
+Upsonic supports OpenAI, Anthropic, and other providers through the model parameter. Specify models like `anthropic/claude-sonnet-4-5` or `openai/gpt-4`.
+
+**How do I configure the model?**
+
+Pass the model in the agent constructor:
+```python
+agent = Agent(model="anthropic/claude-sonnet-4-5")
+```
+
+### OCR and Document Processing
+
+**What OCR engines are supported?**
+
+EasyOCR, RapidOCR, Tesseract, PaddleOCR, DeepSeek OCR, and DeepSeek via Ollama.
+
+**How do I use OCR?**
+
+```python
+from upsonic.ocr import OCR
+from upsonic.ocr.layer_1.engines import EasyOCREngine
+
+engine = EasyOCREngine(languages=["en"])
+ocr = OCR(layer_1_ocr_engine=engine)
+text = ocr.get_text("invoice.pdf")
+```
+
+**What is the OCR pipeline structure?**
+
+Layer 0 handles document preparation (PDF to image, preprocessing), Layer 1 runs the OCR engine.
+
+### Sandbox Integration
+
+**What is E2B Sandbox?**
+
+E2B provides isolated cloud execution environments for autonomous agents. Connect a Sandbox Provider for secure, sandboxed execution.
+
+### Help & Resources
+
+- **Documentation**: https://docs.upsonic.ai
+- **Quickstart**: https://docs.upsonic.ai/get-started/quickstart
+- **Examples**: https://docs.upsonic.ai/examples
+- **Discord**: https://discord.gg/pmYDMSQHqY
+- **GitHub Issues**: https://github.com/Upsonic/Upsonic/issues
