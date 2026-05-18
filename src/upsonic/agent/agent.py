@@ -3850,6 +3850,7 @@ class Agent(BaseAgent):
         from upsonic.usage_registry.scope import (
             _agent_usage_id,
             _task_usage_id,
+            _run_id as _run_id_var,
         )
         _agent_scope_token = (
             _agent_usage_id.set(self.agent_usage_id)
@@ -3875,6 +3876,12 @@ class Agent(BaseAgent):
             run_id = str(uuid.uuid4())
             self.run_id = run_id
             register_run(run_id)
+
+        # Push run_id onto the scope contextvar — emission writes will
+        # tag every ledger row with it, so the registry can roll up by
+        # run later (e.g. when AgentRunOutput.usage moves to a registry
+        # view in a follow-up).
+        _run_scope_token = _run_id_var.set(run_id)
 
         original_model: Optional["Model"] = None
         try:
@@ -3963,6 +3970,10 @@ class Agent(BaseAgent):
                     _task_usage_id.reset(_task_scope_token)
                 except Exception:
                     pass
+            try:
+                _run_id_var.reset(_run_scope_token)
+            except Exception:
+                pass
 
     def _calculate_aggregated_cost(self) -> Optional[float]:
         """Calculate the aggregated monetary cost across the agent run.
@@ -4506,6 +4517,7 @@ class Agent(BaseAgent):
         from upsonic.usage_registry.scope import (
             _agent_usage_id,
             _task_usage_id,
+            _run_id as _run_id_var,
         )
         _agent_scope_token = (
             _agent_usage_id.set(self.agent_usage_id)
@@ -4520,6 +4532,7 @@ class Agent(BaseAgent):
         run_id = str(uuid.uuid4())
         self.run_id = run_id
         register_run(run_id)
+        _run_scope_token = _run_id_var.set(run_id)
         
         original_model: Optional["Model"] = None
         try:
@@ -4626,7 +4639,11 @@ class Agent(BaseAgent):
                     _task_usage_id.reset(_task_scope_token)
                 except Exception:
                     pass
-    
+            try:
+                _run_id_var.reset(_run_scope_token)
+            except Exception:
+                pass
+
     def _extract_text_from_stream_event(self, event: Any) -> Optional[str]:
         """Extract text content from a streaming event.
         

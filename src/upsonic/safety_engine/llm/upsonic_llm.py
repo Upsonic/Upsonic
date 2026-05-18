@@ -82,14 +82,6 @@ class UpsonicLLMProvider:
         else:
             self.agent = Agent(name=agent_name)
 
-    def _accumulate_usage_from_output(self, agent_output: "AgentRunOutput") -> None:
-        """No-op retained for call-site stability.
-
-        Every LLM call this provider's sub-agent makes lands in the
-        usage registry under the inherited scope tags via the Phase-2
-        emission hook, so no manual accumulator is needed."""
-        return
-    
     def find_keywords(self, content_type: str, text: str, language: str = "en") -> List[str]:
         """Find keywords of specified content type in text using Upsonic Agent"""
         
@@ -147,7 +139,6 @@ class UpsonicLLMProvider:
 
         try:
             output = await self.agent.do_async(task, return_output=True)
-            self._accumulate_usage_from_output(output)
             result = output.output
             if result.confidence >= 0.7:
                 return result.detected_keywords
@@ -198,7 +189,6 @@ class UpsonicLLMProvider:
         )
         try:
             output = await self.agent.do_async(task, return_output=True)
-            self._accumulate_usage_from_output(output)
             result = output.output
             return result.block_message
         except Exception:
@@ -257,7 +247,6 @@ class UpsonicLLMProvider:
         )
         try:
             output = await self.agent.do_async(task, return_output=True)
-            self._accumulate_usage_from_output(output)
             result = output.output
             return result.anonymized_content
         except Exception:
@@ -300,7 +289,6 @@ class UpsonicLLMProvider:
         )
         try:
             output = await self.agent.do_async(task, return_output=True)
-            self._accumulate_usage_from_output(output)
             result = output.output
             if result.confidence >= 0.6:
                 return result.language_code
@@ -551,7 +539,6 @@ class UpsonicLLMProvider:
         )
         try:
             output = await self.agent.do_async(task, return_output=True)
-            self._accumulate_usage_from_output(output)
             result = output.output
             translated = result.translated_text.strip()
             if not translated or translated == text.strip():
@@ -562,7 +549,6 @@ class UpsonicLLMProvider:
                     response_format=TranslationResponse,
                 )
                 output2 = await self.agent.do_async(retry_task, return_output=True)
-                self._accumulate_usage_from_output(output2)
                 result = output2.output
                 translated = result.translated_text.strip()
             if translated and translated != text.strip():
@@ -710,7 +696,6 @@ class UpsonicLLMProvider:
             
             try:
                 output = await self.agent.do_async(task, return_output=True)
-                self._accumulate_usage_from_output(output)
                 result = output.output
                 return {
                     "is_harmful": result.is_harmful,
@@ -747,7 +732,6 @@ class UpsonicLLMProvider:
             
             try:
                 output = await self.agent.do_async(task, return_output=True)
-                self._accumulate_usage_from_output(output)
                 result = output.output
                 return {
                     "is_malicious": result.is_malicious,
@@ -909,7 +893,6 @@ class UpsonicLLMProvider:
         
         try:
             output = await self.agent.do_async(task, return_output=True)
-            self._accumulate_usage_from_output(output)
             result = output.output
             # Combine feedback message with suggested approach for comprehensive feedback
             return f"{result.feedback_message}\n\nSuggested approach: {result.suggested_approach}"
