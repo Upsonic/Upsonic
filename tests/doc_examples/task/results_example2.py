@@ -7,7 +7,7 @@ result = agent.do(task)
 
 # Access task metadata
 print(f"Task ID: {task.task_id}")
-print(f"Price ID: {task.price_id}")
+print(f"Task Usage ID: {task.task_usage_id}")
 print(f"Duration: {task.duration}")
 print(f"Start time: {task.start_time}")
 print(f"End time: {task.end_time}")

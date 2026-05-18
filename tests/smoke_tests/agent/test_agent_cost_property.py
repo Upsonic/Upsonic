@@ -2,8 +2,7 @@
 Smoke tests for the ``Agent.cost`` property.
 
 The ``cost`` property exposes ``Agent.usage`` (an :class:`AgentUsage`) as a
-flat dict mirroring :meth:`Task.get_total_cost`, but accumulated across
-every task the agent has executed in the session. This matters for
+flat dict accumulated across every task the agent has executed in the session. This matters for
 autonomous agents and prebuilts (e.g. :class:`AppliedScientist`) that
 dispatch several tasks per run.
 

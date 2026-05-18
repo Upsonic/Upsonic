@@ -66,9 +66,7 @@ class TestUpsonicBasicFlow:
         assert result is not None
 
         assert hasattr(task, 'duration')
-        assert hasattr(task, 'total_cost')
-        assert hasattr(task, 'total_input_token')
-        assert hasattr(task, 'total_output_token')
+        assert task.usage is not None
 
 
 class TestTaskWithTools:
@@ -318,14 +316,12 @@ class TestComprehensiveTaskExecution:
 
         # Verify task metadata is accessible
         assert hasattr(task, 'duration')
-        assert hasattr(task, 'total_cost')
-        assert hasattr(task, 'total_input_token')
-        assert hasattr(task, 'total_output_token')
         assert hasattr(task, 'tool_calls')
+        assert task.usage is not None
 
         # Verify task execution metrics
         assert task.duration >= 0
-        assert task.total_cost >= 0
+        assert (task.usage.cost or 0) >= 0
         assert isinstance(task.tool_calls, list)
     
 

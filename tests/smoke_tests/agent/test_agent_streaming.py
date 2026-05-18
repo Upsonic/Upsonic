@@ -163,8 +163,8 @@ async def test_agent_stream_with_tools():
 
 
 @pytest.mark.asyncio
-async def test_streaming_price_id_isolated_per_run():
-    """Each streaming run should get its own price_id for cost tracking isolation."""
+async def test_streaming_task_usage_id_isolated_per_run():
+    """Each streaming task should carry its own task_usage_id (ledger scope)."""
     agent = Agent(model="anthropic/claude-sonnet-4-6", name="Cost Tracking Agent")
 
     task1 = Task(description="Say hello")
@@ -172,15 +172,15 @@ async def test_streaming_price_id_isolated_per_run():
 
     async for _ in agent.astream(task1):
         pass
-    price_id_1 = task1.price_id_
+    id1 = task1.task_usage_id
 
     async for _ in agent.astream(task2):
         pass
-    price_id_2 = task2.price_id_
+    id2 = task2.task_usage_id
 
-    assert price_id_1 is not None, "Task 1 should have a price_id"
-    assert price_id_2 is not None, "Task 2 should have a price_id"
-    assert price_id_1 != price_id_2, "Each streaming run must have its own price_id"
+    assert id1 is not None
+    assert id2 is not None
+    assert id1 != id2, "Each streaming task must have its own task_usage_id"
 
 
 @pytest.mark.asyncio
@@ -243,11 +243,10 @@ async def test_streaming_cost_tracking_works():
     async for _ in agent.astream(task):
         pass
 
-    assert task.price_id_ is not None, "price_id should be set"
-    assert task.total_input_token is not None, "total_input_token should be tracked"
-    assert task.total_output_token is not None, "total_output_token should be tracked"
-    assert task.total_input_token > 0, "Should have used input tokens"
-    assert task.total_output_token > 0, "Should have used output tokens"
+    assert task.task_usage_id is not None
+    assert task.usage is not None
+    assert task.usage.input_tokens > 0, "Should have used input tokens"
+    assert task.usage.output_tokens > 0, "Should have used output tokens"
 
 
 @pytest.mark.asyncio

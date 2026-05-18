@@ -137,13 +137,12 @@ class ReliabilityEvaluator:
         total_cost: float = 0.0
 
         for task in tasks:
-            in_tok: Optional[int] = task.total_input_token
-            if in_tok is not None:
-                total_input += in_tok
-            out_tok: Optional[int] = task.total_output_token
-            if out_tok is not None:
-                total_output += out_tok
-            cost: Optional[float] = task.total_cost
+            usage = getattr(task, "_usage", None)
+            if usage is None:
+                continue
+            total_input += getattr(usage, "input_tokens", 0) or 0
+            total_output += getattr(usage, "output_tokens", 0) or 0
+            cost = getattr(usage, "cost", None)
             if cost is not None:
                 total_cost += cost
 

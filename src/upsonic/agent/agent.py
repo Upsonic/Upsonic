@@ -904,8 +904,7 @@ class Agent(BaseAgent):
         Aggregated token usage and estimated cost across every task this
         agent has executed.
 
-        Mirrors the shape of :meth:`Task.get_total_cost` but accumulates
-        across all ``do`` / ``do_async`` / ``run`` / ``run_async`` calls
+        Accumulates across all ``do`` / ``do_async`` / ``run`` / ``run_async`` calls
         on this agent instance. Autonomous agents (and prebuilts like
         :class:`AppliedScientist`) frequently dispatch several tasks per
         run — bootstrap, workspace greeting, the user's prompt, internal
@@ -3824,8 +3823,6 @@ class Agent(BaseAgent):
         # Only reset per-run agent state for fresh runs — HITL resume should
         # keep existing state so cost and tool counts aggregate correctly.
         if not is_resuming:
-            import uuid as _uuid
-            task.price_id_ = str(_uuid.uuid4())
             self._tool_call_count = 0
             self._tool_limit_reached = False
         self._last_built_system_prompt = None
@@ -4056,7 +4053,7 @@ class Agent(BaseAgent):
 
         The streaming pipeline lacks CallManagementStep, so when do_async()
         uses streaming internally (partial_on_timeout), we run it manually
-        so that task.total_input_token / total_output_token work.
+        so that task-level usage / metrics are recorded.
         """
         try:
             from upsonic.agent.pipeline.steps import CallManagementStep
@@ -4575,8 +4572,6 @@ class Agent(BaseAgent):
             return
 
         # Reset per-run state (same as do_async for fresh runs)
-        import uuid as _uuid
-        task.price_id_ = str(_uuid.uuid4())
         self._tool_call_count = 0
         self._tool_limit_reached = False
         self._last_built_system_prompt = None
@@ -4893,7 +4888,7 @@ class Agent(BaseAgent):
             CacheStorageStep(),                # 18
             StreamFinalizationStep(),          # 19
             StreamMemoryMessageTrackingStep(), # 20 <-- Saves AgentSession + task_end()
-            CallManagementStep(),              # 21 <-- LAST: Records usage to price_id_summary
+            CallManagementStep(),              # 21 <-- LAST: Records usage
         ]
     
     def _create_full_pipeline_steps(self, is_streaming: bool = False) -> List[Any]:

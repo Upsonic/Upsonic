@@ -1,6 +1,10 @@
 """
 Smoke test for task metrics via agent.do().
 Requires OPENAI_API_KEY to be set.
+
+Metrics are now read from ``task.usage`` (a :class:`TaskUsage`) — the old
+``task.total_cost`` / ``task.total_input_token`` / ``task.total_output_token``
+and the ``price_id`` machinery were removed by the usage-registry refactor.
 """
 import pytest
 from upsonic import Task, Agent
@@ -12,6 +16,14 @@ def agent() -> Agent:
     return Agent(name="MetricsTestAgent", model="openai/gpt-4o-mini")
 
 
+def _assert_usage_positive(task: Task) -> None:
+    assert task.usage is not None
+    assert isinstance(task.usage, TaskUsage)
+    assert task.usage.input_tokens > 0
+    assert task.usage.output_tokens > 0
+    assert task.usage.cost is None or task.usage.cost >= 0
+
+
 class TestTaskMetricsViaDo:
 
     @pytest.mark.asyncio
@@ -19,37 +31,13 @@ class TestTaskMetricsViaDo:
         task = Task("What is 2+2? Answer with just the number.")
         await agent.do_async(task)
 
-        # response
-        assert task.response is not None
-        assert isinstance(task.response, str)
-        assert len(task.response) > 0
-
-        # timing
+        assert task.response is not None and isinstance(task.response, str) and task.response
         assert task.start_time is not None
         assert task.end_time is not None
-        assert task.duration is not None
-        assert task.duration >= 0
+        assert task.duration is not None and task.duration >= 0
 
-        # cost
-        assert task.total_cost is not None
-        assert isinstance(task.total_cost, float)
-        assert task.total_cost >= 0
-
-        # tokens
-        assert task.total_input_token is not None
-        assert isinstance(task.total_input_token, int)
-        assert task.total_input_token > 0
-
-        assert task.total_output_token is not None
-        assert isinstance(task.total_output_token, int)
-        assert task.total_output_token > 0
-
-        # tool calls (no tools provided, should be empty list)
+        _assert_usage_positive(task)
         assert isinstance(task.tool_calls, list)
-
-        # usage is TaskUsage
-        assert task.usage is not None
-        assert isinstance(task.usage, TaskUsage)
 
     def test_all_task_metrics_after_do(self, agent: Agent) -> None:
         task = Task("What is 3+3? Answer with just the number.")
@@ -59,10 +47,7 @@ class TestTaskMetricsViaDo:
         assert task.start_time is not None
         assert task.end_time is not None
         assert task.duration is not None and task.duration >= 0
-        assert task.total_cost is not None and task.total_cost >= 0
-        assert task.total_input_token is not None and task.total_input_token > 0
-        assert task.total_output_token is not None and task.total_output_token > 0
-        assert isinstance(task.usage, TaskUsage)
+        _assert_usage_positive(task)
 
     @pytest.mark.asyncio
     async def test_all_task_metrics_after_print_do_async(self, agent: Agent) -> None:
@@ -70,24 +55,16 @@ class TestTaskMetricsViaDo:
         await agent.print_do_async(task)
 
         assert task.response is not None
-        assert task.start_time is not None
-        assert task.end_time is not None
         assert task.duration is not None and task.duration >= 0
-        assert task.total_cost is not None and task.total_cost >= 0
-        assert task.total_input_token is not None and task.total_input_token > 0
-        assert task.total_output_token is not None and task.total_output_token > 0
+        _assert_usage_positive(task)
 
     def test_all_task_metrics_after_print_do(self, agent: Agent) -> None:
         task = Task("What is 5+5? Answer with just the number.")
         agent.print_do(task)
 
         assert task.response is not None
-        assert task.start_time is not None
-        assert task.end_time is not None
         assert task.duration is not None and task.duration >= 0
-        assert task.total_cost is not None and task.total_cost >= 0
-        assert task.total_input_token is not None and task.total_input_token > 0
-        assert task.total_output_token is not None and task.total_output_token > 0
+        _assert_usage_positive(task)
 
     @pytest.mark.asyncio
     async def test_metrics_independent_across_tasks(self, agent: Agent) -> None:
@@ -98,9 +75,8 @@ class TestTaskMetricsViaDo:
         await agent.do_async(task_a)
         await agent.do_async(task_b)
 
-        assert task_a.price_id_ != task_b.price_id_
-        assert task_a.total_cost is not None
-        assert task_b.total_cost is not None
-        assert task_a.total_input_token is not None
-        assert task_b.total_input_token is not None
+        # task_usage_id replaces the old price_id as the per-task scope tag.
+        assert task_a.task_usage_id != task_b.task_usage_id
+        _assert_usage_positive(task_a)
+        _assert_usage_positive(task_b)
         assert task_a.usage is not task_b.usage

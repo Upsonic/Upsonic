@@ -378,7 +378,7 @@ class ReliabilityProcessor:
                         response_format=ValidationPoint,
                         tools=task.tools,
                         context=context_strings,  # Pass the processed context strings
-                        price_id_=task.price_id,
+                        task_usage_id_=task.task_usage_id,
                         not_main_task=True
                     )
                     
@@ -442,7 +442,7 @@ class ReliabilityProcessor:
                         context=the_context,
                         response_format=task.response_format,
                         tools=task.tools,
-                        price_id_=task.price_id,
+                        task_usage_id_=task.task_usage_id,
                         not_main_task=True
                     )
                     

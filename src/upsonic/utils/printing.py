@@ -669,8 +669,9 @@ def display_graph_tree(
             
             if task and hasattr(task, 'duration') and task.duration:
                 exec_info = f" ({task.duration:.2f}s"
-                if hasattr(task, 'total_cost') and task.total_cost:
-                    exec_info += f", ${task.total_cost:.4f}"
+                _task_cost = getattr(task._usage, "cost", None) if getattr(task, "_usage", None) else None
+                if _task_cost:
+                    exec_info += f", ${_task_cost:.4f}"
                 exec_info += ")"
                 return exec_info
             return ""
@@ -983,8 +984,6 @@ def get_estimated_cost_from_agent(agent: Any, run_type: str = "last") -> str:
         return "~$0.0000"
 
 
-price_id_summary = {}
-
 def spacing():
     console.print("")
 
@@ -1042,29 +1041,7 @@ def connected_to_server(server_type: str, status: str, total_time: float = None)
 
     spacing()
 
-def call_end(result: Any, model: Any, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, debug: bool = False, price_id: str = None, print_output: bool = False, show_tool_calls: bool = False):
-    # Handle price_id tracking regardless of print_output
-    if price_id:
-        estimated_cost = get_estimated_cost(usage['input_tokens'], usage['output_tokens'], model)
-        if price_id not in price_id_summary:
-            price_id_summary[price_id] = {
-                'input_tokens': 0,
-                'output_tokens': 0,
-                'estimated_cost': 0.0
-            }
-        price_id_summary[price_id]['input_tokens'] += usage['input_tokens']
-        price_id_summary[price_id]['output_tokens'] += usage['output_tokens']
-        try:
-            cost_str = str(estimated_cost).replace('~', '').replace('$', '').strip()
-            if isinstance(price_id_summary[price_id]['estimated_cost'], (float, int)):
-                price_id_summary[price_id]['estimated_cost'] += float(cost_str)
-            else:
-                from decimal import Decimal
-                price_id_summary[price_id]['estimated_cost'] = Decimal(str(price_id_summary[price_id]['estimated_cost'])) + Decimal(cost_str)
-        except Exception as e:
-            if debug:
-                pass  # Error calculating cost
-
+def call_end(result: Any, model: Any, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, debug: bool = False, print_output: bool = False, show_tool_calls: bool = False):
     if tool_usage and len(tool_usage) > 0 and (print_output or show_tool_calls):
         display_tool_calls_table(tool_usage, debug=debug)
 
@@ -1139,28 +1116,7 @@ def call_end(result: Any, model: Any, response_format: str, start_time: float, e
     )
 
 
-def agent_end(result: Any, model: Any, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, tool_count: int, context_count: int, debug: bool = False, price_id:str = None, print_output: bool = False):
-    # Handle price_id tracking regardless of print_output
-    if price_id:
-        estimated_cost = get_estimated_cost(usage['input_tokens'], usage['output_tokens'], model)
-        if price_id not in price_id_summary:
-            price_id_summary[price_id] = {
-                'input_tokens': 0,
-                'output_tokens': 0,
-                'estimated_cost': 0.0
-            }
-        price_id_summary[price_id]['input_tokens'] += usage['input_tokens']
-        price_id_summary[price_id]['output_tokens'] += usage['output_tokens']
-        try:
-            cost_str = str(estimated_cost).replace('~', '').replace('$', '').strip()
-            if isinstance(price_id_summary[price_id]['estimated_cost'], (float, int)):
-                price_id_summary[price_id]['estimated_cost'] += float(cost_str)
-            else:
-                price_id_summary[price_id]['estimated_cost'] = Decimal(str(price_id_summary[price_id]['estimated_cost'])) + Decimal(cost_str)
-        except Exception as e:
-            if debug:
-                console.print(f"[bold red]Warning: Could not parse cost value: {estimated_cost}. Error: {e}[/bold red]")
-
+def agent_end(result: Any, model: Any, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, tool_count: int, context_count: int, debug: bool = False, print_output: bool = False):
     if not print_output:
         return
     
@@ -1283,91 +1239,6 @@ def agent_total_cost(total_input_tokens: int, total_output_tokens: int, total_ti
     console.print(panel)
     spacing()
 
-def print_price_id_summary(
-    price_id: str,
-    task: Any,
-    print_output: bool = True,
-) -> Optional[dict]:
-    """
-    Get the summary of usage and costs for a specific price ID and print it in a formatted panel.
-
-    All timing data (duration, model_execution_time, upsonic_execution_time) is read
-    from task.usage (TaskUsage) — the single source of truth for task-level metrics.
-
-    Args:
-        price_id: The price ID to look up
-        task: The task object whose .usage (TaskUsage) carries timing
-        print_output: Whether to print the output (default: True)
-        
-    Returns:
-        dict: A dictionary containing the usage summary, or None if price_id not found
-    """
-    if not print_output:
-        if price_id in price_id_summary:
-            summary = price_id_summary[price_id].copy()
-            raw = summary.get('estimated_cost')
-            summary['estimated_cost'] = _format_cost_for_display(float(raw) if raw is not None else None)
-            return summary
-        return None
-    
-    price_id_display = escape_rich_markup(price_id)
-    
-    if price_id not in price_id_summary:
-        console.print("[bold red]Price ID not found![/bold red]")
-        return None
-    
-    summary = price_id_summary[price_id].copy()
-    raw_cost: Union[float, Decimal] = summary['estimated_cost']
-    cost_val: float = float(raw_cost) if raw_cost is not None else 0.0
-    summary['estimated_cost'] = _format_cost_for_display(cost_val)
-
-    table = Table(show_header=False, expand=True, box=None)
-    table.width = 60
-
-    table.add_row("[bold]Price ID:[/bold]", f"[magenta]{price_id_display}[/magenta]")
-    table.add_row("")
-    table.add_row("[bold]Input Tokens:[/bold]", f"[magenta]{summary['input_tokens']:,}[/magenta]")
-    table.add_row("[bold]Output Tokens:[/bold]", f"[magenta]{summary['output_tokens']:,}[/magenta]")
-    table.add_row("[bold]Total Estimated Cost:[/bold]", f"[magenta]{summary['estimated_cost']}[/magenta]")
-
-    task_usage: Any = getattr(task, 'usage', None) if task else None
-
-    _duration: Optional[float] = getattr(task_usage, 'duration', None) if task_usage else None
-    if _duration is not None:
-        table.add_row("[bold]Time Taken:[/bold]", f"[magenta]{_duration:.2f} seconds[/magenta]")
-
-    _model_time: Optional[float] = getattr(task_usage, 'model_execution_time', None) if task_usage else None
-    _tool_time: Optional[float] = getattr(task_usage, 'tool_execution_time', None) if task_usage else None
-    _pause_time: Optional[float] = getattr(task_usage, 'pause_time', None) if task_usage else None
-    _upsonic_time: Optional[float] = None
-    if _duration is not None and _model_time is not None:
-        _tool_deduct = _tool_time or 0.0
-        _pause_deduct = _pause_time or 0.0
-        _upsonic_time = max(0.0, _duration - _model_time - _tool_deduct - _pause_deduct)
-
-    if _model_time is not None:
-        table.add_row("[bold]Model Execution Time:[/bold]", f"[magenta]{_model_time:.2f} seconds[/magenta]")
-    if _tool_time is not None:
-        table.add_row("[bold]Tool Execution Time:[/bold]", f"[magenta]{_tool_time:.2f} seconds[/magenta]")
-    if _pause_time is not None:
-        table.add_row("[bold]Pause Time (HITL):[/bold]", f"[magenta]{_pause_time:.2f} seconds[/magenta]")
-    if _upsonic_time is not None:
-        table.add_row("[bold]Framework Overhead:[/bold]", f"[magenta]{_upsonic_time:.2f} seconds[/magenta]")
-
-    panel = Panel(
-        table,
-        title="[bold magenta]Task Metrics[/bold magenta]",
-        border_style="magenta",
-        expand=True,
-        width=70
-    )
-
-    console.print(panel)
-    spacing()
-
-    return summary
-
-
 def print_agent_metrics(agent: "Agent", print_output: bool = True) -> Optional[Dict[str, Any]]:
     """Print accumulated agent-level usage metrics in a formatted panel.
     
@@ -1479,27 +1350,6 @@ def call_retry(retry_count: int, max_retries: int):
 
     console.print(panel)
     spacing()
-
-def get_price_id_total_cost(price_id: str):
-    """
-    Get the total cost for a specific price ID.
-    
-    Args:
-        price_id (str): The price ID to get totals for
-        
-    Returns:
-        dict: Dictionary containing input tokens, output tokens, and estimated cost for the price ID.
-        None: If the price ID is not found.
-    """
-    if price_id not in price_id_summary:
-        return None
-
-    data = price_id_summary[price_id]
-    return {
-        'input_tokens': data['input_tokens'],
-        'output_tokens': data['output_tokens'],
-        'estimated_cost': float(data['estimated_cost'])
-    }
 
 def mcp_tool_operation(operation: str, result=None):
     """

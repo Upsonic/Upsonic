@@ -2,12 +2,12 @@
 Smoke tests for Task and Agent attribute management during do_async execution.
 
 Verifies attribute lifecycle changes:
-1. price_id isolation per run (cost tracking)
+1. task_usage_id isolation per run (ledger scope tag)
 2. _tool_call_count reset between fresh runs
 3. _tool_calls accumulation across tool executions
 4. task.response and task.status set after completion
 5. task timing attributes (start_time, end_time, duration)
-6. Cost tracking via price_id_summary (total_cost, total_input_token, total_output_token)
+6. Token / cost tracking via ``task.usage`` (TaskUsage)
 7. AgentRunOutput status and attributes after completion
 8. Multiple sequential runs on the same agent
 
@@ -41,26 +41,26 @@ def subtract(a: int, b: int) -> int:
 
 
 # ============================================================================
-# Test: price_id isolation per do_async run
+# Test: task_usage_id isolation per do_async run
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_do_async_price_id_isolated_per_run():
-    """Each do_async call should generate a fresh price_id for cost tracking."""
-    agent = Agent(model=MODEL, name="PriceIdAgent")
+async def test_do_async_task_usage_id_isolated_per_run():
+    """Each task carries its own usage scope tag."""
+    agent = Agent(model=MODEL, name="UsageIdAgent")
 
     task1 = Task(description="Say hello")
     task2 = Task(description="Say goodbye")
 
     await agent.do_async(task1)
-    price_id_1 = task1.price_id_
+    id1 = task1.task_usage_id
 
     await agent.do_async(task2)
-    price_id_2 = task2.price_id_
+    id2 = task2.task_usage_id
 
-    assert price_id_1 is not None
-    assert price_id_2 is not None
-    assert price_id_1 != price_id_2, "Each run must have its own price_id"
+    assert id1 is not None
+    assert id2 is not None
+    assert id1 != id2, "Each task must have its own task_usage_id"
 
 
 # ============================================================================
@@ -143,22 +143,21 @@ async def test_do_async_task_timing():
 
 
 # ============================================================================
-# Test: cost tracking via price_id_summary
+# Test: token tracking via task.usage (TaskUsage)
 # ============================================================================
 
 @pytest.mark.asyncio
 async def test_do_async_cost_tracking():
-    """task.total_cost, total_input_token, total_output_token should work after do_async."""
+    """task.usage should carry positive token counts after do_async."""
     agent = Agent(model=MODEL, name="CostAgent")
 
     task = Task(description="Say hello world")
     await agent.do_async(task)
 
-    assert task.price_id_ is not None, "price_id should be set"
-    assert task.total_input_token is not None, "total_input_token should be tracked"
-    assert task.total_output_token is not None, "total_output_token should be tracked"
-    assert task.total_input_token > 0, "Should have used input tokens"
-    assert task.total_output_token > 0, "Should have used output tokens"
+    assert task.task_usage_id is not None, "task_usage_id should be set"
+    assert task.usage is not None, "task.usage should be populated"
+    assert task.usage.input_tokens > 0, "Should have used input tokens"
+    assert task.usage.output_tokens > 0, "Should have used output tokens"
 
 
 # ============================================================================
@@ -212,20 +211,20 @@ async def test_do_async_multiple_sequential_runs():
     agent = Agent(model=MODEL, name="SequentialAgent", tools=[add])
 
     results = []
-    price_ids = []
+    usage_ids = []
 
     for i in range(3):
         task = Task(description=f"Use the add tool to calculate {i} + {i+1}")
         await agent.do_async(task)
         results.append(task.response)
-        price_ids.append(task.price_id_)
+        usage_ids.append(task.task_usage_id)
 
     # All should have responses
     for i, r in enumerate(results):
         assert r is not None, f"Task {i} should have a response"
 
-    # All should have unique price_ids
-    assert len(set(price_ids)) == 3, "Each run should have a unique price_id"
+    # All should have unique task_usage_ids
+    assert len(set(usage_ids)) == 3, "Each task should have a unique task_usage_id"
 
 
 # ============================================================================

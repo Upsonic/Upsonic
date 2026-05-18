@@ -52,11 +52,7 @@ class CallManager:
             self.start_time = self.end_time
 
     async def alog_completion(self, context: "AgentRunOutput") -> None:
-        """Log the completion with usage tracking, Tool Calls, LLM Result, and Task Metrics.
-
-        This is the single printing entry-point for completed runs.
-        It calls ``call_end`` (which prints Tool Calls + LLM Result
-        and tracks price_id) and then ``print_price_id_summary`` (Task Metrics).
+        """Log the completion with usage tracking, Tool Calls and LLM Result.
 
         Args:
             context: AgentRunOutput object containing messages and output.
@@ -110,16 +106,9 @@ class CallManager:
             usage,
             tool_usage_result,
             self.debug,
-            getattr(self.task, 'price_id', None),
             print_output=self.print_output,
             show_tool_calls=self.show_tool_calls,
         )
-
-        if self.task and not getattr(self.task, 'not_main_task', False):
-            from upsonic.utils.printing import print_price_id_summary, price_id_summary
-            price_id: Optional[str] = getattr(self.task, 'price_id', None)
-            if price_id and price_id in price_id_summary:
-                print_price_id_summary(price_id, self.task, print_output=self.print_output)
 
     def prepare(self) -> None:
         """Synchronous version of aprepare."""

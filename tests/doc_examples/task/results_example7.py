@@ -21,8 +21,9 @@ result = agent.do(task)
 print("=== TASK EXECUTION SUMMARY ===")
 print(f"Task ID: {task.get_task_id()}")
 print(f"Duration: {task.duration:.2f} seconds")
-print(f"Cost: ${task.total_cost}")
-print(f"Tokens: {task.total_input_token} in, {task.total_output_token} out")
+print(f"Cost: ${task.usage.cost if task.usage else None}")
+print(f"Tokens: {task.usage.input_tokens if task.usage else 0} in, "
+      f"{task.usage.output_tokens if task.usage else 0} out")
 print(f"Tool calls made: {len(task.tool_calls)}")
 print(f"Cache hit: {task._cache_hit}")
 

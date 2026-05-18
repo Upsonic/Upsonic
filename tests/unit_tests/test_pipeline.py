@@ -21,7 +21,7 @@ class MockTask:
         self._response = None
         self.response = None
         self.not_main_task = False
-        self.price_id = "test-123"
+        self.task_usage_id = "task-test-123"
         self._original_input = None
         self.cache_method = "simple"
         self.cache_threshold = 0.9

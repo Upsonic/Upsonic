@@ -992,9 +992,6 @@ class Model(Runnable[Any, Any]):
         
         task = self._build_task_for_invoke(messages)
 
-        import uuid as _uuid
-        task.price_id_ = str(_uuid.uuid4())
-
         model_params = self._build_parameters_for_invoke()
         model_params = self.customize_request_parameters(model_params)
         

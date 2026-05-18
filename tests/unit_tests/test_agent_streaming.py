@@ -153,22 +153,13 @@ class TestAgentStreaming:
         chunks = list(result)
         assert len(chunks) > 0
     
-    def test_stream_initializes_task_properties(self, agent, simple_task):
-        """Test that stream() properly initializes task properties with fresh state."""
-        # Set known values before streaming
-        original_price_id = "existing-id"
-        simple_task.price_id_ = original_price_id
+    def test_stream_resets_run_state(self, agent, simple_task):
+        """Test that stream() resets per-run state (tool counter)."""
         simple_task._tool_calls = [{"test": "call"}]
 
         result = agent.stream(simple_task)
-
-        # Consume the iterator
         chunks = list(result)
         assert len(chunks) > 0
-
-        # price_id_ should be reset to a fresh UUID (not the original)
-        assert simple_task.price_id_ is not None
-        assert simple_task.price_id_ != original_price_id
 
         # Agent's _tool_call_count should be reset for the new run
         assert agent._tool_call_count == 0
@@ -469,7 +460,7 @@ class TestStreamingPipelineComposition:
         memory_idx = step_names.index("stream_memory_message_tracking")
 
         # Post-processing order: execution → reflection → reliability → policy → finalization
-        # → memory tracking (session / task_end) → call management (usage / price_id_summary last)
+        # → memory tracking (session / task_end) → call management (usage, last)
         assert execution_idx < reflection_idx, "Reflection must come after model execution"
         assert reflection_idx < reliability_idx, "Reliability must come after reflection"
         assert reliability_idx < policy_idx, "Agent policy must come after reliability"
@@ -496,18 +487,6 @@ class TestStreamingPipelineComposition:
         for step_name in shared_prefix:
             assert step_name in streaming_names, f"Streaming missing shared step: {step_name}"
             assert step_name in direct_names, f"Direct missing shared step: {step_name}"
-
-    def test_streaming_pipeline_price_id_reset(self, agent):
-        """astream() should generate a fresh price_id for each run."""
-        from upsonic.tasks.tasks import Task as TaskClass
-        task = TaskClass("test")
-        original_price_id = task.price_id_
-
-        # Simulate what astream does before pipeline
-        import uuid as _uuid
-        task.price_id_ = str(_uuid.uuid4())
-
-        assert task.price_id_ != original_price_id
 
     def test_streaming_pipeline_tool_count_reset(self, agent):
         """astream() should reset _tool_call_count for each fresh run."""
@@ -587,7 +566,7 @@ class TestAgentStreamingIntegration:
         async for chunk in result1:
             chunks1.append(chunk)
 
-        first_price_id = task1.price_id_
+        first_usage_id = task1.task_usage_id
 
         # Second streaming session
         result2 = agent_with_memory.astream(task2)
@@ -595,14 +574,14 @@ class TestAgentStreamingIntegration:
         async for chunk in result2:
             chunks2.append(chunk)
 
-        second_price_id = task2.price_id_
+        second_usage_id = task2.task_usage_id
 
         # Both should complete successfully
         assert "".join(chunks1) == "Hello world!"
         assert "".join(chunks2) == "Hello world!"
 
-        # Each task should have its own unique price_id (cost tracking isolation)
-        assert first_price_id != second_price_id
+        # Each task should have its own unique usage scope (ledger isolation)
+        assert first_usage_id != second_usage_id
     
     @pytest.mark.asyncio
     async def test_streaming_with_multiple_tasks(self, agent_with_memory):

@@ -32,7 +32,6 @@ class Task(BaseModel):
     _response: Optional[Union[str, bytes]] = None
     context: Any = None
     _context_formatted: Optional[str] = None
-    price_id_: Optional[str] = None
     task_id_: Optional[str] = None
     task_usage_id_: Optional[str] = None
     not_main_task: bool = False
@@ -311,7 +310,6 @@ class Task(BaseModel):
         response: Optional[Union[str, bytes]] = None,
         context: Any = None,
         _context_formatted: Optional[str] = None,
-        price_id_: Optional[str] = None,
         task_id_: Optional[str] = None,
         task_usage_id_: Optional[str] = None,
         not_main_task: bool = False,
@@ -378,8 +376,6 @@ class Task(BaseModel):
         # Eagerly generate IDs if not provided
         import uuid
         from upsonic.usage_registry import new_usage_id
-        if price_id_ is None:
-            price_id_ = str(uuid.uuid4())
         if task_id_ is None:
             task_id_ = str(uuid.uuid4())
         if task_usage_id_ is None:
@@ -394,7 +390,6 @@ class Task(BaseModel):
             "_response": response,
             "context": context,
             "_context_formatted": _context_formatted,
-            "price_id_": price_id_,
             "task_id_": task_id_,
             "task_usage_id_": task_usage_id_,
             "not_main_task": not_main_task,
@@ -743,10 +738,6 @@ class Task(BaseModel):
 
 
     @property
-    def price_id(self):
-        return self.price_id_
-
-    @property
     def task_id(self):
         return self.task_id_
 
@@ -777,52 +768,6 @@ class Task(BaseModel):
         return self._response
 
 
-
-    def get_total_cost(self):
-        if self.price_id_ is None:
-            return None
-        # Lazy import for heavy modules
-        from upsonic.utils.printing import get_price_id_total_cost
-        return get_price_id_total_cost(self.price_id)
-    
-    @property
-    def total_cost(self) -> Optional[float]:
-        """
-        Get the total estimated cost of this task.
-        
-        Returns:
-            Optional[float]: The estimated cost in USD, or None if not available
-        """
-        the_total_cost = self.get_total_cost()
-        if the_total_cost and "estimated_cost" in the_total_cost:
-            return the_total_cost["estimated_cost"]
-        return None
-        
-    @property
-    def total_input_token(self) -> Optional[int]:
-        """
-        Get the total number of input tokens used by this task.
-        
-        Returns:
-            Optional[int]: The number of input tokens, or None if not available
-        """
-        the_total_cost = self.get_total_cost()
-        if the_total_cost and "input_tokens" in the_total_cost:
-            return the_total_cost["input_tokens"]
-        return None
-        
-    @property
-    def total_output_token(self) -> Optional[int]:
-        """
-        Get the total number of output tokens used by this task.
-        
-        Returns:
-            Optional[int]: The number of output tokens, or None if not available
-        """
-        the_total_cost = self.get_total_cost()
-        if the_total_cost and "output_tokens" in the_total_cost:
-            return the_total_cost["output_tokens"]
-        return None
 
     @property
     def cache_hit(self) -> bool:
@@ -900,7 +845,7 @@ class Task(BaseModel):
         clearing it here, a successful retry attempt would also be skipped.
 
         Does NOT touch user-provided configuration (description, tools,
-        response_format, ...) or persistent fields (price_id_, task_id_,
+        response_format, ...) or persistent fields (task_id_, task_usage_id_,
         agent, _cache_manager, _tool_manager). Does NOT recreate ``_usage``
         — ``task_start()`` owns that lifecycle.
         """
@@ -1109,7 +1054,6 @@ class Task(BaseModel):
             "description": self.description,
             "attachments": self.attachments,
             "response_lang": self.response_lang,
-            "price_id_": self.price_id_,
             "task_id_": self.task_id_,
             "task_usage_id_": self.task_usage_id_,
             "not_main_task": self.not_main_task,
@@ -1328,7 +1272,7 @@ class Task(BaseModel):
         # Filter to only fields that Task accepts in constructor
         valid_fields = {
             "description", "attachments", "response_lang", "context",
-            "price_id_", "task_id_", "task_usage_id_", "not_main_task", "start_time", "end_time",
+            "task_id_", "task_usage_id_", "not_main_task", "start_time", "end_time",
             "enable_thinking_tool", "enable_reasoning_tool",
             "guardrail_retries", "is_paused", "enable_cache", "cache_method",
             "cache_threshold", "cache_duration_minutes", "query_knowledge_base", "vector_search_top_k",
