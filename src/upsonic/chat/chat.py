@@ -732,7 +732,10 @@ class Chat:
     ) -> Union[str, InvokeResult]:
         """Handle blocking invocation. Retries are owned by ``agent.retry``."""
         from upsonic.run.agent.output import AgentRunOutput as AgentRunOutputConcrete
+        from upsonic.usage_registry.scope import _chat_usage_id, _user_id
 
+        _chat_token = _chat_usage_id.set(self.chat_usage_id)
+        _user_token = _user_id.set(self.user_id)
         try:
             if self.debug and self.debug_level >= 2:
                 from upsonic.utils.printing import debug_log_level2
@@ -784,7 +787,15 @@ class Chat:
         finally:
             self._session_manager.end_invocation()
             self._transition_state(SessionState.IDLE)
-    
+            try:
+                _chat_usage_id.reset(_chat_token)
+            except Exception:
+                pass
+            try:
+                _user_id.reset(_user_token)
+            except Exception:
+                pass
+
     def _invoke_streaming(
         self,
         task: Task,
@@ -792,7 +803,11 @@ class Chat:
         **kwargs: Any
     ) -> AsyncIterator[str]:
         """Handle streaming invocation (text chunks)."""
+        from upsonic.usage_registry.scope import _chat_usage_id, _user_id
+
         async def _stream() -> AsyncIterator[str]:
+            _chat_token = _chat_usage_id.set(self.chat_usage_id)
+            _user_token = _user_id.set(self.user_id)
             stream_generator: Optional[AsyncIterator[Any]] = None
             try:
                 stream_generator = self.agent.astream(task, debug=self.debug, events=False, **kwargs)
@@ -822,6 +837,15 @@ class Chat:
                     except Exception:
                         pass
 
+                try:
+                    _chat_usage_id.reset(_chat_token)
+                except Exception:
+                    pass
+                try:
+                    _user_id.reset(_user_token)
+                except Exception:
+                    pass
+
         gen = _stream()
         self._active_stream = gen
         return gen
@@ -833,7 +857,11 @@ class Chat:
         **kwargs: Any
     ) -> AsyncIterator["AgentEvent"]:
         """Handle streaming invocation with events (yields AgentEvent objects)."""
+        from upsonic.usage_registry.scope import _chat_usage_id, _user_id
+
         async def _stream() -> AsyncIterator[Any]:
+            _chat_token = _chat_usage_id.set(self.chat_usage_id)
+            _user_token = _user_id.set(self.user_id)
             stream_generator: Optional[AsyncIterator[Any]] = None
             try:
                 stream_generator = self.agent.astream(task, debug=self.debug, events=True, **kwargs)
@@ -861,6 +889,15 @@ class Chat:
                         await stream_generator.aclose()
                     except Exception:
                         pass
+
+                try:
+                    _chat_usage_id.reset(_chat_token)
+                except Exception:
+                    pass
+                try:
+                    _user_id.reset(_user_token)
+                except Exception:
+                    pass
 
         gen = _stream()
         self._active_stream = gen

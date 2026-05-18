@@ -19,6 +19,7 @@ from upsonic.usage_registry.entry import UsageEntry, UsageKind
 from upsonic.usage_registry.aggregated import AggregatedUsage
 from upsonic.usage_registry.registry import UsageRegistry, get_default_registry
 from upsonic.usage_registry.ids import new_usage_id
+from upsonic.usage_registry.scope import scope, current_scope_tags
 
 __all__ = (
     "UsageEntry",
@@ -27,4 +28,6 @@ __all__ = (
     "UsageRegistry",
     "get_default_registry",
     "new_usage_id",
+    "scope",
+    "current_scope_tags",
 )

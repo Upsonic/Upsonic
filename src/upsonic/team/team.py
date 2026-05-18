@@ -267,13 +267,21 @@ class Team:
             The response from the multi-agent operation.
         """
         from upsonic.tasks.tasks import Task as TaskClass
+        from upsonic.usage_registry.scope import _team_usage_id
         if isinstance(task, str):
             task = TaskClass(description=task)
         tasks_to_execute: List[Task] = [task]
         resolved_print: bool = self._resolve_print_flag(False) if _print_method_default is None else _print_method_default
-        result = await self.multi_agent_async(
-            self.entities, tasks_to_execute, _print_method_default=resolved_print
-        )
+        _team_token = _team_usage_id.set(self.team_usage_id)
+        try:
+            result = await self.multi_agent_async(
+                self.entities, tasks_to_execute, _print_method_default=resolved_print
+            )
+        finally:
+            try:
+                _team_usage_id.reset(_team_token)
+            except Exception:
+                pass
         if isinstance(task, TaskClass) and task.response is None and result is not None:
             task._response = str(result) if not isinstance(result, str) else result
         return result

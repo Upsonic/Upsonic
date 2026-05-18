@@ -3827,6 +3827,18 @@ class Agent(BaseAgent):
             self._tool_limit_reached = False
         self._last_built_system_prompt = None
 
+        # Push agent + task scope onto the usage-registry contextvars so the
+        # Phase-2 emission point at the model call sees them. Tokens reset
+        # in the finally below.
+        from upsonic.usage_registry.scope import (
+            _agent_usage_id,
+            _task_usage_id,
+        )
+        _agent_scope_token = _agent_usage_id.set(self.agent_usage_id)
+        _task_scope_token = _task_usage_id.set(
+            getattr(task, "task_usage_id", None)
+        ) if hasattr(task, "task_usage_id") else None
+
         if debug or self.debug:
             self.user_policy_manager.debug = True
             self.agent_policy_manager.debug = True
@@ -3908,6 +3920,16 @@ class Agent(BaseAgent):
             _is_paused = getattr(_output.task, 'is_paused', False) if _output and _output.task else False
             if not _is_paused:
                 self.run_id = None
+            # Pop usage-registry scope tags pushed at function entry.
+            try:
+                _agent_usage_id.reset(_agent_scope_token)
+            except Exception:
+                pass
+            if _task_scope_token is not None:
+                try:
+                    _task_usage_id.reset(_task_scope_token)
+                except Exception:
+                    pass
 
     def _calculate_aggregated_cost(self) -> Optional[float]:
         """Calculate the aggregated monetary cost across the agent run.
@@ -4576,6 +4598,16 @@ class Agent(BaseAgent):
         self._tool_limit_reached = False
         self._last_built_system_prompt = None
 
+        # Push usage scope for the duration of the stream — symmetric with do_async.
+        from upsonic.usage_registry.scope import (
+            _agent_usage_id,
+            _task_usage_id,
+        )
+        _agent_scope_token = _agent_usage_id.set(self.agent_usage_id)
+        _task_scope_token = _task_usage_id.set(
+            getattr(task, "task_usage_id", None)
+        ) if hasattr(task, "task_usage_id") else None
+
         run_id = str(uuid.uuid4())
         self.run_id = run_id
         register_run(run_id)
@@ -4660,6 +4692,16 @@ class Agent(BaseAgent):
             self._finalize_agent_usage(stream_print_flag)
             cleanup_run(run_id)
             self.run_id = None
+            # Pop usage-registry scope tags pushed at function entry.
+            try:
+                _agent_usage_id.reset(_agent_scope_token)
+            except Exception:
+                pass
+            if _task_scope_token is not None:
+                try:
+                    _task_usage_id.reset(_task_scope_token)
+                except Exception:
+                    pass
     
     def _extract_text_from_stream_event(self, event: Any) -> Optional[str]:
         """Extract text content from a streaming event.
