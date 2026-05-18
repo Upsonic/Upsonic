@@ -4157,27 +4157,16 @@ class Agent(BaseAgent):
     def _finalize_agent_usage(self, print_flag: bool) -> None:
         """Accumulate current run usage into agent-level usage and optionally print agent metrics.
 
-        Should be called at the end of every do_async / astream execution.
-        Skips both accumulation AND printing when the task is paused
-        (``is_paused=True``, set for HITL pause, error, and cancellation
-        because all three may be resumed via ``continue_run_async`` — the
-        same ``TaskUsage`` instance persists across resume rounds and is
-        accumulated once the run finally completes).
+        Called at the end of every do_async / astream execution. Skips
+        accumulation AND printing when the task is paused (``is_paused=True``,
+        set for HITL pause, error, and cancellation — all three may be
+        resumed via ``continue_run_async``).
 
-        Uses a baseline snapshot on the output (``_agent_usage_baseline``) to
-        avoid double-counting when the run has already been accumulated once
-        (e.g. by the retry-exhaustion hook before the user resumed via
-        ``continue_run_async``). When a baseline is present, only the delta
-        of work performed since the baseline is accumulated. The baseline is
-        refreshed after each accumulation so successive calls remain correct.
-
-        For the in-process retry path the failed attempt's usage is captured
-        separately by the retry block in ``do_async`` (before
-        ``reset_run_state`` discards the TaskUsage), so this method does not
-        need to special-case retry.
-
-        Args:
-            print_flag: Whether printing is enabled for this execution.
+        The TECH-1588 baseline / snapshot delta arithmetic is gone: the
+        usage registry is idempotent on ``entry_id``, so double-counting
+        across retry / resume is structurally impossible at the ledger
+        level. The legacy ``agent.usage`` chain still needs a single
+        ``incr`` per finalize, which is what this method now does.
         """
         output = getattr(self, '_agent_run_output', None)
         if output is None:
@@ -4189,84 +4178,11 @@ class Agent(BaseAgent):
         if not is_paused:
             usage = getattr(output, 'usage', None)
             if usage is not None:
-                baseline = getattr(output, '_agent_usage_baseline', None)
-                if baseline is None:
-                    self._accumulate_run_usage(usage)
-                else:
-                    delta = usage.subtract(baseline)
-                    self._accumulate_run_usage(delta)
-                # Refresh baseline so any subsequent finalize only counts new work.
-                output._agent_usage_baseline = usage.snapshot()
+                self._accumulate_run_usage(usage)
 
         if print_flag and task and not getattr(task, 'not_main_task', False) and not is_paused:
             from upsonic.utils.printing import print_agent_metrics
             print_agent_metrics(self, print_output=print_flag)
-
-    async def _on_retries_exhausted(self) -> None:
-        """Hook invoked by ``@retryable`` after all retry attempts have failed.
-
-        Captures the final failed attempt's usage into agent-level usage so
-        retry metrics stay complete even when the user discards the failed
-        task. Records a baseline snapshot on the output so that any
-        subsequent ``continue_run_async`` (resume after retry exhaustion)
-        will only add the *delta* of post-resume work — preventing the
-        previously-captured portion from being double-counted.
-
-        Re-persists the *output state only* to storage (if memory is
-        configured) so the baseline survives a cross-process resume. The
-        pipeline's durable error save already wrote the session's messages
-        and the initial output before this hook ran, so we cannot call the
-        full ``save_session_async`` here — it would append the same
-        messages a second time. Instead we directly upsert the existing
-        session's run output through the storage layer, which is
-        idempotent for the run dict.
-        """
-        output = getattr(self, '_agent_run_output', None)
-        if output is None:
-            return
-        usage = getattr(output, 'usage', None)
-        if usage is None:
-            return
-        self._accumulate_run_usage(usage)
-        output._agent_usage_baseline = usage.snapshot()
-
-        if self.memory is None:
-            return
-
-        try:
-            from upsonic.session.base import SessionType
-            from upsonic.storage.memory.storage_dispatch import is_async_storage_backend
-
-            storage = self.memory.storage
-            session_id = self.memory.session_id
-            if storage is None or session_id is None:
-                return
-
-            if is_async_storage_backend(storage):
-                session = await storage.aget_session(
-                    session_id=session_id,
-                    session_type=SessionType.AGENT,
-                    deserialize=True,
-                )
-            else:
-                session = storage.get_session(
-                    session_id=session_id,
-                    session_type=SessionType.AGENT,
-                    deserialize=True,
-                )
-
-            if session is None:
-                return
-
-            # Idempotent: only updates the run dict's output, doesn't touch messages.
-            session.upsert_run(output)
-
-            if is_async_storage_backend(storage):
-                await storage.aupsert_session(session, deserialize=True)
-            else:
-                storage.upsert_session(session, deserialize=True)
-        except Exception:
-            pass  # Best-effort — don't let storage errors mask the original exception
 
     def _extract_output(self, task: "Task", response: "ModelResponse") -> Any:
         """Extract the output from a model response."""
