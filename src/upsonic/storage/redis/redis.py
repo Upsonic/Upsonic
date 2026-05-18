@@ -178,6 +178,8 @@ class RedisStorage(Storage):
             return self.session_table_name
         elif table_type == "user_memories":
             return self.user_memory_table_name
+        elif table_type == "usage_entries":
+            return self.usage_entry_table_name
         else:
             raise ValueError(f"Unknown table type: {table_type}")
 
@@ -1624,3 +1626,127 @@ class RedisStorage(Storage):
 
         _logger.debug(f"Deleted {deleted_count} knowledge entries")
         return deleted_count
+
+    # ======================== Usage Registry Entries ========================
+    #
+    # Redis layout: one ``upsonic:usage_entries:<entry_id>`` key per row,
+    # plus one ``upsonic:usage_entries:idx:<scope>:<value>`` Set per scope
+    # tag for cheap roll-up queries. Filters AND-intersect those Sets.
+
+    _USAGE_SCOPE_FIELDS = (
+        "chat_usage_id", "agent_usage_id", "task_usage_id",
+        "team_usage_id", "workflow_usage_id", "system_usage_id",
+        "run_id", "user_id", "kind",
+    )
+
+    def _usage_index_key(self, field: str, value: str) -> str:
+        return f"{self.db_prefix}:{self.usage_entry_table_name}:idx:{field}:{value}"
+
+    def upsert_usage_entry(self, entry: Dict[str, Any]) -> None:
+        from upsonic.storage.redis.utils import generate_redis_key, serialize_data
+
+        eid = entry.get("entry_id")
+        if not eid:
+            raise ValueError("usage entry must have a non-empty entry_id")
+
+        # Tear down any stale index entries for this entry_id first so
+        # an upsert that flips a scope tag doesn't leave a phantom.
+        old = self._get_record("usage_entries", eid) or {}
+
+        key = generate_redis_key(
+            prefix=self.db_prefix,
+            table_type="usage_entries",
+            key_id=eid,
+        )
+        pipe = self.redis_client.pipeline()
+        pipe.set(key, serialize_data(dict(entry)), ex=self.expire)
+        for f in self._USAGE_SCOPE_FIELDS:
+            old_v = old.get(f)
+            new_v = entry.get(f)
+            if old_v is not None and old_v != new_v:
+                pipe.srem(self._usage_index_key(f, old_v), eid)
+            if new_v is not None and new_v != old_v:
+                pipe.sadd(self._usage_index_key(f, new_v), eid)
+                if self.expire is not None:
+                    pipe.expire(self._usage_index_key(f, new_v), self.expire)
+        pipe.execute()
+
+    def query_usage_entries(
+        self,
+        *,
+        chat_usage_id: Optional[str] = None,
+        agent_usage_id: Optional[str] = None,
+        task_usage_id: Optional[str] = None,
+        team_usage_id: Optional[str] = None,
+        workflow_usage_id: Optional[str] = None,
+        system_usage_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        kind: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        active = {
+            "chat_usage_id": chat_usage_id, "agent_usage_id": agent_usage_id,
+            "task_usage_id": task_usage_id, "team_usage_id": team_usage_id,
+            "workflow_usage_id": workflow_usage_id, "system_usage_id": system_usage_id,
+            "run_id": run_id, "user_id": user_id, "kind": kind,
+        }
+        active = {k: v for k, v in active.items() if v is not None}
+
+        if not active:
+            rows = self._get_all_records("usage_entries")
+        else:
+            keys = [self._usage_index_key(k, v) for k, v in active.items()]
+            ids = self.redis_client.sinter(keys) if len(keys) > 1 else self.redis_client.smembers(keys[0])
+            rows = []
+            for eid in ids:
+                if isinstance(eid, bytes):
+                    eid = eid.decode("utf-8")
+                doc = self._get_record("usage_entries", eid)
+                if doc:
+                    rows.append(doc)
+
+        if limit is not None:
+            rows = rows[:limit]
+        return rows
+
+    def delete_usage_entries(
+        self,
+        *,
+        chat_usage_id: Optional[str] = None,
+        agent_usage_id: Optional[str] = None,
+        task_usage_id: Optional[str] = None,
+        team_usage_id: Optional[str] = None,
+        workflow_usage_id: Optional[str] = None,
+        system_usage_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> int:
+        from upsonic.storage.redis.utils import generate_redis_key
+        rows = self.query_usage_entries(
+            chat_usage_id=chat_usage_id, agent_usage_id=agent_usage_id,
+            task_usage_id=task_usage_id, team_usage_id=team_usage_id,
+            workflow_usage_id=workflow_usage_id, system_usage_id=system_usage_id,
+            run_id=run_id, user_id=user_id,
+        )
+        if not rows:
+            return 0
+        if not any([
+            chat_usage_id, agent_usage_id, task_usage_id, team_usage_id,
+            workflow_usage_id, system_usage_id, run_id, user_id,
+        ]):
+            return 0
+        pipe = self.redis_client.pipeline()
+        for row in rows:
+            eid = row.get("entry_id")
+            if not eid:
+                continue
+            pipe.delete(generate_redis_key(
+                prefix=self.db_prefix, table_type="usage_entries", key_id=eid,
+            ))
+            for f in self._USAGE_SCOPE_FIELDS:
+                v = row.get(f)
+                if v is not None:
+                    pipe.srem(self._usage_index_key(f, v), eid)
+        pipe.execute()
+        return len(rows)

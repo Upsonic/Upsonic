@@ -51,6 +51,25 @@ KNOWLEDGE_COLLECTION_INDEXES: List[Dict[str, Any]] = [
 ]
 
 
+# Usage-registry ledger indexes — one row per LLM / tool / embedding /
+# OCR call, idempotent on entry_id, scope tags indexed for cheap
+# roll-up queries.
+USAGE_ENTRY_COLLECTION_INDEXES: List[Dict[str, Any]] = [
+    {"keys": [("entry_id", 1)], "unique": True},
+    {"keys": [("chat_usage_id", 1)]},
+    {"keys": [("agent_usage_id", 1)]},
+    {"keys": [("task_usage_id", 1)]},
+    {"keys": [("team_usage_id", 1)]},
+    {"keys": [("workflow_usage_id", 1)]},
+    {"keys": [("system_usage_id", 1)]},
+    {"keys": [("run_id", 1)]},
+    {"keys": [("user_id", 1)]},
+    {"keys": [("parent_entry_id", 1)]},
+    {"keys": [("kind", 1)]},
+    {"keys": [("timestamp", -1)]},
+]
+
+
 # Session document structure (for reference/validation)
 SESSION_DOCUMENT_STRUCTURE: Dict[str, Dict[str, Any]] = {
     "session_id": {"type": "string", "required": True, "unique": True},
@@ -139,6 +158,7 @@ def get_collection_indexes(collection_type: str) -> List[Dict[str, Any]]:
         "user_memories": USER_MEMORY_COLLECTION_INDEXES,
         "cultural_knowledge": CULTURAL_KNOWLEDGE_COLLECTION_INDEXES,
         "knowledge": KNOWLEDGE_COLLECTION_INDEXES,
+        "usage_entries": USAGE_ENTRY_COLLECTION_INDEXES,
     }
     
     if collection_type not in indexes:

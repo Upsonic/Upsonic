@@ -168,6 +168,7 @@ class PostgresStorage(Storage):
         self._user_memory_table: Optional[Table] = None
         self._cultural_knowledge_table: Optional[Table] = None
         self._knowledge_table: Optional[Table] = None
+        self._usage_entry_table: Optional[Table] = None
         self._tables: Dict[str, Table] = {}  # Cache for generic model tables
 
     def close(self) -> None:
@@ -194,6 +195,7 @@ class PostgresStorage(Storage):
             (self.user_memory_table_name, "user_memories"),
             (self.cultural_knowledge_table_name, "cultural_knowledge"),
             (self.knowledge_table_name, "knowledge"),
+            (self.usage_entry_table_name, "usage_entries"),
         ]
 
         for table_name, table_type in tables_to_create:
@@ -1845,3 +1847,96 @@ class PostgresStorage(Storage):
         except Exception as e:
             _logger.error(f"Error deleting knowledge contents: {e}")
             raise e
+
+    # ======================== Usage Registry Entries ========================
+
+    def _get_usage_entry_table(self, create_if_not_found: bool = False) -> Table:
+        if self._usage_entry_table is None:
+            self._usage_entry_table = self._get_or_create_table(
+                table_name=self.usage_entry_table_name,
+                table_type="usage_entries",
+                create_if_not_found=create_if_not_found,
+            )
+        return self._usage_entry_table
+
+    @staticmethod
+    def _row_to_dict(row: Any) -> Dict[str, Any]:
+        return dict(row._mapping)
+
+    def upsert_usage_entry(self, entry: Dict[str, Any]) -> None:
+        eid = entry.get("entry_id")
+        if not eid:
+            raise ValueError("usage entry must have a non-empty entry_id")
+        table = self._get_usage_entry_table(create_if_not_found=True)
+        stmt = postgresql.insert(table).values(**entry)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[table.c.entry_id],
+            set_={c.name: stmt.excluded[c.name] for c in table.columns if c.name != "entry_id"},
+        )
+        with self.Session() as sess, sess.begin():
+            sess.execute(stmt)
+
+    def query_usage_entries(
+        self,
+        *,
+        chat_usage_id: Optional[str] = None,
+        agent_usage_id: Optional[str] = None,
+        task_usage_id: Optional[str] = None,
+        team_usage_id: Optional[str] = None,
+        workflow_usage_id: Optional[str] = None,
+        system_usage_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        kind: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        try:
+            table = self._get_usage_entry_table(create_if_not_found=False)
+        except ValueError:
+            return []
+        stmt = select(table)
+        filters = {
+            "chat_usage_id": chat_usage_id, "agent_usage_id": agent_usage_id,
+            "task_usage_id": task_usage_id, "team_usage_id": team_usage_id,
+            "workflow_usage_id": workflow_usage_id, "system_usage_id": system_usage_id,
+            "run_id": run_id, "user_id": user_id, "kind": kind,
+        }
+        for k, v in filters.items():
+            if v is not None:
+                stmt = stmt.where(table.c[k] == v)
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        with self.Session() as sess:
+            return [self._row_to_dict(r) for r in sess.execute(stmt).all()]
+
+    def delete_usage_entries(
+        self,
+        *,
+        chat_usage_id: Optional[str] = None,
+        agent_usage_id: Optional[str] = None,
+        task_usage_id: Optional[str] = None,
+        team_usage_id: Optional[str] = None,
+        workflow_usage_id: Optional[str] = None,
+        system_usage_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> int:
+        try:
+            table = self._get_usage_entry_table(create_if_not_found=False)
+        except ValueError:
+            return 0
+        filters = {
+            "chat_usage_id": chat_usage_id, "agent_usage_id": agent_usage_id,
+            "task_usage_id": task_usage_id, "team_usage_id": team_usage_id,
+            "workflow_usage_id": workflow_usage_id, "system_usage_id": system_usage_id,
+            "run_id": run_id, "user_id": user_id,
+        }
+        if all(v is None for v in filters.values()):
+            return 0
+        stmt = table.delete()
+        for k, v in filters.items():
+            if v is not None:
+                stmt = stmt.where(table.c[k] == v)
+        with self.Session() as sess, sess.begin():
+            result = sess.execute(stmt)
+            return result.rowcount or 0

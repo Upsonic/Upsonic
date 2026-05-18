@@ -5,7 +5,7 @@ Uses JSONB for JSON fields to enable efficient querying and indexing.
 from typing import Any, Dict
 
 try:
-    from sqlalchemy import BigInteger, String
+    from sqlalchemy import BigInteger, Float, String
     from sqlalchemy.dialects.postgresql import JSONB
 except ImportError:
     raise ImportError(
@@ -80,6 +80,45 @@ KNOWLEDGE_TABLE_SCHEMA: Dict[str, Dict[str, Any]] = {
 }
 
 
+USAGE_ENTRY_TABLE_SCHEMA: Dict[str, Dict[str, Any]] = {
+    "entry_id": {"type": String, "primary_key": True, "nullable": False},
+    "timestamp": {"type": Float, "nullable": False, "index": True},
+    "kind": {"type": String, "nullable": False, "index": True},
+    "model": {"type": String, "nullable": True},
+    "provider": {"type": String, "nullable": True},
+
+    "input_tokens": {"type": BigInteger, "nullable": False},
+    "output_tokens": {"type": BigInteger, "nullable": False},
+    "cache_read_tokens": {"type": BigInteger, "nullable": False},
+    "cache_write_tokens": {"type": BigInteger, "nullable": False},
+    "reasoning_tokens": {"type": BigInteger, "nullable": False},
+    "input_audio_tokens": {"type": BigInteger, "nullable": False},
+    "output_audio_tokens": {"type": BigInteger, "nullable": False},
+    "cache_audio_read_tokens": {"type": BigInteger, "nullable": False},
+    "requests": {"type": BigInteger, "nullable": False},
+    "tool_calls": {"type": BigInteger, "nullable": False},
+    "cost_usd": {"type": Float, "nullable": True},
+
+    "duration": {"type": Float, "nullable": False},
+    "model_execution_time": {"type": Float, "nullable": False},
+    "tool_execution_time": {"type": Float, "nullable": False},
+    "time_to_first_token": {"type": Float, "nullable": True},
+
+    "chat_usage_id": {"type": String, "nullable": True, "index": True},
+    "agent_usage_id": {"type": String, "nullable": True, "index": True},
+    "task_usage_id": {"type": String, "nullable": True, "index": True},
+    "team_usage_id": {"type": String, "nullable": True, "index": True},
+    "workflow_usage_id": {"type": String, "nullable": True, "index": True},
+    "system_usage_id": {"type": String, "nullable": True, "index": True},
+
+    "run_id": {"type": String, "nullable": True, "index": True},
+    "user_id": {"type": String, "nullable": True, "index": True},
+    "parent_entry_id": {"type": String, "nullable": True, "index": True},
+    "pipeline_step": {"type": String, "nullable": True},
+    "extra": {"type": JSONB, "nullable": True},
+}
+
+
 def get_table_schema_definition(table_type: str) -> Dict[str, Dict[str, Any]]:
     """
     Get the schema definition for a given table type.
@@ -98,6 +137,7 @@ def get_table_schema_definition(table_type: str) -> Dict[str, Dict[str, Any]]:
         "user_memories": USER_MEMORY_TABLE_SCHEMA,
         "cultural_knowledge": CULTURAL_KNOWLEDGE_TABLE_SCHEMA,
         "knowledge": KNOWLEDGE_TABLE_SCHEMA,
+        "usage_entries": USAGE_ENTRY_TABLE_SCHEMA,
     }
     
     if table_type not in schemas:

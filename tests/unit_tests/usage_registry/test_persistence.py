@@ -21,6 +21,15 @@ try:
 except ImportError:
     SqliteStorage = None  # type: ignore
     _SQLITE_AVAILABLE = False
+
+try:
+    import fakeredis  # type: ignore
+    from upsonic.storage.redis.redis import RedisStorage  # type: ignore
+    _REDIS_AVAILABLE = True
+except ImportError:
+    fakeredis = None  # type: ignore
+    RedisStorage = None  # type: ignore
+    _REDIS_AVAILABLE = False
 from upsonic.usage import RequestUsage
 from upsonic.usage_registry import (
     UsageEntry,
@@ -136,6 +145,19 @@ class TestSQLiteBackend(_BackendRoundTripMixin, unittest.TestCase):
             pass
         try:
             os.unlink(self._tmp.name)
+        except Exception:
+            pass
+
+
+@unittest.skipUnless(_REDIS_AVAILABLE, "fakeredis not installed")
+class TestRedisBackend(_BackendRoundTripMixin, unittest.TestCase):
+    def _make_storage(self):
+        client = fakeredis.FakeRedis(decode_responses=True)
+        return RedisStorage(redis_client=client, db_prefix="upsonic-test")
+
+    def _cleanup(self, storage):
+        try:
+            storage.redis_client.flushall()
         except Exception:
             pass
 

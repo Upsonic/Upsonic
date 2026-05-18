@@ -126,10 +126,12 @@ class MongoStorage(Storage):
         self._user_memory_collection: Optional[Collection] = None
         self._cultural_knowledge_collection: Optional[Collection] = None
         self._knowledge_collection: Optional[Collection] = None
+        self._usage_entry_collection: Optional[Collection] = None
         self._sessions_initialized: bool = False
         self._user_memories_initialized: bool = False
         self._cultural_knowledge_initialized: bool = False
         self._knowledge_initialized: bool = False
+        self._usage_entries_initialized: bool = False
 
     # ======================== Client Management ========================
 
@@ -183,6 +185,7 @@ class MongoStorage(Storage):
             ("user_memories", self.user_memory_table_name),
             ("cultural_knowledge", self.cultural_knowledge_table_name),
             ("knowledge", self.knowledge_table_name),
+            ("usage_entries", self.usage_entry_table_name),
         ]
 
         for collection_type, collection_name in collections_to_create:
@@ -258,6 +261,19 @@ class MongoStorage(Storage):
                     create_collection_if_not_found=create_collection_if_not_found,
                 )
             return self._knowledge_collection
+
+        if collection_type == "usage_entries":
+            if self._usage_entry_collection is None:
+                if self.usage_entry_table_name is None:
+                    raise ValueError(
+                        "Usage entry collection was not provided on initialization"
+                    )
+                self._usage_entry_collection = self._get_or_create_collection(
+                    collection_name=self.usage_entry_table_name,
+                    collection_type="usage_entries",
+                    create_collection_if_not_found=create_collection_if_not_found,
+                )
+            return self._usage_entry_collection
 
         raise ValueError(f"Unknown collection type: {collection_type}")
 
@@ -1693,3 +1709,81 @@ class MongoStorage(Storage):
         except Exception as e:
             _logger.error(f"Error deleting knowledge contents: {e}")
             raise e
+
+    # ======================== Usage Registry Entries ========================
+
+    @staticmethod
+    def _usage_scope_filter(**kw) -> Dict[str, Any]:
+        return {k: v for k, v in kw.items() if v is not None}
+
+    def upsert_usage_entry(self, entry: Dict[str, Any]) -> None:
+        eid = entry.get("entry_id")
+        if not eid:
+            raise ValueError("usage entry must have a non-empty entry_id")
+        collection = self._get_collection("usage_entries", create_collection_if_not_found=True)
+        # Idempotent on entry_id.
+        collection.replace_one({"entry_id": eid}, dict(entry), upsert=True)
+
+    def query_usage_entries(
+        self,
+        *,
+        chat_usage_id: Optional[str] = None,
+        agent_usage_id: Optional[str] = None,
+        task_usage_id: Optional[str] = None,
+        team_usage_id: Optional[str] = None,
+        workflow_usage_id: Optional[str] = None,
+        system_usage_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        kind: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        try:
+            collection = self._get_collection("usage_entries", create_collection_if_not_found=False)
+        except ValueError:
+            return []
+        if collection is None:
+            return []
+        flt = self._usage_scope_filter(
+            chat_usage_id=chat_usage_id, agent_usage_id=agent_usage_id,
+            task_usage_id=task_usage_id, team_usage_id=team_usage_id,
+            workflow_usage_id=workflow_usage_id, system_usage_id=system_usage_id,
+            run_id=run_id, user_id=user_id, kind=kind,
+        )
+        cursor = collection.find(flt)
+        if limit is not None:
+            cursor = cursor.limit(limit)
+        out: List[Dict[str, Any]] = []
+        for doc in cursor:
+            doc.pop("_id", None)
+            out.append(doc)
+        return out
+
+    def delete_usage_entries(
+        self,
+        *,
+        chat_usage_id: Optional[str] = None,
+        agent_usage_id: Optional[str] = None,
+        task_usage_id: Optional[str] = None,
+        team_usage_id: Optional[str] = None,
+        workflow_usage_id: Optional[str] = None,
+        system_usage_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> int:
+        try:
+            collection = self._get_collection("usage_entries", create_collection_if_not_found=False)
+        except ValueError:
+            return 0
+        if collection is None:
+            return 0
+        flt = self._usage_scope_filter(
+            chat_usage_id=chat_usage_id, agent_usage_id=agent_usage_id,
+            task_usage_id=task_usage_id, team_usage_id=team_usage_id,
+            workflow_usage_id=workflow_usage_id, system_usage_id=system_usage_id,
+            run_id=run_id, user_id=user_id,
+        )
+        if not flt:
+            return 0
+        result = collection.delete_many(flt)
+        return result.deleted_count or 0
