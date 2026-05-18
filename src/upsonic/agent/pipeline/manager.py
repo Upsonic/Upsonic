@@ -155,8 +155,8 @@ class PipelineManager:
         if not cancelled_step_result:
             cancelled_step_result = output.get_cancelled_step()
 
-        # Stop the usage timer and mark paused so _finalize_agent_usage
-        # doesn't double-count and duration is preserved for resume.
+        # Stop the usage timer and mark paused so the run-state knows
+        # to resume cleanly; duration is preserved for the resume path.
         if self.task:
             self.task.is_paused = True
             if hasattr(self.task, '_usage') and self.task._usage is not None:
@@ -202,8 +202,8 @@ class PipelineManager:
         if not failed_step_result:
             failed_step_result = output.get_error_step()
 
-        # Stop the usage timer and mark paused so _finalize_agent_usage
-        # doesn't double-count and duration is preserved for resume.
+        # Stop the usage timer and mark paused so the run-state knows
+        # to resume cleanly; duration is preserved for the resume path.
         if self.task:
             self.task.is_paused = True
             if hasattr(self.task, '_usage') and self.task._usage is not None:

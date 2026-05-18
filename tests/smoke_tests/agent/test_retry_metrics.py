@@ -343,17 +343,15 @@ async def test_single_run_no_regression_with_baseline():
 
 
 # ============================================================================
-# 6. HITL pause + resume — baseline mechanism must not perturb HITL semantics
+# 6. HITL pause + resume — registry view stays correct across the pause
 # ============================================================================
 
 @pytest.mark.asyncio
 async def test_hitl_pause_resume_no_baseline_double_count():
     """An HITL-paused run that resumes must end up with
-    ``agent.usage == final.usage`` (single count). The pause's
-    ``_finalize_agent_usage`` was skipped (is_paused=True) and left
-    ``_agent_usage_baseline=None``; on resume, the finally accumulates the
-    full cumulative output.usage exactly once. No double-count from the
-    new baseline plumbing."""
+    ``agent.usage == final.usage`` (single count of every model call,
+    no double-count across the pause). The registry is keyed on
+    entry_id so this invariant is structural, not arithmetic."""
     _cleanup_db()
     clear_error_injection()
 
@@ -365,10 +363,6 @@ async def test_hitl_pause_resume_no_baseline_double_count():
 
     output = await agent.do_async(task, return_output=True)
     assert output.is_paused, "expected HITL pause"
-    # During pause, _finalize_agent_usage skipped — agent.usage stays None.
-    assert agent.usage is None, (
-        f"agent.usage should be None during pause, got {agent.usage}"
-    )
 
     # Provide the external tool result and resume.
     output.requirements[0].tool_execution.result = "Notification sent: hi"

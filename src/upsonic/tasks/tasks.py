@@ -432,24 +432,15 @@ class Task(BaseModel):
     @property
     def usage(self) -> Optional[Any]:
         """Aggregated usage for every ledger entry recorded under this
-        task's scope (Phase 5/2).
+        task's scope.
 
         Returns an :class:`AggregatedUsage` view derived from the usage
-        registry by default. Shape is API-compatible with the legacy
-        :class:`TaskUsage` (input_tokens, output_tokens, cost, requests,
-        duration, model_execution_time, ...).
-
-        With ``UPSONIC_LEGACY_USAGE=1`` returns the live ``TaskUsage``
-        instance the pipeline still mutates via ``incr`` / timer — the
-        rollout-window escape hatch.
+        registry. Shape mirrors the previous :class:`TaskUsage`
+        (input_tokens, output_tokens, cost, requests, duration,
+        model_execution_time, ...) so existing callers keep working.
         """
-        import os
-        if os.environ.get("UPSONIC_LEGACY_USAGE", "").lower() in ("1", "true", "yes"):
-            return self._usage
         from upsonic.usage_registry import get_default_registry
-        if self.task_usage_id_ is None:
-            return self._usage
-        return get_default_registry().by_task(self.task_usage_id_)
+        return get_default_registry().by_task(self.task_usage_id_) if self.task_usage_id_ else None
 
     @property
     def duration(self) -> Optional[float]:
@@ -858,9 +849,8 @@ class Task(BaseModel):
         Called from ``task_start()`` so every fresh pipeline run starts clean,
         and from the agent retry path so re-attempts after a failure cannot
         carry stale flags. In particular ``is_paused`` is set to True by the
-        pipeline manager when a run errors or is cancelled, which makes
-        ``_finalize_agent_usage`` skip agent-level accumulation; without
-        clearing it here, a successful retry attempt would also be skipped.
+        pipeline manager when a run errors or is cancelled; without clearing
+        it here, a successful retry attempt would still look paused.
 
         Does NOT touch user-provided configuration (description, tools,
         response_format, ...) or persistent fields (task_id_, task_usage_id_,

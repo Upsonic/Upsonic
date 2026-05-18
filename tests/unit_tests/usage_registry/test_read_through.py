@@ -35,8 +35,6 @@ def _response(input_tokens=70, output_tokens=30):
 class TestChatReadThrough(unittest.TestCase):
     def setUp(self):
         get_default_registry().clear()
-        # Make sure the env flag is off for these tests.
-        os.environ.pop("UPSONIC_LEGACY_USAGE", None)
 
     @patch("upsonic.models.infer_model")
     def test_chat_total_tokens_reads_from_registry(self, mock_infer_model):
@@ -68,32 +66,6 @@ class TestChatReadThrough(unittest.TestCase):
         # to be reflected.
         self.assertGreaterEqual(chat.total_cost, 0.003)
         self.assertEqual(chat.total_requests, 2)
-
-    @patch("upsonic.models.infer_model")
-    def test_legacy_env_flag_falls_back_to_session_manager(self, mock_infer_model):
-        mock_model = MagicMock()
-        mock_infer_model.return_value = mock_model
-        mock_model.request = AsyncMock(return_value=_response(70, 30))
-
-        agent = Agent(name="A", model=mock_model)
-        chat = Chat(session_id="s", user_id="u", agent=agent, storage=InMemoryStorage())
-        asyncio.run(chat.invoke("hi"))
-
-        # Inject an EXTRA registry-only entry. Legacy path should ignore it.
-        with scope(chat_usage_id=chat.chat_usage_id):
-            record_request_usage(
-                RequestUsage(input_tokens=999, output_tokens=999),
-                model="ghost",
-            )
-
-        os.environ["UPSONIC_LEGACY_USAGE"] = "1"
-        try:
-            # Legacy session.usage is what SessionManager would report —
-            # we just want it to NOT be the registry's view (which would
-            # include the 999+999 ghost entry).
-            self.assertNotEqual(chat.total_tokens, 999 + 999 + 70 + 30)
-        finally:
-            os.environ.pop("UPSONIC_LEGACY_USAGE", None)
 
     @patch("upsonic.models.infer_model")
     def test_get_usage_returns_aggregated_view_by_default(self, mock_infer_model):

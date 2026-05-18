@@ -580,11 +580,6 @@ class Agent(BaseAgent):
         self._tool_call_count = 0
         self._tool_limit_reached = False
         
-        # Agent-level accumulated usage across all tasks. The public
-        # ``usage`` surface is now a registry-backed property below;
-        # this private field is kept for the legacy ``incr`` chain
-        # (Phase 5 cleanup will remove it once nothing reads it).
-        self._usage_legacy: Optional["AgentUsage"] = None
         
         # Run cancellation tracking
         self.run_id: Optional[str] = None
@@ -797,36 +792,17 @@ class Agent(BaseAgent):
         return self._agent_usage_id
 
     @property
-    def usage(self) -> Optional[Any]:
-        """Aggregated token / cost / timing for every entry ledger'd
-        under this agent's scope.
+    def usage(self) -> Any:
+        """Aggregated token / cost / timing for every ledger entry
+        recorded under this agent's scope.
 
         Returns an :class:`AggregatedUsage` view derived from the
-        registry by default. Shape matches the legacy
-        :class:`AgentUsage` (input_tokens, output_tokens, requests,
-        cost, duration, ...) so existing callers keep working.
-
-        With ``UPSONIC_LEGACY_USAGE=1`` set, returns the legacy mutable
-        ``AgentUsage`` instance the ``incr`` chain still maintains —
-        kept available for the rollout window so users can diff the
-        two views.
+        usage registry. Shape is API-compatible with the previous
+        ``AgentUsage`` (input_tokens, output_tokens, requests, cost,
+        duration, ...) so callers don't need to know it's now derived.
         """
-        import os
-        if os.environ.get("UPSONIC_LEGACY_USAGE", "").lower() in ("1", "true", "yes"):
-            return self._usage_legacy
         from upsonic.usage_registry import get_default_registry
         return get_default_registry().by_agent(self.agent_usage_id)
-
-    @usage.setter
-    def usage(self, value: Any) -> None:
-        """Internal write path — keeps the legacy mutable in sync.
-
-        Phase-5 cleanup will eliminate every writer and remove this
-        setter together with ``_usage_legacy``. Until then, internal
-        code at ``_accumulate_run_usage`` / the retry block can still
-        do ``self.usage = AgentUsage()`` without crashing.
-        """
-        self._usage_legacy = value
 
     @property
     def session_id(self) -> Optional[str]:
@@ -3878,18 +3854,12 @@ class Agent(BaseAgent):
             return validation_error.output
 
         if not is_resuming and effective_retry > 1 and task.is_problematic:
-            # Capture the failed attempt's partial usage into agent-level
-            # before reset_run_state drops it; _finalize_agent_usage skipped
-            # this on error (is_paused=True). Retry path only — resume goes
-            # through continue_run_async, which accumulates after completion.
-            prev_output = getattr(self, '_agent_run_output', None)
-            prev_usage = getattr(prev_output, 'usage', None) if prev_output else None
-            if prev_usage is not None:
-                self._accumulate_run_usage(prev_usage)
-
-            # Clear per-attempt task state for a clean retry — especially
-            # is_paused=True (set on error), which would otherwise keep
-            # _finalize_agent_usage from accumulating on a successful retry.
+            # Clear per-attempt task state for a clean retry. Failed-attempt
+            # usage doesn't need a separate "capture before reset" step
+            # anymore — every model.request response was already written to
+            # the usage registry under this agent_usage_id at emission time
+            # (Phase 2), so the agent.usage view rolls them up regardless
+            # of whether the run paused / errored / cancelled.
             task.reset_run_state()
             # Clear the stale output from the previous failed attempt so no code
             # can accidentally read its error status before the new output is created.
@@ -3997,10 +3967,18 @@ class Agent(BaseAgent):
         finally:
             if original_model is not None:
                 self.model = original_model
-            self._finalize_agent_usage(resolved_print_flag)
             # Keep run_id alive when task is paused (HITL) — the run is still active
             _output = getattr(self, '_agent_run_output', None)
             _is_paused = getattr(_output.task, 'is_paused', False) if _output and _output.task else False
+            if (
+                resolved_print_flag
+                and _output is not None
+                and _output.task is not None
+                and not getattr(_output.task, 'not_main_task', False)
+                and not _is_paused
+            ):
+                from upsonic.utils.printing import print_agent_metrics
+                print_agent_metrics(self, print_output=resolved_print_flag)
             if not _is_paused:
                 self.run_id = None
             # Pop usage-registry scope tags pushed at function entry —
@@ -4172,52 +4150,6 @@ class Agent(BaseAgent):
             )
         except Exception:
             pass  # Best-effort — don't let tracking errors mask the result
-
-    def _accumulate_run_usage(self, task_usage: Optional["TaskUsage"]) -> None:
-        """Accumulate a task's usage metrics into the agent-level usage.
-
-        Args:
-            task_usage: The TaskUsage from a completed task. If None, no-op.
-        """
-        if task_usage is None:
-            return
-
-        from upsonic.usage import AgentUsage
-
-        if self._usage_legacy is None:
-            self._usage_legacy = AgentUsage()
-
-        self._usage_legacy.incr(task_usage)
-
-    def _finalize_agent_usage(self, print_flag: bool) -> None:
-        """Accumulate current run usage into agent-level usage and optionally print agent metrics.
-
-        Called at the end of every do_async / astream execution. Skips
-        accumulation AND printing when the task is paused (``is_paused=True``,
-        set for HITL pause, error, and cancellation — all three may be
-        resumed via ``continue_run_async``).
-
-        The TECH-1588 baseline / snapshot delta arithmetic is gone: the
-        usage registry is idempotent on ``entry_id``, so double-counting
-        across retry / resume is structurally impossible at the ledger
-        level. The legacy ``agent.usage`` chain still needs a single
-        ``incr`` per finalize, which is what this method now does.
-        """
-        output = getattr(self, '_agent_run_output', None)
-        if output is None:
-            return
-
-        task = output.task
-        is_paused: bool = getattr(task, 'is_paused', False) if task else False
-
-        if not is_paused:
-            usage = getattr(output, 'usage', None)
-            if usage is not None:
-                self._accumulate_run_usage(usage)
-
-        if print_flag and task and not getattr(task, 'not_main_task', False) and not is_paused:
-            from upsonic.utils.printing import print_agent_metrics
-            print_agent_metrics(self, print_output=print_flag)
 
     def _extract_output(self, task: "Task", response: "ModelResponse") -> Any:
         """Extract the output from a model response."""
@@ -4697,7 +4629,20 @@ class Agent(BaseAgent):
             if original_model is not None:
                 self.model = original_model
             stream_print_flag = self._resolve_print_flag(False)
-            self._finalize_agent_usage(stream_print_flag)
+            _stream_output_ref = getattr(self, '_agent_run_output', None)
+            _stream_is_paused = (
+                getattr(_stream_output_ref.task, 'is_paused', False)
+                if _stream_output_ref and _stream_output_ref.task else False
+            )
+            if (
+                stream_print_flag
+                and _stream_output_ref is not None
+                and _stream_output_ref.task is not None
+                and not getattr(_stream_output_ref.task, 'not_main_task', False)
+                and not _stream_is_paused
+            ):
+                from upsonic.utils.printing import print_agent_metrics
+                print_agent_metrics(self, print_output=stream_print_flag)
             cleanup_run(run_id)
             self.run_id = None
             # Pop usage-registry scope tags pushed at function entry —

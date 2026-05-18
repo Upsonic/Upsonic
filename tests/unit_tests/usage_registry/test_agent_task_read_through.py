@@ -1,16 +1,13 @@
 """Phase 5/2 read-through: agent.usage and task.usage query the registry."""
 from __future__ import annotations
 
-import asyncio
-import os
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from upsonic import Agent, Task
 from upsonic.models import ModelResponse, TextPart
-from upsonic.usage import AgentUsage, RequestUsage, TaskUsage
+from upsonic.usage import RequestUsage
 from upsonic.usage_registry import (
-    UsageEntry,
     get_default_registry,
     record_request_usage,
     scope,
@@ -33,7 +30,6 @@ def _response(input_tokens=70, output_tokens=30):
 class TestAgentUsageRegistryView(unittest.TestCase):
     def setUp(self):
         get_default_registry().clear()
-        os.environ.pop("UPSONIC_LEGACY_USAGE", None)
 
     @patch("upsonic.models.infer_model")
     def test_agent_usage_reflects_registry_entries(self, mock_infer_model):
@@ -46,7 +42,6 @@ class TestAgentUsageRegistryView(unittest.TestCase):
 
         usage = agent.usage
         self.assertIsNotNone(usage)
-        # Registry view has the input_tokens / output_tokens shape.
         self.assertEqual(usage.input_tokens, 70)
         self.assertEqual(usage.output_tokens, 30)
         self.assertEqual(usage.requests, 1)
@@ -74,28 +69,10 @@ class TestAgentUsageRegistryView(unittest.TestCase):
         self.assertEqual(usage.input_tokens, 70 + 11)
         self.assertEqual(usage.output_tokens, 30 + 22)
 
-    @patch("upsonic.models.infer_model")
-    def test_legacy_env_flag_returns_agent_usage_instance(self, mock_infer_model):
-        mock_model = MagicMock()
-        mock_infer_model.return_value = mock_model
-        mock_model.request = AsyncMock(return_value=_response(70, 30))
-
-        agent = Agent(name="A", model=mock_model)
-        agent.do(Task("hi"))
-
-        os.environ["UPSONIC_LEGACY_USAGE"] = "1"
-        try:
-            usage = agent.usage
-            # Legacy chain returns the actual AgentUsage instance.
-            self.assertIsInstance(usage, AgentUsage)
-        finally:
-            os.environ.pop("UPSONIC_LEGACY_USAGE", None)
-
 
 class TestTaskUsageRegistryView(unittest.TestCase):
     def setUp(self):
         get_default_registry().clear()
-        os.environ.pop("UPSONIC_LEGACY_USAGE", None)
 
     @patch("upsonic.models.infer_model")
     def test_task_usage_reflects_registry_entries(self, mock_infer_model):
@@ -126,23 +103,6 @@ class TestTaskUsageRegistryView(unittest.TestCase):
         self.assertEqual(t1.usage.input_tokens, 40)
         self.assertEqual(t2.usage.input_tokens, 40)
         self.assertNotEqual(t1.task_usage_id, t2.task_usage_id)
-
-    @patch("upsonic.models.infer_model")
-    def test_legacy_env_flag_returns_taskusage_instance(self, mock_infer_model):
-        mock_model = MagicMock()
-        mock_infer_model.return_value = mock_model
-        mock_model.request = AsyncMock(return_value=_response(50, 25))
-
-        agent = Agent(name="A", model=mock_model)
-        task = Task("hi")
-        agent.do(task)
-
-        os.environ["UPSONIC_LEGACY_USAGE"] = "1"
-        try:
-            usage = task.usage
-            self.assertIsInstance(usage, TaskUsage)
-        finally:
-            os.environ.pop("UPSONIC_LEGACY_USAGE", None)
 
 
 if __name__ == "__main__":
