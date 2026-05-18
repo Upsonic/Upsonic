@@ -304,8 +304,11 @@ class TestOrchestratorUsagePropagation:
 
         assert not hasattr(parent, "_agent_run_output") or getattr(parent, "_agent_run_output", None) is None
 
-    def test_propagate_sub_agent_usage_increments_parent_usage(self) -> None:
-        """_propagate_sub_agent_usage increments parent agent's run output usage."""
+    def test_propagate_sub_agent_usage_is_noop(self) -> None:
+        """``_propagate_sub_agent_usage`` no longer mutates the parent's
+        run output. Sub-agent spend reaches the parent's totals via the
+        usage registry (inherited scope contextvars); this method is
+        retained only as a call-site stub."""
         from upsonic.tools.orchestration import Orchestrator
 
         parent_usage = TaskUsage()
@@ -319,26 +322,7 @@ class TestOrchestratorUsagePropagation:
 
         orch._propagate_sub_agent_usage(sub_output)
 
-        assert parent_usage.requests == 1
-        assert parent_usage.input_tokens == 100
-        assert parent_usage.output_tokens == 50
-        assert parent_usage.cost == 0.001
-
-    def test_propagate_sub_agent_usage_ignores_none_usage(self) -> None:
-        """_propagate_sub_agent_usage does nothing when sub output has no usage."""
-        from upsonic.tools.orchestration import Orchestrator
-
-        parent_usage = TaskUsage()
-        parent_output = Mock()
-        parent_output.usage = parent_usage
-        parent = Mock(_agent_run_output=parent_output)
-
-        orch = Orchestrator(agent_instance=parent, task=None, wrapped_tools={})
-        sub_output = Mock(spec=[])
-        sub_output.usage = None
-
-        orch._propagate_sub_agent_usage(sub_output)
-
+        # parent_usage stays untouched.
         assert parent_usage.requests == 0
         assert parent_usage.input_tokens == 0
 
@@ -425,8 +409,10 @@ class TestAgentDrainAgentToolUsage:
         assert agent._agent_run_output.usage.input_tokens == 0
 
     @patch("upsonic.models.infer_model")
-    def test_drain_agent_tool_usage_agent_tool_drains_into_run_output(self, mock_infer_model: Mock) -> None:
-        """_drain_agent_tool_usage drains AgentTool usage into run output."""
+    def test_drain_agent_tool_usage_is_noop(self, mock_infer_model: Mock) -> None:
+        """``_drain_agent_tool_usage`` is now a call-site stub. Sub-agent
+        tool spend reaches the parent's totals via the usage registry,
+        not via mutation of ``_agent_run_output.usage``."""
         from upsonic.agent.agent import Agent
         from upsonic.tools.wrappers import AgentTool
 
@@ -446,25 +432,18 @@ class TestAgentDrainAgentToolUsage:
         mock_sub_agent.name = "Sub"
         agent_tool = AgentTool(mock_sub_agent)
         agent_tool._accumulated_usage = TaskUsage(
-            requests=1,
-            input_tokens=60,
-            output_tokens=30,
-            cost=0.0005,
+            requests=1, input_tokens=60, output_tokens=30, cost=0.0005,
         )
 
         agent.tool_manager = Mock()
         agent.tool_manager.registry = Mock()
-        agent.tool_manager.registry.registered_tools = {
-            "ask_sub": agent_tool,
-        }
+        agent.tool_manager.registry.registered_tools = {"ask_sub": agent_tool}
 
         agent._drain_agent_tool_usage("ask_sub")
 
-        assert agent._agent_run_output.usage.requests == 1
-        assert agent._agent_run_output.usage.input_tokens == 60
-        assert agent._agent_run_output.usage.output_tokens == 30
-        assert agent._agent_run_output.usage.cost == 0.0005
-        assert agent_tool._accumulated_usage is None
+        # No mutation of the run-output's snapshot.
+        assert agent._agent_run_output.usage.requests == 0
+        assert agent._agent_run_output.usage.input_tokens == 0
 
     @patch("upsonic.models.infer_model")
     def test_drain_agent_tool_usage_unknown_tool_name(self, mock_infer_model: Mock) -> None:
@@ -499,8 +478,11 @@ class TestSystemPromptManagerCultureUsageDrain:
     """Unit tests for SystemPromptManager draining culture usage into agent run output."""
 
     @pytest.mark.asyncio
-    async def test_aprepare_drains_culture_usage_into_agent_run_output(self) -> None:
-        """When culture is prepared, drain_accumulated_usage is called and merged into agent._agent_run_output.usage."""
+    async def test_aprepare_does_not_drain_culture_usage_onto_run_output(self) -> None:
+        """``SystemPromptManager.aprepare`` no longer drains culture usage
+        onto ``_agent_run_output.usage``. Culture's LLM call is recorded
+        into the usage registry directly via the Phase-2 emission hook
+        under the active scope tags."""
         from upsonic.agent.context_managers.system_prompt_manager import SystemPromptManager
 
         mock_agent = Mock()
@@ -511,11 +493,8 @@ class TestSystemPromptManagerCultureUsageDrain:
             return_value=TaskUsage(requests=1, input_tokens=40, output_tokens=20, cost=0.0002)
         )
         run_output = AgentRunOutput(
-            run_id="r1",
-            agent_id="a1",
-            agent_name="Test",
-            session_id="s1",
-            user_id="u1",
+            run_id="r1", agent_id="a1", agent_name="Test",
+            session_id="s1", user_id="u1",
         )
         run_output.usage = TaskUsage()
         mock_agent._agent_run_output = run_output
@@ -527,40 +506,8 @@ class TestSystemPromptManagerCultureUsageDrain:
              patch.object(sp_manager, "_build_system_prompt", return_value=""):
             await sp_manager.aprepare(memory_handler=None)
 
-        mock_agent._culture_manager.drain_accumulated_usage.assert_called_once()
-        assert mock_agent._agent_run_output.usage.requests == 1
-        assert mock_agent._agent_run_output.usage.input_tokens == 40
-        assert mock_agent._agent_run_output.usage.output_tokens == 20
-        assert mock_agent._agent_run_output.usage.cost == 0.0002
-
-    @pytest.mark.asyncio
-    async def test_aprepare_no_drain_when_culture_usage_none(self) -> None:
-        """When drain returns None, agent run output usage is unchanged (no merge)."""
-        from upsonic.agent.context_managers.system_prompt_manager import SystemPromptManager
-
-        mock_agent = Mock()
-        mock_agent._culture_manager = Mock()
-        mock_agent._culture_manager.enabled = True
-        mock_agent._culture_manager.prepared = False
-        mock_agent._culture_manager.drain_accumulated_usage = Mock(return_value=None)
-        run_output = AgentRunOutput(
-            run_id="r1",
-            agent_id="a1",
-            agent_name="Test",
-            session_id="s1",
-            user_id="u1",
-        )
-        run_output.usage = TaskUsage()
-        mock_agent._agent_run_output = run_output
-
-        mock_task = Mock()
-        sp_manager = SystemPromptManager(mock_agent, mock_task)
-
-        with patch.object(mock_agent._culture_manager, "aprepare", new_callable=AsyncMock), \
-             patch.object(sp_manager, "_build_system_prompt", return_value=""):
-            await sp_manager.aprepare(memory_handler=None)
-
-        mock_agent._culture_manager.drain_accumulated_usage.assert_called_once()
+        # The run-output snapshot is not mutated and drain is not invoked.
+        mock_agent._culture_manager.drain_accumulated_usage.assert_not_called()
         assert mock_agent._agent_run_output.usage.requests == 0
         assert mock_agent._agent_run_output.usage.input_tokens == 0
 

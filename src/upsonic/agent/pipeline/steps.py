@@ -177,11 +177,11 @@ class CacheCheckStep(Step):
             # Propagate sub-agent usage from cache LLM comparison (if any)
             cache_mgr = getattr(agent, '_cache_manager', None)
             if cache_mgr is not None:
-                cache_llm_usage = getattr(cache_mgr, '_last_llm_usage', None)
-                if cache_llm_usage is not None:
-                    usage = context._ensure_usage()
-                    usage.incr(cache_llm_usage)
-                    cache_mgr._last_llm_usage = None
+                # The cache layer's own LLM-based lookup is recorded into
+                # the usage registry under the active scope tags by its
+                # emission hook, so no manual incr onto the run snapshot
+                # is needed; just clear the staging field.
+                cache_mgr._last_llm_usage = None
             
             if cached_response is not None:
                 similarity = None
@@ -2044,10 +2044,9 @@ class ReflectionStep(Step):
                 context.output
             )
             
-            # Aggregate sub-agent usage from reflection into parent context
-            if reflection_result.sub_agent_usage is not None:
-                usage = context._ensure_usage()
-                usage.incr(reflection_result.sub_agent_usage)
+            # Reflection's sub-agent LLM calls already land in the usage
+            # registry under the parent's scope tags (inherited via
+            # contextvars), so no manual roll-up onto the run snapshot.
             
             # Extract values from ReflectionResult
             improved_output = reflection_result.improved_output
@@ -2576,12 +2575,10 @@ class ReliabilityStep(Step):
             finally:
                 await reliability_manager.afinalize()
 
-            # Aggregate sub-agent usage from reliability layer into parent context
-            reliability_usage = getattr(task, '_reliability_sub_agent_usage', None)
-            if reliability_usage is not None:
-                usage = context._ensure_usage()
-                usage.incr(reliability_usage)
-                task._reliability_sub_agent_usage = None
+            # Reliability layer's validator / editor sub-agents inherit
+            # the parent's scope tags via contextvars, so their LLM usage
+            # is already in the registry; just clear the staging field.
+            task._reliability_sub_agent_usage = None
 
             modifications_made = str(original_output) != str(context.output)
             
@@ -2722,12 +2719,10 @@ class AgentPolicyStep(Step):
                 iteration += 1
                 
                 processed_task, feedback_message = await agent._apply_agent_policy(task, context)
-                
-                # Drain and aggregate sub-agent usage from agent policy LLM calls
-                agent_policy_usage = agent.agent_policy_manager.drain_accumulated_usage()
-                if agent_policy_usage is not None:
-                    usage = context._ensure_usage()
-                    usage.incr(agent_policy_usage)
+
+                # Agent-policy LLM calls inherit the parent's scope tags
+                # and land in the usage registry directly; no roll-up
+                # onto the run snapshot is needed.
                 
                 if agent.debug and agent.debug_level >= 2:
                     from upsonic.utils.printing import debug_log_level2

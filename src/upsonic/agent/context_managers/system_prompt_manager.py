@@ -416,16 +416,13 @@ class SystemPromptManager:
         Args:
             memory_handler: Optional MemoryManager for memory and culture injection
         """
-        # Prepare culture if needed (async) - must be done before _build_system_prompt
+        # Prepare culture if needed (async) - must be done before _build_system_prompt.
+        # Culture's own LLM call already lands in the usage registry under
+        # the active agent_usage_id / task_usage_id; no manual roll-up onto
+        # the parent's run output is needed.
         if self.agent._culture_manager and self.agent._culture_manager.enabled:
             if not self.agent._culture_manager.prepared:
                 await self.agent._culture_manager.aprepare()
-            
-            # Drain culture extraction LLM usage into parent agent's run output
-            if hasattr(self.agent, '_agent_run_output') and self.agent._agent_run_output:
-                culture_usage = self.agent._culture_manager.drain_accumulated_usage()
-                if culture_usage:
-                    self.agent._agent_run_output.usage.incr(culture_usage)
         
         # Build system prompt (culture will be injected in _build_system_prompt if prepared)
         self.system_prompt = self._build_system_prompt(memory_handler)

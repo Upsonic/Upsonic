@@ -149,16 +149,16 @@ class Orchestrator(Tool):
         }
     
     def _propagate_sub_agent_usage(self, sub_agent_output: Any) -> None:
-        """Propagate sub-agent usage to the parent agent's AgentRunOutput.
-        
-        Args:
-            sub_agent_output: The AgentRunOutput from a sub-agent do_async(return_output=True) call
+        """No-op retained for call-site stability.
+
+        Sub-agents spawned by the orchestrator inherit the parent's
+        ``agent_usage_id`` / ``task_usage_id`` contextvars, so every
+        model.request inside them is already emitted to the usage
+        registry under the parent's scope. The old manual roll-up onto
+        ``parent_run_output.usage`` was a parallel write to a legacy
+        mutable nothing reads any more.
         """
-        if not self.agent_instance:
-            return
-        parent_run_output = getattr(self.agent_instance, '_agent_run_output', None)
-        if parent_run_output and hasattr(sub_agent_output, 'usage') and sub_agent_output.usage:
-            parent_run_output.usage.incr(sub_agent_output.usage)
+        return
     
     async def execute(self, thought: Thought) -> Any:
         """Main entry point for orchestrator execution."""

@@ -2432,13 +2432,12 @@ class Agent(BaseAgent):
                     tool_call_info=tool_call_info,
                     check_type="Post-Execution Tool Call Validation"
                 )
-                
-                # Drain and aggregate sub-agent usage from tool policy LLM calls
-                tool_policy_usage = self.tool_policy_post_manager.drain_accumulated_usage()
-                if tool_policy_usage is not None and hasattr(self, '_agent_run_output') and self._agent_run_output:
-                    usage = self._agent_run_output._ensure_usage()
-                    usage.incr(tool_policy_usage)
-                
+
+                # Tool policy's internal LLM calls already landed in the
+                # usage registry under the inherited agent_usage_id /
+                # task_usage_id, so no manual roll-up onto the run's
+                # legacy snapshot is needed.
+
                 if validation_result.should_block():
                     # Handle blocking based on action type
                     # If DisallowedOperation was raised by a RAISE action policy, re-raise it
@@ -2577,13 +2576,10 @@ class Agent(BaseAgent):
                         tool_call_info=tool_call_info,
                         check_type="Post-Execution Tool Call Validation"
                     )
-                    
-                    # Drain and aggregate sub-agent usage from tool policy LLM calls (parallel path)
-                    tool_policy_usage = self.tool_policy_post_manager.drain_accumulated_usage()
-                    if tool_policy_usage is not None and hasattr(self, '_agent_run_output') and self._agent_run_output:
-                        usage = self._agent_run_output._ensure_usage()
-                        usage.incr(tool_policy_usage)
-                    
+
+                    # See the sync path: tool-policy LLM usage is already
+                    # in the registry under the parent's scope tags.
+
                     if validation_result.should_block():
                         # Handle blocking based on action type
                         # If DisallowedOperation was raised by a RAISE action policy, re-raise it
@@ -2738,12 +2734,10 @@ class Agent(BaseAgent):
                     # Ensure culture is prepared
                     if not self._culture_manager.prepared:
                         await self._culture_manager.aprepare()
-                        
-                        # Drain culture extraction LLM usage into run output
-                        if hasattr(self, '_agent_run_output') and self._agent_run_output:
-                            culture_usage = self._culture_manager.drain_accumulated_usage()
-                            if culture_usage:
-                                self._agent_run_output.usage.incr(culture_usage)
+                        # Culture's own LLM call was emitted into the usage
+                        # registry under the active agent_usage_id by the
+                        # Phase-2 hook, so no manual roll-up onto
+                        # ``_agent_run_output.usage`` is needed.
                     
                     culture_formatted = self._culture_manager.format_for_system_prompt()
                     if culture_formatted:
@@ -3053,22 +3047,16 @@ class Agent(BaseAgent):
             self._context_management_middleware._last_summarization_usage = None
     
     def _drain_agent_tool_usage(self, tool_name: str) -> None:
-        """Drain accumulated usage from AgentTool sub-agent executions into the parent AgentRunOutput.
-        
-        Args:
-            tool_name: The name of the tool that was just executed
+        """No-op retained for call-site stability.
+
+        Sub-agent tool executions inherit this agent's scope contextvars
+        (Phase 1c + 3a), so every model.request from inside them lands
+        in the usage registry under the parent's ``agent_usage_id`` /
+        ``task_usage_id`` automatically. The old "drain into
+        ``_agent_run_output.usage``" fold was a parallel write to the
+        legacy mutable that nothing reads any more.
         """
-        from upsonic.tools.wrappers import AgentTool
-        
-        registered_tool = self.tool_manager.registry.registered_tools.get(tool_name)
-        if registered_tool is None:
-            current_task = getattr(self, 'current_task', None)
-            if current_task is not None and current_task.tool_manager is not None:
-                registered_tool = current_task.tool_manager.registry.registered_tools.get(tool_name)
-        if registered_tool and isinstance(registered_tool, AgentTool):
-            agent_tool_usage = registered_tool.drain_accumulated_usage()
-            if agent_tool_usage is not None:
-                self._agent_run_output.usage.incr(agent_tool_usage)
+        return
     
     async def _handle_cache(self, task: "Task") -> Optional[Any]:
         """Handle cache operations for the task."""
@@ -3213,10 +3201,9 @@ class Agent(BaseAgent):
             agent=self,
         )
 
-        user_policy_usage = self.user_policy_manager.drain_accumulated_usage()
-        if user_policy_usage is not None:
-            usage = context._ensure_usage()
-            usage.incr(user_policy_usage)
+        # User-policy LLM usage is recorded directly into the registry
+        # under the active scope tags by its own emission hook, so no
+        # rollup onto the run's legacy snapshot is needed.
 
         # ----- 3. Emit streaming events -----
         action_mapping = {
