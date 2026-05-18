@@ -123,6 +123,49 @@ class TestChatScopePush(unittest.TestCase):
         self.assertIsNone(tags["task_usage_id"])
 
 
+class TestSubAgentInheritance(unittest.TestCase):
+    """A sub-agent run inside another agent's do_async must inherit the
+    parent's chat / agent / task scope — per the agreed "memory and
+    reliability calls go to the active ids" default. This is what makes
+    the registry roll-up "free": the sub-agent's emission tags itself
+    with the parent's ids automatically via contextvar inheritance.
+    """
+
+    @patch("upsonic.models.infer_model")
+    def test_nested_agent_run_inherits_parent_scope(self, mock_infer_model):
+        from upsonic.usage_registry.scope import scope
+
+        mock_model = MagicMock()
+        mock_infer_model.return_value = mock_model
+        probe = _ScopeProbeRequest()
+        mock_model.request = probe
+
+        outer = Agent(name="Outer", model=mock_model)
+        inner = Agent(name="Inner", model=mock_model)
+        outer_task = Task("outer")
+        inner_task = Task("inner")
+
+        async def _run_nested():
+            # Manually open outer's scope, then run inner under it
+            # (mimics what tool-orchestration / reliability layer does).
+            with scope(
+                agent_usage_id=outer.agent_usage_id,
+                task_usage_id=outer_task.task_usage_id,
+            ):
+                await inner.do_async(inner_task)
+
+        asyncio.run(_run_nested())
+
+        # Inner's emission carries outer's scope, not inner's.
+        self.assertGreater(len(probe.snapshots), 0)
+        snap = probe.snapshots[0]
+        self.assertEqual(snap["agent_usage_id"], outer.agent_usage_id)
+        self.assertEqual(snap["task_usage_id"], outer_task.task_usage_id)
+        # Inner's own id is not active.
+        self.assertNotEqual(snap["agent_usage_id"], inner.agent_usage_id)
+        self.assertNotEqual(snap["task_usage_id"], inner_task.task_usage_id)
+
+
 class TestTeamScopePush(unittest.TestCase):
     @patch("upsonic.models.infer_model")
     def test_team_do_pushes_team_scope(self, mock_infer_model):

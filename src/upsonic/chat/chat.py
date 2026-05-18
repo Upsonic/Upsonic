@@ -267,35 +267,72 @@ class Chat:
         """
         return self._session_manager.all_messages
     
+    # ------------------------------------------------------------------
+    # Usage / cost / token surface — read-through to the usage registry.
+    # ------------------------------------------------------------------
+    #
+    # The Phase-2 write-through hooks emit a ledger row at every fresh
+    # model.request() with the chat_usage_id contextvar set. Roll-up of
+    # token / cost / request counts for this chat is therefore just a
+    # query against the registry — and it picks up spend the legacy
+    # session.usage path could not (memory summarisation, reliability
+    # validator/editor, context middleware), because those sub-agents
+    # inherit the parent chat's scope automatically (Phase 1c + 3a).
+    #
+    # Escape hatch: setting ``UPSONIC_LEGACY_USAGE=1`` flips every
+    # property back to the legacy SessionManager reads, which is useful
+    # for diffing during the rollout window. The default is registry.
+
+    def _use_legacy_usage(self) -> bool:
+        import os
+        return os.environ.get("UPSONIC_LEGACY_USAGE", "").lower() in ("1", "true", "yes")
+
+    def _registry_view(self):
+        """Snapshot of the usage registry for this chat's scope."""
+        from upsonic.usage_registry import get_default_registry
+        return get_default_registry().by_chat(self.chat_usage_id)
+
     @property
     def input_tokens(self) -> int:
-        """Total input tokens used in this chat session (from storage)."""
-        return self._session_manager.input_tokens
-    
+        """Total input tokens used in this chat session."""
+        if self._use_legacy_usage():
+            return self._session_manager.input_tokens
+        return self._registry_view().input_tokens
+
     @property
     def output_tokens(self) -> int:
-        """Total output tokens used in this chat session (from storage)."""
-        return self._session_manager.output_tokens
-    
+        """Total output tokens used in this chat session."""
+        if self._use_legacy_usage():
+            return self._session_manager.output_tokens
+        return self._registry_view().output_tokens
+
     @property
     def total_tokens(self) -> int:
         """Total tokens (input + output) used in this chat session."""
-        return self._session_manager.total_tokens
-    
+        if self._use_legacy_usage():
+            return self._session_manager.total_tokens
+        return self._registry_view().total_tokens
+
     @property
     def total_cost(self) -> float:
-        """Total cost of this chat session in USD (from storage)."""
-        return self._session_manager.total_cost
-    
+        """Total cost of this chat session in USD."""
+        if self._use_legacy_usage():
+            return self._session_manager.total_cost
+        return self._registry_view().cost or 0.0
+
     @property
     def total_requests(self) -> int:
-        """Total API requests made in this chat session (from storage)."""
-        return self._session_manager.total_requests
-    
+        """Total API requests made in this chat session."""
+        if self._use_legacy_usage():
+            return self._session_manager.total_requests
+        return self._registry_view().requests
+
     @property
     def total_tool_calls(self) -> int:
-        """Total tool calls made in this chat session (from storage)."""
-        return self._session_manager.total_tool_calls
+        """Total tool calls made in this chat session."""
+        if self._use_legacy_usage():
+            return self._session_manager.total_tool_calls
+        return self._registry_view().tool_calls
     
     @property
     def run_duration(self) -> Optional[float]:
@@ -343,8 +380,16 @@ class Chat:
         return self._session_manager.is_closed
     
     def get_usage(self) -> Any:
-        """Get the full RunUsage object from session storage."""
-        return self._session_manager.get_usage()
+        """Return the full usage view for this chat.
+
+        Reads from the usage registry by default (returns
+        :class:`AggregatedUsage`). With ``UPSONIC_LEGACY_USAGE=1``
+        falls back to the legacy ``session.usage`` (``RunUsage``)
+        stored on storage.
+        """
+        if self._use_legacy_usage():
+            return self._session_manager.get_usage()
+        return self._registry_view()
     
     def get_session_metrics(self) -> Any:
         """Get comprehensive session metrics."""
