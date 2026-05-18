@@ -43,6 +43,8 @@ class Team:
                  debug_level: int = 1,
                  agents: Optional[List[Union[Agent, "Team"]]] = None,
                  print: Optional[bool] = None,
+                 team_id: Optional[str] = None,
+                 team_usage_id: Optional[str] = None,
                  ):
         """
         Initialize the Team with entities (Agents and/or nested Teams) and optionally tasks.
@@ -71,6 +73,10 @@ class Team:
         self.entities: List[Union[Agent, Team]] = resolved_entities
         self.tasks: List[Task] = tasks if isinstance(tasks, list) else [tasks] if tasks is not None else []
         self.name: Optional[str] = name
+
+        from upsonic.usage_registry import new_usage_id
+        self.team_id: str = team_id or new_usage_id("team")
+        self.team_usage_id: str = team_usage_id or new_usage_id("team")
         self.role: Optional[str] = role
         self.goal: Optional[str] = goal
         self.model: Optional[Any] = model

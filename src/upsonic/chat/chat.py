@@ -117,6 +117,7 @@ class Chat:
         debug: bool = False,
         debug_level: int = 1,
         max_concurrent_invocations: int = 1,
+        chat_usage_id: Optional[str] = None,
     ) -> None:
         """
         Initialize a Chat session.
@@ -155,6 +156,9 @@ class Chat:
         self.agent = agent
         self.debug = debug
         self.debug_level = debug_level if debug else 1
+
+        from upsonic.usage_registry import new_usage_id
+        self.chat_usage_id: str = chat_usage_id or new_usage_id("chat")
         
         # Agent-first resolution: reuse agent.memory (and its storage) when
         # present; otherwise build a fresh pair from Chat's kwargs and wire

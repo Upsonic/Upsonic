@@ -34,6 +34,7 @@ class Task(BaseModel):
     _context_formatted: Optional[str] = None
     price_id_: Optional[str] = None
     task_id_: Optional[str] = None
+    task_usage_id_: Optional[str] = None
     not_main_task: bool = False
     start_time: Optional[int] = None
     end_time: Optional[int] = None
@@ -312,6 +313,7 @@ class Task(BaseModel):
         _context_formatted: Optional[str] = None,
         price_id_: Optional[str] = None,
         task_id_: Optional[str] = None,
+        task_usage_id_: Optional[str] = None,
         not_main_task: bool = False,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
@@ -375,10 +377,13 @@ class Task(BaseModel):
 
         # Eagerly generate IDs if not provided
         import uuid
+        from upsonic.usage_registry import new_usage_id
         if price_id_ is None:
             price_id_ = str(uuid.uuid4())
         if task_id_ is None:
             task_id_ = str(uuid.uuid4())
+        if task_usage_id_ is None:
+            task_usage_id_ = new_usage_id("task")
 
         super().__init__(**{
             "description": description,
@@ -391,6 +396,7 @@ class Task(BaseModel):
             "_context_formatted": _context_formatted,
             "price_id_": price_id_,
             "task_id_": task_id_,
+            "task_usage_id_": task_usage_id_,
             "not_main_task": not_main_task,
             "start_time": start_time,
             "end_time": end_time,
@@ -743,7 +749,17 @@ class Task(BaseModel):
     @property
     def task_id(self):
         return self.task_id_
-    
+
+    @property
+    def task_usage_id(self) -> str:
+        """Stable id used by the usage registry to scope every ledger
+        entry produced while this task is running. Lazily generated when
+        not set explicitly."""
+        if self.task_usage_id_ is None:
+            from upsonic.usage_registry import new_usage_id
+            self.task_usage_id_ = new_usage_id("task")
+        return self.task_usage_id_
+
     def get_task_id(self):
         return f"Task_{self.task_id[:8]}"
 
@@ -1095,6 +1111,7 @@ class Task(BaseModel):
             "response_lang": self.response_lang,
             "price_id_": self.price_id_,
             "task_id_": self.task_id_,
+            "task_usage_id_": self.task_usage_id_,
             "not_main_task": self.not_main_task,
             "start_time": self.start_time,
             "end_time": self.end_time,
@@ -1311,7 +1328,7 @@ class Task(BaseModel):
         # Filter to only fields that Task accepts in constructor
         valid_fields = {
             "description", "attachments", "response_lang", "context",
-            "price_id_", "task_id_", "not_main_task", "start_time", "end_time",
+            "price_id_", "task_id_", "task_usage_id_", "not_main_task", "start_time", "end_time",
             "enable_thinking_tool", "enable_reasoning_tool",
             "guardrail_retries", "is_paused", "enable_cache", "cache_method",
             "cache_threshold", "cache_duration_minutes", "query_knowledge_base", "vector_search_top_k",

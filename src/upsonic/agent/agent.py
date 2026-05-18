@@ -248,6 +248,7 @@ class Agent(BaseAgent):
         context_management_model: Optional[str] = None,
         reliability_layer: Optional[Any] = None,
         agent_id_: Optional[str] = None,
+        agent_usage_id: Optional[str] = None,
         canvas: Optional["Canvas"] = None,
         retry: int = 1,
         mode: RetryMode = "raise",
@@ -391,7 +392,8 @@ class Agent(BaseAgent):
 
         self.name = name
         self.agent_id_ = agent_id_
-        
+        self._agent_usage_id = agent_usage_id
+
         # Session/user overrides
         self._override_session_id = session_id
         self._override_user_id = user_id
@@ -779,7 +781,18 @@ class Agent(BaseAgent):
         if self.agent_id_ is None:
             self.agent_id_ = str(uuid.uuid4())
         return self.agent_id_
-    
+
+    @property
+    def agent_usage_id(self) -> str:
+        """Stable id used by the usage registry to tag every ledger entry
+        produced by this agent. Lazily generated; distinct from
+        :attr:`agent_id` so callers can scope usage across many agents that
+        share the same logical agent_id (e.g. recreated per-request)."""
+        if self._agent_usage_id is None:
+            from upsonic.usage_registry import new_usage_id
+            self._agent_usage_id = new_usage_id("agent")
+        return self._agent_usage_id
+
     @property
     def session_id(self) -> Optional[str]:
         """Get session_id from override, memory, or db."""
