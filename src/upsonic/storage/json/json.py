@@ -113,6 +113,7 @@ class JSONStorage(Storage):
         self._read_json_file(self.session_table_name, create_if_not_found=True)
         self._read_json_file(self.user_memory_table_name, create_if_not_found=True)
         self._read_json_file(self.knowledge_table_name, create_if_not_found=True)
+        self._read_json_file(self.usage_entry_table_name, create_if_not_found=True)
 
     def close(self) -> None:
         """Close the storage (no-op for JSON file storage)."""
@@ -1495,3 +1496,79 @@ class JSONStorage(Storage):
         except Exception as e:
             _logger.error(f"Error deleting knowledge contents: {e}")
             raise e
+
+    # ======================== Usage Registry Entries ========================
+
+    def upsert_usage_entry(self, entry: Dict[str, Any]) -> None:
+        eid = entry.get("entry_id")
+        if not eid:
+            raise ValueError("usage entry must have a non-empty entry_id")
+        rows = self._read_json_file(self.usage_entry_table_name, create_if_not_found=True)
+        # idempotent: replace by entry_id if present, else append
+        rewritten = False
+        for i, row in enumerate(rows):
+            if row.get("entry_id") == eid:
+                rows[i] = dict(entry)
+                rewritten = True
+                break
+        if not rewritten:
+            rows.append(dict(entry))
+        self._write_json_file(self.usage_entry_table_name, rows)
+
+    def query_usage_entries(
+        self,
+        *,
+        chat_usage_id: Optional[str] = None,
+        agent_usage_id: Optional[str] = None,
+        task_usage_id: Optional[str] = None,
+        team_usage_id: Optional[str] = None,
+        workflow_usage_id: Optional[str] = None,
+        system_usage_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        kind: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        rows = self._read_json_file(self.usage_entry_table_name, create_if_not_found=True)
+        filters = {
+            "chat_usage_id": chat_usage_id, "agent_usage_id": agent_usage_id,
+            "task_usage_id": task_usage_id, "team_usage_id": team_usage_id,
+            "workflow_usage_id": workflow_usage_id, "system_usage_id": system_usage_id,
+            "run_id": run_id, "user_id": user_id, "kind": kind,
+        }
+        out: List[Dict[str, Any]] = []
+        for row in rows:
+            if all(v is None or row.get(k) == v for k, v in filters.items()):
+                out.append(dict(row))
+                if limit is not None and len(out) >= limit:
+                    break
+        return out
+
+    def delete_usage_entries(
+        self,
+        *,
+        chat_usage_id: Optional[str] = None,
+        agent_usage_id: Optional[str] = None,
+        task_usage_id: Optional[str] = None,
+        team_usage_id: Optional[str] = None,
+        workflow_usage_id: Optional[str] = None,
+        system_usage_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> int:
+        rows = self._read_json_file(self.usage_entry_table_name, create_if_not_found=True)
+        filters = {
+            "chat_usage_id": chat_usage_id, "agent_usage_id": agent_usage_id,
+            "task_usage_id": task_usage_id, "team_usage_id": team_usage_id,
+            "workflow_usage_id": workflow_usage_id, "system_usage_id": system_usage_id,
+            "run_id": run_id, "user_id": user_id,
+        }
+        before = len(rows)
+        kept = [
+            row for row in rows
+            if not all(v is None or row.get(k) == v for k, v in filters.items())
+        ]
+        deleted = before - len(kept)
+        if deleted:
+            self._write_json_file(self.usage_entry_table_name, kept)
+        return deleted

@@ -220,6 +220,21 @@ class Chat:
         
         self._max_concurrent_invocations = max_concurrent_invocations
 
+        # Wire the resolved storage into the default usage registry so
+        # every entry recorded under this chat_usage_id is also persisted
+        # and historical spend is restored on reopen. Backends that have
+        # not been ported to Phase 4 silently no-op via the
+        # NotImplementedError-swallowing path on the registry side.
+        try:
+            from upsonic.usage_registry import get_default_registry
+            if self._storage is not None:
+                _registry = get_default_registry()
+                _registry.attach_storage(self._storage)
+                _registry.load_from_storage(chat_usage_id=self.chat_usage_id)
+        except Exception:
+            # Never let registry wiring break Chat construction.
+            pass
+
         # Tracks the currently-active streaming generator (if any) so the
         # next invoke can force-close a stream the consumer abandoned
         # without calling `aclose()`. Only honoured when

@@ -7,10 +7,13 @@ point — only the internal ``_entries`` list will gain a storage flush.
 from __future__ import annotations
 
 import threading
-from typing import Dict, Iterable, List, Optional
+from typing import TYPE_CHECKING, Dict, Iterable, List, Optional
 
 from upsonic.usage_registry.aggregated import AggregatedUsage
 from upsonic.usage_registry.entry import UsageEntry
+
+if TYPE_CHECKING:
+    from upsonic.storage.base import Storage
 
 
 class UsageRegistry:
@@ -20,24 +23,107 @@ class UsageRegistry:
     replaces the previous row instead of double-counting, which is what
     makes the registry retry-safe and resume-safe without the baseline
     arithmetic the old ``TaskUsage.snapshot/subtract`` flow needed.
+
+    Optional storage backend (Phase 4): when ``storage`` is attached every
+    :meth:`record` performs a write-through into the storage backend's
+    ``usage_entries`` table, and :meth:`load_from_storage` rehydrates the
+    in-memory dict from a prior process — so ``chat.total_cost`` keeps
+    accumulating across restarts and across workers that share the same
+    storage URL.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, storage: Optional["Storage"] = None) -> None:
         self._entries: Dict[str, UsageEntry] = {}
         self._lock = threading.RLock()
+        self._storage: Optional["Storage"] = storage
+
+    # ------------------------------------------------------------------
+    # Storage wiring (Phase 4)
+    # ------------------------------------------------------------------
+    def attach_storage(self, storage: "Storage") -> None:
+        """Bind a storage backend so subsequent :meth:`record` calls
+        also persist. Calling this on a registry that already has data
+        does NOT back-fill storage — call :meth:`flush_to_storage` for
+        that."""
+        self._storage = storage
+
+    def detach_storage(self) -> None:
+        self._storage = None
+
+    @property
+    def storage(self) -> Optional["Storage"]:
+        return self._storage
+
+    def flush_to_storage(self, storage: Optional["Storage"] = None) -> int:
+        """Bulk-write every in-memory entry to ``storage`` (or the attached
+        one). Idempotent thanks to ``entry_id`` upserts. Returns count."""
+        target = storage if storage is not None else self._storage
+        if target is None:
+            return 0
+        with self._lock:
+            rows = list(self._entries.values())
+        for e in rows:
+            try:
+                target.upsert_usage_entry(e.to_dict())
+            except NotImplementedError:
+                return 0   # Backend doesn't support persistence; bail silently.
+        return len(rows)
+
+    def load_from_storage(
+        self,
+        storage: Optional["Storage"] = None,
+        **scope,
+    ) -> int:
+        """Pull every row matching ``scope`` from storage into memory.
+
+        Returns the count loaded. Typical use: when a Chat opens, call
+        ``registry.load_from_storage(storage, chat_usage_id=chat.chat_usage_id)``
+        so ``chat.total_cost`` reflects historical spend.
+        """
+        target = storage if storage is not None else self._storage
+        if target is None:
+            return 0
+        try:
+            rows = target.query_usage_entries(**scope)
+        except NotImplementedError:
+            return 0
+        count = 0
+        with self._lock:
+            for row in rows:
+                entry = UsageEntry.from_dict(row)
+                self._entries[entry.entry_id] = entry
+                count += 1
+        return count
 
     # ------------------------------------------------------------------
     # Write
     # ------------------------------------------------------------------
     def record(self, entry: UsageEntry) -> None:
-        """Insert or replace ``entry`` by its ``entry_id``."""
+        """Insert or replace ``entry`` by its ``entry_id`` (and persist
+        through to the attached storage backend when one is bound)."""
         with self._lock:
             self._entries[entry.entry_id] = entry
+        if self._storage is not None:
+            try:
+                self._storage.upsert_usage_entry(entry.to_dict())
+            except NotImplementedError:
+                # Storage backend hasn't been ported; keep the in-memory
+                # write — the rest of the system still works, only cross-
+                # process resume is unavailable on this backend.
+                pass
 
     def record_many(self, entries: Iterable[UsageEntry]) -> None:
+        # Materialise once — the input may be a generator.
+        materialised = list(entries)
         with self._lock:
-            for e in entries:
+            for e in materialised:
                 self._entries[e.entry_id] = e
+        if self._storage is not None:
+            try:
+                for e in materialised:
+                    self._storage.upsert_usage_entry(e.to_dict())
+            except NotImplementedError:
+                pass
 
     def remove(self, entry_id: str) -> bool:
         with self._lock:

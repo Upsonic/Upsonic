@@ -25,16 +25,19 @@ class Storage(ABC):
         user_memory_table: Optional[str] = None,
         cultural_knowledge_table: Optional[str] = None,
         knowledge_table: Optional[str] = None,
+        usage_entry_table: Optional[str] = None,
         id: Optional[str] = None,
     ) -> None:
         """
         Initialize the storage backend.
-        
+
         Args:
             session_table: Name of the table to store sessions.
             user_memory_table: Name of the table to store user memories.
             cultural_knowledge_table: Name of the table to store cultural knowledge.
             knowledge_table: Name of the table to store knowledge base document registry.
+            usage_entry_table: Name of the table to store the usage-registry
+                ledger rows (one row per LLM / tool / embedding / OCR call).
             id: Unique identifier for this storage instance.
         """
         self.id: str = id or str(uuid4())
@@ -42,6 +45,7 @@ class Storage(ABC):
         self.user_memory_table_name: str = user_memory_table or "upsonic_user_memories"
         self.cultural_knowledge_table_name: str = cultural_knowledge_table or "upsonic_cultural_knowledge"
         self.knowledge_table_name: str = knowledge_table or "upsonic_knowledge"
+        self.usage_entry_table_name: str = usage_entry_table or "upsonic_usage_entries"
 
     @abstractmethod
     def table_exists(self, table_name: str) -> bool:
@@ -647,17 +651,77 @@ class Storage(ABC):
     ) -> List[Any]:
         """
         List all models of a type in a collection.
-        
+
         Args:
             model_type: The Pydantic model class to deserialize into.
             collection: Collection/table name to list from.
-        
+
         Returns:
             List of model instances.
-        
+
         Note: Default implementation returns empty list. Providers should override.
         """
         return []
+
+    # --- Usage Registry Entry Methods ---
+    #
+    # Backends opt in by overriding the three methods below. The default
+    # implementations raise NotImplementedError so a caller that depends on
+    # persistence (rather than the in-memory registry alone) gets a clear
+    # error instead of a silent no-op. Backends that have not yet been
+    # ported keep working for everything else; only usage-registry
+    # persistence is unavailable on them.
+
+    def upsert_usage_entry(self, entry: Dict[str, Any]) -> None:
+        """Insert or replace one usage-registry ledger row.
+
+        Args:
+            entry: The result of :meth:`upsonic.usage_registry.UsageEntry.to_dict`.
+                Idempotent by ``entry["entry_id"]``.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support usage_entry persistence yet."
+        )
+
+    def query_usage_entries(
+        self,
+        *,
+        chat_usage_id: Optional[str] = None,
+        agent_usage_id: Optional[str] = None,
+        task_usage_id: Optional[str] = None,
+        team_usage_id: Optional[str] = None,
+        workflow_usage_id: Optional[str] = None,
+        system_usage_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        kind: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """Return every usage-entry row matching the AND-of non-None filters.
+
+        Each row is a plain dict matching :meth:`UsageEntry.from_dict`'s
+        input shape.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support usage_entry persistence yet."
+        )
+
+    def delete_usage_entries(
+        self,
+        *,
+        chat_usage_id: Optional[str] = None,
+        agent_usage_id: Optional[str] = None,
+        task_usage_id: Optional[str] = None,
+        team_usage_id: Optional[str] = None,
+        workflow_usage_id: Optional[str] = None,
+        system_usage_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> int:
+        """Delete every row matching the AND-of non-None filters. Returns count."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support usage_entry persistence yet."
+        )
 
 
 class AsyncStorage(ABC):
@@ -673,16 +737,18 @@ class AsyncStorage(ABC):
         user_memory_table: Optional[str] = None,
         cultural_knowledge_table: Optional[str] = None,
         knowledge_table: Optional[str] = None,
+        usage_entry_table: Optional[str] = None,
         id: Optional[str] = None,
     ) -> None:
         """
         Initialize the async storage backend.
-        
+
         Args:
             session_table: Name of the table to store sessions.
             user_memory_table: Name of the table to store user memories.
             cultural_knowledge_table: Name of the table to store cultural knowledge.
             knowledge_table: Name of the table to store knowledge base document registry.
+            usage_entry_table: Name of the table to store usage-registry rows.
             id: Unique identifier for this storage instance.
         """
         self.id: str = id or str(uuid4())
@@ -690,6 +756,7 @@ class AsyncStorage(ABC):
         self.user_memory_table_name: str = user_memory_table or "upsonic_user_memories"
         self.cultural_knowledge_table_name: str = cultural_knowledge_table or "upsonic_cultural_knowledge"
         self.knowledge_table_name: str = knowledge_table or "upsonic_knowledge"
+        self.usage_entry_table_name: str = usage_entry_table or "upsonic_usage_entries"
 
     @abstractmethod
     async def table_exists(self, table_name: str) -> bool:
@@ -1295,15 +1362,59 @@ class AsyncStorage(ABC):
     ) -> List[Any]:
         """
         List all models of a type in a collection (async).
-        
+
         Args:
             model_type: The Pydantic model class to deserialize into.
             collection: Collection/table name to list from.
-        
+
         Returns:
             List of model instances.
-        
+
         Note: Default implementation returns empty list. Providers should override.
         """
         return []
+
+    # --- Usage Registry Entry Methods (async) ---
+
+    async def aupsert_usage_entry(self, entry: Dict[str, Any]) -> None:
+        """Async variant of :meth:`Storage.upsert_usage_entry`."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support usage_entry persistence yet."
+        )
+
+    async def aquery_usage_entries(
+        self,
+        *,
+        chat_usage_id: Optional[str] = None,
+        agent_usage_id: Optional[str] = None,
+        task_usage_id: Optional[str] = None,
+        team_usage_id: Optional[str] = None,
+        workflow_usage_id: Optional[str] = None,
+        system_usage_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        kind: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """Async variant of :meth:`Storage.query_usage_entries`."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support usage_entry persistence yet."
+        )
+
+    async def adelete_usage_entries(
+        self,
+        *,
+        chat_usage_id: Optional[str] = None,
+        agent_usage_id: Optional[str] = None,
+        task_usage_id: Optional[str] = None,
+        team_usage_id: Optional[str] = None,
+        workflow_usage_id: Optional[str] = None,
+        system_usage_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> int:
+        """Async variant of :meth:`Storage.delete_usage_entries`."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support usage_entry persistence yet."
+        )
 
