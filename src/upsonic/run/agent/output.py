@@ -111,11 +111,10 @@ class AgentRunOutput:
     # response: Current ModelResponse
     response: Optional["ModelResponse"] = None
     usage: Optional["TaskUsage"] = None
-    # Snapshot of ``usage`` taken at the moment its values were accumulated
-    # into agent-level usage. Used to compute the delta on a subsequent
-    # accumulation so that resuming a previously-captured run (e.g. after
-    # retry exhaustion or HITL pause) does not double-count. Set by the
-    # agent; None for runs that have never been accumulated into agent.usage.
+    # Snapshot of ``usage`` at the moment it was last accumulated into
+    # agent-level usage. Subsequent accumulations subtract this baseline
+    # (delta) so retry / HITL resume can't double-count. None until first
+    # accumulation.
     _agent_usage_baseline: Optional["TaskUsage"] = None
     additional_input_message: Optional[List["ModelRequest"]] = None
     

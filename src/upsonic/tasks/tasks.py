@@ -890,12 +890,9 @@ class Task(BaseModel):
         """
         self.is_paused = False
         self.status = None
-        # NOTE: do NOT reset ``_run_id`` here. ``do_async`` assigns
-        # ``task.run_id = run_id`` BEFORE the pipeline runs (so InitStep can
-        # find it), and this method is called from ``task_start()`` inside
-        # InitStep — clearing the run_id here would null the just-assigned
-        # value and break cross-process resume that relies on
-        # ``task.run_id`` to locate the checkpoint in storage.
+        # Do NOT reset ``_run_id`` here: ``do_async`` assigns it before the
+        # pipeline runs and this method runs inside InitStep — clearing it
+        # would break cross-process resume, which keys on ``task.run_id``.
         self.start_time = None
         self.end_time = None
 

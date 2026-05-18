@@ -101,7 +101,9 @@ class AutonomousShellToolKit(ToolKit):
         
         return None
     
-    @tool
+    # Subprocess owns its own timeout; outer wait_for duplicates it and
+    # leaks processes on cancel. Disable the generic tool-layer retry.
+    @tool(timeout=None, max_retries=0)
     def run_command(
         self,
         command: str,
@@ -271,7 +273,7 @@ class AutonomousShellToolKit(ToolKit):
         except Exception as e:
             return f"❌ Error running command: {str(e)}"
     
-    @tool
+    @tool(timeout=None, max_retries=0)  # same rationale as run_command above
     def run_python(
         self,
         code: str,

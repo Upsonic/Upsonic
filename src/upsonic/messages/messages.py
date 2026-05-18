@@ -1281,12 +1281,15 @@ class BaseToolCallPart:
         try:
             args = pydantic_core.from_json(self.args)
         except ValueError:
-            # Some providers (e.g. Gemma via OpenRouter with harmony-format
-            # output) append non-JSON trailing tokens after the valid args
-            # object. Recover the leading JSON object and discard the rest.
+            # Trailing-junk (Gemma harmony): raw_decode peels the leading object.
+            # Truncated/unterminated: fall back to {} so the stream survives.
             import json as _json
-            args, _ = _json.JSONDecoder().raw_decode(self.args)
-        assert isinstance(args, dict), 'args should be a dict'
+            try:
+                args, _ = _json.JSONDecoder().raw_decode(self.args)
+            except (ValueError, _json.JSONDecodeError):
+                args = {}
+        if not isinstance(args, dict):
+            args = {}
         return cast(dict[str, Any], args)
 
     def args_as_json_str(self) -> str:

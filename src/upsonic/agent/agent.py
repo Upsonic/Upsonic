@@ -11,17 +11,9 @@ from upsonic.utils.logging_config import sentry_sdk, get_env_bool_optional, get_
 _pl_logger = get_logger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Persistent event loop for sync wrappers (do, stream, print_do, etc.)
-#
-# asyncio.run() creates a *new* event loop each call and closes it afterward.
-# Cached httpx.AsyncClient connections inside the OpenAI SDK stay bound to
-# the first loop.  When asyncio.run() destroys that loop, subsequent calls
-# fail with "RuntimeError: Event loop is closed".
-#
-# Solution: keep a single background loop alive for the process lifetime so
-# async clients and their connection pools remain valid across calls.
-# ---------------------------------------------------------------------------
+# Persistent background event loop for sync wrappers — asyncio.run() closes
+# the loop each call, which invalidates cached httpx.AsyncClient connections
+# in the OpenAI SDK. Keep one loop alive for the process lifetime.
 _bg_loop: Optional[asyncio.AbstractEventLoop] = None
 _bg_loop_lock = threading.Lock()
 
@@ -1630,10 +1622,8 @@ class Agent(BaseAgent):
                 })
                 last_step_node = node_name
 
-            # 4. Tool call nodes — separate branches off step_model_execution
-            #    Each tool node depends ONLY on step_model_execution.
-            #    Nothing depends on tool nodes — they are dead-end branches,
-            #    isolated from the main pipeline.
+            # 4. Tool call nodes — dead-end branches off step_model_execution;
+            #    no node in the main pipeline depends on them.
             model_exec_node: str = "step_model_execution"
             model_exec_exists: bool = any(
                 n["name"] == model_exec_node for n in nodes
@@ -3801,25 +3791,18 @@ class Agent(BaseAgent):
             return validation_error.output
 
         if not is_resuming and effective_retry > 1 and task.is_problematic:
-            # The failed attempt's TaskUsage is about to be discarded by
-            # reset_run_state + a fresh TaskUsage in InitStep. Its
-            # _finalize_agent_usage skipped accumulation (is_paused=True set
-            # by the pipeline manager on error). Capture the partial usage
-            # into agent-level here so retry attempts don't silently drop
-            # token / cost data. This runs ONLY on the retry path —
-            # continue_run_async preserves task._usage across resume, so its
-            # accumulation happens after final completion (no double count).
+            # Capture the failed attempt's partial usage into agent-level
+            # before reset_run_state drops it; _finalize_agent_usage skipped
+            # this on error (is_paused=True). Retry path only — resume goes
+            # through continue_run_async, which accumulates after completion.
             prev_output = getattr(self, '_agent_run_output', None)
             prev_usage = getattr(prev_output, 'usage', None) if prev_output else None
             if prev_usage is not None:
                 self._accumulate_run_usage(prev_usage)
 
-            # Clear all per-attempt state on the task (status, run_id, is_paused,
-            # _response, _tool_calls, cache/policy/anonymization state, etc.) so
-            # the retried attempt starts from a clean slate. Critically, this
-            # clears is_paused=True set by the pipeline manager on error, which
-            # would otherwise cause _finalize_agent_usage to skip agent-level
-            # accumulation even on the successful retry attempt.
+            # Clear per-attempt task state for a clean retry — especially
+            # is_paused=True (set on error), which would otherwise keep
+            # _finalize_agent_usage from accumulating on a successful retry.
             task.reset_run_state()
             # Clear the stale output from the previous failed attempt so no code
             # can accidentally read its error status before the new output is created.
@@ -5335,11 +5318,9 @@ class Agent(BaseAgent):
         if task is None:
             raise ValueError("Cannot extract task from checkpoint")
 
-        # AgentRunOutput is the single source of truth for usage. After
-        # cross-process resume both Task._usage and AgentRunOutput.usage may
-        # have been deserialized into separate TaskUsage instances; rebind
-        # task._usage to output.usage so subsequent increments on either side
-        # mutate the same object.
+        # Rebind task._usage to output.usage so cross-process resume — where
+        # both sides deserialize into separate TaskUsage instances — keeps
+        # a single mutation target. AgentRunOutput is the canonical usage.
         output._ensure_usage()
         task._usage = output.usage
 
@@ -5359,17 +5340,13 @@ class Agent(BaseAgent):
         
         resume_step_index = problematic_step.step_number
         
-        # ChatHistoryStep sets _run_boundaries when loading history.
-        # Only call start_new_run() if we're resuming AFTER ChatHistoryStep.
-        # If we resume AT or BEFORE ChatHistoryStep, it will rebuild chat_history and
-        # set the correct boundary itself.
+        # Only mark a new run when resuming AFTER ChatHistoryStep; otherwise
+        # ChatHistoryStep itself rebuilds chat_history and sets the boundary.
         chat_history_step_index: int = self._get_step_index_by_name("chat_history")
         if resume_step_index > chat_history_step_index:
-            # CRITICAL: Mark the start of this resumed run for message tracking BEFORE any modifications.
-            # When resuming AFTER ChatHistoryStep, it's skipped (we resume from a later step),
-            # so we need to record the current chat_history length here.
-            # This ensures finalize_run_messages() includes ALL messages from THIS resumed run,
-            # including injected tool results.
+            # Mark the resumed-run boundary now (ChatHistoryStep is skipped)
+            # so finalize_run_messages() captures every message — including
+            # injected tool results — that belongs to this run.
             output.start_new_run()
         
         # For paused runs, inject HITL results (external tool, confirmation, user input)
@@ -5394,10 +5371,8 @@ class Agent(BaseAgent):
         task.is_paused = False
         output.task = task
 
-        # Restore agent-level tool call count from the output so that
-        # tool_call_limit checks work correctly across HITL resume
-        # (especially important for cross-process resume where agent.__init__
-        # resets _tool_call_count to 0).
+        # Restore agent-level tool call count so tool_call_limit stays correct
+        # across HITL / cross-process resume (agent.__init__ zeroes it).
         self._tool_call_count = getattr(output, 'tool_call_count', 0)
         self._tool_limit_reached = False
 
