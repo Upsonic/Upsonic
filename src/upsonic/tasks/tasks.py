@@ -430,8 +430,26 @@ class Task(BaseModel):
         self.validate_tools()
 
     @property
-    def usage(self) -> Optional["TaskUsage"]:
-        return self._usage
+    def usage(self) -> Optional[Any]:
+        """Aggregated usage for every ledger entry recorded under this
+        task's scope (Phase 5/2).
+
+        Returns an :class:`AggregatedUsage` view derived from the usage
+        registry by default. Shape is API-compatible with the legacy
+        :class:`TaskUsage` (input_tokens, output_tokens, cost, requests,
+        duration, model_execution_time, ...).
+
+        With ``UPSONIC_LEGACY_USAGE=1`` returns the live ``TaskUsage``
+        instance the pipeline still mutates via ``incr`` / timer — the
+        rollout-window escape hatch.
+        """
+        import os
+        if os.environ.get("UPSONIC_LEGACY_USAGE", "").lower() in ("1", "true", "yes"):
+            return self._usage
+        from upsonic.usage_registry import get_default_registry
+        if self.task_usage_id_ is None:
+            return self._usage
+        return get_default_registry().by_task(self.task_usage_id_)
 
     @property
     def duration(self) -> Optional[float]:

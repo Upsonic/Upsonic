@@ -580,8 +580,11 @@ class Agent(BaseAgent):
         self._tool_call_count = 0
         self._tool_limit_reached = False
         
-        # Agent-level accumulated usage across all tasks
-        self.usage: Optional["AgentUsage"] = None
+        # Agent-level accumulated usage across all tasks. The public
+        # ``usage`` surface is now a registry-backed property below;
+        # this private field is kept for the legacy ``incr`` chain
+        # (Phase 5 cleanup will remove it once nothing reads it).
+        self._usage_legacy: Optional["AgentUsage"] = None
         
         # Run cancellation tracking
         self.run_id: Optional[str] = None
@@ -792,6 +795,38 @@ class Agent(BaseAgent):
             from upsonic.usage_registry import new_usage_id
             self._agent_usage_id = new_usage_id("agent")
         return self._agent_usage_id
+
+    @property
+    def usage(self) -> Optional[Any]:
+        """Aggregated token / cost / timing for every entry ledger'd
+        under this agent's scope.
+
+        Returns an :class:`AggregatedUsage` view derived from the
+        registry by default. Shape matches the legacy
+        :class:`AgentUsage` (input_tokens, output_tokens, requests,
+        cost, duration, ...) so existing callers keep working.
+
+        With ``UPSONIC_LEGACY_USAGE=1`` set, returns the legacy mutable
+        ``AgentUsage`` instance the ``incr`` chain still maintains —
+        kept available for the rollout window so users can diff the
+        two views.
+        """
+        import os
+        if os.environ.get("UPSONIC_LEGACY_USAGE", "").lower() in ("1", "true", "yes"):
+            return self._usage_legacy
+        from upsonic.usage_registry import get_default_registry
+        return get_default_registry().by_agent(self.agent_usage_id)
+
+    @usage.setter
+    def usage(self, value: Any) -> None:
+        """Internal write path — keeps the legacy mutable in sync.
+
+        Phase-5 cleanup will eliminate every writer and remove this
+        setter together with ``_usage_legacy``. Until then, internal
+        code at ``_accumulate_run_usage`` / the retry block can still
+        do ``self.usage = AgentUsage()`` without crashing.
+        """
+        self._usage_legacy = value
 
     @property
     def session_id(self) -> Optional[str]:
@@ -4149,10 +4184,10 @@ class Agent(BaseAgent):
 
         from upsonic.usage import AgentUsage
 
-        if self.usage is None:
-            self.usage = AgentUsage()
+        if self._usage_legacy is None:
+            self._usage_legacy = AgentUsage()
 
-        self.usage.incr(task_usage)
+        self._usage_legacy.incr(task_usage)
 
     def _finalize_agent_usage(self, print_flag: bool) -> None:
         """Accumulate current run usage into agent-level usage and optionally print agent metrics.
