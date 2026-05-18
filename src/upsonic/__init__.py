@@ -1,10 +1,10 @@
-import warnings
 import importlib
 import os
+import warnings
 from pathlib import Path
 from typing import Any
 
-__version__ = "0.1.0"
+__version__ = "0.77.2" # x-release-please-version
 
 from dotenv import load_dotenv
 
@@ -26,7 +26,7 @@ else:
     # Fallback: search from current directory upwards (default behavior)
     load_dotenv(override=False)
 
-def _lazy_import(module_name: str, class_name: str = None):
+def _lazy_import(module_name: str, class_name: str | None = None):
     """Lazy import function to defer heavy imports until actually needed."""
     def _import():
         if module_name not in _lazy_imports:

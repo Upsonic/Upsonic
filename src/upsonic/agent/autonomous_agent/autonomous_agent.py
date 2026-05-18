@@ -260,13 +260,8 @@ class AutonomousAgent(Agent):
         else:
             effective_memory = None
         
-        # NOTE: We deliberately do NOT cache `effective_memory` on the
-        # instance. The base class sets ``self.memory`` from it, and
-        # ``Chat`` may legitimately swap ``self.memory`` for one wired with
-        # the chat's session/user config. Reading the memory through a stale
-        # snapshot here would diverge from the truly active memory; the
-        # ``autonomous_memory`` property below resolves through ``self.memory``
-        # so the two never drift.
+        # We don't cache `effective_memory`; the base class owns `self.memory`
+        # and the `autonomous_memory` property routes through it (no stale snapshot).
 
         self.filesystem_toolkit: Optional[AutonomousFilesystemToolKit] = None
         self.shell_toolkit: Optional[AutonomousShellToolKit] = None
