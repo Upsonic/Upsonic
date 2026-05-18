@@ -34,6 +34,28 @@ Before any non-trivial task, the always-on guides compose into a single pre-work
 
 Trivial work (single-line typo, comment edit) skips this and says so explicitly: *"Skipping memory / Serena lookup — single-line cosmetic edit."*
 
+### Keep `documents/ai/explanation/` in sync with code
+
+The files under `documents/ai/explanation/<subsystem>/<subsystem>.md` are treated as the authoritative description of each subsystem's behaviour contract. Whenever a code change alters an *observable* contract that an explanation doc asserts, resync the matching file in the same commit (or an immediate follow-up `docs: sync explanation/…` commit). The `documents/ai/guides/` files are Claude-operational process docs and only change when the *process* changes, not when a single contract does.
+
+Triggers that almost always require a doc update:
+
+- A public method / constructor signature changed (added, removed, renamed parameter; new default; new keyword-only requirement).
+- A side effect was added, removed, or made conditional (e.g. `Chat.__init__` no longer unconditionally overwrites `agent.memory`).
+- A `ToolConfig` / dataclass default flipped, or a specific subclass overrides the generic default.
+- An exception path turned into a graceful fallback, or vice versa.
+- A previously-documented invariant ("X always Y") is now conditional.
+- A new public emission (e.g. `UserWarning`, log line, event) is added that callers may observe.
+
+How to do it:
+
+1. Identify the touched module(s) under `src/upsonic/`.
+2. `grep -rln "<class or symbol>" documents/ai/explanation/` to find the doc and the exact lines whose claim is now stale.
+3. Edit surgically — fix only the sentences/tables whose claim is now wrong; do not rewrite the surrounding prose.
+4. Include the doc edit in the same logical change (same PR / commit block). If the code commit is already pushed, follow up with a `docs: sync explanation/…` commit before the PR is reviewed.
+
+Skip when the change is purely internal (private helpers, comment trims, refactors that preserve every observable contract). Surface what you found at the start of the reply (memory / Serena conventions still apply), e.g.: *"Touched `Chat.__init__` storage wiring → resyncing `documents/ai/explanation/chat/chat.md` lines 257–280."*
+
 ## Core Architecture
 
 ### Key Components
