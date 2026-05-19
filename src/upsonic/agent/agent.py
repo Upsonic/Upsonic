@@ -2764,24 +2764,15 @@ class Agent(BaseAgent):
             
             if hasattr(self, '_agent_run_output') and self._agent_run_output:
                 self._agent_run_output.add_model_execution_time(_retry_model_elapsed)
-                if hasattr(retry_response, 'usage') and retry_response.usage:
-                    self._agent_run_output._ensure_usage().incr(retry_response.usage)
-                    try:
-                        from upsonic.utils.usage import calculate_cost_from_usage
-                        cost_value: float = calculate_cost_from_usage(retry_response.usage, self.model)
-                        self._agent_run_output.set_usage_cost(cost_value)
+                from upsonic.usage_registry import record_response_usage
+                record_response_usage(
+                    retry_response,
+                    model=self.model,
+                    pipeline_step="model_call_retry",
+                    model_execution_time=_retry_model_elapsed,
+                    run_output=self._agent_run_output,
+                )
 
-                        from upsonic.usage_registry import record_request_usage
-                        record_request_usage(
-                            retry_response.usage,
-                            model=getattr(self.model, "model_name", None),
-                            pipeline_step="model_call_retry",
-                            cost_usd=cost_value,
-                            model_execution_time=_retry_model_elapsed,
-                        )
-                    except Exception:
-                        pass
-            
             return await self._handle_model_response(retry_response, messages)
         
         if regular_tool_calls:
@@ -2861,23 +2852,14 @@ class Agent(BaseAgent):
                 
                 if hasattr(self, '_agent_run_output') and self._agent_run_output:
                     self._agent_run_output.add_model_execution_time(_limit_model_elapsed)
-                    if hasattr(final_response, 'usage') and final_response.usage:
-                        self._agent_run_output._ensure_usage().incr(final_response.usage)
-                        try:
-                            from upsonic.utils.usage import calculate_cost_from_usage
-                            cost_value: float = calculate_cost_from_usage(final_response.usage, self.model)
-                            self._agent_run_output.set_usage_cost(cost_value)
-
-                            from upsonic.usage_registry import record_request_usage
-                            record_request_usage(
-                                final_response.usage,
-                                model=getattr(self.model, "model_name", None),
-                                pipeline_step="model_call_final",
-                                cost_usd=cost_value,
-                                model_execution_time=_limit_model_elapsed,
-                            )
-                        except Exception:
-                            pass
+                    from upsonic.usage_registry import record_response_usage
+                    record_response_usage(
+                        final_response,
+                        model=self.model,
+                        pipeline_step="model_call_final",
+                        model_execution_time=_limit_model_elapsed,
+                        run_output=self._agent_run_output,
+                    )
                 
                 return final_response
             
@@ -2943,23 +2925,14 @@ class Agent(BaseAgent):
             
             if hasattr(self, '_agent_run_output') and self._agent_run_output:
                 self._agent_run_output.add_model_execution_time(_followup_model_elapsed)
-                if hasattr(follow_up_response, 'usage') and follow_up_response.usage:
-                    self._agent_run_output._ensure_usage().incr(follow_up_response.usage)
-                    try:
-                        from upsonic.utils.usage import calculate_cost_from_usage
-                        cost_value: float = calculate_cost_from_usage(follow_up_response.usage, self.model)
-                        self._agent_run_output.set_usage_cost(cost_value)
-
-                        from upsonic.usage_registry import record_request_usage
-                        record_request_usage(
-                            follow_up_response.usage,
-                            model=getattr(self.model, "model_name", None),
-                            pipeline_step="model_call_follow_up",
-                            cost_usd=cost_value,
-                            model_execution_time=_followup_model_elapsed,
-                        )
-                    except Exception:
-                        pass
+                from upsonic.usage_registry import record_response_usage
+                record_response_usage(
+                    follow_up_response,
+                    model=self.model,
+                    pipeline_step="model_call_follow_up",
+                    model_execution_time=_followup_model_elapsed,
+                    run_output=self._agent_run_output,
+                )
             
             return await self._handle_model_response(follow_up_response, messages)
         
@@ -3328,23 +3301,14 @@ class Agent(BaseAgent):
             
             if hasattr(self, '_agent_run_output') and self._agent_run_output:
                 self._agent_run_output.add_model_execution_time(_guardrail_model_elapsed)
-                if hasattr(response, 'usage') and response.usage:
-                    self._agent_run_output._ensure_usage().incr(response.usage)
-                    try:
-                        from upsonic.utils.usage import calculate_cost_from_usage
-                        cost_value: float = calculate_cost_from_usage(response.usage, self.model)
-                        self._agent_run_output.set_usage_cost(cost_value)
-
-                        from upsonic.usage_registry import record_request_usage
-                        record_request_usage(
-                            response.usage,
-                            model=getattr(self.model, "model_name", None),
-                            pipeline_step="guardrail",
-                            cost_usd=cost_value,
-                            model_execution_time=_guardrail_model_elapsed,
-                        )
-                    except Exception:
-                        pass
+                from upsonic.usage_registry import record_response_usage
+                record_response_usage(
+                    response,
+                    model=self.model,
+                    pipeline_step="guardrail",
+                    model_execution_time=_guardrail_model_elapsed,
+                    run_output=self._agent_run_output,
+                )
 
             current_model_response = await self._handle_model_response(response, messages)
             
@@ -3799,19 +3763,11 @@ class Agent(BaseAgent):
         # nested agents) INHERIT the parent's scope rather than pushing a
         # fresh one — per the agreed "no separate structure, write to the
         # active id" default. Tokens reset in the finally below.
-        from upsonic.usage_registry.scope import (
-            _agent_usage_id,
-            _task_usage_id,
-            _run_id as _run_id_var,
-        )
-        _agent_scope_token = (
-            _agent_usage_id.set(self.agent_usage_id)
-            if _agent_usage_id.get() is None else None
-        )
-        _task_scope_token = (
-            _task_usage_id.set(task.task_usage_id)
-            if hasattr(task, "task_usage_id") and _task_usage_id.get() is None
-            else None
+        from upsonic.usage_registry import push_scope_tags
+        _scope_tokens = push_scope_tags(
+            agent_usage_id=self.agent_usage_id,
+            task_usage_id=getattr(task, "task_usage_id", None),
+            inherit=True,
         )
 
         if debug or self.debug:
@@ -3829,11 +3785,9 @@ class Agent(BaseAgent):
             self.run_id = run_id
             register_run(run_id)
 
-        # Push run_id onto the scope contextvar — emission writes will
-        # tag every ledger row with it, so the registry can roll up by
-        # run later (e.g. when AgentRunOutput.usage moves to a registry
-        # view in a follow-up).
-        _run_scope_token = _run_id_var.set(run_id)
+        # Push run_id onto the scope contextvar — each agent.do_async
+        # invocation IS a distinct run, so no inherit semantics here.
+        _scope_tokens += push_scope_tags(run_id=run_id)
 
         original_model: Optional["Model"] = None
         try:
@@ -3910,22 +3864,10 @@ class Agent(BaseAgent):
             if not _is_paused:
                 self.run_id = None
             # Pop usage-registry scope tags pushed at function entry —
-            # only the ones we actually pushed (sub-agent runs inherit and
-            # leave the parent's tokens alone).
-            if _agent_scope_token is not None:
-                try:
-                    _agent_usage_id.reset(_agent_scope_token)
-                except Exception:
-                    pass
-            if _task_scope_token is not None:
-                try:
-                    _task_usage_id.reset(_task_scope_token)
-                except Exception:
-                    pass
-            try:
-                _run_id_var.reset(_run_scope_token)
-            except Exception:
-                pass
+            # only the ones we actually pushed (sub-agent runs inherit
+            # and leave the parent's tokens alone).
+            from upsonic.usage_registry import reset_scope_tags
+            reset_scope_tags(_scope_tokens)
 
     def _calculate_aggregated_cost(self) -> Optional[float]:
         """Calculate the aggregated monetary cost across the agent run.
@@ -4466,25 +4408,17 @@ class Agent(BaseAgent):
 
         # Push usage scope for the duration of the stream — symmetric with
         # do_async, including the inherit-don't-override sub-agent rule.
-        from upsonic.usage_registry.scope import (
-            _agent_usage_id,
-            _task_usage_id,
-            _run_id as _run_id_var,
-        )
-        _agent_scope_token = (
-            _agent_usage_id.set(self.agent_usage_id)
-            if _agent_usage_id.get() is None else None
-        )
-        _task_scope_token = (
-            _task_usage_id.set(task.task_usage_id)
-            if hasattr(task, "task_usage_id") and _task_usage_id.get() is None
-            else None
+        from upsonic.usage_registry import push_scope_tags
+        _scope_tokens = push_scope_tags(
+            agent_usage_id=self.agent_usage_id,
+            task_usage_id=getattr(task, "task_usage_id", None),
+            inherit=True,
         )
 
         run_id = str(uuid.uuid4())
         self.run_id = run_id
         register_run(run_id)
-        _run_scope_token = _run_id_var.set(run_id)
+        _scope_tokens += push_scope_tags(run_id=run_id)
         
         original_model: Optional["Model"] = None
         try:
@@ -4579,22 +4513,8 @@ class Agent(BaseAgent):
                 print_agent_metrics(self, print_output=stream_print_flag)
             cleanup_run(run_id)
             self.run_id = None
-            # Pop usage-registry scope tags pushed at function entry —
-            # only the ones we actually pushed.
-            if _agent_scope_token is not None:
-                try:
-                    _agent_usage_id.reset(_agent_scope_token)
-                except Exception:
-                    pass
-            if _task_scope_token is not None:
-                try:
-                    _task_usage_id.reset(_task_scope_token)
-                except Exception:
-                    pass
-            try:
-                _run_id_var.reset(_run_scope_token)
-            except Exception:
-                pass
+            from upsonic.usage_registry import reset_scope_tags
+            reset_scope_tags(_scope_tokens)
 
     def _extract_text_from_stream_event(self, event: Any) -> Optional[str]:
         """Extract text content from a streaming event.

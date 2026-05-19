@@ -119,3 +119,61 @@ def scope(
         # Restore in reverse order so nested scope() calls unwind cleanly.
         for var, token in reversed(tokens):
             var.reset(token)
+
+
+def push_scope_tags(
+    *,
+    chat_usage_id: Optional[str] = None,
+    agent_usage_id: Optional[str] = None,
+    task_usage_id: Optional[str] = None,
+    team_usage_id: Optional[str] = None,
+    workflow_usage_id: Optional[str] = None,
+    system_usage_id: Optional[str] = None,
+    run_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    inherit: bool = False,
+) -> list:
+    """Imperative variant of :func:`scope` for entry / exit blocks that
+    span more code than a ``with`` block can wrap cleanly (e.g. the
+    long body of ``Agent.do_async`` / ``Agent.astream``).
+
+    Pushes every non-``None`` tag onto the matching contextvar and
+    returns a list of ``(ContextVar, Token)`` pairs that the caller
+    feeds back to :func:`reset_scope_tags` in a ``finally`` block.
+
+    Args:
+        inherit: When ``True``, a tag that's already active in the
+            current context is left untouched (the contextvar is
+            NOT re-set). This is the "sub-agent inherits parent's
+            scope" pattern — caller passes its own id, but a nested
+            run sees the existing value and keeps it.
+    """
+    pairs = [
+        (_chat_usage_id, chat_usage_id),
+        (_agent_usage_id, agent_usage_id),
+        (_task_usage_id, task_usage_id),
+        (_team_usage_id, team_usage_id),
+        (_workflow_usage_id, workflow_usage_id),
+        (_system_usage_id, system_usage_id),
+        (_run_id, run_id),
+        (_user_id, user_id),
+    ]
+    tokens: list = []
+    for var, value in pairs:
+        if value is None:
+            continue
+        if inherit and var.get() is not None:
+            continue
+        tokens.append((var, var.set(value)))
+    return tokens
+
+
+def reset_scope_tags(tokens: list) -> None:
+    """Reset every token returned by :func:`push_scope_tags`. Safe to
+    call with a partial / interleaved list; failures on individual
+    tokens are swallowed so a finally block can run to completion."""
+    for var, token in reversed(tokens):
+        try:
+            var.reset(token)
+        except Exception:
+            pass

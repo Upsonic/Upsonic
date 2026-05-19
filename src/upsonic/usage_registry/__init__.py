@@ -19,8 +19,16 @@ from upsonic.usage_registry.entry import UsageEntry, UsageKind
 from upsonic.usage_registry.aggregated import AggregatedUsage
 from upsonic.usage_registry.registry import UsageRegistry, get_default_registry
 from upsonic.usage_registry.ids import new_usage_id
-from upsonic.usage_registry.scope import scope, current_scope_tags
-from upsonic.usage_registry.recorder import record_request_usage
+from upsonic.usage_registry.scope import (
+    scope,
+    current_scope_tags,
+    push_scope_tags,
+    reset_scope_tags,
+)
+from upsonic.usage_registry.recorder import (
+    record_request_usage,
+    record_response_usage,
+)
 
 __all__ = (
     "UsageEntry",
@@ -31,5 +39,8 @@ __all__ = (
     "new_usage_id",
     "scope",
     "current_scope_tags",
+    "push_scope_tags",
+    "reset_scope_tags",
     "record_request_usage",
+    "record_response_usage",
 )

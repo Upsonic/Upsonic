@@ -19,6 +19,94 @@ if TYPE_CHECKING:
     from upsonic.usage import RequestUsage
 
 
+def record_response_usage(
+    response: Any,
+    *,
+    model: Any = None,
+    pipeline_step: str,
+    model_execution_time: float = 0.0,
+    run_output: Any = None,
+    compute_cost: bool = True,
+) -> Optional[float]:
+    """Standard handling for a fresh ``model.request(...)`` response.
+
+    Wraps the three things every emission site does:
+
+    1. Compute ``cost_usd`` via :func:`calculate_cost_from_usage` from
+       the response usage + model (skipped when ``compute_cost=False``).
+    2. Fold the response usage into the per-run snapshot on
+       ``run_output`` (``_ensure_usage().incr(...)`` +
+       ``set_usage_cost(...)``) — only when ``run_output`` is given.
+    3. Write a ``UsageEntry`` into the default usage registry under
+       the active scope contextvars via :func:`record_request_usage`.
+
+    Every step is wrapped in its own ``try/except`` so a pricing
+    failure / snapshot failure / registry failure can't propagate and
+    mask the real model response. Returns the computed cost (or
+    ``None`` when no cost was resolved) so the caller can keep
+    using it.
+
+    Args:
+        response: The :class:`ModelResponse` from
+            ``await model.request(...)``. Only the ``.usage`` attribute
+            is touched; everything else is ignored.
+        model: The model instance (or string id) used for pricing
+            resolution. Pass ``None`` to skip cost lookup.
+        pipeline_step: Free-form step name attached to the ledger row
+            (``"model_call"`` / ``"model_call_retry"`` /
+            ``"guardrail"`` / ...).
+        model_execution_time: Per-call elapsed wall-clock from
+            ``time.time()`` before/after the request. Becomes both
+            ``UsageEntry.model_execution_time`` and
+            ``UsageEntry.duration`` so :class:`AggregatedUsage` rolls
+            them up.
+        run_output: The active :class:`AgentRunOutput` to update the
+            per-run snapshot on. ``None`` skips the snapshot fold
+            (used by ``direct.py`` where the snapshot lives on the
+            task instead).
+        compute_cost: When ``False`` the cost-calculation step is
+            skipped — useful when the caller already has the value or
+            when pricing isn't meaningful for this call.
+
+    Returns:
+        The computed ``cost_value`` (USD float), or ``None`` if no
+        cost was resolved.
+    """
+    if not (hasattr(response, "usage") and response.usage):
+        return None
+
+    response_usage = response.usage
+    cost_value: Optional[float] = None
+
+    if compute_cost and model is not None:
+        try:
+            from upsonic.utils.usage import calculate_cost_from_usage
+            cost_value = calculate_cost_from_usage(response_usage, model)
+        except Exception:
+            cost_value = None
+
+    if run_output is not None:
+        try:
+            run_output._ensure_usage().incr(response_usage)
+            if cost_value is not None:
+                run_output.set_usage_cost(cost_value)
+        except Exception:
+            pass
+
+    try:
+        record_request_usage(
+            response_usage,
+            model=getattr(model, "model_name", None) if model is not None else None,
+            pipeline_step=pipeline_step,
+            cost_usd=cost_value,
+            model_execution_time=model_execution_time,
+        )
+    except Exception:
+        pass
+
+    return cost_value
+
+
 def record_request_usage(
     request_usage: Optional["RequestUsage"],
     *,

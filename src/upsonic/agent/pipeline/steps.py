@@ -1820,24 +1820,15 @@ class ModelExecutionStep(Step):
         finally:
             # Always update usage from model response if available (even on error/cancel)
             # This ensures usage is tracked for durable execution recovery
-            if response is not None and hasattr(response, 'usage') and response.usage:
-                try:
-                    context._ensure_usage().incr(response.usage)
-
-                    from upsonic.utils.usage import calculate_cost_from_usage
-                    cost_value = calculate_cost_from_usage(response.usage, model)
-                    context.set_usage_cost(cost_value)
-
-                    from upsonic.usage_registry import record_request_usage
-                    record_request_usage(
-                        response.usage,
-                        model=getattr(model, "model_name", None),
-                        pipeline_step="model_call",
-                        cost_usd=cost_value,
-                        model_execution_time=model_execution_time,
-                    )
-                except Exception:
-                    pass
+            if response is not None:
+                from upsonic.usage_registry import record_response_usage
+                record_response_usage(
+                    response,
+                    model=model,
+                    pipeline_step="model_call",
+                    model_execution_time=model_execution_time,
+                    run_output=context,
+                )
 
             if step_result:
                 self._finalize_step_result(step_result, context)
@@ -2826,24 +2817,15 @@ class AgentPolicyStep(Step):
         )
         _policy_model_elapsed: float = time.time() - _policy_model_start
         context.add_model_execution_time(_policy_model_elapsed)
-        
-        if hasattr(response, 'usage') and response.usage:
-            context._ensure_usage().incr(response.usage)
-            try:
-                from upsonic.utils.usage import calculate_cost_from_usage
-                cost_value: float = calculate_cost_from_usage(response.usage, model)
-                context.set_usage_cost(cost_value)
 
-                from upsonic.usage_registry import record_request_usage
-                record_request_usage(
-                    response.usage,
-                    model=getattr(model, "model_name", None),
-                    pipeline_step="policy_feedback",
-                    cost_usd=cost_value,
-                    model_execution_time=_policy_model_elapsed,
-                )
-            except Exception:
-                pass
+        from upsonic.usage_registry import record_response_usage
+        record_response_usage(
+            response,
+            model=model,
+            pipeline_step="policy_feedback",
+            model_execution_time=_policy_model_elapsed,
+            run_output=context,
+        )
         
         # Handle response (including any tool calls)
         final_response = await agent._handle_model_response(
@@ -3257,24 +3239,14 @@ class StreamModelExecutionStep(Step):
         # This ensures the response is included in session memory
         context.chat_history.append(final_response)
         
-        if hasattr(final_response, 'usage') and final_response.usage:
-            context._ensure_usage().incr(final_response.usage)
-
-            try:
-                from upsonic.utils.usage import calculate_cost_from_usage
-                cost_value = calculate_cost_from_usage(final_response.usage, model)
-                context.set_usage_cost(cost_value)
-
-                from upsonic.usage_registry import record_request_usage
-                record_request_usage(
-                    final_response.usage,
-                    model=getattr(model, "model_name", None),
-                    pipeline_step="model_call_stream",
-                    cost_usd=cost_value,
-                    model_execution_time=_stream_model_elapsed,
-                )
-            except Exception:
-                pass
+        from upsonic.usage_registry import record_response_usage
+        record_response_usage(
+            final_response,
+            model=model,
+            pipeline_step="model_call_stream",
+            model_execution_time=_stream_model_elapsed,
+            run_output=context,
+        )
 
         # Note: TextCompleteEvent is already yielded by convert_llm_event_to_agent_event
         # when PartEndEvent with TextPart is received, so we don't yield it again here
