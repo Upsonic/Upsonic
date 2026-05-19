@@ -106,6 +106,18 @@ class Team:
             self.add_tool()
 
     @property
+    def usage(self):
+        """Aggregated token / cost / timing for every ledger entry
+        recorded under this team's scope.
+
+        Returns an :class:`~upsonic.usage_registry.AggregatedUsage` view
+        derived from the usage registry. Same shape as ``agent.usage`` /
+        ``task.usage`` / ``chat.usage`` — read fields directly.
+        """
+        from upsonic.usage_registry import get_default_registry
+        return get_default_registry().by_team(self.team_usage_id)
+
+    @property
     def agents(self) -> List[Union[Agent, "Team"]]:
         """Backward-compatible alias for entities."""
         return self.entities

@@ -116,6 +116,29 @@ class TestTeamIds(unittest.TestCase):
         self.assertEqual(t.team_id, "t1")
         self.assertEqual(t.team_usage_id, "tu1")
 
+    def test_team_usage_property_returns_aggregated_view(self):
+        """``team.usage`` returns an AggregatedUsage queried by
+        ``team_usage_id`` — same shape as agent / task / chat."""
+        from upsonic.usage_registry import (
+            AggregatedUsage, get_default_registry, record_request_usage, scope,
+        )
+        from upsonic.usage import RequestUsage
+
+        get_default_registry().clear()
+        t = self._make(team_id="t1", team_usage_id="tu1")
+        # Empty registry → zero-valued AggregatedUsage.
+        self.assertIsInstance(t.usage, AggregatedUsage)
+        self.assertEqual(t.usage.input_tokens, 0)
+
+        with scope(team_usage_id="tu1"):
+            record_request_usage(
+                RequestUsage(input_tokens=7, output_tokens=3),
+                model="mock-model",
+            )
+        self.assertEqual(t.usage.input_tokens, 7)
+        self.assertEqual(t.usage.output_tokens, 3)
+        self.assertEqual(t.usage.requests, 1)
+
 
 if __name__ == "__main__":
     unittest.main()
