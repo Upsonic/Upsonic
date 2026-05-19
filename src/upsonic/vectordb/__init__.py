@@ -22,6 +22,7 @@ if TYPE_CHECKING:
         WeaviateConfig,
         PgVectorConfig,
         SuperMemoryConfig,
+        ValkeyConfig,
         create_config,
     )
 
@@ -34,6 +35,7 @@ if TYPE_CHECKING:
     from .providers.weaviate import WeaviateProvider
     from .providers.pgvector import PgVectorProvider
     from .providers.supermemory import SuperMemoryProvider
+    from .providers.valkey import ValkeyProvider
 
 # Provider class mapping for lazy imports
 _PROVIDER_MAP = {
@@ -45,6 +47,7 @@ _PROVIDER_MAP = {
     'WeaviateProvider': '.providers.weaviate',
     'PgVectorProvider': '.providers.pgvector',
     'SuperMemoryProvider': '.providers.supermemory',
+    'ValkeyProvider': '.providers.valkey',
 }
 
 # Cache for lazily imported providers and configs
@@ -81,6 +84,7 @@ def _get_config_classes():
         WeaviateConfig,
         PgVectorConfig,
         SuperMemoryConfig,
+        ValkeyConfig,
         create_config,
     )
     
@@ -102,6 +106,7 @@ def _get_config_classes():
         'WeaviateConfig': WeaviateConfig,
         'PgVectorConfig': PgVectorConfig,
         'SuperMemoryConfig': SuperMemoryConfig,
+        'ValkeyConfig': ValkeyConfig,
         'create_config': create_config,
     })
     
@@ -165,6 +170,7 @@ __all__ = [
     'WeaviateProvider',
     'PgVectorProvider',
     'SuperMemoryProvider',
+    'ValkeyProvider',
     
     # Config classes
     'BaseVectorDBConfig',
@@ -184,6 +190,7 @@ __all__ = [
     'WeaviateConfig',
     'PgVectorConfig',
     'SuperMemoryConfig',
+    'ValkeyConfig',
     'create_config',
 ]
 
