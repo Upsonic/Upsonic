@@ -2777,6 +2777,7 @@ class Agent(BaseAgent):
                             model=getattr(self.model, "model_name", None),
                             pipeline_step="model_call_retry",
                             cost_usd=cost_value,
+                            model_execution_time=_retry_model_elapsed,
                         )
                     except Exception:
                         pass
@@ -2873,6 +2874,7 @@ class Agent(BaseAgent):
                                 model=getattr(self.model, "model_name", None),
                                 pipeline_step="model_call_final",
                                 cost_usd=cost_value,
+                                model_execution_time=_limit_model_elapsed,
                             )
                         except Exception:
                             pass
@@ -2954,6 +2956,7 @@ class Agent(BaseAgent):
                             model=getattr(self.model, "model_name", None),
                             pipeline_step="model_call_follow_up",
                             cost_usd=cost_value,
+                            model_execution_time=_followup_model_elapsed,
                         )
                     except Exception:
                         pass
@@ -2978,14 +2981,11 @@ class Agent(BaseAgent):
                 summarization_model: "Model" = self._context_management_middleware._get_summarization_model()
                 cost_value: float = calculate_cost_from_usage(summarization_usage, summarization_model)
                 self._agent_run_output.set_usage_cost(cost_value)
-
-                from upsonic.usage_registry import record_request_usage
-                record_request_usage(
-                    summarization_usage,
-                    model=getattr(summarization_model, "model_name", None),
-                    pipeline_step="summarization",
-                    cost_usd=cost_value,
-                )
+                # Note: summarization's own model.request inside the
+                # context-management middleware emits its own UsageEntry
+                # under the inherited scope tags. Recording here would
+                # double-count, so this site only updates the per-run
+                # snapshot — the registry already has the row.
             except Exception:
                 pass
             # Reset to prevent double-counting on next apply() call
@@ -3341,6 +3341,7 @@ class Agent(BaseAgent):
                             model=getattr(self.model, "model_name", None),
                             pipeline_step="guardrail",
                             cost_usd=cost_value,
+                            model_execution_time=_guardrail_model_elapsed,
                         )
                     except Exception:
                         pass

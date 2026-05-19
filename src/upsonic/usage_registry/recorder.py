@@ -28,6 +28,8 @@ def record_request_usage(
     pipeline_step: Optional[str] = None,
     parent_entry_id: Optional[str] = None,
     cost_usd: Optional[float] = None,
+    model_execution_time: float = 0.0,
+    time_to_first_token: Optional[float] = None,
     extra: Optional[Dict[str, Any]] = None,
     registry: Optional[UsageRegistry] = None,
 ) -> Optional[UsageEntry]:
@@ -89,6 +91,9 @@ def record_request_usage(
         cache_audio_read_tokens=getattr(request_usage, "cache_audio_read_tokens", 0) or 0,
         requests=getattr(request_usage, "requests", 1) or 1,
         cost_usd=cost_usd,
+        model_execution_time=model_execution_time,
+        duration=model_execution_time,
+        time_to_first_token=time_to_first_token,
         pipeline_step=pipeline_step,
         parent_entry_id=parent_entry_id,
         extra=extra or {},

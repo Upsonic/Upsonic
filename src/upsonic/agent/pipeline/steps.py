@@ -1834,6 +1834,7 @@ class ModelExecutionStep(Step):
                         model=getattr(model, "model_name", None),
                         pipeline_step="model_call",
                         cost_usd=cost_value,
+                        model_execution_time=model_execution_time,
                     )
                 except Exception:
                     pass
@@ -2839,6 +2840,7 @@ class AgentPolicyStep(Step):
                     model=getattr(model, "model_name", None),
                     pipeline_step="policy_feedback",
                     cost_usd=cost_value,
+                    model_execution_time=_policy_model_elapsed,
                 )
             except Exception:
                 pass
@@ -3269,6 +3271,7 @@ class StreamModelExecutionStep(Step):
                     model=getattr(model, "model_name", None),
                     pipeline_step="model_call_stream",
                     cost_usd=cost_value,
+                    model_execution_time=_stream_model_elapsed,
                 )
             except Exception:
                 pass

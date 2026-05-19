@@ -430,6 +430,7 @@ class Direct:
                     response.usage,
                     model=getattr(model, "model_name", None),
                     pipeline_step="direct",
+                    model_execution_time=_model_elapsed,
                 )
 
             task._usage.stop_timer()
