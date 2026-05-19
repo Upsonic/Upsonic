@@ -59,7 +59,7 @@ async def main():
             print(f"\n❌ Error validating profile: {e}")
             print(f"Raw profile data: {profile_data}")
 
-    print(f"\nTotal cost: ${chat.total_cost:.4f} | Tokens: {chat.input_tokens + chat.output_tokens:,}")
+    print(f"\nTotal cost: ${(chat.usage.cost or 0.0):.4f} | Tokens: {chat.usage.input_tokens + chat.usage.output_tokens:,}")
 
 
 if __name__ == "__main__":

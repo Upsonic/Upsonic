@@ -16,7 +16,7 @@ async def main():
     # Send a message and get response
     response = await chat.invoke("Hello! How are you?")
     print(f"Response: {response}")
-    print(f"\nTotal cost: ${chat.total_cost}")
+    print(f"\nTotal cost: ${(chat.usage.cost or 0.0)}")
     print(f"Messages in history: {len(chat.all_messages)}")
 
 

@@ -10,9 +10,9 @@ async def main():
     await chat.invoke("How are you?")
 
     # Access cost metrics
-    print(f"Total cost: ${chat.total_cost:.4f}")
-    print(f"Input tokens: {chat.input_tokens}")
-    print(f"Output tokens: {chat.output_tokens}")
+    print(f"Total cost: ${(chat.usage.cost or 0.0):.4f}")
+    print(f"Input tokens: {chat.usage.input_tokens}")
+    print(f"Output tokens: {chat.usage.output_tokens}")
 
 
 if __name__ == "__main__":

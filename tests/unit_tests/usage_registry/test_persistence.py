@@ -256,9 +256,9 @@ class TestChatPersistsAndResumes(unittest.TestCase):
         )
 
         # The registry was rehydrated on open — prior tokens are visible.
-        self.assertEqual(chat2.input_tokens, 70)
-        self.assertEqual(chat2.output_tokens, 30)
-        self.assertEqual(chat2.total_requests, 1)
+        self.assertEqual(chat2.usage.input_tokens, 70)
+        self.assertEqual(chat2.usage.output_tokens, 30)
+        self.assertEqual(chat2.usage.requests, 1)
 
 
 if __name__ == "__main__":

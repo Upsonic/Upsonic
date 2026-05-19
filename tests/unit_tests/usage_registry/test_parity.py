@@ -1,4 +1,4 @@
-"""Parity tests: registry totals must equal task.usage / agent.usage / chat.total_tokens.
+"""Parity tests: registry totals must equal task.usage / agent.usage / chat.usage.total_tokens.
 
 These run against mocked models so they execute fast and don't need an
 API key. The point is to verify the Phase-2 write-through paths line up

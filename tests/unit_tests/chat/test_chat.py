@@ -300,14 +300,14 @@ class TestChatProperties:
         agent = MockAgent()
         chat = Chat(session_id="session", user_id="user", agent=agent)
         
-        assert chat.total_tokens == 0
+        assert chat.usage.total_tokens == 0
     
     def test_total_cost_initially_zero(self):
         """Test that total_cost is initially zero."""
         agent = MockAgent()
         chat = Chat(session_id="session", user_id="user", agent=agent)
         
-        assert chat.total_cost == 0.0
+        assert (chat.usage.cost or 0.0) == 0.0
 
 
 class TestChatRepr:

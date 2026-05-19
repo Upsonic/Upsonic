@@ -21,7 +21,7 @@ async def main():
     await chat.invoke("Can you help me write a Python function to calculate fibonacci numbers?")
     await chat.invoke("Can you also help me optimize it?")
 
-    print(f"Total cost: ${chat.total_cost:.4f} | Tokens: {chat.input_tokens + chat.output_tokens:,} | Messages: {len(chat.all_messages)}")
+    print(f"Total cost: ${(chat.usage.cost or 0.0):.4f} | Tokens: {chat.usage.input_tokens + chat.usage.output_tokens:,} | Messages: {len(chat.all_messages)}")
 
 
 if __name__ == "__main__":

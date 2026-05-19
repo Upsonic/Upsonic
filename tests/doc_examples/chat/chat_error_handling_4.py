@@ -29,9 +29,9 @@ async def main():
         print(f"{i}. {response}")
     
     # Show metrics
-    print(f"\nTotal cost: ${chat.total_cost}")
-    print(f"Input tokens: {chat.input_tokens}")
-    print(f"Output tokens: {chat.output_tokens}")
+    print(f"\nTotal cost: ${(chat.usage.cost or 0.0)}")
+    print(f"Input tokens: {chat.usage.input_tokens}")
+    print(f"Output tokens: {chat.usage.output_tokens}")
     print(f"Messages in history: {len(chat.all_messages)}")
     print(f"Final session state: {chat.state.value}")
     

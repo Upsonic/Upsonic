@@ -283,54 +283,27 @@ class Chat:
         return self._session_manager.all_messages
     
     # ------------------------------------------------------------------
-    # Usage / cost / token surface — read-through to the usage registry.
+    # Usage / cost / token surface
     # ------------------------------------------------------------------
     #
-    # Every model.request() emits a UsageEntry tagged with chat_usage_id
-    # (Phase 2 write-through + Phase 1c scope contextvars). Roll-up is a
-    # registry query — picks up sub-agent spend the old session.usage
-    # path never saw (memory summary, reliability validator/editor,
-    # context middleware) because those sub-agents inherit this chat's
-    # scope automatically.
+    # One canonical surface: ``chat.usage`` returns an
+    # :class:`AggregatedUsage` view of every UsageEntry tagged with this
+    # chat's ``chat_usage_id`` (sub-agent / memory / reliability calls
+    # inherit the scope automatically, so this picks them up too).
+    #
+    # All token / cost / duration / TTFT / request / tool-call counts
+    # are fields on that view — read them as ``chat.usage.input_tokens``,
+    # ``chat.usage.cost``, ``chat.usage.duration``, etc. The previous
+    # top-level shortcuts (``chat.input_tokens`` / ``chat.total_cost`` /
+    # …) and ``chat.get_usage()`` / ``chat.get_session_metrics()`` were
+    # removed in the unification pass — every other entity (Agent,
+    # Task, AgentRunOutput) uses the same ``.usage.X`` shape now.
 
-    def _registry_view(self):
+    @property
+    def usage(self):
         from upsonic.usage_registry import get_default_registry
         return get_default_registry().by_chat(self.chat_usage_id)
 
-    @property
-    def input_tokens(self) -> int:
-        return self._registry_view().input_tokens
-
-    @property
-    def output_tokens(self) -> int:
-        return self._registry_view().output_tokens
-
-    @property
-    def total_tokens(self) -> int:
-        return self._registry_view().total_tokens
-
-    @property
-    def total_cost(self) -> float:
-        return self._registry_view().cost or 0.0
-
-    @property
-    def total_requests(self) -> int:
-        return self._registry_view().requests
-
-    @property
-    def total_tool_calls(self) -> int:
-        return self._registry_view().tool_calls
-    
-    @property
-    def run_duration(self) -> Optional[float]:
-        """Total run duration in seconds (from storage RunUsage)."""
-        return self._session_manager.run_duration
-    
-    @property
-    def time_to_first_token(self) -> Optional[float]:
-        """Time to first token in seconds (from storage RunUsage)."""
-        return self._session_manager.time_to_first_token
-    
     @property
     def start_time(self) -> float:
         """Session start time (Unix timestamp)."""
@@ -365,19 +338,6 @@ class Chat:
     def is_closed(self) -> bool:
         """Check if the session has been closed."""
         return self._session_manager.is_closed
-    
-    def get_usage(self) -> Any:
-        """Return the full usage view for this chat as an
-        :class:`AggregatedUsage`, derived from the registry."""
-        return self._registry_view()
-    
-    def get_session_metrics(self) -> Any:
-        """Get comprehensive session metrics."""
-        return self._session_manager.get_session_metrics()
-    
-    def get_session_summary(self) -> str:
-        """Get a human-readable session summary."""
-        return self._session_manager.get_session_summary()
     
     def get_recent_messages(self, count: int = 10) -> List[ChatMessage]:
         """Get the most recent messages as ChatMessage objects."""
@@ -1016,8 +976,9 @@ class Chat:
     def __repr__(self) -> str:
         """String representation of the chat."""
         message_count = self._session_manager.get_message_count()
+        cost = self.usage.cost or 0.0
         return (
             f"Chat(session_id='{self.session_id}', user_id='{self.user_id}', "
             f"state={self.state.value}, messages={message_count}, "
-            f"cost=${self.total_cost:.4f})"
+            f"cost=${cost:.4f})"
         )

@@ -40,7 +40,7 @@ async def main():
     metrics = chat.get_session_metrics()
     print(f"Session duration: {metrics.duration:.1f}s")
     print(f"Messages: {metrics.message_count}")
-    print(f"Total cost: ${chat.total_cost:.4f}")
+    print(f"Total cost: ${(chat.usage.cost or 0.0):.4f}")
     print(f"Avg response time: {metrics.average_response_time:.2f}s")
     
     # Get cost history

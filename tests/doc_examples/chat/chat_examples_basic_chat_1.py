@@ -21,7 +21,7 @@ async def main():
     
     # Access history
     print(f"\nTotal messages: {len(chat.all_messages)}")
-    print(f"Total cost: ${chat.total_cost:.4f}")
+    print(f"Total cost: ${(chat.usage.cost or 0.0):.4f}")
     
     # Clean up
     await chat.close()

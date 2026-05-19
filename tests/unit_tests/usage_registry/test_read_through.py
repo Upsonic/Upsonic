@@ -58,14 +58,14 @@ class TestChatReadThrough(unittest.TestCase):
             )
 
         # Chat properties should reflect both rows.
-        self.assertEqual(chat.input_tokens, 70 + 11)
-        self.assertEqual(chat.output_tokens, 30 + 22)
-        self.assertEqual(chat.total_tokens, 70 + 30 + 11 + 22)
+        self.assertEqual(chat.usage.input_tokens, 70 + 11)
+        self.assertEqual(chat.usage.output_tokens, 30 + 22)
+        self.assertEqual(chat.usage.total_tokens, 70 + 30 + 11 + 22)
         # Cost sums every priced entry, including whatever genai_prices
         # assigned to the initial invoke — we just need the 0.003 injection
         # to be reflected.
-        self.assertGreaterEqual(chat.total_cost, 0.003)
-        self.assertEqual(chat.total_requests, 2)
+        self.assertGreaterEqual((chat.usage.cost or 0.0), 0.003)
+        self.assertEqual(chat.usage.requests, 2)
 
     @patch("upsonic.models.infer_model")
     def test_get_usage_returns_aggregated_view_by_default(self, mock_infer_model):
@@ -77,7 +77,7 @@ class TestChatReadThrough(unittest.TestCase):
         chat = Chat(session_id="s", user_id="u", agent=agent, storage=InMemoryStorage())
         asyncio.run(chat.invoke("hi"))
 
-        view = chat.get_usage()
+        view = chat.usage
         # Returns AggregatedUsage; must have the same shape interface
         # callers used to get from RunUsage (input_tokens, output_tokens,
         # total_tokens, requests, cost).

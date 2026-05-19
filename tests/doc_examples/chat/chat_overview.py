@@ -18,7 +18,7 @@ async def main():
     print(response)
 
     # Access metrics
-    print(f"Total cost: ${chat.total_cost}")
+    print(f"Total cost: ${(chat.usage.cost or 0.0)}")
     print(f"Messages: {len(chat.all_messages)}")
 
 
