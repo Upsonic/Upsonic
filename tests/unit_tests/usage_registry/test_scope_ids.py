@@ -1,23 +1,27 @@
 """Unit tests for the scope-id surfaces on Task / Agent / Chat / Team.
 
-Uses ``MagicMock``-backed models everywhere so the tests don't need an
-``OPENAI_API_KEY`` in CI."""
+Uses a ``spec=Model`` MagicMock so ``infer_model`` returns it directly
+(via the ``isinstance(model, Model)`` short-circuit) and never touches
+the OpenAI provider client — no ``OPENAI_API_KEY`` needed in CI."""
 from __future__ import annotations
 
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from upsonic.tasks.tasks import Task
 from upsonic.agent.agent import Agent
 from upsonic.chat.chat import Chat
 from upsonic.team.team import Team
+from upsonic.models import Model
 from upsonic.storage.in_memory.in_memory import InMemoryStorage
 
 
 def _mock_agent(**kw) -> Agent:
-    """Build an Agent with a MagicMock model so no real provider client
-    (and therefore no API key) is needed at construction time."""
-    return Agent(model=MagicMock(model_name="mock-model"), **kw)
+    """Build an Agent backed by a Model-spec MagicMock so construction
+    does not open a real provider client (and therefore needs no key)."""
+    mock_model = MagicMock(spec=Model)
+    mock_model.model_name = "mock-model"
+    return Agent(model=mock_model, **kw)
 
 
 class TestTaskUsageId(unittest.TestCase):
