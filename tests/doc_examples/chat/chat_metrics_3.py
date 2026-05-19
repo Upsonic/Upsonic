@@ -8,12 +8,13 @@ async def main():
 
     await chat.invoke("Hello")
 
-    # Get comprehensive session metrics
-    metrics = chat.get_session_metrics()
-    print(f"Duration: {metrics.duration:.1f}s")
-    print(f"Messages: {metrics.message_count}")
-    print(f"Avg response time: {metrics.average_response_time:.2f}s")
-    print(f"Messages/min: {metrics.messages_per_minute:.1f}")
+    # Read session metrics directly from chat + the unified usage view.
+    print(f"Duration:        {chat.duration:.1f}s")
+    print(f"Messages:        {len(chat.all_messages)}")
+    print(f"Input tokens:    {chat.usage.input_tokens}")
+    print(f"Output tokens:   {chat.usage.output_tokens}")
+    print(f"Requests:        {chat.usage.requests}")
+    print(f"Cost (USD):      {chat.usage.cost}")
 
 
 if __name__ == "__main__":

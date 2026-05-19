@@ -36,18 +36,14 @@ async def main():
     await chat.invoke("My name is Bob and I love Python")
     await chat.invoke("What's my name and what do I love?")
     
-    # Access metrics
-    metrics = chat.get_session_metrics()
-    print(f"Session duration: {metrics.duration:.1f}s")
-    print(f"Messages: {metrics.message_count}")
-    print(f"Total cost: ${(chat.usage.cost or 0.0):.4f}")
-    print(f"Avg response time: {metrics.average_response_time:.2f}s")
-    
-    # Get cost history
-    cost_history = chat.get_cost_history()
-    for entry in cost_history:
-        print(f"Cost: ${entry['estimated_cost']:.4f}, "
-              f"Tokens: {entry['input_tokens']} in, {entry['output_tokens']} out")
+    # Access metrics — chat.duration / len(chat.all_messages) for
+    # runtime, chat.usage for everything else (registry view).
+    print(f"Session duration: {chat.duration:.1f}s")
+    print(f"Messages:         {len(chat.all_messages)}")
+    print(f"Total cost (USD): {chat.usage.cost}")
+    print(f"Input tokens:     {chat.usage.input_tokens}")
+    print(f"Output tokens:    {chat.usage.output_tokens}")
+    print(f"Requests:         {chat.usage.requests}")
     
     # Clean up
     await chat.close()

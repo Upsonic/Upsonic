@@ -26,9 +26,15 @@ async def main():
         response = await chat.invoke("Continue the story")
         print(f"\nAssistant: {response}")
         
-        # Access session summary
-        summary = chat.get_session_summary()
-        print(f"\n{summary}")
+        # Read summary fields directly from the unified surfaces.
+        u = chat.usage
+        print(
+            f"\nChat {chat.session_id} ({chat.user_id})\n"
+            f"  Duration:  {chat.duration:.1f}s\n"
+            f"  Messages:  {len(chat.all_messages)}\n"
+            f"  Tokens:    {u.input_tokens} in / {u.output_tokens} out\n"
+            f"  Cost USD:  {u.cost}"
+        )
 
 if __name__ == "__main__":
     asyncio.run(main())
