@@ -1,13 +1,23 @@
-"""Unit tests for the scope-id surfaces on Task / Agent / Chat / Team."""
+"""Unit tests for the scope-id surfaces on Task / Agent / Chat / Team.
+
+Uses ``MagicMock``-backed models everywhere so the tests don't need an
+``OPENAI_API_KEY`` in CI."""
 from __future__ import annotations
 
 import unittest
+from unittest.mock import MagicMock, patch
 
 from upsonic.tasks.tasks import Task
 from upsonic.agent.agent import Agent
 from upsonic.chat.chat import Chat
 from upsonic.team.team import Team
 from upsonic.storage.in_memory.in_memory import InMemoryStorage
+
+
+def _mock_agent(**kw) -> Agent:
+    """Build an Agent with a MagicMock model so no real provider client
+    (and therefore no API key) is needed at construction time."""
+    return Agent(model=MagicMock(model_name="mock-model"), **kw)
 
 
 class TestTaskUsageId(unittest.TestCase):
@@ -41,20 +51,20 @@ class TestTaskUsageId(unittest.TestCase):
 
 class TestAgentUsageId(unittest.TestCase):
     def test_agent_usage_id_auto_generated(self):
-        a = Agent("openai/gpt-4o")
+        a = _mock_agent()
         self.assertTrue(a.agent_usage_id.startswith("agent-"))
 
     def test_agent_usage_id_stable_across_reads(self):
-        a = Agent("openai/gpt-4o")
+        a = _mock_agent()
         first = a.agent_usage_id
         self.assertEqual(a.agent_usage_id, first)
 
     def test_explicit_agent_usage_id_honored(self):
-        a = Agent("openai/gpt-4o", agent_usage_id="my-id")
+        a = _mock_agent(agent_usage_id="my-id")
         self.assertEqual(a.agent_usage_id, "my-id")
 
     def test_agent_usage_id_distinct_from_agent_id(self):
-        a = Agent("openai/gpt-4o")
+        a = _mock_agent()
         self.assertNotEqual(a.agent_usage_id, a.agent_id)
 
 
@@ -63,7 +73,7 @@ class TestChatUsageId(unittest.TestCase):
         return Chat(
             session_id="s",
             user_id="u",
-            agent=Agent("openai/gpt-4o"),
+            agent=_mock_agent(),
             storage=InMemoryStorage(),
             **kw,
         )
@@ -83,7 +93,7 @@ class TestChatUsageId(unittest.TestCase):
 
 class TestTeamIds(unittest.TestCase):
     def _make(self, **kw):
-        return Team(entities=[Agent("openai/gpt-4o")], **kw)
+        return Team(entities=[_mock_agent()], **kw)
 
     def test_team_id_auto_generated(self):
         t = self._make()
