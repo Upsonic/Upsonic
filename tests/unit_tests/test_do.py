@@ -38,19 +38,19 @@ class TestDo(unittest.TestCase):
 class TestTaskTimingAndToolCalls(unittest.TestCase):
     """Task-level metric scaffolding that does not require a live run."""
 
-    def test_task_duration_set_after_start_and_end(self) -> None:
+    def test_task_start_end_time_set_after_assignment(self) -> None:
+        """The timer-derived ``task.duration`` property was removed in
+        the usage-registry unification. Callers who need wall-clock
+        task duration derive it themselves from ``start_time`` /
+        ``end_time``; the registry view (``task.usage.duration``) gives
+        the sum-of-per-call model time."""
         import time
 
         task = Task("Test task")
         task.start_time = time.time()
         task.end_time = task.start_time + 2.5
 
-        self.assertIsNotNone(task.duration)
-        self.assertAlmostEqual(task.duration, 2.5, places=1)
-
-    def test_task_duration_none_without_times(self) -> None:
-        task = Task("Test task")
-        self.assertIsNone(task.duration)
+        self.assertAlmostEqual(task.end_time - task.start_time, 2.5, places=1)
 
     def test_task_tool_calls_initially_empty(self) -> None:
         task = Task("Test task")

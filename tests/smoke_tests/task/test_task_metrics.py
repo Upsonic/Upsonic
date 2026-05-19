@@ -34,7 +34,7 @@ class TestTaskMetricsViaDo:
         assert task.response is not None and isinstance(task.response, str) and task.response
         assert task.start_time is not None
         assert task.end_time is not None
-        assert task.duration is not None and task.duration >= 0
+        assert task.usage.duration is not None and task.usage.duration >= 0
 
         _assert_usage_positive(task)
         assert isinstance(task.tool_calls, list)
@@ -46,7 +46,7 @@ class TestTaskMetricsViaDo:
         assert task.response is not None
         assert task.start_time is not None
         assert task.end_time is not None
-        assert task.duration is not None and task.duration >= 0
+        assert task.usage.duration is not None and task.usage.duration >= 0
         _assert_usage_positive(task)
 
     @pytest.mark.asyncio
@@ -55,7 +55,7 @@ class TestTaskMetricsViaDo:
         await agent.print_do_async(task)
 
         assert task.response is not None
-        assert task.duration is not None and task.duration >= 0
+        assert task.usage.duration is not None and task.usage.duration >= 0
         _assert_usage_positive(task)
 
     def test_all_task_metrics_after_print_do(self, agent: Agent) -> None:
@@ -63,7 +63,7 @@ class TestTaskMetricsViaDo:
         agent.print_do(task)
 
         assert task.response is not None
-        assert task.duration is not None and task.duration >= 0
+        assert task.usage.duration is not None and task.usage.duration >= 0
         _assert_usage_positive(task)
 
     @pytest.mark.asyncio

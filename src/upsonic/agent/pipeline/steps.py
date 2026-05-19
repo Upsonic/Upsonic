@@ -3729,7 +3729,7 @@ class StreamFinalizationStep(Step):
                     has_output=context.output is not None,
                     output_preview=output_preview,
                     total_tool_calls=context.tool_call_count,
-                    total_duration=task.duration if task.duration else None
+                    total_duration=task.usage.duration if task.usage.duration else None
                 ):
                     context.events.append(event)
 
@@ -3874,7 +3874,7 @@ class FinalizationStep(Step):
 
             if context.is_streaming:
                 output_preview = str(context.output)[:100] if context.output else None
-                total_duration = task.duration if task.duration else None
+                total_duration = task.usage.duration if task.usage.duration else None
                 from upsonic.utils.agent.events import ayield_execution_complete_event
                 async for event in ayield_execution_complete_event(
                     run_id=context.run_id or "",

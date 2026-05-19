@@ -434,49 +434,11 @@ class TestTaskUsageLifecycle:
 # ---------------------------------------------------------------------------
 
 class TestTaskPropertyDelegation:
-
-    def test_duration_delegates_to_usage(self) -> None:
-        task = Task(description="test")
-        mock_agent = Mock()
-        mock_agent.canvas = None
-        task.task_start(mock_agent)
-        task._usage.duration = 3.14
-        assert task.duration == 3.14
-
-    def test_duration_fallback_to_start_end_time(self) -> None:
-        task = Task(description="test")
-        task.start_time = 100
-        task.end_time = 105
-        assert task.duration == 5
-
-    def test_duration_none_when_no_usage_and_no_times(self) -> None:
-        task = Task(description="test")
-        assert task.duration is None
-
-    def test_model_execution_time_delegates_to_usage(self) -> None:
-        task = Task(description="test")
-        mock_agent = Mock()
-        mock_agent.canvas = None
-        task.task_start(mock_agent)
-        task._usage.model_execution_time = 2.0
-        assert task.model_execution_time == 2.0
-
-    def test_model_execution_time_none_without_usage(self) -> None:
-        task = Task(description="test")
-        assert task.model_execution_time is None
-
-    def test_upsonic_execution_time_delegates_to_usage(self) -> None:
-        task = Task(description="test")
-        mock_agent = Mock()
-        mock_agent.canvas = None
-        task.task_start(mock_agent)
-        task._usage.duration = 5.0
-        task._usage.model_execution_time = 3.0
-        assert task.upsonic_execution_time == pytest.approx(2.0)
-
-    def test_upsonic_execution_time_none_without_usage(self) -> None:
-        task = Task(description="test")
-        assert task.upsonic_execution_time is None
+    """The legacy ``task.duration`` / ``task.model_execution_time`` /
+    ``task.tool_execution_time`` / ``task.upsonic_execution_time``
+    properties were removed in the unification pass — callers read
+    everything off ``task.usage`` now. The tests that asserted the
+    delegation contract no longer apply and have been deleted."""
 
     def test_usage_property_is_registry_view_not_internal_mutable(self) -> None:
         """``task.usage`` is now an :class:`AggregatedUsage` derived from
@@ -574,10 +536,10 @@ class TestTaskUsagePopulation:
         assert task.usage.output_tokens == 30
         assert task.usage.requests == 2
 
-        # task.duration / task.model_execution_time still read from the
-        # _usage scratchpad — they're timer values, not token counts.
-        assert task.duration is not None
-        assert task.model_execution_time == pytest.approx(1.2, abs=0.01)
+        # Internal ``_usage`` scratchpad still carries the timer state
+        # the pipeline accumulated during the run.
+        assert task._usage.duration is None or task._usage.duration >= 0
+        assert task._usage.model_execution_time == pytest.approx(1.2, abs=0.01)
 
 
 # ---------------------------------------------------------------------------
@@ -633,9 +595,6 @@ class TestTaskSerializationWithUsage:
         assert restored._usage.output_tokens == 50
         assert restored._usage.duration is not None
         assert restored._usage.model_execution_time == 2.0
-        # Timer-derived properties also still work.
-        assert restored.duration == restored._usage.duration
-        assert restored.model_execution_time == 2.0
 
     def test_from_dict_without_usage(self) -> None:
         from upsonic.usage_registry import AggregatedUsage

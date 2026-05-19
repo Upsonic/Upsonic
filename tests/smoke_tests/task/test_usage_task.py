@@ -9,7 +9,7 @@ task-level metrics — properly tracks:
   - input_tokens / output_tokens (accumulated from model responses)
   - to_dict / from_dict round-trip
   - independence across multiple tasks on the same agent
-  - consistency between task.usage and task.duration / task.model_execution_time / task.upsonic_execution_time
+  - consistency between task.usage and task.usage.duration / task.usage.model_execution_time / task.usage.upsonic_execution_time
   - print_do and print_do_async produce output without errors
 
 Requires OPENAI_API_KEY to be set.
@@ -111,7 +111,7 @@ class TestTaskUsagePrintDo:
 
 
 # ---------------------------------------------------------------------------
-# 3. Task property delegation — task.duration, task.model_execution_time, etc.
+# 3. Task property delegation — task.usage.duration, task.usage.model_execution_time, etc.
 # ---------------------------------------------------------------------------
 
 class TestTaskPropertyDelegation:
@@ -125,9 +125,9 @@ class TestTaskPropertyDelegation:
         assert usage is not None
         assert isinstance(usage, TaskUsage)
 
-        assert task.duration == usage.duration
-        assert task.model_execution_time == usage.model_execution_time
-        assert task.upsonic_execution_time == usage.upsonic_execution_time
+        assert task.usage.duration == usage.duration
+        assert task.usage.model_execution_time == usage.model_execution_time
+        assert task.usage.upsonic_execution_time == usage.upsonic_execution_time
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +226,7 @@ class TestTaskUsageSerialization:
         assert restored.usage.model_execution_time == task.usage.model_execution_time
         assert restored.usage.input_tokens == task.usage.input_tokens
         assert restored.usage.output_tokens == task.usage.output_tokens
-        assert restored.duration == task.duration
+        assert restored.usage.duration == task.usage.duration
 
 
 # ---------------------------------------------------------------------------

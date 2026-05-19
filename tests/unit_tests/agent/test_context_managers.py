@@ -47,7 +47,11 @@ class MockTask:
         self.not_main_task = False
         self.start_time = None
         self.end_time = None
-        self.duration = None
+        # Mocked registry view — context_manager reads task.usage.duration
+        # (and friends) off the AggregatedUsage shape.
+        _usage = Mock()
+        _usage.duration = None
+        self.usage = _usage
         self.enable_thinking_tool = None
         self.enable_reasoning_tool = None
         self.tools = []

@@ -442,31 +442,6 @@ class Task(BaseModel):
         from upsonic.usage_registry import get_default_registry
         return get_default_registry().by_task(self.task_usage_id_) if self.task_usage_id_ else None
 
-    @property
-    def duration(self) -> Optional[float]:
-        if self._usage is not None and self._usage.duration is not None:
-            return self._usage.duration
-        if self.start_time is None or self.end_time is None:
-            return None
-        return self.end_time - self.start_time
-
-    @property
-    def model_execution_time(self) -> Optional[float]:
-        if self._usage is not None:
-            return self._usage.model_execution_time
-        return None
-
-    @property
-    def tool_execution_time(self) -> Optional[float]:
-        if self._usage is not None:
-            return self._usage.tool_execution_time
-        return None
-
-    @property
-    def upsonic_execution_time(self) -> Optional[float]:
-        if self._usage is not None:
-            return self._usage.upsonic_execution_time
-        return None
 
     @property
     def id(self) -> str:

@@ -138,8 +138,8 @@ async def test_do_async_task_timing():
     assert task.start_time is not None, "start_time should be set"
     assert task.end_time is not None, "end_time should be set"
     assert task.end_time >= task.start_time, "end_time should be >= start_time"
-    assert task.duration is not None, "duration should be computed"
-    assert task.duration >= 0, "duration should be non-negative"
+    assert task.usage.duration is not None, "duration should be computed"
+    assert task.usage.duration >= 0, "duration should be non-negative"
 
 
 # ============================================================================

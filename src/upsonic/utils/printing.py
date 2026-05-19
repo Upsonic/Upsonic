@@ -667,8 +667,8 @@ def display_graph_tree(
             elif hasattr(node, 'task'):
                 task = node.task
             
-            if task and hasattr(task, 'duration') and task.duration:
-                exec_info = f" ({task.duration:.2f}s"
+            if task and hasattr(task, 'duration') and task.usage.duration:
+                exec_info = f" ({task.usage.duration:.2f}s"
                 _task_cost = getattr(task._usage, "cost", None) if getattr(task, "_usage", None) else None
                 if _task_cost:
                     exec_info += f", ${_task_cost:.4f}"
