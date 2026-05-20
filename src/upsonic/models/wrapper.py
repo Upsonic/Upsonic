@@ -14,6 +14,12 @@ from upsonic.usage import RequestUsage
 from upsonic.models import KnownModelName, Model, ModelRequestParameters, StreamedResponse, infer_model
 
 
+# Attribute names whose writes on a WrapperModel are also forwarded to ``self.wrapped``.
+# Bounded set tied to the per-model shaping contract on ``Model``; the guard prevents
+# accidental forwarding of unrelated subclass-private state.
+_PASSTHROUGH_ATTRS = frozenset({"_settings", "_profile"})
+
+
 @dataclass(init=False)
 class WrapperModel(Model):
     """Model which wraps another model.
@@ -86,6 +92,17 @@ class WrapperModel(Model):
     def settings(self) -> ModelSettings | None:
         """Get the settings from the wrapped model."""
         return self.wrapped.settings
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Mirror every write onto self; additionally forward writes of
+        ``_settings``/``_profile`` to ``self.wrapped`` so nested wrapper chains
+        mirror the value at every level (terminating at the innermost non-wrapper
+        primary). Subclasses needing wrapper-local state can bypass via
+        ``object.__setattr__(self, name, value)``.
+        """
+        super().__setattr__(name, value)
+        if name in _PASSTHROUGH_ATTRS and "wrapped" in self.__dict__:
+            setattr(self.wrapped, name, value)
 
     def __getattr__(self, item: str):
         return getattr(self.wrapped, item)
