@@ -37,7 +37,7 @@ from tests._pipeline_injection import (
 
 pytestmark = pytest.mark.timeout(300)
 
-MODEL = "openai/gpt-4o-mini"
+MODEL = "anthropic/claude-haiku-4-5"
 
 COMPLETED_WARNING_FRAGMENT = "Task is already completed"
 

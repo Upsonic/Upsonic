@@ -2425,7 +2425,8 @@ def pipeline_failed(error_message: str, executed_steps: int, total_steps: int, f
         failed_step: Name of the step that failed
         step_time: Time taken by the failed step
     """
-    error_esc = escape_rich_markup(error_message)
+    safe_error = error_message if error_message else "(no message — see traceback)"
+    error_esc = escape_rich_markup(safe_error)
     failed_step_esc = escape_rich_markup(failed_step) if failed_step else "Unknown"
 
     table = Table(show_header=False, expand=True, box=None)

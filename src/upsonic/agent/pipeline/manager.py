@@ -679,17 +679,39 @@ class PipelineManager:
                 context.tool_limit_reached = getattr(self.agent, '_tool_limit_reached', False)
             
             if self.debug:
-                from upsonic.utils.printing import pipeline_failed
+                from upsonic.utils.printing import pipeline_failed, debug_log_level2
+                import traceback as _traceback
+                # Pull the actual failing step from context (Sorun 3 + 4) so
+                # the panel shows "Failed Step: <name>" instead of "Unknown".
+                failed_step_result = context.get_error_step() or context.current_step_result
+                err_text = str(e) if str(e) else type(e).__name__
                 pipeline_failed(
-                    str(e),
+                    err_text,
                     context.execution_stats.executed_steps if context.execution_stats else 0,
                     context.execution_stats.total_steps if context.execution_stats else len(self.steps),
-                    None,
-                    None
+                    failed_step_result.name if failed_step_result else None,
+                    failed_step_result.execution_time if failed_step_result else None,
                 )
-            
+
+                debug_level = getattr(self.agent, 'debug_level', 1) if self.agent else 1
+                if debug_level >= 2:
+                    error_traceback = ''.join(_traceback.format_exception(type(e), e, e.__traceback__))
+                    debug_log_level2(
+                        "Streaming pipeline execution error",
+                        "PipelineManager",
+                        debug=self.debug,
+                        debug_level=debug_level,
+                        error_type=type(e).__name__,
+                        error_message=str(e),
+                        error_traceback=error_traceback[-2000:],
+                        failed_step_index=failed_step_result.step_number if failed_step_result else 0,
+                        failed_step_name=failed_step_result.name if failed_step_result else "Unknown",
+                        executed_steps=context.execution_stats.executed_steps if context.execution_stats else 0,
+                        total_steps=context.execution_stats.total_steps if context.execution_stats else len(self.steps),
+                    )
+
             raise
-        
+
           finally:
             total_time = time.time() - pipeline_start_time
             executed_steps = context.execution_stats.executed_steps if context.execution_stats else 0
@@ -704,7 +726,15 @@ class PipelineManager:
                     error_message=error_message
                 )
 
-                if context.step_results and context.step_results[-1].status == StepStatus.COMPLETED:
+                # Only finalize as completed when the pipeline actually
+                # succeeded. ``error_message`` is set in the except branch;
+                # without this gate the failing path also calls
+                # ``mark_completed()`` and overwrites ``mark_error()``.
+                if (
+                    error_message is None
+                    and context.step_results
+                    and context.step_results[-1].status == StepStatus.COMPLETED
+                ):
                     if self.agent and self.agent._agent_run_output:
                         self.agent._agent_run_output.mark_completed()
                         context.tool_call_count = getattr(self.agent, '_tool_call_count', 0)

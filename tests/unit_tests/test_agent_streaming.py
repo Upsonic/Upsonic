@@ -604,5 +604,154 @@ class TestAgentStreamingIntegration:
         assert len(results) == 3
 
 
+class TestStreamingErrorState:
+    """Regression suite for the streaming exception-path bug where
+    ``PipelineManager.execute_stream`` overwrote ``mark_error()`` with
+    ``mark_completed()`` in its ``finally`` block. The bug caused the
+    next invoke to fail validation with
+    "Task is already completed (run_id=…). Cannot re-run a completed task."
+    """
+
+    @pytest.fixture
+    def mock_model(self):
+        return MockModel()
+
+    @pytest.fixture
+    def agent(self, mock_model):
+        return Agent(model=mock_model, name="TestAgent")
+
+    @pytest.fixture
+    def simple_task(self):
+        return Task(description="Hello, world!")
+
+    @staticmethod
+    def _make_error_model():
+        """Real ``Model`` subclass; only ``request_stream`` fails (mid-stream)
+        so non-streaming preflight steps (LLMManager, ToolSetup, ...) succeed
+        and the failure lands inside ``StreamModelExecutionStep``.
+        """
+
+        class StreamErrorModel(MockModel):
+            @asynccontextmanager
+            async def request_stream(self, messages, model_settings, model_request_parameters):
+                class _Iter:
+                    async def __aenter__(self_inner):
+                        return self_inner
+
+                    async def __aexit__(self_inner, exc_type, exc_val, exc_tb):
+                        pass
+
+                    def __aiter__(self_inner):
+                        return self_inner
+
+                    async def __anext__(self_inner):
+                        # Fail mid-stream, not at __aenter__, so we are INSIDE
+                        # StreamModelExecutionStep.execute_stream when the
+                        # exception propagates.
+                        raise Exception("Stream error mid-flight")
+
+                yield _Iter()
+
+        return StreamErrorModel()
+
+    @pytest.mark.asyncio
+    async def test_streaming_error_leaves_task_status_as_error(self, agent, simple_task):
+        """task.status must be RunStatus.error (not completed) after a
+        mid-stream exception. If it gets marked completed, the next
+        ``_validate_task_for_new_run`` warns and refuses.
+        """
+        from upsonic.run.base import RunStatus
+
+        agent.model = self._make_error_model()
+
+        with pytest.raises(Exception):
+            async for _ in agent.astream(simple_task):
+                pass
+
+        assert simple_task.status == RunStatus.error, (
+            f"Expected task.status=RunStatus.error after stream failure, "
+            f"got {simple_task.status}. The pipeline finally block has "
+            f"overwritten mark_error() with mark_completed()."
+        )
+        assert simple_task.is_completed is False, (
+            "task.is_completed must be False after a failed stream — "
+            "otherwise the next invoke triggers the completed-task guard."
+        )
+        assert simple_task.is_problematic is True, (
+            "task.is_problematic must be True (status=error) so the "
+            "caller knows to continue/retry, not silently re-run."
+        )
+
+    @pytest.mark.asyncio
+    async def test_streaming_error_appends_failing_step_to_step_results(self, agent, simple_task):
+        """When a streaming step raises, its ERROR StepResult must be
+        appended to context.step_results. Without this, observability
+        is broken and the buggy finally branch sees step_results[-1] as
+        the previous COMPLETED step.
+        """
+        from upsonic.agent.pipeline.step import StepStatus
+
+        agent.model = self._make_error_model()
+
+        with pytest.raises(Exception):
+            async for _ in agent.astream(simple_task):
+                pass
+
+        output = agent._agent_run_output
+        assert output is not None
+        assert output.step_results, "step_results must not be empty"
+        last_step = output.step_results[-1]
+        assert last_step.status in (StepStatus.ERROR, StepStatus.CANCELLED), (
+            f"Last recorded step status should be ERROR/CANCELLED after "
+            f"a mid-stream failure, got {last_step.status}. Failing step "
+            f"was never finalized into step_results."
+        )
+
+    @pytest.mark.asyncio
+    async def test_streaming_error_records_failing_step_name(self, agent, simple_task):
+        """The recorded failing step must carry name/step_number so
+        observability (pipeline_failed panel, sentry log) and downstream
+        gates (continue_run_async) can identify where we failed.
+        """
+        agent.model = self._make_error_model()
+
+        with pytest.raises(Exception):
+            async for _ in agent.astream(simple_task):
+                pass
+
+        output = agent._agent_run_output
+        last_step = output.step_results[-1]
+        assert last_step.name, (
+            f"Failing StepResult must have a non-empty name, got "
+            f"{last_step.name!r}. StreamModelExecutionStep's exception "
+            f"branch was constructing StepResult without name/step_number."
+        )
+
+    @pytest.mark.asyncio
+    async def test_second_invoke_with_fresh_task_does_not_warn(self, agent, simple_task):
+        """After a failed stream, invoking with a *different* fresh Task
+        must not trip the completed-task guard. (Regression for the
+        cross-invocation symptom seen in autonomous-HQ chat.)
+        """
+        from upsonic.run.base import RunStatus
+
+        agent.model = self._make_error_model()
+
+        with pytest.raises(Exception):
+            async for _ in agent.astream(simple_task):
+                pass
+
+        # Restore a healthy model and stream a fresh task.
+        agent.model = MockModel()
+        fresh_task = Task(description="Second turn")
+
+        chunks = []
+        async for chunk in agent.astream(fresh_task):
+            chunks.append(chunk)
+
+        assert "".join(chunks) == "Hello world!"
+        assert fresh_task.status == RunStatus.completed
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

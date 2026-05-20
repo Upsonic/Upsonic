@@ -292,25 +292,28 @@ class Step(ABC):
         
         # Initialize result holder in context
         context.current_step_result = None
-        
-        # Execute step - consume generator and yield all events
-        async for event in self.execute_stream(context, task, agent, model, step_number, pipeline_manager=pipeline_manager):
-            yield event
-        
-        # Get result from context (set by execute_stream())
-        result = context.current_step_result
-        
-        # Finalize step result (updates context.step_results and execution_stats)
-        if result:
-            self._finalize_step_result(result, context)
-        
-        # Yield step end event
-        if result:
-            yield StepEndEvent(
-                run_id=run_id,
-                step_name=self.name,
-                step_index=step_number,
-                status=result.status.value,
-                execution_time=result.execution_time,
-                message=result.message or ""
-            )
+
+        try:
+            # Execute step - consume generator and yield all events
+            async for event in self.execute_stream(context, task, agent, model, step_number, pipeline_manager=pipeline_manager):
+                yield event
+        finally:
+            # Even on exception, finalize the step result so step_results
+            # reflects the failing step (status=ERROR/CANCELLED). Without
+            # this, PipelineManager.execute_stream sees step_results[-1]
+            # as the previous successful step and erroneously marks the
+            # run as completed in its finally branch.
+            result = context.current_step_result
+            if result:
+                self._finalize_step_result(result, context)
+                try:
+                    yield StepEndEvent(
+                        run_id=run_id,
+                        step_name=self.name,
+                        step_index=step_number,
+                        status=result.status.value,
+                        execution_time=result.execution_time,
+                        message=result.message or ""
+                    )
+                except GeneratorExit:
+                    pass

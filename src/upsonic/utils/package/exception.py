@@ -227,12 +227,25 @@ class ModelHTTPError(AgentRunError):
     message: str
     """The error message with the status code and response body, if available."""
 
-    def __init__(self, status_code: int, model_name: str, body: object | None = None):
+    def __init__(
+        self,
+        status_code: int,
+        model_name: str,
+        body: object | None = None,
+        message: str | None = None,
+    ):
         self.status_code = status_code
         self.model_name = model_name
         self.body = body
-        message = f'status_code: {status_code}, model_name: {model_name}, body: {body}'
-        super().__init__(message)
+        # Allow callers to override the default message string so that
+        # provider SDKs can attach a richer description (e.g. when the
+        # upstream `e.message` is empty, fall back to repr/type name).
+        self.message = (
+            message
+            if message
+            else f'status_code: {status_code}, model_name: {model_name}, body: {body}'
+        )
+        super().__init__(self.message)
 
 class ModelAPIError(AgentRunError):
     """Raised when a model provider API request fails."""

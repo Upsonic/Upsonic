@@ -355,16 +355,31 @@ class Chat:
         """Clear the chat history from storage (async)."""
         await self._session_manager.aclear_history()
     
+    def _clear_usage_entries(self) -> None:
+        """Drop every usage-registry entry tagged with this chat's
+        ``chat_usage_id`` so ``chat.usage.cost`` etc. reset to zero.
+        Uses the registry's existing ``entries`` filter + ``remove`` so
+        no chat-specific helper is needed on the registry side.
+        """
+        from upsonic.usage_registry import get_default_registry
+        registry = get_default_registry()
+        for entry in registry.entries(chat_usage_id=self.chat_usage_id):
+            registry.remove(entry.entry_id)
+
     def reset_session(self) -> None:
         """
         Reset the chat session to initial state.
-        
-        This deletes the session from storage and resets runtime state.
+
+        This deletes the session from storage, drops the cached usage
+        entries (so ``chat.usage.cost`` etc. reset to zero), and resets
+        runtime state.
         """
+        self._clear_usage_entries()
         self._session_manager.reset_session()
-    
+
     async def areset_session(self) -> None:
         """Reset the chat session to initial state (async)."""
+        self._clear_usage_entries()
         await self._session_manager.areset_session()
     
     def reopen(self) -> None:

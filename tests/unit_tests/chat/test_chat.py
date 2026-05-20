@@ -481,6 +481,161 @@ class TestChatHistoryMethods:
         """Test that remove_attachment method exists."""
         agent = MockAgent()
         chat = Chat(session_id="test", user_id="user", agent=agent)
-        
+
         assert hasattr(chat, 'remove_attachment')
         assert callable(chat.remove_attachment)
+
+
+class TestChatStreamingErrorState:
+    """End-to-end regression for the ``Chat`` → ``Agent.astream`` →
+    ``PipelineManager`` mid-stream-failure path. Mirrors the autonomous-HQ
+    chat.py screenshot.
+
+    Chat's ``_stream_events_with_retry`` retries the SAME task on
+    exception (default ``retry_attempts=3``). Before the fix, the
+    pipeline's ``finally`` block ran ``mark_completed()`` after
+    ``mark_error()`` because the failing step was never appended to
+    ``step_results`` — so on attempt 2, ``_validate_task_for_new_run``
+    saw ``task.is_completed=True`` and emitted
+    "Task is already completed (run_id=…). Cannot re-run a completed task."
+    After the fix the task stays in ``RunStatus.error`` and the
+    completed-guard never trips.
+    """
+
+    @staticmethod
+    def _build_chat_with_failing_stream(session_suffix: str):
+        """Real ``Agent`` with a ``MockModel`` whose ``request_stream``
+        raises inside __anext__ (so non-streaming preflight steps pass
+        and the failure lands in StreamModelExecutionStep).
+        Each test must pass a unique ``session_suffix`` so storage state
+        does not bleed across tests.
+        """
+        from contextlib import asynccontextmanager
+        import time as _time
+        from upsonic import Agent
+        from upsonic.models import Model
+        from upsonic.messages.messages import ModelResponse, TextPart
+        from upsonic.usage import RequestUsage
+
+        class _MockModel(Model):
+            def __init__(self):
+                super().__init__()
+
+            @property
+            def model_name(self):
+                return "test-model"
+
+            @property
+            def system(self):
+                return "test-provider"
+
+            async def request(self, messages, model_settings, model_request_parameters):
+                return ModelResponse(
+                    parts=[TextPart(content="ok")],
+                    model_name="test-model",
+                    timestamp=_time.time(),
+                    usage=RequestUsage(input_tokens=1, output_tokens=1, details={}),
+                    provider_name="test-provider",
+                    provider_response_id="id",
+                    provider_details={},
+                    finish_reason="stop",
+                )
+
+            @asynccontextmanager
+            async def request_stream(self, messages, model_settings, model_request_parameters):
+                class _Iter:
+                    async def __aenter__(self_inner):
+                        return self_inner
+
+                    async def __aexit__(self_inner, exc_type, exc_val, exc_tb):
+                        pass
+
+                    def __aiter__(self_inner):
+                        return self_inner
+
+                    async def __anext__(self_inner):
+                        raise Exception("Stream error mid-flight")
+
+                yield _Iter()
+
+        agent = Agent(model=_MockModel(), name="StreamFailAgent")
+        chat = Chat(
+            session_id=f"test-stream-fail-{session_suffix}",
+            user_id="test-user",
+            agent=agent,
+        )
+        return chat, agent
+
+    @pytest.mark.asyncio
+    async def test_chat_stream_failure_leaves_task_in_error_state(self):
+        """After ``chat.invoke(stream=True)`` raises mid-flight, the
+        underlying run must be ``RunStatus.error`` — NOT
+        ``RunStatus.completed``. Without the fix, the pipeline finally
+        block overrides ``mark_error()`` with ``mark_completed()``.
+        """
+        from upsonic.run.base import RunStatus
+
+        chat, agent = self._build_chat_with_failing_stream("status")
+
+        with pytest.raises(Exception):
+            stream = await chat.invoke("hello", stream=True, events=True)
+            async for _ in stream:
+                pass
+
+        out = agent.get_run_output()
+        assert out is not None
+        assert out.status == RunStatus.error, (
+            f"AgentRunOutput.status must be error after a failed stream, "
+            f"got {out.status}. The pipeline finally block is overwriting "
+            f"mark_error() with mark_completed()."
+        )
+
+    @pytest.mark.asyncio
+    async def test_reused_task_after_stream_failure_does_not_trip_completed_guard(self, capsys):
+        """Direct regression for the autonomous-HQ symptom.
+
+        After a failed streaming invoke, passing the SAME ``Task`` instance
+        back through ``chat.invoke(task_obj)`` must NOT emit:
+        "Task is already completed (run_id=…). Cannot re-run a completed task."
+
+        It is acceptable for the framework to refuse with the
+        ``problematic run`` message (status=ERROR) — but the
+        ``is_completed`` branch must never fire on a failed task.
+        """
+        chat, _ = self._build_chat_with_failing_stream("reuse")
+
+        # 1st invoke (string) — fresh Task, fails mid-stream.
+        task_holder: list = []
+        # Hook _normalize_input to capture the Task object created by Chat.
+        original_normalize = chat._normalize_input
+
+        def _capture(input_data, context=None):
+            t = original_normalize(input_data, context)
+            task_holder.append(t)
+            return t
+
+        chat._normalize_input = _capture
+
+        with pytest.raises(Exception):
+            stream = await chat.invoke("hello", stream=True, events=True)
+            async for _ in stream:
+                pass
+
+        assert task_holder, "Expected Chat to materialize a Task on first invoke"
+        failed_task = task_holder[0]
+
+        # 2nd invoke (same Task instance) — guard runs again.
+        try:
+            stream = await chat.invoke(failed_task, stream=True, events=True)
+            async for _ in stream:
+                pass
+        except Exception:
+            pass
+
+        captured = capsys.readouterr()
+        combined = captured.out + captured.err
+        assert "Task is already completed" not in combined, (
+            "Regression: re-using a failed Task tripped the completed-task "
+            "guard. The pipeline finally branch is overwriting mark_error() "
+            "with mark_completed(). Output tail:\n" + combined[-800:]
+        )
