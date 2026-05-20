@@ -458,11 +458,21 @@ class AnthropicModel(Model):
                 extra_body=model_settings.get('extra_body'),
             )
         except APIStatusError as e:
+            # Anthropic SDK occasionally exposes an empty ``e.message``;
+            # fall back to ``repr(e)`` / type name so panels and Sentry
+            # entries are not "(no message)".
+            msg = e.message or repr(e) or type(e).__name__
             if (status_code := e.status_code) >= 400:
-                raise ModelHTTPError(status_code=status_code, model_name=self.model_name, body=e.body) from e
-            raise ModelAPIError(model_name=self.model_name, message=e.message) from e  # pragma: lax no cover
+                raise ModelHTTPError(
+                    status_code=status_code,
+                    model_name=self.model_name,
+                    body=e.body,
+                    message=msg,
+                ) from e
+            raise ModelAPIError(model_name=self.model_name, message=msg) from e  # pragma: lax no cover
         except APIConnectionError as e:
-            raise ModelAPIError(model_name=self.model_name, message=e.message) from e
+            msg = e.message or repr(e) or type(e).__name__
+            raise ModelAPIError(model_name=self.model_name, message=msg) from e
 
     def _get_betas_and_extra_headers(
         self,
@@ -541,11 +551,18 @@ class AnthropicModel(Model):
                 extra_body=model_settings.get('extra_body'),
             )
         except APIStatusError as e:
+            msg = e.message or repr(e) or type(e).__name__
             if (status_code := e.status_code) >= 400:
-                raise ModelHTTPError(status_code=status_code, model_name=self.model_name, body=e.body) from e
-            raise ModelAPIError(model_name=self.model_name, message=e.message) from e  # pragma: lax no cover
+                raise ModelHTTPError(
+                    status_code=status_code,
+                    model_name=self.model_name,
+                    body=e.body,
+                    message=msg,
+                ) from e
+            raise ModelAPIError(model_name=self.model_name, message=msg) from e  # pragma: lax no cover
         except APIConnectionError as e:
-            raise ModelAPIError(model_name=self.model_name, message=e.message) from e
+            msg = e.message or repr(e) or type(e).__name__
+            raise ModelAPIError(model_name=self.model_name, message=msg) from e
 
     def _process_response(self, response: BetaMessage) -> ModelResponse:
         """Process a non-streamed response, and prepare a message to return."""

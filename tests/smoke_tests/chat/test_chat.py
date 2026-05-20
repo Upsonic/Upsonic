@@ -49,7 +49,7 @@ def test_chat_reuses_agent_memory_and_storage():
     # Build Memory with matching ids so no alignment warning is triggered.
     agent_memory = Memory(storage=shared, session_id="reuse-default", user_id="u")
     agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-haiku-4-5",
         name="Storage Reuse Agent",
         memory=agent_memory,
     )
@@ -66,7 +66,7 @@ def test_chat_reuses_agent_memory_and_storage():
 
 def test_chat_creates_storage_when_agent_has_none():
     """No memory on the agent ⇒ Chat creates one and wires it into the agent."""
-    agent = Agent(model="openai/gpt-4o-mini", name="Storage Reuse Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Storage Reuse Agent")
     assert agent.memory is None
 
     chat = Chat(session_id="reuse-fresh", user_id="u", agent=agent)
@@ -81,7 +81,7 @@ def test_chat_creates_storage_when_agent_has_none():
 def test_chat_explicit_storage_used_only_when_agent_has_no_memory():
     """No agent memory + explicit Chat storage ⇒ Chat's storage is used."""
     chat_storage = InMemoryStorage()
-    agent = Agent(model="openai/gpt-4o-mini", name="Storage Reuse Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Storage Reuse Agent")
     assert agent.memory is None
 
     chat = Chat(
@@ -104,7 +104,7 @@ def test_agent_storage_wins_over_chat_explicit_storage():
     agent_storage = InMemoryStorage()
     agent_memory = Memory(storage=agent_storage, session_id="agent-wins", user_id="u")
     agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-haiku-4-5",
         name="Storage Reuse Agent",
         memory=agent_memory,
     )
@@ -133,7 +133,7 @@ def test_chat_aligns_session_id_with_agent_memory():
         user_id="u",
     )
     agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-haiku-4-5",
         name="Align Agent",
         memory=agent_memory,
     )
@@ -158,7 +158,7 @@ def test_chat_aligns_user_id_with_agent_memory():
         user_id="agent-user",
     )
     agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-haiku-4-5",
         name="Align Agent",
         memory=agent_memory,
     )
@@ -180,7 +180,7 @@ def test_chat_no_warning_when_ids_match_agent_memory():
         user_id="u-match",
     )
     agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-haiku-4-5",
         name="Match Agent",
         memory=agent_memory,
     )
@@ -200,7 +200,7 @@ async def test_chat_basic_invoke():
     print("TEST: test_chat_basic_invoke")
     print("="*60)
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     chat = Chat(
         session_id="test_session_1",
         user_id="test_user_1",
@@ -261,7 +261,7 @@ async def test_chat_streaming():
     print("TEST: test_chat_streaming")
     print("="*60)
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     chat = Chat(
         session_id="test_session_2",
         user_id="test_user_2",
@@ -314,7 +314,7 @@ async def test_chat_conversation_history():
     print("TEST: test_chat_conversation_history")
     print("="*60)
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     chat = Chat(
         session_id="test_session_3",
         user_id="test_user_3",
@@ -375,7 +375,7 @@ async def test_chat_all_attributes():
     print("TEST: test_chat_all_attributes")
     print("="*60)
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     chat = Chat(
         session_id="test_session_4",
         user_id="test_user_4",
@@ -496,7 +496,7 @@ async def test_chat_with_task():
     print("TEST: test_chat_with_task")
     print("="*60)
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     chat = Chat(
         session_id="test_session_5",
         user_id="test_user_5",
@@ -531,7 +531,7 @@ async def test_chat_cost_tracking():
     print("TEST: test_chat_cost_tracking")
     print("="*60)
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     chat = Chat(
         session_id="test_session_6",
         user_id="test_user_6",
@@ -613,7 +613,7 @@ async def test_chat_clear_history():
     print("TEST: test_chat_clear_history")
     print("="*60)
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     chat = Chat(
         session_id="test_session_7",
         user_id="test_user_7",
@@ -664,7 +664,7 @@ async def test_chat_reset_session():
     print("TEST: test_chat_reset_session")
     print("="*60)
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     chat = Chat(
         session_id="test_session_8",
         user_id="test_user_8",
@@ -716,7 +716,7 @@ async def test_chat_state_transitions():
     print("TEST: test_chat_state_transitions")
     print("="*60)
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     chat = Chat(
         session_id="test_session_9",
         user_id="test_user_9",
@@ -749,7 +749,7 @@ async def test_chat_message_content_types():
     print("TEST: test_chat_message_content_types")
     print("="*60)
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     chat = Chat(
         session_id="test_session_10",
         user_id="test_user_10",
@@ -798,7 +798,7 @@ async def test_chat_async_context_manager():
     print("TEST: test_chat_async_context_manager")
     print("="*60)
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     
     async with Chat(
         session_id="test_session_11",
@@ -827,7 +827,7 @@ async def test_chat_repr():
     print("TEST: test_chat_repr")
     print("="*60)
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     chat = Chat(
         session_id="test_session_12",
         user_id="test_user_12",
@@ -861,7 +861,7 @@ async def test_chat_message_index():
     print("TEST: test_chat_message_index")
     print("="*60)
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     chat = Chat(
         session_id="test_session_13",
         user_id="test_user_13",
@@ -898,7 +898,7 @@ async def test_chat_delete_message():
     print("TEST: test_chat_delete_message")
     print("="*60)
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     chat = Chat(
         session_id="test_session_14",
         user_id="test_user_14",
@@ -953,7 +953,7 @@ async def test_chat_get_set_raw_messages():
     print("TEST: test_chat_get_set_raw_messages")
     print("="*60)
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     chat = Chat(
         session_id="test_session_15",
         user_id="test_user_15",
@@ -1008,7 +1008,7 @@ async def test_chat_with_attachments():
     print(f"  - PDF: {pdf_path}")
     print(f"  - Image: {image_path}")
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     chat = Chat(
         session_id="test_session_16",
         user_id="test_user_16",
@@ -1167,7 +1167,7 @@ async def test_chat_history_manipulation_workflow():
     print("TEST: test_chat_history_manipulation_workflow")
     print("="*60)
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     chat = Chat(
         session_id="test_session_17",
         user_id="test_user_17",
@@ -1238,7 +1238,7 @@ async def test_chat_remove_attachment():
     assert os.path.exists(pdf_path), f"PDF file not found: {pdf_path}"
     assert os.path.exists(image_path), f"Image file not found: {image_path}"
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     chat = Chat(
         session_id="test_session_remove_att",
         user_id="test_user_remove_att",
@@ -1356,7 +1356,7 @@ async def test_chat_session_timing():
     
     import time
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     chat = Chat(
         session_id="test_session_timing",
         user_id="test_user_timing",
@@ -1460,7 +1460,7 @@ async def test_chat_remove_attachment_by_path():
     assert os.path.exists(pdf_path), f"PDF file not found: {pdf_path}"
     assert os.path.exists(image_path), f"Image file not found: {image_path}"
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     chat = Chat(
         session_id="test_session_remove_by_path",
         user_id="test_user_remove_by_path",
@@ -1563,7 +1563,7 @@ async def test_chat_reopen_session():
     
     import time
     
-    agent = Agent(model="openai/gpt-4o", name="Chat Agent")
+    agent = Agent(model="anthropic/claude-haiku-4-5", name="Chat Agent")
     chat = Chat(
         session_id="test_session_reopen",
         user_id="test_user_reopen",

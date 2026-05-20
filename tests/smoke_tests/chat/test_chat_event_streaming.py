@@ -51,7 +51,7 @@ async def test_chat_stream_events_basic():
     print("TEST: test_chat_stream_events_basic")
     print("=" * 60)
     
-    agent = Agent(model="openai/gpt-4o", tools=[add_numbers])
+    agent = Agent(model="anthropic/claude-haiku-4-5", tools=[add_numbers])
     chat = Chat(
         session_id="test_event_stream_1",
         user_id="test_user",
@@ -121,7 +121,7 @@ async def test_chat_invoke_stream_events():
     print("TEST: test_chat_invoke_stream_events")
     print("=" * 60)
     
-    agent = Agent(model="openai/gpt-4o", tools=[multiply_numbers])
+    agent = Agent(model="anthropic/claude-haiku-4-5", tools=[multiply_numbers])
     chat = Chat(
         session_id="test_event_stream_2",
         user_id="test_user",
@@ -163,7 +163,7 @@ async def test_chat_stream_events_no_tools():
     print("=" * 60)
     
     # Agent without tools
-    agent = Agent(model="openai/gpt-4o")
+    agent = Agent(model="anthropic/claude-haiku-4-5")
     chat = Chat(
         session_id="test_event_stream_3",
         user_id="test_user",
@@ -205,7 +205,7 @@ async def test_chat_stream_tool_result_content():
     print("TEST: test_chat_stream_tool_result_content")
     print("=" * 60)
     
-    agent = Agent(model="openai/gpt-4o", tools=[add_numbers])
+    agent = Agent(model="anthropic/claude-haiku-4-5", tools=[add_numbers])
     chat = Chat(
         session_id="test_event_stream_4",
         user_id="test_user",
@@ -253,7 +253,7 @@ async def test_chat_stream_multiple_messages():
     print("TEST: test_chat_stream_multiple_messages")
     print("=" * 60)
     
-    agent = Agent(model="openai/gpt-4o", tools=[add_numbers])
+    agent = Agent(model="anthropic/claude-haiku-4-5", tools=[add_numbers])
     chat = Chat(
         session_id="test_event_stream_5",
         user_id="test_user",
@@ -299,7 +299,7 @@ async def test_chat_stream_events_with_context():
     print("TEST: test_chat_stream_events_with_context")
     print("=" * 60)
     
-    agent = Agent(model="openai/gpt-4o")
+    agent = Agent(model="anthropic/claude-haiku-4-5")
     chat = Chat(
         session_id="test_event_stream_6",
         user_id="test_user",

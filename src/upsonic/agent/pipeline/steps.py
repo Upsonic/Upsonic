@@ -3053,15 +3053,19 @@ class StreamModelExecutionStep(Step):
             
             context.output = cached_content
             context.current_step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
                 status=StepStatus.SKIPPED,
                 message="Skipped due to cache hit",
                 execution_time=time.time() - start_time
             )
             return
-        
+
         if task._policy_blocked:
             yield FinalOutputEvent(run_id=run_id, output=None, output_type='blocked')
             context.current_step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
                 status=StepStatus.SKIPPED,
                 message="Skipped due to policy block",
                 execution_time=time.time() - start_time
@@ -3123,12 +3127,14 @@ class StreamModelExecutionStep(Step):
             # Check if execution was paused (streaming does not support HITL resumption)
             if task.is_paused:
                 context.current_step_result = StepResult(
+                    name=self.name,
+                    step_number=step_number,
                     status=StepStatus.PAUSED,
                     message="Execution paused (use direct call mode for HITL continuation)",
                     execution_time=time.time() - start_time
                 )
                 return
-            
+
             # Extract output and update context
             output = agent._extract_output(task, context.response)
 
@@ -3142,26 +3148,36 @@ class StreamModelExecutionStep(Step):
                 output_type='structured' if not isinstance(output, str) else 'text'
             )
             # Note: Message finalization is deferred to StreamMemoryMessageTrackingStep
-            # This ensures all steps (including AgentPolicyStep feedback loop) 
+            # This ensures all steps (including AgentPolicyStep feedback loop)
             # can add their messages to chat_history before we extract new messages
-            
+
             context.current_step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
                 status=StepStatus.COMPLETED,
                 message="Streaming execution completed",
                 execution_time=time.time() - start_time
             )
-            
+
         except asyncio.CancelledError:
             context.current_step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
                 status=StepStatus.CANCELLED,
                 message="Cancelled due to timeout",
                 execution_time=time.time() - start_time
             )
             raise
         except Exception as e:
+            # Prefix exception type so empty SDK messages still produce a
+            # readable panel/log entry (some Anthropic streaming errors
+            # come with message="" — Sorun 5).
+            err_text = str(e) or type(e).__name__
             context.current_step_result = StepResult(
+                name=self.name,
+                step_number=step_number,
                 status=StepStatus.ERROR,
-                message=f"Streaming execution failed: {str(e)}",
+                message=f"Streaming execution failed: {err_text}",
                 execution_time=time.time() - start_time
             )
             raise
