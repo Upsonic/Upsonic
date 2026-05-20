@@ -1713,10 +1713,10 @@ class ModelExecutionStep(Step):
                     )
                 
                 model_start_time = time.time()
-                response = await model.request(
+                response = await agent._request_with_fallback(
                     messages=context.chat_history,
                     model_settings=model.settings,
-                    model_request_parameters=model_params
+                    model_request_parameters=model_params,
                 )
                 model_execution_time: float = time.time() - model_start_time
                 context.add_model_execution_time(model_execution_time)
@@ -2823,10 +2823,10 @@ class AgentPolicyStep(Step):
         model_params = model.customize_request_parameters(model_params)
         
         _policy_model_start: float = time.time()
-        response = await model.request(
+        response = await agent._request_with_fallback(
             messages=context.chat_history,
             model_settings=model.settings,
-            model_request_parameters=model_params
+            model_request_parameters=model_params,
         )
         _policy_model_elapsed: float = time.time() - _policy_model_start
         context.add_model_execution_time(_policy_model_elapsed)

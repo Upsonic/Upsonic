@@ -487,9 +487,22 @@ class WrapperModel(Model):
     def __getattr__(self, item): return getattr(self.wrapped, item)
 ```
 
-`InstrumentedModel` (and any future fallback / retry / cache wrapper) extends this.
-Note the `__getattr__` fall-through — wrappers expose every attribute of the wrapped
-model transparently.
+`InstrumentedModel` extends this base. Note the `__getattr__` fall-through —
+wrappers expose every attribute of the wrapped model transparently.
+
+`WrapperModel.__setattr__` mirrors every write onto the wrapper itself and
+additionally forwards writes of `_settings` / `_profile` (the module-level
+`_PASSTHROUGH_ATTRS` set) onto `self.wrapped`. Forwarding recurses through
+nested wrapper chains, terminating at the innermost non-wrapper primary. This
+makes `wrapper._settings = X` semantically symmetric with `wrapper.settings`
+(the property reads `self.wrapped.settings`) and ensures that constructor-time
+mutations like `Agent`'s `self.model._settings = settings` correctly reach the
+inner primary even when `self.model` is an `InstrumentedModel` wrap.
+Subclasses needing wrapper-local `_settings` / `_profile` can bypass via
+`object.__setattr__(self, name, value)`. Auth-fallback in Upsonic is NOT
+implemented as a `WrapperModel` subclass; it lives as a parallel
+`Agent.fallback_model` field with a `_request_with_fallback(...)` helper at
+each `model.request(...)` call site (see `documents/ai/explanation/agent/agent.md`).
 
 ### 3.5 `instrumented.py` — OpenTelemetry GenAI instrumentation
 

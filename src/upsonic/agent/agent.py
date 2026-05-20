@@ -229,6 +229,7 @@ class Agent(BaseAgent):
         self,
         model: Union[str, "Model"] = "openai/gpt-4o",
         *,
+        fallback_model: Optional[Union[str, "Model"]] = None,
         name: Optional[str] = None,
         memory: Optional["Memory"] = None,
         db: Optional["DatabaseBase"] = None,
@@ -305,6 +306,13 @@ class Agent(BaseAgent):
         
         Args:
             model: Model identifier or Model instance
+            fallback_model: Optional alternate model used when the primary
+                model is inaccessible (HTTP 401/403/404 from the provider).
+                Accepts the same forms as ``model`` (string ``"provider/model"``
+                or a ``Model`` instance). Defaults to ``None``, which disables
+                fallback. Applies to ``do()`` / ``do_async()`` only — streaming
+                calls (``stream()``, ``astream()``) do not currently trigger
+                fallback.
             name: Agent name for identification
             memory: Memory instance for conversation history
             db: Database instance (overrides memory if provided)
@@ -384,6 +392,10 @@ class Agent(BaseAgent):
         from upsonic.models import infer_model
         self.model = infer_model(model)
         self.model_name=model
+
+        self.fallback_model: Optional["Model"] = (
+            infer_model(fallback_model) if fallback_model is not None else None
+        )
 
         self._tracing_provider, self._instrument_settings, self._otel = self._resolve_instrumentation(instrument)
         self.promptlayer: Optional["PromptLayer"] = promptlayer
@@ -555,7 +567,7 @@ class Agent(BaseAgent):
             self.model._settings = settings
         if profile:
             self.model._profile = profile
-            
+
         self._apply_reasoning_settings()
         
         from upsonic.cache import CacheManager
@@ -696,41 +708,50 @@ class Agent(BaseAgent):
         self.tool_policy_post_manager.setup_policy_models(self.model)
     
     def _apply_reasoning_settings(self) -> None:
-        """Apply common reasoning/thinking attributes to model-specific settings."""
-        if not hasattr(self.model, '_settings') or self.model._settings is None:
-            self.model._settings = {}
-        
-        try:
-            current_settings = self.model._settings.copy()
-        except (AttributeError, TypeError):
-            current_settings = {}
-            
-        reasoning_settings = self._get_model_specific_reasoning_settings()
-        
-        try:
-            self.model._settings = {**current_settings, **reasoning_settings}
-        except TypeError:
-            self.model._settings = current_settings
-    
-    def _get_model_specific_reasoning_settings(self) -> Dict[str, Any]:
-        """Convert common reasoning attributes to model-specific settings."""
+        """Apply common reasoning/thinking attributes to model-specific settings,
+        symmetrically on both ``self.model`` and ``self.fallback_model`` (when
+        configured). Each target gets its own provider-keyed reasoning dict so
+        primary's openai-shape keys don't pollute an Anthropic fallback's settings.
+        """
+        for m in (self.model, self.fallback_model):
+            if m is None:
+                continue
+            if not hasattr(m, '_settings') or m._settings is None:
+                m._settings = {}
+
+            try:
+                current_settings = m._settings.copy()
+            except (AttributeError, TypeError):
+                current_settings = {}
+
+            reasoning_settings = self._get_model_specific_reasoning_settings_for(m)
+
+            try:
+                m._settings = {**current_settings, **reasoning_settings}
+            except TypeError:
+                m._settings = current_settings
+
+    def _get_model_specific_reasoning_settings_for(self, target_model: "Model") -> Dict[str, Any]:
+        """Convert common reasoning attributes to model-specific settings keyed off
+        ``target_model.system`` (so the dict is correct for whichever model it will
+        be written onto — primary or fallback)."""
         settings = {}
-        
+
         try:
-            provider_name = getattr(self.model, 'system', '').lower()
+            provider_name = getattr(target_model, 'system', '').lower()
         except (AttributeError, TypeError):
             provider_name = ''
-        
+
         # OpenAI/OpenAI-compatible models
         if provider_name in ['openai', 'azure', 'deepseek', 'cerebras', 'fireworks', 'github', 'grok', 'heroku', 'moonshotai', 'openrouter', 'together', 'vercel', 'litellm']:
             # Apply reasoning_effort to all OpenAI models
             if self.reasoning_effort is not None:
                 settings['openai_reasoning_effort'] = self.reasoning_effort
-            
+
             # Only apply reasoning_summary to OpenAIResponsesModel
             if self.reasoning_summary is not None:
                 from upsonic.models.openai import OpenAIResponsesModel
-                if isinstance(self.model, OpenAIResponsesModel):
+                if isinstance(target_model, OpenAIResponsesModel):
                     settings['openai_reasoning_summary'] = self.reasoning_summary
         
         # Anthropic models
@@ -760,6 +781,50 @@ class Agent(BaseAgent):
         
         return settings
     
+    @property
+    def settings(self) -> Optional["ModelSettings"]:
+        """User-supplied model settings stored on the primary ``self.model``."""
+        return getattr(self.model, "_settings", None)
+
+    @settings.setter
+    def settings(self, value: Optional["ModelSettings"]) -> None:
+        self.model._settings = value
+
+    @property
+    def profile(self) -> Optional["ModelProfile"]:
+        """User-supplied model profile stored on the primary ``self.model``."""
+        return getattr(self.model, "_profile", None)
+
+    @profile.setter
+    def profile(self, value: Optional["ModelProfile"]) -> None:
+        self.model._profile = value
+
+    @property
+    def fallback_settings(self) -> Optional["ModelSettings"]:
+        """Model settings on ``self.fallback_model``; ``None`` when no fallback configured."""
+        return getattr(self.fallback_model, "_settings", None) if self.fallback_model is not None else None
+
+    @fallback_settings.setter
+    def fallback_settings(self, value: Optional["ModelSettings"]) -> None:
+        if self.fallback_model is None:
+            raise AttributeError(
+                "Cannot set fallback_settings: no fallback_model configured on this agent."
+            )
+        self.fallback_model._settings = value
+
+    @property
+    def fallback_profile(self) -> Optional["ModelProfile"]:
+        """Model profile on ``self.fallback_model``; ``None`` when no fallback configured."""
+        return getattr(self.fallback_model, "_profile", None) if self.fallback_model is not None else None
+
+    @fallback_profile.setter
+    def fallback_profile(self, value: Optional["ModelProfile"]) -> None:
+        if self.fallback_model is None:
+            raise AttributeError(
+                "Cannot set fallback_profile: no fallback_model configured on this agent."
+            )
+        self.fallback_model._profile = value
+
     @property
     def system_prompt(self) -> Optional[str]:
         """Return the latest fully-built system prompt, falling back to the
@@ -1755,8 +1820,39 @@ class Agent(BaseAgent):
                 self.model = instrument_model(self.model, self._instrument_settings)
             return original_model
         return None
-    
-    
+
+    async def _request_with_fallback(
+        self,
+        messages: "list[ModelMessage]",
+        model_settings: Optional["ModelSettings"],
+        model_request_parameters: "ModelRequestParameters",
+    ) -> "ModelResponse":
+        """Call ``self.model.request(...)`` and, on auth/access HTTP error,
+        retry the same request against ``self.fallback_model``. Re-raises any
+        other exception (including ``ModelHTTPError`` codes outside {401, 403,
+        404}, ``ModelAPIError``, and non-HTTP errors). No-op when no fallback
+        is configured.
+        """
+        from upsonic.utils.package.exception import ModelHTTPError
+        try:
+            return await self.model.request(messages, model_settings, model_request_parameters)
+        except ModelHTTPError as primary_err:
+            if self.fallback_model is None:
+                raise
+            if primary_err.status_code not in {401, 403, 404}:
+                raise
+            from upsonic.utils.printing import warning_log
+            warning_log(
+                f"Primary model '{self.model.model_name}' inaccessible "
+                f"(status={primary_err.status_code}); falling back to "
+                f"'{self.fallback_model.model_name}'.",
+                "ModelFallback",
+            )
+            return await self.fallback_model.request(
+                messages, model_settings, model_request_parameters
+            )
+
+
     def get_run_id(self) -> Optional[str]:
         """
         Get the current run ID.
@@ -2793,10 +2889,10 @@ class Agent(BaseAgent):
             model_params = self.model.customize_request_parameters(model_params)
             
             _retry_model_start: float = time.time()
-            retry_response: "ModelResponse" = await self.model.request(
+            retry_response: "ModelResponse" = await self._request_with_fallback(
                 messages=messages,
                 model_settings=self.model.settings,
-                model_request_parameters=model_params
+                model_request_parameters=model_params,
             )
             _retry_model_elapsed: float = time.time() - _retry_model_start
             
@@ -2881,10 +2977,10 @@ class Agent(BaseAgent):
                 model_params = self.model.customize_request_parameters(model_params)
                 
                 _limit_model_start: float = time.time()
-                final_response = await self.model.request(
+                final_response = await self._request_with_fallback(
                     messages=messages,
                     model_settings=self.model.settings,
-                    model_request_parameters=model_params
+                    model_request_parameters=model_params,
                 )
                 _limit_model_elapsed: float = time.time() - _limit_model_start
                 
@@ -2954,10 +3050,10 @@ class Agent(BaseAgent):
             model_params = self.model.customize_request_parameters(model_params)
             
             _followup_model_start: float = time.time()
-            follow_up_response = await self.model.request(
+            follow_up_response = await self._request_with_fallback(
                 messages=messages,
                 model_settings=self.model.settings,
-                model_request_parameters=model_params
+                model_request_parameters=model_params,
             )
             _followup_model_elapsed: float = time.time() - _followup_model_start
             
@@ -3344,10 +3440,10 @@ class Agent(BaseAgent):
             model_params = self.model.customize_request_parameters(model_params)
             
             _guardrail_model_start: float = time.time()
-            response = await self.model.request(
+            response = await self._request_with_fallback(
                 messages=messages,
                 model_settings=self.model.settings,
-                model_request_parameters=model_params
+                model_request_parameters=model_params,
             )
             _guardrail_model_elapsed: float = time.time() - _guardrail_model_start
             

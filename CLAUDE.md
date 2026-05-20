@@ -36,7 +36,9 @@ Trivial work (single-line typo, comment edit) skips this and says so explicitly:
 
 ### Keep `documents/ai/explanation/` in sync with code
 
-The files under `documents/ai/explanation/<subsystem>/<subsystem>.md` are treated as the authoritative description of each subsystem's behaviour contract. Whenever a code change alters an *observable* contract that an explanation doc asserts, resync the matching file in the same commit (or an immediate follow-up `docs: sync explanation/…` commit). The `documents/ai/guides/` files are Claude-operational process docs and only change when the *process* changes, not when a single contract does.
+The files under `documents/ai/explanation/<subsystem>/<subsystem>.md` are the authoritative description of each subsystem's behaviour contract. They're sized to match (typically 40–80 KB) — canonical written explanations of the subsystem, not brief overviews. Whenever a code change alters an *observable* contract that an explanation doc asserts, resync the matching file in the same commit (or an immediate follow-up `docs: sync explanation/…` commit). The `documents/ai/guides/` files are Claude-operational process docs and only change when the *process* changes, not when a single contract does.
+
+**Pre-plan, mandatory**: before any non-trivial change to a subsystem, read its `<subsystem>.md` end-to-end (dispatch an `Explore` subagent for the read when the file is large — keep main context lean). Surface what was found in the pre-work bullet, e.g. *"From `agent.md`: `Agent.do()` documented as 24-step pipeline; `ModelExecutionStep` invokes `self.model.request()` at step N..."* Planning that names symbols, constructor params, or contracts without first consulting the subsystem's `<subsystem>.md` is grounded in inference, not evidence.
 
 Triggers that almost always require a doc update:
 
@@ -51,10 +53,10 @@ How to do it:
 
 1. Identify the touched module(s) under `src/upsonic/`.
 2. `grep -rln "<class or symbol>" documents/ai/explanation/` to find the doc and the exact lines whose claim is now stale.
-3. Edit surgically — fix only the sentences/tables whose claim is now wrong; do not rewrite the surrounding prose.
+3. Edit surgically — fix only the sentences/tables whose claim is now wrong; do not rewrite the surrounding prose. If a new public class is added, add it to the section listing peer classes; if a contract changes, update the section describing that class.
 4. Include the doc edit in the same logical change (same PR / commit block). If the code commit is already pushed, follow up with a `docs: sync explanation/…` commit before the PR is reviewed.
 
-Skip when the change is purely internal (private helpers, comment trims, refactors that preserve every observable contract). Surface what you found at the start of the reply (memory / Serena conventions still apply), e.g.: *"Touched `Chat.__init__` storage wiring → resyncing `documents/ai/explanation/chat/chat.md` lines 257–280."*
+Skip when the change is purely internal (private helpers, comment trims, refactors that preserve every observable contract); say so explicitly per the Default Pre-Work Consultation skip rule. Surface what you found at the start of the reply (memory / Serena conventions still apply), e.g.: *"Touched `Chat.__init__` storage wiring → resyncing `documents/ai/explanation/chat/chat.md` lines 257–280."*
 
 ## Core Architecture
 
@@ -183,6 +185,7 @@ Key environment variables:
 - Source code: `src/upsonic/`
 - Tests: `tests/` (four tiers — see Testing Structure)
 - AI operational guides: `documents/ai/guides/` (process protocols — see AI Operational Guides)
+- AI subsystem deep-dives: `documents/ai/explanation/<subsystem>/<subsystem>.md` (canonical per-subsystem explanation; see "Keep `documents/ai/explanation/` in sync with code" under AI Operational Guides — mandatory pre-plan read and post-impl resync)
 - Other documentation: `README.md`, inline Google-style docstrings
 - Configuration: `pyproject.toml`, `.pre-commit-config.yaml`, `pytest.ini`
 - Dependencies: Managed by `uv` with `uv.lock`

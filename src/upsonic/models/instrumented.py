@@ -456,7 +456,6 @@ class InstrumentedModel(WrapperModel):
             ) as span:
 
                 def finish(response: ModelResponse, parameters: ModelRequestParameters):
-                    # FallbackModel updates these span attributes.
                     attributes.update(getattr(span, 'attributes', {}))
                     request_model = attributes[GEN_AI_REQUEST_MODEL_ATTRIBUTE]
                     system = cast(str, attributes[GEN_AI_SYSTEM_ATTRIBUTE])
