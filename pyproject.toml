@@ -76,7 +76,7 @@ supermemory = [
     "supermemory>=3.25.0",
 ]
 valkey = [
-    "valkey-glide>=2.3.1",
+    "valkey-glide>=2.4.0",
 ]
 vectordb = [
     "chromadb>=1.0.20; python_version < '3.14'",
@@ -85,7 +85,7 @@ vectordb = [
     "psycopg>=3.2.9",
     "pymilvus[milvus-lite]>=2.6.1",
     "qdrant-client>=1.12.1",
-    "valkey-glide>=2.3.1",
+    "valkey-glide>=2.4.0",
     "weaviate-client>=4.16.9",
     "scipy>=1.13.0",
     "scikit-learn>=1.4.0",
