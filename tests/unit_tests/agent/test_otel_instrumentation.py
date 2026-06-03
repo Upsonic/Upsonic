@@ -14,6 +14,7 @@ Covers:
 Run with: uv run pytest tests/unit_tests/agent/test_otel_instrumentation.py -v -s
 """
 
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock, patch
 
@@ -29,6 +30,24 @@ from upsonic.agent.otel_manager import AgentOTelManager
 from upsonic.agent.pipeline.manager import PipelineManager
 from upsonic.agent.pipeline.step import StepResult, StepStatus
 from upsonic.usage import RunUsage, RequestUsage
+
+
+def _make_otel_capture(include_content: bool = True) -> tuple[Any, Any, Any, InstrumentationSettings]:
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    exporter = InMemorySpanExporter()
+    tracer_provider = TracerProvider()
+    tracer_provider.add_span_processor(SimpleSpanProcessor(exporter))
+    meter_provider = MeterProvider()
+    settings = InstrumentationSettings(
+        tracer_provider=tracer_provider,
+        meter_provider=meter_provider,
+        include_content=include_content,
+    )
+    return exporter, tracer_provider, meter_provider, settings
 
 
 def _make_mock_model(model: Any = "openai/gpt-4o", **_kwargs: Any) -> MagicMock:
@@ -282,6 +301,161 @@ class TestSpanContextManagers:
     def test_pipeline_manager_resolves_noop_otel(self) -> None:
         pm = PipelineManager(agent=Agent("openai/gpt-4o"))
         assert not pm._otel.enabled
+
+
+class TestPlanSpans:
+    """Test GenAI plan span instrumentation for DeepAgent planning."""
+
+    def test_plan_span_noop(self) -> None:
+        otel = _make_otel(instrument=False)
+        with otel.plan_span(agent_name="Planner") as span:
+            assert span is None
+
+    def test_plan_result_omits_content_when_disabled(self) -> None:
+        settings = InstrumentationSettings(include_content=False)
+        otel = AgentOTelManager(settings)
+        span = RecordingSpan()
+
+        otel.set_plan_result(
+            span,
+            success=True,
+            todo_count=2,
+            status_counts={"pending": 2},
+            action="create",
+            output="hidden plan output",
+        )
+
+        assert span.attrs["upsonic.plan.todo_count"] == 2
+        assert span.attrs["upsonic.plan.status.pending"] == 2
+        assert span.attrs["upsonic.plan.action"] == "create"
+        assert "upsonic.plan.output" not in span.attrs
+
+    @pytest.mark.asyncio
+    async def test_planning_toolkit_write_todos_emits_plan_span(self) -> None:
+        from opentelemetry.trace import StatusCode
+        from upsonic.agent.deepagent.tools.planning_toolkit import PlanningToolKit
+
+        exporter, tracer_provider, meter_provider, settings = _make_otel_capture()
+        try:
+            toolkit = PlanningToolKit()
+            task = SimpleNamespace()
+            agent = SimpleNamespace(
+                _otel=AgentOTelManager(settings),
+                name="PlannerAgent",
+                agent_id="agent-123",
+            )
+            toolkit.set_current_context(task, agent)
+
+            response = await toolkit.write_todos([
+                {"content": "Research", "status": "pending", "id": "1"},
+                {"content": "Write", "status": "pending", "id": "2"},
+            ])
+
+            assert "Plan created" in response
+            plan_spans = [
+                span
+                for span in exporter.get_finished_spans()
+                if span.attributes.get("gen_ai.operation.name") == "plan"
+            ]
+            assert len(plan_spans) == 1
+            plan_span = plan_spans[0]
+            assert plan_span.name == "plan PlannerAgent"
+            assert plan_span.attributes["gen_ai.agent.name"] == "PlannerAgent"
+            assert plan_span.attributes["gen_ai.agent.id"] == "agent-123"
+            assert plan_span.attributes["upsonic.plan.action"] == "create"
+            assert plan_span.attributes["upsonic.plan.todo_count"] == 2
+            assert plan_span.attributes["upsonic.plan.status.pending"] == 2
+            assert plan_span.status.status_code == StatusCode.OK
+        finally:
+            tracer_provider.shutdown()
+            meter_provider.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_planning_toolkit_validation_error_marks_plan_span_error(self) -> None:
+        from opentelemetry.trace import StatusCode
+        from upsonic.agent.deepagent.tools.planning_toolkit import PlanningToolKit
+
+        exporter, tracer_provider, meter_provider, settings = _make_otel_capture()
+        try:
+            toolkit = PlanningToolKit()
+            task = SimpleNamespace()
+            agent = SimpleNamespace(_otel=AgentOTelManager(settings), name="PlannerAgent")
+            toolkit.set_current_context(task, agent)
+
+            response = await toolkit.write_todos([])
+
+            assert "Missing 'todos' parameter" in response
+            plan_spans = [
+                span
+                for span in exporter.get_finished_spans()
+                if span.attributes.get("gen_ai.operation.name") == "plan"
+            ]
+            assert len(plan_spans) == 1
+            assert plan_spans[0].attributes["upsonic.plan.action"] == "create"
+            assert plan_spans[0].status.status_code == StatusCode.ERROR
+        finally:
+            tracer_provider.shutdown()
+            meter_provider.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_deepagent_write_todos_tool_emits_child_plan_span(self) -> None:
+        from upsonic import Task
+        from upsonic.agent.deepagent import DeepAgent
+        from upsonic.agent.pipeline.steps import ToolSetupStep
+        from upsonic.messages.messages import ToolCallPart
+        from upsonic.run.pipeline.stats import PipelineExecutionStats
+
+        exporter, tracer_provider, meter_provider, settings = _make_otel_capture()
+        try:
+            agent = DeepAgent(
+                model="openai/gpt-4o",
+                name="RuntimePlanner",
+                instrument=settings,
+                enable_planning=True,
+                enable_filesystem=False,
+                enable_subagents=False,
+            )
+            task = Task("Create a short execution plan")
+            context = SimpleNamespace(
+                is_streaming=False,
+                events=[],
+                run_id="run-1",
+                step_results=[],
+                execution_stats=PipelineExecutionStats(total_steps=1),
+            )
+            agent.current_task = task
+
+            await ToolSetupStep().execute(context, task, agent, agent.model, 0)
+            result = await agent._execute_tool_calls([
+                ToolCallPart(
+                    tool_name="write_todos",
+                    args={
+                        "todos": [
+                            {"content": "Research", "status": "pending", "id": "1"},
+                            {"content": "Write", "status": "pending", "id": "2"},
+                        ]
+                    },
+                    tool_call_id="call_plan",
+                )
+            ])
+
+            assert len(result) == 1
+            assert result[0].tool_name == "write_todos"
+            spans = exporter.get_finished_spans()
+            tool_span = next(span for span in spans if span.name == "tool.execute")
+            plan_span = next(
+                span
+                for span in spans
+                if span.attributes.get("gen_ai.operation.name") == "plan"
+            )
+
+            assert plan_span.parent is not None
+            assert plan_span.parent.span_id == tool_span.context.span_id
+            assert plan_span.attributes["upsonic.plan.action"] == "create"
+            assert plan_span.attributes["upsonic.plan.todo_count"] == 2
+        finally:
+            tracer_provider.shutdown()
+            meter_provider.shutdown()
 
 
 class TestErrorRecording:
