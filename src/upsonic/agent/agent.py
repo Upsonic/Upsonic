@@ -4440,14 +4440,15 @@ class Agent(BaseAgent):
             )
             
             self._agent_run_output.print_flag = self._resolve_print_flag(False)
-            
+            self._agent_run_output.state = state
+
             if task is not None:
                 task.run_id = run_id
-            
+
             original_model = self._apply_model_override(model)
-            
+
             pipeline = PipelineManager(
-                steps=self._create_streaming_pipeline_steps(),
+                steps=self._select_streaming_pipeline_steps(),
                 task=self._agent_run_output.task,
                 agent=self,
                 model=self.model,
@@ -4689,21 +4690,23 @@ class Agent(BaseAgent):
     def _create_direct_pipeline_steps(self) -> List[Any]:
         """Build the reduced pipeline for the ``Direct`` fast path: a bare LLM call.
 
-        This is the full agent pipeline minus the optional/expensive steps
-        (storage, cache, policies, reflection, reliability, task-management,
-        memory-save). The retained steps include the structural initializers that
-        later steps depend on — e.g. ChatHistoryStep is the sole producer of
-        ``context.chat_history`` (it yields ``[]`` when there is no memory), and
-        ContextBuildStep is the sole renderer of ``task.context`` into
-        ``task.context_formatted``. Selected when ``_pipeline_profile == "direct"``.
+        This is the full agent pipeline minus every optional/expensive step —
+        storage, cache, policies, tool setup, reflection, reliability, memory
+        preparation, chat-history loading, and memory-save. With no memory,
+        ``context.chat_history`` stays at its ``[]`` default, so the chat-history
+        step is unnecessary. ``ContextBuildStep`` is retained because it renders
+        ``task.context`` into ``task.context_formatted`` and resolves any
+        ``TaskOutputSource`` from the threaded Graph ``state`` — it powers the
+        ``context=[...]`` and Graph-passthrough features, not memory. Selected
+        when ``_pipeline_profile == "direct"``.
 
         Returns:
             The ordered list of pipeline steps for the reduced direct pipeline.
         """
         from upsonic.agent.pipeline import (
             InitializationStep, ModelSelectionStep,
-            MemoryPrepareStep, SystemPromptBuildStep, ContextBuildStep,
-            ChatHistoryStep, UserInputBuildStep, MessageAssemblyStep,
+            SystemPromptBuildStep, ContextBuildStep,
+            UserInputBuildStep, MessageAssemblyStep,
             CallManagerSetupStep, ModelExecutionStep, ResponseProcessingStep,
             FinalizationStep, CallManagementStep,
         )
@@ -4711,17 +4714,15 @@ class Agent(BaseAgent):
         return [
             InitializationStep(),          # init counters / usage
             ModelSelectionStep(),          # model metadata
-            MemoryPrepareStep(),           # registers memory_manager (no-op when memory=None)
             SystemPromptBuildStep(),       # registers system_prompt_manager
-            ContextBuildStep(),            # renders task.context -> context_formatted
-            ChatHistoryStep(),             # sole producer of context.chat_history (=[])
+            ContextBuildStep(),            # renders task.context -> context_formatted; resolves TaskOutputSource from state
             UserInputBuildStep(),          # builds run_input.input from prompt + context
             MessageAssemblyStep(),         # assembles ModelRequest
             CallManagerSetupStep(),        # registers call_manager
             ModelExecutionStep(),          # the LLM call
             ResponseProcessingStep(),      # extract output
             FinalizationStep(),            # cleanup / deanonymize
-            CallManagementStep(),          # usage logging
+            CallManagementStep(),          # usage logging + task_end finalize
         ]
 
     def _select_pipeline_steps(self) -> List[Any]:
@@ -4808,7 +4809,59 @@ class Agent(BaseAgent):
             StreamMemoryMessageTrackingStep(), # 20 <-- Saves AgentSession + task_end()
             CallManagementStep(),              # 21 <-- LAST: Records usage
         ]
-    
+
+    def _create_direct_streaming_pipeline_steps(self) -> List[Any]:
+        """Build the reduced streaming pipeline for the ``Direct`` fast path.
+
+        Mirrors :meth:`_create_direct_pipeline_steps` for streaming: the same
+        bare-LLM-call step set with the streaming model-execution and
+        finalization steps swapped in. Every optional/expensive step (storage,
+        cache, policies, tool setup, reflection, reliability, memory preparation,
+        chat-history loading, memory tracking) is omitted. With no memory,
+        ``context.chat_history`` stays at its ``[]`` default.
+        ``StreamMemoryMessageTrackingStep`` is dropped, so ``task_end()`` is
+        finalized by ``CallManagementStep``. ``ContextBuildStep`` is retained for
+        the ``context=[...]`` / Graph-passthrough features. Selected when
+        ``_pipeline_profile == "direct"``.
+
+        Returns:
+            The ordered list of streaming pipeline steps for the reduced
+            direct pipeline.
+        """
+        from upsonic.agent.pipeline import (
+            InitializationStep, ModelSelectionStep,
+            SystemPromptBuildStep, ContextBuildStep,
+            UserInputBuildStep, MessageAssemblyStep,
+            CallManagerSetupStep, StreamModelExecutionStep,
+            StreamFinalizationStep, CallManagementStep,
+        )
+
+        return [
+            InitializationStep(),          # init counters / usage
+            ModelSelectionStep(),          # model metadata
+            SystemPromptBuildStep(),       # registers system_prompt_manager
+            ContextBuildStep(),            # renders task.context -> context_formatted; resolves TaskOutputSource from state
+            UserInputBuildStep(),          # builds run_input.input from prompt + context
+            MessageAssemblyStep(),         # assembles ModelRequest
+            CallManagerSetupStep(),        # registers call_manager
+            StreamModelExecutionStep(),    # the streaming LLM call
+            StreamFinalizationStep(),      # extract output / deanonymize
+            CallManagementStep(),          # usage logging + task_end finalize
+        ]
+
+    def _select_streaming_pipeline_steps(self) -> List[Any]:
+        """Choose the streaming pipeline step list for the active profile.
+
+        ``_pipeline_profile == "direct"`` selects the reduced streaming pipeline;
+        ``"agent"`` (the default) selects the full streaming pipeline.
+
+        Returns:
+            The ordered list of streaming pipeline steps for the active profile.
+        """
+        if self._pipeline_profile == "direct":
+            return self._create_direct_streaming_pipeline_steps()
+        return self._create_streaming_pipeline_steps()
+
     def _create_full_pipeline_steps(self, is_streaming: bool = False) -> List[Any]:
         """
         Create complete pipeline steps based on execution mode.

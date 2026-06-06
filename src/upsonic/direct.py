@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Optional, Union
+from typing import Any, AsyncIterator, Iterator, Optional, Union
 
 from upsonic.models.settings import ModelSettings
 from upsonic.tasks.tasks import Task
@@ -288,6 +288,60 @@ class Direct:
             graph_execution_id=graph_execution_id,
             _print_method_default=True,
         )
+
+    def stream(
+        self,
+        task: Task,
+        *,
+        events: bool = False,
+        state: Optional[Any] = None,
+    ) -> Iterator[Union[str, Any]]:
+        """Stream a task synchronously, yielding output as it arrives.
+
+        Delegates to ``Agent.stream`` on the internal Agent, which runs the
+        reduced ``"direct"`` streaming pipeline — a bare streaming LLM call with
+        no memory, knowledge base, tools, reflection, reliability, or policies.
+        For async streaming use ``astream``.
+
+        Args:
+            task: Task object containing description, context, and response format.
+            events: If ``True`` yield ``AgentStreamEvent`` objects; if ``False``
+                (default) yield text chunks (``str``).
+            state: Optional Graph execution state (resolves ``TaskOutputSource``).
+
+        Returns:
+            An iterator over text chunks, or stream events when ``events=True``.
+        """
+        return self._build_internal_agent().stream(task, events=events, state=state)
+
+    def astream(
+        self,
+        task: Task,
+        *,
+        events: bool = False,
+        state: Optional[Any] = None,
+    ) -> AsyncIterator[Union[str, Any]]:
+        """Stream a task asynchronously, yielding output as it arrives.
+
+        Delegates to ``Agent.astream`` on the internal Agent, which runs the
+        reduced ``"direct"`` streaming pipeline — a bare streaming LLM call with
+        no memory, knowledge base, tools, reflection, reliability, or policies.
+
+        Print behaviour follows ``Agent`` streaming: the start/metrics panels are
+        shown only when the constructor ``print=True`` or
+        ``UPSONIC_AGENT_PRINT=true``.
+
+        Args:
+            task: Task object containing description, context, and response format.
+            events: If ``True`` yield ``AgentStreamEvent`` objects; if ``False``
+                (default) yield text chunks (``str``).
+            state: Optional Graph execution state (resolves ``TaskOutputSource``).
+
+        Returns:
+            An async iterator over text chunks, or stream events when
+            ``events=True``.
+        """
+        return self._build_internal_agent().astream(task, events=events, state=state)
 
     @property
     def model(self) -> Optional[Any]:

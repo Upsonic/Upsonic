@@ -152,3 +152,38 @@ async def test_smoke_direct_usage_matches_agent_usage():
     assert au.input_tokens > 0 and au.output_tokens > 0
     # Identical prompt + model + config ⇒ identical input token count.
     assert du.input_tokens == au.input_tokens
+
+
+@pytest.mark.asyncio
+async def test_smoke_direct_astream_text():
+    """Direct.astream streams real text chunks through the reduced streaming
+    pipeline; reassembled they form the answer."""
+    d = Direct(MODEL, print=False)
+    chunks = []
+    async for chunk in d.astream(
+        Task("List the first 3 positive integers, comma separated.")
+    ):
+        assert isinstance(chunk, str)
+        chunks.append(chunk)
+
+    assert chunks, "astream must yield at least one text chunk"
+    joined = "".join(chunks)
+    assert "1" in joined and "2" in joined and "3" in joined
+
+
+def test_smoke_direct_stream_sync():
+    """The sync Direct.stream wrapper yields real text chunks."""
+    d = Direct(MODEL, print=False)
+    joined = "".join(d.stream(Task("Reply with only the word: PONG")))
+    assert "PONG" in joined.upper()
+
+
+@pytest.mark.asyncio
+async def test_smoke_direct_astream_usage():
+    """After streaming, Direct.usage reflects the real streamed call."""
+    d = Direct(MODEL, print=False)
+    async for _ in d.astream(Task("Reply with only the word: USAGE")):
+        pass
+    u = d.usage
+    assert u.requests == 1
+    assert u.input_tokens > 0 and u.output_tokens > 0

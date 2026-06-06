@@ -168,8 +168,8 @@ def test_direct_and_agent_pipeline_profiles():
     direct = Direct(model=model, print=False)
     agent = direct._build_internal_agent()
     assert agent._pipeline_profile == "direct"
-    assert len(agent._select_pipeline_steps()) == 13
-    assert len(agent._create_direct_pipeline_steps()) == 13
+    assert len(agent._select_pipeline_steps()) == 11
+    assert len(agent._create_direct_pipeline_steps()) == 11
 
     default_agent = type(agent)("anthropic/claude-haiku-4-5", print=False)
     assert default_agent._pipeline_profile == "agent"
