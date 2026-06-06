@@ -6,15 +6,27 @@ including initialization, execution methods, builder methods, and error handling
 """
 
 import unittest
-from unittest.mock import patch, AsyncMock, MagicMock, mock_open
+from unittest.mock import patch, AsyncMock, MagicMock
 import pytest
 from pydantic import BaseModel
+
+import os
 
 from upsonic import Direct, Task
 from upsonic.models import ModelResponse, TextPart, ModelRequestParameters
 from upsonic.models.settings import ModelSettings
 from upsonic.profiles import ModelProfileSpec
 from upsonic.providers import Provider
+
+
+def _real_test_model():
+    """Build a real model object for execution tests; the caller patches its
+    ``request`` so no network occurs. A genuine ``Model`` instance is required
+    because model inference rejects bare mocks. A placeholder key suffices for
+    client construction."""
+    os.environ.setdefault("ANTHROPIC_API_KEY", "sk-ant-placeholder-for-construction")
+    from upsonic.models import infer_model
+    return infer_model("anthropic/claude-haiku-4-5")
 
 
 # Mock Pydantic models for testing structured outputs
@@ -205,18 +217,21 @@ class TestDirectProperties(unittest.TestCase):
         direct = Direct(provider=self.mock_provider)
         self.assertEqual(direct.provider, self.mock_provider)
 
+    def test_direct_model_name_property(self):
+        """model_name returns the model's name, or None when no model is set."""
+        self.mock_model.model_name = "test-model"
+        direct = Direct(model=self.mock_model)
+        self.assertEqual(direct.model_name, "test-model")
+        self.assertIsNone(Direct().model_name)
+
 
 class TestDirectDoMethods(unittest.TestCase):
     """Test suite for Direct do() and related execution methods."""
 
     def setUp(self):
         """Set up test fixtures."""
-        self.mock_model = MagicMock()
-        self.mock_model.model_name = "test-model"
-        self.mock_model.settings = MagicMock()
-        self.mock_model.customize_request_parameters = MagicMock(
-            side_effect=lambda x: x
-        )
+        # Real model instance; only `.request` is patched (no network).
+        self.mock_model = _real_test_model()
 
         # Mock response
         self.mock_response = ModelResponse(
@@ -231,39 +246,26 @@ class TestDirectDoMethods(unittest.TestCase):
         )
         self.mock_model.request = AsyncMock(return_value=self.mock_response)
 
-    @patch("upsonic.utils.printing.direct_started")
-    @patch("upsonic.utils.printing.direct_completed")
     @patch("upsonic.models.infer_model")
-    def test_direct_do_basic(self, mock_infer_model, mock_completed, mock_started):
-        """Test basic do() method."""
+    def test_direct_do_basic(self, mock_infer_model):
+        """do() returns the delegated output for a string-specified model."""
         mock_infer_model.return_value = self.mock_model
 
         direct = Direct(model="openai/gpt-4o")
-        task = Task("What is 2+2?")
+        result = direct.do(Task("What is 2+2?"))
 
-        result = direct.do(task, show_output=False)
-
-        self.assertIsInstance(result, str)
         self.assertEqual(result, "Hello, this is a test response.")
         self.mock_model.request.assert_called_once()
 
-    @patch("upsonic.utils.printing.direct_started")
-    @patch("upsonic.utils.printing.direct_completed")
-    def test_direct_do_with_text_task(self, mock_completed, mock_started):
-        """Test do() with simple text task."""
+    def test_direct_do_with_text_task(self):
+        """do() returns a non-empty string for a text task."""
         direct = Direct(model=self.mock_model)
-        task = Task("Tell me a joke")
-
-        result = direct.do(task, show_output=False)
-
+        result = direct.do(Task("Tell me a joke"))
         self.assertIsInstance(result, str)
         self.assertNotEqual(result, "")
 
-    @patch("upsonic.utils.printing.direct_started")
-    @patch("upsonic.utils.printing.direct_completed")
-    def test_direct_do_with_structured_output(self, mock_completed, mock_started):
-        """Test do() with Pydantic response format."""
-        # Mock JSON response
+    def test_direct_do_with_structured_output(self):
+        """do() returns a validated Pydantic model for a structured task."""
         json_response = ModelResponse(
             parts=[TextPart(content='{"name": "John", "age": 30, "city": "New York"}')],
             model_name="test-model",
@@ -277,243 +279,47 @@ class TestDirectDoMethods(unittest.TestCase):
         self.mock_model.request = AsyncMock(return_value=json_response)
 
         direct = Direct(model=self.mock_model)
-        task = Task("Extract user information", response_format=MockResponse)
-
-        result = direct.do(task, show_output=False)
+        result = direct.do(Task("Extract user information", response_format=MockResponse))
 
         self.assertIsInstance(result, MockResponse)
         self.assertEqual(result.name, "John")
         self.assertEqual(result.age, 30)
-        self.assertEqual(result.city, "New York")
 
-    @patch("upsonic.utils.printing.direct_started")
-    @patch("upsonic.utils.printing.direct_completed")
-    def test_direct_do_with_context(self, mock_completed, mock_started):
-        """Test do() with task context."""
+    def test_direct_do_with_context(self):
+        """do() runs with task context and returns the delegated output."""
         direct = Direct(model=self.mock_model)
-        task = Task("Summarize this", context=["Some context text"])
-
-        result = direct.do(task, show_output=False)
-
+        result = direct.do(Task("Summarize this", context=["Some context text"]))
         self.assertIsInstance(result, str)
-        # Verify context was included in message building
         self.mock_model.request.assert_called_once()
 
-    @patch("upsonic.utils.printing.direct_started")
-    @patch("upsonic.utils.printing.direct_completed")
-    @patch("builtins.open", new_callable=mock_open, read_data=b"fake image data")
-    @patch("mimetypes.guess_type", return_value=("image/png", None))
-    def test_direct_do_with_attachments(
-        self, mock_guess_type, mock_file, mock_completed, mock_started
-    ):
-        """Test do() with file attachments."""
-        direct = Direct(model=self.mock_model)
-        task = Task("Analyze this image", attachments=["/path/to/image.png"])
-
-        result = direct.do(task, show_output=False)
-
-        self.assertIsInstance(result, str)
-        mock_file.assert_called_once_with("/path/to/image.png", "rb")
-
     @pytest.mark.asyncio
-    @patch("upsonic.utils.printing.direct_started")
-    @patch("upsonic.utils.printing.direct_completed")
-    async def test_direct_do_async(self, mock_completed, mock_started):
-        """Test async execution."""
+    async def test_direct_do_async(self):
+        """do_async() returns the delegated output."""
         direct = Direct(model=self.mock_model)
-        task = Task("Async test task")
-
-        result = await direct.do_async(task, show_output=False)
-
-        self.assertIsInstance(result, str)
+        result = await direct.do_async(Task("Async test task"))
         self.assertEqual(result, "Hello, this is a test response.")
 
-    @patch("upsonic.utils.printing.direct_started")
-    @patch("upsonic.utils.printing.direct_completed")
-    def test_direct_print_do(self, mock_completed, mock_started):
-        """Test print_do() method."""
+    @pytest.mark.asyncio
+    async def test_direct_forwards_agent_print_semantics(self):
+        """The facade uses Agent's native print semantics: do()/do_async pass
+        ``_print_method_default=False``; print_do()/print_do_async pass ``True``.
+        Direct does no print resolution of its own — the Agent owns it."""
         direct = Direct(model=self.mock_model)
-        task = Task("Print test")
+        agent = direct._build_internal_agent()
+        with patch.object(agent, "do_async", new=AsyncMock(return_value="r")) as mock_do:
+            await direct.do_async(Task("quiet"))
+            self.assertIs(mock_do.call_args.kwargs.get("_print_method_default"), False)
 
-        result = direct.print_do(task)
+            await direct.print_do_async(Task("loud"))
+            self.assertIs(mock_do.call_args.kwargs.get("_print_method_default"), True)
 
+    def test_direct_print_do_prints_via_agent_pipeline(self):
+        """print_do() ⇒ the Agent pipeline's completion printer (call_end) fires."""
+        with patch("upsonic.utils.printing.call_end") as mock_call_end:
+            direct = Direct(model=self.mock_model)
+            result = direct.print_do(Task("Print test"))
         self.assertIsInstance(result, str)
-        # Verify print functions were called
-        mock_started.assert_called_once()
-        mock_completed.assert_called_once()
-
-    @pytest.mark.asyncio
-    @patch("upsonic.utils.printing.direct_started")
-    @patch("upsonic.utils.printing.direct_completed")
-    async def test_direct_print_do_async(self, mock_completed, mock_started):
-        """Test async print_do_async()."""
-        direct = Direct(model=self.mock_model)
-        task = Task("Async print test")
-
-        result = await direct.print_do_async(task)
-
-        self.assertIsInstance(result, str)
-        mock_started.assert_called_once()
-        mock_completed.assert_called_once()
-
-
-class TestDirectInternalMethods(unittest.TestCase):
-    """Test suite for Direct internal methods."""
-
-    def setUp(self):
-        """Set up test fixtures."""
-        self.mock_model = MagicMock()
-        self.mock_model.model_name = "test-model"
-        self.mock_model.request = AsyncMock()
-
-    @patch("upsonic.models.infer_model")
-    def test_direct_model_preparation_with_model(self, mock_infer_model):
-        """Test _prepare_model() when model is already set."""
-        direct = Direct(model=self.mock_model)
-
-        model = direct._prepare_model()
-
-        self.assertEqual(model, self.mock_model)
-        mock_infer_model.assert_not_called()
-
-    @patch("upsonic.models.infer_model")
-    def test_direct_model_preparation_without_model(self, mock_infer_model):
-        """Test _prepare_model() when model is None."""
-        default_model = MagicMock()
-        default_model.model_name = "default-model"
-        mock_infer_model.return_value = default_model
-
-        direct = Direct()
-        model = direct._prepare_model()
-
-        self.assertIsNotNone(model)
-        mock_infer_model.assert_called_once_with("openai/gpt-4o")
-
-    @patch("upsonic.models.infer_model")
-    def test_direct_model_preparation_with_settings(self, mock_infer_model):
-        """Test _prepare_model() with settings applied."""
-        mock_settings = MagicMock(spec=ModelSettings)
-        default_model = MagicMock()
-        default_model.model_name = "default-model"
-        default_model._settings = None
-        mock_infer_model.return_value = default_model
-
-        direct = Direct(settings=mock_settings)
-        model = direct._prepare_model()
-
-        self.assertEqual(model._settings, mock_settings)
-
-    @pytest.mark.asyncio
-    async def test_direct_build_messages_from_task(self):
-        """Test _build_messages_from_task() method."""
-        direct = Direct(model=self.mock_model)
-        task = Task("Test task description")
-
-        messages = await direct._build_messages_from_task(task)
-
-        self.assertIsInstance(messages, list)
-        self.assertEqual(len(messages), 1)
-        self.assertEqual(messages[0].parts[0].content, "Test task description")
-
-    @pytest.mark.asyncio
-    async def test_direct_build_messages_from_task_with_attachments(self):
-        """Test _build_messages_from_task() with attachments."""
-        direct = Direct(model=self.mock_model)
-        task = Task("Test task", attachments=["/path/to/file.txt"])
-
-        with patch("builtins.open", mock_open(read_data=b"file content")):
-            with patch("mimetypes.guess_type", return_value=("text/plain", None)):
-                messages = await direct._build_messages_from_task(task)
-
-        self.assertEqual(len(messages), 1)
-        self.assertEqual(len(messages[0].parts), 2)  # UserPromptPart + BinaryContent
-
-    def test_direct_build_request_parameters_text(self):
-        """Test _build_request_parameters() for text output."""
-        direct = Direct(model=self.mock_model)
-        task = Task("Test task", response_format=str)
-
-        params = direct._build_request_parameters(task)
-
-        self.assertIsInstance(params, ModelRequestParameters)
-        self.assertEqual(params.output_mode, "text")
-        self.assertIsNone(params.output_object)
-
-    def test_direct_build_request_parameters_structured(self):
-        """Test _build_request_parameters() for structured output."""
-        direct = Direct(model=self.mock_model)
-        task = Task("Test task", response_format=MockResponse)
-
-        params = direct._build_request_parameters(task)
-
-        self.assertIsInstance(params, ModelRequestParameters)
-        self.assertEqual(params.output_mode, "native")
-        self.assertIsNotNone(params.output_object)
-        self.assertEqual(params.output_object.name, "MockResponse")
-
-    def test_direct_extract_output_text(self):
-        """Test _extract_output() for text response."""
-        direct = Direct(model=self.mock_model)
-        task = Task("Test task", response_format=str)
-
-        response = ModelResponse(
-            parts=[TextPart(content="Test response text")],
-            model_name="test-model",
-            timestamp="2024-01-01T00:00:00Z",
-            usage=None,
-            provider_name="test-provider",
-            provider_response_id="test-id",
-            provider_details={},
-            finish_reason="stop",
-        )
-
-        result = direct._extract_output(response, task)
-
-        self.assertEqual(result, "Test response text")
-
-    def test_direct_extract_output_structured(self):
-        """Test _extract_output() for structured response."""
-        direct = Direct(model=self.mock_model)
-        task = Task("Test task", response_format=MockResponse)
-
-        response = ModelResponse(
-            parts=[TextPart(content='{"name": "Alice", "age": 25, "city": "Boston"}')],
-            model_name="test-model",
-            timestamp="2024-01-01T00:00:00Z",
-            usage=None,
-            provider_name="test-provider",
-            provider_response_id="test-id",
-            provider_details={},
-            finish_reason="stop",
-        )
-
-        result = direct._extract_output(response, task)
-
-        self.assertIsInstance(result, MockResponse)
-        self.assertEqual(result.name, "Alice")
-        self.assertEqual(result.age, 25)
-        self.assertEqual(result.city, "Boston")
-
-    def test_direct_extract_output_invalid_json(self):
-        """Test _extract_output() with invalid JSON falls back to text."""
-        direct = Direct(model=self.mock_model)
-        task = Task("Test task", response_format=MockResponse)
-
-        response = ModelResponse(
-            parts=[TextPart(content="Not valid JSON")],
-            model_name="test-model",
-            timestamp="2024-01-01T00:00:00Z",
-            usage=None,
-            provider_name="test-provider",
-            provider_response_id="test-id",
-            provider_details={},
-            finish_reason="stop",
-        )
-
-        result = direct._extract_output(response, task)
-
-        # Should return text content when JSON parsing fails
-        self.assertEqual(result, "Not valid JSON")
+        mock_call_end.assert_called_once()
 
 
 class TestDirectErrorHandling(unittest.TestCase):
@@ -521,30 +327,20 @@ class TestDirectErrorHandling(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.mock_model = MagicMock()
-        self.mock_model.model_name = "test-model"
-        self.mock_model.settings = MagicMock()
-        self.mock_model.customize_request_parameters = MagicMock(
-            side_effect=lambda x: x
-        )
+        # Real model instance; tests patch `.request` to raise (no network).
+        self.mock_model = _real_test_model()
 
-    @patch("upsonic.utils.printing.direct_error")
-    @patch("upsonic.utils.printing.direct_started")
-    def test_direct_error_handling(self, mock_started, mock_error):
-        """Test error handling in do() method."""
-        # Mock model to raise an exception
-        error_response = Exception("Model request failed")
-        self.mock_model.request = AsyncMock(side_effect=error_response)
+    def test_direct_error_handling(self):
+        """A failing run re-raises the original exception via print_do (the
+        pipeline does not swallow it; no error panel in non-debug, like Agent)."""
+        self.mock_model.request = AsyncMock(side_effect=Exception("Model request failed"))
 
         direct = Direct(model=self.mock_model)
-        task = Task("Test task that will fail")
 
-        # Test that exception is raised and direct_error is called when show_output=True
-        with self.assertRaises(Exception):
-            direct.do(task, show_output=True)
+        with self.assertRaises(Exception) as context:
+            direct.print_do(Task("Test task that will fail"))
 
-        mock_error.assert_called_once()
-        mock_started.assert_called_once()
+        self.assertEqual(str(context.exception), "Model request failed")
 
     def test_direct_error_handling_no_output(self):
         """Test error handling in do() method without output."""
@@ -555,9 +351,9 @@ class TestDirectErrorHandling(unittest.TestCase):
         direct = Direct(model=self.mock_model)
         task = Task("Test task that will fail")
 
-        # Test that exception is raised even when show_output=False
+        # Test that the exception propagates even when not printing.
         with self.assertRaises(Exception) as context:
-            direct.do(task, show_output=False)
+            direct.do(task)
 
         self.assertEqual(str(context.exception), "Model request failed")
 

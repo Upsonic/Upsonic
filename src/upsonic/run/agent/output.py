@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from upsonic.run.pipeline.stats import PipelineExecutionStats
     from upsonic.tasks.tasks import Task
     from upsonic.schemas.kb_filter import KBFilterExpr
+    from upsonic.graph.graph import State
 
 
 @dataclass
@@ -143,6 +144,9 @@ class AgentRunOutput:
     # --- Metadata ---
     metadata: Optional[Dict[str, Any]] = None
     session_state: Optional[Dict[str, Any]] = None
+    # Graph execution state, threaded through the pipeline so ContextBuildStep
+    # can resolve TaskOutputSource items. None for non-Graph runs.
+    state: Optional["State"] = None
 
     # --- Skill metrics ---
     skill_metrics: Optional[Dict[str, Any]] = None

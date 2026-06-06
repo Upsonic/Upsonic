@@ -1,44 +1,43 @@
 from __future__ import annotations
 
-import asyncio
-from typing import Any, Optional, Union
+from typing import Any, AsyncIterator, Iterator, Optional, Union
 
 from upsonic.models.settings import ModelSettings
 from upsonic.tasks.tasks import Task
-from upsonic.output import OutputObjectDefinition
 from upsonic.profiles import ModelProfileSpec
 from upsonic.providers import Provider
-from upsonic.utils.logging_config import get_env_bool
 
 
 class Direct:
     """Simplified, high-speed interface for LLM interactions.
-    
-    This class provides a streamlined way to interact with LLMs without
-    the complexity of memory, knowledge base, or tool calls. It focuses
-    on maximum speed and direct data retrieval.
-    
+
+    Direct executes a task as a *bare* LLM call — no memory, knowledge base,
+    tools, reflection, reliability, or policies. It is a thin facade over a
+    minimally-configured ``Agent`` running the reduced ``"direct"`` pipeline
+    profile, and delegates execution, output extraction, usage/cost/timing
+    metrics, and printing entirely to that pipeline.
+
     Example:
         ```python
         from upsonic import Direct, Task
         from pydantic import BaseModel
-        
+
         my_direct = Direct(model="openai/gpt-4o")
-        
+
         class MyResponse(BaseModel):
             tax_number: str
-        
+
         my_task = Task(
-            "Read the paper and return me the tax number", 
-            context=["my.pdf", "my.png"], 
+            "Read the paper and return me the tax number",
+            context=["my.pdf", "my.png"],
             response_format=MyResponse
         )
-        
+
         result = my_direct.do(my_task)
         print(result)
         ```
     """
-    
+
     def __init__(
         self,
         model: Union[str, Any, None] = None,
@@ -49,28 +48,33 @@ class Direct:
         print: Optional[bool] = None
     ):
         """Initialize the Direct instance.
-        
+
         Args:
-            model: Model name (e.g., "openai/gpt-4o"), Model instance, or None
-            settings: Optional model settings
-            profile: Optional model profile
-            provider: Optional provider name or Provider instance
-            print: Enable printing of direct output and execution details. If None, reads from UPSONIC_DIRECT_PRINT env variable. If set, overrides env variable.
+            model: Model name (e.g., "openai/gpt-4o"), Model instance, or None.
+            settings: Optional model settings.
+            profile: Optional model profile.
+            provider: Optional provider name or Provider instance.
+            print: Print behaviour, forwarded to the internal Agent (identical
+                semantics to ``Agent``'s ``print``): if None, ``do()`` does not
+                print unless ``UPSONIC_AGENT_PRINT=true``, while ``print_do()``
+                does; if set, it overrides the method default. ``UPSONIC_AGENT_PRINT``
+                overrides everything.
         """
-        self._model = None
+        self._model: Any = None
         self._settings = settings
         self._profile = profile
         self._provider = provider
-        
-        # Handle print flag: parameter overrides env variable
-        if print is not None:
-            self.print = print
-        else:
-            self.print = get_env_bool("UPSONIC_DIRECT_PRINT", default=True)
-        
+        # Forwarded to the internal Agent, which owns all print resolution
+        # (constructor ``print`` / ``UPSONIC_AGENT_PRINT`` / method default).
+        self._print = print
+        # Internal Agent that runs the reduced pipeline. Built lazily and cached;
+        # the per-instance config is fixed (with_* returns new instances), so
+        # reuse across do() calls is safe.
+        self._internal_agent: Optional[Any] = None
+
         if model is not None:
             self._set_model(model)
-    
+
     def _set_model(self, model: Union[str, Any]) -> None:
         """Set the model for this Direct instance."""
         if isinstance(model, str):
@@ -80,13 +84,15 @@ class Direct:
             self._model = model
         else:
             raise ValueError(f"Invalid model type: {type(model)}")
-    
+        # A new model invalidates any cached internal agent.
+        self._internal_agent = None
+
     def with_model(self, model: Union[str, Any]) -> "Direct":
         """Create a new Direct instance with the specified model.
-        
+
         Args:
             model: Model name or Model instance
-            
+
         Returns:
             New Direct instance with the specified model
         """
@@ -94,17 +100,17 @@ class Direct:
             settings=self._settings,
             profile=self._profile,
             provider=self._provider,
-            print=self.print
+            print=self._print
         )
         new_direct._set_model(model)
         return new_direct
-    
+
     def with_settings(self, settings: ModelSettings) -> "Direct":
         """Create a new Direct instance with the specified settings.
-        
+
         Args:
             settings: Model settings
-            
+
         Returns:
             New Direct instance with the specified settings
         """
@@ -113,16 +119,16 @@ class Direct:
             settings=settings,
             profile=self._profile,
             provider=self._provider,
-            print=self.print
+            print=self._print
         )
         return new_direct
-    
+
     def with_profile(self, profile: ModelProfileSpec) -> "Direct":
         """Create a new Direct instance with the specified profile.
-        
+
         Args:
             profile: Model profile
-            
+
         Returns:
             New Direct instance with the specified profile
         """
@@ -131,16 +137,16 @@ class Direct:
             settings=self._settings,
             profile=profile,
             provider=self._provider,
-            print=self.print
+            print=self._print
         )
         return new_direct
-    
+
     def with_provider(self, provider: Union[str, Provider]) -> "Direct":
         """Create a new Direct instance with the specified provider.
-        
+
         Args:
             provider: Provider name or Provider instance
-            
+
         Returns:
             New Direct instance with the specified provider
         """
@@ -149,389 +155,229 @@ class Direct:
             settings=self._settings,
             profile=self._profile,
             provider=provider,
-            print=self.print
+            print=self._print
         )
         return new_direct
-    
-    def _prepare_model(self) -> Any:
-        """Prepare the model for use, creating one if necessary."""
+
+    def _resolve_model(self) -> Any:
+        """Resolve and cache the concrete model, applying settings and profile.
+
+        Creates the default model when none was supplied and applies any
+        configured settings/profile onto the model object.
+
+        Returns:
+            The resolved model instance, also stored on ``self._model``.
+        """
         if self._model is None:
-            # Use default model if none specified
             from upsonic.models import infer_model
             self._model = infer_model("openai/gpt-4o")
-        
-        # Apply settings and profile if provided
+
         if self._settings is not None:
             self._model._settings = self._settings
-        
+
         if self._profile is not None:
             self._model._profile = self._profile
-        
+
         return self._model
-    
-    async def _build_messages_from_task(self, task: Task, state: Optional[Any] = None) -> list:
-        """Build messages from a Task object.
-        
-        Args:
-            task: Task object to build messages from
-            state: Optional state object for Graph execution (used to get previous task outputs)
-            
+
+    def _build_internal_agent(self) -> Any:
+        """Build and cache the internal Agent that runs the reduced pipeline.
+
+        The Agent is configured for a bare LLM call: no memory, knowledge base,
+        tools, reflection, reliability, or policies. The ``print`` setting is
+        forwarded so the Agent owns all print resolution.
+
         Returns:
-            List of ModelRequest objects
+            The cached internal Agent, configured with the ``"direct"`` profile.
         """
-        from upsonic.messages import ModelRequest, UserPromptPart, BinaryContent, SystemPromptPart
-        from upsonic.context.sources import TaskOutputSource
-        import mimetypes
-        
-        parts = []
-        
-        # Build context from task.context if present (similar to Agent's ContextManager)
-        context_parts = []
-        if task.context:
-            for item in task.context:
-                if isinstance(item, TaskOutputSource) and state:
-                    # Get output from previous task in graph
-                    try:
-                        source_output = state.get_task_output(item.task_description_or_id)
-                        if source_output is not None:
-                            # Format the output
-                            output_str = self._format_task_output(source_output)
-                            context_parts.append(
-                                f"<PreviousTaskNodeOutput id='{item.task_description_or_id}'>\n{output_str}\n</PreviousTaskNodeOutput>"
-                            )
-                            # Debug: Log that we're using previous task output
-                            from upsonic.utils.printing import info_log
-                            info_log(f"Direct: Using output from previous task '{item.task_description_or_id}' (length: {len(output_str)} chars)", "Direct")
-                        else:
-                            from upsonic.utils.printing import warning_log
-                            warning_log(f"Direct: No output found for task '{item.task_description_or_id}'", "Direct")
-                    except Exception as e:
-                        from upsonic.utils.printing import warning_log
-                        warning_log(f"Error processing TaskOutputSource '{item.task_description_or_id}': {str(e)}", "Direct")
-                elif isinstance(item, str):
-                    context_parts.append(item)
-        
-        # Add context as system prompt if we have context parts
-        if context_parts:
-            context_str = "<Context>\n" + "\n\n".join(context_parts) + "\n</Context>"
-            parts.append(SystemPromptPart(content=context_str))
-        
-        # Start with the task description
-        user_part = UserPromptPart(content=task.description)
-        parts.append(user_part)
-        
-        # Add attachments if present
-        if task.attachments:
-            for attachment_path in task.attachments:
-                try:
-                    with open(attachment_path, "rb") as attachment_file:
-                        attachment_data = attachment_file.read()
-                    
-                    # Determine media type
-                    media_type, _ = mimetypes.guess_type(attachment_path)
-                    if media_type is None:
-                        media_type = "application/octet-stream"
-                    
-                    parts.append(BinaryContent(data=attachment_data, media_type=media_type))
-                except Exception as e:
-                    print(f"Warning: Could not load attachment {attachment_path}: {e}")
-        
-        return [ModelRequest(parts=parts)]
-    
-    def _format_task_output(self, source_output: Any) -> str:
-        """Format task output with serialization (same as Agent's ContextManager)."""
-        try:
-            import json
-            if hasattr(source_output, 'model_dump_json'):
-                return source_output.model_dump_json(indent=2)
-            elif hasattr(source_output, 'model_dump'):
-                return json.dumps(source_output.model_dump(), default=str, indent=2)
-            elif hasattr(source_output, 'to_dict'):
-                return json.dumps(source_output.to_dict(), default=str, indent=2)
-            elif hasattr(source_output, '__dict__'):
-                return json.dumps(source_output.__dict__, default=str, indent=2)
-            else:
-                return str(source_output)
-        except Exception as e:
-            from upsonic.utils.printing import error_log
-            error_log(f"Error formatting task output: {str(e)}", "Direct")
-            return str(source_output)
-    
-    def _build_request_parameters(self, task: Task):
-        """Build model request parameters from task."""
-        from upsonic.models import ModelRequestParameters
-        from pydantic import BaseModel
-        
-        # Handle response format
-        output_mode = 'text'
-        output_object = None
-        allow_text_output = True
-        
-        if task.response_format and task.response_format != str and task.response_format is not str:
-            if isinstance(task.response_format, type) and issubclass(task.response_format, BaseModel):
-                output_mode = 'native'
-                allow_text_output = False
-                
-                schema = task.response_format.model_json_schema()
-                output_object = OutputObjectDefinition(
-                    json_schema=schema,
-                    name=task.response_format.__name__,
-                    description=task.response_format.__doc__,
-                    strict=True
-                )
-        
-        return ModelRequestParameters(
-            function_tools=[],
-            builtin_tools=[],
-            output_mode=output_mode,
-            output_object=output_object,
-            allow_text_output=allow_text_output
-        )
-    
-    def _extract_output(self, response, task: Task) -> Any:
-        """Extract output from model response."""
-        from upsonic.messages import TextPart, FilePart, BinaryImage
-        
-        # Check for image outputs first
-        image_parts = [
-            part.content for part in response.parts 
-            if isinstance(part, FilePart) and isinstance(part.content, BinaryImage)
-        ]
-        
-        if image_parts:
-            # If there are multiple images, return a list; if single, return the image data
-            if len(image_parts) == 1:
-                return image_parts[0].data
-            else:
-                return [img.data for img in image_parts]
-        
-        # Extract text parts
-        text_parts = [
-            part.content for part in response.parts 
-            if isinstance(part, TextPart)
-        ]
-        
-        if task.response_format == str or task.response_format is str:
-            return "".join(text_parts)
-        
-        text_content = "".join(text_parts)
-        
-        if task.response_format and text_content:
-            try:
-                import json
-                parsed = json.loads(text_content)
-                if hasattr(task.response_format, 'model_validate'):
-                    return task.response_format.model_validate(parsed)
-                return parsed
-            except Exception:
-                # If parsing fails, return as text
-                pass
-        
-        # Default: return as string
-        return text_content
-    
-    def do(self, task: Task, show_output: Optional[bool] = None) -> Any:
-        """Execute a task synchronously.
-        
+        if self._internal_agent is None:
+            from upsonic.agent.agent import Agent
+
+            model = self._resolve_model()
+            agent = Agent(
+                model=model,
+                memory=None,
+                tools=[],
+                reflection=False,
+                print=self._print,
+            )
+            agent._pipeline_profile = "direct"
+            self._internal_agent = agent
+        return self._internal_agent
+
+    def do(self, task: Task) -> Any:
+        """Execute a task synchronously (does not print by default).
+
+        Print behaviour is identical to ``Agent.do``: nothing is printed unless
+        the constructor ``print=True`` or ``UPSONIC_AGENT_PRINT=true``.
+
         Args:
-            task: Task object containing description, context, and response format
-            show_output: Whether to show visual output. If None, uses self.print flag.
-            
+            task: Task object containing description, context, and response format.
+
         Returns:
-            The model's response (extracted output)
+            The model's response (extracted output).
         """
-        print_output = show_output if show_output is not None else self.print
-        try:
-            loop = asyncio.get_running_loop()
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, self.do_async(task, show_output=print_output))
-                return future.result()
-        except RuntimeError:
-            return asyncio.run(self.do_async(task, show_output=print_output))
-    
+        return self._build_internal_agent().do(task)
+
     async def do_async(
-        self, 
-        task: Task, 
-        show_output: Optional[bool] = None,
+        self,
+        task: Task,
         state: Optional[Any] = None,
         *,
         graph_execution_id: Optional[str] = None
     ) -> Any:
-        """Execute a task asynchronously.
-        
+        """Execute a task asynchronously by delegating to the internal Agent.
+
+        The Agent pipeline owns execution, output extraction, metrics, and
+        printing. Printing follows ``Agent.do_async`` semantics (does not print
+        by default). ``TaskOutputSource`` items in ``task.context`` are resolved
+        inside the pipeline from ``state``.
+
         Args:
-            task: Task object containing description, context, and response format
-            show_output: Whether to show visual output. If None, uses self.print flag.
-            state: Optional state object (for Graph compatibility, not used by Direct)
-            graph_execution_id: Optional graph execution ID (for Graph compatibility, not used by Direct)
-            
+            task: Task object containing description, context, and response format.
+            state: Optional Graph execution state (resolves ``TaskOutputSource``).
+            graph_execution_id: Optional graph execution ID (Graph compatibility).
+
         Returns:
-            The model's response (extracted output)
+            The model's response (extracted output).
         """
-        import time
-        
-        # Use show_output parameter if provided, otherwise use self.print
-        print_output = show_output if show_output is not None else self.print
-        
-        model = self._prepare_model()
+        return await self._build_internal_agent().do_async(
+            task,
+            state=state,
+            graph_execution_id=graph_execution_id,
+            _print_method_default=False,
+        )
 
-        # Get response format name
-        response_format_name = "str"
-        if task.response_format and task.response_format != str:
-            if hasattr(task.response_format, '__name__'):
-                response_format_name = task.response_format.__name__
-            else:
-                response_format_name = str(task.response_format)
-        
-        # Show start message
-        if print_output:
-            from upsonic.utils.printing import direct_started
-            direct_started(
-                model_name=model.model_name,
-                task_description=task.description,
-                response_format=response_format_name
-            )
-        
-        start_time = time.time()
-        task.start_time = int(start_time)
-
-        from upsonic.usage import TaskUsage
-        task._usage = TaskUsage()
-        task._usage.start_timer()
-        
-        try:
-            messages = await self._build_messages_from_task(task, state=state)
-            
-            model_params = self._build_request_parameters(task)
-            model_params = model.customize_request_parameters(model_params)
-            
-            _model_start: float = time.time()
-            response = await model.request(
-                messages=messages,
-                model_settings=model.settings,
-                model_request_parameters=model_params
-            )
-            _model_elapsed: float = time.time() - _model_start
-            task._usage.add_model_execution_time(_model_elapsed)
-            
-            end_time = time.time()
-            task.end_time = int(end_time)
-
-            result = self._extract_output(response, task)
-            task._response = result
-
-            # Accumulate token usage BEFORE stopping the timer so that
-            # all metrics are set when stop_timer finalizes duration.
-            if hasattr(response, 'usage') and response.usage:
-                task._usage.incr(response.usage)
-                from upsonic.usage_registry import record_request_usage
-                record_request_usage(
-                    response.usage,
-                    model=getattr(model, "model_name", None),
-                    pipeline_step="direct",
-                    model_execution_time=_model_elapsed,
-                )
-
-            task._usage.stop_timer()
-            
-            usage: dict[str, int] = {
-                'input_tokens': task._usage.input_tokens,
-                'output_tokens': task._usage.output_tokens,
-            }
-            
-            # Derive start/end from model_execution_time so call_end
-            # displays the accurate LLM execution time, not wall-clock.
-            _met = task._usage.model_execution_time
-            if _met is not None:
-                _effective_end = time.time()
-                _effective_start = _effective_end - _met
-            else:
-                _effective_end = end_time
-                _effective_start = start_time
-
-            from upsonic.utils.printing import call_end
-            call_end(
-                result=result,
-                model=model,
-                response_format=task.response_format if task.response_format is not None else str,
-                start_time=_effective_start,
-                end_time=_effective_end,
-                usage=usage,
-                tool_usage=[],
-                debug=False,
-                print_output=print_output
-            )
-            
-            # Show completion message with metrics (optional, for display)
-            if print_output:
-                from upsonic.utils.printing import direct_completed
-                direct_completed(
-                    result=result,
-                    model=model,
-                    response_format=response_format_name,
-                    start_time=start_time,
-                    end_time=end_time,
-                    usage=usage,
-                    debug=False,
-                    task_description=task.description
-                )
-            
-            return result
-            
-        except Exception as e:
-            end_time = time.time()
-            
-            if print_output:
-                from upsonic.utils.printing import direct_error
-                direct_error(
-                    error_message=str(e),
-                    model_name=model.model_name if model else None,
-                    task_description=task.description,
-                    execution_time=end_time - start_time
-                )
-            raise
-    
     def print_do(self, task: Task) -> Any:
-        """Execute a task synchronously and print the result with visual output.
-        
+        """Execute a task synchronously and print the result.
+
+        Print behaviour is identical to ``Agent.print_do``: the result is printed
+        unless ``print=False`` or ``UPSONIC_AGENT_PRINT=false`` overrides it.
+
         Args:
-            task: Task object containing description, context, and response format
-            
+            task: Task object containing description, context, and response format.
+
         Returns:
-            The model's response (extracted output)
+            The model's response (extracted output).
         """
-        # Force print output for this convenience method
-        return self.do(task, show_output=True)
-    
-    async def print_do_async(self, task: Task) -> Any:
-        """Execute a task asynchronously and print the result with visual output.
-        
+        return self._build_internal_agent().print_do(task)
+
+    async def print_do_async(
+        self,
+        task: Task,
+        state: Optional[Any] = None,
+        *,
+        graph_execution_id: Optional[str] = None
+    ) -> Any:
+        """Execute a task asynchronously and print the result.
+
+        Print behaviour is identical to ``Agent.print_do_async``: the result is
+        printed unless overridden by ``print=False`` / ``UPSONIC_AGENT_PRINT``.
+
         Args:
-            task: Task object containing description, context, and response format
-            
+            task: Task object containing description, context, and response format.
+            state: Optional Graph execution state (resolves ``TaskOutputSource``).
+            graph_execution_id: Optional graph execution ID (Graph compatibility).
+
         Returns:
-            The model's response (extracted output)
+            The model's response (extracted output).
         """
-        # Force print output for this convenience method
-        return await self.do_async(task, show_output=True)
-    
+        return await self._build_internal_agent().do_async(
+            task,
+            state=state,
+            graph_execution_id=graph_execution_id,
+            _print_method_default=True,
+        )
+
+    def stream(
+        self,
+        task: Task,
+        *,
+        events: bool = False,
+        state: Optional[Any] = None,
+    ) -> Iterator[Union[str, Any]]:
+        """Stream a task synchronously, yielding output as it arrives.
+
+        Delegates to ``Agent.stream`` on the internal Agent, which runs the
+        reduced ``"direct"`` streaming pipeline — a bare streaming LLM call with
+        no memory, knowledge base, tools, reflection, reliability, or policies.
+        For async streaming use ``astream``.
+
+        Args:
+            task: Task object containing description, context, and response format.
+            events: If ``True`` yield ``AgentStreamEvent`` objects; if ``False``
+                (default) yield text chunks (``str``).
+            state: Optional Graph execution state (resolves ``TaskOutputSource``).
+
+        Returns:
+            An iterator over text chunks, or stream events when ``events=True``.
+        """
+        return self._build_internal_agent().stream(task, events=events, state=state)
+
+    def astream(
+        self,
+        task: Task,
+        *,
+        events: bool = False,
+        state: Optional[Any] = None,
+    ) -> AsyncIterator[Union[str, Any]]:
+        """Stream a task asynchronously, yielding output as it arrives.
+
+        Delegates to ``Agent.astream`` on the internal Agent, which runs the
+        reduced ``"direct"`` streaming pipeline — a bare streaming LLM call with
+        no memory, knowledge base, tools, reflection, reliability, or policies.
+
+        Print behaviour follows ``Agent`` streaming: the start/metrics panels are
+        shown only when the constructor ``print=True`` or
+        ``UPSONIC_AGENT_PRINT=true``.
+
+        Args:
+            task: Task object containing description, context, and response format.
+            events: If ``True`` yield ``AgentStreamEvent`` objects; if ``False``
+                (default) yield text chunks (``str``).
+            state: Optional Graph execution state (resolves ``TaskOutputSource``).
+
+        Returns:
+            An async iterator over text chunks, or stream events when
+            ``events=True``.
+        """
+        return self._build_internal_agent().astream(task, events=events, state=state)
+
     @property
     def model(self) -> Optional[Any]:
         """Get the current model."""
         return self._model
-    
+
+    @property
+    def model_name(self) -> Optional[str]:
+        """Get the current model's name, or ``None`` if no model is set yet."""
+        return getattr(self._model, "model_name", None)
+
     @property
     def settings(self) -> Optional[ModelSettings]:
         """Get the current settings."""
         return self._settings
-    
+
     @property
     def profile(self) -> Optional[ModelProfileSpec]:
         """Get the current profile."""
         return self._profile
-    
+
     @property
     def provider(self) -> Optional[Union[str, Provider]]:
         """Get the current provider."""
         return self._provider
+
+    @property
+    def usage(self) -> Any:
+        """Aggregated token / cost / timing usage for this Direct instance.
+
+        Delegates to the internal Agent's :pyattr:`Agent.usage` — the single
+        source of truth — so it is shape-compatible with ``Agent.usage``
+        (input_tokens, output_tokens, requests, cost, duration, ...) and
+        accumulates across every ``do()`` / ``do_async()`` call.
+
+        Returns:
+            An ``AggregatedUsage`` view of this instance's usage.
+        """
+        return self._build_internal_agent().usage

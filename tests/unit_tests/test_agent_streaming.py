@@ -468,13 +468,14 @@ class TestStreamingPipelineComposition:
         assert finalization_idx < memory_idx, "Memory tracking must come after finalization"
         assert memory_idx < call_mgmt_idx, "Call management must run after memory tracking (last step)"
 
-    def test_streaming_and_direct_pipelines_share_common_steps(self, agent):
-        """Streaming and direct pipelines should share the same pre-execution steps."""
+    def test_streaming_and_agent_pipelines_share_common_steps(self, agent):
+        """Streaming and the full (agent-profile) pipeline should share the same
+        pre-execution steps."""
         streaming_steps = agent._create_streaming_pipeline_steps()
-        direct_steps = agent._create_direct_pipeline_steps()
+        agent_steps = agent._create_agent_pipeline_steps()
 
         streaming_names = [s.name for s in streaming_steps]
-        direct_names = [s.name for s in direct_steps]
+        agent_names = [s.name for s in agent_steps]
 
         # Steps 0-13 should be identical between both pipelines
         shared_prefix = [
@@ -486,7 +487,7 @@ class TestStreamingPipelineComposition:
         ]
         for step_name in shared_prefix:
             assert step_name in streaming_names, f"Streaming missing shared step: {step_name}"
-            assert step_name in direct_names, f"Direct missing shared step: {step_name}"
+            assert step_name in agent_names, f"Agent pipeline missing shared step: {step_name}"
 
     def test_streaming_pipeline_tool_count_reset(self, agent):
         """astream() should reset _tool_call_count for each fresh run."""
