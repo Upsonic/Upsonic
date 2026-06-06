@@ -101,7 +101,7 @@ async def test_direct_image_generation(temp_dir):
     output_buffer = StringIO()
     try:
         with redirect_stdout(output_buffer):
-            result = await direct.do_async(task, show_output=False)
+            result = await direct.do_async(task)
         
         output = output_buffer.getvalue()
         

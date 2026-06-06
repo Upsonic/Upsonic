@@ -244,7 +244,7 @@ class Simulation:
         
         while attempt <= self._max_retries:
             try:
-                result = await self._direct.do_async(task, show_output=False)
+                result = await self._direct.do_async(task)
                 break
             except Exception as e:
                 last_error = e

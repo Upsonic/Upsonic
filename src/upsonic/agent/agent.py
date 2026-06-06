@@ -386,6 +386,12 @@ class Agent(BaseAgent):
         self.model = infer_model(model)
         self.model_name=model
 
+        # Pipeline profile selects which non-streaming pipeline `do_async` runs:
+        #   "agent"  -> the full pipeline (`_create_agent_pipeline_steps`, default)
+        #   "direct" -> the reduced fast-path pipeline (`_create_direct_pipeline_steps`)
+        # `Direct` sets this to "direct" on its internal Agent.
+        self._pipeline_profile: str = "agent"
+
         self._tracing_provider, self._instrument_settings, self._otel = self._resolve_instrumentation(instrument)
         self.promptlayer: Optional["PromptLayer"] = promptlayer
         self._suppress_promptlayer_logging: bool = False
@@ -3780,6 +3786,7 @@ class Agent(BaseAgent):
             self._agent_run_output = _resume_output
             self._agent_run_output.is_streaming = False
             self._agent_run_output.print_flag = resolved_print_flag
+            self._agent_run_output.state = state
         else:
             run_id = str(uuid.uuid4())
             self.run_id = run_id
@@ -3800,6 +3807,7 @@ class Agent(BaseAgent):
                     is_streaming=False
                 )
                 self._agent_run_output.print_flag = resolved_print_flag
+                self._agent_run_output.state = state
                 if task is not None:
                     task.run_id = run_id
 
@@ -3966,7 +3974,7 @@ class Agent(BaseAgent):
             from upsonic.exceptions import ExecutionTimeoutError
 
             pipeline = PipelineManager(
-                steps=self._create_direct_pipeline_steps(),
+                steps=self._select_pipeline_steps(),
                 task=self._agent_run_output.task,
                 agent=self,
                 model=self.model,
@@ -3994,7 +4002,7 @@ class Agent(BaseAgent):
 
         else:
             pipeline = PipelineManager(
-                steps=self._create_direct_pipeline_steps(),
+                steps=self._select_pipeline_steps(),
                 task=self._agent_run_output.task,
                 agent=self,
                 model=self.model,
@@ -4626,12 +4634,16 @@ class Agent(BaseAgent):
         
         return False, None
     
-    def _create_direct_pipeline_steps(self) -> List[Any]:
+    def _create_agent_pipeline_steps(self) -> List[Any]:
         """
-        Create pipeline steps for direct call mode (do_async).
-        
+        Create the full (agent-profile) non-streaming pipeline for do_async.
+
+        This is the canonical 24-step pipeline selected when
+        ``_pipeline_profile == "agent"`` (the default). ``Direct`` selects the
+        reduced ``_create_direct_pipeline_steps`` instead.
+
         Returns:
-            List of all pipeline steps for direct execution
+            List of all pipeline steps for full agent execution
         """
         from upsonic.agent.pipeline import (
             InitializationStep, CacheCheckStep, UserPolicyStep,
@@ -4673,7 +4685,58 @@ class Agent(BaseAgent):
             MemorySaveStep(),              # 22
             CallManagementStep(),          # 23 <-- LAST: calls task_end() & prints metrics
         ]
-    
+
+    def _create_direct_pipeline_steps(self) -> List[Any]:
+        """Build the reduced pipeline for the ``Direct`` fast path: a bare LLM call.
+
+        This is the full agent pipeline minus the optional/expensive steps
+        (storage, cache, policies, reflection, reliability, task-management,
+        memory-save). The retained steps include the structural initializers that
+        later steps depend on — e.g. ChatHistoryStep is the sole producer of
+        ``context.chat_history`` (it yields ``[]`` when there is no memory), and
+        ContextBuildStep is the sole renderer of ``task.context`` into
+        ``task.context_formatted``. Selected when ``_pipeline_profile == "direct"``.
+
+        Returns:
+            The ordered list of pipeline steps for the reduced direct pipeline.
+        """
+        from upsonic.agent.pipeline import (
+            InitializationStep, ModelSelectionStep,
+            MemoryPrepareStep, SystemPromptBuildStep, ContextBuildStep,
+            ChatHistoryStep, UserInputBuildStep, MessageAssemblyStep,
+            CallManagerSetupStep, ModelExecutionStep, ResponseProcessingStep,
+            FinalizationStep, CallManagementStep,
+        )
+
+        return [
+            InitializationStep(),          # init counters / usage
+            ModelSelectionStep(),          # model metadata
+            MemoryPrepareStep(),           # registers memory_manager (no-op when memory=None)
+            SystemPromptBuildStep(),       # registers system_prompt_manager
+            ContextBuildStep(),            # renders task.context -> context_formatted
+            ChatHistoryStep(),             # sole producer of context.chat_history (=[])
+            UserInputBuildStep(),          # builds run_input.input from prompt + context
+            MessageAssemblyStep(),         # assembles ModelRequest
+            CallManagerSetupStep(),        # registers call_manager
+            ModelExecutionStep(),          # the LLM call
+            ResponseProcessingStep(),      # extract output
+            FinalizationStep(),            # cleanup / deanonymize
+            CallManagementStep(),          # usage logging
+        ]
+
+    def _select_pipeline_steps(self) -> List[Any]:
+        """Choose the non-streaming pipeline step list for the active profile.
+
+        ``_pipeline_profile == "direct"`` selects the reduced fast-path pipeline;
+        ``"agent"`` (the default) selects the full pipeline.
+
+        Returns:
+            The ordered list of pipeline steps for the active profile.
+        """
+        if self._pipeline_profile == "direct":
+            return self._create_direct_pipeline_steps()
+        return self._create_agent_pipeline_steps()
+
     def _get_step_index_by_name(self, step_name: str, is_streaming: bool = False) -> int:
         """
         Get the index of a pipeline step by its name.
@@ -4692,13 +4755,13 @@ class Agent(BaseAgent):
         Raises:
             ValueError: If the step is not found
         """
-        steps = self._create_streaming_pipeline_steps() if is_streaming else self._create_direct_pipeline_steps()
-        
+        steps = self._create_streaming_pipeline_steps() if is_streaming else self._select_pipeline_steps()
+
         for i, step in enumerate(steps):
             if step.name == step_name:
                 return i
-        
-        raise ValueError(f"Step '{step_name}' not found in {'streaming' if is_streaming else 'direct'} pipeline")
+
+        raise ValueError(f"Step '{step_name}' not found in {'streaming' if is_streaming else 'non-streaming'} pipeline")
     
     def _create_streaming_pipeline_steps(self) -> List[Any]:
         """
@@ -4759,7 +4822,7 @@ class Agent(BaseAgent):
         """
         if is_streaming:
             return self._create_streaming_pipeline_steps()
-        return self._create_direct_pipeline_steps()
+        return self._create_agent_pipeline_steps()
     
     async def _inject_external_tool_results(
         self, 

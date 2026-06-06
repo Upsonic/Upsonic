@@ -66,8 +66,11 @@ class InitializationStep(Step):
             # Check print flag from context (thread-safe, set per-run)
             should_print = context.print_flag
             if should_print:
-                from upsonic.utils.printing import agent_started
-                agent_started(agent.get_agent_id())
+                from upsonic.utils.printing import agent_started, pipeline_label
+                agent_started(
+                    agent.get_agent_id(),
+                    label=pipeline_label(getattr(agent, "_pipeline_profile", "agent")),
+                )
 
             context.tool_call_count = 0
             agent.current_task = context.task
@@ -1018,7 +1021,7 @@ class ContextBuildStep(Step):
             if pipeline_manager:
                 memory_manager = pipeline_manager.get_manager('memory_manager')
 
-            context_manager: ContextManager = ContextManager(agent, task, state=None)
+            context_manager: ContextManager = ContextManager(agent, task, state=context.state)
             await context_manager.aprepare(memory_handler=memory_manager)
 
             context_prompt: str = context_manager.get_context_prompt()
@@ -2170,10 +2173,15 @@ class CallManagementStep(Step):
             if context.output is None and task:
                 context.output = task.response
 
-            # task_end() is NOT called here. Both pipelines place
-            # the memory save step (MemorySaveStep / StreamMemoryMessageTrackingStep)
-            # BEFORE this step so that duration is already set when
-            # we print Task Metrics.
+            # Safety-net finalizer. The full and streaming pipelines call
+            # task_end() in MemorySaveStep / StreamMemoryMessageTrackingStep
+            # (before this step). The reduced "direct" profile has neither, so
+            # finalize here when it hasn't happened yet. Guarded on end_time
+            # because stop_timer() is additive — calling task_end() twice would
+            # double-count duration; this is the last step, so a profile that
+            # already finalized simply skips.
+            if task is not None and task.end_time is None:
+                task.task_end()
 
             # Retrieve CallManager from pipeline registry and delegate all printing
             if pipeline_manager:
