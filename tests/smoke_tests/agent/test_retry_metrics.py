@@ -46,7 +46,7 @@ from tests._pipeline_injection import (
 pytestmark = pytest.mark.timeout(300)
 
 DB_FILE = "retry_metrics_smoke.db"
-MODEL = "openai/gpt-4o-mini"
+MODEL = "anthropic/claude-opus-4-8"
 
 
 def _cleanup_db():

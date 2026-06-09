@@ -51,7 +51,7 @@ from upsonic.usage import TaskUsage, AgentUsage
 
 def _make_agent(name: str = "AgentUsageTestAgent", tools: list = None) -> Agent:
     return Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name=name,
         tools=tools or [],
     )
@@ -368,13 +368,13 @@ class TestAgentAsToolUsagePropagation:
     @pytest.mark.asyncio
     async def test_parent_agent_usage_includes_sub_agent(self) -> None:
         sub_agent = Agent(
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-opus-4-8",
             name="MathHelper",
             system_prompt="You answer math questions. Respond with just the number.",
         )
 
         parent_agent = Agent(
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-opus-4-8",
             name="ParentCoordinator",
             tools=[sub_agent],
         )
@@ -390,18 +390,18 @@ class TestAgentAsToolUsagePropagation:
     @pytest.mark.asyncio
     async def test_multiple_sub_agents_all_propagate(self) -> None:
         agent_a = Agent(
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-opus-4-8",
             name="TranslatorBot",
             system_prompt="Translate to French. Return only the translation.",
         )
         agent_b = Agent(
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-opus-4-8",
             name="SummarizerBot",
             system_prompt="Summarize in one sentence. Return only the summary.",
         )
 
         coordinator = Agent(
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-opus-4-8",
             name="MultiSubCoordinator",
             tools=[agent_a, agent_b],
         )
@@ -428,7 +428,7 @@ class TestAgentCostTracking:
         agent = _make_agent()
         agent.do(Task("What is Python?"))
 
-        assert agent.usage.cost is not None, "Cost should be tracked for gpt-4o-mini"
+        assert agent.usage.cost is not None, "Cost should be tracked for claude-haiku-4-5"
         assert agent.usage.cost > 0, f"Cost should be positive, got {agent.usage.cost}"
 
     def test_agent_cost_accumulates(self) -> None:
@@ -564,7 +564,7 @@ class TestAgentUsageSerialization:
 def test_basic_agent_usage_tracking():
     """Verify that a simple agent run tracks usage from the direct model.request() call."""
     agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="BasicUsageAgent",
     )
 
@@ -583,7 +583,7 @@ def test_basic_agent_usage_tracking():
 async def test_basic_agent_usage_tracking_async():
     """Async version of test_basic_agent_usage_tracking."""
     agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="BasicUsageAgentAsync",
     )
 
@@ -611,7 +611,7 @@ def test_structured_output_usage_tracking():
         explanation: str = Field(description="Brief explanation")
 
     agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="StructuredOutputAgent",
     )
 
@@ -653,7 +653,7 @@ def test_tool_usage_tracking():
         return a + b
 
     agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="ToolUsageAgent",
         tools=[add_numbers],
     )
@@ -678,13 +678,13 @@ def test_tool_usage_tracking():
 async def test_agent_as_tool_usage_tracking():
     """Verify that usage from a sub-agent used as a tool propagates to the parent agent."""
     sub_agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="MathExpert",
         system_prompt="You are a math expert. Answer math questions concisely.",
     )
 
     parent_agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="Coordinator",
         tools=[sub_agent],
     )
@@ -719,7 +719,7 @@ def test_culture_extraction_usage_tracking():
     )
 
     agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="CultureAgent",
         culture=culture,
     )
@@ -755,7 +755,7 @@ async def test_reflection_usage_tracking():
     )
 
     agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="ReflectionAgent",
         reflection=True,
         reflection_config=reflection_config,
@@ -815,7 +815,7 @@ def test_multiple_tools_structured_output_usage():
         steps: List[str] = Field(description="List of computation steps taken")
 
     agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="MultiToolAgent",
         tools=[multiply, subtract],
     )
@@ -845,7 +845,7 @@ def test_multiple_tools_structured_output_usage():
 async def test_usage_accumulation_separate_runs():
     """Each do_async call should track usage independently on AgentRunOutput."""
     agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="AccumulationAgent",
     )
 
@@ -875,7 +875,7 @@ async def test_usage_accumulation_separate_runs():
 def test_system_prompt_usage_tracking():
     """Verify usage tracking for agent with custom system prompt."""
     agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="SystemPromptAgent",
         system_prompt="You are a pirate. Always respond in pirate speak.",
     )
@@ -907,7 +907,7 @@ async def test_guardrail_usage_tracking():
         population_approx: str = Field(description="Approximate population")
 
     agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="GuardrailAgent",
     )
 
@@ -934,7 +934,7 @@ async def test_guardrail_usage_tracking():
 def test_usage_fields_completeness():
     """Verify that all critical TaskUsage fields are populated after a run."""
     agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="FieldsCheckAgent",
     )
 
@@ -963,19 +963,19 @@ def test_usage_fields_completeness():
 async def test_multiple_agent_tools_usage_tracking():
     """Verify usage propagation when parent agent delegates to multiple sub-agents."""
     translator_agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="Translator",
         system_prompt="You translate text to French. Return only the translation.",
     )
 
     summarizer_agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="Summarizer",
         system_prompt="You summarize text in one short sentence. Return only the summary.",
     )
 
     coordinator = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="Coordinator",
         tools=[translator_agent, summarizer_agent],
     )
@@ -1039,7 +1039,7 @@ def test_combined_culture_tool_structured():
     )
 
     agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="HotelConcierge",
         culture=culture,
         tools=[get_room_price],
@@ -1071,7 +1071,7 @@ def test_combined_culture_tool_structured():
 async def test_streaming_usage_tracking():
     """Verify that usage is tracked even in streaming mode."""
     agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="StreamingAgent",
     )
 
@@ -1093,7 +1093,7 @@ async def test_streaming_usage_tracking():
 def test_cost_tracking():
     """Verify that cost is calculated and populated in usage."""
     agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="CostTrackingAgent",
     )
 
@@ -1106,7 +1106,7 @@ def test_cost_tracking():
     usage: TaskUsage = output.usage
     _assert_task_usage_positive(usage, "cost_tracking")
 
-    assert usage.cost is not None, "Cost should be calculated for gpt-4o-mini"
+    assert usage.cost is not None, "Cost should be calculated for claude-haiku-4-5"
     assert usage.cost > 0, f"Cost should be positive, got {usage.cost}"
 
 

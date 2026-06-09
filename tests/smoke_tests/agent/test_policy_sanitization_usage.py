@@ -75,7 +75,7 @@ async def test_do_async_with_policy() -> None:
     """Agent.do_async with PII policy: output must contain de-anonymized PII."""
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt=f"You are a helpful assistant. User's email is {SENSITIVE_EMAIL}.",
         user_policy=_pii_policy(),
     )
@@ -108,7 +108,7 @@ async def test_event_streaming_with_policy() -> None:
     """Stream events with PII policy: tool results anonymized, final text de-anonymized."""
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt=f"You are a helpful assistant. User's email is {SENSITIVE_EMAIL}.",
         user_policy=_pii_policy(),
     )
@@ -157,7 +157,7 @@ async def test_pure_text_streaming_with_policy() -> None:
     """Pure text streaming (events=False): only str chunks, de-anonymized."""
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt=f"You are a helpful assistant. Email: {SENSITIVE_EMAIL}.",
         user_policy=_pii_policy(),
     )
@@ -197,7 +197,7 @@ async def test_scoped_policy_description_only() -> None:
     original_system_prompt: str = f"You are a helper. Email: {SENSITIVE_EMAIL}"
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt=original_system_prompt,
         user_policy=_pii_policy(
             description=True,
@@ -233,7 +233,7 @@ async def test_no_policy_baseline() -> None:
     """Without policies, PII passes through unchanged."""
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt=f"You are a helper. Email: {SENSITIVE_EMAIL}",
     )
 
@@ -259,7 +259,7 @@ async def test_step_events() -> None:
     """All pipeline step events are emitted with valid content."""
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt="You are a helpful coding assistant.",
     )
 
@@ -323,9 +323,9 @@ async def test_chat_history_sqlite_policy() -> None:
     # Run 1: no policy
     memory1: Memory = Memory(
         storage=storage, session_id=session_id, user_id="user1",
-        full_session_memory=True, model="openai/gpt-4o-mini",
+        full_session_memory=True, model="anthropic/claude-opus-4-8",
     )
-    agent1: Agent = Agent(model="openai/gpt-4o-mini", memory=memory1)
+    agent1: Agent = Agent(model="anthropic/claude-opus-4-8", memory=memory1)
     task1: Task = Task(
         description=f"Remember: my email is {SENSITIVE_EMAIL}, phone {SENSITIVE_PHONE}. Confirm."
     )
@@ -337,9 +337,9 @@ async def test_chat_history_sqlite_policy() -> None:
     # Run 2: with policy
     memory2: Memory = Memory(
         storage=storage, session_id=session_id, user_id="user1",
-        full_session_memory=True, model="openai/gpt-4o-mini",
+        full_session_memory=True, model="anthropic/claude-opus-4-8",
     )
-    agent2: Agent = Agent(model="openai/gpt-4o-mini", memory=memory2, user_policy=_pii_policy())
+    agent2: Agent = Agent(model="anthropic/claude-opus-4-8", memory=memory2, user_policy=_pii_policy())
     task2: Task = Task(description="What is my email and phone number?")
 
     result2: Any = await agent2.do_async(task2)
@@ -374,9 +374,9 @@ async def test_chat_history_tool_calls_policy() -> None:
     # Run 1: tool + no policy
     memory1: Memory = Memory(
         storage=storage, session_id=session_id, user_id="user1",
-        full_session_memory=True, model="openai/gpt-4o-mini",
+        full_session_memory=True, model="anthropic/claude-opus-4-8",
     )
-    agent1: Agent = Agent(model="openai/gpt-4o-mini", memory=memory1)
+    agent1: Agent = Agent(model="anthropic/claude-opus-4-8", memory=memory1)
     task1: Task = Task(
         description=f"Look up contact info for {SENSITIVE_EMAIL}. Use lookup_contact tool.",
         tools=[lookup_contact],
@@ -390,9 +390,9 @@ async def test_chat_history_tool_calls_policy() -> None:
     # Run 2: policy applied
     memory2: Memory = Memory(
         storage=storage, session_id=session_id, user_id="user1",
-        full_session_memory=True, model="openai/gpt-4o-mini",
+        full_session_memory=True, model="anthropic/claude-opus-4-8",
     )
-    agent2: Agent = Agent(model="openai/gpt-4o-mini", memory=memory2, user_policy=_pii_policy())
+    agent2: Agent = Agent(model="anthropic/claude-opus-4-8", memory=memory2, user_policy=_pii_policy())
     task2: Task = Task(
         description=f"What email and phone did you find earlier? Also look up {SENSITIVE_EMAIL} again.",
         tools=[lookup_contact],

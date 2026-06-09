@@ -206,7 +206,7 @@ async def test_pii_anonymize_do_async() -> None:
     """PII Anonymize with do_async: email + phone anonymized, de-anonymized in output."""
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt=f"You are a helpful assistant. User's email is {SENSITIVE_EMAIL}.",
         user_policy=_pii_anonymize_policy(),
         print=True,
@@ -240,7 +240,7 @@ async def test_pii_replace_do_async() -> None:
     """PII Replace with do_async: email replaced with [PII_REDACTED], de-anonymized in output."""
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt=f"You are a helpful assistant. User's email is {SENSITIVE_EMAIL}.",
         user_policy=_pii_replace_policy(),
         print=True,
@@ -275,7 +275,7 @@ async def test_pii_anonymize_stream_events() -> None:
     """PII Anonymize streaming: tool results anonymized, final text de-anonymized."""
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt=f"You are a helpful assistant. User's email is {SENSITIVE_EMAIL}.",
         user_policy=_pii_anonymize_policy(),
         print=True,
@@ -325,7 +325,7 @@ async def test_pii_replace_stream_events() -> None:
     """PII Replace streaming: tool results contain [PII_REDACTED], final text de-anonymized."""
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt=f"You are a helpful assistant. User's email is {SENSITIVE_EMAIL}.",
         user_policy=_pii_replace_policy(),
         print=True,
@@ -376,7 +376,7 @@ async def test_pii_anonymize_stream_text() -> None:
     """PII Anonymize pure text streaming: only str chunks, de-anonymized."""
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt=f"You are a helpful assistant. Email: {SENSITIVE_EMAIL}.",
         user_policy=_pii_anonymize_policy(),
         print=True,
@@ -414,7 +414,7 @@ async def test_pii_replace_stream_text() -> None:
     """PII Replace pure text streaming: de-anonymized, no [PII_REDACTED] in output."""
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt=f"You are a helpful assistant. Email: {SENSITIVE_EMAIL}.",
         user_policy=_pii_replace_policy(),
         print=True,
@@ -453,7 +453,7 @@ async def test_financial_anonymize_do_async() -> None:
     """Financial Anonymize: credit card number anonymized and de-anonymized in output."""
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt="You are a helpful billing assistant.",
         user_policy=_financial_anonymize_policy(),
         print=True,
@@ -490,7 +490,7 @@ async def test_financial_replace_do_async() -> None:
     """Financial Replace: credit card replaced with [FINANCIAL_INFO_REDACTED], de-anonymized."""
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt="You are a helpful billing assistant.",
         user_policy=_financial_replace_policy(),
         print=True,
@@ -529,7 +529,7 @@ async def test_phone_anonymize_do_async() -> None:
     """Phone Anonymize: phone number anonymized with random digits and de-anonymized."""
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt="You are a phone directory assistant.",
         user_policy=_phone_anonymize_policy(),
         print=True,
@@ -563,7 +563,7 @@ async def test_medical_anonymize_do_async() -> None:
     """Medical Anonymize: patient ID and prescription anonymized, de-anonymized in output."""
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt="You are a medical records assistant.",
         user_policy=_medical_anonymize_policy(),
         print=True,
@@ -596,7 +596,7 @@ async def test_medical_replace_do_async() -> None:
     """Medical Replace: medical info replaced with [MEDICAL_INFO_REDACTED], de-anonymized."""
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt="You are a medical records assistant.",
         user_policy=_medical_replace_policy(),
         print=True,
@@ -631,7 +631,7 @@ async def test_multi_policy_pii_financial_do_async() -> None:
     """Multiple policies applied together: PII + Financial anonymize."""
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt=f"You are a helpful assistant. User's email is {SENSITIVE_EMAIL}.",
         user_policy=[_pii_anonymize_policy(), _financial_anonymize_policy()],
         print=True,
@@ -671,7 +671,7 @@ async def test_pii_replace_scoped_description_only() -> None:
     original_system_prompt: str = f"You are a helper. Email: {SENSITIVE_EMAIL}"
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt=original_system_prompt,
         user_policy=_pii_replace_policy(
             description=True,
@@ -709,7 +709,7 @@ async def test_financial_anonymize_stream_events() -> None:
     """Financial Anonymize streaming: credit card anonymized in tool results, de-anonymized in text."""
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt="You are a billing assistant.",
         user_policy=_financial_anonymize_policy(),
         print=True,
@@ -759,7 +759,7 @@ async def test_phone_anonymize_stream_text() -> None:
     """Phone Anonymize pure text streaming: phone de-anonymized in output."""
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         system_prompt="You are a phone directory assistant.",
         user_policy=_phone_anonymize_policy(),
         print=True,
