@@ -863,7 +863,7 @@ class SystemPromptBuildStep(Step):
 
     @property
     def description(self) -> str:
-        return "Build system prompt (culture, skills, role, tools)"
+        return "Build system prompt (culture, role, tools)"
 
     async def execute(
         self,
@@ -921,7 +921,6 @@ class SystemPromptBuildStep(Step):
                 agent._last_built_system_prompt = built_prompt
 
             has_culture: bool = bool(getattr(system_prompt_manager, '_culture_prompt', None))
-            has_skills: bool = bool(getattr(system_prompt_manager, '_skills_prompt', None))
 
             if context.is_streaming:
                 from upsonic.utils.agent.events import ayield_system_prompt_built_event
@@ -929,7 +928,6 @@ class SystemPromptBuildStep(Step):
                     run_id=context.run_id or "",
                     prompt_length=len(built_prompt) if built_prompt else 0,
                     has_culture=has_culture,
-                    has_skills=has_skills,
                 ):
                     context.events.append(event)
 
@@ -2360,14 +2358,6 @@ class MemorySaveStep(Step):
             if agent and hasattr(agent, 'run_id') and agent.run_id:
                 raise_if_cancelled(agent.run_id)
 
-            # Update skill metrics snapshot before saving
-            all_metrics: dict = {}
-            all_metrics.update(agent.get_skill_metrics())
-            if task:
-                all_metrics.update(task.get_skill_metrics())
-            if all_metrics:
-                context.skill_metrics = all_metrics
-
             # Finalize run messages BEFORE marking completed
             context.finalize_run_messages()
             
@@ -3465,14 +3455,6 @@ class StreamMemoryMessageTrackingStep(Step):
                     execution_time=time.time() - start_time
                 )
                 return step_result
-            
-            # Update skill metrics snapshot before saving
-            all_metrics: dict = {}
-            all_metrics.update(agent.get_skill_metrics())
-            if task:
-                all_metrics.update(task.get_skill_metrics())
-            if all_metrics:
-                context.skill_metrics = all_metrics
 
             # Finalize run messages BEFORE marking completed and saving
             # This extracts new messages from chat_history (using _run_boundaries)

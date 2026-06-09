@@ -1,6 +1,6 @@
 ---
 name: safety-engine
-description: Use when working with Upsonic's content-filtering and policy-enforcement layer that scans agent inputs/outputs/tool calls and applies allow/block/replace/anonymize/raise actions. Use when a user asks to add a safety policy to an Agent, build a custom Rule/Action/Policy, anonymize PII or de-anonymize LLM responses, block crypto/adult/hate/phishing/fraud content, redact API keys or credentials, validate tool registration or tool calls, configure feedback retry loops, or wire up PolicyManager / ToolPolicyManager. Trigger when the user mentions safety_engine, RuleBase, ActionBase, Policy, PolicyInput, RuleOutput, PolicyOutput, PolicyManager, ToolPolicyManager, DisallowedOperation, UpsonicLLMProvider, Anonymizer, StreamDeanonymizer, transformation_map, user_policy, agent_policy, tool_policy, PII, financial, medical, legal, technical_security, cybersecurity, fraud_detection, phishing, insider_threat, profanity, Detoxify, skill_policies, prompt injection, secret leak, code injection, HarmfulToolRule, MaliciousToolCallRule, CryptoBlockPolicy, PIIAnonymizePolicy, AdultContentBlockPolicy, AnonymizePhoneNumbersPolicy, or content moderation.
+description: Use when working with Upsonic's content-filtering and policy-enforcement layer that scans agent inputs/outputs/tool calls and applies allow/block/replace/anonymize/raise actions. Use when a user asks to add a safety policy to an Agent, build a custom Rule/Action/Policy, anonymize PII or de-anonymize LLM responses, block crypto/adult/hate/phishing/fraud content, redact API keys or credentials, validate tool registration or tool calls, configure feedback retry loops, or wire up PolicyManager / ToolPolicyManager. Trigger when the user mentions safety_engine, RuleBase, ActionBase, Policy, PolicyInput, RuleOutput, PolicyOutput, PolicyManager, ToolPolicyManager, DisallowedOperation, UpsonicLLMProvider, Anonymizer, StreamDeanonymizer, transformation_map, user_policy, agent_policy, tool_policy, PII, financial, medical, legal, technical_security, cybersecurity, fraud_detection, phishing, insider_threat, profanity, Detoxify, HarmfulToolRule, MaliciousToolCallRule, CryptoBlockPolicy, PIIAnonymizePolicy, AdultContentBlockPolicy, AnonymizePhoneNumbersPolicy, or content moderation.
 ---
 
 # `src/upsonic/safety_engine/` — Content Filtering and Policy Enforcement
@@ -28,7 +28,7 @@ The engine also owns:
 - A `DisallowedOperation` exception used to abort the agent run from inside an action.
 - A custom `UpsonicLLMProvider` that wraps `upsonic.agent.agent.Agent` for keyword extraction, language detection, translation, block-message generation, tool-safety analysis, and policy feedback.
 
-The pre-built policies cover **adult content, crypto, sensitive social/hate speech, phone numbers, PII, financial information, medical / PHI, legal / confidential, technical security secrets, cybersecurity threats, fraud / scams, phishing, insider threats, profanity (Detoxify), tool safety, and skill safety (prompt injection / secret leak / code injection)**.
+The pre-built policies cover **adult content, crypto, sensitive social/hate speech, phone numbers, PII, financial information, medical / PHI, legal / confidential, technical security secrets, cybersecurity threats, fraud / scams, phishing, insider threats, profanity (Detoxify), and tool safety**.
 
 The engine is consumed by two managers in `src/upsonic/agent/`:
 
@@ -66,7 +66,6 @@ src/upsonic/safety_engine/
     ├── pii_policies.py
     ├── profanity_policies.py            # Detoxify-backed (optional dep)
     ├── sensitive_social_policies.py
-    ├── skill_policies.py                # Prompt-injection / secret-leak / code-injection
     ├── technical_policies.py            # API keys, passwords, tokens, certs
     └── tool_safety_policies.py          # Harmful tool / malicious tool call (LLM-driven)
 ```
@@ -505,19 +504,7 @@ Action subclasses (`ProfanityBlockAction`, `ProfanityBlockAction_LLM`, `Profanit
 
 The module ships ~50 pre-built policies covering every combination of `{Block, Block_LLM, RaiseException, RaiseException_LLM} × {default, model variant, threshold low/high, CPU, GPU}`. If the `detoxify` package is not installed, every constant in this module is set to `None` so other modules can still import.
 
-#### 4.3.15 Skill safety (`skill_policies.py`)
-
-Three independent rules used to validate skill content (instructions, references, scripts) before agents load them:
-
-| Rule | Detects |
-|------|---------|
-| `SkillPromptInjectionRule` | "ignore previous instructions", "you are now a different agent", `[/system]` / `</system>` boundary escapes, "execute silently", ... |
-| `SkillSecretLeakRule` | API keys (named regexes for AWS, GitHub, GitLab, Slack, OpenAI, Anthropic, Stripe, SendGrid, Twilio, Google, Azure), generic `password=`, bearer tokens, PEM private keys, connection strings — triggered keywords are truncated to `<type>:<first-12-chars>***`. |
-| `SkillCodeInjectionRule` | `eval(`, `exec(`, `os.system(`, `subprocess.*(`, `pickle.loads(`, `requests.get(`, `socket.socket(`, ... |
-
-Each has an LLM twin (`SkillPromptInjectionRule_LLM`, etc.) that asks the LLM for the same content type. Action classes are `SkillBlockAction`, `SkillBlockAction_LLM`, `SkillRaiseExceptionAction`, `SkillRaiseExceptionAction_LLM`. Fifteen pre-built policies cover the matrix `{prompt-injection, secret-leak, code-injection} × {block, block_LLM, block_LLM_Finder, raise, raise_LLM}`.
-
-#### 4.3.16 Tool safety (`tool_safety_policies.py`)
+#### 4.3.15 Tool safety (`tool_safety_policies.py`)
 
 LLM-first because tool schemas are too varied for keyword detection alone. Two rules:
 
@@ -619,7 +606,6 @@ from upsonic.safety_engine import (
     FraudDetectionBlockPolicy, PhishingBlockPolicy, InsiderThreatBlockPolicy,
     AnonymizePhoneNumbersPolicy,
     HarmfulToolBlockPolicy, MaliciousToolCallBlockPolicy,
-    SkillPromptInjectionBlockPolicy, SkillSecretLeakBlockPolicy, SkillCodeInjectionBlockPolicy,
     ProfanityBlockPolicy,  # may be None if detoxify isn't installed
 )
 ```

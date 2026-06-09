@@ -826,12 +826,10 @@ class SystemPromptBuiltEvent(AgentEvent):
     Attributes:
         prompt_length: Character length of the built system prompt
         has_culture: Whether culture content was included
-        has_skills: Whether skill content was included
     """
 
     prompt_length: int = 0
     has_culture: bool = False
-    has_skills: bool = False
 
     event_kind: Literal['system_prompt_built'] = 'system_prompt_built'
 

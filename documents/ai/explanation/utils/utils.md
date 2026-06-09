@@ -33,7 +33,7 @@ Three sub-areas hang off the package:
 - `package/` — process-level concerns: package version detection, persistent
   on-disk configuration in `~/.upsonic/config.json`, system ID management, and
   the framework-wide exception hierarchy (`UupsonicError`,
-  `GuardrailValidationError`, `ModelRetry`, `SkillError`, etc.).
+  `GuardrailValidationError`, `ModelRetry`, etc.).
 
 The package's `__init__.py` only re-exports a small curated cost / printing
 surface; everything else is imported by absolute path (`from upsonic.utils.X`)
@@ -194,7 +194,7 @@ import either, and a tag-only error never surfaces as an exception.
 
 #### Safety / Policy / Reflection
 
-`policy_triggered`, `tool_safety_check`, `skill_safety_check`,
+`policy_triggered`, `tool_safety_check`,
 `policy_feedback_generated`, `policy_feedback_retry`,
 `policy_feedback_exhausted`, `user_policy_feedback_returned`,
 `agent_policy_feedback_success`, `reflection_started`, `reflection_evaluation`,
@@ -446,7 +446,6 @@ re-exported via `upsonic.exceptions`)**:
 | `UsageLimitExceeded`, `UnexpectedModelBehavior`, `ModelHTTPError`, `ModelAPIError` | `AgentRunError` | Provider-level errors with `body`/`status_code`/`model_name`. |
 | `UserError` | `RuntimeError` | Developer mistakes. |
 | `ModelRetry` | `Exception` | Tools raise this to ask the model to retry. Has a Pydantic core schema for serialisation. |
-| `SkillError`, `SkillParseError`, `SkillDownloadError`, `SkillIntegrityError`, `SkillRegistryError`, `SkillValidationError` | `Exception` | Skills subsystem. `SkillValidationError` carries `errors: list[str]`. |
 
 ## 5. Cross-file relationships
 
@@ -572,7 +571,7 @@ public functions above.
   `cache_stored`, `cache_stats`, `cache_cleared`, `cache_configuration`
   panels.
 - **Safety engine (`upsonic.safety_engine`)** — Calls `policy_triggered`,
-  `policy_feedback_*`, `tool_safety_check`, `skill_safety_check`,
+  `policy_feedback_*`, `tool_safety_check`,
   `anonymization_debug_panel`.
 - **Reflection / reliability (`upsonic.reflection`, `upsonic.reliability_layer`)**
   — Uses `reflection_*` panels and the matching `(a)yield_reflection_event` /

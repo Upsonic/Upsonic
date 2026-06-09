@@ -804,14 +804,12 @@ async def ayield_system_prompt_built_event(
     run_id: str,
     prompt_length: int = 0,
     has_culture: bool = False,
-    has_skills: bool = False,
 ) -> AsyncIterator[SystemPromptBuiltEvent]:
     """Yield a SystemPromptBuiltEvent."""
     yield SystemPromptBuiltEvent(
         run_id=run_id,
         prompt_length=prompt_length,
         has_culture=has_culture,
-        has_skills=has_skills,
     )
 
 
@@ -819,14 +817,12 @@ def yield_system_prompt_built_event(
     run_id: str,
     prompt_length: int = 0,
     has_culture: bool = False,
-    has_skills: bool = False,
 ) -> Iterator[SystemPromptBuiltEvent]:
     """Yield a SystemPromptBuiltEvent (sync)."""
     yield SystemPromptBuiltEvent(
         run_id=run_id,
         prompt_length=prompt_length,
         has_culture=has_culture,
-        has_skills=has_skills,
     )
 
 

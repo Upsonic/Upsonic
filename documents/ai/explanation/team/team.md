@@ -1,6 +1,6 @@
 ---
 name: team-multi-agent-coordination
-description: Use when working with Upsonic's multi-agent orchestration layer in src/upsonic/team/, including building teams of agents, nesting teams, or wiring leader/router agents. Use when a user asks to coordinate multiple agents, delegate tasks across agents, route a request to the right specialist, combine results from multiple tasks, propagate memory or skills across team members, stream from a team, or expose a team as an MCP server. Trigger when the user mentions Team, multi-agent, sequential mode, coordinate mode, route mode, leader agent, router agent, delegate_task, route_request_to_member, CoordinatorSetup, DelegationManager, ContextSharing, TaskAssignment, ResultCombiner, entities, ask_other_team_members, as_mcp, nested teams, or team.do/astream.
+description: Use when working with Upsonic's multi-agent orchestration layer in src/upsonic/team/, including building teams of agents, nesting teams, or wiring leader/router agents. Use when a user asks to coordinate multiple agents, delegate tasks across agents, route a request to the right specialist, combine results from multiple tasks, propagate memory across team members, stream from a team, or expose a team as an MCP server. Trigger when the user mentions Team, multi-agent, sequential mode, coordinate mode, route mode, leader agent, router agent, delegate_task, route_request_to_member, CoordinatorSetup, DelegationManager, ContextSharing, TaskAssignment, ResultCombiner, entities, ask_other_team_members, as_mcp, nested teams, or team.do/astream.
 ---
 
 # `src/upsonic/team/` — Multi-Agent Team Coordination
@@ -26,7 +26,7 @@ Key properties:
 
 - **Heterogeneous membership**: an entity can be an `Agent` or a nested `Team`, so teams nest.
 - **Three modes** with different selection strategies (`sequential` / `coordinate` / `route`).
-- **Memory & skills propagation**: a `Team`-level `Memory` or `Skills` is propagated down to all
+- **Memory propagation**: a `Team`-level `Memory` is propagated down to all
   contained agents (recursively into sub-teams).
 - **Streaming**: text-only `astream`/`stream` for sequential, coordinate (leader's text), and route
   (chosen specialist's text) modes.
@@ -87,7 +87,6 @@ class Team:
                  leader: Optional[Agent] = None,
                  router: Optional[Agent] = None,
                  memory: Optional[Memory] = None,
-                 skills: Optional[Any] = None,
                  debug: bool = False,
                  debug_level: int = 1,
                  agents: Optional[List[Union[Agent, "Team"]]] = None,
@@ -108,7 +107,6 @@ class Team:
 | `leader`                 | Pre-built leader agent for `coordinate` mode (else built from `model`).                  |
 | `router`                 | Pre-built router agent for `route` mode (else built from `model`).                       |
 | `memory`                 | A `Memory` propagated to every Agent member (and sub-team) lacking its own.              |
-| `skills`                 | A `Skills` set; copied per agent, registered via `agent.add_tools()`. Merges with existing skills. |
 | `debug` / `debug_level`  | Enables `info_log` and `debug_log_level2` traces. Level 2 prints task-level details.     |
 | `agents`                 | **Backwards-compatible alias** for `entities`.                                           |
 | `print`                  | Tri-state (`None` / `True` / `False`) controlling output printing.                       |
@@ -120,9 +118,7 @@ The constructor:
 3. Resolves the `print` flag: `UPSONIC_AGENT_PRINT` env > constructor `print=` > defaults.
 4. If `memory` is given, calls `_propagate_memory` to recursively assign it to agents/sub-teams
    that don't already have one.
-5. If `skills` is given, calls `_propagate_skills` to recursively register the skills as tools
-   (each agent gets its own copy so metrics are tracked independently).
-6. If `ask_other_team_members=True`, calls `add_tool()` to expose Agent members as tools on each
+5. If `ask_other_team_members=True`, calls `add_tool()` to expose Agent members as tools on each
    initial task.
 
 #### Properties and aliases
@@ -138,7 +134,6 @@ The constructor:
 | Method                                    | Role                                                                                |
 |-------------------------------------------|-------------------------------------------------------------------------------------|
 | `_propagate_memory(entities, memory)`     | Recursively assigns `memory` to Agents and Teams that have `memory is None`.        |
-| `_propagate_skills(entities, skills)`     | Per-agent skills copy + register; merges with existing skills (removes stale tools).|
 | `get_entity_id()`                         | Returns `self.name` if set, else `f"Team_{id(self)}"`. Used for routing/manifests.  |
 | `_resolve_print_flag(method_default)`     | ENV > constructor `print` > method default (do=False, print_do=True).               |
 | `_find_first_model()`                     | DFS over entities to find any agent's model (used by combiner & by inner teams).    |
@@ -479,7 +474,7 @@ There are no subfolders inside `src/upsonic/team/`. All code lives at the top le
 
 | File                    | Imports from team                                  | Imports from outside                                                                       |
 |-------------------------|----------------------------------------------------|--------------------------------------------------------------------------------------------|
-| `team.py`               | `coordinator_setup`, `delegation_manager`, `context_sharing`, `task_assignment`, `result_combiner` | `Task`, `Agent` (lazy), `Memory` (TYPE_CHECKING), `FastMCP` (lazy), `utils.logging_config`, `utils.printing`, `Skills` (lazy) |
+| `team.py`               | `coordinator_setup`, `delegation_manager`, `context_sharing`, `task_assignment`, `result_combiner` | `Task`, `Agent` (lazy), `Memory` (TYPE_CHECKING), `FastMCP` (lazy), `utils.logging_config`, `utils.printing` |
 | `coordinator_setup.py`  | —                                                  | `Task`, `Agent`, `KnowledgeBase`, `Team` (all TYPE_CHECKING)                               |
 | `delegation_manager.py` | —                                                  | `Task`, `tools.config.ToolConfig`/`tool`, `utils.printing.info_log` (lazy), `Agent`/`Team` (TYPE_CHECKING) |
 | `context_sharing.py`    | —                                                  | `Task`, `Agent`/`Team` (TYPE_CHECKING)                                                     |
@@ -591,12 +586,11 @@ Every concrete unit of work is a `Task`. `Team` mutates and reads:
 | `response_format` | Forwarded to the master/final task and the combiner.                     |
 | `agent`           | Pre-binding hint: if set, sequential mode skips the LLM selection step.   |
 
-### 7.3 Memory and skills
+### 7.3 Memory
 
 | Concern  | How `Team` integrates                                                                          |
 |----------|------------------------------------------------------------------------------------------------|
 | Memory   | `Team(memory=...)` is propagated into every contained `Agent` (including those in sub-teams) that does not already have a `Memory`. In `coordinate` mode, the auto-created or supplied leader inherits team memory if it has none. |
-| Skills   | `Team(skills=...)` is **copied per agent** so that metrics stay independent. Skills get registered via `agent.add_tools(skills.get_tools())`. If an agent already has skills, they are merged with `Skills.merge(skills, entity.skills)` and old `get_skill_*` tools are removed first via `agent.remove_tools(...)`. |
 
 ### 7.4 Tool layer
 
@@ -764,28 +758,7 @@ _propagate_memory(entities=[A, SubTeam], memory=M)
 All agents and sub-teams that had no memory now share M.
 ```
 
-### 8.6 Skills propagation flow (constructor)
-
-```
-Team(entities=[A, SubTeam([B])], skills=S)
-   │
-   ▼
-_propagate_skills(entities=[A, SubTeam], skills=S)
-   │  for A (Agent):
-   │     if A.skills is None:
-   │        A.skills = S.copy()           # independent metrics per agent
-   │        A.add_tools(A.skills.get_tools())
-   │     else:
-   │        old = [t for t in A.tools if t.__name__.startswith('get_skill_')]
-   │        A.remove_tools(old)
-   │        A.skills = Skills.merge(S, A.skills)
-   │        A.add_tools(A.skills.get_tools())
-   │  for SubTeam (Team):
-   │     if SubTeam.skills is None: SubTeam.skills = S
-   │     _propagate_skills(SubTeam.entities, S)
-```
-
-### 8.7 Sync-from-async safety net
+### 8.6 Sync-from-async safety net
 
 ```
 team.do(...)

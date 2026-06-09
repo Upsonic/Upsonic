@@ -637,7 +637,7 @@ union values.
 | `AgentInitializedEvent`     | `agent_initialized`    | InitializationStep                                               |
 | `StorageConnectionEvent`    | `storage_connection`   | StorageStep                                                      |
 | `MemoryPreparedEvent`       | `memory_prepared`      | MemoryStep / ChatHistoryStep                                     |
-| `SystemPromptBuiltEvent`    | `system_prompt_built`  | SystemPromptStep (`prompt_length`, `has_culture`, `has_skills`)  |
+| `SystemPromptBuiltEvent`    | `system_prompt_built`  | SystemPromptStep (`prompt_length`, `has_culture`)  |
 | `ContextBuiltEvent`         | `context_built`        | ContextStep (`context_length`, `has_knowledge_base`, `has_prior_outputs`) |
 | `UserInputBuiltEvent`       | `user_input_built`     | UserInputStep (`input_type`, `has_images`, `has_documents`, `input_length`) |
 | `ChatHistoryLoadedEvent`    | `chat_history_loaded`  | ChatHistoryStep (`history_count`)                                |

@@ -1,6 +1,6 @@
 ---
 name: tasks-package-reference
-description: Use when working with the Upsonic Task class, its lifecycle, fields, or how it threads through agents, teams, workflows, RAG, cache, policy, guardrails, reliability, and pricing. Use when a user asks to define a Task, configure response_format, attachments, context, tools, skills, guardrails, caching (vector_search/llm_call), HITL pause/resume, RunStatus transitions, price_id_/task_id_, or to_dict/from_dict serialization. Trigger when the user mentions Task, src/upsonic/tasks/tasks.py, task_start, task_end, task_response, additional_description, add_canvas, add_tool_call, get_total_cost, RunStatus, is_problematic, is_completed, _run_id, continue_run_async, _original_input, _anonymization_map, _reliability_sub_agent_usage, TaskUsage, ToolManager, KnowledgeBase context, vector_search_top_k, guardrail, cache_method, cache_threshold, policy_apply_to_*, _task_todos, response_format, attachments_base64.
+description: Use when working with the Upsonic Task class, its lifecycle, fields, or how it threads through agents, teams, workflows, RAG, cache, policy, guardrails, reliability, and pricing. Use when a user asks to define a Task, configure response_format, attachments, context, tools, guardrails, caching (vector_search/llm_call), HITL pause/resume, RunStatus transitions, price_id_/task_id_, or to_dict/from_dict serialization. Trigger when the user mentions Task, src/upsonic/tasks/tasks.py, task_start, task_end, task_response, additional_description, add_canvas, add_tool_call, get_total_cost, RunStatus, is_problematic, is_completed, _run_id, continue_run_async, _original_input, _anonymization_map, _reliability_sub_agent_usage, TaskUsage, ToolManager, KnowledgeBase context, vector_search_top_k, guardrail, cache_method, cache_threshold, policy_apply_to_*, _task_todos, response_format, attachments_base64.
 ---
 
 # `src/upsonic/tasks/` — Task definition & lifecycle
@@ -29,7 +29,7 @@ effect, the **shared in-memory scratch-pad** for an entire `do()` invocation.
 |---|---|
 | **Definition** | `description` (the user prompt), `response_format` (str or Pydantic model), `response_lang`, `attachments` (file paths), `context` (free-form list/dict/object), `agent` reference |
 | **Identification** | `task_id_` (uuid4), `price_id_` (uuid4 — used by the pricing/usage subsystem to aggregate cost across sub-runs and reliability sub-agents), `_run_id` (set when the task is executed by a pipeline) |
-| **Tools & skills** | `tools` (raw user-supplied list), `skills` (a `Skills` registry), `task_builtin_tools`, `registered_task_tools`, `_tool_manager` (a `ToolManager` instance owned by the task) |
+| **Tools** | `tools` (raw user-supplied list), `task_builtin_tools`, `registered_task_tools`, `_tool_manager` (a `ToolManager` instance owned by the task) |
 | **Cache** | `enable_cache`, `cache_method` (`vector_search` or `llm_call`), `cache_threshold`, `cache_embedding_provider`, `cache_duration_minutes`, `_cache_manager`, `_cache_hit`, `_last_cache_entry`, `_original_input` |
 | **Guardrails** | `guardrail` (callable validator), `guardrail_retries` |
 | **Status / lifecycle** | `start_time`, `end_time`, `status` (a `RunStatus`), `is_paused`, `is_problematic`, `is_completed`, `_response`, `_tool_calls`, `_usage` |
@@ -69,7 +69,7 @@ factories. Everything lives in `tasks.py` (1418 lines).
 * The `Task` class — a `pydantic.BaseModel` with `arbitrary_types_allowed`.
 * The module-level helper `_rebuild_task_model()` which calls
   `Task.model_rebuild()` at import time so forward references (`TodoList`,
-  `Skills`, `ToolManager`, `ToolDefinition`, `TaskUsage`) resolve correctly.
+  `ToolManager`, `ToolDefinition`, `TaskUsage`) resolve correctly.
 
 The file imports lazily wherever heavy modules are touched. For example:
 
@@ -102,7 +102,7 @@ class Task(BaseModel):
 ```
 
 Pydantic v2 model. `arbitrary_types_allowed` is required because `Task`
-embeds non-pydantic objects: a `ToolManager`, a `Skills` registry, a `Canvas`,
+embeds non-pydantic objects: a `ToolManager`, a `Canvas`,
 custom embedding providers, and arbitrary tool callables.
 
 ---
@@ -132,7 +132,7 @@ Upsonic. Below is a partial map of who reads/writes which slots on it.
 
 | Subsystem | Reads | Writes |
 |---|---|---|
-| `Agent` / `Direct` (`src/upsonic/agent/agent.py`) | `description`, `response_format`, `response_lang`, `tools`, `skills`, `attachments`, `context`, `enable_thinking_tool`, `enable_reasoning_tool`, `is_paused`, `status`, `_run_id` | `agent`, `start_time`, `end_time`, `_response`, `_usage`, `_run_id`, `status` |
+| `Agent` / `Direct` (`src/upsonic/agent/agent.py`) | `description`, `response_format`, `response_lang`, `tools`, `attachments`, `context`, `enable_thinking_tool`, `enable_reasoning_tool`, `is_paused`, `status`, `_run_id` | `agent`, `start_time`, `end_time`, `_response`, `_usage`, `_run_id`, `status` |
 | `ToolManager` (`src/upsonic/tools/`) | `tools`, `task_builtin_tools`, `registered_task_tools` | `_tool_manager`, `registered_task_tools` |
 | `KnowledgeBase` (`src/upsonic/knowledge_base/`) | `description`, `query_knowledge_base`, `vector_search_*` fields | `_context_formatted` (indirectly via the Context manager) |
 | `CacheManager` (under `src/upsonic/cache/`) | `enable_cache`, `cache_method`, `cache_threshold`, `cache_embedding_provider`, `cache_duration_minutes`, `_original_input` | `_cache_manager`, `_cache_hit`, `_last_cache_entry` |
@@ -171,7 +171,6 @@ Task(
     description: str,
     attachments: Optional[List[str]] = None,
     tools: list[Any] = None,
-    skills: Optional[Skills] = None,
     response_format: Union[Type[BaseModel], type[str], None] = str,
     response: Optional[Union[str, bytes]] = None,
     context: Any = None,
@@ -233,7 +232,6 @@ invoke any `__control__()` hooks on tool classes.
 | `description` | `str` | required | The user prompt / task statement. Mutated by `add_canvas` to append canvas instructions. Used as the input key for caching. |
 | `attachments` | `Optional[List[str]]` | `None` → `[]` | File paths to attach. Files extracted from `context` are appended here. Convertible to base-64 via the `attachments_base64` property. |
 | `tools` | `list[Any]` | `None` → `[]` | Raw tool list — functions, agents, MCP handlers, ToolKit instances, AbstractBuiltinTool instances. Processed at run time. |
-| `skills` | `Optional[Skills]` | `None` | A `Skills` registry forwarded to the agent's runtime. |
 | `response_format` | `Type[BaseModel] \| type[str] \| None` | `str` | Output schema — either `str` for plain text, or a Pydantic class for structured output. `None` is permitted and treated as "no constraint". |
 | `response_lang` | `Optional[str]` | `"en"` (declared) but `None` from constructor | Hint for the model to respond in a particular language. |
 | `_response` | `Optional[Union[str, bytes]]` | `None` | The model's final output. Set by `task_response` after the LLM returns. |
@@ -263,7 +261,7 @@ invoke any `__control__()` hooks on tool classes.
 | `enable_reasoning_tool` | `Optional[bool]` | `None` | Enable the in-prompt reasoning tool (provider-native chain-of-thought hooks). |
 | `_task_todos` | `Optional[TodoList]` | `[]` | Deep-agent planning artifact. Type-checked in `__setattr__`: must be a `list` or `None`. |
 
-#### Tools / skills internals
+#### Tools internals
 
 | Attribute | Type | Default | Description |
 |---|---|---|---|
@@ -366,7 +364,6 @@ invoke any `__control__()` hooks on tool classes.
 | `validate_tools()` | Iterates `self.tools` and, for any tool that is a class or instance with a `__control__` callable, invokes it. (The boolean returned is captured but not currently asserted on, leaving room for tools to raise from `__control__`.) |
 | `_ensure_tool_manager()` | Lazily constructs a `ToolManager` and stores it in `_tool_manager`. |
 | `get_tool_defs()` | Returns `self._tool_manager.get_tool_definitions()` or `[]`. |
-| `get_skill_metrics()` | Returns `{name: metrics_dict}` from `self.skills.get_metrics()`. |
 | `add_tools(tools)` | Append-only: normalises to list, initialises `self.tools` if needed, dedupes by identity. |
 | `remove_tools(tools, agent=None)` | Removes by name (`str`), by callable, by agent, by MCP handler, by class, or by `AbstractBuiltinTool`. Splits into builtin vs regular, uses the task's `ToolManager` for the regular case, filters `task_builtin_tools` by `unique_id` for builtins, and finally rewrites `self.tools`. The `agent=` parameter is deprecated. |
 | `additional_description(client)` (async) | Iterates `self.context`, for every `KnowledgeBase` calls `setup_async()` (if `query_knowledge_base`) and `query_async(self.description, task=self)`. Returns a single string `The following is the RAG data: <rag>...</rag>` with each result formatted as `[i] [metadata: source: …, page: …, chunk_id: …, score: …] <text>`. |
@@ -382,7 +379,7 @@ invoke any `__control__()` hooks on tool classes.
 | `clear_cache()` | Calls the cache manager's `clear_cache()` and resets `_cache_hit`. |
 | `_pickle(obj)` (static) | `cloudpickle.dumps` + base64; returns `{"__pickled__": "..."}` or `None`. |
 | `_unpickle(obj)` (static) | Inverse of `_pickle`; returns `obj` unchanged if not a `{"__pickled__": ...}` dict. |
-| `to_dict(serialize_flag=False)` | Full task → dict. With `serialize_flag=True`, cloudpickles `tools`, `skills`, `registered_task_tools`, `task_builtin_tools`, `guardrail`, `_tool_manager`, `response_format`. With `serialize_flag=False`, returns simple JSON-friendly placeholders for those fields and uses tagged shapes (`__builtin_type__`, `__pydantic_type__`, `__type__`) for `response_format`. |
+| `to_dict(serialize_flag=False)` | Full task → dict. With `serialize_flag=True`, cloudpickles `tools`, `registered_task_tools`, `task_builtin_tools`, `guardrail`, `_tool_manager`, `response_format`. With `serialize_flag=False`, returns simple JSON-friendly placeholders for those fields and uses tagged shapes (`__builtin_type__`, `__pydantic_type__`, `__type__`) for `response_format`. |
 | `from_dict(data, deserialize_flag=False)` (classmethod) | Inverse of `to_dict`. Re-imports Pydantic / built-in types when `response_format` was JSON-tagged; falls back to `str` with a `warning_log` on import failure. Restores `status`, `_task_todos` (validating each `Todo`), `registered_task_tools`, `task_builtin_tools`, `_tool_manager`, every `_*` private flag, `_usage` (via `TaskUsage.from_dict`), and `agent`/`cache_embedding_provider`/`_cache_manager` when present. |
 | `add_tool_call(tool_call)` | Append `tool_call` (dict with `tool_name`, `params`, `tool_result`) to `_tool_calls`. |
 | `get_total_cost()` | Looks up `get_price_id_total_cost(self.price_id)` from `upsonic.utils.printing`. Returns `None` if `price_id_` is unset. |
@@ -401,7 +398,7 @@ _rebuild_task_model()
 ```
 
 This runs at import time so Pydantic resolves the `TYPE_CHECKING` forward refs
-(`TodoList`, `Skills`, `ToolManager`, `ToolDefinition`, `TaskUsage`).
+(`TodoList`, `ToolManager`, `ToolDefinition`, `TaskUsage`).
 
 ---
 
@@ -421,7 +418,7 @@ on `Agent` / `Direct`:
 
 In all cases the input is a `Task`. The agent:
 
-1. Reads `task.tools`, `task.skills`, `task.attachments`, `task.context`,
+1. Reads `task.tools`, `task.attachments`, `task.context`,
    `task.response_format`, etc., to seed the pipeline.
 2. Calls `task.task_start(self)` (via `InitStep`) on a fresh run.
 3. Drives the pipeline: context formatting → policy → cache lookup → RAG →
@@ -508,7 +505,7 @@ in-flight `TaskUsage` (`_usage`) holds wall-clock + token totals that
 
 Prebuilts under `src/upsonic/prebuilt/<agent>/` build a `Task` from a template
 (system prompt + first message). The base class `PrebuiltAgentBase`
-populates `description`, optional `attachments`, `tools` (skills), and a
+populates `description`, optional `attachments`, `tools`, and a
 `response_format` Pydantic model, then calls `Agent.do(task)`. See
 `Docs/ai/new_prebuilt_agent_adding.md` for the canonical pattern.
 
@@ -619,7 +616,7 @@ What happens:
 
 6. **Tool registration**
    * The agent's `ToolManager` (or `task._ensure_tool_manager()`) processes
-     `tools`, `task_builtin_tools`, and `skills` into ToolDefinitions. These
+     `tools` and `task_builtin_tools` into ToolDefinitions. These
      can be inspected with `task.get_tool_defs()`.
 
 7. **Model call**
