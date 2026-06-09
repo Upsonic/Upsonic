@@ -1,6 +1,6 @@
 ---
 name: agent-execution-pipeline
-description: Use when working on the core agent orchestration in `src/upsonic/agent/`, including the 24-step direct pipeline, the 22-step streaming pipeline, context managers, policy enforcement, OTel instrumentation, or the AutonomousAgent and DeepAgent subclasses. Use when a user asks to add or modify a pipeline Step, debug HITL resumption, wire up tool execution and tool policies, change system-prompt assembly, adjust context-window overflow handling, plug in reliability/reflection layers, or extend the prebuilt autonomous/deep agents. Trigger when the user mentions Agent, Clanker, Direct, BaseAgent, AutonomousAgent, DeepAgent, AgentRunOutput, AgentRunInput, PipelineManager, Step, StepResult, StepStatus, ModelExecutionStep, StreamModelExecutionStep, CallManager, MemoryManager, SystemPromptManager, ContextManager, ContextManagementMiddleware, LLMManager, TaskManager, ReliabilityManager, PolicyManager, ToolPolicyManager, PolicyScope, AgentOTelManager, RunRequirement, ConfirmationPause, UserInputPause, ExternalExecutionPause, _handle_model_response, _run_in_bg_loop, do/do_async, stream/astream, continue_run, write_todos, FilesystemToolKit, AutonomousFilesystemToolKit, AutonomousShellToolKit, BackendProtocol, StateBackend, MemoryBackend, CompositeBackend, SubagentToolKit, PlanningToolKit, HITL resume, durable execution, or Langfuse Baggage propagation in the agent module.
+description: Use when working on the core agent orchestration in `src/upsonic/agent/`, including the 24-step agent pipeline, the 22-step streaming pipeline, context managers, policy enforcement, OTel instrumentation, or the AutonomousAgent and DeepAgent subclasses. Use when a user asks to add or modify a pipeline Step, debug HITL resumption, wire up tool execution and tool policies, change system-prompt assembly, adjust context-window overflow handling, plug in reliability/reflection layers, or extend the prebuilt autonomous/deep agents. Trigger when the user mentions Agent, Clanker, Direct, BaseAgent, AutonomousAgent, DeepAgent, AgentRunOutput, AgentRunInput, PipelineManager, Step, StepResult, StepStatus, ModelExecutionStep, StreamModelExecutionStep, CallManager, MemoryManager, SystemPromptManager, ContextManager, ContextManagementMiddleware, LLMManager, TaskManager, ReliabilityManager, PolicyManager, ToolPolicyManager, PolicyScope, AgentOTelManager, RunRequirement, ConfirmationPause, UserInputPause, ExternalExecutionPause, _handle_model_response, _run_in_bg_loop, do/do_async, stream/astream, continue_run, write_todos, FilesystemToolKit, AutonomousFilesystemToolKit, AutonomousShellToolKit, BackendProtocol, StateBackend, MemoryBackend, CompositeBackend, SubagentToolKit, PlanningToolKit, HITL resume, durable execution, or Langfuse Baggage propagation in the agent module.
 ---
 
 # `src/upsonic/agent/` — Deep Dive
@@ -10,7 +10,7 @@ description: Use when working on the core agent orchestration in `src/upsonic/ag
 `src/upsonic/agent/` is the **execution heart of the Upsonic framework**. Every time a user calls `agent.do(task)`, `agent.stream(task)`, or `agent.continue_run(...)`, control flows through the classes defined here. The folder owns:
 
 - The user-facing **`Agent`** class (and its alias `Clanker`) — the main object users instantiate.
-- A **24-step direct pipeline** and a **22-step streaming pipeline** that turn a `Task` into a model response, with cache lookups, safety policies, memory injection, system-prompt assembly, model execution, tool execution, reflection, reliability layers, and finalization stitched together as discrete `Step` objects.
+- A **24-step agent pipeline** (the default, built by `_create_agent_pipeline_steps`) and a **22-step streaming pipeline** that turn a `Task` into a model response, with cache lookups, safety policies, memory injection, system-prompt assembly, model execution, tool execution, reflection, reliability layers, and finalization stitched together as discrete `Step` objects. Both pipelines are chosen by `_pipeline_profile`: `"agent"` (default) runs the full 24-step / 22-step streaming variant; `"direct"` (set by `Direct`) runs a reduced 11-step (`_create_direct_pipeline_steps`) / 10-step streaming (`_create_direct_streaming_pipeline_steps`) variant. The active list is resolved by `_select_pipeline_steps` (non-streaming) and `_select_streaming_pipeline_steps` (streaming).
 - **Context managers** (`SystemPromptManager`, `ContextManager`, `MemoryManager`, `LLMManager`, `CallManager`, `TaskManager`, `ReliabilityManager`, `ContextManagementMiddleware`) — small async classes that handle one cross-cutting concern each and are wired into the pipeline.
 - **Safety/policy plumbing** — `PolicyManager` and `ToolPolicyManager` enforce input/output and tool-level rules with feedback loops, blocking, and reversible anonymization.
 - **OpenTelemetry instrumentation** — `AgentOTelManager` centralizes span creation for `agent.run`, `pipeline.execute`, `pipeline.step.*`, and `tool.execute` with Langfuse-aware Baggage propagation.
@@ -75,7 +75,7 @@ def _run_in_bg_loop(coro): ...
 | Identity / persona | `name`, `role`, `goal`, `instructions`, `education`, `work_experience`, `company_*`, `metadata`, `culture` |
 | Memory / storage | `memory`, `db`, `session_id`, `user_id`, `feed_tool_call_results` |
 | Context window mgmt | `context_management`, `context_management_keep_recent`, `context_management_model` |
-| Tools | `tools`, `skills`, `tool_call_limit`, `enable_thinking_tool`, `enable_reasoning_tool`, `show_tool_calls` |
+| Tools | `tools`, `tool_call_limit`, `enable_thinking_tool`, `enable_reasoning_tool`, `show_tool_calls` |
 | Reliability | `reliability_layer`, `reflection`, `reflection_config`, `retry`, `mode` |
 | Safety | `user_policy`, `agent_policy`, `tool_policy_pre`, `tool_policy_post`, `*_feedback`, `*_feedback_loop`, scoped `user_policy_apply_to_*` flags |
 | Observability | `instrument` (OTel), `promptlayer`, `debug`, `debug_level`, `print` |
@@ -88,7 +88,7 @@ Reasoning settings are mapped to model-specific keys by `_get_model_specific_rea
 
 | Method | Behavior |
 | --- | --- |
-| `do(task)` / `do_async(task)` | Run a single task or list of tasks through the **direct pipeline**. Returns task content (default) or full `AgentRunOutput` when `return_output=True`. Supports `timeout` (raises `ExecutionTimeoutError`) and `partial_on_timeout` (silently switches to streaming so partial text can be returned). |
+| `do(task)` / `do_async(task)` | Run a single task or list of tasks through the **agent pipeline** (the non-streaming pipeline; `_pipeline_profile == "agent"`). Returns task content (default) or full `AgentRunOutput` when `return_output=True`. Supports `timeout` (raises `ExecutionTimeoutError`) and `partial_on_timeout` (silently switches to streaming so partial text can be returned). |
 | `print_do` / `print_do_async` | Same, but defaults to printing the run summary. |
 | `stream(task)` / `astream(task)` | Run through the **streaming pipeline**, yielding either text chunks or `AgentEvent` objects. Sync `stream()` runs the async generator on the persistent bg loop and bridges it via a `queue.Queue`. |
 | `continue_run` / `continue_run_async` | Resume a paused/cancelled/error run. Loads `RunData` from storage if needed, injects HITL results (external tools, user confirmation, user input), and re-enters the pipeline at the failed step. Supports a `hitl_handler` callback that the loop calls per `RunRequirement`. |
@@ -103,7 +103,7 @@ Reasoning settings are mapped to model-specific keys by `_get_model_specific_rea
 
 #### 3.2.4 Pipeline construction
 
-`_create_direct_pipeline_steps()` returns the canonical 24-step direct pipeline:
+`_create_agent_pipeline_steps()` returns the canonical 24-step pipeline (selected when `_pipeline_profile == "agent"`, the default). `Direct` sets `_pipeline_profile == "direct"` on its internal Agent, selecting `_create_direct_pipeline_steps()` — a reduced 13-step pipeline (no storage/cache/policies/reflection/reliability/task-management/memory-save) for a bare LLM call. `_select_pipeline_steps()` picks between them; the 24-step list is:
 
 ```
 0  InitializationStep         12 MessageAssemblyStep
@@ -205,7 +205,7 @@ Eight thin async classes, each owning one responsibility. The pattern is identic
 | `reliability_manager.py` | `ReliabilityManager` | Lazy-imports `ReliabilityProcessor` and runs the configured reliability layer over the task. |
 | `llm_manager.py` | `LLMManager` | Selects the model. Reads `LLM_MODEL_KEY` env var, supports a Celery-driven `bypass_llm_model` override, calls `infer_model()`, then writes `model_name`/`provider`/`profile` onto `AgentRunOutput`. |
 | `memory_manager.py` | `MemoryManager` | Calls `memory.prepare_inputs_for_task(agent_metadata=...)` to load message history, summary context, user-profile system-prompt injection, and metadata injection. Saves the session via `memory.save_session_async()` in `afinalize`. Builds an `<AgentMetadata>...</AgentMetadata>` block from agent metadata. |
-| `system_prompt_manager.py` | `SystemPromptManager` | Builds the **final system prompt**. Order: (optional reflective `Operation Deliberate Thought`/`Operation Blueprint` mission briefings if thinking/reasoning tools are on) → today's date → memory user-profile injection → workspace `AGENTS.md` → user `system_prompt` → role/goal/instructions/education/work_experience/company_* → cultural knowledge (always last so it has final authority) → `<YourCharacter>` (other agents passed as context) → skills section → `<ToolInstructions>` collected from agent and task `ToolManager`s. Decides whether to re-include the system prompt on follow-up turns based on whether `<UserProfile>`/`<CulturalKnowledge>` content is dynamic. |
+| `system_prompt_manager.py` | `SystemPromptManager` | Builds the **final system prompt**. Order: (optional reflective `Operation Deliberate Thought`/`Operation Blueprint` mission briefings if thinking/reasoning tools are on) → today's date → memory user-profile injection → workspace `AGENTS.md` → user `system_prompt` → role/goal/instructions/education/work_experience/company_* → cultural knowledge (always last so it has final authority) → `<YourCharacter>` (other agents passed as context) → `<ToolInstructions>` collected from agent and task `ToolManager`s. Decides whether to re-include the system prompt on follow-up turns based on whether `<UserProfile>`/`<CulturalKnowledge>` content is dynamic. |
 | `context_manager.py` | `ContextManager` | Builds the **task-specific context block**. Iterates `task.context` items: other `Task`s become `<Tasks>`, `KnowledgeBase`s trigger `setup_async()` + optional `query_async()` and become `<rag source=...>` blocks with metadata-rich chunk formatting, raw strings become `<Additional Context>`, `TaskOutputSource` items pull from `Graph.State` and become `<PreviousTaskNodeOutput>`. Also exposes `get_knowledge_base_health_status()` and `get_context_summary()` for diagnostics. |
 | `context_management_middleware.py` | `ContextManagementMiddleware` | Applies the context-window-overflow strategy. (See §4.1.) |
 
@@ -270,7 +270,7 @@ Owns step execution. Two main entry points:
 
 ### 5.4 `steps.py` — the 27 concrete steps
 
-The order of steps in the **direct pipeline** matches the numbered list in §3.2.4. Each step is implemented as:
+The order of steps in the **agent pipeline** matches the numbered list in §3.2.4. Each step is implemented as:
 
 ```python
 class XxxStep(Step):
@@ -437,7 +437,7 @@ Public API: `add_subagent(agent)`, `get_subagent_names()`, `get_current_plan()`,
 1. **Sync entry.** `agent.do(task)` resolves a list-vs-single, converts strings to `Task`, then submits `agent.do_async(...)` to the persistent background loop via `_run_in_bg_loop`.
 2. **Setup.** `do_async` validates the task isn't already completed/problematic, generates a `run_id`, registers it with the global cancel registry, builds an `AgentRunInput` (splits attachments by mime-type into images vs documents), constructs the `AgentRunOutput` factory, and applies any per-call model override.
 3. **OTel + PromptLayer.** Wraps the rest in `agent._otel.agent_run_span(...)` (with Langfuse Baggage attached) and records the start time for PromptLayer.
-4. **Pipeline.** Constructs the 24-step `PipelineManager` via `_create_direct_pipeline_steps()` and calls `pipeline.execute(context, start_step_index)`. (If `partial_on_timeout=True`, switches to streaming + `asyncio.wait_for` so partial text can be salvaged on timeout.)
+4. **Pipeline.** Constructs the `PipelineManager` via `_select_pipeline_steps()` — the 24-step agent pipeline (`_create_agent_pipeline_steps`) by default, or the 13-step direct pipeline (`_create_direct_pipeline_steps`) when `_pipeline_profile == "direct"` — and calls `pipeline.execute(context, start_step_index)`. (If `partial_on_timeout=True`, switches to streaming + `asyncio.wait_for` so partial text can be salvaged on timeout.)
 5. **Step loop.** `PipelineManager.execute` walks each step inside its own OTel/Sentry span. Steps mutate `AgentRunOutput` directly: chat history, system prompt, requirements, step results, usage, output, events.
 6. **Tool round-trip.** `ModelExecutionStep` calls `model.request(...)`, then `_handle_model_response()` recursively executes tool calls (parallel where possible), reapplies `ContextManagementMiddleware`, and re-calls `model.request(...)` with the tool returns until no tool calls remain. HITL pauses raise `ExternalExecutionPause`/`ConfirmationPause`/`UserInputPause`, propagating up to the manager, which converts them into `RunRequirement`s and saves a checkpoint.
 7. **Post-processing.** `ResponseProcessingStep` extracts the final output (text, structured Pydantic, image bytes). `ReflectionStep`/`ReliabilityStep` may rewrite it. `AgentPolicyStep` may ask for one or more retries with feedback.

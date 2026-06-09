@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from upsonic.run.pipeline.stats import PipelineExecutionStats
     from upsonic.tasks.tasks import Task
     from upsonic.schemas.kb_filter import KBFilterExpr
+    from upsonic.graph.graph import State
 
 
 @dataclass
@@ -143,11 +144,11 @@ class AgentRunOutput:
     # --- Metadata ---
     metadata: Optional[Dict[str, Any]] = None
     session_state: Optional[Dict[str, Any]] = None
+    # Graph execution state, threaded through the pipeline so ContextBuildStep
+    # can resolve TaskOutputSource items. None for non-Graph runs.
+    state: Optional["State"] = None
 
-    # --- Skill metrics ---
-    skill_metrics: Optional[Dict[str, Any]] = None
 
-    
     # --- Execution state ---
     is_streaming: bool = False
     accumulated_text: str = ""
@@ -806,12 +807,6 @@ class AgentRunOutput:
         else:
             result["events"] = None
         
-        # skill_metrics: dict of {skill_name: SkillMetrics.to_dict()}
-        if self.skill_metrics:
-            result["skill_metrics"] = self.skill_metrics
-        else:
-            result["skill_metrics"] = None
-
         # agent_knowledge_base_filter: to_dict
         if self.agent_knowledge_base_filter is not None:
             result["agent_knowledge_base_filter"] = self.agent_knowledge_base_filter.to_dict()
@@ -1041,9 +1036,6 @@ class AgentRunOutput:
         else:
             agent_knowledge_base_filter = agent_knowledge_base_filter_data
         
-        # Handle skill_metrics (already plain dict)
-        skill_metrics = data.get("skill_metrics")
-
         # Handle current_step_result: from_dict
         current_step_result_data = data.get("current_step_result")
         if current_step_result_data and isinstance(current_step_result_data, dict):
@@ -1090,7 +1082,6 @@ class AgentRunOutput:
             agent_knowledge_base_filter=agent_knowledge_base_filter,
             metadata=data.get("metadata"),
             session_state=data.get("session_state"),
-            skill_metrics=skill_metrics,
             is_streaming=data.get("is_streaming", False),
             accumulated_text=data.get("accumulated_text", ""),
             current_step_result=current_step_result,

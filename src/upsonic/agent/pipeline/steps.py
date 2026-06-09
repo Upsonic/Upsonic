@@ -66,8 +66,11 @@ class InitializationStep(Step):
             # Check print flag from context (thread-safe, set per-run)
             should_print = context.print_flag
             if should_print:
-                from upsonic.utils.printing import agent_started
-                agent_started(agent.get_agent_id())
+                from upsonic.utils.printing import agent_started, pipeline_label
+                agent_started(
+                    agent.get_agent_id(),
+                    label=pipeline_label(getattr(agent, "_pipeline_profile", "agent")),
+                )
 
             context.tool_call_count = 0
             agent.current_task = context.task
@@ -860,7 +863,7 @@ class SystemPromptBuildStep(Step):
 
     @property
     def description(self) -> str:
-        return "Build system prompt (culture, skills, role, tools)"
+        return "Build system prompt (culture, role, tools)"
 
     async def execute(
         self,
@@ -918,7 +921,6 @@ class SystemPromptBuildStep(Step):
                 agent._last_built_system_prompt = built_prompt
 
             has_culture: bool = bool(getattr(system_prompt_manager, '_culture_prompt', None))
-            has_skills: bool = bool(getattr(system_prompt_manager, '_skills_prompt', None))
 
             if context.is_streaming:
                 from upsonic.utils.agent.events import ayield_system_prompt_built_event
@@ -926,7 +928,6 @@ class SystemPromptBuildStep(Step):
                     run_id=context.run_id or "",
                     prompt_length=len(built_prompt) if built_prompt else 0,
                     has_culture=has_culture,
-                    has_skills=has_skills,
                 ):
                     context.events.append(event)
 
@@ -1018,7 +1019,7 @@ class ContextBuildStep(Step):
             if pipeline_manager:
                 memory_manager = pipeline_manager.get_manager('memory_manager')
 
-            context_manager: ContextManager = ContextManager(agent, task, state=None)
+            context_manager: ContextManager = ContextManager(agent, task, state=context.state)
             await context_manager.aprepare(memory_handler=memory_manager)
 
             context_prompt: str = context_manager.get_context_prompt()
@@ -2170,10 +2171,15 @@ class CallManagementStep(Step):
             if context.output is None and task:
                 context.output = task.response
 
-            # task_end() is NOT called here. Both pipelines place
-            # the memory save step (MemorySaveStep / StreamMemoryMessageTrackingStep)
-            # BEFORE this step so that duration is already set when
-            # we print Task Metrics.
+            # Safety-net finalizer. The full and streaming pipelines call
+            # task_end() in MemorySaveStep / StreamMemoryMessageTrackingStep
+            # (before this step). The reduced "direct" profile has neither, so
+            # finalize here when it hasn't happened yet. Guarded on end_time
+            # because stop_timer() is additive — calling task_end() twice would
+            # double-count duration; this is the last step, so a profile that
+            # already finalized simply skips.
+            if task is not None and task.end_time is None:
+                task.task_end()
 
             # Retrieve CallManager from pipeline registry and delegate all printing
             if pipeline_manager:
@@ -2351,14 +2357,6 @@ class MemorySaveStep(Step):
         try:
             if agent and hasattr(agent, 'run_id') and agent.run_id:
                 raise_if_cancelled(agent.run_id)
-
-            # Update skill metrics snapshot before saving
-            all_metrics: dict = {}
-            all_metrics.update(agent.get_skill_metrics())
-            if task:
-                all_metrics.update(task.get_skill_metrics())
-            if all_metrics:
-                context.skill_metrics = all_metrics
 
             # Finalize run messages BEFORE marking completed
             context.finalize_run_messages()
@@ -3457,14 +3455,6 @@ class StreamMemoryMessageTrackingStep(Step):
                     execution_time=time.time() - start_time
                 )
                 return step_result
-            
-            # Update skill metrics snapshot before saving
-            all_metrics: dict = {}
-            all_metrics.update(agent.get_skill_metrics())
-            if task:
-                all_metrics.update(task.get_skill_metrics())
-            if all_metrics:
-                context.skill_metrics = all_metrics
 
             # Finalize run messages BEFORE marking completed and saving
             # This extracts new messages from chat_history (using _run_boundaries)

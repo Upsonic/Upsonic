@@ -300,11 +300,11 @@ All buckets are concatenated under a single `<Context>...</Context>` envelope wh
 1. `default_prompt()` — only when the agent has no system prompt and no company metadata and no thinking briefing and no culture.
 2. `turn_agent_to_string` — when `task.context` contains another `Agent` instance.
 
-Together with the agent's own `system_prompt`, company metadata, culture (if any), tool instructions, and skills section, these contributions form the final system prompt assembled inside `_build_system_prompt`.
+Together with the agent's own `system_prompt`, company metadata, culture (if any), and tool instructions, these contributions form the final system prompt assembled inside `_build_system_prompt`.
 
 ### 7.4 With `upsonic.direct.Direct`
 
-`Direct._build_messages_from_task` is a slimmer pipeline that does **not** instantiate a `ContextManager`. It still respects `TaskOutputSource` (and plain `str`) so that graph passthrough works in `Direct` mode. The same `<PreviousTaskNodeOutput id='...'>` framing is produced.
+`Direct` runs a **reduced pipeline profile** of the same Agent pipeline (it delegates to an internal, minimally-configured `Agent`), so context is rendered by the shared `ContextManager` — the same `ContextBuildStep` the full pipeline uses — rather than a hand-rolled message builder. The Graph `state` is threaded through the pipeline (`AgentRunOutput.state`) into `ContextBuildStep`, which constructs its `ContextManager` with `state=context.state`; any `TaskOutputSource` in `task.context` is therefore resolved *inside* the pipeline from `state.get_task_output(...)` — `Direct` does not pre-resolve it. This holds for both `do_async` and the streaming `astream` (both set `AgentRunOutput.state` from their `state=` argument). Plain `str` context items are passed straight through to the `ContextManager`.
 
 ### 7.5 With `upsonic.graph.graph.Graph`
 

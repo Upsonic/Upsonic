@@ -113,7 +113,7 @@ async def test_do_async_anonymize_all_inputs() -> None:
     original_system_prompt: str = f"You are a helpful assistant. User's email is {SENSITIVE_EMAIL}."
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="PolicySanitizeTestAgent",
         system_prompt=original_system_prompt,
         user_policy=policy,
@@ -193,7 +193,7 @@ async def test_stream_events_full_verification() -> None:
     )
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="PolicySanitizeStreamAgent",
         system_prompt=original_system_prompt,
         user_policy=policy,
@@ -304,7 +304,7 @@ async def test_pure_text_streaming_with_policy() -> None:
     original_system_prompt: str = f"You are a helpful assistant. The user email is {SENSITIVE_EMAIL}."
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="PureTextStreamPolicyAgent",
         system_prompt=original_system_prompt,
         user_policy=policy,
@@ -372,7 +372,7 @@ async def test_scope_flags_description_only() -> None:
     original_system_prompt: str = f"You are a helper. Email: {SENSITIVE_EMAIL}"
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="ScopeTestAgent",
         system_prompt=original_system_prompt,
         user_policy=policy,
@@ -415,7 +415,7 @@ async def test_no_policy_baseline() -> None:
     original_description: str = f"Say hello and mention {SENSITIVE_EMAIL}."
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="NoPolicyAgent",
         system_prompt=f"You are a helper. Email: {SENSITIVE_EMAIL}",
     )
@@ -447,7 +447,7 @@ async def test_stream_step_events_content() -> None:
     """Verify the 5 new step events have correct content."""
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="StepEventTestAgent",
         system_prompt="You are a helpful coding assistant with expertise in Python.",
     )
@@ -520,12 +520,12 @@ async def test_chat_history_with_sqlite_policy() -> None:
         session_id=session_id,
         user_id=user_id,
         full_session_memory=True,
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
     )
 
     # --- RUN 1: No policy — agent stores PII in chat history ---
     agent1: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="ChatHistoryTestAgent",
         memory=memory,
     )
@@ -557,13 +557,13 @@ async def test_chat_history_with_sqlite_policy() -> None:
         session_id=session_id,
         user_id=user_id,
         full_session_memory=True,
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
     )
 
     original_description2: str = f"What is my email address? Also tell me my phone number."
 
     agent2: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="ChatHistoryTestAgent",
         memory=memory2,
         user_policy=policy,
@@ -618,12 +618,12 @@ async def test_chat_history_with_tool_calls_policy() -> None:
         session_id=session_id,
         user_id=user_id,
         full_session_memory=True,
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
     )
 
     # --- RUN 1: No policy, with tool — stores PII in chat history ---
     agent1: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="ChatToolHistoryAgent",
         memory=memory1,
     )
@@ -665,7 +665,7 @@ async def test_chat_history_with_tool_calls_policy() -> None:
         session_id=session_id,
         user_id=user_id,
         full_session_memory=True,
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
     )
 
     original_description2: str = (
@@ -674,7 +674,7 @@ async def test_chat_history_with_tool_calls_policy() -> None:
     )
 
     agent2: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="ChatToolHistoryAgent",
         memory=memory2,
         user_policy=policy,
@@ -734,7 +734,7 @@ async def test_stream_events_multi_pii_deanonymization() -> None:
     )
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="MultiPIIStreamEventAgent",
         system_prompt=original_system_prompt,
         user_policy=policy,
@@ -847,7 +847,7 @@ async def test_pure_text_stream_multi_pii_deanonymization() -> None:
     )
 
     agent: Agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="MultiPIIPureTextStreamAgent",
         system_prompt=original_system_prompt,
         user_policy=policy,

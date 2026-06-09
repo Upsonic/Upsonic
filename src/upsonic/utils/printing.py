@@ -1239,6 +1239,17 @@ def agent_total_cost(total_input_tokens: int, total_output_tokens: int, total_ti
     console.print(panel)
     spacing()
 
+# Single source of truth for panel branding. Maps a pipeline profile to the
+# label shown in the Started / Metrics panels. Change a label (or add a profile)
+# here and every panel follows.
+_PIPELINE_LABELS: Dict[str, str] = {"agent": "Agent", "direct": "Direct"}
+
+
+def pipeline_label(profile: Optional[str]) -> str:
+    """Return the display label for a pipeline profile (defaults to 'Agent')."""
+    return _PIPELINE_LABELS.get(profile or "agent", "Agent")
+
+
 def print_agent_metrics(agent: "Agent", print_output: bool = True) -> Optional[Dict[str, Any]]:
     """Print accumulated agent-level usage metrics in a formatted panel.
     
@@ -1280,7 +1291,8 @@ def print_agent_metrics(agent: "Agent", print_output: bool = True) -> Optional[D
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
     
-    table.add_row("[bold]Agent:[/bold]", f"[cyan]{agent_name_display}[/cyan]")
+    label = pipeline_label(getattr(agent, "_pipeline_profile", "agent"))
+    table.add_row(f"[bold]{label}:[/bold]", f"[cyan]{agent_name_display}[/cyan]")
     table.add_row("")
     table.add_row("[bold]Total Requests:[/bold]", f"[cyan]{usage.requests:,}[/cyan]")
     table.add_row("[bold]Total Input Tokens:[/bold]", f"[cyan]{usage.input_tokens:,}[/cyan]")
@@ -1305,7 +1317,7 @@ def print_agent_metrics(agent: "Agent", print_output: bool = True) -> Optional[D
 
     panel = Panel(
         table,
-        title="[bold cyan]Agent Metrics[/bold cyan]",
+        title=f"[bold cyan]{label} Metrics[/bold cyan]",
         border_style="cyan",
         expand=True,
         width=70
@@ -1805,24 +1817,25 @@ def cache_configuration(enable_cache: bool, cache_method: Literal["vector_search
     console.print(panel)
     spacing()
 
-def agent_started(agent_name: str) -> None:
+def agent_started(agent_name: str, label: str = "Agent") -> None:
     """
     Prints a formatted panel when an agent starts to work.
 
     Args:
         agent_name: Name or ID of the agent that started working
+        label: Display label for the panel branding ('Agent' / 'Direct').
     """
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
 
     agent_name_esc = escape_rich_markup(agent_name)
 
-    table.add_row("[bold]Agent Status:[/bold]", "[green]🚀 Started to work[/green]")
-    table.add_row("[bold]Agent Name:[/bold]", f"[cyan]{agent_name_esc}[/cyan]")
+    table.add_row(f"[bold]{label} Status:[/bold]", "[green]🚀 Started to work[/green]")
+    table.add_row(f"[bold]{label} Name:[/bold]", f"[cyan]{agent_name_esc}[/cyan]")
 
     panel = Panel(
         table,
-        title="[bold green]🤖 Agent Started[/bold green]",
+        title=f"[bold green]🤖 {label} Started[/bold green]",
         border_style="green",
         expand=True,
         width=70
@@ -2799,225 +2812,6 @@ def deep_agent_max_iterations_warning(max_iterations: int, incomplete_count: int
     spacing()
 
 
-def direct_started(model_name: str, task_description: str, response_format: str = "str") -> None:
-    """
-    Print a formatted panel when Direct class starts execution.
-    
-    Args:
-        model_name: Name of the model being used
-        task_description: Description of the task
-        response_format: Expected response format
-    """
-    model_name_esc = escape_rich_markup(model_name)
-    response_format_esc = escape_rich_markup(response_format)
-    
-    # Truncate task description if too long
-    task_preview = task_description[:150] + "..." if len(task_description) > 150 else task_description
-    task_preview_esc = escape_rich_markup(task_preview)
-    
-    table = Table(show_header=False, expand=True, box=None)
-    table.width = 60
-    
-    # Use safe character for Windows compatibility
-    lightning_char = "⚡" if platform.system() != "Windows" else "►"
-    
-    table.add_row("[bold]Status:[/bold]", f"[blue]{lightning_char} Direct Execution Started[/blue]")
-    table.add_row("[bold]Model:[/bold]", f"[cyan]{model_name_esc}[/cyan]")
-    table.add_row("[bold]Response Format:[/bold]", f"[yellow]{response_format_esc}[/yellow]")
-    table.add_row("")  # Spacing
-    table.add_row("[bold]Task:[/bold]")
-    table.add_row(f"[dim]{task_preview_esc}[/dim]")
-    
-    panel = Panel(
-        table,
-        title=f"[bold blue]{lightning_char} Upsonic Direct - Execution Started[/bold blue]",
-        border_style="blue",
-        expand=True,
-        width=70
-    )
-    
-    console.print(panel)
-    spacing()
-    
-    # Sentry logging
-    _sentry_logger.info(
-        "Direct execution started: %s",
-        model_name,
-        extra={
-            "model": model_name,
-            "response_format": response_format,
-            "task_preview": task_description[:100]
-        }
-    )
-
-
-def direct_completed(
-    result: Any, 
-    model: Any, 
-    response_format: str, 
-    start_time: float, 
-    end_time: float, 
-    usage: dict,
-    debug: bool = False,
-    task_description: str = None
-) -> None:
-    """
-    Print a formatted panel when Direct class completes execution.
-    Shows comprehensive metrics including cost, time, and token usage.
-    
-    Args:
-        result: The result from Direct execution
-        model: Model instance
-        response_format: Response format used
-        start_time: Start timestamp
-        end_time: End timestamp
-        usage: Dictionary with input_tokens and output_tokens
-        debug: Whether to show full result
-        task_description: Optional task description preview
-    """
-    execution_time = end_time - start_time
-    
-    display_model_name = escape_rich_markup(model.model_name)
-    response_format_esc = escape_rich_markup(response_format)
-    
-    # Calculate cost
-    estimated_cost = get_estimated_cost(
-        usage.get('input_tokens', 0), 
-        usage.get('output_tokens', 0), 
-        model
-    )
-    
-    # Format result
-    result_str = str(result)
-    if not debug:
-        result_str = result_str[:370]
-    if len(result_str) < len(str(result)):
-        result_str += "..."
-    result_esc = escape_rich_markup(result_str)
-    
-    # Create main table
-    table = Table(show_header=False, expand=True, box=None)
-    table.width = 60
-    
-    table.add_row("[bold]Status:[/bold]", "[green]✅ Execution Completed[/green]")
-    table.add_row("[bold]Model:[/bold]", f"[cyan]{display_model_name}[/cyan]")
-    table.add_row("[bold]Response Format:[/bold]", f"[yellow]{response_format_esc}[/yellow]")
-    table.add_row("")  # Spacing
-    
-    # Show task preview if provided
-    if task_description:
-        task_preview = task_description[:100] + "..." if len(task_description) > 100 else task_description
-        task_preview_esc = escape_rich_markup(task_preview)
-        table.add_row("[bold]Task:[/bold]")
-        table.add_row(f"[dim]{task_preview_esc}[/dim]")
-        table.add_row("")  # Spacing
-    
-    # Show result
-    table.add_row("[bold]Result:[/bold]")
-    table.add_row(f"[green]{result_esc}[/green]")
-    table.add_row("")  # Spacing
-    
-    # Performance metrics section
-    table.add_row("[bold cyan]📊 Performance Metrics[/bold cyan]", "")
-    table.add_row("├─ [bold]Execution Time:[/bold]", f"[magenta]{execution_time:.3f}s[/magenta]")
-    table.add_row("├─ [bold]Input Tokens:[/bold]", f"[blue]{usage.get('input_tokens', 0):,}[/blue]")
-    table.add_row("├─ [bold]Output Tokens:[/bold]", f"[blue]{usage.get('output_tokens', 0):,}[/blue]")
-    table.add_row("└─ [bold]Estimated Cost:[/bold]", f"[yellow]{estimated_cost}[/yellow]")
-    
-    # Use safe character for Windows compatibility
-    lightning_char = "⚡" if platform.system() != "Windows" else "►"
-    
-    panel = Panel(
-        table,
-        title=f"[bold green]{lightning_char} Upsonic Direct - Execution Complete[/bold green]",
-        border_style="green",
-        expand=True,
-        width=70
-    )
-    
-    console.print(panel)
-    spacing()
-    
-    # Sentry logging
-    _sentry_logger.info(
-        "Direct execution completed: %s (%.2fs)",
-        model.model_name, execution_time,
-        extra={
-            "model": str(model.model_name),
-            "response_format": response_format,
-            "execution_time": execution_time,
-            "input_tokens": usage.get('input_tokens', 0),
-            "output_tokens": usage.get('output_tokens', 0),
-            "estimated_cost": str(estimated_cost)
-        }
-    )
-
-
-def direct_error(
-    error_message: str, 
-    model_name: str = None,
-    task_description: str = None,
-    execution_time: float = None
-) -> None:
-    """
-    Print a formatted panel when Direct class encounters an error.
-    
-    Args:
-        error_message: The error message
-        model_name: Optional model name
-        task_description: Optional task description
-        execution_time: Optional execution time before error
-    """
-    error_esc = escape_rich_markup(str(error_message))
-    
-    table = Table(show_header=False, expand=True, box=None)
-    table.width = 60
-    
-    table.add_row("[bold]Status:[/bold]", "[red]❌ Execution Failed[/red]")
-    
-    if model_name:
-        model_name_esc = escape_rich_markup(model_name)
-        table.add_row("[bold]Model:[/bold]", f"[cyan]{model_name_esc}[/cyan]")
-    
-    if task_description:
-        task_preview = task_description[:100] + "..." if len(task_description) > 100 else task_description
-        task_preview_esc = escape_rich_markup(task_preview)
-        table.add_row("[bold]Task:[/bold]", f"[dim]{task_preview_esc}[/dim]")
-    
-    table.add_row("")  # Spacing
-    table.add_row("[bold]Error Details:[/bold]")
-    table.add_row(f"[red]{error_esc}[/red]")
-    
-    if execution_time is not None:
-        table.add_row("")  # Spacing
-        table.add_row("[bold]Time Before Error:[/bold]", f"[yellow]{execution_time:.3f}s[/yellow]")
-    
-    # Use safe character for Windows compatibility
-    lightning_char = "⚡" if platform.system() != "Windows" else "►"
-    
-    panel = Panel(
-        table,
-        title=f"[bold red]{lightning_char} Upsonic Direct - Execution Error[/bold red]",
-        border_style="red",
-        expand=True,
-        width=70
-    )
-    
-    console.print(panel)
-    spacing()
-    
-    # Sentry logging
-    _sentry_logger.error(
-        "Direct execution failed: %s",
-        error_message,
-        extra={
-            "error": str(error_message),
-            "model": model_name,
-            "execution_time": execution_time
-        }
-    )
-
-
 def direct_metrics_summary(
     total_calls: int,
     total_time: float,
@@ -3852,89 +3646,3 @@ def planning_todo_update(
     spacing()
     
     _bg_logger.debug(f"Planning todo update: {updated_count} updated, {added_count} added")
-
-
-def skill_safety_check(
-    skill_name: str,
-    policy_name: str,
-    check_context: str,
-    status: str,
-    confidence: float,
-    content_type: str,
-    details: str,
-    triggered_keywords: Optional[List[str]] = None,
-) -> None:
-    """
-    Prints a formatted panel for skill safety policy validation results.
-
-    Args:
-        skill_name: Name of the skill being validated
-        policy_name: Name of the policy that ran
-        check_context: Where the check happened (e.g. "instructions", "reference", "script")
-        status: Validation status ("BLOCKED" or "PASSED")
-        confidence: Confidence score (0.0-1.0)
-        content_type: The content type from the rule output
-        details: Details string from the rule output
-        triggered_keywords: Optional list of triggered keywords/patterns
-    """
-    skill_name_esc = escape_rich_markup(skill_name)
-    policy_name_esc = escape_rich_markup(policy_name)
-    check_context_esc = escape_rich_markup(check_context)
-    details_esc = escape_rich_markup(details)
-    content_type_esc = escape_rich_markup(content_type)
-
-    if status.upper() == "BLOCKED":
-        border_style = "bold red"
-        title = "[bold red]🛡️ Skill Safety: BLOCKED[/bold red]"
-        status_display = "[red]BLOCKED[/red]"
-    else:
-        border_style = "bold green"
-        title = "[bold green]🛡️ Skill Safety: PASSED[/bold green]"
-        status_display = "[green]PASSED[/green]"
-
-    table = Table(show_header=False, expand=True, box=None)
-    table.width = 60
-
-    table.add_row("[bold]Skill Name:[/bold]", f"[cyan]{skill_name_esc}[/cyan]")
-    table.add_row("[bold]Policy Name:[/bold]", f"[cyan]{policy_name_esc}[/cyan]")
-    table.add_row("[bold]Check Context:[/bold]", f"[cyan]{check_context_esc}[/cyan]")
-    table.add_row("")
-    table.add_row("[bold]Status:[/bold]", status_display)
-    table.add_row("[bold]Confidence:[/bold]", f"{confidence:.2f}")
-    table.add_row("[bold]Content Type:[/bold]", f"{content_type_esc}")
-
-    if details_esc:
-        if len(details_esc) > 150:
-            details_esc = details_esc[:147] + "..."
-        table.add_row("[bold]Details:[/bold]", f"{details_esc}")
-
-    if triggered_keywords:
-        keywords_str = ", ".join(map(str, triggered_keywords))
-        if len(keywords_str) > 100:
-            keywords_str = keywords_str[:97] + "..."
-        keywords_esc = escape_rich_markup(keywords_str)
-        table.add_row("[bold]Triggers:[/bold]", f"[yellow]{keywords_esc}[/yellow]")
-
-    panel = Panel(
-        table,
-        title=title,
-        border_style=border_style,
-        expand=True,
-        width=70
-    )
-
-    console.print(panel)
-    spacing()
-
-    _sentry_logger.info(
-        "Skill safety check: %s (policy=%s, context=%s) - %s",
-        skill_name, policy_name, check_context, status,
-        extra={
-            "skill_name": skill_name,
-            "policy_name": policy_name,
-            "check_context": check_context,
-            "status": status,
-            "confidence": confidence,
-            "content_type": content_type,
-        },
-    )

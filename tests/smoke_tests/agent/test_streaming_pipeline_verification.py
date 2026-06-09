@@ -77,7 +77,7 @@ async def test_event_streaming_with_tools():
     print("=" * 80)
 
     agent = Agent(
-        model="openai/gpt-4o-mini",
+        model="anthropic/claude-opus-4-8",
         name="EventStreamAgent",
         tools=[multiply],
         reflection=True,

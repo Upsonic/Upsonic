@@ -13,7 +13,7 @@ from upsonic.usage import TaskUsage
 
 @pytest.fixture
 def agent() -> Agent:
-    return Agent(name="MetricsTestAgent", model="openai/gpt-4o-mini")
+    return Agent(name="MetricsTestAgent", model="anthropic/claude-opus-4-8")
 
 
 def _assert_usage_positive(task: Task) -> None:

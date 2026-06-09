@@ -38,7 +38,7 @@ from opentelemetry.sdk.metrics import MeterProvider
 from upsonic import Agent, Task
 from upsonic.models.instrumented import InstrumentationSettings
 
-MODEL: str = "openai/gpt-4o-mini"
+MODEL: str = "anthropic/claude-opus-4-8"
 
 JAEGER_OTLP_ENDPOINT: str = os.getenv("JAEGER_OTLP_ENDPOINT", "http://localhost:4317")
 JAEGER_QUERY_URL: str = os.getenv("JAEGER_QUERY_URL", "http://localhost:16686")
@@ -391,7 +391,7 @@ def test_model_override_span_and_restore(otel_capture: tuple) -> None:
     agent = Agent(MODEL, instrument=settings, name="OverrideAgent")
     original_model = agent.model
 
-    agent.do("Say hi.", model="openai/gpt-4o-mini")
+    agent.do("Say hi.", model="anthropic/claude-opus-4-8")
 
     # Original model should be restored
     assert agent.model is original_model, "Model should be restored after do()"
@@ -400,8 +400,8 @@ def test_model_override_span_and_restore(otel_capture: tuple) -> None:
     assert len(chat_spans) >= 1
 
     request_models = [_attr(s, "gen_ai.request.model") for s in chat_spans]
-    assert any("gpt-4o-mini" in str(m) for m in request_models), \
-        f"Expected chat span with gpt-4o-mini model. Got request models: {request_models}"
+    assert any("claude-haiku-4-5" in str(m) for m in request_models), \
+        f"Expected chat span with claude-haiku-4-5 model. Got request models: {request_models}"
 
 
 def test_no_instrument_no_spans() -> None:

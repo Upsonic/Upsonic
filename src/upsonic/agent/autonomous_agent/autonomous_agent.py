@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from upsonic.models import Model
     from upsonic.culture.culture import Culture
     from upsonic.db.database import DatabaseBase
-    from upsonic.skills import Skills
     from upsonic.models.instrumented import InstrumentationSettings
     from upsonic.integrations.tracing import TracingProvider
     from upsonic.integrations.promptlayer import PromptLayer
@@ -136,7 +135,6 @@ class AutonomousAgent(Agent):
         enable_thinking_tool: bool = False,
         enable_reasoning_tool: bool = False,
         tools: Optional[List[Any]] = None,
-        skills: Optional["Skills"] = None,
         user_policy: Optional[Union["Policy", List["Policy"]]] = None,
         agent_policy: Optional[Union["Policy", List["Policy"]]] = None,
         tool_policy_pre: Optional[Union["Policy", List["Policy"]]] = None,
@@ -328,7 +326,6 @@ class AutonomousAgent(Agent):
             enable_thinking_tool=enable_thinking_tool,
             enable_reasoning_tool=enable_reasoning_tool,
             tools=all_tools,
-            skills=skills,
             user_policy=user_policy,
             agent_policy=agent_policy,
             tool_policy_pre=tool_policy_pre,

@@ -91,7 +91,7 @@ def _assert_timing_consistency(usage: TaskUsage, label: str) -> None:
 @pytest.mark.asyncio
 async def test_non_streaming_usage_all_fields():
     """Non-streaming run should have all usage fields populated."""
-    agent = Agent("openai/gpt-4o-mini", name="non_stream_usage")
+    agent = Agent("anthropic/claude-opus-4-8", name="non_stream_usage")
     task = Task(description="What is the capital of France? Answer in one word.")
 
     output = await agent.do_async(task, return_output=True)
@@ -108,7 +108,7 @@ async def test_non_streaming_usage_all_fields():
 @pytest.mark.asyncio
 async def test_non_streaming_with_tools_usage():
     """Non-streaming run with tools should track model time and have correct timing."""
-    agent = Agent("openai/gpt-4o-mini", name="tool_usage_agent")
+    agent = Agent("anthropic/claude-opus-4-8", name="tool_usage_agent")
     task = Task(
         description="Use multiply to calculate 12 * 15. Return just the number.",
         tools=[multiply]
@@ -132,7 +132,7 @@ async def test_non_streaming_with_tools_usage():
 @pytest.mark.asyncio
 async def test_non_streaming_multiple_tools_timing():
     """Multiple tool calls should have consistent timing."""
-    agent = Agent("openai/gpt-4o-mini", name="multi_tool_timing")
+    agent = Agent("anthropic/claude-opus-4-8", name="multi_tool_timing")
     task = Task(
         description=(
             "First multiply 6 by 7, then divide the result by 2. "
@@ -156,7 +156,7 @@ async def test_non_streaming_multiple_tools_timing():
 @pytest.mark.asyncio
 async def test_streaming_usage_all_fields():
     """Streaming run should have all usage fields populated."""
-    agent = Agent("openai/gpt-4o-mini", name="stream_usage")
+    agent = Agent("anthropic/claude-opus-4-8", name="stream_usage")
     task = Task(description="Count from 1 to 3, each on a new line.")
 
     events = []
@@ -186,7 +186,7 @@ async def test_streaming_usage_all_fields():
 @pytest.mark.asyncio
 async def test_streaming_with_tools_tracks_tool_time():
     """Streaming run with tools should track tool_execution_time separately."""
-    agent = Agent("openai/gpt-4o-mini", name="stream_tool_time")
+    agent = Agent("anthropic/claude-opus-4-8", name="stream_tool_time")
     task = Task(
         description="Use multiply to calculate 5 * 9. Return just the number.",
         tools=[multiply]
@@ -218,7 +218,7 @@ async def test_streaming_with_tools_tracks_tool_time():
 @pytest.mark.asyncio
 async def test_streaming_time_to_first_token():
     """Streaming run should set time_to_first_token."""
-    agent = Agent("openai/gpt-4o-mini", name="stream_ttft")
+    agent = Agent("anthropic/claude-opus-4-8", name="stream_ttft")
     task = Task(description="Say hello.")
 
     events = []
@@ -246,7 +246,7 @@ async def test_streaming_time_to_first_token():
 @pytest.mark.asyncio
 async def test_agent_usage_accumulates_with_tools():
     """Agent.usage should accumulate across multiple tool-using tasks."""
-    agent = Agent("openai/gpt-4o-mini", name="accumulate_agent")
+    agent = Agent("anthropic/claude-opus-4-8", name="accumulate_agent")
 
     task1 = Task(
         description="Use multiply to calculate 3 * 4. Return the number.",
@@ -275,7 +275,7 @@ async def test_agent_usage_accumulates_with_tools():
 @pytest.mark.asyncio
 async def test_task_usage_serialization_after_run():
     """TaskUsage from a real run should survive to_dict/from_dict."""
-    agent = Agent("openai/gpt-4o-mini", name="serial_agent")
+    agent = Agent("anthropic/claude-opus-4-8", name="serial_agent")
     task = Task(description="What is 7*8? Just the number.")
 
     output = await agent.do_async(task, return_output=True)
@@ -303,7 +303,7 @@ async def test_task_usage_serialization_after_run():
 
 def test_print_do_shows_timing_metrics(capsys):
     """print_do should display Task Metrics with timing fields."""
-    agent = Agent("openai/gpt-4o-mini", name="print_timing_agent")
+    agent = Agent("anthropic/claude-opus-4-8", name="print_timing_agent")
     task = Task(description="Say hello.")
 
     agent.print_do(task)
@@ -322,7 +322,7 @@ def test_print_do_shows_timing_metrics(capsys):
 @pytest.mark.asyncio
 async def test_task_usage_matches_output_usage():
     """task.usage and output.usage should reference the same object."""
-    agent = Agent("openai/gpt-4o-mini", name="match_agent")
+    agent = Agent("anthropic/claude-opus-4-8", name="match_agent")
     task = Task(description="What is 1+1? Just the number.")
 
     output = await agent.do_async(task, return_output=True)
