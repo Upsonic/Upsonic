@@ -497,7 +497,9 @@ async def test_event_attributes():
     if "ModelSelectedEvent" in by_type:
         event = by_type["ModelSelectedEvent"][0]
         assert hasattr(event, 'model_name')
-        assert "claude-sonnet-4-5" in event.model_name.lower() or "claude" in event.model_name.lower()
+        # Model-agnostic: the smoke suite may override the model, so just assert
+        # the event carries a populated model name.
+        assert isinstance(event.model_name, str) and event.model_name
         print(f"  ✓ ModelSelectedEvent: model_name={event.model_name}")
     
     # Test ToolCallEvent attributes

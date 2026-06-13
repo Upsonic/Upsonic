@@ -37,6 +37,7 @@ from opentelemetry.sdk.metrics import MeterProvider
 
 from upsonic import Agent, Task
 from upsonic.models.instrumented import InstrumentationSettings
+from tests.smoke_tests._model_selection import without_model_override
 
 MODEL: str = "openai/gpt-4o-mini"
 
@@ -388,20 +389,24 @@ def test_model_override_span_and_restore(otel_capture: tuple) -> None:
     """Model override should produce chat span for the override model, then restore original."""
     settings, exporter = otel_capture
 
-    agent = Agent(MODEL, instrument=settings, name="OverrideAgent")
-    original_model = agent.model
+    # This test asserts the per-call model= override is reflected in the span,
+    # so it must run with the smoke-suite global override disabled (otherwise
+    # both the base and the per-call model are swapped out to gpt-5).
+    with without_model_override():
+        agent = Agent(MODEL, instrument=settings, name="OverrideAgent")
+        original_model = agent.model
 
-    agent.do("Say hi.", model="openai/gpt-4o-mini")
+        agent.do("Say hi.", model="openai/gpt-4o-mini")
 
-    # Original model should be restored
-    assert agent.model is original_model, "Model should be restored after do()"
+        # Original model should be restored
+        assert agent.model is original_model, "Model should be restored after do()"
 
-    chat_spans = [s for s in exporter.get_finished_spans() if s.name.startswith("chat ")]
-    assert len(chat_spans) >= 1
+        chat_spans = [s for s in exporter.get_finished_spans() if s.name.startswith("chat ")]
+        assert len(chat_spans) >= 1
 
-    request_models = [_attr(s, "gen_ai.request.model") for s in chat_spans]
-    assert any("gpt-4o-mini" in str(m) for m in request_models), \
-        f"Expected chat span with gpt-4o-mini model. Got request models: {request_models}"
+        request_models = [_attr(s, "gen_ai.request.model") for s in chat_spans]
+        assert any("gpt-4o-mini" in str(m) for m in request_models), \
+            f"Expected chat span with gpt-4o-mini model. Got request models: {request_models}"
 
 
 def test_no_instrument_no_spans() -> None:

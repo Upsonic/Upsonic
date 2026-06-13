@@ -93,6 +93,15 @@ def record_response_usage(
         except Exception:
             pass
 
+    # Count the tool calls requested in THIS response so the ledger entry (and
+    # therefore chat.usage.tool_calls / the agent metrics panel) reflects them.
+    # Requested-basis: computed at this chokepoint with no cross-iteration state.
+    tool_calls = 0
+    try:
+        tool_calls = len(response.tool_calls)
+    except Exception:
+        tool_calls = 0
+
     try:
         record_request_usage(
             response_usage,
@@ -100,6 +109,7 @@ def record_response_usage(
             pipeline_step=pipeline_step,
             cost_usd=cost_value,
             model_execution_time=model_execution_time,
+            tool_calls=tool_calls,
         )
     except Exception:
         pass
@@ -118,6 +128,7 @@ def record_request_usage(
     cost_usd: Optional[float] = None,
     model_execution_time: float = 0.0,
     time_to_first_token: Optional[float] = None,
+    tool_calls: int = 0,
     extra: Optional[Dict[str, Any]] = None,
     registry: Optional[UsageRegistry] = None,
 ) -> Optional[UsageEntry]:
@@ -156,10 +167,11 @@ def record_request_usage(
 
     # Token-zero responses are useful to record for cache-hit / refusal
     # analytics, but for now follow the existing ``incr`` guard pattern
-    # and skip them.
+    # and skip them — UNLESS the response carried tool calls, which we must
+    # still record so chat.usage.tool_calls / the metrics panel are accurate.
     input_tokens = getattr(request_usage, "input_tokens", 0) or 0
     output_tokens = getattr(request_usage, "output_tokens", 0) or 0
-    if input_tokens == 0 and output_tokens == 0:
+    if input_tokens == 0 and output_tokens == 0 and tool_calls == 0:
         return None
 
     reg = registry if registry is not None else get_default_registry()
@@ -178,6 +190,7 @@ def record_request_usage(
         output_audio_tokens=getattr(request_usage, "output_audio_tokens", 0) or 0,
         cache_audio_read_tokens=getattr(request_usage, "cache_audio_read_tokens", 0) or 0,
         requests=getattr(request_usage, "requests", 1) or 1,
+        tool_calls=tool_calls,
         cost_usd=cost_usd,
         model_execution_time=model_execution_time,
         duration=model_execution_time,

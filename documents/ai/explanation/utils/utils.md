@@ -268,15 +268,23 @@ A decorator that supports sync **and** async functions. Resolution order for
 the retry count and mode:
 
 1. Decorator args (`@retryable(retries=5, mode="raise")`).
-2. If `retries_from_param="X"` is set: instance attribute `self.retry` first, else
-   the function parameter named `X` (default fallback `0` for sync, `3` for async).
+2. If `retries_from_param="X"` is set: the explicitly-passed function parameter
+   named `X` first (the per-call override wins), else the instance attribute
+   `self.retry` (default fallback `0` for sync, `3` for async). The call param
+   is detected as "explicitly passed" by the parameter defaulting to `None`;
+   `None` means "not specified" and falls back to the instance attribute. (This
+   order was previously inverted — instance-first — which made the per-call
+   `retry=` parameter unreachable whenever `__init__` set `self.retry`.)
 3. Instance attribute `self.retry` / `self.mode`.
 4. Hard defaults (`0`/`3`, `"raise"`).
 
 Behaviour:
 
-- Catches every exception except `GuardrailValidationError` and
-  `ExecutionTimeoutError`, which always bubble up immediately.
+- Retries every exception **including** `ExecutionTimeoutError` (a timeout is a
+  transient failure — each attempt gets its own timeout budget). Only
+  `GuardrailValidationError` bubbles up immediately (guardrails own their retries
+  via `Task(guardrail_retries=N)`); a `warning_log` is emitted before re-raising
+  so the non-retry is visible to the developer.
 - Exponential backoff with `delay`, multiplied by `backoff` after each failure.
 - On exhaustion: `mode="raise"` re-raises the last exception, `mode="return_false"`
   returns `False`.
@@ -483,9 +491,10 @@ Key invariants:
   loads, so file/Sentry logging is wired up but Rich keeps console ownership.
 - **`usage.py`** is the single source of cost math; `printing.py`, `chat.cost_calculator`,
   and `agent.agent.Agent.cost` all delegate to it.
-- **`@retryable`** *must* let `GuardrailValidationError` and
-  `ExecutionTimeoutError` bubble up — they signal hard failures (validator
-  exhaustion, user-set timeout) that retries cannot fix.
+- **`@retryable`** *must* let `GuardrailValidationError` bubble up (validator
+  exhaustion — guardrails own their own `Task(guardrail_retries=N)` loop), logging
+  a `warning_log` before re-raising. `ExecutionTimeoutError`, by contrast, **is**
+  retried — a timeout is transient and each attempt gets a fresh timeout budget.
 - The lazy `__getattr__` pattern in `utils/__init__.py` and
   `utils/agent/__init__.py` exists to break circular imports with
   `agent.agent.Agent`.

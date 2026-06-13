@@ -30,6 +30,7 @@ from upsonic.messages import (
     UserPromptPart,
 )
 from upsonic.models import infer_model
+from tests.smoke_tests._model_selection import without_model_override
 from upsonic.usage import RequestUsage
 
 SYSTEM_PROMPT_CONTENT: str = (
@@ -76,7 +77,8 @@ TOOL_ROUNDS: List[tuple[str, str, str, str]] = [
 
 
 def _get_model() -> Any:
-    return infer_model("anthropic/claude-sonnet-4-5")
+    with without_model_override():  # pin known 200k window past the gpt-5 override
+        return infer_model("anthropic/claude-sonnet-4-5")
 
 
 def _build_rich_chat_history() -> List[Any]:

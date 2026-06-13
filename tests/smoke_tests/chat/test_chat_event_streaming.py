@@ -27,6 +27,7 @@ from upsonic.run.events.events import (
     RunCompletedEvent,
 )
 from upsonic.tools import tool
+from tests.smoke_tests._model_selection import without_model_override
 
 
 pytestmark = pytest.mark.timeout(120)
@@ -51,7 +52,10 @@ async def test_chat_stream_events_basic():
     print("TEST: test_chat_stream_events_basic")
     print("=" * 60)
     
-    agent = Agent(model="openai/gpt-4o", tools=[add_numbers])
+    # Pin past the smoke gpt-5 override: this test verifies tool-call streaming
+    # events, which need a model that deterministically calls the tool.
+    with without_model_override():
+        agent = Agent(model="openai/gpt-4o", tools=[add_numbers])
     chat = Chat(
         session_id="test_event_stream_1",
         user_id="test_user",
@@ -121,7 +125,8 @@ async def test_chat_invoke_stream_events():
     print("TEST: test_chat_invoke_stream_events")
     print("=" * 60)
     
-    agent = Agent(model="openai/gpt-4o", tools=[multiply_numbers])
+    with without_model_override():  # deterministic tool calling for stream-event assertions
+        agent = Agent(model="openai/gpt-4o", tools=[multiply_numbers])
     chat = Chat(
         session_id="test_event_stream_2",
         user_id="test_user",

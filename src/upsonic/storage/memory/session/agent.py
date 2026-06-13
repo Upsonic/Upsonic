@@ -767,14 +767,30 @@ class AgentSessionMemory(BaseSessionMemory):
         if not message_history:
             return []
         
-        # Group messages into runs (request-response pairs)
-        all_runs = []
-        for i in range(0, len(message_history) - 1, 2):
-            request = message_history[i]
-            response = message_history[i + 1]
-            if isinstance(request, ModelRequest) and isinstance(response, ModelResponse):
-                all_runs.append((request, response))
-        
+        # Group messages into runs by user-turn boundary. A run starts at each
+        # ModelRequest carrying a UserPromptPart and absorbs everything that
+        # follows (the response, plus any tool-call / tool-return round-trips)
+        # until the next user turn. Parity-based pairing breaks the moment a
+        # turn contains tool round-trips (a turn is then >2 messages), which is
+        # why num_last_messages silently degraded to "keep everything".
+        # Messages before the first user turn (e.g. a leading summary/system
+        # preamble) attach to the first run.
+        all_runs: List[List[Any]] = []
+        current_run: List[Any] = []
+        seen_boundary = False
+        for msg in message_history:
+            is_boundary = isinstance(msg, ModelRequest) and any(
+                isinstance(part, UserPromptPart) for part in msg.parts
+            )
+            if is_boundary and seen_boundary:
+                all_runs.append(current_run)
+                current_run = []
+            if is_boundary:
+                seen_boundary = True
+            current_run.append(msg)
+        if current_run:
+            all_runs.append(current_run)
+
         if len(all_runs) <= self.num_last_messages:
             if self.debug:
                 info_log(
@@ -782,18 +798,18 @@ class AgentSessionMemory(BaseSessionMemory):
                     "AgentSessionMemory"
                 )
             return message_history
-        
+
         kept_runs = all_runs[-self.num_last_messages:]
-        
+
         if self.debug:
             info_log(
                 f"Limiting from {len(all_runs)} runs to last {self.num_last_messages}",
                 "AgentSessionMemory"
             )
-        
+
         if not kept_runs:
             return []
-        
+
         # Find original system prompt
         original_system_prompt = None
         if message_history:
@@ -801,11 +817,11 @@ class AgentSessionMemory(BaseSessionMemory):
                 if isinstance(part, SystemPromptPart):
                     original_system_prompt = part
                     break
-        
+
         if not original_system_prompt:
             warning_log("Could not find original SystemPromptPart", "AgentSessionMemory")
             return [message for run in kept_runs for message in run]
-        
+
         # Find user prompt in first kept run
         first_request = kept_runs[0][0]
         new_user_prompt = None
@@ -813,28 +829,28 @@ class AgentSessionMemory(BaseSessionMemory):
             if isinstance(part, UserPromptPart):
                 new_user_prompt = part
                 break
-        
+
         if not new_user_prompt:
             warning_log("Could not find UserPromptPart in first message", "AgentSessionMemory")
             return [message for run in kept_runs for message in run]
-        
-        # Reconstruct with system prompt
+
+        # Reconstruct: re-inject the original system prompt into the first kept
+        # request, then keep the rest of that run and all later runs intact.
         modified_first_request = copy.deepcopy(first_request)
         modified_first_request.parts = [original_system_prompt, new_user_prompt]
-        
-        final_history = []
-        final_history.append(modified_first_request)
-        final_history.append(kept_runs[0][1])
-        
+
+        final_history: List[Any] = [modified_first_request]
+        final_history.extend(kept_runs[0][1:])
+
         for run in kept_runs[1:]:
             final_history.extend(run)
-        
+
         if self.debug:
             info_log(
                 f"Limited to {len(final_history)} messages from {self.num_last_messages} runs",
                 "AgentSessionMemory"
             )
-        
+
         return final_history
     
     def _filter_tool_messages(self, messages: List[Any]) -> List[Any]:

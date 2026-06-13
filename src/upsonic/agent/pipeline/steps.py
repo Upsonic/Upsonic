@@ -1756,9 +1756,9 @@ class ModelExecutionStep(Step):
             context.chat_history.append(final_response)
             
             if context.is_streaming:
-                from upsonic.messages import TextPart, ToolCallPart
+                from upsonic.messages import TextPart
                 has_text = any(isinstance(p, TextPart) for p in final_response.parts)
-                tool_calls = [p for p in final_response.parts if isinstance(p, ToolCallPart)]
+                tool_calls = final_response.tool_calls
                 from upsonic.utils.agent.events import ayield_model_response_event
                 async for event in ayield_model_response_event(
                     run_id=context.run_id or "",

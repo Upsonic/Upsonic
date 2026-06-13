@@ -839,7 +839,7 @@ async def test_session_persistence_sqlite_direct(
     
     agent1 = Agent(model="openai/gpt-4o-mini", memory=memory1)
     
-    task1 = Task(description="Remember that my secret code is DELTA-789.")
+    task1 = Task(description="Remember that my project codename is DELTA-789.")
     await agent1.do_async(task1)
     
     # Create second Memory instance with same session_id
@@ -853,8 +853,8 @@ async def test_session_persistence_sqlite_direct(
     
     agent2 = Agent(model="openai/gpt-4o-mini", memory=memory2)
     
-    # Should remember the secret code
-    task2 = Task(description="What is my secret code?")
+    # Should remember the project codename
+    task2 = Task(description="What is my project codename?")
     result2 = await agent2.do_async(task2)
     
     result2_str = str(result2).upper()
@@ -880,7 +880,7 @@ async def test_session_persistence_sqlite_streaming(
     
     agent1 = Agent(model="openai/gpt-4o-mini", memory=memory1)
     
-    task1 = Task(description="Remember that my secret code is GAMMA-456.")
+    task1 = Task(description="Remember that my project codename is GAMMA-456.")
     await consume_stream(agent1, task1, sqlite_storage, test_session_id)
     
     # Create second Memory instance with same session_id
@@ -895,7 +895,7 @@ async def test_session_persistence_sqlite_streaming(
     agent2 = Agent(model="openai/gpt-4o-mini", memory=memory2)
     
     # Should remember via streaming
-    task2 = Task(description="What is my secret code?")
+    task2 = Task(description="What is my project codename?")
     run_output = await consume_stream(agent2, task2, sqlite_storage, test_session_id)
     
     response_text = str(run_output.response).upper() if run_output.response else ""

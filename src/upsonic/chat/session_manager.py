@@ -200,6 +200,7 @@ class SessionManager:
     def can_accept_invocation(self) -> bool:
         """Check if session can accept a new invocation."""
         return (
+            not self._is_closed and
             self._state != SessionState.ERROR and
             self._concurrent_invocations < self._max_concurrent_invocations
         )
@@ -967,54 +968,62 @@ class SessionManager:
     
     def reopen_session(self) -> None:
         """
-        Reopen a closed session.
-        
-        This allows resuming a session that was previously closed.
-        The session duration continues from where it left off (cumulative).
+        Reopen a closed or errored session.
+
+        Two non-destructive recovery paths share this entry point:
+          - A *closed* session (via close()) resumes with cumulative duration.
+          - An *errored* session (a failed invoke latched it to ERROR) clears
+            back to IDLE so the next invoke is accepted — history preserved.
+
+        A session that is open and not errored is a genuine no-op.
         """
-        if not self._is_closed:
+        was_errored = self._state == SessionState.ERROR
+        if not self._is_closed and not was_errored:
             if self.debug:
                 from upsonic.utils.printing import debug_log
                 debug_log("Session is already open", "SessionManager")
             return
-        
-        # Calculate how long the session was closed
-        closed_duration = self.duration  # This was frozen at close time
-        
-        # Reopen by setting a new start time that accounts for elapsed time
-        # This makes duration continue from where it left off
-        self._start_time = time.time() - closed_duration
-        self._end_time = None
-        self._is_closed = False
+
+        if self._is_closed:
+            # Calculate how long the session was closed and set a new start time
+            # that accounts for it, so duration continues from where it left off.
+            closed_duration = self.duration  # This was frozen at close time
+            self._start_time = time.time() - closed_duration
+            self._end_time = None
+            self._is_closed = False
+
+        if was_errored:
+            self.transition_state(SessionState.IDLE)
+
         self._last_activity_time = time.time()
-        
+
         if self.debug:
             from upsonic.utils.printing import debug_log
-            debug_log(
-                f"Session reopened: continuing from duration={closed_duration:.2f}s",
-                "SessionManager"
-            )
-    
+            debug_log("Session reopened", "SessionManager")
+
     async def areopen_session(self) -> None:
-        """Reopen a closed session (async)."""
-        if not self._is_closed:
+        """Reopen a closed or errored session (async). See reopen_session."""
+        was_errored = self._state == SessionState.ERROR
+        if not self._is_closed and not was_errored:
             if self.debug:
                 from upsonic.utils.printing import debug_log
                 debug_log("Session is already open (async)", "SessionManager")
             return
-        
-        closed_duration = self.duration
-        self._start_time = time.time() - closed_duration
-        self._end_time = None
-        self._is_closed = False
+
+        if self._is_closed:
+            closed_duration = self.duration
+            self._start_time = time.time() - closed_duration
+            self._end_time = None
+            self._is_closed = False
+
+        if was_errored:
+            self.transition_state(SessionState.IDLE)
+
         self._last_activity_time = time.time()
-        
+
         if self.debug:
             from upsonic.utils.printing import debug_log
-            debug_log(
-                f"Session reopened (async): continuing from duration={closed_duration:.2f}s",
-                "SessionManager"
-            )
+            debug_log("Session reopened (async)", "SessionManager")
     
 
     
