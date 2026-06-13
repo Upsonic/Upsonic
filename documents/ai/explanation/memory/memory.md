@@ -400,8 +400,15 @@ The only registered session memory implementation. Responsibilities:
   doesn't contain the `run_id`.
 - **Load any run** via `aload_run` / `load_run` (status-agnostic).
 - **History limiting** in `_limit_message_history`:
-  - groups raw messages into request/response pairs;
-  - keeps the last `num_last_messages` runs;
+  - groups raw messages into **runs by user-turn boundary** — a run starts at
+    each `ModelRequest` carrying a `UserPromptPart` and absorbs the response plus
+    any tool-call / tool-return round-trips until the next user turn (messages
+    before the first user turn attach to the first run). This counts actual user
+    turns; the earlier parity-based pairing silently degraded to "keep
+    everything" whenever a turn contained tool round-trips (a turn is then >2
+    messages);
+  - keeps the last `num_last_messages` runs (returns the history unchanged when
+    there are fewer runs than the limit);
   - **always preserves the original `SystemPromptPart`** by copying it
     onto the first kept request, so the system prompt is never lost
     when the conversation is truncated.

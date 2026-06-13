@@ -27,6 +27,7 @@ from upsonic.messages import (
     UserPromptPart,
 )
 from upsonic.models import infer_model
+from tests.smoke_tests._model_selection import without_model_override
 from upsonic.usage import RequestUsage
 
 pytestmark = pytest.mark.timeout(120)
@@ -37,8 +38,13 @@ pytestmark = pytest.mark.timeout(120)
 # ---------------------------------------------------------------------------
 
 def _get_real_model():
-    """Create a real model instance via the framework's infer_model."""
-    return infer_model("anthropic/claude-sonnet-4-5")
+    """Create a real model instance via the framework's infer_model.
+
+    Pinned past the smoke-suite gpt-5 override: these tests assert on a known
+    context window (claude-sonnet-4-5 = 200k).
+    """
+    with without_model_override():
+        return infer_model("anthropic/claude-sonnet-4-5")
 
 
 def _make_user_request(text: str) -> ModelRequest:

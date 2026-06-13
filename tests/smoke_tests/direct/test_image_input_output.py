@@ -12,6 +12,7 @@ from contextlib import redirect_stdout
 
 from upsonic import Agent, Direct, Task
 from upsonic.tools.builtin_tools import ImageGenerationTool
+from tests.smoke_tests._model_selection import without_model_override
 
 pytestmark = pytest.mark.timeout(180)
 
@@ -30,7 +31,10 @@ async def test_agent_image_generation(temp_dir):
     
     Note: ImageGenerationTool requires OpenAIResponsesModel (use openai-responses prefix).
     """
-    agent = Agent(model="openai-responses/gpt-4o", name="Image Agent", debug=True)
+    # ImageGenerationTool requires the OpenAI Responses model; pin past the
+    # smoke gpt-5 override (openai-chat/gpt-5 does not support image generation).
+    with without_model_override():
+        agent = Agent(model="openai-responses/gpt-4o", name="Image Agent", debug=True)
     
     # Create a dynamic file path
     image_path = os.path.join(temp_dir, f"generated_image_{os.getpid()}.png")
@@ -175,7 +179,8 @@ async def test_agent_multiple_images(temp_dir):
     
     Note: ImageGenerationTool requires OpenAIResponsesModel (use openai-responses prefix).
     """
-    agent = Agent(model="openai-responses/gpt-4o", name="Multi Image Agent", debug=True)
+    with without_model_override():  # Responses model required for image generation
+        agent = Agent(model="openai-responses/gpt-4o", name="Multi Image Agent", debug=True)
     
     # Create dynamic file paths
     image_paths = [

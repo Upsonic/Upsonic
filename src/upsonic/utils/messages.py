@@ -79,8 +79,7 @@ def get_tool_calls(response: "ModelResponse") -> list["ToolCallPart"]:
     Returns:
         A list of all ToolCallPart instances in the response
     """
-    from upsonic.messages.messages import ToolCallPart
-    return [part for part in response.parts if isinstance(part, ToolCallPart)]
+    return response.tool_calls
 
 
 def get_builtin_tool_calls(response: "ModelResponse") -> list["BuiltinToolCallPart"]:

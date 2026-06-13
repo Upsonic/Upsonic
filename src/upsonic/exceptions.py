@@ -174,3 +174,12 @@ class ExecutionTimeoutError(UpsonicError):
     def __init__(self, message: str = "Execution timed out", timeout: float = 0):
         self.timeout = timeout
         super().__init__(message)
+
+
+class SessionClosedError(UpsonicError):
+    """Raised when invoking a chat session that has been closed.
+
+    A closed session no longer accepts invocations; call ``chat.reopen()`` to
+    resume it (history and cumulative duration are preserved).
+    """
+    pass

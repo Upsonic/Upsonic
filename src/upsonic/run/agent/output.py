@@ -591,6 +591,14 @@ class AgentRunOutput:
         """
         usage = self._ensure_usage()
         usage.add_tool_execution_time(elapsed)
+        # Mirror into the usage registry so registry-derived views
+        # (Agent.usage / chat.usage / the metrics panel) reflect tool wall
+        # time — the snapshot above only feeds run metadata, not Agent.usage.
+        try:
+            from upsonic.usage_registry import record_tool_execution_time
+            record_tool_execution_time(elapsed)
+        except Exception:
+            pass
 
     def set_usage_cost(self, cost: float) -> None:
         """Set the cost in usage.

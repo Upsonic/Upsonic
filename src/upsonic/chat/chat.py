@@ -676,9 +676,16 @@ class Chat:
 
         # State and concurrency checks
         if not self._session_manager.can_accept_invocation():
+            if self._session_manager._is_closed:
+                from upsonic.exceptions import SessionClosedError
+                raise SessionClosedError(
+                    f"Session '{self.session_id}' is closed. "
+                    "Call chat.reopen() to resume it."
+                )
             if self._session_manager.state == SessionState.ERROR:
                 raise RuntimeError(
-                    "Chat is in error state. Reset or create a new chat session."
+                    "Chat is in error state. Call reopen() to resume with history, "
+                    "or reset_session() to start fresh."
                 )
             else:
                 current = self._session_manager._concurrent_invocations
@@ -723,6 +730,7 @@ class Chat:
             chat_usage_id=self.chat_usage_id,
             user_id=self.user_id,
         )
+        errored = False
         try:
             if self.debug and self.debug_level >= 2:
                 from upsonic.utils.printing import debug_log_level2
@@ -768,12 +776,17 @@ class Chat:
             self._session_manager.end_response_timer(response_start_time)
             return invoke_result
         except Exception:
+            errored = True
             self._session_manager.end_response_timer(response_start_time)
             self._transition_state(SessionState.ERROR)
             raise
         finally:
             self._session_manager.end_invocation()
-            self._transition_state(SessionState.IDLE)
+            # Only return to IDLE on success — a failed invoke must leave the
+            # session in ERROR so the next invoke is guarded (recover with
+            # reopen() to keep history, or reset_session() to start fresh).
+            if not errored:
+                self._transition_state(SessionState.IDLE)
             from upsonic.usage_registry import reset_scope_tags
             reset_scope_tags(_scope_tokens)
 
@@ -792,12 +805,14 @@ class Chat:
                 user_id=self.user_id,
             )
             stream_generator: Optional[AsyncIterator[Any]] = None
+            errored = False
             try:
                 stream_generator = self.agent.astream(task, debug=self.debug, events=False, **kwargs)
                 async for chunk in stream_generator:
                     if isinstance(chunk, str):
                         yield chunk
             except Exception:
+                errored = True
                 self._transition_state(SessionState.ERROR)
                 if stream_generator is not None:
                     try:
@@ -810,7 +825,11 @@ class Chat:
                 # Counter / state first — sync, GeneratorExit-safe.
                 self._session_manager.end_response_timer(response_start_time)
                 self._session_manager.end_invocation()
-                self._transition_state(SessionState.IDLE)
+                # Stream abandonment (GeneratorExit / CancelledError — both
+                # BaseException, so not caught above) is not an error: fall to
+                # IDLE. Only a real exception keeps the session in ERROR.
+                if not errored:
+                    self._transition_state(SessionState.IDLE)
                 if self._active_stream is gen:
                     self._active_stream = None
 
@@ -841,11 +860,13 @@ class Chat:
                 user_id=self.user_id,
             )
             stream_generator: Optional[AsyncIterator[Any]] = None
+            errored = False
             try:
                 stream_generator = self.agent.astream(task, debug=self.debug, events=True, **kwargs)
                 async for event in stream_generator:
                     yield event
             except Exception:
+                errored = True
                 self._transition_state(SessionState.ERROR)
                 if stream_generator is not None:
                     try:
@@ -858,7 +879,11 @@ class Chat:
                 # Counter / state first — sync, GeneratorExit-safe.
                 self._session_manager.end_response_timer(response_start_time)
                 self._session_manager.end_invocation()
-                self._transition_state(SessionState.IDLE)
+                # Stream abandonment (GeneratorExit / CancelledError — both
+                # BaseException, so not caught above) is not an error: fall to
+                # IDLE. Only a real exception keeps the session in ERROR.
+                if not errored:
+                    self._transition_state(SessionState.IDLE)
                 if self._active_stream is gen:
                     self._active_stream = None
 

@@ -505,14 +505,19 @@ You can execute commands in the workspace directory:
         if self.filesystem_toolkit:
             self.filesystem_toolkit.reset_read_tracking()
     
-    async def aexecute_heartbeat(self) -> Optional[str]:
+    async def aexecute_heartbeat(self, print: Optional[bool] = None) -> Optional[str]:
         """
         Execute the heartbeat message as a task and return the agent's response.
-        
+
         Sends ``self.heartbeat_message`` to this agent via ``do_async`` and
         extracts the textual response.  Returns ``None`` when heartbeat is
         disabled, the message is empty, or the agent produces no output.
-        
+
+        Args:
+            print: By default (``None``) the heartbeat runs silently — it is a
+                background pulse and shouldn't spam the console. Pass
+                ``print=True`` to render the normal agent console panels.
+
         Returns:
             The agent's text response, or None.
         """
@@ -522,15 +527,18 @@ You can execute commands in the workspace directory:
         from upsonic.tasks.tasks import Task
 
         task: Task = Task(self.heartbeat_message)
-        saved_print_param: Optional[bool] = self._print_param
-        saved_print_attr: bool = self.print
-        try:
-            self._print_param = False
-            self.print = False
-            await self.do_async(task, _print_method_default=False)
-        finally:
-            self._print_param = saved_print_param
-            self.print = saved_print_attr
+        if print:
+            await self.do_async(task)
+        else:
+            saved_print_param: Optional[bool] = self._print_param
+            saved_print_attr: bool = self.print
+            try:
+                self._print_param = False
+                self.print = False
+                await self.do_async(task, _print_method_default=False)
+            finally:
+                self._print_param = saved_print_param
+                self.print = saved_print_attr
 
         run_result = self.get_run_output()
         if not run_result:
@@ -543,12 +551,16 @@ You can execute commands in the workspace directory:
             return str(run_result.output)
         return None
 
-    def execute_heartbeat(self) -> Optional[str]:
+    def execute_heartbeat(self, print: Optional[bool] = None) -> Optional[str]:
         """
         Execute the heartbeat message as a task and return the agent's response (sync).
-        
+
         Synchronous wrapper around :meth:`aexecute_heartbeat`.
-        
+
+        Args:
+            print: Pass ``print=True`` to render the normal agent console panels.
+                Defaults to silent (``None``).
+
         Returns:
             The agent's text response, or None.
         """
@@ -559,10 +571,10 @@ You can execute commands in the workspace directory:
             loop = asyncio.get_running_loop()
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, self.aexecute_heartbeat())
+                future = executor.submit(asyncio.run, self.aexecute_heartbeat(print=print))
                 return future.result()
         except RuntimeError:
-            return asyncio.run(self.aexecute_heartbeat())
+            return asyncio.run(self.aexecute_heartbeat(print=print))
 
     def __repr__(self) -> str:
         """String representation of AutonomousAgent."""

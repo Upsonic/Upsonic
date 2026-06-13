@@ -54,6 +54,12 @@ def _run_in_bg_loop(coro):
     future = asyncio.run_coroutine_threadsafe(coro, loop)
     return future.result()
 from upsonic.agent.base import BaseAgent
+from upsonic.agent.run_state import (
+    AgentRunState,
+    get_run_state,
+    set_run_state,
+    reset_run_state,
+)
 from upsonic.run.agent.output import AgentRunOutput
 from upsonic.run.agent.input import AgentRunInput
 from upsonic.run.base import RunStatus
@@ -829,7 +835,60 @@ class Agent(BaseAgent):
         if self.db and hasattr(self.db, 'memory') and hasattr(self.db.memory, 'user_id'):
             return self.db.memory.user_id
         return None
-    
+
+    # ------------------------------------------------------------------
+    # Per-run state (concurrency isolation)
+    #
+    # run_id / output / tool counters belong to a single execution, not to
+    # the agent config. They are stored in an AgentRunState held by a
+    # ContextVar so concurrent do_async/astream calls on the same agent
+    # instance don't clobber each other. When no run scope is active we fall
+    # back to a per-instance state so post-run reads (get_run_output, etc.)
+    # still work. See upsonic.agent.run_state.
+    # ------------------------------------------------------------------
+    def _active_run_state(self) -> AgentRunState:
+        """Return the state for the active run, or the per-instance fallback."""
+        state = get_run_state()
+        if state is not None:
+            return state
+        fallback = self.__dict__.get("_run_state_fallback")
+        if fallback is None:
+            fallback = AgentRunState()
+            self.__dict__["_run_state_fallback"] = fallback
+        return fallback
+
+    @property
+    def run_id(self) -> Optional[str]:
+        return self._active_run_state().run_id
+
+    @run_id.setter
+    def run_id(self, value: Optional[str]) -> None:
+        self._active_run_state().run_id = value
+
+    @property
+    def _agent_run_output(self) -> Optional[AgentRunOutput]:
+        return self._active_run_state().agent_run_output
+
+    @_agent_run_output.setter
+    def _agent_run_output(self, value: Optional[AgentRunOutput]) -> None:
+        self._active_run_state().agent_run_output = value
+
+    @property
+    def _tool_call_count(self) -> int:
+        return self._active_run_state().tool_call_count
+
+    @_tool_call_count.setter
+    def _tool_call_count(self, value: int) -> None:
+        self._active_run_state().tool_call_count = value
+
+    @property
+    def _tool_limit_reached(self) -> bool:
+        return self._active_run_state().tool_limit_reached
+
+    @_tool_limit_reached.setter
+    def _tool_limit_reached(self, value: bool) -> None:
+        self._active_run_state().tool_limit_reached = value
+
     def get_agent_id(self) -> str:
         """Get display-friendly agent ID."""
         if self.name:
@@ -3651,7 +3710,7 @@ class Agent(BaseAgent):
         task: Union[str, "Task", List[Union[str, "Task"]]],
         model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
-        retry: int = 1,
+        retry: Optional[int] = None,
         return_output: bool = False,
         state: Optional["State"] = None,
         *,
@@ -3673,10 +3732,13 @@ class Agent(BaseAgent):
             task: Task to execute. Accepts a single Task/str or a list of them.
             model: Override model for this execution
             debug: Enable debug mode
-            retry: Number of retries
+            retry: Number of attempts. None (default) falls back to the agent-level
+                ``retry`` setting; an explicit value overrides it for this call.
             return_output: If True, return full AgentRunOutput. If False (default), return content only.
             state: Graph execution state
-            timeout: Maximum execution time in seconds. None means no timeout.
+            timeout: Maximum execution time in seconds. None means no timeout. When
+                ``retry`` allows more than one attempt, each attempt gets its own
+                timeout budget (a timed-out attempt is retried).
             partial_on_timeout: If True and timeout is set, return whatever text was
                 generated so far instead of raising an error. Requires timeout to be set.
                 Internally uses streaming to enable progressive text capture.
@@ -3728,7 +3790,9 @@ class Agent(BaseAgent):
         
         start_step_index = _resume_step_index if _resume_step_index is not None else 0
         is_resuming = _resume_output is not None
-        effective_retry = self.retry if getattr(self, "retry", None) is not None else retry
+        # Mirror the @retryable resolution order: an explicit per-call retry wins,
+        # otherwise fall back to the agent-level setting (default 1).
+        effective_retry = retry if retry is not None else (getattr(self, "retry", None) or 1)
 
         validation_error = self._validate_task_for_new_run(
             task, is_resuming, allow_problematic_for_retry=(effective_retry > 1)
@@ -3737,6 +3801,12 @@ class Agent(BaseAgent):
             if return_output:
                 return validation_error
             return validation_error.output
+
+        # Open an isolated run-state scope for fresh runs so concurrent
+        # do_async calls on the same agent don't clobber each other's run_id /
+        # output / tool counters. HITL resume keeps the caller's state (set up
+        # by _prepare_continuation_context), so it does not open a new scope.
+        _run_state_token = set_run_state(AgentRunState()) if not is_resuming else None
 
         if not is_resuming and effective_retry > 1 and task.is_problematic:
             # Clear per-attempt task state for a clean retry. Failed-attempt
@@ -3868,6 +3938,14 @@ class Agent(BaseAgent):
             # and leave the parent's tokens alone).
             from upsonic.usage_registry import reset_scope_tags
             reset_scope_tags(_scope_tokens)
+            # Snapshot the run state into the per-instance fallback so post-run
+            # reads (get_run_output, get_run_id, paused-HITL state) still work
+            # after the scope is torn down, then restore the previous scope.
+            if _run_state_token is not None:
+                _final_state = get_run_state()
+                if _final_state is not None:
+                    self.__dict__["_run_state_fallback"] = _final_state
+                reset_run_state(_run_state_token)
 
     def _calculate_aggregated_cost(self) -> Optional[float]:
         """Calculate the aggregated monetary cost across the agent run.
@@ -4027,7 +4105,7 @@ class Agent(BaseAgent):
 
     def _extract_output(self, task: "Task", response: "ModelResponse") -> Any:
         """Extract the output from a model response."""
-        from upsonic.messages import TextPart, ToolCallPart
+        from upsonic.messages import TextPart
         
         # Check for image outputs first
         images = response.images
@@ -4040,7 +4118,7 @@ class Agent(BaseAgent):
         
         # Check for tool call output from structured output tool
         if task.response_format and task.response_format != str and task.response_format is not str:
-            tool_call_parts = [part for part in response.parts if isinstance(part, ToolCallPart)]
+            tool_call_parts = response.tool_calls
             for tool_call in tool_call_parts:
                 # Look for the output tool
                 if tool_call.tool_name == DEFAULT_OUTPUT_TOOL_NAME:
@@ -4076,7 +4154,7 @@ class Agent(BaseAgent):
         task: Union[str, "Task", List[Union[str, "Task"]]],
         model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
-        retry: int = 1,
+        retry: Optional[int] = None,
         return_output: bool = False,
         timeout: Optional[float] = None,
         partial_on_timeout: bool = False,
@@ -4131,7 +4209,7 @@ class Agent(BaseAgent):
         task: Union[str, "Task", List[Union[str, "Task"]]],
         model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
-        retry: int = 1,
+        retry: Optional[int] = None,
         return_output: bool = False
     ) -> Union[Any, List[Any], List[AgentRunOutput]]:
         """
@@ -4178,7 +4256,7 @@ class Agent(BaseAgent):
         task: Union[str, "Task", List[Union[str, "Task"]]],
         model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
-        retry: int = 1,
+        retry: Optional[int] = None,
         return_output: bool = False
     ) -> Union[Any, List[Any], List[AgentRunOutput]]:
         """
@@ -4401,6 +4479,11 @@ class Agent(BaseAgent):
                 )
             return
 
+        # Open an isolated run-state scope so concurrent astream/do_async calls
+        # on the same agent don't clobber each other (streaming is always a
+        # fresh run — HITL resume goes through continue_run_async).
+        _run_state_token = set_run_state(AgentRunState())
+
         # Reset per-run state (same as do_async for fresh runs)
         self._tool_call_count = 0
         self._tool_limit_reached = False
@@ -4515,6 +4598,13 @@ class Agent(BaseAgent):
             self.run_id = None
             from upsonic.usage_registry import reset_scope_tags
             reset_scope_tags(_scope_tokens)
+            # Snapshot run state into the per-instance fallback for post-stream
+            # reads, then restore the previous scope.
+            if _run_state_token is not None:
+                _final_state = get_run_state()
+                if _final_state is not None:
+                    self.__dict__["_run_state_fallback"] = _final_state
+                reset_run_state(_run_state_token)
 
     def _extract_text_from_stream_event(self, event: Any) -> Optional[str]:
         """Extract text content from a streaming event.
@@ -4950,7 +5040,7 @@ class Agent(BaseAgent):
         requirements: Optional[List["RunRequirement"]] = None,
         model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
-        retry: int = 1,
+        retry: Optional[int] = None,
         return_output: bool = False,
         *,
         streaming: Optional[bool] = None,
@@ -5251,7 +5341,7 @@ class Agent(BaseAgent):
         requirements: Optional[List["RunRequirement"]] = None,
         model: Optional[Union[str, "Model"]] = None,
         debug: bool = False,
-        retry: int = 1,
+        retry: Optional[int] = None,
         return_output: bool = False,
         state: Optional["State"] = None,
         *,
@@ -5341,7 +5431,7 @@ class Agent(BaseAgent):
         task: "Task",
         model: Optional[Union[str, "Model"]],
         debug: bool,
-        retry: int,
+        retry: Optional[int],
         return_output: bool,
         output: AgentRunOutput,
         resume_step_index: int,

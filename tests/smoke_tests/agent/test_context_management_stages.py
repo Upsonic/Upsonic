@@ -29,6 +29,7 @@ from upsonic.messages import (
     UserPromptPart,
 )
 from upsonic.models import infer_model
+from tests.smoke_tests._model_selection import without_model_override
 from upsonic.usage import RequestUsage
 
 pytestmark = pytest.mark.timeout(180)
@@ -65,11 +66,13 @@ TOOL_RESULT_TEXT: str = (
 
 
 def _get_real_model() -> Any:
-    return infer_model("anthropic/claude-sonnet-4-5")
+    with without_model_override():  # pin known 200k window past the gpt-5 override
+        return infer_model("anthropic/claude-sonnet-4-5")
 
 
 def _get_high_context_model() -> Any:
-    return infer_model("anthropic/claude-sonnet-4-5")
+    with without_model_override():
+        return infer_model("anthropic/claude-sonnet-4-5")
 
 
 def _make_user_request(text: str) -> ModelRequest:

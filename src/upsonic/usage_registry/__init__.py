@@ -28,6 +28,7 @@ from upsonic.usage_registry.scope import (
 from upsonic.usage_registry.recorder import (
     record_request_usage,
     record_response_usage,
+    record_tool_execution_time,
 )
 
 __all__ = (
@@ -43,4 +44,5 @@ __all__ = (
     "reset_scope_tags",
     "record_request_usage",
     "record_response_usage",
+    "record_tool_execution_time",
 )

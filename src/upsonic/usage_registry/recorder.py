@@ -93,6 +93,15 @@ def record_response_usage(
         except Exception:
             pass
 
+    # Count the tool calls requested in THIS response so the ledger entry (and
+    # therefore chat.usage.tool_calls / the agent metrics panel) reflects them.
+    # Requested-basis: computed at this chokepoint with no cross-iteration state.
+    tool_calls = 0
+    try:
+        tool_calls = len(response.tool_calls)
+    except Exception:
+        tool_calls = 0
+
     try:
         record_request_usage(
             response_usage,
@@ -100,6 +109,7 @@ def record_response_usage(
             pipeline_step=pipeline_step,
             cost_usd=cost_value,
             model_execution_time=model_execution_time,
+            tool_calls=tool_calls,
         )
     except Exception:
         pass
@@ -118,6 +128,7 @@ def record_request_usage(
     cost_usd: Optional[float] = None,
     model_execution_time: float = 0.0,
     time_to_first_token: Optional[float] = None,
+    tool_calls: int = 0,
     extra: Optional[Dict[str, Any]] = None,
     registry: Optional[UsageRegistry] = None,
 ) -> Optional[UsageEntry]:
@@ -156,10 +167,11 @@ def record_request_usage(
 
     # Token-zero responses are useful to record for cache-hit / refusal
     # analytics, but for now follow the existing ``incr`` guard pattern
-    # and skip them.
+    # and skip them — UNLESS the response carried tool calls, which we must
+    # still record so chat.usage.tool_calls / the metrics panel are accurate.
     input_tokens = getattr(request_usage, "input_tokens", 0) or 0
     output_tokens = getattr(request_usage, "output_tokens", 0) or 0
-    if input_tokens == 0 and output_tokens == 0:
+    if input_tokens == 0 and output_tokens == 0 and tool_calls == 0:
         return None
 
     reg = registry if registry is not None else get_default_registry()
@@ -178,6 +190,7 @@ def record_request_usage(
         output_audio_tokens=getattr(request_usage, "output_audio_tokens", 0) or 0,
         cache_audio_read_tokens=getattr(request_usage, "cache_audio_read_tokens", 0) or 0,
         requests=getattr(request_usage, "requests", 1) or 1,
+        tool_calls=tool_calls,
         cost_usd=cost_usd,
         model_execution_time=model_execution_time,
         duration=model_execution_time,
@@ -189,3 +202,59 @@ def record_request_usage(
     )
     reg.record(entry)
     return entry
+
+
+def record_tool_execution_time(
+    elapsed: float,
+    *,
+    tool_name: Optional[str] = None,
+    registry: Optional[UsageRegistry] = None,
+) -> Optional[UsageEntry]:
+    """Append a ``kind="tool"`` ledger row carrying tool wall-clock time.
+
+    ``Agent`` measures per-tool (and per parallel-batch) execution time and
+    folds it into the per-run snapshot via
+    :meth:`upsonic.run.agent.output.AgentRunOutput.add_tool_execution_time`.
+    Since :attr:`Agent.usage` is now derived purely from the registry, that
+    wall time also needs a ledger row — otherwise
+    :attr:`AggregatedUsage.tool_execution_time` (and the Agent Metrics panel)
+    stays at ``0`` despite real tool calls.
+
+    The row carries no tokens and no cost — only timing. ``duration`` is set
+    equal to ``elapsed`` so the aggregated ``duration`` accounts for tool wall
+    time alongside model time; ``upsonic_execution_time`` is unaffected because
+    the same ``elapsed`` is added to both ``duration`` and
+    ``tool_execution_time`` (they cancel in ``duration - model - tool``).
+
+    Recorded under the active scope contextvars, so it rolls up by chat /
+    agent / task exactly like the model-call rows recorded in the same run.
+    Wrapped so a registry failure can never propagate into tool execution.
+
+    Args:
+        elapsed: Wall-clock seconds for one tool execution (or one parallel
+            batch). Zero / negative is skipped.
+        tool_name: Optional tool identifier, stored in ``extra`` for analytics.
+        registry: Override registry instance; defaults to
+            :func:`get_default_registry`.
+
+    Returns:
+        The created :class:`UsageEntry`, or ``None`` when skipped / on failure.
+    """
+    if not elapsed or elapsed <= 0:
+        return None
+    try:
+        reg = registry if registry is not None else get_default_registry()
+        tags = current_scope_tags()
+        entry = UsageEntry(
+            kind="tool",
+            tool_execution_time=elapsed,
+            duration=elapsed,
+            requests=0,
+            pipeline_step="tool_execution",
+            extra={"tool_name": tool_name} if tool_name else {},
+            **tags,
+        )
+        reg.record(entry)
+        return entry
+    except Exception:
+        return None

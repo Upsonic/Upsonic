@@ -132,7 +132,7 @@ Pure runtime state machine — *not* persisted to storage.
 | `IDLE` | `"idle"` | No invocation in flight; ready. |
 | `AWAITING_RESPONSE` | `"awaiting_response"` | A blocking `invoke` call is mid-flight. |
 | `STREAMING` | `"streaming"` | A streaming `invoke` / `stream` call is mid-flight. |
-| `ERROR` | `"error"` | A previous invocation hit a non-retryable or all-retries-exhausted failure. `can_accept_invocation()` returns `False` until `reset_session()` is called. |
+| `ERROR` | `"error"` | A previous invocation failed. The state **latches** (a failed `invoke`'s `finally` only returns to `IDLE` on success). `can_accept_invocation()` returns `False` until recovery via `reopen()` (non-destructive — clears `ERROR`→`IDLE`, history preserved) or `reset_session()` (deletes the session). |
 
 #### `SessionMetrics` (dataclass)
 
@@ -192,7 +192,7 @@ Initializes runtime-only fields: `_state = SessionState.IDLE`, `_concurrent_invo
 | --- | --- |
 | `state` (property) | Returns `_state`. |
 | `transition_state(new_state)` | Logs and assigns `_state`. |
-| `can_accept_invocation()` | `state != ERROR and concurrent < max`. |
+| `can_accept_invocation()` | `not _is_closed and state != ERROR and concurrent < max`. |
 | `start_invocation()` | Increments concurrent counter and refreshes activity. |
 | `end_invocation()` | Decrements counter (clamped at `0`) and refreshes activity. |
 
@@ -229,7 +229,7 @@ Initializes runtime-only fields: `_state = SessionState.IDLE`, `_concurrent_invo
 | `clear_history()` / `aclear_history()` | Sets `session.messages = []` and upserts. Other session data (usage, runs, user analysis) is preserved. |
 | `reset_session()` / `areset_session()` | Calls `storage.delete_session(session_id)` (or `adelete_session` if `AsyncStorage`). Clears local state, sets a fresh `_start_time`, clears `_end_time`, `_is_closed = False`. |
 | `close_session()` / `aclose_session()` | Idempotent: if not yet closed, sets `_end_time = time.time()` and `_is_closed = True`. Forces `_state = IDLE`, zeros `_concurrent_invocations`. Does *not* delete from storage. |
-| `reopen_session()` / `areopen_session()` | If `_is_closed`, computes `closed_duration = self.duration` (which was frozen by `close_session`) then sets `_start_time = time.time() - closed_duration` and clears `_end_time` / `_is_closed`. The arithmetic preserves *cumulative* duration semantics so a session that ran 30s, was closed for 1h, and reopened will continue counting from 30s. |
+| `reopen_session()` / `areopen_session()` | Recovers a *closed* **or** *errored* session (no-op only when open and not errored). For a closed session, computes `closed_duration = self.duration` (frozen by `close_session`) then sets `_start_time = time.time() - closed_duration` and clears `_end_time` / `_is_closed` — preserving *cumulative* duration (a session that ran 30s, was closed 1h, and reopened continues from 30s). Independently, if the state was `ERROR`, transitions it back to `IDLE`. |
 | `is_session_active()` | `_state != ERROR`. |
 
 ##### Usage / cost properties (all read from `session.usage`, all return `0` / `None` if absent)
@@ -344,7 +344,7 @@ All forward to `_session_manager` — there is *no* duplicate state in `Chat`.
 Runtime body:
 
 1. Normalize flags: `events=True` forces `stream=True`. `stream` and `return_run_output` together → `return_run_output` is dropped (it only applies to blocking).
-2. Concurrency / state guard via `_session_manager.can_accept_invocation()`. If `state == ERROR` raise `RuntimeError("Chat is in error state…")`. Otherwise raise `RuntimeError("Maximum concurrent invocations exceeded…")` with current/max counts.
+2. Concurrency / state guard via `_session_manager.can_accept_invocation()`. If `_is_closed` raise `SessionClosedError("Session '…' is closed. Call chat.reopen() to resume it.")`. Else if `state == ERROR` raise `RuntimeError("Chat is in error state. Call reopen() to resume with history, or reset_session() to start fresh.")`. Otherwise raise `RuntimeError("Maximum concurrent invocations exceeded…")` with current/max counts.
 3. `_normalize_input` → `Task`.
 4. `_session_manager.start_invocation()`, transition state to `STREAMING` or `AWAITING_RESPONSE`.
 5. `response_start_time = _session_manager.start_response_timer()`.
@@ -355,7 +355,7 @@ Runtime body:
 
 ##### `_invoke_blocking_async`
 
-Defines an inner `_execute()` coroutine. If `return_run_output`, calls `agent.do_async(task, debug=self.debug, return_output=True, **kwargs)`. If the result is an `AgentRunOutput` and `result.is_paused`, returns `InvokeResult(text=str(result.output), run_output=result)` — the HITL pause path. Otherwise returns `InvokeResult(text=…, run_output=None)`. If `return_run_output` is `False`, calls `agent.do_async(task, debug, **kwargs)` and stringifies the result. Wraps the call in `_execute_with_retry`. The `finally` always calls `end_response_timer`, `end_invocation`, and transitions state back to `IDLE`.
+Defines an inner `_execute()` coroutine. If `return_run_output`, calls `agent.do_async(task, debug=self.debug, return_output=True, **kwargs)`. If the result is an `AgentRunOutput` and `result.is_paused`, returns `InvokeResult(text=str(result.output), run_output=result)` — the HITL pause path. Otherwise returns `InvokeResult(text=…, run_output=None)`. If `return_run_output` is `False`, calls `agent.do_async(task, debug, **kwargs)` and stringifies the result. The `finally` always calls `end_invocation`, but transitions state back to `IDLE` **only on success** — a failed invoke sets (and latches) `ERROR` in the `except` handler so the failure stays observable.
 
 ##### `_invoke_streaming` / `_invoke_streaming_events`
 
@@ -366,7 +366,7 @@ Both follow the same pattern. They define an inner async generator (`_execute_st
   * If the message contains `"context manager is already active"` (a known pydantic-ai streaming corner case), backoff is `retry_delay * 3 ** attempt`.
   * Else if attempts remain, backoff is `retry_delay * 2 ** attempt`.
   * Else re-raise the last exception.
-* The outer `try/finally` always closes the generator if any, calls `end_response_timer`, `end_invocation`, and transitions to `IDLE`.
+* The outer `try/finally` always closes the generator if any, calls `end_response_timer`, `end_invocation`, and transitions to `IDLE` **unless the stream errored** (tracked by an `errored` flag) — a real exception latches `ERROR`, while stream abandonment (`GeneratorExit` / `CancelledError`, which `except Exception` does not catch) is treated as a non-error and lands in `IDLE`.
 
 This means that even mid-stream cancellation, exceptions, or abandonment never leak open generators or stuck state.
 
