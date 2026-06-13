@@ -2479,9 +2479,11 @@ class MemorySaveStep(Step):
                 execution_time=time.time() - start_time,
             )
             raise
+        finally:
+            if step_result:
+                self._finalize_step_result(step_result, context)
 
 
-            
 class ReliabilityStep(Step):
     """Apply reliability layer processing."""
     

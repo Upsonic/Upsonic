@@ -63,16 +63,23 @@ class CallManager:
         from upsonic.utils.tool_usage import tool_usage
         from upsonic.utils.printing import call_end
 
+        # Carry cache token counts through so the displayed Estimated Cost is
+        # priced cache-aware (matching chat.usage.cost / Agent Metrics) instead
+        # of charging cached input at full rate.
         task_usage: Optional[Any] = getattr(self.task, '_usage', None)
         if task_usage is not None and (task_usage.input_tokens or task_usage.output_tokens):
             usage: Dict[str, int] = {
                 "input_tokens": task_usage.input_tokens,
                 "output_tokens": task_usage.output_tokens,
+                "cache_read_tokens": getattr(task_usage, "cache_read_tokens", 0) or 0,
+                "cache_write_tokens": getattr(task_usage, "cache_write_tokens", 0) or 0,
             }
         elif context.usage is not None and hasattr(context.usage, 'input_tokens'):
             usage = {
                 "input_tokens": context.usage.input_tokens,
                 "output_tokens": context.usage.output_tokens,
+                "cache_read_tokens": getattr(context.usage, "cache_read_tokens", 0) or 0,
+                "cache_write_tokens": getattr(context.usage, "cache_write_tokens", 0) or 0,
             }
         else:
             from upsonic.utils.llm_usage import llm_usage

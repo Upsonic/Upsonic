@@ -202,3 +202,59 @@ def record_request_usage(
     )
     reg.record(entry)
     return entry
+
+
+def record_tool_execution_time(
+    elapsed: float,
+    *,
+    tool_name: Optional[str] = None,
+    registry: Optional[UsageRegistry] = None,
+) -> Optional[UsageEntry]:
+    """Append a ``kind="tool"`` ledger row carrying tool wall-clock time.
+
+    ``Agent`` measures per-tool (and per parallel-batch) execution time and
+    folds it into the per-run snapshot via
+    :meth:`upsonic.run.agent.output.AgentRunOutput.add_tool_execution_time`.
+    Since :attr:`Agent.usage` is now derived purely from the registry, that
+    wall time also needs a ledger row — otherwise
+    :attr:`AggregatedUsage.tool_execution_time` (and the Agent Metrics panel)
+    stays at ``0`` despite real tool calls.
+
+    The row carries no tokens and no cost — only timing. ``duration`` is set
+    equal to ``elapsed`` so the aggregated ``duration`` accounts for tool wall
+    time alongside model time; ``upsonic_execution_time`` is unaffected because
+    the same ``elapsed`` is added to both ``duration`` and
+    ``tool_execution_time`` (they cancel in ``duration - model - tool``).
+
+    Recorded under the active scope contextvars, so it rolls up by chat /
+    agent / task exactly like the model-call rows recorded in the same run.
+    Wrapped so a registry failure can never propagate into tool execution.
+
+    Args:
+        elapsed: Wall-clock seconds for one tool execution (or one parallel
+            batch). Zero / negative is skipped.
+        tool_name: Optional tool identifier, stored in ``extra`` for analytics.
+        registry: Override registry instance; defaults to
+            :func:`get_default_registry`.
+
+    Returns:
+        The created :class:`UsageEntry`, or ``None`` when skipped / on failure.
+    """
+    if not elapsed or elapsed <= 0:
+        return None
+    try:
+        reg = registry if registry is not None else get_default_registry()
+        tags = current_scope_tags()
+        entry = UsageEntry(
+            kind="tool",
+            tool_execution_time=elapsed,
+            duration=elapsed,
+            requests=0,
+            pipeline_step="tool_execution",
+            extra={"tool_name": tool_name} if tool_name else {},
+            **tags,
+        )
+        reg.record(entry)
+        return entry
+    except Exception:
+        return None

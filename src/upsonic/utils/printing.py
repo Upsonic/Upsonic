@@ -82,6 +82,22 @@ def get_estimated_cost(input_tokens: int, output_tokens: int, model: Union["Mode
         return "~$0.0000"
 
 
+def get_estimated_cost_from_usage(usage: dict, model: Union["Model", str]) -> str:
+    """Cache-aware estimated cost from a usage dict.
+
+    Unlike :func:`get_estimated_cost`, this honors ``cache_read_tokens`` /
+    ``cache_write_tokens`` (and ``reasoning_tokens``) when present in ``usage``,
+    so the displayed cost matches the cache-aware registry / ``chat.usage.cost``
+    value instead of charging cached input at full rate. A usage dict without
+    those keys prices identically to the plain input/output path.
+    """
+    try:
+        from upsonic.utils.usage import get_estimated_cost_from_usage as _get_estimated_cost_from_usage
+        return _get_estimated_cost_from_usage(usage, model)
+    except Exception:
+        return "~$0.0000"
+
+
 def _format_cost_for_display(cost: Optional[float]) -> str:
     """Format cost for Task/Agent Metrics so very small values are visible (not $0.0000)."""
     if cost is None:
@@ -252,12 +268,8 @@ def display_pydantic_structured_output(
     format_name = response_format.__name__ if hasattr(response_format, '__name__') else str(response_format)
     format_name_esc = escape_rich_markup(format_name)
     
-    estimated_cost = get_estimated_cost(
-        usage.get('input_tokens', 0),
-        usage.get('output_tokens', 0),
-        model_name
-    )
-    
+    estimated_cost = get_estimated_cost_from_usage(usage, model_name)
+
     metadata_table.add_row("[bold cyan]Model:[/bold cyan]", f"[bright_cyan]{model_name_esc}[/bright_cyan]")
     metadata_table.add_row("[bold yellow]Response Format:[/bold yellow]", f"[bright_yellow]{format_name_esc}[/bright_yellow]")
     metadata_table.add_row("[bold green]Execution Time:[/bold green]", f"[bright_green]{execution_time:.3f}s[/bright_green]")
@@ -350,12 +362,8 @@ def display_llm_result_table(
         result_str = result_str[:2000] + "\n\n... (truncated, use debug=True for full output)"
     result_esc = escape_rich_markup(result_str)
     
-    estimated_cost = get_estimated_cost(
-        usage.get('input_tokens', 0),
-        usage.get('output_tokens', 0),
-        model_name
-    )
-    
+    estimated_cost = get_estimated_cost_from_usage(usage, model_name)
+
     # Add rows to result table
     result_table.add_row("[bold bright_cyan]🤖 Model:[/bold bright_cyan]", f"[bright_cyan]{model_name_esc}[/bright_cyan]")
     result_table.add_row("")
@@ -1100,7 +1108,7 @@ def call_end(result: Any, model: Any, response_format: str, start_time: float, e
         "execution_time": execution_time,
         "input_tokens": str(usage.get('input_tokens', 0)),
         "output_tokens": str(usage.get('output_tokens', 0)),
-        "estimated_cost": str(get_estimated_cost(usage.get('input_tokens', 0), usage.get('output_tokens', 0), model))
+        "estimated_cost": str(get_estimated_cost_from_usage(usage, model))
     }
 
     # Tool kullanıldıysa ekle
@@ -1162,12 +1170,8 @@ def agent_end(result: Any, model: Any, response_format: str, start_time: float, 
             result_str = result_str[:2000] + "\n\n... (truncated, use debug=True for full output)"
         result_esc = escape_rich_markup(result_str)
         
-        estimated_cost = get_estimated_cost(
-            usage.get('input_tokens', 0),
-            usage.get('output_tokens', 0),
-            model
-        )
-        
+        estimated_cost = get_estimated_cost_from_usage(usage, model)
+
         # Add rows to result table
         result_table.add_row("[bold bright_cyan]🤖 Model:[/bold bright_cyan]", f"[bright_cyan]{model_name_esc}[/bright_cyan]")
         result_table.add_row("")
@@ -2880,13 +2884,9 @@ def direct_completed(
     display_model_name = escape_rich_markup(model.model_name)
     response_format_esc = escape_rich_markup(response_format)
     
-    # Calculate cost
-    estimated_cost = get_estimated_cost(
-        usage.get('input_tokens', 0), 
-        usage.get('output_tokens', 0), 
-        model
-    )
-    
+    # Calculate cost (cache-aware when the usage dict carries cache tokens)
+    estimated_cost = get_estimated_cost_from_usage(usage, model)
+
     # Format result
     result_str = str(result)
     if not debug:
