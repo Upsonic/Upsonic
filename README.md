@@ -4,6 +4,8 @@
 
 # Upsonic
 
+[![Listed on TakoAPI](https://img.shields.io/badge/Listed%20on-TakoAPI-7c3aed)](https://takoapi.com/agents/upsonic-upsonic)
+
 **Build Autonomous AI Agents in Python**
 
 [![PyPI version](https://badge.fury.io/py/upsonic.svg)](https://badge.fury.io/py/upsonic)
