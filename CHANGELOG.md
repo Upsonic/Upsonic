@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.77.4](https://github.com/Upsonic/Upsonic/compare/v0.77.3...v0.77.4) (2026-06-18)
+
+
+### Documentation
+
+* add SECURITY.md with responsible disclosure policy ([655c4d3](https://github.com/Upsonic/Upsonic/commit/655c4d3037df177e801c01defaf5be52344f9dfb))
+* add SECURITY.md with responsible disclosure policy ([eca02d4](https://github.com/Upsonic/Upsonic/commit/eca02d43ac8fb48b5ed4fe00433548d8c34c70bc))
+* **community:** add code of conduct ([101f031](https://github.com/Upsonic/Upsonic/commit/101f0313b0ddb96cd4078354879b2ff57005db29))
+* **community:** add code of conduct ([cd0b144](https://github.com/Upsonic/Upsonic/commit/cd0b144a3c3f545338017a9397c6b4cfc26a60a4))
+
 ## [0.77.3](https://github.com/Upsonic/Upsonic/compare/v0.77.2...v0.77.3) (2026-05-19)
 
 
