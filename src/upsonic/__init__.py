@@ -4,7 +4,7 @@ import warnings
 from pathlib import Path
 from typing import Any
 
-__version__ = "0.77.3" # x-release-please-version
+__version__ = "0.77.4" # x-release-please-version
 
 from dotenv import load_dotenv
 

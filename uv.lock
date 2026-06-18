@@ -8833,7 +8833,7 @@ wheels = [
 
 [[package]]
 name = "upsonic"
-version = "0.77.3"
+version = "0.77.4"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
