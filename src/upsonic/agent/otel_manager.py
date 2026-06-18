@@ -43,6 +43,15 @@ ATTR_STEP_NAME: str = "upsonic.step.name"
 ATTR_STEP_DESCRIPTION: str = "upsonic.step.description"
 ATTR_STEP_STATUS: str = "upsonic.step.status"
 ATTR_STEP_EXECUTION_TIME: str = "upsonic.step.execution_time"
+ATTR_PLAN_ACTION: str = "upsonic.plan.action"
+ATTR_PLAN_INPUT: str = "upsonic.plan.input"
+ATTR_PLAN_OUTPUT: str = "upsonic.plan.output"
+ATTR_PLAN_TODO_COUNT: str = "upsonic.plan.todo_count"
+ATTR_PLAN_STATUS_PREFIX: str = "upsonic.plan.status"
+
+GEN_AI_OPERATION_NAME: str = "gen_ai.operation.name"
+GEN_AI_AGENT_NAME: str = "gen_ai.agent.name"
+GEN_AI_AGENT_ID: str = "gen_ai.agent.id"
 
 # Additional run-level metrics
 ATTR_USAGE_REQUESTS: str = "upsonic.usage.requests"
@@ -73,6 +82,18 @@ LF_USER_ID: str = "langfuse.user.id"
 LF_SESSION_ID: str = "langfuse.session.id"
 GENERIC_USER_ID: str = "user.id"
 GENERIC_SESSION_ID: str = "session.id"
+_PLAN_OPERATION: str = "plan"
+_PLAN_STATUSES: tuple[str, ...] = ("pending", "in_progress", "completed", "cancelled")
+_CONTENT_ATTRIBUTE_LIMIT: int = 5000
+
+
+def _serialize_content_attribute(value: Any) -> str:
+    """Serialize arbitrary content to an OTel-safe bounded string attribute."""
+    try:
+        serialized = _json.dumps(value, default=str)
+    except Exception:
+        serialized = str(value)
+    return serialized[:_CONTENT_ATTRIBUTE_LIMIT]
 
 
 def _set_baggage(
@@ -309,6 +330,41 @@ class AgentOTelManager:
             attributes=attrs,
         )
 
+    def plan_span(
+        self,
+        *,
+        agent_name: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        action: Optional[str] = None,
+        input_todos: Optional[Any] = None,
+    ) -> Any:
+        """Create a GenAI ``plan`` span, or a no-op context manager."""
+        if self._settings is None:
+            return nullcontext(None)
+
+        from opentelemetry.trace import SpanKind
+
+        span_name = f"plan {agent_name}" if agent_name else "plan"
+        attrs: Dict[str, Any] = {
+            GEN_AI_OPERATION_NAME: _PLAN_OPERATION,
+        }
+        if agent_name:
+            attrs[GEN_AI_AGENT_NAME] = agent_name
+        if agent_id:
+            attrs[GEN_AI_AGENT_ID] = agent_id
+        if action:
+            attrs[ATTR_PLAN_ACTION] = action
+
+        include_content: bool = getattr(self._settings, "include_content", True)
+        if include_content and input_todos is not None:
+            attrs[ATTR_PLAN_INPUT] = _serialize_content_attribute(input_todos)
+
+        return self._settings.tracer.start_as_current_span(
+            span_name,
+            kind=SpanKind.INTERNAL,
+            attributes=attrs,
+        )
+
     def pipeline_span(
         self,
         total_steps: int,
@@ -453,6 +509,48 @@ class AgentOTelManager:
             _set_status_ok(span)
         elif error is not None:
             self.record_error(span, error)
+
+    def set_plan_result(
+        self,
+        span: Any,
+        *,
+        success: bool,
+        todo_count: Optional[int] = None,
+        status_counts: Optional[Dict[str, int]] = None,
+        action: Optional[str] = None,
+        output: Optional[Any] = None,
+        error: Optional[Exception] = None,
+    ) -> None:
+        """Set result attributes on a GenAI ``plan`` span."""
+        if not _is_recording(span):
+            return
+
+        attrs: Dict[str, Any] = {}
+        if action:
+            attrs[ATTR_PLAN_ACTION] = action
+        if todo_count is not None:
+            attrs[ATTR_PLAN_TODO_COUNT] = todo_count
+        if status_counts:
+            for status in _PLAN_STATUSES:
+                count = status_counts.get(status)
+                if count is not None:
+                    attrs[f"{ATTR_PLAN_STATUS_PREFIX}.{status}"] = count
+
+        include_content: bool = (
+            getattr(self._settings, "include_content", True)
+            if self._settings is not None
+            else True
+        )
+        if include_content and output is not None:
+            attrs[ATTR_PLAN_OUTPUT] = _serialize_content_attribute(output)
+
+        if attrs:
+            span.set_attributes(attrs)
+
+        if success:
+            _set_status_ok(span)
+        else:
+            self.record_error(span, error or RuntimeError("plan failed"))
 
     def set_step_result(
         self,

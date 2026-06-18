@@ -478,7 +478,10 @@ class ToolSetupStep(Step):
             agent._setup_task_tools(task)
             
             if hasattr(agent, '_planning_toolkit') and agent._planning_toolkit:
-                agent._planning_toolkit.set_current_task(task)
+                if hasattr(agent._planning_toolkit, "set_current_context"):
+                    agent._planning_toolkit.set_current_context(task, agent)
+                else:
+                    agent._planning_toolkit.set_current_task(task)
             
             tool_names: list = []
             has_mcp: bool = False
