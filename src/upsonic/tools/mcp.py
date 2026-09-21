@@ -497,6 +497,7 @@ class MCPHandler:
         loop = asyncio.get_event_loop()
         original_handler = loop.get_exception_handler()
         loop.set_exception_handler(self._cleanup_exception_handler)
+        cancellation: Optional[asyncio.CancelledError] = None
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message=".*coroutine.*was never awaited.*")
@@ -504,6 +505,8 @@ class MCPHandler:
                 if self._session_ctx is not None:
                     try:
                         await self._session_ctx.__aexit__(None, None, None)
+                    except asyncio.CancelledError as exc:
+                        cancellation = exc
                     except BaseException:
                         pass
                     self.session = None
@@ -512,6 +515,8 @@ class MCPHandler:
                 if self._transport_ctx is not None:
                     try:
                         await self._transport_ctx.__aexit__(None, None, None)
+                    except asyncio.CancelledError as exc:
+                        cancellation = exc
                     except BaseException:
                         pass
                     self._transport_ctx = None
@@ -519,6 +524,8 @@ class MCPHandler:
                 if self._managed_http_client is not None:
                     try:
                         await self._managed_http_client.aclose()
+                    except asyncio.CancelledError as exc:
+                        cancellation = exc
                     except BaseException:
                         pass
                     self._managed_http_client = None
@@ -527,9 +534,13 @@ class MCPHandler:
             finally:
                 try:
                     await asyncio.sleep(0)
+                except asyncio.CancelledError as exc:
+                    cancellation = exc
                 except BaseException:
                     pass
                 loop.set_exception_handler(original_handler)
+        if cancellation is not None:
+            raise cancellation
     
     async def __aenter__(self) -> "MCPHandler":
         await self.connect()
@@ -925,15 +936,20 @@ class MultiMCPHandler:
         console.print(f"[green]✅ Successfully connected to {len(self.handlers)} MCP servers with {len(self.tools)} total tools[/green]")
     
     async def close(self) -> None:
+        cancellation: Optional[asyncio.CancelledError] = None
         for handler in self.handlers:
             try:
                 await handler.close()
+            except asyncio.CancelledError as exc:
+                cancellation = exc
             except Exception:
                 pass
         
         self.handlers.clear()
         self.tools.clear()
         self._initialized = False
+        if cancellation is not None:
+            raise cancellation
     
     async def __aenter__(self) -> "MultiMCPHandler":
         await self.connect()

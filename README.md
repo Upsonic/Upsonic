@@ -114,6 +114,37 @@ agent = Agent(model="anthropic/claude-sonnet-4-5", name="Calculator Agent")
 result = agent.print_do(task)
 ```
 
+### Choose a web search backend
+
+`WebSearch` uses DuckDuckGo by default. To select Parallel's anonymous Search
+MCP instead, install the MCP extra and pass `provider="parallel"`:
+
+```bash
+pip install "upsonic[mcp]"
+```
+
+```python
+from upsonic.tools import WebSearch, aWebSearch
+
+results = WebSearch("Upsonic framework documentation", provider="parallel")
+# In an async application:
+# results = await aWebSearch("Upsonic framework documentation", provider="parallel")
+```
+
+Both return titles, source URLs and excerpts. `max_results` limits the sources
+returned to your caller locally; it doesn't set a server search limit. This
+option uses `https://search.parallel.ai/mcp` over Streamable HTTP and needs no
+Parallel account or API key. Anonymous access is rate limited. It doesn't replace
+provider-side `WebSearchTool` or change other search integrations.
+
+Selecting Parallel sends the supplied query (also used as the search objective)
+to Parallel. If you register `WebSearch` as an agent tool, the agent can invoke
+it with that provider. Requests include `upsonic/<package version>` in the
+User-Agent to measure aggregate Upsonic usage; this identifier contains no user
+or installation ID. This adapter uses the anonymous path and doesn't read
+Parallel API keys from the environment. See the [Search MCP documentation](https://docs.parallel.ai/integrations/mcp/search-mcp)
+for service details.
+
 > **Next steps:** Integrate [MCP Tools](https://docs.upsonic.ai/concepts/tools/mcp-tools/overview) to connect your agents to thousands of external data sources and services.
 
 ---

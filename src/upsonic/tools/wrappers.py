@@ -91,6 +91,12 @@ class FunctionTool(Tool):
         """Execute the tool function."""
         # Convert dict arguments to Pydantic models if needed
         converted_kwargs = self._convert_dicts_to_pydantic(kwargs)
+
+        from upsonic.tools.builtin_tools import WebSearch, aWebSearch
+
+        if self.function is WebSearch:
+            # Keep MCP work on the caller's loop so cancellation closes its client.
+            return await aWebSearch(*args, **converted_kwargs)
         
         if self.is_async:
             return await self.function(*args, **converted_kwargs)

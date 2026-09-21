@@ -41,7 +41,7 @@ dependencies = [
 
 [project.optional-dependencies]
 mcp = [
-    "mcp[cli]>=1.26.0",
+    "mcp[cli]>=1.26.0,<2",
     "fastmcp>=2.14.5",
 ]
 asqav = [

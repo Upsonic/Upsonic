@@ -727,7 +727,7 @@ Default `ToolConfig`: `timeout=60`, `max_retries=2`, `sequential=False`.
 | `__new__` | Issues a one-time security warning ("only trust MCP servers you connect to") and asserts the optional `mcp` package is installed. |
 | `__init__(config=None, *, command=None, url=None, env=None, transport='stdio', server_params=None, session=None, timeout_seconds=5, include_tools=None, exclude_tools=None, tool_name_prefix=None)` | Accepts either a legacy config class (with `.url`/`.command`) or explicit kwargs, derives `connection_type`, `server_name`, and canonical `server_params`. |
 | `connect()` | Async, idempotent. Opens the transport context manager, builds a `ClientSession`, calls `_discover_tools` (which calls `session.initialize()` and `session.list_tools()`), applies `include_tools`/`exclude_tools` filters, and creates one `MCPTool` per discovered tool. Guarded by an `asyncio.Lock`. |
-| `close()` | Async. Tears down session and transport, calls `_managed_http_client.aclose()` if needed. Tool metadata survives. |
+| `close()` | Async. Tears down session and transport, calls `_managed_http_client.aclose()` if needed, then propagates observed cancellation. Tool metadata survives. |
 | `__aenter__` / `__aexit__` | Sugar for `connect`/`close`. |
 | `get_tools()` | **Synchronous** wrapper that opens a temp connection in a fresh thread (if there's already a running loop) or a new event loop, discovers, then closes. Used at registration time, before the agent's main event loop starts. |
 | `call_tool(tool_name, arguments)` | Auto-reconnects if the persistent session was closed, calls `session.call_tool`, processes the result via `_process_tool_result` (joins text content, base64-decodes embedded images, surfaces `EmbeddedResource` URIs, returns a dict with `content` + `images` when images were present). |
@@ -751,6 +751,7 @@ Aggregated `tools`, `handlers`. Same `connect`/`close`/`get_tools`/
 async-context-manager surface as `MCPHandler`. Extras: `get_server_count()`,
 `get_tool_count()`, `get_tools_by_server()` (dict server→tool names),
 `get_server_info()` (per-server debug list).
+`close()` finishes all child cleanup and clears aggregated state before propagating cancellation.
 
 ### 4.2 `builtin_tools.py` — provider-side native tools
 
@@ -783,10 +784,17 @@ Shipped builtin types:
 excludes deprecated, `BUILTIN_TOOLS_REQUIRING_CONFIG = {MCPServerTool,
 MemoryTool}`.
 
-The file also exports two **plain Python** helper functions:
+The file also exports **plain Python** helper functions:
 
-- `WebSearch(query: str, max_results: int = 10) -> str` — uses `ddgs` /
-  `duckduckgo_search` synchronously. Suitable as a quick ad-hoc tool.
+- `WebSearch(query: str, max_results: int = 10, provider="duckduckgo") -> str`
+  uses `ddgs` / `duckduckgo_search` by default. Explicit `provider="parallel"`
+  uses anonymous Search MCP through the maintained `MCPHandler`, requiring
+  `upsonic[mcp]`. `aWebSearch` is its async counterpart. Both preserve titles,
+  URLs and excerpts; Parallel's `max_results` is a local returned-source limit.
+  Queries go to Parallel with the project-wide `upsonic/<version>` User-Agent.
+  The adapter reads no Parallel credentials. See the README's backend setup.
+  The native function-tool wrapper calls `WebSearch` through its async counterpart,
+  so MCP work follows caller cancellation while retaining its name and configuration.
 - `WebRead(url: str) -> str` — uses `requests` + `bs4` to fetch and clean a
   page; truncates to 5000 chars. Both are used as zero-config defaults
   when an agent requests basic web access without a paid SDK.

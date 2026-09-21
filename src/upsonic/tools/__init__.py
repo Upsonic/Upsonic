@@ -79,6 +79,7 @@ if TYPE_CHECKING:
         CodeExecutionTool,
         UrlContextTool,
         WebSearch,
+        aWebSearch,
         WebRead,
     )
 
@@ -253,6 +254,7 @@ def _get_builtin_classes() -> Dict[str, Any]:
         CodeExecutionTool,
         UrlContextTool,
         WebSearch,
+        aWebSearch,
         WebRead,
     )
 
@@ -263,6 +265,7 @@ def _get_builtin_classes() -> Dict[str, Any]:
         'CodeExecutionTool': CodeExecutionTool,
         'UrlContextTool': UrlContextTool,
         'WebSearch': WebSearch,
+        'aWebSearch': aWebSearch,
         'WebRead': WebRead,
     }
 
@@ -528,5 +531,6 @@ __all__ = [
     'CodeExecutionTool',
     'UrlContextTool',
     'WebSearch',
+    'aWebSearch',
     'WebRead',
 ]

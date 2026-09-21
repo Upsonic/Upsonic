@@ -1,5 +1,7 @@
 from __future__ import annotations as _annotations
 
+import json
+
 from abc import ABC
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -507,17 +509,28 @@ SUPPORTED_BUILTIN_TOOLS = frozenset(cls for cls in BUILTIN_TOOL_TYPES.values() i
 BUILTIN_TOOLS_REQUIRING_CONFIG: frozenset[type[AbstractBuiltinTool]] = frozenset({MCPServerTool, MemoryTool})
 
 
-def WebSearch(query: str, max_results: int = 10) -> str:
+def WebSearch(
+    query: str, max_results: int = 10,
+    provider: Literal["duckduckgo", "parallel"] = "duckduckgo",
+) -> str:
     """
     Search the web for the given query and return formatted results.
 
     Args:
         query: The search query
         max_results: Maximum number of results to return (default: 10)
+        provider: Search backend. Parallel uses the anonymous Search MCP and
+            requires the mcp extra. DuckDuckGo remains the default.
 
     Returns:
         Formatted string containing search results
     """
+    if provider == "parallel":
+        from upsonic.utils.async_utils import run_async
+        return run_async(aWebSearch(query, max_results, provider))
+    if provider != "duckduckgo":
+        raise ValueError(f"Unknown search provider: {provider}")
+
     if not _DDGS_AVAILABLE:
         from upsonic.utils.printing import import_error
         import_error(
@@ -540,6 +553,73 @@ def WebSearch(query: str, max_results: int = 10) -> str:
             return formatted_results
         except Exception as e:
             return f"Error performing web search: {str(e)}"
+
+
+async def aWebSearch(
+    query: str, max_results: int = 10,
+    provider: Literal["duckduckgo", "parallel"] = "duckduckgo",
+) -> str:
+    """Search asynchronously, preserving DuckDuckGo as the default backend.
+
+    Parallel sends the query to https://search.parallel.ai/mcp without an API
+    key. max_results limits returned sources locally, not the server search.
+    """
+    if provider == "duckduckgo":
+        import anyio.to_thread
+        return await anyio.to_thread.run_sync(WebSearch, query, max_results)
+    if provider != "parallel":
+        raise ValueError(f"Unknown search provider: {provider}")
+    if not query.strip():
+        raise ValueError("query must not be empty")
+    if isinstance(max_results, bool) or not isinstance(max_results, int) or max_results < 1:
+        raise ValueError("max_results must be a positive integer")
+
+    from upsonic import __version__
+    from upsonic.tools.mcp import MCPHandler, StreamableHTTPClientParams
+
+    # Identify aggregate Upsonic usage; keep this project-wide, without user IDs.
+    handler = MCPHandler(
+        server_params=StreamableHTTPClientParams(
+            url="https://search.parallel.ai/mcp",
+            headers={"User-Agent": f"upsonic/{__version__}"},
+        ),
+        include_tools=["web_search"],
+        timeout_seconds=30,
+    )
+    try:
+        try:
+            await handler.connect()
+            response = await handler.call_tool("web_search", {
+                "objective": query, "search_queries": [query],
+            })
+        finally:
+            # Setup can be cancelled before a context manager enters successfully.
+            await handler.close()
+        if not isinstance(response, str):
+            raise ValueError(f"Search MCP failed: {response}")
+        payload = json.loads(response)
+        if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
+            raise ValueError("Search MCP returned an invalid result payload")
+        results = payload["results"]
+        for result in results:
+            if (
+                not isinstance(result, dict)
+                or not isinstance(result.get("url"), str)
+                or not isinstance(result.get("title"), str)
+                or not isinstance(result.get("excerpts"), list)
+                or not all(isinstance(excerpt, str) for excerpt in result["excerpts"])
+            ):
+                raise ValueError("Search MCP returned an invalid search result")
+        formatted = f"Web search results for: {query}\n\n"
+        for i, result in enumerate(results[:max_results], 1):
+            formatted += f"{i}. {result['title']}\n"
+            formatted += f"   URL: {result['url']}\n"
+            formatted += "   Description: " + "\n".join(result["excerpts"]) + "\n\n"
+        if payload.get("warnings"):
+            formatted += "Warnings: " + json.dumps(payload["warnings"]) + "\n"
+        return formatted
+    except Exception as exc:
+        return f"Error performing web search: {exc}"
 
 
 def WebRead(url: str) -> str:
