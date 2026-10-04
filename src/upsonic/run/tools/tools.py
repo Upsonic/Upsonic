@@ -36,6 +36,9 @@ class ToolExecution:
 
     result_injected: bool = False
 
+    # Snapshot at execution time; old persisted executions default to unsafe.
+    retry_safe: bool = False
+
     @property
     def is_paused(self) -> bool:
         return bool(self.requires_confirmation or self.requires_user_input or self.external_execution_required)
@@ -59,6 +62,7 @@ class ToolExecution:
             "user_input_schema": self.user_input_schema,
             "answered": self.answered,
             "external_execution_required": self.external_execution_required,
+            "retry_safe": self.retry_safe,
         }
 
     @classmethod
@@ -86,4 +90,5 @@ class ToolExecution:
             external_execution_required=data.get("external_execution_required"),
             metrics=metrics,
             created_at=data.get("created_at", int(time())),
+            retry_safe=data.get("retry_safe", False) is True,
         )

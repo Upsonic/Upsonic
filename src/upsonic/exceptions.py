@@ -34,6 +34,23 @@ class UpsonicError(Exception):
     pass
 
 
+class AgentRetryUnsafeError(UpsonicError):
+    """A failed task cannot safely restart after completed tool executions.
+
+    The tools completed, but the task did not. Inspect their results before
+    starting a new task; this exception does not undo their effects.
+    """
+
+    def __init__(self, tool_names: tuple[str, ...]):
+        self.tool_names = tool_names
+        super().__init__(
+            "Refusing whole-task retry after completed tools without retry_safe=True: "
+            + ", ".join(tool_names)
+            + ". The task failed after these tools completed; inspect their results "
+            "before starting another task."
+        )
+
+
 class APIKeyMissingError(UpsonicError):
     """
     Exception raised when an API key is missing for a model provider.

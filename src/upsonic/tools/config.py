@@ -16,6 +16,16 @@ class ToolHooks(BaseModel):
 
 class ToolConfig(BaseModel):
     """Tool behavior configuration for the Upsonic framework."""
+
+    retry_safe: bool = Field(
+        default=False,
+        strict=True,
+        description=(
+            "If True, a completed tool may be repeated when an Agent retries the "
+            "whole task. Only enable for operations whose repetition is safe. "
+            "This does not configure the tool's own max_retries."
+        ),
+    )
     
     requires_confirmation: bool = Field(
         default=False,

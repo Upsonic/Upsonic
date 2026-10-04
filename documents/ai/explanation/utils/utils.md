@@ -275,8 +275,9 @@ the retry count and mode:
 
 Behaviour:
 
-- Catches every exception except `GuardrailValidationError` and
-  `ExecutionTimeoutError`, which always bubble up immediately.
+- Catches every exception except `GuardrailValidationError`,
+  `ExecutionTimeoutError`, and `AgentRetryUnsafeError`, which always bubble up
+  immediately (including in `mode="return_false"`).
 - Exponential backoff with `delay`, multiplied by `backoff` after each failure.
 - On exhaustion: `mode="raise"` re-raises the last exception, `mode="return_false"`
   returns `False`.
