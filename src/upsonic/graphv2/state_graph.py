@@ -9,32 +9,42 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-import operator
 from collections.abc import Callable
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
-    Any, Dict, List, Literal, Optional, Tuple, Type, TypeVar, Union,
-    get_args, get_origin,
+    Any,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Type,
+    TypeVar,
+    Union,
+    get_args,
+    get_origin,
 )
 
 if TYPE_CHECKING:
     from upsonic.uel.graph import RunnableGraph
 
-from upsonic.uel.runnable import Runnable
+from upsonic.graphv2.cache import BaseCache, CachePolicy
 from upsonic.graphv2.checkpoint import (
     BaseCheckpointer,
     Checkpoint,
     StateSnapshot,
     generate_checkpoint_id,
 )
-from upsonic.graphv2.primitives import Command, END, InterruptException, Send
+from upsonic.graphv2.errors import (
+    GraphExecutionUncertainError,
+    GraphRecursionError,
+    GraphValidationError,
+)
+from upsonic.graphv2.primitives import END, Command, InterruptException, Send
 from upsonic.graphv2.store import BaseStore
-from upsonic.graphv2.cache import BaseCache, CachePolicy
 from upsonic.graphv2.task import RetryPolicy
-from upsonic.graphv2.errors import GraphRecursionError, GraphValidationError
-
+from upsonic.uel.runnable import Runnable
 
 # Special START marker
 START = "__start__"
@@ -54,9 +64,14 @@ class NodeConfig:
         cache_policy: Optional cache configuration for results
     """
     
-    func: Callable[[Dict[str, Any]], Any]
+    func: Callable[..., Any]
     retry_policy: Optional[RetryPolicy] = None
     cache_policy: Optional[CachePolicy] = None
+    retry_safe: bool = False
+
+    def __post_init__(self) -> None:
+        if type(self.retry_safe) is not bool:
+            raise TypeError("retry_safe must be a boolean")
 
 
 @dataclass
@@ -167,10 +182,11 @@ class StateGraph(Runnable[Dict[str, Any], Dict[str, Any]]):
     def add_node(
         self,
         name: str,
-        func: Callable[[Dict[str, Any]], Any],
+        func: Callable[..., Any],
         *,
         retry_policy: Optional[RetryPolicy] = None,
-        cache_policy: Optional[CachePolicy] = None
+        cache_policy: Optional[CachePolicy] = None,
+        retry_safe: bool = False
     ) -> None:
         """Add a node to the graph.
         
@@ -179,6 +195,7 @@ class StateGraph(Runnable[Dict[str, Any], Dict[str, Any]]):
             func: Function that takes state and returns state updates
             retry_policy: Optional retry configuration
             cache_policy: Optional cache configuration
+            retry_safe: Explicitly permit replay after an uncertain outcome
             
         Raises:
             ValueError: If a node with this name already exists
@@ -192,7 +209,8 @@ class StateGraph(Runnable[Dict[str, Any], Dict[str, Any]]):
         self.nodes[name] = NodeConfig(
             func=func,
             retry_policy=retry_policy,
-            cache_policy=cache_policy
+            cache_policy=cache_policy,
+            retry_safe=retry_safe
         )
     
     def add_edge(self, from_node: str, to_node: str) -> None:
@@ -399,122 +417,61 @@ class CompiledStateGraph(Runnable[Dict[str, Any], Dict[str, Any]]):
         config: Optional[Dict[str, Any]] = None,
         context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Execute the graph asynchronously.
-        
-        Args:
-            input: Initial state or Command to resume from interrupt (None to resume from failure)
-            config: Configuration including thread_id, checkpoint_id, and recursion_limit
-            context: Runtime context parameters
-            
-        Returns:
-            Final state dictionary
+        """Execute or recover a graph using durable logical invocation records.
+
+        Checkpointer writes are synchronous safety barriers in every durability
+        mode. Use a persistent checkpointer for recovery across processes.
+        Concurrent writers to the same thread are not supported.
         """
-        # Get or create thread configuration
-        config = config or {}
+        config = dict(config or {})
         thread_config = config.get("configurable", {})
         thread_id = thread_config.get("thread_id", "default")
         checkpoint_id = thread_config.get("checkpoint_id")
         recursion_limit = config.get("recursion_limit", 100)
-        
-        # Store context in config for node access
         if context:
             config["context"] = context
-        
-        # Validate input against input_schema if provided
         if input is not None and not isinstance(input, Command) and self.input_schema:
             input = self._validate_input(input)
-        
-        # Handle resume from interrupt
+        checkpoint = self.checkpointer.get(thread_id, checkpoint_id) if self.checkpointer else None
+        if checkpoint_id and self.checkpointer:
+            latest = self.checkpointer.get(thread_id)
+            if latest and latest.checkpoint_id != checkpoint_id and latest.pending_tasks:
+                raise GraphExecutionUncertainError(latest.pending_tasks)
         if isinstance(input, Command):
             try:
-                final_state = await self._resume_from_interrupt(input, thread_id, checkpoint_id, config, recursion_limit)
-                
-                # Flush pending checkpoints if using exit durability
-                if self.durability == "exit" and self.checkpointer:
-                    await self._flush_exit_checkpoints()
-                
-                return self._filter_output(final_state)
-            except InterruptException as e:
-                # A subsequent node interrupted during resume
-                # Flush pending checkpoints if using exit durability
-                if self.durability == "exit" and self.checkpointer:
-                    await self._flush_exit_checkpoints()
-                
-                # Get the current state from the latest checkpoint
-                state = {}
-                if self.checkpointer:
-                    latest_checkpoint = self.checkpointer.get(thread_id)
-                    if latest_checkpoint:
-                        state = latest_checkpoint.state
-                return {
-                    **state,
-                    "__interrupt__": [{"value": e.value}]
-                }
-        
-        # Handle resume from failure (input is None)
-        if input is None and self.checkpointer:
-            existing_checkpoint = self.checkpointer.get(thread_id, checkpoint_id)
-            if existing_checkpoint:
-                # Resume from where we left off
-                state = deepcopy(existing_checkpoint.state)
-                next_nodes = existing_checkpoint.next_nodes
-                parent_checkpoint_id = existing_checkpoint.checkpoint_id
-            else:
-                raise ValueError(f"Cannot resume: no checkpoint found for thread_id={thread_id}")
-        # Load existing state from checkpoint or start fresh
-        elif self.checkpointer and (existing_checkpoint := self.checkpointer.get(thread_id, checkpoint_id)):
-            state = deepcopy(existing_checkpoint.state)
-            next_nodes = existing_checkpoint.next_nodes
-            parent_checkpoint_id = existing_checkpoint.checkpoint_id
-            
-            # If input provided (including empty dict), merge it and restart from START
-            # Use `is not None` instead of truthiness check since {} is falsy but valid input
-            if input is not None:
-                state = self._merge_state(state, input)
-                # If the previous execution ended (next_nodes is END), restart from START
-                if END in next_nodes or not next_nodes:
-                    next_nodes = [START]
-        else:
-            # Fresh start
-            state = input or {}
-            next_nodes = [START]
-            parent_checkpoint_id = None
-        
-        # Execute the graph
+                return self._filter_output(await self._resume_from_interrupt(
+                    input, thread_id, checkpoint_id, config, recursion_limit))
+            except InterruptException as exc:
+                latest = self.checkpointer.get(thread_id) if self.checkpointer else None
+                return {**(latest.state if latest else {}), "__interrupt__": [{"value": exc.value}]}
+        if input is None and self.checkpointer and checkpoint is None:
+            raise ValueError(f"Cannot resume: no checkpoint found for thread_id={thread_id}")
+        state = deepcopy(checkpoint.state) if checkpoint else deepcopy(input or {})
+        next_nodes = checkpoint.next_nodes if checkpoint else [START]
+        tasks = deepcopy(checkpoint.pending_tasks) if checkpoint else None
+        if checkpoint and input is not None:
+            if tasks:
+                # Changing inputs must not replace the original invocation plan.
+                raise GraphExecutionUncertainError(tasks)
+            state = self._merge_state(state, input)
+            if END in next_nodes or not next_nodes:
+                next_nodes = [START]
+                tasks = None
+        if (checkpoint and checkpoint.pending_tasks is None
+                and checkpoint.next_nodes and END not in checkpoint.next_nodes):
+            tasks = self._plan_tasks(next_nodes, state)
+            for task in tasks:
+                task["status"] = "UNKNOWN"
         try:
             final_state = await self._execute_graph(
-                state=state,
-                next_nodes=next_nodes,
-                thread_id=thread_id,
-                parent_checkpoint_id=parent_checkpoint_id,
-                config=config,
-                recursion_limit=recursion_limit
-            )
-            
-            # Flush pending checkpoints if using exit durability
-            if self.durability == "exit" and self.checkpointer:
-                await self._flush_exit_checkpoints()
-            
+                state, next_nodes, thread_id,
+                checkpoint.checkpoint_id if checkpoint else None,
+                config, recursion_limit, pending_tasks=tasks)
             return self._filter_output(final_state)
-            
-        except InterruptException as e:
-            # Graph was interrupted - the checkpoint is already saved
-            # Flush pending checkpoints if using exit durability
-            if self.durability == "exit" and self.checkpointer:
-                await self._flush_exit_checkpoints()
-            
-            # Just return the current state with interrupt marker
-            return {
-                **state,
-                "__interrupt__": [{"value": e.value}]
-            }
-        except Exception as e:
-            # Any other error - flush checkpoints if using exit durability
-            if self.durability == "exit" and self.checkpointer:
-                await self._flush_exit_checkpoints()
-            # Re-raise the exception
-            raise
-    
+        except InterruptException as exc:
+            latest = self.checkpointer.get(thread_id) if self.checkpointer else None
+            return {**(latest.state if latest else state), "__interrupt__": [{"value": exc.value}]}
+
     def _validate_input(self, input: Dict[str, Any]) -> Dict[str, Any]:
         """Validate input against input_schema.
         
@@ -563,355 +520,160 @@ class CompiledStateGraph(Runnable[Dict[str, Any], Dict[str, Any]]):
         
         return state
     
+    def _plan_tasks(
+        self, targets: list[str | Send], state: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        """Materialize ordered invocation slots; payload equality is not identity."""
+        tasks = []
+        for target in targets:
+            if target == START:
+                tasks.extend(self._plan_tasks(self._get_next_nodes(START, state), state))
+                continue
+            if target == END:
+                continue
+            node = target.node if isinstance(target, Send) else target
+            if node not in self.nodes:
+                raise ValueError(f"Send or edge references unknown node: {node}")
+            node_state = {**state, **target.state} if isinstance(target, Send) else state
+            tasks.append({"id": generate_checkpoint_id(), "node": node,
+                          "state": deepcopy(node_state), "send": isinstance(target, Send),
+                          "status": "NOT_STARTED", "result": None})
+        return tasks
+
     async def _execute_graph(
         self,
-        state: Dict[str, Any],
-        next_nodes: List[str],
+        state: dict[str, Any],
+        next_nodes: list[str],
         thread_id: str,
-        parent_checkpoint_id: Optional[str],
-        config: Dict[str, Any],
-        recursion_limit: int
-    ) -> Dict[str, Any]:
-        """Execute the graph from the given state and nodes.
-        
-        Args:
-            state: Current state
-            next_nodes: List of nodes to execute next
-            thread_id: Thread identifier
-            parent_checkpoint_id: Parent checkpoint for history
-            config: Configuration including context
-            recursion_limit: Maximum number of supersteps allowed
-            
-        Returns:
-            Final state after execution completes
-            
-        Raises:
-            GraphRecursionError: If recursion_limit is exceeded
-        """
-        current_nodes = next_nodes
-        current_parent = parent_checkpoint_id
-        superstep_count = 0
-        
-        while current_nodes:
-            # Check recursion limit
-            superstep_count += 1
-            if superstep_count > recursion_limit:
-                raise GraphRecursionError(
-                    f"Graph execution exceeded recursion limit of {recursion_limit} supersteps"
-                )
-            # Get the first node to execute
-            if START in current_nodes:
-                # Start node - find what comes after it
-                next_result = self._get_next_nodes(START, state)
-                # Check if we got Send objects
-                if next_result and len(next_result) > 0 and isinstance(next_result[0], Send):
-                    # Execute Send objects from START
-                    send_results = await self._execute_send_objects(next_result, state, config)
-                    for send_updates in send_results:
-                        state = self._merge_state(state, send_updates)
-                    # After Send execution, determine next nodes
-                    all_next = set()
-                    for send_obj in next_result:
-                        next_from_send = self._get_next_nodes(send_obj.node, state)
-                        if next_from_send and not isinstance(next_from_send[0], Send):
-                            all_next.update(next_from_send)
-                    current_nodes = list(all_next) if all_next else [END]
-                else:
-                    current_nodes = next_result
-                continue
-            
-            if END in current_nodes or not current_nodes:
-                # Reached the end
-                break
-            
-            # Execute all ready nodes in parallel if multiple
-            nodes_to_execute = [n for n in current_nodes if n != END]
-            
-            if not nodes_to_execute:
-                break
-            
-            if len(nodes_to_execute) == 1:
-                # Single node execution
-                node_name = nodes_to_execute[0]
-                
-                # Check for interrupt before
-                if node_name in self.interrupt_before:
-                    await self._save_checkpoint(
-                        state=state,
-                        next_nodes=current_nodes,
-                        thread_id=thread_id,
-                        parent_checkpoint_id=current_parent,
-                        metadata={"interrupted_before": node_name}
-                    )
-                    raise InterruptException({"node": node_name, "when": "before"})
-                
-                # Execute the node with retry and caching
-                node_config = self.nodes[node_name]
+        parent_checkpoint_id: str | None,
+        config: dict[str, Any],
+        recursion_limit: int,
+        pending_tasks: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
+        """Plan, durably admit, and settle each logical invocation in a batch."""
+        tasks: list[dict[str, Any]] = pending_tasks if pending_tasks is not None else []
+        parent = parent_checkpoint_id
+
+        def save(metadata: dict[str, Any] | None = None) -> None:
+            nonlocal parent
+            checkpoint = Checkpoint(
+                checkpoint_id=generate_checkpoint_id(), thread_id=thread_id,
+                state=deepcopy(state), next_nodes=[t["node"] for t in tasks] or [END],
+                parent_checkpoint_id=parent, metadata=metadata or {},
+                pending_tasks=deepcopy(tasks))
+            if self.checkpointer:
+                # Never schedule this write in the background or buffer until exit.
+                self.checkpointer.put(checkpoint)
+            parent = checkpoint.checkpoint_id
+
+        if pending_tasks is None:
+            tasks = self._plan_tasks(next_nodes, state)
+            save()
+        for _ in range(recursion_limit):
+            if not tasks:
+                return state
+            uncertain = [task for task in tasks
+                         if task["status"] not in ("NOT_STARTED", "COMPLETED")
+                         and not self.nodes[task["node"]].retry_safe]
+            if uncertain:
+                raise GraphExecutionUncertainError(uncertain)
+            for task in tasks:
+                if (task["status"] == "NOT_STARTED" and task["node"] in self.interrupt_before
+                        and not task.get("before_approved", False)):
+                    save({"interrupted_before": task["node"], "interrupted_task": task["id"]})
+                    raise InterruptException({"node": task["node"], "when": "before"})
+
+            async def execute(
+                task: dict[str, Any]
+            ) -> dict[str, Any] | Command:
+                if task["status"] == "COMPLETED":
+                    return task["result"]
+                node_config = self.nodes[task["node"]]
+                node_runtime = {**config, "configurable": {
+                    **config.get("configurable", {}), "thread_id": thread_id,
+                    "node_execution_id": task["id"]}}
+                # Cache hits never enter a node body, hence need no dispatch marker.
+                if task["status"] == "NOT_STARTED" and node_config.cache_policy and self.cache:
+                    cache_key = node_config.cache_policy.key_func(task["state"])
+                    cached = self.cache.get((task["node"],), cache_key)
+                    if cached is not None:
+                        task["result"] = cached
+                        task["status"] = "COMPLETED"
+                        save()
+                        return cached
+                task["status"] = "DISPATCH_RECORDED"
+                save()  # A failing barrier aborts before any body execution.
                 try:
-                    updates = await self._execute_node_with_policies(
-                        node_name=node_name,
-                        node_config=node_config,
-                        state=state,
-                        config=config
+                    from upsonic.graphv2.primitives import (
+                        _interrupt_counter,
+                        _interrupt_resume_values,
                     )
-                except InterruptException as e:
-                    # Node called interrupt() - save checkpoint and re-raise
-                    await self._save_checkpoint(
-                        state=state,
-                        next_nodes=[node_name],  # Will re-execute this node on resume
-                        thread_id=thread_id,
-                        parent_checkpoint_id=current_parent,
-                        metadata={"interrupted_node": node_name, "interrupt_value": e.value}
-                    )
+                    resume_token = counter_token = None
+                    values = config.get("_graph_resume_values", {}).get(task["id"])
+                    if values is not None:
+                        resume_token = _interrupt_resume_values.set(values)
+                        counter_token = _interrupt_counter.set(0)
+                    try:
+                        result = await self._execute_node_with_policies(
+                            task["node"], node_config, deepcopy(task["state"]), node_runtime)
+                    finally:
+                        if resume_token is not None:
+                            _interrupt_resume_values.reset(resume_token)
+                            _interrupt_counter.reset(counter_token)
+                    if isinstance(result, Send) or (isinstance(result, list)
+                            and any(isinstance(value, Send) for value in result)):
+                        raise ValueError("Send objects can only be returned from conditional edge functions")
+                    if not isinstance(result, (dict, Command)):
+                        raise TypeError("Node result must be a dictionary or Command")
+                except InterruptException as exc:
+                    task["status"] = "INTERRUPTED"
+                    save({"interrupted_node": task["node"], "interrupted_task": task["id"],
+                          "interrupt_value": exc.value})
                     raise
-                except Exception as e:
-                    # Node failed with an error - save checkpoint for recovery
-                    if self.checkpointer:
-                        await self._save_checkpoint(
-                            state=state,
-                            next_nodes=[node_name],  # Will re-execute this node on resume
-                            thread_id=thread_id,
-                            parent_checkpoint_id=current_parent,
-                            metadata={"failed_node": node_name, "error": str(e)}
-                        )
+                except Exception as exc:
+                    task["status"] = "UNKNOWN"
+                    save({"failed_node": task["node"], "error": str(exc)})
+                    if not node_config.retry_safe:
+                        raise GraphExecutionUncertainError([task]) from exc
                     raise
-                
-                # Check if node returned a Command
-                next_goto = None
-                
-                if isinstance(updates, Command):
-                    next_goto = updates.goto
-                    updates = updates.update or {}
-                elif isinstance(updates, (Send, list)):
-                    # Node returned Send objects directly - this is NOT supported!
-                    # Send objects should ONLY be returned from conditional edge functions
-                    if isinstance(updates, Send) or (isinstance(updates, list) and any(isinstance(u, Send) for u in updates)):
-                        raise ValueError(
-                            f"Node '{node_name}' returned Send object(s) directly. "
-                            "Send objects can only be returned from conditional edge functions. "
-                            "Use add_conditional_edges() with a routing function that returns Send objects."
-                        )
-                
-                # Merge updates into state
+                task["result"] = result
+                task["status"] = "COMPLETED"
+                save()  # Persist each sibling receipt before a batch can advance.
+                return result
+
+            outcomes = await asyncio.gather(*(execute(task) for task in tasks), return_exceptions=True)
+            for outcome in outcomes:
+                if isinstance(outcome, BaseException):
+                    raise outcome
+            completed = tasks
+            for task in completed:
+                result = task["result"]
+                updates = result.update or {} if isinstance(result, Command) else result
                 state = self._merge_state(state, updates)
-                
-                # Check for interrupt after
-                if node_name in self.interrupt_after:
-                    # Determine next nodes before interrupting
-                    if next_goto:
-                        resolved_goto = self._resolve_goto(next_goto)
-                        # Convert Send objects to node names for checkpoint
-                        if resolved_goto and isinstance(resolved_goto[0], Send):
-                            next_nodes_after = [s.node for s in resolved_goto if isinstance(s, Send)]
-                        else:
-                            next_nodes_after = resolved_goto
-                    else:
-                        next_nodes_result = self._get_next_nodes(node_name, state)
-                        # Convert Send objects to node names for checkpoint
-                        if next_nodes_result and isinstance(next_nodes_result[0], Send):
-                            next_nodes_after = [s.node for s in next_nodes_result if isinstance(s, Send)]
-                        else:
-                            next_nodes_after = next_nodes_result
-                    
-                    await self._save_checkpoint(
-                        state=state,
-                        next_nodes=next_nodes_after,
-                        thread_id=thread_id,
-                        parent_checkpoint_id=current_parent,
-                        metadata={"interrupted_after": node_name}
-                    )
-                    raise InterruptException({"node": node_name, "when": "after"})
-                
-                # Save checkpoint after super-step based on durability mode
-                if self.checkpointer:
-                    if next_goto:
-                        resolved_goto = self._resolve_goto(next_goto)
-                        # Convert Send objects to node names for checkpoint
-                        if resolved_goto and isinstance(resolved_goto[0], Send):
-                            next_nodes_to_save = [s.node for s in resolved_goto if isinstance(s, Send)]
-                        else:
-                            next_nodes_to_save = resolved_goto
-                    else:
-                        next_nodes_result = self._get_next_nodes(node_name, state)
-                        # Convert Send objects to node names for checkpoint
-                        if next_nodes_result and isinstance(next_nodes_result[0], Send):
-                            next_nodes_to_save = [s.node for s in next_nodes_result if isinstance(s, Send)]
-                        else:
-                            next_nodes_to_save = next_nodes_result
-                    
-                    checkpoint = await self._save_checkpoint_with_durability(
-                        state=state,
-                        next_nodes=next_nodes_to_save,
-                        thread_id=thread_id,
-                        parent_checkpoint_id=current_parent
-                    )
-                    current_parent = checkpoint.checkpoint_id
-                
-                # Determine next nodes
-                if next_goto:
-                    resolved_goto = self._resolve_goto(next_goto)
-                    # Check if we have Send objects to execute
-                    if resolved_goto and isinstance(resolved_goto[0], Send):
-                        # Execute Send objects and continue with remaining edges
-                        send_results = await self._execute_send_objects(
-                            send_objects=resolved_goto,
-                            state=state,
-                            config=config
-                        )
-                        # Merge send results
-                        for send_updates in send_results:
-                            state = self._merge_state(state, send_updates)
-                        # After Send objects execute, get next nodes from Send targets
-                        all_next = set()
-                        for send_obj in resolved_goto:
-                            next_from_send = self._get_next_nodes(send_obj.node, state)
-                            # Make sure we don't get more Send objects (only one level)
-                            if next_from_send and not isinstance(next_from_send[0], Send):
-                                all_next.update(next_from_send)
-                        current_nodes = list(all_next) if all_next else [END]
-                    else:
-                        current_nodes = resolved_goto
+            targets = []
+            for task in completed:
+                result = task["result"]
+                if len(completed) == 1 and isinstance(result, Command) and result.goto:
+                    routed = self._resolve_goto(result.goto)
                 else:
-                    next_result = self._get_next_nodes(node_name, state)
-                    # Check if we got Send objects from conditional edge
-                    if next_result and len(next_result) > 0 and isinstance(next_result[0], Send):
-                        # Execute Send objects
-                        send_results = await self._execute_send_objects(next_result, state, config)
-                        for send_updates in send_results:
-                            state = self._merge_state(state, send_updates)
-                        # After Send execution, determine actual next nodes
-                        # Get next nodes from all Send target nodes
-                        all_next = set()
-                        for send_obj in next_result:
-                            next_from_send = self._get_next_nodes(send_obj.node, state)
-                            # Make sure we don't get more Send objects (only one level)
-                            if next_from_send and not isinstance(next_from_send[0], Send):
-                                all_next.update(next_from_send)
-                        current_nodes = list(all_next) if all_next else [END]
-                    else:
-                        current_nodes = next_result
-            
-            else:
-                # Multiple nodes - execute in parallel
-                parallel_results = await self._execute_nodes_parallel(
-                    nodes_to_execute, state, thread_id, current_parent, config
-                )
-                
-                # Merge all updates from parallel execution
-                for node_name, updates in parallel_results:
-                    if isinstance(updates, Command):
-                        # Command in parallel execution - apply updates only
-                        # (routing is handled after all parallel nodes complete)
-                        if updates.update:
-                            state = self._merge_state(state, updates.update)
-                    else:
-                        state = self._merge_state(state, updates)
-                
-                # Save checkpoint after parallel super-step
-                if self.checkpointer:
-                    # Determine next nodes from all completed parallel nodes
-                    all_next_nodes = set()
-                    for node_name, _ in parallel_results:
-                        next_from_node = self._get_next_nodes(node_name, state)
-                        # Convert Send objects to node names for checkpoint
-                        if next_from_node and isinstance(next_from_node[0], Send):
-                            all_next_nodes.update(s.node for s in next_from_node if isinstance(s, Send))
-                        else:
-                            all_next_nodes.update(next_from_node)
-                    
-                    next_nodes_to_save = list(all_next_nodes)
-                    
-                    checkpoint = await self._save_checkpoint(
-                        state=state,
-                        next_nodes=next_nodes_to_save,
-                        thread_id=thread_id,
-                        parent_checkpoint_id=current_parent,
-                        metadata={"parallel_execution": nodes_to_execute}
-                    )
-                    current_parent = checkpoint.checkpoint_id
-                
-                # Determine next nodes from all completed nodes
-                all_next_nodes = set()
-                send_objects_to_execute = []
-                
-                for node_name, _ in parallel_results:
-                    next_from_node = self._get_next_nodes(node_name, state)
-                    # Check if we got Send objects
-                    if next_from_node and len(next_from_node) > 0 and isinstance(next_from_node[0], Send):
-                        # Collect Send objects to execute later
-                        send_objects_to_execute.extend(next_from_node)
-                    else:
-                        all_next_nodes.update(next_from_node)
-                
-                # Execute any Send objects from conditional edges after parallel nodes
-                if send_objects_to_execute:
-                    send_results = await self._execute_send_objects(send_objects_to_execute, state, config)
-                    for send_updates in send_results:
-                        state = self._merge_state(state, send_updates)
-                    # Get next nodes from Send targets
-                    for send_obj in send_objects_to_execute:
-                        next_from_send = self._get_next_nodes(send_obj.node, state)
-                        if next_from_send and not isinstance(next_from_send[0], Send):
-                            all_next_nodes.update(next_from_send)
-                
-                current_nodes = list(all_next_nodes) if all_next_nodes else [END]
-        
-        return state
-    
-    async def _execute_nodes_parallel(
-        self,
-        node_names: List[str],
-        state: Dict[str, Any],
-        thread_id: str,
-        parent_checkpoint_id: Optional[str],
-        config: Optional[Dict[str, Any]] = None
-    ) -> List[Tuple[str, Union[Dict[str, Any], Command]]]:
-        """Execute multiple nodes in parallel.
-        
-        Args:
-            node_names: List of node names to execute
-            state: Current state (read-only for all nodes)
-            thread_id: Thread identifier
-            parent_checkpoint_id: Parent checkpoint for history
-            config: Optional configuration
-            
-        Returns:
-            List of (node_name, updates) tuples
-        """
-        # Create tasks for all nodes
-        tasks = []
-        for node_name in node_names:
-            node_config = self.nodes[node_name]
-            # Use _execute_node_with_policies to support retry and cache
-            task = self._execute_node_with_policies(node_name, node_config, state, config or {})
-            tasks.append((node_name, task))
-        
-        # Execute all tasks truly in parallel using asyncio.gather
-        # We need to use return_exceptions=False so exceptions are raised
-        task_results = await asyncio.gather(*[task for _, task in tasks], return_exceptions=True)
-        
-        # Process results and handle errors
-        results = []
-        for i, (node_name, _) in enumerate(tasks):
-            result = task_results[i]
-            
-            if isinstance(result, InterruptException):
-                # Interrupts not supported in parallel execution
-                raise RuntimeError(
-                    f"Node '{node_name}' called interrupt() during parallel execution. "
-                    "Interrupts are not supported in parallel execution."
-                )
-            elif isinstance(result, Exception):
-                # Handle node errors - re-raise with context
-                raise RuntimeError(f"Error in parallel node '{node_name}': {str(result)}") from result
-            else:
-                results.append((node_name, result))
-        
-        return results
-    
+                    routed = self._get_next_nodes(task["node"], state)
+                for target in routed:
+                    # Ordinary graph joins deduplicate names; Send slots never do.
+                    if isinstance(target, Send) or target not in targets:
+                        targets.append(target)
+            tasks = self._plan_tasks(targets, state)
+            after = next((task["node"] for task in completed
+                          if task["node"] in self.interrupt_after), None)
+            save({"interrupted_after": after} if after else None)
+            if after:
+                raise InterruptException({"node": after, "when": "after"})
+            if not tasks:
+                return state
+        raise GraphRecursionError(f"Graph execution exceeded recursion limit of {recursion_limit} supersteps")
+
     async def _execute_node(
         self,
-        func: Callable[[Dict[str, Any]], Any],
+        func: Callable[..., Any],
         state: Dict[str, Any],
         config: Optional[Dict[str, Any]] = None
     ) -> Union[Dict[str, Any], Command]:
@@ -981,7 +743,7 @@ class CompiledStateGraph(Runnable[Dict[str, Any], Dict[str, Any]]):
                 return cached_result
         
         # Execute with retry logic if policy is set
-        if node_config.retry_policy:
+        if node_config.retry_policy and node_config.retry_safe:
             result = await self._execute_with_retry(
                 node_config.func,
                 state,
@@ -1004,7 +766,7 @@ class CompiledStateGraph(Runnable[Dict[str, Any], Dict[str, Any]]):
     
     async def _execute_with_retry(
         self,
-        func: Callable[[Dict[str, Any]], Any],
+        func: Callable[..., Any],
         state: Dict[str, Any],
         retry_policy: RetryPolicy,
         config: Optional[Dict[str, Any]] = None
@@ -1023,13 +785,15 @@ class CompiledStateGraph(Runnable[Dict[str, Any], Dict[str, Any]]):
         Raises:
             Exception: If all retry attempts fail
         """
-        from upsonic.graphv2.task import should_retry, calculate_retry_delay
+        from upsonic.graphv2.task import calculate_retry_delay, should_retry
         
         last_exception = None
         
         for attempt in range(retry_policy.max_attempts):
             try:
                 return await self._execute_node(func, state, config)
+            except InterruptException:
+                raise
             except Exception as e:
                 last_exception = e
                 
@@ -1046,73 +810,13 @@ class CompiledStateGraph(Runnable[Dict[str, Any], Dict[str, Any]]):
         # This should not be reached
         if last_exception:
             raise last_exception
-    
-    async def _execute_send_objects(
-        self,
-        send_objects: List[Send],
-        state: Dict[str, Any],
-        config: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
-        """Execute Send objects (dynamic parallelization).
-        
-        Args:
-            send_objects: List of Send objects to execute
-            state: Current state (base state for all Send tasks)
-            config: Runtime configuration
-            
-        Returns:
-            List of state updates from all Send tasks
-        """
-        # Create tasks for all Send objects
-        tasks = []
-        send_metadata = []  # Store metadata for error messages
-        for send_obj in send_objects:
-            # Get the node to invoke
-            if send_obj.node not in self.nodes:
-                raise ValueError(f"Send references unknown node: {send_obj.node}")
-            
-            node_config = self.nodes[send_obj.node]
-            
-            # Merge Send state with base state
-            send_state = {**state, **send_obj.state}
-            
-            # Execute the node
-            task = self._execute_node_with_policies(
-                node_name=send_obj.node,
-                node_config=node_config,
-                state=send_state,
-                config=config
-            )
-            tasks.append(task)
-            send_metadata.append(send_obj.node)
-        
-        # Execute all tasks truly in parallel using asyncio.gather
-        task_results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # Process results and handle errors
-        results = []
-        for i, result in enumerate(task_results):
-            if isinstance(result, Exception):
-                # Handle errors in Send tasks
-                node_name = send_metadata[i]
-                raise RuntimeError(f"Error in Send task for node '{node_name}': {str(result)}") from result
-            else:
-                # Extract updates from result
-                if isinstance(result, Command):
-                    updates = result.update or {}
-                elif isinstance(result, dict):
-                    updates = result
-                else:
-                    updates = {}
-                results.append(updates)
-        
-        return results
+        raise ValueError("RetryPolicy.max_attempts must be greater than zero")
     
     def _resolve_goto(self, goto: Union[str, Send, List[Send], List[str]]) -> Union[List[str], List[Send]]:
         """Resolve goto target to list of node names or Send objects.
         
         When goto contains Send objects, they need special handling for dynamic parallelization.
-        This method returns Send objects as-is so they can be processed by _execute_send_objects.
+        This method retains Send objects for the shared invocation planner.
         
         Args:
             goto: Goto target (node name, Send, or list of Send/node names)
@@ -1132,73 +836,6 @@ class CompiledStateGraph(Runnable[Dict[str, Any], Dict[str, Any]]):
             return goto
         else:
             return [str(goto)]
-    
-    async def _save_checkpoint_with_durability(
-        self,
-        state: Dict[str, Any],
-        next_nodes: List[str],
-        thread_id: str,
-        parent_checkpoint_id: Optional[str]
-    ) -> Checkpoint:
-        """Save checkpoint based on durability mode.
-        
-        Args:
-            state: Current state
-            next_nodes: Nodes to execute next
-            thread_id: Thread identifier
-            parent_checkpoint_id: Parent checkpoint ID
-            
-        Returns:
-            The saved checkpoint
-        """
-        checkpoint = Checkpoint(
-            checkpoint_id=generate_checkpoint_id(),
-            thread_id=thread_id,
-            state=deepcopy(state),
-            next_nodes=next_nodes,
-            parent_checkpoint_id=parent_checkpoint_id,
-            metadata={}
-        )
-        
-        if self.durability == "sync":
-            # Save synchronously - wait for completion before continuing
-            await asyncio.get_event_loop().run_in_executor(
-                None,
-                self.checkpointer.put,
-                checkpoint
-            )
-        elif self.durability == "async":
-            # Save asynchronously - schedule in background and continue immediately
-            # The checkpoint will be saved while the next node executes
-            asyncio.get_event_loop().run_in_executor(
-                None,
-                self.checkpointer.put,
-                checkpoint
-            )
-        elif self.durability == "exit":
-            # Don't save during execution - only on exit
-            # Store for later saving
-            if not hasattr(self, '_pending_checkpoints'):
-                self._pending_checkpoints = []
-            self._pending_checkpoints.append(checkpoint)
-        
-        return checkpoint
-    
-    async def _flush_exit_checkpoints(self):
-        """Flush pending checkpoints when using exit durability mode.
-        
-        This is called when the graph completes or encounters an error
-        in exit durability mode.
-        """
-        if hasattr(self, '_pending_checkpoints') and self._pending_checkpoints:
-            # Save all pending checkpoints
-            for checkpoint in self._pending_checkpoints:
-                await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    self.checkpointer.put,
-                    checkpoint
-                )
-            self._pending_checkpoints = []
     
     def _merge_state(
         self,
@@ -1266,180 +903,46 @@ class CompiledStateGraph(Runnable[Dict[str, Any], Dict[str, Any]]):
         # No outgoing edges - end execution
         return [END]
     
-    async def _save_checkpoint(
-        self,
-        state: Dict[str, Any],
-        next_nodes: List[str],
-        thread_id: str,
-        parent_checkpoint_id: Optional[str],
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> Checkpoint:
-        """Save a checkpoint.
-        
-        Args:
-            state: Current state
-            next_nodes: Nodes to execute next
-            thread_id: Thread identifier
-            parent_checkpoint_id: Parent checkpoint ID
-            metadata: Optional metadata about the checkpoint
-            
-        Returns:
-            The saved checkpoint
-        """
-        checkpoint = Checkpoint(
-            checkpoint_id=generate_checkpoint_id(),
-            thread_id=thread_id,
-            state=deepcopy(state),
-            next_nodes=next_nodes,
-            parent_checkpoint_id=parent_checkpoint_id,
-            metadata=metadata or {}
-        )
-        
-        if self.checkpointer:
-            self.checkpointer.put(checkpoint)
-        
-        return checkpoint
-    
     async def _resume_from_interrupt(
         self,
         command: Command,
         thread_id: str,
-        checkpoint_id: Optional[str],
-        config: Dict[str, Any],
+        checkpoint_id: str | None,
+        config: dict[str, Any],
         recursion_limit: int
-    ) -> Dict[str, Any]:
-        """Resume execution from an interrupt.
-        
-        This method properly handles resuming from an interrupt by:
-        1. Loading the checkpoint where execution was interrupted
-        2. Setting up the context so interrupt() calls return resume values
-        3. Re-executing the interrupted node(s)
-        4. Continuing normal execution
-        
-        Args:
-            command: Command with resume value
-            thread_id: Thread identifier
-            checkpoint_id: Optional specific checkpoint to resume from
-            
-        Returns:
-            Final state after resuming
-        """
-        from upsonic.graphv2.primitives import _interrupt_resume_values, _interrupt_counter
-        
+    ) -> dict[str, Any]:
         if not self.checkpointer:
             raise RuntimeError("Cannot resume without a checkpointer")
-        
-        # Load the checkpoint
         checkpoint = self.checkpointer.get(thread_id, checkpoint_id)
         if not checkpoint:
             raise ValueError(f"No checkpoint found for thread_id={thread_id}")
-        
-        state = deepcopy(checkpoint.state)
-        
-        # Check if this checkpoint has interrupt metadata
-        interrupted_before = checkpoint.metadata.get("interrupted_before")
-        interrupted_after = checkpoint.metadata.get("interrupted_after")
-        
-        if interrupted_before:
-            # The node was interrupted before execution
-            # Just continue normally - the node hasn't run yet
-            final_state = await self._execute_graph(
-                state=state,
-                next_nodes=checkpoint.next_nodes,
-                thread_id=thread_id,
-                parent_checkpoint_id=checkpoint.checkpoint_id,
-                config=config,
-                recursion_limit=recursion_limit
-            )
-            return final_state
-        
-        elif interrupted_after:
-            # The node was interrupted after execution  
-            # Just continue from next_nodes
-            final_state = await self._execute_graph(
-                state=state,
-                next_nodes=checkpoint.next_nodes,
-                thread_id=thread_id,
-                parent_checkpoint_id=checkpoint.checkpoint_id,
-                config=config,
-                recursion_limit=recursion_limit
-            )
-            return final_state
-        
-        else:
-            # This was an interrupt from inside a node function
-            # We need to re-execute the node with resume context
-            
-            # Determine which node to re-execute
-            # The checkpoint's next_nodes should contain the node that was executing
-            if not checkpoint.next_nodes:
-                raise RuntimeError("Cannot determine interrupted node from checkpoint")
-            
-            interrupted_node = checkpoint.next_nodes[0]
-            
-            # Set up the interrupt resume context
-            # Convert resume value to list if it isn't already
-            if isinstance(command.resume, list):
-                resume_values = command.resume
-            else:
-                resume_values = [command.resume]
-            
-            # Set the context variables for this execution
-            resume_token = _interrupt_resume_values.set(resume_values)
-            counter_token = _interrupt_counter.set(0)
-            
-            try:
-                # Re-execute the interrupted node with resume context
-                node_config = self.nodes[interrupted_node]
-                updates = await self._execute_node(node_config.func, state)
-                
-                # Process the results
-                next_goto = None
-                if isinstance(updates, Command):
-                    next_goto = updates.goto
-                    updates = updates.update or {}
-                
-                # Merge updates
-                state = self._merge_state(state, updates)
-                
-                # Determine next nodes
-                if next_goto:
-                    next_nodes = [next_goto] if next_goto != END else [END]
-                else:
-                    next_nodes = self._get_next_nodes(interrupted_node, state)
-                
-                # Save checkpoint after completing the interrupted node
-                if self.checkpointer:
-                    new_checkpoint = await self._save_checkpoint(
-                        state=state,
-                        next_nodes=next_nodes,
-                        thread_id=thread_id,
-                        parent_checkpoint_id=checkpoint.checkpoint_id,
-                        metadata={"resumed_from": checkpoint.checkpoint_id}
-                    )
-                    parent_checkpoint_id = new_checkpoint.checkpoint_id
-                else:
-                    parent_checkpoint_id = checkpoint.checkpoint_id
-                
-            finally:
-                # Clean up the resume context before continuing
-                # This ensures subsequent nodes start fresh
-                _interrupt_resume_values.reset(resume_token)
-                _interrupt_counter.reset(counter_token)
-            
-            # Continue execution from the next nodes WITHOUT resume context
-            # Any new interrupts in subsequent nodes will be fresh interrupts
-            final_state = await self._execute_graph(
-                state=state,
-                next_nodes=next_nodes,
-                thread_id=thread_id,
-                parent_checkpoint_id=parent_checkpoint_id,
-                config=config,
-                recursion_limit=recursion_limit
-            )
-            
-            return final_state
-    
+        tasks = deepcopy(checkpoint.pending_tasks)
+        if tasks is None:
+            tasks = self._plan_tasks(checkpoint.next_nodes, checkpoint.state)
+            for task in tasks:
+                if not checkpoint.metadata.get("interrupted_before"):
+                    task["status"] = "UNKNOWN"
+        if checkpoint.metadata.get("interrupted_before"):
+            approved_id = checkpoint.metadata.get("interrupted_task")
+            if approved_id is None:
+                # Legacy before-node checkpoints lacked a slot identity.
+                approved_id = next((task["id"] for task in tasks
+                                    if task["node"] == checkpoint.metadata["interrupted_before"]), None)
+            for task in tasks:
+                if task["id"] == approved_id:
+                    task["before_approved"] = True
+                    break
+        interrupted = [task for task in tasks if task["status"] == "INTERRUPTED"]
+        if interrupted:
+            values = command.resume if isinstance(command.resume, list) else [command.resume]
+            config = {**config, "_graph_resume_values": {
+                task["id"]: values for task in tasks
+                if task["status"] == "INTERRUPTED"}}
+        return await self._execute_graph(
+            deepcopy(checkpoint.state), checkpoint.next_nodes, thread_id,
+            checkpoint.checkpoint_id, config, recursion_limit,
+            pending_tasks=tasks)
+
     def get_state(self, config: Dict[str, Any]) -> Optional[StateSnapshot]:
         """Get the current state for a thread.
         
@@ -1555,6 +1058,12 @@ class CompiledStateGraph(Runnable[Dict[str, Any], Dict[str, Any]]):
         if not checkpoint:
             raise ValueError(f"No checkpoint found for thread_id={thread_id}")
         
+        latest = self.checkpointer.get(thread_id)
+        if latest and latest.pending_tasks:
+            raise GraphExecutionUncertainError(latest.pending_tasks)
+        if checkpoint.pending_tasks:
+            raise GraphExecutionUncertainError(checkpoint.pending_tasks)
+
         # Merge the updates
         updated_state = self._merge_state(checkpoint.state, values)
         
@@ -1565,7 +1074,8 @@ class CompiledStateGraph(Runnable[Dict[str, Any], Dict[str, Any]]):
             state=updated_state,
             next_nodes=checkpoint.next_nodes,
             parent_checkpoint_id=checkpoint.checkpoint_id,
-            metadata={"updated_by": as_node} if as_node else {}
+            metadata={**checkpoint.metadata, **({"updated_by": as_node} if as_node else {})},
+            pending_tasks=deepcopy(checkpoint.pending_tasks)
         )
         
         self.checkpointer.put(new_checkpoint)

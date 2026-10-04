@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from .store import BaseStore, InMemoryStore
     from .cache import BaseCache, InMemoryCache, SqliteCache, CachePolicy
     from .task import task, RetryPolicy, TaskFunction
-    from .errors import GraphRecursionError, GraphValidationError, GraphInterruptError
+    from .errors import GraphRecursionError, GraphValidationError, GraphInterruptError, GraphExecutionUncertainError
 
 def _get_graphv2_core_classes():
     """Lazy import of core graphv2 classes."""
@@ -86,12 +86,13 @@ def _get_graphv2_task_classes():
 
 def _get_graphv2_error_classes():
     """Lazy import of error classes."""
-    from .errors import GraphRecursionError, GraphValidationError, GraphInterruptError
+    from .errors import GraphRecursionError, GraphValidationError, GraphInterruptError, GraphExecutionUncertainError
     
     return {
         'GraphRecursionError': GraphRecursionError,
         'GraphValidationError': GraphValidationError,
         'GraphInterruptError': GraphInterruptError,
+        'GraphExecutionUncertainError': GraphExecutionUncertainError,
     }
 
 def __getattr__(name: str) -> Any:
@@ -173,5 +174,6 @@ __all__ = [
     "GraphRecursionError",
     "GraphValidationError",
     "GraphInterruptError",
+    "GraphExecutionUncertainError",
 ]
 
