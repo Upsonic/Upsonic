@@ -4,6 +4,23 @@ Error types for GraphV2.
 This module defines custom exceptions used throughout the GraphV2 system.
 """
 
+from copy import deepcopy
+from typing import Any
+
+
+class GraphExecutionUncertainError(RuntimeError):
+    """A logical node invocation may have executed and cannot safely be replayed.
+
+    Dispatch records prove possible execution, not provider success. Inspect
+    tasks and reconcile the external outcome before choosing a new invocation.
+    """
+
+    def __init__(self, tasks: list[dict[str, Any]]) -> None:
+        self.tasks = deepcopy(tasks)
+        self.pending_tasks = self.tasks
+        names = ", ".join(task["node"] for task in tasks)
+        super().__init__(f"Graph execution outcome is uncertain for: {names}")
+
 
 class GraphRecursionError(RecursionError):
     """Raised when graph execution exceeds the recursion limit.

@@ -11,6 +11,7 @@ import json
 import pickle
 import uuid
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Iterator
@@ -39,6 +40,8 @@ class Checkpoint:
     parent_checkpoint_id: Optional[str] = None
     timestamp: datetime = field(default_factory=now_utc)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    pending_tasks: list[dict[str, Any]] | None = None
+    """Durable invocation plan; None denotes a legacy snapshot without a plan."""
     
     def to_dict(self) -> Dict[str, Any]:
         """Serialize checkpoint to dictionary."""
@@ -50,6 +53,7 @@ class Checkpoint:
             "parent_checkpoint_id": self.parent_checkpoint_id,
             "timestamp": self.timestamp.isoformat(),
             "metadata": self.metadata,
+            "pending_tasks": deepcopy(self.pending_tasks),
         }
     
     @classmethod
@@ -168,7 +172,7 @@ class MemorySaver(BaseCheckpointer):
             self._storage[thread_id] = []
         
         # Add to the beginning (newest first)
-        self._storage[thread_id].insert(0, checkpoint)
+        self._storage[thread_id].insert(0, deepcopy(checkpoint))
     
     def get(self, thread_id: str, checkpoint_id: Optional[str] = None) -> Optional[Checkpoint]:
         """Retrieve a checkpoint from memory.
@@ -190,12 +194,12 @@ class MemorySaver(BaseCheckpointer):
         
         if checkpoint_id is None:
             # Return the latest checkpoint
-            return checkpoints[0]
+            return deepcopy(checkpoints[0])
         
         # Search for specific checkpoint
         for checkpoint in checkpoints:
             if checkpoint.checkpoint_id == checkpoint_id:
-                return checkpoint
+                return deepcopy(checkpoint)
         
         return None
     
@@ -210,7 +214,7 @@ class MemorySaver(BaseCheckpointer):
         """
         if thread_id in self._storage:
             for checkpoint in self._storage[thread_id]:
-                yield checkpoint
+                yield deepcopy(checkpoint)
 
 
 class SqliteCheckpointer(BaseCheckpointer):
@@ -241,6 +245,7 @@ class SqliteCheckpointer(BaseCheckpointer):
                 next_nodes TEXT NOT NULL,
                 timestamp TEXT NOT NULL,
                 metadata TEXT,
+                pending_tasks BLOB,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -248,6 +253,9 @@ class SqliteCheckpointer(BaseCheckpointer):
             CREATE INDEX IF NOT EXISTS idx_thread_timestamp 
             ON checkpoints(thread_id, timestamp DESC)
         """)
+        columns = {row[1] for row in cursor.execute("PRAGMA table_info(checkpoints)")}
+        if "pending_tasks" not in columns:
+            cursor.execute("ALTER TABLE checkpoints ADD COLUMN pending_tasks BLOB")
         self.connection.commit()
     
     def put(self, checkpoint: Checkpoint) -> None:
@@ -262,11 +270,15 @@ class SqliteCheckpointer(BaseCheckpointer):
         state_blob = pickle.dumps(checkpoint.state)
         next_nodes_json = json.dumps(checkpoint.next_nodes)
         metadata_json = json.dumps(checkpoint.metadata)
+        pending_tasks_blob = (
+            pickle.dumps(checkpoint.pending_tasks)
+            if checkpoint.pending_tasks is not None else None
+        )
         
         cursor.execute("""
             INSERT OR REPLACE INTO checkpoints 
-            (checkpoint_id, thread_id, parent_checkpoint_id, state, next_nodes, timestamp, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (checkpoint_id, thread_id, parent_checkpoint_id, state, next_nodes, timestamp, metadata, pending_tasks)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             checkpoint.checkpoint_id,
             checkpoint.thread_id,
@@ -275,6 +287,7 @@ class SqliteCheckpointer(BaseCheckpointer):
             next_nodes_json,
             checkpoint.timestamp.isoformat(),
             metadata_json,
+            pending_tasks_blob,
         ))
         
         self.connection.commit()
@@ -295,17 +308,17 @@ class SqliteCheckpointer(BaseCheckpointer):
             # Get the latest checkpoint
             cursor.execute("""
                 SELECT checkpoint_id, thread_id, parent_checkpoint_id, state, 
-                       next_nodes, timestamp, metadata
+                       next_nodes, timestamp, metadata, pending_tasks
                 FROM checkpoints
                 WHERE thread_id = ?
-                ORDER BY timestamp DESC
+                ORDER BY rowid DESC
                 LIMIT 1
             """, (thread_id,))
         else:
             # Get specific checkpoint
             cursor.execute("""
                 SELECT checkpoint_id, thread_id, parent_checkpoint_id, state, 
-                       next_nodes, timestamp, metadata
+                       next_nodes, timestamp, metadata, pending_tasks
                 FROM checkpoints
                 WHERE checkpoint_id = ?
             """, (checkpoint_id,))
@@ -329,10 +342,10 @@ class SqliteCheckpointer(BaseCheckpointer):
         cursor = self.connection.cursor()
         cursor.execute("""
             SELECT checkpoint_id, thread_id, parent_checkpoint_id, state, 
-                   next_nodes, timestamp, metadata
+                   next_nodes, timestamp, metadata, pending_tasks
             FROM checkpoints
             WHERE thread_id = ?
-            ORDER BY timestamp DESC
+            ORDER BY rowid DESC
         """, (thread_id,))
         
         for row in cursor.fetchall():
@@ -340,7 +353,7 @@ class SqliteCheckpointer(BaseCheckpointer):
     
     def _row_to_checkpoint(self, row) -> Checkpoint:
         """Convert a database row to a Checkpoint object."""
-        checkpoint_id, thread_id, parent_checkpoint_id, state_blob, next_nodes_json, timestamp_str, metadata_json = row
+        checkpoint_id, thread_id, parent_checkpoint_id, state_blob, next_nodes_json, timestamp_str, metadata_json, pending_tasks_blob = row
         
         state = pickle.loads(state_blob)
         next_nodes = json.loads(next_nodes_json)
@@ -357,6 +370,7 @@ class SqliteCheckpointer(BaseCheckpointer):
             next_nodes=next_nodes,
             timestamp=timestamp,
             metadata=metadata,
+            pending_tasks=pickle.loads(pending_tasks_blob) if pending_tasks_blob is not None else None,
         )
 
 
