@@ -90,6 +90,17 @@ Reasoning settings are mapped to model-specific keys by `_get_model_specific_rea
 | --- | --- |
 | `do(task)` / `do_async(task)` | Run a single task or list of tasks through the **direct pipeline**. Returns task content (default) or full `AgentRunOutput` when `return_output=True`. Supports `timeout` (raises `ExecutionTimeoutError`) and `partial_on_timeout` (silently switches to streaming so partial text can be returned). |
 | `print_do` / `print_do_async` | Same, but defaults to printing the run summary. |
+
+`retry` bounds attempts for each individual task, not an enclosing task list.
+If a task fails after a completed tool call, an outer task retry raises
+`AgentRetryUnsafeError` unless every completed tool explicitly opted into
+`@tool(retry_safe=True)`. The exception preserves the original failure as its
+cause; recorded tool results remain available in the run output. A completed
+tool's retry-safety declaration is captured in its `ToolExecution` and survives
+serialization (older records default to unsafe). Before any tool completes,
+task retries retain their existing behavior. This guard does not undo effects,
+deduplicate intentionally repeated calls, or change tool-local retries or
+StateGraph crash/resume semantics.
 | `stream(task)` / `astream(task)` | Run through the **streaming pipeline**, yielding either text chunks or `AgentEvent` objects. Sync `stream()` runs the async generator on the persistent bg loop and bridges it via a `queue.Queue`. |
 | `continue_run` / `continue_run_async` | Resume a paused/cancelled/error run. Loads `RunData` from storage if needed, injects HITL results (external tools, user confirmation, user input), and re-enters the pipeline at the failed step. Supports a `hitl_handler` callback that the loop calls per `RunRequirement`. |
 | `add_tools` / `remove_tools` / `get_tool_defs` | Dynamic tool management (validates with `tool_policy_pre` on add). |
@@ -481,4 +492,3 @@ AgentOTelManager (otel_manager.py) — composed into every Agent instance
 - **Lazy loading** at every `__init__.py` keeps cold-start cost minimal for users who only need the base `Agent`.
 - **OpenTelemetry as a no-op when off.** Every span helper returns `nullcontext(None)` when instrumentation is disabled, so the pipeline never branches on `if otel_enabled`.
 - **Specialization via subclass + tool injection.** `AutonomousAgent` and `DeepAgent` add behavior almost entirely by injecting toolkits and a custom system prompt — they don't override pipeline machinery, which keeps them tracking the base agent automatically as it evolves.
-

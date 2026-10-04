@@ -3,7 +3,7 @@ import copy
 import threading
 import time
 import uuid
-from typing import Any, AsyncIterator, Callable, Dict, Iterator, List, Literal, Optional, Union, TYPE_CHECKING
+from typing import Any, AsyncIterator, Callable, Dict, Iterator, List, Literal, Optional, Union, TYPE_CHECKING, cast
 
 
 from upsonic.utils.logging_config import sentry_sdk, get_env_bool_optional, get_logger
@@ -2445,6 +2445,10 @@ class Agent(BaseAgent):
                             tool_name=tool_call.tool_name,
                             tool_args=tool_call.args_as_dict(),
                             result=str(result.content) if result.content else None,
+                            retry_safe=getattr(
+                                getattr(target_manager.registry.registered_tools.get(tool_call.tool_name), "config", None),
+                                "retry_safe", False,
+                            ) is True,
                         )
                         if self._agent_run_output.tools is None:
                             self._agent_run_output.tools = []
@@ -2563,6 +2567,10 @@ class Agent(BaseAgent):
                                 tool_name=tool_call.tool_name,
                                 tool_args=_tool_args2,
                                 result=str(result.content) if result.content else None,
+                                retry_safe=getattr(
+                                    getattr(target_manager.registry.registered_tools.get(tool_call.tool_name), "config", None),
+                                    "retry_safe", False,
+                                ) is True,
                             )
                             if self._agent_run_output.tools is None:
                                 self._agent_run_output.tools = []
@@ -3645,7 +3653,6 @@ class Agent(BaseAgent):
 
     
     
-    @retryable(retries_from_param="retry")
     async def do_async(
         self,
         task: Union[str, "Task", List[Union[str, "Task"]]],
@@ -3673,7 +3680,9 @@ class Agent(BaseAgent):
             task: Task to execute. Accepts a single Task/str or a list of them.
             model: Override model for this execution
             debug: Enable debug mode
-            retry: Number of retries
+            retry: Maximum number of task attempts. A failed task is not restarted
+                after a completed tool unless every completed tool explicitly sets
+                retry_safe=True. Tools may already have produced external effects.
             return_output: If True, return full AgentRunOutput. If False (default), return content only.
             state: Graph execution state
             timeout: Maximum execution time in seconds. None means no timeout.
@@ -3713,8 +3722,32 @@ class Agent(BaseAgent):
         )
         if handled:
             return task_or_results
-        task = task_or_results
+        return await self._do_async_single(
+            task_or_results, model, debug, retry, return_output, state,
+            timeout=timeout, partial_on_timeout=partial_on_timeout,
+            graph_execution_id=graph_execution_id,
+            _resume_output=_resume_output, _resume_step_index=_resume_step_index,
+            _print_method_default=_print_method_default,
+        )
 
+    @retryable(retries_from_param="retry")
+    async def _do_async_single(
+        self,
+        task: Union[str, "Task"],
+        model: Optional[Union[str, "Model"]] = None,
+        debug: bool = False,
+        retry: int = 1,
+        return_output: bool = False,
+        state: Optional["State"] = None,
+        *,
+        timeout: Optional[float] = None,
+        partial_on_timeout: bool = False,
+        graph_execution_id: Optional[str] = None,
+        _resume_output: Optional[AgentRunOutput] = None,
+        _resume_step_index: Optional[int] = None,
+        _print_method_default: bool = False,
+    ) -> Any:
+        """Retry one task, never the enclosing list of completed tasks."""
         # Validate timeout parameters
         if partial_on_timeout and timeout is None:
             raise ValueError("partial_on_timeout=True requires timeout to be set")
@@ -3845,6 +3878,20 @@ class Agent(BaseAgent):
                     return result
                 except Exception as exc:
                     self._otel.record_error(otel_span, exc)
+                    if effective_retry > 1:
+                        from upsonic.exceptions import AgentRetryUnsafeError
+
+                        attempt_output = self._agent_run_output
+                        completed_tools = (attempt_output.tools or []) if attempt_output is not None else []
+                        unsafe_names = tuple(dict.fromkeys(
+                            execution.tool_name or "<unknown>"
+                            for execution in completed_tools
+                            if not execution.is_paused
+                            and not execution.tool_call_error
+                            and execution.retry_safe is not True
+                        ))
+                        if unsafe_names:
+                            raise AgentRetryUnsafeError(unsafe_names) from exc
                     raise
         finally:
             if original_model is not None:
@@ -5318,7 +5365,7 @@ class Agent(BaseAgent):
                 "Agent"
             )
             return await self.do_async(
-                task=task,
+                task=cast("Task", task),
                 model=model,
                 debug=debug,
                 retry=retry,
@@ -5364,7 +5411,7 @@ class Agent(BaseAgent):
         while rounds < max_rounds:
             rounds += 1
             
-            result = await self.do_async(
+            result = cast(AgentRunOutput, await self.do_async(
                 task,
                 model=model,
                 debug=debug,
@@ -5373,7 +5420,7 @@ class Agent(BaseAgent):
                 _resume_output=output,
                 _resume_step_index=resume_step_index,
                 _print_method_default=original_print_flag,
-            )
+            ))
             
             if result.is_complete:
                 if return_output:

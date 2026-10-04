@@ -316,6 +316,7 @@ class ToolExecution:
     external_execution_required: Optional[bool]
 
     result_injected: bool                  # internal: has the result been pushed back into chat_history?
+    retry_safe: bool = False                # snapshot permitting completed-tool replay during Agent retry
 ```
 
 | Field                          | Used by                                                                          |

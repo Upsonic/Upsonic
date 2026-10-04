@@ -212,7 +212,7 @@ class TestModelOverridePreservation:
 
     def test_do_async_restore_pattern_in_source(self) -> None:
         import inspect
-        source = inspect.getsource(Agent.do_async)
+        source = inspect.getsource(Agent._do_async_single)
         lines = source.split("\n")
 
         init_idx: Optional[int] = None
@@ -562,7 +562,7 @@ class TestSpanHierarchy:
 
     def test_do_async_uses_otel_manager(self) -> None:
         import inspect
-        source = inspect.getsource(Agent.do_async)
+        source = inspect.getsource(Agent._do_async_single)
         assert "self._otel.agent_run_span" in source
         assert "self._otel.finalize_agent_run" in source
         assert "self._otel.record_error" in source

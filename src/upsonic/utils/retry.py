@@ -5,7 +5,7 @@ import time
 from typing import Callable, Any, Literal
 
 from upsonic.utils.package.exception import GuardrailValidationError
-from upsonic.exceptions import ExecutionTimeoutError
+from upsonic.exceptions import AgentRetryUnsafeError, ExecutionTimeoutError
 
 # A type hint for our specific retry modes, can be imported by other modules.
 RetryMode = Literal["raise", "return_false"]
@@ -87,7 +87,7 @@ def retryable(
                 try:
                     return func(self, *args, **kwargs)
                 except Exception as e:
-                    if isinstance(e, (GuardrailValidationError, ExecutionTimeoutError)):
+                    if isinstance(e, (GuardrailValidationError, ExecutionTimeoutError, AgentRetryUnsafeError)):
                         raise e
                     last_known_exception = e
                     if attempt < final_retries:
@@ -140,7 +140,7 @@ def retryable(
                 try:
                     return await func(self, *args, **kwargs)
                 except Exception as e:
-                    if isinstance(e, (GuardrailValidationError, ExecutionTimeoutError)):
+                    if isinstance(e, (GuardrailValidationError, ExecutionTimeoutError, AgentRetryUnsafeError)):
                         raise e
                     last_known_exception = e
                     if attempt < final_retries:

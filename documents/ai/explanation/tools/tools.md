@@ -251,6 +251,7 @@ this on the function object via `setattr(func, '_upsonic_tool_config', cfg)`.
 
 | Field | Default | Behavior |
 |---|---|---|
+| `retry_safe` | `False` | Explicitly permits repeating a completed tool during a whole-task Agent retry. Use only when repetition is safe, including any hooks. Does not change the tool wrapper's `max_retries` policy. |
 | `requires_confirmation` | `False` | Tool raises `ConfirmationPause` before executing — agent surfaces a paused call to the caller for approval. |
 | `requires_user_input` | `False` | Tool raises `UserInputPause` before executing — caller must supply values for the listed `user_input_fields`. |
 | `user_input_fields` | `[]` | Subset of parameter names the user fills in. The processor strips them from the JSON schema's `required` list so the LLM doesn't try to provide them. |
