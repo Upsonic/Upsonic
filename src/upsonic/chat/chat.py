@@ -117,7 +117,6 @@ class Chat:
         debug: bool = False,
         debug_level: int = 1,
         max_concurrent_invocations: int = 1,
-        chat_usage_id: Optional[str] = None,
     ) -> None:
         """
         Initialize a Chat session.
@@ -156,9 +155,6 @@ class Chat:
         self.agent = agent
         self.debug = debug
         self.debug_level = debug_level if debug else 1
-
-        from upsonic.usage_registry import new_usage_id
-        self.chat_usage_id: str = chat_usage_id or new_usage_id("chat")
         
         # Agent-first resolution: reuse agent.memory (and its storage) when
         # present; otherwise build a fresh pair from Chat's kwargs and wire
@@ -220,21 +216,6 @@ class Chat:
         
         self._max_concurrent_invocations = max_concurrent_invocations
 
-        # Wire the resolved storage into the default usage registry so
-        # every entry recorded under this chat_usage_id is also persisted
-        # and historical spend is restored on reopen. Backends that have
-        # not been ported to Phase 4 silently no-op via the
-        # NotImplementedError-swallowing path on the registry side.
-        try:
-            from upsonic.usage_registry import get_default_registry
-            if self._storage is not None:
-                _registry = get_default_registry()
-                _registry.attach_storage(self._storage)
-                _registry.load_from_storage(chat_usage_id=self.chat_usage_id)
-        except Exception:
-            # Never let registry wiring break Chat construction.
-            pass
-
         # Tracks the currently-active streaming generator (if any) so the
         # next invoke can force-close a stream the consumer abandoned
         # without calling `aclose()`. Only honoured when
@@ -282,28 +263,46 @@ class Chat:
         """
         return self._session_manager.all_messages
     
-    # ------------------------------------------------------------------
-    # Usage / cost / token surface
-    # ------------------------------------------------------------------
-    #
-    # One canonical surface: ``chat.usage`` returns an
-    # :class:`AggregatedUsage` view of every UsageEntry tagged with this
-    # chat's ``chat_usage_id`` (sub-agent / memory / reliability calls
-    # inherit the scope automatically, so this picks them up too).
-    #
-    # All token / cost / duration / TTFT / request / tool-call counts
-    # are fields on that view — read them as ``chat.usage.input_tokens``,
-    # ``chat.usage.cost``, ``chat.usage.duration``, etc. The previous
-    # top-level shortcuts (``chat.input_tokens`` / ``chat.total_cost`` /
-    # …) and ``chat.get_usage()`` / ``chat.get_session_metrics()`` were
-    # removed in the unification pass — every other entity (Agent,
-    # Task, AgentRunOutput) uses the same ``.usage.X`` shape now.
-
     @property
-    def usage(self):
-        from upsonic.usage_registry import get_default_registry
-        return get_default_registry().by_chat(self.chat_usage_id)
-
+    def input_tokens(self) -> int:
+        """Total input tokens used in this chat session (from storage)."""
+        return self._session_manager.input_tokens
+    
+    @property
+    def output_tokens(self) -> int:
+        """Total output tokens used in this chat session (from storage)."""
+        return self._session_manager.output_tokens
+    
+    @property
+    def total_tokens(self) -> int:
+        """Total tokens (input + output) used in this chat session."""
+        return self._session_manager.total_tokens
+    
+    @property
+    def total_cost(self) -> float:
+        """Total cost of this chat session in USD (from storage)."""
+        return self._session_manager.total_cost
+    
+    @property
+    def total_requests(self) -> int:
+        """Total API requests made in this chat session (from storage)."""
+        return self._session_manager.total_requests
+    
+    @property
+    def total_tool_calls(self) -> int:
+        """Total tool calls made in this chat session (from storage)."""
+        return self._session_manager.total_tool_calls
+    
+    @property
+    def run_duration(self) -> Optional[float]:
+        """Total run duration in seconds (from storage RunUsage)."""
+        return self._session_manager.run_duration
+    
+    @property
+    def time_to_first_token(self) -> Optional[float]:
+        """Time to first token in seconds (from storage RunUsage)."""
+        return self._session_manager.time_to_first_token
+    
     @property
     def start_time(self) -> float:
         """Session start time (Unix timestamp)."""
@@ -338,6 +337,18 @@ class Chat:
     def is_closed(self) -> bool:
         """Check if the session has been closed."""
         return self._session_manager.is_closed
+    
+    def get_usage(self) -> Any:
+        """Get the full RunUsage object from session storage."""
+        return self._session_manager.get_usage()
+    
+    def get_session_metrics(self) -> Any:
+        """Get comprehensive session metrics."""
+        return self._session_manager.get_session_metrics()
+    
+    def get_session_summary(self) -> str:
+        """Get a human-readable session summary."""
+        return self._session_manager.get_session_summary()
     
     def get_recent_messages(self, count: int = 10) -> List[ChatMessage]:
         """Get the most recent messages as ChatMessage objects."""
@@ -717,12 +728,7 @@ class Chat:
     ) -> Union[str, InvokeResult]:
         """Handle blocking invocation. Retries are owned by ``agent.retry``."""
         from upsonic.run.agent.output import AgentRunOutput as AgentRunOutputConcrete
-        from upsonic.usage_registry import push_scope_tags
 
-        _scope_tokens = push_scope_tags(
-            chat_usage_id=self.chat_usage_id,
-            user_id=self.user_id,
-        )
         try:
             if self.debug and self.debug_level >= 2:
                 from upsonic.utils.printing import debug_log_level2
@@ -774,8 +780,52 @@ class Chat:
         finally:
             self._session_manager.end_invocation()
             self._transition_state(SessionState.IDLE)
-            from upsonic.usage_registry import reset_scope_tags
-            reset_scope_tags(_scope_tokens)
+    
+    def _invoke_streaming_impl(
+        self,
+        task: Task,
+        response_start_time: float,
+        events: bool,
+        **kwargs: Any
+    ) -> AsyncIterator[Any]:
+        """Shared streaming implementation for both text chunks and event objects."""
+        async def _stream() -> AsyncIterator[Any]:
+            stream_generator: Optional[AsyncIterator[Any]] = None
+            try:
+                stream_generator = self.agent.astream(task, debug=self.debug, events=events, **kwargs)
+                async for item in stream_generator:
+                    if not events:
+                        # Text mode: only yield string chunks
+                        if isinstance(item, str):
+                            yield item
+                    else:
+                        yield item
+            except Exception:
+                self._transition_state(SessionState.ERROR)
+                if stream_generator is not None:
+                    try:
+                        await stream_generator.aclose()
+                    except Exception:
+                        pass
+                    stream_generator = None
+                raise
+            finally:
+                # Counter / state first — sync, GeneratorExit-safe.
+                self._session_manager.end_response_timer(response_start_time)
+                self._session_manager.end_invocation()
+                self._transition_state(SessionState.IDLE)
+                if self._active_stream is gen:
+                    self._active_stream = None
+
+                if stream_generator is not None:
+                    try:
+                        await stream_generator.aclose()
+                    except Exception:
+                        pass
+
+        gen = _stream()
+        self._active_stream = gen
+        return gen
 
     def _invoke_streaming(
         self,
@@ -784,48 +834,8 @@ class Chat:
         **kwargs: Any
     ) -> AsyncIterator[str]:
         """Handle streaming invocation (text chunks)."""
-        from upsonic.usage_registry import push_scope_tags, reset_scope_tags
+        return self._invoke_streaming_impl(task, response_start_time, events=False, **kwargs)
 
-        async def _stream() -> AsyncIterator[str]:
-            _scope_tokens = push_scope_tags(
-                chat_usage_id=self.chat_usage_id,
-                user_id=self.user_id,
-            )
-            stream_generator: Optional[AsyncIterator[Any]] = None
-            try:
-                stream_generator = self.agent.astream(task, debug=self.debug, events=False, **kwargs)
-                async for chunk in stream_generator:
-                    if isinstance(chunk, str):
-                        yield chunk
-            except Exception:
-                self._transition_state(SessionState.ERROR)
-                if stream_generator is not None:
-                    try:
-                        await stream_generator.aclose()
-                    except Exception:
-                        pass
-                    stream_generator = None
-                raise
-            finally:
-                # Counter / state first — sync, GeneratorExit-safe.
-                self._session_manager.end_response_timer(response_start_time)
-                self._session_manager.end_invocation()
-                self._transition_state(SessionState.IDLE)
-                if self._active_stream is gen:
-                    self._active_stream = None
-
-                if stream_generator is not None:
-                    try:
-                        await stream_generator.aclose()
-                    except Exception:
-                        pass
-
-                reset_scope_tags(_scope_tokens)
-
-        gen = _stream()
-        self._active_stream = gen
-        return gen
-    
     def _invoke_streaming_events(
         self,
         task: Task,
@@ -833,46 +843,7 @@ class Chat:
         **kwargs: Any
     ) -> AsyncIterator["AgentEvent"]:
         """Handle streaming invocation with events (yields AgentEvent objects)."""
-        from upsonic.usage_registry import push_scope_tags, reset_scope_tags
-
-        async def _stream() -> AsyncIterator[Any]:
-            _scope_tokens = push_scope_tags(
-                chat_usage_id=self.chat_usage_id,
-                user_id=self.user_id,
-            )
-            stream_generator: Optional[AsyncIterator[Any]] = None
-            try:
-                stream_generator = self.agent.astream(task, debug=self.debug, events=True, **kwargs)
-                async for event in stream_generator:
-                    yield event
-            except Exception:
-                self._transition_state(SessionState.ERROR)
-                if stream_generator is not None:
-                    try:
-                        await stream_generator.aclose()
-                    except Exception:
-                        pass
-                    stream_generator = None
-                raise
-            finally:
-                # Counter / state first — sync, GeneratorExit-safe.
-                self._session_manager.end_response_timer(response_start_time)
-                self._session_manager.end_invocation()
-                self._transition_state(SessionState.IDLE)
-                if self._active_stream is gen:
-                    self._active_stream = None
-
-                if stream_generator is not None:
-                    try:
-                        await stream_generator.aclose()
-                    except Exception:
-                        pass
-
-                reset_scope_tags(_scope_tokens)
-
-        gen = _stream()
-        self._active_stream = gen
-        return gen
+        return self._invoke_streaming_impl(task, response_start_time, events=True, **kwargs)
     
     @overload
     def stream(
@@ -962,9 +933,8 @@ class Chat:
     def __repr__(self) -> str:
         """String representation of the chat."""
         message_count = self._session_manager.get_message_count()
-        cost = self.usage.cost or 0.0
         return (
             f"Chat(session_id='{self.session_id}', user_id='{self.user_id}', "
             f"state={self.state.value}, messages={message_count}, "
-            f"cost=${cost:.4f})"
+            f"cost=${self.total_cost:.4f})"
         )

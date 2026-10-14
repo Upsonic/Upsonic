@@ -562,6 +562,59 @@ class SuperMemoryConfig(BaseVectorDBConfig):
         return cls(**config_dict)
 
 
+class ValkeyConfig(BaseVectorDBConfig):
+    """
+    Configuration for Valkey Search vector database provider.
+
+    Requires Valkey 9.1+ with the valkey-search module (v1.2+) loaded.
+    Supports HNSW and FLAT indexes, dense vector search, full-text search,
+    and hybrid search combining both via RRF fusion.
+
+    Documents are stored as Valkey Hash keys with a configurable prefix.
+    The FT index is created over those hashes with vector, text, and tag fields.
+    """
+    connection: ConnectionConfig
+    index: Union[HNSWIndexConfig, FlatIndexConfig] = HNSWIndexConfig()
+
+    # Key prefix for hash keys storing document chunks
+    key_prefix: str = "doc:"
+
+    # Vector field configuration
+    vector_field_name: str = "vector"
+
+    # Full-text search field
+    text_field_name: str = "content"
+
+    # HNSW runtime search parameter
+    ef_runtime: Optional[int] = None
+
+    # Batch processing
+    batch_size: int = 100
+
+    # Cluster mode (use GlideClusterClient instead of GlideClient)
+    cluster_mode: bool = False
+
+    # Request timeout in milliseconds for the GLIDE client
+    request_timeout: Optional[int] = None
+
+    # Hybrid search RRF ranking parameter
+    rrf_k: int = 60
+
+    @pydantic.model_validator(mode='after')
+    def validate_valkey_config(self):
+        """Validate Valkey-specific constraints."""
+        if isinstance(self.index, IVFIndexConfig):
+            raise ValueError("Valkey Search does not support IVF index type. Use HNSW or FLAT.")
+        if self.vector_size <= 0:
+            raise ValueError("vector_size must be a positive integer for Valkey Search.")
+        return self
+
+    @classmethod
+    def from_dict(cls, config_dict: Dict[str, Any]) -> 'ValkeyConfig':
+        """Create ValkeyConfig from a dictionary."""
+        return cls(**config_dict)
+
+
 Config = Union[
     ChromaConfig,
     FaissConfig,
@@ -571,6 +624,7 @@ Config = Union[
     WeaviateConfig,
     PgVectorConfig,
     SuperMemoryConfig,
+    ValkeyConfig,
 ]
 
 
@@ -595,6 +649,7 @@ def create_config(provider: str, **kwargs) -> Config:
         'weaviate': WeaviateConfig,
         'pgvector': PgVectorConfig,
         'supermemory': SuperMemoryConfig,
+        'valkey': ValkeyConfig,
     }
     
     config_class = provider_map.get(provider.lower())

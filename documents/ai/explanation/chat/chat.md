@@ -1,6 +1,6 @@
 ---
 name: chat-session-layer
-description: Use when working on the conversational session orchestrator that wraps an Agent with persisted multi-turn state under `src/upsonic/chat/`. Use when a user asks to build a Chat session, manage session_id/user_id with Storage, stream responses, retry failed invocations, edit chat history, remove attachments, compute session metrics/cost, or handle HITL paused runs. Trigger when the user mentions Chat, ChatMessage, ChatAttachment, SessionManager, SessionState, SessionMetrics, InvokeResult, CostTracker, format_cost, format_tokens, invoke, astream, blocking vs streaming, retry_attempts, max_concurrent_invocations, reopen_session, clear_history, remove_attachment, AgentRunOutput, RunUsage, or AgentSession in the chat package.
+description: Use when working on the conversational session orchestrator that wraps an Agent with persisted multi-turn state under `src/upsonic/chat/`. Use when a user asks to build a Chat session, manage session_id/user_id with Storage, stream responses, edit chat history, remove attachments, compute session metrics/cost, or handle HITL paused runs. Trigger when the user mentions Chat, ChatMessage, ChatAttachment, SessionManager, SessionState, SessionMetrics, InvokeResult, CostTracker, format_cost, format_tokens, invoke, astream, blocking vs streaming, max_concurrent_invocations, reopen_session, clear_history, remove_attachment, AgentRunOutput, RunUsage, or AgentSession in the chat package.
 ---
 
 # `src/upsonic/chat/` — Conversational Session Layer
@@ -260,7 +260,7 @@ The main public facade. Imports `Task`, `Memory`, `Storage`, `InMemoryStorage`, 
 
 ##### `__init__`
 
-Long signature broken into three groups (see table). All inputs are validated up front: empty strings raise `ValueError`, `agent is None` raises, `max_concurrent_invocations < 1`, `retry_attempts < 0`, `retry_delay < 0`, `num_last_messages < 1` (when not `None`) all raise.
+Long signature broken into three groups (see table). All inputs are validated up front: empty strings raise `ValueError`, `agent is None` raises, `max_concurrent_invocations < 1`, `num_last_messages < 1` (when not `None`) all raise.
 
 | Group | Parameters |
 | --- | --- |
@@ -270,7 +270,7 @@ Long signature broken into three groups (see table). All inputs are validated up
 | Memory load flags | `load_full_session_memory=True`, `load_summary_memory=None`, `load_user_analysis_memory=None` |
 | Profile config | `user_profile_schema=None`, `dynamic_user_profile=False` |
 | Memory tuning | `num_last_messages=None`, `feed_tool_call_results=False`, `user_memory_mode='update'\|'replace'` |
-| Chat ops | `debug=False`, `debug_level=1`, `max_concurrent_invocations=1`, `retry_attempts=3`, `retry_delay=1.0` |
+| Chat ops | `debug=False`, `debug_level=1`, `max_concurrent_invocations=1` |
 
 After validation it resolves storage and memory under an **agent-first** policy, then realigns its identifiers:
 
@@ -326,8 +326,6 @@ All forward to `_session_manager` — there is *no* duplicate state in `Chat`.
 | --- | --- |
 | `_transition_state(new_state)` | Thin wrapper over `_session_manager.transition_state`. |
 | `_normalize_input(input_data, context=None)` | `None` → `ValueError`; `str` → `Task(description=stripped, context=context)` (rejecting empty/whitespace); `Task` → returned as-is (with description validation); other → `TypeError`. |
-| `_execute_with_retry(coro_func, *args, **kwargs)` | Retry loop. On exception: classify via `_is_retryable_error`. Non-retryable → state to `ERROR`, re-raise. Retryable & attempts left → `await asyncio.sleep(retry_delay * 2 ** attempt)` (exponential backoff). All attempts exhausted → state to `ERROR`, raise the last exception. |
-| `_is_retryable_error(error)` | True if the error is `ConnectionError`, `TimeoutError`, `asyncio.TimeoutError`, or `OSError`, OR its lowercased message contains any of: `'timeout'`, `'connection'`, `'network'`, `'rate limit'`, `'temporary'`, `'service unavailable'`, `'internal server error'`, `'bad gateway'`, `'gateway timeout'`. |
 
 ##### `invoke` — the primary entry point
 
@@ -355,18 +353,16 @@ Runtime body:
 
 ##### `_invoke_blocking_async`
 
-Defines an inner `_execute()` coroutine. If `return_run_output`, calls `agent.do_async(task, debug=self.debug, return_output=True, **kwargs)`. If the result is an `AgentRunOutput` and `result.is_paused`, returns `InvokeResult(text=str(result.output), run_output=result)` — the HITL pause path. Otherwise returns `InvokeResult(text=…, run_output=None)`. If `return_run_output` is `False`, calls `agent.do_async(task, debug, **kwargs)` and stringifies the result. Wraps the call in `_execute_with_retry`. The `finally` always calls `end_response_timer`, `end_invocation`, and transitions state back to `IDLE`.
+Defines an inner `_execute()` coroutine. If `return_run_output`, calls `agent.do_async(task, debug=self.debug, return_output=True, **kwargs)`. If the result is an `AgentRunOutput` and `result.is_paused`, returns `InvokeResult(text=str(result.output), run_output=result)` — the HITL pause path. Otherwise returns `InvokeResult(text=…, run_output=None)`. If `return_run_output` is `False`, calls `agent.do_async(task, debug, **kwargs)` and stringifies the result. The `finally` always calls `end_response_timer`, `end_invocation`, and transitions state back to `IDLE`.
 
 ##### `_invoke_streaming` / `_invoke_streaming_events`
 
-Both follow the same pattern. They define an inner async generator (`_execute_streaming` / `_execute_streaming_events`) that calls `agent.astream(task, debug=self.debug, events=False/True, **kwargs)` and yields chunks (`str`) or `AgentEvent`s. Then they wrap that in `_stream_with_retry` / `_stream_events_with_retry`:
+Both follow the same pattern. They define an inner async generator that calls `agent.astream(task, debug=self.debug, events=False/True, **kwargs)` and yields chunks (`str`) or `AgentEvent`s.
 
-* For each attempt up to `_retry_attempts + 1`, get a fresh generator and `async for` through it, yielding to the caller.
-* On exception: best-effort `await stream_generator.aclose()` (suppressing close errors), null out the generator, then:
-  * If the message contains `"context manager is already active"` (a known pydantic-ai streaming corner case), backoff is `retry_delay * 3 ** attempt`.
-  * Else if attempts remain, backoff is `retry_delay * 2 ** attempt`.
-  * Else re-raise the last exception.
-* The outer `try/finally` always closes the generator if any, calls `end_response_timer`, `end_invocation`, and transitions to `IDLE`.
+* On exception: state transitions to `ERROR`, best-effort `await stream_generator.aclose()` (suppressing close errors), then re-raises.
+* The `finally` block always closes the generator if any, calls `end_response_timer`, `end_invocation`, and transitions to `IDLE`.
+
+Note: Retries are now owned by `Agent(retry=N)` via the `@retryable` decorator — `Chat` no longer implements its own retry logic.
 
 This means that even mid-stream cancellation, exceptions, or abandonment never leak open generators or stuck state.
 
@@ -476,10 +472,10 @@ text = await chat.invoke("Hello!")
 3. `_normalize_input("Hello!")` → `Task(description="Hello!")`.
 4. `start_invocation()` increments concurrent counter to `1`. State transitions to `AWAITING_RESPONSE`.
 5. `start_response_timer()` returns `t0 = time.time()`.
-6. `_invoke_blocking_async` runs `_execute_with_retry(_execute)`:
+6. `_invoke_blocking_async` runs `_execute`:
    * `_execute` calls `agent.do_async(task, debug=self.debug, **kwargs)` and stringifies the result.
    * The agent internally pulls history out of `Memory` (which reads `session.messages`), runs the model, writes back the new `ModelRequest` + `ModelResponse` and updates `session.usage`.
-   * Any retryable exception triggers exponential backoff (`retry_delay * 2 ** attempt`).
+   * Retries (if configured) are handled at the `Agent` level via `@retryable`.
 7. `_session_manager.end_response_timer(t0)` records the duration in `_response_times`.
 8. `finally`: `end_invocation()` decrements the counter; state → `IDLE`.
 9. Returns `text`.
